@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Catalog, Command, CommandRole, GitHubRepoConfig, Vehicle } from './types/catalog';
-import { DEFAULT_CATALOG } from './data/defaultCatalog';
+import { DEFAULT_CATALOG, normalizeCatalog } from './data/defaultCatalog';
 import { validateCatalog } from './utils/canValidator';
 import { getSavedRepoConfig, saveRepoConfig } from './utils/githubHelper';
 import { CommandFilter } from './components/CommandFilter';
@@ -64,7 +64,7 @@ export default function App() {
       if (saved && hasDrafts) {
         const parsed = JSON.parse(saved);
         if (parsed.commands && parsed.vehicles) {
-          return parsed;
+          return normalizeCatalog(parsed);
         }
       }
     } catch (e) {
@@ -201,7 +201,7 @@ export default function App() {
           if (res.ok) {
             const data = await res.json();
             if (data && data.commands && data.vehicles) {
-              setCatalog(data);
+              setCatalog(normalizeCatalog(data));
               return;
             }
           }
@@ -330,29 +330,32 @@ export default function App() {
 
       // Search query (name, id, state_can_id, action_can_id, category, payloads)
       if (q) {
-        const matchesName = cmd.name.toLowerCase().includes(q);
-        const matchesId = cmd.id.toLowerCase().includes(q);
-        const matchesCanId = cmd.state_can_id?.toLowerCase().includes(q) || cmd.action_can_id?.toLowerCase().includes(q);
-        const matchesCategory = cmd.category.toLowerCase().includes(q);
-        const matchesSubcategory = cmd.subcategory?.toLowerCase().includes(q);
-        const matchesFrom = cmd.from_payload?.toLowerCase().includes(q);
-        const matchesTo = cmd.to_payload?.toLowerCase().includes(q);
-        const matchesMatch = cmd.match_payload?.toLowerCase().includes(q);
+        const cmdName = cmd.name || cmd.ha_metadata?.name || cmd.id || '';
+        const matchesName = cmdName.toLowerCase().includes(q);
+        const matchesId = (cmd.id || '').toLowerCase().includes(q);
+        const stateId = cmd.state_can_id || cmd.network?.state_can_id || '';
+        const actionId = cmd.action_can_id || cmd.network?.action_can_id || '';
+        const matchesCanId = stateId.toLowerCase().includes(q) || actionId.toLowerCase().includes(q);
+        const matchesCategory = (cmd.category || '').toLowerCase().includes(q);
+        const matchesSubcategory = (cmd.subcategory || '').toLowerCase().includes(q);
+        const matchesFrom = typeof cmd.from_payload === 'string' ? cmd.from_payload.toLowerCase().includes(q) : false;
+        const matchesTo = typeof cmd.to_payload === 'string' ? cmd.to_payload.toLowerCase().includes(q) : false;
+        const matchesMatch = typeof cmd.match_payload === 'string' ? cmd.match_payload.toLowerCase().includes(q) : false;
         const matchesOptions = cmd.options?.some(
           o =>
-            o.label.toLowerCase().includes(q) ||
-            o.payload?.toLowerCase().includes(q) ||
-            o.match_payload?.toLowerCase().includes(q) ||
-            o.to_payload?.toLowerCase().includes(q) ||
+            (o.label || '').toLowerCase().includes(q) ||
+            (typeof o.payload === 'string' && o.payload.toLowerCase().includes(q)) ||
+            (typeof o.match_payload === 'string' && o.match_payload.toLowerCase().includes(q)) ||
+            (typeof o.to_payload === 'string' && o.to_payload.toLowerCase().includes(q)) ||
             (o.state_value !== undefined && String(o.state_value).toLowerCase().includes(q)) ||
-            o.description?.toLowerCase().includes(q)
+            (o.description || '').toLowerCase().includes(q)
         );
         const cleanQ = q.replace(/^@/, '');
         const matchesContributor =
           (cmd.contributor?.name && cmd.contributor.name.toLowerCase().includes(cleanQ)) ||
           (cmd.contributor?.github && cmd.contributor.github.toLowerCase().includes(cleanQ)) ||
           (cmd.contributor?.notes && cmd.contributor.notes.toLowerCase().includes(cleanQ));
-        const matchesHaDomain = cmd.ha_domain?.toLowerCase().includes(q);
+        const matchesHaDomain = (cmd.ha_domain || cmd.ha_metadata?.domain || '').toLowerCase().includes(q);
         const matchesMdi = (cmd.icon?.toLowerCase().includes(q) || cmd.mdi?.toLowerCase().includes(q));
         const matchesDeviceClass = cmd.device_class?.toLowerCase().includes(q);
 
@@ -523,8 +526,9 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data && data.commands && data.vehicles) {
-          setCatalog(data);
-          localStorage.setItem(STORAGE_KEY_CATALOG, JSON.stringify(data));
+          const normalized = normalizeCatalog(data);
+          setCatalog(normalized);
+          localStorage.setItem(STORAGE_KEY_CATALOG, JSON.stringify(normalized));
           alert(`Successfully reloaded catalog (v${data.catalog_version || '1.0.0'}) from /catalog!`);
           return;
         }

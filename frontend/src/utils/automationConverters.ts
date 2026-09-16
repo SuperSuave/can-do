@@ -142,7 +142,7 @@ export function commandToTrigger(cmd: Command, opt?: CommandOption): AutomationT
     match_payload: toPayload,
     match: typeof toPayload === 'object' ? toPayload : undefined,
     source_command_id: cmd.id,
-    source_command_name: cmd.name,
+    source_command_name: cmd.name || cmd.ha_metadata?.name || cmd.id,
     option_label: opt?.label
   };
 }
@@ -164,7 +164,7 @@ export function commandToCondition(cmd: Command, opt?: CommandOption): Automatio
     match: typeof matchPayload === 'object' ? matchPayload : undefined,
     invert: false,
     source_command_id: cmd.id,
-    source_command_name: cmd.name,
+    source_command_name: cmd.name || cmd.ha_metadata?.name || cmd.id,
     option_label: opt?.label
   };
 }
@@ -184,6 +184,8 @@ export function commandToAction(cmd: Command, opt?: CommandOption): AutomationAc
     delay_ms: 50
   })) || [{ payload, repeat: opt?.repeat || 1, delay_ms: 50 }];
 
+  const cmdDisplayName = cmd.name || cmd.ha_metadata?.name || cmd.id;
+
   return {
     id: actId,
     type: 'can_tx',
@@ -193,9 +195,9 @@ export function commandToAction(cmd: Command, opt?: CommandOption): AutomationAc
     repeat: opt?.repeat || 1,
     delay_ms: 50,
     steps,
-    popup_message: opt?.popup || `${cmd.name}${opt?.label ? ` - ${opt.label}` : ''}`,
+    popup_message: opt?.popup || `${cmdDisplayName}${opt?.label ? ` - ${opt.label}` : ''}`,
     source_command_id: cmd.id,
-    source_command_name: cmd.name,
+    source_command_name: cmdDisplayName,
     option_label: opt?.label
   };
 }

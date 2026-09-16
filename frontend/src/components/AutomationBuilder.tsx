@@ -326,12 +326,18 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   };
 
   // Filter commands for the catalog pull picker
-  const filteredPickerCommands = catalog.commands.filter(cmd => {
+  const filteredPickerCommands = (catalog?.commands || []).filter(cmd => {
+    const cmdName = cmd.name || cmd.ha_metadata?.name || cmd.id || '';
+    const cmdId = cmd.id || '';
+    const stateCanId = cmd.state_can_id || cmd.network?.state_can_id || '';
+    const actionCanId = cmd.action_can_id || cmd.network?.action_can_id || '';
+    const q = (pickerSearch || '').toLowerCase();
+
     const matchesSearch =
-      cmd.name.toLowerCase().includes(pickerSearch.toLowerCase()) ||
-      cmd.id.toLowerCase().includes(pickerSearch.toLowerCase()) ||
-      (cmd.state_can_id && cmd.state_can_id.toLowerCase().includes(pickerSearch.toLowerCase())) ||
-      (cmd.action_can_id && cmd.action_can_id.toLowerCase().includes(pickerSearch.toLowerCase()));
+      cmdName.toLowerCase().includes(q) ||
+      cmdId.toLowerCase().includes(q) ||
+      stateCanId.toLowerCase().includes(q) ||
+      actionCanId.toLowerCase().includes(q);
     const matchesCat = pickerCategory === 'all' || cmd.category === pickerCategory;
     return matchesSearch && matchesCat;
   });
@@ -1448,14 +1454,18 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     <div className="flex items-center justify-between gap-2">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-white">{cmd.name}</span>
+                          <span className="text-xs font-bold text-white">{cmd.name || cmd.ha_metadata?.name || cmd.id}</span>
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 font-mono">
                             {cmd.category}
                           </span>
                         </div>
                         <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono mt-0.5">
-                          {cmd.state_can_id && <span>RX: {cmd.state_can_id}</span>}
-                          {cmd.action_can_id && <span>TX: {cmd.action_can_id}</span>}
+                          {(cmd.state_can_id || cmd.network?.state_can_id) && (
+                            <span>RX: {cmd.state_can_id || cmd.network?.state_can_id}</span>
+                          )}
+                          {(cmd.action_can_id || cmd.network?.action_can_id) && (
+                            <span>TX: {cmd.action_can_id || cmd.network?.action_can_id}</span>
+                          )}
                         </div>
                       </div>
 
