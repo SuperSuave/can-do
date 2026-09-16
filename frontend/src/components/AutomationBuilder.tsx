@@ -15,7 +15,8 @@ import {
   exportToFullCatalogJson,
   commandToTrigger,
   commandToCondition,
-  commandToAction
+  commandToAction,
+  compileToByteMap
 } from '../utils/automationConverters';
 import { MdiIcon, SUGGESTED_MDI_ICONS } from './MdiIcon';
 import {
@@ -172,8 +173,10 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           can_id: '0x448',
           bus: 0,
           click_count: 1,
-          from_payload: '* * * * * 0*',
-          to_payload: '* * * * * 1*'
+          byte_index: 6,
+          from_value: 0,
+          to_value: 1,
+          match: { D7: '0x0' }
         }
       ],
       conditions: [],
@@ -183,7 +186,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           type: 'can_tx',
           can_id: '0x524',
           bus: 0,
-          payload: '02 01 00 00 00 00 00 00',
+          payload: { D1: '0x02', D2: '0x01' },
           repeat: 1,
           delay_ms: 50
         }
@@ -685,8 +688,10 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                         can_id: '0x448',
                         bus: 0,
                         click_count: 1,
-                        from_payload: '* * * * * 0*',
-                        to_payload: '* * * * * 1*'
+                        byte_index: 6,
+                        from_value: 0,
+                        to_value: 1,
+                        match: { D7: '0x0' }
                       };
                       handleUpdateActiveRule({ triggers: [...activeRule.triggers, newTrig] });
                     }}
@@ -786,31 +791,63 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
                     <div className="grid grid-cols-2 gap-2 font-mono text-[11px]">
                       <div>
-                        <label className="block text-[10px] font-sans text-slate-500">From Payload</label>
+                        <label className="block text-[10px] font-sans text-slate-500">Target Match (1-based D1..D8)</label>
                         <input
                           type="text"
-                          value={trig.from_payload || '* * * * * 0*'}
+                          value={typeof trig.match === 'object' ? JSON.stringify(trig.match) : (trig.to_payload || '{"D7":"0x0"}')}
                           onChange={e => {
                             const updated = [...activeRule.triggers];
-                            updated[tIdx].from_payload = e.target.value;
+                            const compiled = compileToByteMap(e.target.value);
+                            updated[tIdx].match = compiled;
+                            updated[tIdx].to_payload = compiled;
                             handleUpdateActiveRule({ triggers: updated });
                           }}
-                          className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-300"
+                          placeholder='{"D7":"0x0"}'
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-cyan-300 font-bold"
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-sans text-slate-500">To / Match Payload</label>
-                        <input
-                          type="text"
-                          value={trig.to_payload || trig.match_payload || '* * * * * 1*'}
-                          onChange={e => {
-                            const updated = [...activeRule.triggers];
-                            updated[tIdx].to_payload = e.target.value;
-                            updated[tIdx].match_payload = e.target.value;
-                            handleUpdateActiveRule({ triggers: updated });
-                          }}
-                          className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-cyan-300 font-bold"
-                        />
+                        <label className="block text-[10px] font-sans text-slate-500">Byte Transition (Byte, From, To)</label>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            max={7}
+                            placeholder="Byte (0-7)"
+                            value={trig.byte_index ?? 6}
+                            onChange={e => {
+                              const updated = [...activeRule.triggers];
+                              updated[tIdx].byte_index = parseInt(e.target.value, 10) || 0;
+                              handleUpdateActiveRule({ triggers: updated });
+                            }}
+                            className="w-1/3 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 text-center"
+                            title="Byte Index (0-7)"
+                          />
+                          <input
+                            type="text"
+                            placeholder="From"
+                            value={trig.from_value !== undefined ? `0x${trig.from_value.toString(16)}` : '0x0'}
+                            onChange={e => {
+                              const updated = [...activeRule.triggers];
+                              updated[tIdx].from_value = parseInt(e.target.value, 16) || 0;
+                              handleUpdateActiveRule({ triggers: updated });
+                            }}
+                            className="w-1/3 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 text-center"
+                            title="From Value"
+                          />
+                          <input
+                            type="text"
+                            placeholder="To"
+                            value={trig.to_value !== undefined ? `0x${trig.to_value.toString(16)}` : '0x1'}
+                            onChange={e => {
+                              const updated = [...activeRule.triggers];
+                              updated[tIdx].to_value = parseInt(e.target.value, 16) || 0;
+                              handleUpdateActiveRule({ triggers: updated });
+                            }}
+                            className="w-1/3 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-cyan-300 text-center font-bold"
+                            title="To Value"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -849,7 +886,12 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                         type: 'can_state',
                         can_id: '0x120',
                         bus: 0,
-                        match_payload: '01 * * * * * * *',
+                        match: { D1: '0x01' },
+                        evaluate: {
+                          byte: 'D1',
+                          operator: 'equal',
+                          value: '0x01'
+                        },
                         invert: false
                       };
                       handleUpdateActiveRule({ conditions: [...activeRule.conditions, newCond] });
@@ -935,15 +977,18 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-sans text-slate-500">Match Payload Pattern</label>
+                          <label className="block text-[10px] font-sans text-slate-500">Condition Match (1-based D1..D8)</label>
                           <input
                             type="text"
-                            value={cond.match_payload || '* * * * * * * *'}
+                            value={typeof cond.match === 'object' ? JSON.stringify(cond.match) : (cond.match_payload || '{"D1":"0x01"}')}
                             onChange={e => {
                               const updated = [...activeRule.conditions];
-                              updated[cIdx].match_payload = e.target.value;
+                              const compiled = compileToByteMap(e.target.value);
+                              updated[cIdx].match = compiled;
+                              updated[cIdx].match_payload = compiled;
                               handleUpdateActiveRule({ conditions: updated });
                             }}
+                            placeholder='{"D1":"0x01"}'
                             className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-purple-300 font-bold"
                           />
                         </div>
@@ -985,7 +1030,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                         type: 'can_tx',
                         can_id: '0x524',
                         bus: 0,
-                        payload: '02 01 00 00 00 00 00 00',
+                        payload: { D1: '0x02', D2: '0x01' },
                         repeat: 1,
                         delay_ms: 50
                       };
@@ -1141,15 +1186,17 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     {act.type === 'can_tx' && (
                       <div className="space-y-1.5 font-mono text-[11px]">
                         <div>
-                          <label className="block text-[10px] font-sans text-slate-500">Payload (8 Bytes)</label>
+                          <label className="block text-[10px] font-sans text-slate-500">Payload (1-based D1..D8)</label>
                           <input
                             type="text"
-                            value={act.payload || '00 00 00 00 00 00 00 00'}
+                            value={typeof act.payload === 'object' ? JSON.stringify(act.payload) : (act.payload || '{"D1":"0x02","D2":"0x01"}')}
                             onChange={e => {
                               const updated = [...activeRule.actions];
-                              updated[aIdx].payload = e.target.value;
+                              const compiled = compileToByteMap(e.target.value);
+                              updated[aIdx].payload = Object.keys(compiled).length > 0 ? compiled : e.target.value;
                               handleUpdateActiveRule({ actions: updated });
                             }}
+                            placeholder='{"D1":"0x02","D2":"0x01"}'
                             className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-emerald-300 font-bold"
                           />
                         </div>

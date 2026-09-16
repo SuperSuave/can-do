@@ -12,11 +12,15 @@ export type TriggerCombineMode = 'any' | 'all' | 'sequence';
 export interface AutomationTrigger {
   id: string;
   source: 'preset' | 'can' | 'time' | 'voltage' | 'mqtt';
+  type?: string;
   can_id?: string;
   bus?: number;
   click_count?: number; // 1 = single, 2 = double, 3 = triple
   for_sec?: number;
   for_ms?: number;
+  byte_index?: number;
+  from_value?: number;
+  to_value?: number;
   from_payload?: string | ByteMap;
   to_payload?: string | ByteMap;
   match_payload?: string | ByteMap;
@@ -40,6 +44,14 @@ export interface AutomationCondition {
   bus?: number;
   match_payload?: string | ByteMap;
   match?: ByteMap;
+  byte_index?: number;
+  operator?: string;
+  evaluate?: {
+    byte: string;
+    byte_index?: number;
+    operator: string;
+    value: string;
+  };
   invert?: boolean;
   expression?: string;
   source_command_id?: string;
@@ -62,10 +74,12 @@ export interface AutomationActionStep {
 
 export interface AutomationAction {
   id: string;
-  type: 'can_tx' | 'precondition' | 'climate_target' | 'webhook' | 'choose' | 'if_then';
+  type: 'can_tx' | 'transmit' | 'entity_command' | 'precondition' | 'climate_target' | 'webhook' | 'choose' | 'if_then';
   trigger_id?: string;
   can_id?: string;
   bus?: number;
+  entity_id?: string;
+  command?: string;
   payload?: string | ByteMap;
   to_payload?: string | ByteMap;
   repeat?: number;

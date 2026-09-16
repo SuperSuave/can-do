@@ -9,11 +9,11 @@ export const DEFAULT_AUTOMATION_SETTINGS: AutomationSettings = {
 
 export const DEFAULT_AUTOMATION_RULES: AutomationRule[] = [
   {
-    id: 'rule-precondition-star',
-    name: 'Steering Wheel Star → Battery Preconditioning',
+    id: 'menu_ok_cool_driver_seat',
+    name: 'Menu OK Press → Driver Seat Medium Cool',
     enabled: true,
     ha_expose: true,
-    ha_icon: 'mdi:car-defrost-rear',
+    ha_icon: 'mdi:car-seat-cooler',
     exec_mode: 'one_shot',
     trigger_mode: 'any',
     cooldown_ms: 1000,
@@ -21,42 +21,33 @@ export const DEFAULT_AUTOMATION_RULES: AutomationRule[] = [
     reset_can_id: '0x448',
     triggers: [
       {
-        id: 'trig_sw_star',
-        source: 'preset',
+        id: 'trig_menu_ok',
+        source: 'can',
+        type: 'can_rx',
         can_id: '0x448',
         bus: 0,
         click_count: 1,
         for_sec: 0,
         for_ms: 0,
-        from_payload: '* * * * * 0*',
-        to_payload: '* * * * * 1*',
-        match_payload: '* * * * * 1*',
-        source_command_id: 'sw_star_btn',
-        source_command_name: 'Steering Wheel Star Button',
+        byte_index: 6,
+        from_value: 0,
+        to_value: 1,
+        match: { D7: '0x0' },
+        source_command_id: 'sw_ok',
+        source_command_name: 'Menu / OK Button',
         option_label: 'Pressed'
       }
     ],
-    conditions: [
-      {
-        id: 'cond_gear_park',
-        type: 'can_state',
-        can_id: '0x120',
-        bus: 0,
-        match_payload: '01 * * * * * * *',
-        invert: false,
-        source_command_id: 'gear_selector',
-        source_command_name: 'Transmission Gear (PRND)',
-        option_label: 'Park (P)'
-      }
-    ],
+    conditions: [],
     actions: [
       {
-        id: 'act_precon',
-        type: 'precondition',
-        trigger_id: 'trig_sw_star',
-        precon_mode: 'persistent',
-        precon_press: 'short',
-        popup_message: 'Battery Precon Activated'
+        id: 'act_cool_driver_seat',
+        type: 'entity_command',
+        entity_id: 'drivers_seat_comfort',
+        command: 'Medium Cool',
+        popup_message: 'Driver Seat: Cool Med',
+        source_command_id: 'drivers_seat_comfort',
+        source_command_name: 'Driver Seat Comfort'
       }
     ]
   },
@@ -74,14 +65,16 @@ export const DEFAULT_AUTOMATION_RULES: AutomationRule[] = [
       {
         id: 'trig_unlock_double',
         source: 'can',
+        type: 'can_rx',
         can_id: '0x380',
         bus: 0,
         click_count: 2,
         for_sec: 0,
         for_ms: 0,
-        from_payload: '* * 00 * * * * *',
-        to_payload: '* * 01 * * * * *',
-        match_payload: '* * 01 * * * * *',
+        byte_index: 2,
+        from_value: 0,
+        to_value: 1,
+        match: { D3: '0x01' },
         source_command_id: 'door_lock_switch',
         source_command_name: 'Driver Door Unlock Switch',
         option_label: 'Unlock'
@@ -93,7 +86,12 @@ export const DEFAULT_AUTOMATION_RULES: AutomationRule[] = [
         type: 'can_state',
         can_id: '0x220',
         bus: 0,
-        match_payload: '00 00 * * * * * *',
+        match: { D1: '0x00', D2: '0x00' },
+        evaluate: {
+          byte: 'D1',
+          operator: 'equal',
+          value: '0x00'
+        },
         invert: false,
         source_command_id: 'wheel_speed',
         source_command_name: 'Vehicle Speed',
@@ -103,14 +101,14 @@ export const DEFAULT_AUTOMATION_RULES: AutomationRule[] = [
     actions: [
       {
         id: 'act_tailgate',
-        type: 'can_tx',
+        type: 'transmit',
         can_id: '0x540',
         bus: 0,
-        payload: '08 01 00 00 00 00 00 00',
+        payload: { D1: '0x08', D2: '0x01' },
         repeat: 3,
         delay_ms: 100,
         steps: [
-          { payload: '08 01 00 00 00 00 00 00', repeat: 3, delay_ms: 80 }
+          { payload: { D1: '0x08', D2: '0x01' }, repeat: 3, delay_ms: 80 }
         ],
         popup_message: 'Opening Tailgate',
         source_command_id: 'tailgate_trigger',
