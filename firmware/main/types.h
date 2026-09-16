@@ -65,6 +65,7 @@ struct AutomationTrigger {
     uint32_t can_id = 0;
     uint8_t bus = 0;
     int byte_index = -1;
+    uint8_t byte_mask = 0xFF; // Bitmask for specific byte/nibble (e.g. 0xF0)
     uint8_t from_value = 0;
     uint8_t to_value = 0;
     uint8_t match_payload[8] = {0};

@@ -20,6 +20,7 @@ export interface AutomationTrigger {
   for_ms?: number;
   byte_index?: number;
   byte?: string;
+  mask?: string;
   from?: string;
   to?: string;
   from_value?: number;

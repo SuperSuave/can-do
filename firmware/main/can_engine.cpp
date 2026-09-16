@@ -54,7 +54,19 @@ bool is_match(const uint8_t* incoming_data, const EntityOption& option) {
     return true;
 }
 
+static inline bool evaluate_masked_byte(uint8_t actual_value, uint8_t target_value, uint8_t mask) {
+    // If mask is 0xF0:
+    // actual: 0x13 (0001 0011) & mask: 0xF0 (1111 0000) = 0x10 (0001 0000)
+    // target: 0x10 (0001 0000) & mask: 0xF0 (1111 0000) = 0x10 (0001 0000)
+    // They match, ignoring the changing lower nibble!
+    return (actual_value & mask) == (target_value & mask);
+}
+
 static bool is_trigger_match(const uint8_t* incoming_data, const AutomationTrigger& trig) {
+    if (trig.type == "byte_transition" && trig.byte_index >= 0 && trig.byte_index < 8) {
+        return evaluate_masked_byte(incoming_data[trig.byte_index], trig.to_value, trig.byte_mask);
+    }
+
     if (trig.match_mask == 0) return true; // match whole ID if no byte mask
     for (int i = 0; i < 8; i++) {
         if ((trig.match_mask & (1 << i)) != 0) {

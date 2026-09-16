@@ -169,12 +169,19 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
             uint8_t dummy_invert = 0;
             parse_byte_match(cJSON_GetObjectItem(t_item, "match"), tr.match_payload, tr.match_mask, dummy_invert);
 
-            // Handle byte_transition schema: "byte": "D7", "from": "0x00", "to": "0x10"
+            // Handle byte_transition schema: "byte": "D7", "mask": "0xF0", "from": "0x00", "to": "0x10"
             cJSON* byte_item = cJSON_GetObjectItem(t_item, "byte");
             if (cJSON_IsString(byte_item)) {
                 int b_idx = get_d_index(byte_item->valuestring);
                 if (b_idx >= 0) {
                     tr.byte_index = b_idx;
+                    cJSON* mask_item = cJSON_GetObjectItem(t_item, "mask");
+                    if (cJSON_IsString(mask_item)) {
+                        tr.byte_mask = parse_hex_string(mask_item->valuestring);
+                    } else {
+                        tr.byte_mask = 0xFF;
+                    }
+
                     cJSON* from_item = cJSON_GetObjectItem(t_item, "from");
                     cJSON* to_item = cJSON_GetObjectItem(t_item, "to");
                     if (cJSON_IsString(from_item)) tr.from_value = parse_hex_string(from_item->valuestring);

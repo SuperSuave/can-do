@@ -23,6 +23,7 @@ export const DEFAULT_AUTOMATION_RULES: AutomationRule[] = [
         can_id: '0x448',
         bus: 0,
         byte: 'D7',
+        mask: '0xF0',
         from: '0x00',
         to: '0x10'
       }

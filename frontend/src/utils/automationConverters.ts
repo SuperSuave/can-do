@@ -61,12 +61,14 @@ export function compileAutomationRule(rule: AutomationRule): any {
       const targetByte = trig.byte || (trig.match ? Object.keys(trig.match)[0] : undefined) || (trig.byte_index !== undefined ? `D${trig.byte_index + 1}` : 'D7');
       const fromHex = trig.from || (trig.from_value !== undefined ? `0x${trig.from_value.toString(16).padStart(2, '0').toUpperCase()}` : '0x00');
       const toHex = trig.to || (trig.match && trig.match[targetByte]) || (trig.to_value !== undefined ? `0x${trig.to_value.toString(16).padStart(2, '0').toUpperCase()}` : '0x10');
+      const maskHex = trig.mask || '0xF0';
 
       return {
         type: 'byte_transition',
         can_id: trig.can_id || '0x448',
         bus: trig.bus ?? 0,
         byte: targetByte,
+        mask: maskHex,
         from: fromHex,
         to: toHex
       };
@@ -167,6 +169,7 @@ export function exportToEsp32FirmwareJson(
         can_id: t.can_id || '0x000',
         bus: t.bus ?? 0,
         byte: t.byte,
+        mask: t.mask || '0xF0',
         from: t.from,
         to: t.to
       })),
@@ -220,6 +223,7 @@ export function commandToTrigger(cmd: Command, opt?: CommandOption): AutomationT
     can_id: canId,
     bus: cmd.network?.bus ?? cmd.bus ?? 0,
     byte: targetByte,
+    mask: '0xF0',
     from: '0x00',
     to: targetTo,
     click_count: 1,

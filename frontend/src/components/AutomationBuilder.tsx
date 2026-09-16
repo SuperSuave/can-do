@@ -807,45 +807,61 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-sans text-slate-500">Byte Transition (Byte, From, To)</label>
+                        <label className="block text-[10px] font-sans text-slate-500">Byte Transition (Byte, Mask, From, To)</label>
                         <div className="flex items-center gap-1">
                           <input
-                            type="number"
-                            min={0}
-                            max={7}
-                            placeholder="Byte (0-7)"
-                            value={trig.byte_index ?? 6}
+                            type="text"
+                            placeholder="D7"
+                            value={trig.byte || (trig.byte_index !== undefined ? `D${trig.byte_index + 1}` : 'D7')}
                             onChange={e => {
                               const updated = [...activeRule.triggers];
-                              updated[tIdx].byte_index = parseInt(e.target.value, 10) || 0;
+                              updated[tIdx].byte = e.target.value.toUpperCase();
+                              const num = parseInt(e.target.value.replace(/\D/g, ''), 10);
+                              if (!isNaN(num) && num >= 1 && num <= 8) {
+                                updated[tIdx].byte_index = num - 1;
+                              }
                               handleUpdateActiveRule({ triggers: updated });
                             }}
-                            className="w-1/3 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 text-center"
-                            title="Byte Index (0-7)"
+                            className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 text-center font-bold"
+                            title="1-based Byte (D1..D8)"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Mask"
+                            value={trig.mask || '0xF0'}
+                            onChange={e => {
+                              const updated = [...activeRule.triggers];
+                              updated[tIdx].mask = e.target.value;
+                              handleUpdateActiveRule({ triggers: updated });
+                            }}
+                            className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-yellow-300 text-center font-bold"
+                            title="Byte Bitmask (e.g. 0xF0)"
                           />
                           <input
                             type="text"
                             placeholder="From"
-                            value={trig.from_value !== undefined ? `0x${trig.from_value.toString(16)}` : '0x0'}
+                            value={trig.from || (trig.from_value !== undefined ? `0x${trig.from_value.toString(16).padStart(2, '0').toUpperCase()}` : '0x00')}
                             onChange={e => {
                               const updated = [...activeRule.triggers];
+                              updated[tIdx].from = e.target.value;
                               updated[tIdx].from_value = parseInt(e.target.value, 16) || 0;
                               handleUpdateActiveRule({ triggers: updated });
                             }}
-                            className="w-1/3 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 text-center"
-                            title="From Value"
+                            className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 text-center"
+                            title="From Value (e.g. 0x00)"
                           />
                           <input
                             type="text"
                             placeholder="To"
-                            value={trig.to_value !== undefined ? `0x${trig.to_value.toString(16)}` : '0x1'}
+                            value={trig.to || (trig.to_value !== undefined ? `0x${trig.to_value.toString(16).padStart(2, '0').toUpperCase()}` : '0x10')}
                             onChange={e => {
                               const updated = [...activeRule.triggers];
+                              updated[tIdx].to = e.target.value;
                               updated[tIdx].to_value = parseInt(e.target.value, 16) || 0;
                               handleUpdateActiveRule({ triggers: updated });
                             }}
-                            className="w-1/3 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-cyan-300 text-center font-bold"
-                            title="To Value"
+                            className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-cyan-300 text-center font-bold"
+                            title="To Value (e.g. 0x10)"
                           />
                         </div>
                       </div>
