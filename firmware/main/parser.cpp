@@ -163,9 +163,29 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
             if (cJSON_IsString(type)) tr.type = type->valuestring;
             cJSON* cid = cJSON_GetObjectItem(t_item, "can_id");
             if (cJSON_IsString(cid)) tr.can_id = strtol(cid->valuestring, nullptr, 16);
+            cJSON* bus = cJSON_GetObjectItem(t_item, "bus");
+            if (cJSON_IsNumber(bus)) tr.bus = bus->valueint;
 
             uint8_t dummy_invert = 0;
             parse_byte_match(cJSON_GetObjectItem(t_item, "match"), tr.match_payload, tr.match_mask, dummy_invert);
+
+            // Handle byte_transition schema: "byte": "D7", "from": "0x00", "to": "0x10"
+            cJSON* byte_item = cJSON_GetObjectItem(t_item, "byte");
+            if (cJSON_IsString(byte_item)) {
+                int b_idx = get_d_index(byte_item->valuestring);
+                if (b_idx >= 0) {
+                    tr.byte_index = b_idx;
+                    cJSON* from_item = cJSON_GetObjectItem(t_item, "from");
+                    cJSON* to_item = cJSON_GetObjectItem(t_item, "to");
+                    if (cJSON_IsString(from_item)) tr.from_value = parse_hex_string(from_item->valuestring);
+                    if (cJSON_IsString(to_item)) {
+                        tr.to_value = parse_hex_string(to_item->valuestring);
+                        tr.match_payload[b_idx] = tr.to_value;
+                        tr.match_mask |= (1 << b_idx);
+                    }
+                }
+            }
+
             out_rule.triggers.push_back(tr);
         }
     }

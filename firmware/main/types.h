@@ -61,8 +61,12 @@ struct AutomationCondition {
 };
 
 struct AutomationTrigger {
-    std::string type = "can_rx"; // "can_rx" or "mqtt"
+    std::string type = "can_rx"; // "can_rx", "byte_transition", or "mqtt"
     uint32_t can_id = 0;
+    uint8_t bus = 0;
+    int byte_index = -1;
+    uint8_t from_value = 0;
+    uint8_t to_value = 0;
     uint8_t match_payload[8] = {0};
     uint8_t match_mask = 0;
 };

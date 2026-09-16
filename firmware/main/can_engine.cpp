@@ -145,7 +145,7 @@ void can_rx_task(void* arg) {
                 if (!rule.enabled) continue;
 
                 for (const auto& trig : rule.triggers) {
-                    if (trig.type == "can_rx" && trig.can_id == rx_msg.identifier) {
+                    if ((trig.type == "can_rx" || trig.type == "byte_transition") && trig.can_id == rx_msg.identifier) {
                         if (is_trigger_match(rx_msg.data, trig)) {
                             // Check conditions
                             bool passed = true;

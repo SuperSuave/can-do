@@ -19,6 +19,9 @@ export interface AutomationTrigger {
   for_sec?: number;
   for_ms?: number;
   byte_index?: number;
+  byte?: string;
+  from?: string;
+  to?: string;
   from_value?: number;
   to_value?: number;
   from_payload?: string | ByteMap;
@@ -102,9 +105,9 @@ export interface AutomationRule {
   ha_expose: boolean;
   ha_icon: string;
   exec_mode: ExecutionMode;
-  trigger_mode: TriggerCombineMode;
+  trigger_mode?: TriggerCombineMode;
   cooldown_ms: number;
-  timeout_reset_ms: number;
+  timeout_reset_ms?: number;
   reset_can_id?: string;
   verify_can_id?: string;
   verify_payload?: string;

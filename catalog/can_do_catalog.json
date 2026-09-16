@@ -2580,13 +2580,18 @@
       "id": "menu_ok_cool_driver_seat",
       "name": "Menu OK Sets Driver Seat Medium Cool",
       "enabled": true,
+      "ha_expose": true,
+      "ha_icon": "mdi:car-cog",
+      "exec_mode": "one_shot",
+      "cooldown_ms": 500,
       "triggers": [
         {
-          "type": "can_rx",
+          "type": "byte_transition",
           "can_id": "0x448",
-          "match": {
-            "D7": "0x0"
-          }
+          "bus": 0,
+          "byte": "D7",
+          "from": "0x00",
+          "to": "0x10"
         }
       ],
       "conditions": [],
