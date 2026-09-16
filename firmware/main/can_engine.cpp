@@ -24,18 +24,47 @@ void update_state_cache(uint32_t can_id, const uint8_t* data) {
 }
 
 bool evaluate_condition(const AutomationCondition& cond) {
-    auto it = can_state_cache.find(cond.can_id);
-    if (it == can_state_cache.end()) return false;
+    switch (cond.logic) {
+        case ConditionLogic::AND_GROUP: {
+            for (const auto& sub : cond.sub_conditions) {
+                if (!evaluate_condition(sub)) return false;
+            }
+            return true;
+        }
+        case ConditionLogic::OR_GROUP: {
+            if (cond.sub_conditions.empty()) return false;
+            for (const auto& sub : cond.sub_conditions) {
+                if (evaluate_condition(sub)) return true;
+            }
+            return false;
+        }
+        case ConditionLogic::NOT_GROUP: {
+            if (cond.sub_conditions.empty()) return true;
+            for (const auto& sub : cond.sub_conditions) {
+                if (evaluate_condition(sub)) return false;
+            }
+            return true;
+        }
+        case ConditionLogic::LEAF:
+        default: {
+            auto it = can_state_cache.find(cond.can_id);
+            if (it == can_state_cache.end()) return false;
 
-    if (cond.byte_index >= 8) return false;
-    uint8_t actual = it->second[cond.byte_index];
+            if (cond.byte_index >= 8) return false;
+            uint8_t actual = it->second[cond.byte_index];
+            uint8_t mask = cond.byte_mask;
 
-    switch (cond.op) {
-        case ConditionOperator::EQUAL:        return actual == cond.target_value;
-        case ConditionOperator::NOT_EQUAL:    return actual != cond.target_value;
-        case ConditionOperator::LESS_THAN:    return actual < cond.target_value;
-        case ConditionOperator::GREATER_THAN: return actual > cond.target_value;
-        default: return false;
+            uint8_t masked_actual = actual & mask;
+            uint8_t masked_target = cond.target_value & mask;
+
+            switch (cond.op) {
+                case ConditionOperator::EQUAL:        return masked_actual == masked_target;
+                case ConditionOperator::NOT_EQUAL:    return masked_actual != masked_target;
+                case ConditionOperator::LESS_THAN:    return masked_actual < masked_target;
+                case ConditionOperator::GREATER_THAN: return masked_actual > masked_target;
+                default: return false;
+            }
+        }
     }
 }
 
@@ -89,6 +118,44 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
 
         if (step.type == ActionType::ENTITY_COMMAND) {
             queue_entity_command(step.entity_id, step.command);
+            continue;
+        }
+
+        if (step.type == ActionType::IF_THEN) {
+            bool passed = true;
+            for (const auto& c : step.if_conditions) {
+                if (!evaluate_condition(c)) {
+                    passed = false;
+                    break;
+                }
+            }
+            if (passed) {
+                execute_can_burst(can_id, step.then_steps, delay_ms);
+            } else {
+                execute_can_burst(can_id, step.else_steps, delay_ms);
+            }
+            continue;
+        }
+
+        if (step.type == ActionType::CHOOSE) {
+            bool matched = false;
+            for (const auto& choice : step.choices) {
+                bool branch_passed = true;
+                for (const auto& c : choice.conditions) {
+                    if (!evaluate_condition(c)) {
+                        branch_passed = false;
+                        break;
+                    }
+                }
+                if (branch_passed) {
+                    execute_can_burst(can_id, choice.sequence, delay_ms);
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched && !step.default_steps.empty()) {
+                execute_can_burst(can_id, step.default_steps, delay_ms);
+            }
             continue;
         }
 

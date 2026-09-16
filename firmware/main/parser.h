@@ -10,6 +10,8 @@ extern std::vector<AutomationRule> global_automations;
 int get_d_index(const char* key);
 uint8_t parse_hex_string(const char* hex_str, bool* is_inverted = nullptr);
 ConditionOperator parse_operator(const char* op_str);
+bool parse_single_condition(cJSON* c_item, AutomationCondition& cond);
+bool parse_action_step(cJSON* a_item, ActionStep& step);
 
 bool parse_entity(cJSON* entity_json, CanEntity& out_entity);
 bool parse_automation(cJSON* auto_json, AutomationRule& out_rule);

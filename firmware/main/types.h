@@ -5,21 +5,71 @@
 #include <vector>
 #include <array>
 
+enum class ConditionLogic {
+    LEAF,
+    AND_GROUP,
+    OR_GROUP,
+    NOT_GROUP
+};
+
+enum class ConditionOperator {
+    EQUAL,
+    NOT_EQUAL,
+    LESS_THAN,
+    GREATER_THAN
+};
+
+struct AutomationCondition;
+struct ActionStep;
+
+struct AutomationCondition {
+    ConditionLogic logic = ConditionLogic::LEAF;
+
+    // Leaf evaluation fields
+    uint32_t can_id = 0;
+    uint8_t bus = 0;
+    uint8_t byte_index = 0; // 0..7 (from D1..D8)
+    uint8_t byte_mask = 0xFF; // Bitmask (e.g. 0xF0, 0xFF)
+    ConditionOperator op = ConditionOperator::EQUAL;
+    uint8_t target_value = 0;
+
+    // Nested sub-conditions for AND, OR, NOT groups
+    std::vector<AutomationCondition> sub_conditions;
+};
+
 enum class ActionType {
     TRANSMIT_FRAME,
     ENTITY_COMMAND,
-    DELAY
+    DELAY,
+    IF_THEN,
+    CHOOSE
+};
+
+struct ChoiceBranch {
+    std::vector<AutomationCondition> conditions;
+    std::vector<ActionStep> sequence;
 };
 
 struct ActionStep {
     ActionType type = ActionType::TRANSMIT_FRAME;
     uint32_t can_id = 0;
+    uint8_t bus = 0;
     uint8_t payload[8] = {0};
     uint8_t mask = 0;
     uint8_t repeat = 1;
     uint32_t delay_ms = 0;
     std::string entity_id;
     std::string command;
+    std::string popup_message;
+
+    // For IF_THEN
+    std::vector<AutomationCondition> if_conditions;
+    std::vector<ActionStep> then_steps;
+    std::vector<ActionStep> else_steps;
+
+    // For CHOOSE
+    std::vector<ChoiceBranch> choices;
+    std::vector<ActionStep> default_steps;
 };
 
 struct EntityOption {
@@ -44,20 +94,6 @@ struct CanEntity {
 
     std::vector<EntityOption> options;
     std::string current_state = "";
-};
-
-enum class ConditionOperator {
-    EQUAL,
-    NOT_EQUAL,
-    LESS_THAN,
-    GREATER_THAN
-};
-
-struct AutomationCondition {
-    uint32_t can_id = 0;
-    uint8_t byte_index = 0; // 0..7 (from D1..D8)
-    ConditionOperator op = ConditionOperator::EQUAL;
-    uint8_t target_value = 0;
 };
 
 struct AutomationTrigger {

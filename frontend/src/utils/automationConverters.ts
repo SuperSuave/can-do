@@ -45,6 +45,95 @@ export function compileToByteMap(input: string | ByteMap | undefined): ByteMap {
 }
 
 /**
+ * Compiles an AutomationCondition into a structured logic block (and/or/not) or masked leaf
+ */
+export function compileCondition(cond: AutomationCondition): any {
+  if (cond.logic === 'and' || cond.type === 'and_group') {
+    return {
+      logic: 'and',
+      conditions: (cond.conditions || []).map(compileCondition)
+    };
+  }
+  if (cond.logic === 'or' || cond.type === 'or_group') {
+    return {
+      logic: 'or',
+      conditions: (cond.conditions || []).map(compileCondition)
+    };
+  }
+  if (cond.logic === 'not' || cond.type === 'not_group') {
+    return {
+      logic: 'not',
+      conditions: (cond.conditions || []).map(compileCondition)
+    };
+  }
+
+  // Leaf condition
+  const match = compileToByteMap(cond.match || cond.match_payload);
+  const dKey = cond.byte || cond.evaluate?.byte || Object.keys(match)[0] || 'D1';
+  const targetVal = cond.value || cond.evaluate?.value || match[dKey] || '0x01';
+  const maskVal = cond.mask || cond.evaluate?.mask || '0xFF';
+  const op = cond.operator || cond.evaluate?.operator || (cond.invert ? 'not_equal' : 'equal');
+
+  return {
+    can_id: cond.can_id || '0x000',
+    bus: cond.bus ?? 0,
+    byte: dKey,
+    mask: maskVal,
+    operator: op,
+    value: targetVal
+  };
+}
+
+/**
+ * Compiles an AutomationAction into an entity_command, transmit, delay, if_then, or choose block
+ */
+export function compileAction(act: AutomationAction): any {
+  if (act.type === 'if_then') {
+    return {
+      type: 'if_then',
+      conditions: (act.conditions || []).map(compileCondition),
+      then: (act.then || []).map(compileAction),
+      else: (act.else || []).map(compileAction)
+    };
+  }
+
+  if (act.type === 'choose') {
+    return {
+      type: 'choose',
+      choices: (act.choices || []).map(c => ({
+        conditions: (c.conditions || []).map(compileCondition),
+        sequence: (c.sequence || []).map(compileAction)
+      })),
+      default: (act.default || []).map(compileAction)
+    };
+  }
+
+  if (act.type === 'delay') {
+    return {
+      type: 'delay',
+      ms: act.delay_ms || act.ms || 500
+    };
+  }
+
+  if (act.type === 'entity_command' || act.entity_id) {
+    return {
+      type: 'entity_command',
+      entity_id: act.entity_id || act.source_command_id || 'drivers_seat_comfort',
+      command: act.command || act.option_label || 'Medium Cool'
+    };
+  }
+
+  const payload = compileToByteMap(act.payload || act.to_payload);
+  return {
+    type: 'transmit',
+    can_id: act.can_id || '0x000',
+    bus: act.bus ?? 0,
+    payload: Object.keys(payload).length > 0 ? payload : { D1: '0x01' },
+    repeat: act.repeat || 1
+  };
+}
+
+/**
  * Compiles a single AutomationRule into a clean, wildcard-free schema conforming strictly
  * to docs/architecture.md and the exact outcome format.
  */
@@ -73,36 +162,8 @@ export function compileAutomationRule(rule: AutomationRule): any {
         to: toHex
       };
     }),
-    conditions: (rule.conditions || []).map(cond => {
-      const match = compileToByteMap(cond.match || cond.match_payload);
-      const dKey = cond.evaluate?.byte || Object.keys(match)[0] || 'D1';
-      const targetVal = cond.evaluate?.value || match[dKey] || '0x01';
-
-      return {
-        can_id: cond.can_id || '0x000',
-        bus: cond.bus ?? 0,
-        byte: dKey,
-        operator: cond.evaluate?.operator || cond.operator || 'equal',
-        value: targetVal
-      };
-    }),
-    actions: (rule.actions || []).map(act => {
-      if (act.type === 'entity_command' || act.entity_id) {
-        return {
-          type: 'entity_command',
-          entity_id: act.entity_id || act.source_command_id || 'drivers_seat_comfort',
-          command: act.command || act.option_label || 'Medium Cool'
-        };
-      }
-
-      const payload = compileToByteMap(act.payload || act.to_payload);
-      return {
-        type: 'transmit',
-        can_id: act.can_id || '0x000',
-        bus: act.bus ?? 0,
-        payload: Object.keys(payload).length > 0 ? payload : { D1: '0x01' }
-      };
-    })
+    conditions: (rule.conditions || []).map(compileCondition),
+    actions: (rule.actions || []).map(compileAction)
   };
 }
 
@@ -173,27 +234,8 @@ export function exportToEsp32FirmwareJson(
         from: t.from,
         to: t.to
       })),
-      conds: compiled.conditions.map((c: any) => ({
-        can_id: c.can_id || '0x000',
-        bus: c.bus ?? 0,
-        byte: c.byte,
-        op: c.operator,
-        val: c.value
-      })),
-      acts: compiled.actions.map((a: any) => {
-        if (a.type === 'entity_command') {
-          return {
-            type: 'entity_command',
-            entity_id: a.entity_id,
-            command: a.command
-          };
-        }
-        return {
-          can_id: a.can_id || '0x000',
-          bus: a.bus ?? 0,
-          payload: a.payload
-        };
-      })
+      conds: compiled.conditions,
+      acts: compiled.actions
     };
   });
 

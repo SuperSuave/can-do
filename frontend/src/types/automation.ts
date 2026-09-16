@@ -43,16 +43,21 @@ export interface AutomationTrigger {
 
 export interface AutomationCondition {
   id: string;
-  type: 'can_state' | 'param_range' | 'time' | 'voltage' | 'and_group' | 'or_group';
+  type?: 'can_state' | 'param_range' | 'time' | 'voltage' | 'and_group' | 'or_group' | 'not_group';
+  logic?: 'and' | 'or' | 'not' | 'leaf';
   can_id?: string;
   bus?: number;
+  byte?: string;
+  mask?: string;
+  operator?: string;
+  value?: string;
   match_payload?: string | ByteMap;
   match?: ByteMap;
   byte_index?: number;
-  operator?: string;
   evaluate?: {
     byte: string;
     byte_index?: number;
+    mask?: string;
     operator: string;
     value: string;
   };
@@ -70,6 +75,11 @@ export interface AutomationCondition {
   conditions?: AutomationCondition[];
 }
 
+export interface AutomationActionChoice {
+  conditions: AutomationCondition[];
+  sequence: AutomationAction[];
+}
+
 export interface AutomationActionStep {
   payload: string | ByteMap;
   repeat?: number;
@@ -78,7 +88,7 @@ export interface AutomationActionStep {
 
 export interface AutomationAction {
   id: string;
-  type: 'can_tx' | 'transmit' | 'entity_command' | 'precondition' | 'climate_target' | 'webhook' | 'choose' | 'if_then';
+  type: 'can_tx' | 'transmit' | 'entity_command' | 'delay' | 'precondition' | 'climate_target' | 'webhook' | 'choose' | 'if_then';
   trigger_id?: string;
   can_id?: string;
   bus?: number;
@@ -88,6 +98,7 @@ export interface AutomationAction {
   to_payload?: string | ByteMap;
   repeat?: number;
   delay_ms?: number;
+  ms?: number;
   steps?: AutomationActionStep[];
   popup_message?: string;
   precon_mode?: 'persistent' | 'timed' | 'toggle';
@@ -97,6 +108,15 @@ export interface AutomationAction {
   option_label?: string;
   webhook_url?: string;
   webhook_method?: 'GET' | 'POST';
+
+  // For if_then
+  conditions?: AutomationCondition[];
+  then?: AutomationAction[];
+  else?: AutomationAction[];
+
+  // For choose
+  choices?: AutomationActionChoice[];
+  default?: AutomationAction[];
 }
 
 export interface AutomationRule {

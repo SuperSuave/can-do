@@ -174,14 +174,68 @@ Every incoming frame updates a RAM-based hash map (can_state_cache) linking a CA
 
 This cache allows triggers and conditions to be evaluated instantly without waiting for a frame broadcast interval.
 
-2. Rule Evaluation & Transitions
-Rules are evaluated using explicit numerical checks rather than string matching:
+2. Rule Evaluation, Masking & Transitions
+Rules are evaluated using explicit numerical checks rather than string matching or wildcards:
 
-Triggers monitor specific byte transitions (e.g., byte_index: 6, from_value: 0x00, to_value: 0x01).
+- **Triggers**: Monitor specific byte transitions with optional bitmasks:
+  ```json
+  {
+    "type": "byte_transition",
+    "can_id": "0x448",
+    "bus": 0,
+    "byte": "D7",
+    "mask": "0xF0",
+    "from": "0x00",
+    "to": "0x10"
+  }
+  ```
+  Masked byte evaluation logic: `(actual & mask) == (target & mask)`.
 
-Conditions evaluate math operators against cached frames (less_than, greater_than, equal, not_equal).
+- **Structured Conditions (AND/OR/NOT)**:
+  Conditions compile into explicit logic groups or leaf checks:
+  ```json
+  {
+    "logic": "and",
+    "conditions": [
+      {
+        "can_id": "0x120",
+        "bus": 0,
+        "byte": "D1",
+        "mask": "0xFF",
+        "operator": "equal",
+        "value": "0x01"
+      }
+    ]
+  }
+  ```
 
-Actions either push raw byte bursts or trigger named entity commands.
+- **Sequential Branching Actions (If-Then-Else & Choose)**:
+  Actions execute sequentially and support branching:
+  - **Entity Commands**: `{ "type": "entity_command", "entity_id": "drivers_seat_comfort", "command": "Medium Cool" }`
+  - **Transmit Frames**: `{ "type": "transmit", "can_id": "0x524", "bus": 0, "payload": { "D1": "0x02" }, "repeat": 1 }`
+  - **Delay**: `{ "type": "delay", "ms": 500 }`
+  - **If-Then-Else**:
+    ```json
+    {
+      "type": "if_then",
+      "conditions": [ ... ],
+      "then": [ ... ],
+      "else": [ ... ]
+    }
+    ```
+  - **Choose (Switch-Case)**:
+    ```json
+    {
+      "type": "choose",
+      "choices": [
+        {
+          "conditions": [ ... ],
+          "sequence": [ ... ]
+        }
+      ],
+      "default": [ ... ]
+    }
+    ```
 
 3. Asynchronous Communication
 WebSockets (/ws): Real-time state changes and system logs (esp_log hook output) are broadcast asynchronously to connected MD3 dashboards using httpd_queue_work.
