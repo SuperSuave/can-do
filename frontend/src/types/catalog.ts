@@ -1,0 +1,156 @@
+export type CommandRole = 'trigger' | 'condition' | 'action';
+
+export type CommandType =
+  | 'can_tx'
+  | 'popup'
+  | 'precondition'
+  | 'webhook'
+  | 'mqtt'
+  | 'climate_target'
+  | 'speed_zero'
+  | 'can_state'
+  | 'param_range'
+  | 'voltage'
+  | 'day_of_week'
+  | 'time_window'
+  | string;
+
+export type ByteMap = Record<string, string>;
+
+export interface CommandNetwork {
+  bus?: number;
+  type?: string;
+  state_can_id?: string;
+  action_can_id?: string;
+  delay_ms?: number;
+}
+
+export interface CommandHaMetadata {
+  name?: string;
+  domain?: string;
+  icon?: string;
+}
+
+export interface CommandOption {
+  label: string;
+  payload?: string | ByteMap;
+  match?: ByteMap;
+  from_payload?: string;
+  to_payload?: string;
+  match_payload?: string;
+  state_can_id?: string;
+  action_can_id?: string;
+  steps?: CommandStep[];
+  popup?: string;
+  default?: boolean;
+  repeat?: number;
+  requires_feature?: string;
+  state_value?: string | number;
+  description?: string;
+}
+
+export interface CommandStep {
+  payload: string | ByteMap;
+  repeat?: number;
+}
+
+export interface ContributorInfo {
+  name?: string;
+  github?: string;
+  notes?: string;
+}
+
+export interface Command {
+  id: string;
+  name: string;
+  category: string;
+  subcategory?: string;
+  roles: CommandRole[];
+  network?: CommandNetwork;
+  ha_metadata?: CommandHaMetadata;
+  match?: ByteMap;
+  state_can_id?: string;
+  action_can_id?: string;
+  bus?: number;
+  action_bus?: number;
+  from_payload?: string;
+  to_payload?: string;
+  match_payload?: string;
+  tags?: string[];
+  requires_feature?: string;
+  type?: CommandType;
+  delay_ms?: number;
+  popup_message?: string;
+  popup_message_imperial?: string;
+  options?: CommandOption[];
+  steps?: CommandStep[];
+  contributor?: ContributorInfo;
+  // Home Assistant & MDI Icon metadata
+  ha_domain?: string;
+  icon?: string;
+  mdi?: string;
+  device_class?: string;
+  // Special types properties
+  precon_mode?: string;
+  precon_press?: string;
+  webhook_url?: string;
+  mqtt_topic?: string;
+  mqtt_payload?: string;
+  expression?: string;
+  voltage_val?: string;
+  voltage_dir?: 'above' | 'below' | string;
+  days?: string[];
+  start_time?: string;
+  end_time?: string;
+  climate_zone?: string;
+  target_temp_c?: number;
+  target_temp_f?: number;
+  pass_temp_c?: number;
+  pass_temp_f?: number;
+  climate_sync_on?: boolean;
+  climate_driver_only?: boolean;
+  [key: string]: any;
+}
+
+export interface Vehicle {
+  id: string;
+  name: string;
+  make: string;
+  model: string;
+  trim: string;
+  region: 'us' | 'eu' | 'global' | 'universal' | string;
+  family: string;
+  features: string[];
+  contributor?: ContributorInfo;
+}
+
+export interface Catalog {
+  catalog_version: string;
+  vehicles: Vehicle[];
+  commands: Command[];
+}
+
+export interface ValidationIssue {
+  type: 'error' | 'warning' | 'info';
+  field?: string;
+  message: string;
+  commandId?: string;
+}
+
+export interface CatalogValidationReport {
+  isValid: boolean;
+  errors: ValidationIssue[];
+  warnings: ValidationIssue[];
+  infos: ValidationIssue[];
+  totalCommands: number;
+  canIdGroups: Record<string, string[]>; // can_id -> command ids
+  categoryCounts: Record<string, number>;
+  roleCounts: Record<CommandRole, number>;
+}
+
+export interface GitHubRepoConfig {
+  owner: string;
+  repo: string;
+  branch: string;
+  filePath: string;
+}

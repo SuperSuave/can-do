@@ -1,0 +1,6 @@
+{
+  "name": "CAN Do Message Catalog",
+  "description": "Community Contribution for CAN Do Automations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

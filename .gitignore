@@ -1,0 +1,25 @@
+# Node / Frontend
+node_modules/
+dist/
+.vite/
+*.log
+
+# ESP-IDF / C++
+firmware/build/
+firmware/sdkconfig
+firmware/sdkconfig.old
+firmware/dependencies.lock
+firmware/managed_components/
+
+# Environment & local configs
+.env
+.env.local
+*.local
+
+# System & IDE artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.bak
