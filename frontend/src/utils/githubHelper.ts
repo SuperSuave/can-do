@@ -5,7 +5,7 @@ export const DEFAULT_REPO_CONFIG: GitHubRepoConfig = {
   owner: 'SuperSuave',
   repo: 'can-do-message-catalog',
   branch: 'main',
-  filePath: 'can_do_catalog.json'
+  filePath: 'catalog/can_do_catalog.json'
 };
 
 export function getSavedRepoConfig(): GitHubRepoConfig {

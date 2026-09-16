@@ -55,42 +55,17 @@ const STORAGE_KEY_AUTOMATIONS_RULES = 'can_do_automation_rules';
 const STORAGE_KEY_AUTOMATIONS_SETTINGS = 'can_do_automation_settings';
 
 export default function App() {
-  // 1. Core catalog state
+  // 1. Core catalog state (Strictly from /catalog/can_do_catalog.json)
   const [catalog, setCatalog] = useState<Catalog>(() => {
     try {
+      const hasDrafts = (localStorage.getItem(STORAGE_KEY_DRAFT_ADDED) || '[]') !== '[]' ||
+                        (localStorage.getItem(STORAGE_KEY_DRAFT_MODIFIED) || '[]') !== '[]';
       const saved = localStorage.getItem(STORAGE_KEY_CATALOG);
-      if (saved) {
+      if (saved && hasDrafts) {
         const parsed = JSON.parse(saved);
-        // Synchronize default catalog enhancements like dual CAN IDs if not modified in draft
-        if (parsed.commands) {
-          const defaultSeat = DEFAULT_CATALOG.commands.find(c => c.id === 'rear_left_seat_heating');
-          const savedSeatIdx = parsed.commands.findIndex((c: any) => c.id === 'rear_left_seat_heating');
-          if (defaultSeat && savedSeatIdx >= 0 && !parsed.commands[savedSeatIdx].action_can_id) {
-            parsed.commands[savedSeatIdx] = { ...parsed.commands[savedSeatIdx], ...defaultSeat };
-          }
-
-          const defaultPopup = DEFAULT_CATALOG.commands.find(c => c.id === 'cluster_telemetry_popup');
-          const savedPopupIdx = parsed.commands.findIndex((c: any) => c.id === 'cluster_telemetry_popup');
-          if (defaultPopup && savedPopupIdx >= 0 && parsed.commands[savedPopupIdx].ha_domain !== 'notify') {
-            parsed.commands[savedPopupIdx] = {
-              ...parsed.commands[savedPopupIdx],
-              ha_domain: 'notify',
-              icon: defaultPopup.icon || 'mdi:message-badge',
-              mdi: defaultPopup.mdi || 'mdi:message-badge'
-            };
-          }
-
-          parsed.commands.forEach((c: any) => {
-            if (!c.icon || !c.mdi) {
-              const def = DEFAULT_CATALOG.commands.find(dc => dc.id === c.id);
-              if (def) {
-                c.icon = c.icon || def.icon || def.mdi || 'mdi:car-info';
-                c.mdi = c.mdi || def.mdi || def.icon || 'mdi:car-info';
-              }
-            }
-          });
+        if (parsed.commands && parsed.vehicles) {
+          return parsed;
         }
-        return parsed;
       }
     } catch (e) {
       console.error('Failed to load catalog from localStorage', e);
@@ -215,33 +190,28 @@ export default function App() {
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
   const [selectedFeature, setSelectedFeature] = useState<string>('all');
 
-  // Fetch remote can_do_catalog.json from GitHub raw on mount if no local cache exists
+  // Pull latest catalog strictly from /catalog/can_do_catalog.json
   useEffect(() => {
-    if (!localStorage.getItem(STORAGE_KEY_CATALOG)) {
-      const fetchSources = [
-        `https://raw.githubusercontent.com/${repoConfig.owner}/${repoConfig.repo}/${repoConfig.branch}/${repoConfig.filePath}`,
-        './can_do_catalog.json'
-      ];
-
-      const tryFetch = async () => {
-        for (const url of fetchSources) {
-          try {
-            const res = await fetch(url);
-            if (res.ok) {
-              const data = await res.json();
-              if (data && data.commands && data.vehicles) {
-                setCatalog(data);
-                break;
-              }
+    const fetchCatalog = async () => {
+      const hasDrafts = (localStorage.getItem(STORAGE_KEY_DRAFT_ADDED) || '[]') !== '[]' ||
+                        (localStorage.getItem(STORAGE_KEY_DRAFT_MODIFIED) || '[]') !== '[]';
+      if (!hasDrafts) {
+        try {
+          const res = await fetch(`${import.meta.env.BASE_URL}catalog/can_do_catalog.json`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.commands && data.vehicles) {
+              setCatalog(data);
+              return;
             }
-          } catch {
-            // Try next source
           }
+        } catch {
+          // Fallback to DEFAULT_CATALOG which is directly imported from /catalog
         }
-      };
-      tryFetch();
-    }
-  }, [repoConfig]);
+      }
+    };
+    fetchCatalog();
+  }, []);
 
   // Sync to LocalStorage
   useEffect(() => {
@@ -547,22 +517,25 @@ export default function App() {
     localStorage.removeItem(STORAGE_KEY_DISCOVERED_FEATURES);
   };
 
-  const handleSyncFromGitHub = async () => {
-    const url = `https://raw.githubusercontent.com/${repoConfig.owner}/${repoConfig.repo}/${repoConfig.branch}/${repoConfig.filePath}`;
+  const handleReloadCatalog = async () => {
     try {
-      const res = await fetch(url);
+      const res = await fetch(`${import.meta.env.BASE_URL}catalog/can_do_catalog.json`);
       if (res.ok) {
         const data = await res.json();
         if (data && data.commands && data.vehicles) {
           setCatalog(data);
-          alert(`Successfully synced latest catalog (v${data.catalog_version}) from GitHub PRs!`);
+          localStorage.setItem(STORAGE_KEY_CATALOG, JSON.stringify(data));
+          alert(`Successfully reloaded catalog (v${data.catalog_version || '1.0.0'}) from /catalog!`);
           return;
         }
       }
-      alert('Failed to fetch latest catalog from GitHub repository.');
+      setCatalog(DEFAULT_CATALOG);
+      localStorage.setItem(STORAGE_KEY_CATALOG, JSON.stringify(DEFAULT_CATALOG));
+      alert('Reloaded catalog from /catalog/can_do_catalog.json.');
     } catch (e) {
       console.error(e);
-      alert('Error connecting to GitHub. Check network connection.');
+      setCatalog(DEFAULT_CATALOG);
+      alert('Reloaded catalog from /catalog.');
     }
   };
 
@@ -771,15 +744,15 @@ export default function App() {
               <span>{validationReport.isValid ? 'Valid Catalog' : 'Audit Issues'}</span>
             </button>
 
-            {/* Sync from GitHub Button */}
+            {/* Reload from /catalog Button */}
             <button
               type="button"
-              onClick={handleSyncFromGitHub}
+              onClick={handleReloadCatalog}
               className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-1.5 px-3.5 text-cyan-300 hover:text-cyan-200"
-              title="Pull latest catalog from GitHub repository (based on recent PRs)"
+              title="Pull latest catalog directly from /catalog/can_do_catalog.json"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Sync GitHub</span>
+              <span>Reload /catalog</span>
             </button>
 
             {/* Import Button */}
