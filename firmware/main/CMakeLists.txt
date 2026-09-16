@@ -18,7 +18,7 @@ idf_component_register(
 
 # Automated LittleFS staging
 set(CATALOG_DIR "${CMAKE_SOURCE_DIR}/../catalog")
-set(FRONTEND_DIR "${CMAKE_SOURCE_DIR}/../frontend")
+set(DASHBOARD_DIR "${CMAKE_SOURCE_DIR}/embedded-dashboard")
 set(STAGING_DIR "${CMAKE_BINARY_DIR}/fs_staging")
 
 file(MAKE_DIRECTORY ${STAGING_DIR}/catalog)
@@ -26,8 +26,8 @@ file(MAKE_DIRECTORY ${STAGING_DIR}/www)
 
 add_custom_target(copy_fs_files ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CATALOG_DIR} ${STAGING_DIR}/catalog
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${FRONTEND_DIR} ${STAGING_DIR}/www
-    COMMENT "Staging catalog and frontend for LittleFS packaging..."
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${DASHBOARD_DIR} ${STAGING_DIR}/www
+    COMMENT "Staging catalog and embedded dashboard for LittleFS packaging..."
 )
 
 littlefs_create_partition_image(storage ${STAGING_DIR} FLASH_IN_PROJECT)

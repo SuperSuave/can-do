@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAN Do Engine Console</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top-bar">
+    <div class="brand">
+      <span class="brand-title">CAN Do</span>
+      <span class="brand-sub">Edge Engine</span>
+    </div>
+    <div id="connection-status" class="status-badge offline">Connecting...</div>
+  </header>
+
+  <main class="container">
+    <!-- Quick Stats -->
+    <section class="card stats-bar">
+      <div class="stat-item">
+        <span class="stat-label">Active State</span>
+        <span id="stat-active" class="stat-value">Ready</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Entities</span>
+        <span id="stat-entities" class="stat-value">--</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Automations</span>
+        <span id="stat-automations" class="stat-value">--</span>
+      </div>
+    </section>
+
+    <!-- Controls & Status -->
+    <section class="card">
+      <div class="card-header">
+        <h2>Vehicle Controls & Status</h2>
+        <input type="text" id="filter-input" placeholder="Search entities..." class="input-search">
+      </div>
+      <div id="entity-grid" class="entity-grid">
+        <div class="loading-placeholder">Loading entities...</div>
+      </div>
+    </section>
+
+    <!-- Automation Rule Runner -->
+    <section class="card">
+      <div class="card-header">
+        <h2>Automation Testing</h2>
+      </div>
+      <div class="automation-test-bar">
+        <select id="automation-select" class="select-field">
+          <option value="menu_ok_cool_driver_seat">Menu OK Sets Driver Seat Medium Cool</option>
+        </select>
+        <div class="button-group">
+          <button id="btn-dry-run" class="btn btn-secondary">Dry Run</button>
+          <button id="btn-live-fire" class="btn btn-primary">Live Fire</button>
+        </div>
+      </div>
+      <div id="test-result" class="test-result-box" style="display:none;"></div>
+    </section>
+
+    <!-- Real-time Terminal Log -->
+    <section class="card terminal-card">
+      <div class="card-header">
+        <h2>Live System Logs</h2>
+        <div class="terminal-actions">
+          <button id="btn-clear-log" class="btn-tiny">Clear</button>
+          <label class="checkbox-label">
+            <input type="checkbox" id="chk-autoscroll" checked> Auto-scroll
+          </label>
+        </div>
+      </div>
+      <div id="terminal-window" class="terminal-window"></div>
+    </section>
+
+    <!-- Maintenance / OTA -->
+    <section class="card">
+      <div class="card-header">
+        <h2>Maintenance & OTA Updates</h2>
+      </div>
+      <div class="ota-grid">
+        <div class="ota-box">
+          <h3>Firmware Flash (.bin)</h3>
+          <p class="subtext">A/B OTA dual partition</p>
+          <input type="file" id="firmware-input" accept=".bin" class="file-input">
+          <progress id="ota-progress" value="0" max="1" style="display:none;"></progress>
+          <span id="ota-status" class="status-msg"></span>
+        </div>
+        <div class="ota-box">
+          <h3>Catalog Update (.json)</h3>
+          <p class="subtext">Uploads rules and restarts engine</p>
+          <input type="file" id="catalog-input" accept=".json" class="file-input">
+          <span id="catalog-status" class="status-msg"></span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="main.js"></script>
+</body>
+</html>
