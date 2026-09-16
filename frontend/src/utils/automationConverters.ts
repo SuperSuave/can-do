@@ -8,7 +8,7 @@ import {
   AutomationCondition,
   AutomationAction
 } from '../types/automation';
-import { Command, CommandOption } from '../types/catalog';
+import { Command, CommandOption, Catalog } from '../types/catalog';
 
 /**
  * Generate standard WiCAN / CAN Do format compatible with SuperSuave/wicant-i-automate
@@ -37,6 +37,19 @@ export function exportToCandoJson(
   };
 
   return JSON.stringify(exportPayload, null, 2);
+}
+
+/**
+ * Generate full can_do_catalog.json with embedded automations array ready for ESP32 LittleFS
+ */
+export function exportToFullCatalogJson(
+  catalog: Catalog,
+  rules: AutomationRule[]
+): string {
+  return JSON.stringify({
+    ...catalog,
+    automations: rules
+  }, null, 2);
 }
 
 /**

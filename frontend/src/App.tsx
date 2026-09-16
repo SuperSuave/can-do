@@ -169,6 +169,9 @@ export default function App() {
     } catch (e) {
       console.error('Failed to load automation rules from storage', e);
     }
+    if ((DEFAULT_CATALOG as any).automations && Array.isArray((DEFAULT_CATALOG as any).automations) && (DEFAULT_CATALOG as any).automations.length > 0) {
+      return (DEFAULT_CATALOG as any).automations;
+    }
     return DEFAULT_AUTOMATION_RULES;
   });
 

@@ -1,0 +1,46 @@
+# Home Assistant Automations demonstrating CAN Do MQTT command dispatch
+# Add to your automations.yaml or import via UI
+
+# 1. Android Auto connected -> Set driver comfort profile
+- id: can_do_android_auto_driver_profile
+  alias: "CAN Do: Apply Driver Profile on Android Auto Connect"
+  description: "When phone connects to Android Auto, set driver seat comfort to Medium Cool"
+  trigger:
+    - platform: state
+      entity_id: sensor.andrews_phone_bluetooth_connection
+      to: "Android Auto"
+  condition:
+    - condition: state
+      entity_id: select.cando_kia_ev6_drivers_seat_comfort
+      state: "Off"
+  action:
+    - service: select.select_option
+      target:
+        entity_id: select.cando_kia_ev6_drivers_seat_comfort
+      data:
+        option: "Medium Cool"
+  mode: single
+
+# 2. Morning departure schedule -> Trigger climate and warmers
+- id: can_do_morning_precondition
+  alias: "CAN Do: Morning Precondition on Weekdays"
+  description: "Trigger climate, seat heat, and wheel heat at 7:30 AM if cold"
+  trigger:
+    - platform: time
+      at: "07:30:00"
+  condition:
+    - condition: time
+      weekday:
+        - mon
+        - tue
+        - wed
+        - thu
+        - fri
+    - condition: numeric_state
+      entity_id: sensor.outdoor_temperature
+      below: 45
+  action:
+    - service: button.press
+      target:
+        entity_id: button.cando_kia_ev6_remote_climate_start____seats___wheel_
+  mode: single

@@ -1,0 +1,56 @@
+# Home Assistant Lovelace Vehicle Dashboard Card
+# Paste into a Manual Card or Dashboard View
+
+type: vertical-stack
+cards:
+  # Vehicle Header
+  - type: custom:mushroom-title-card
+    title: CAN Do Vehicle
+    subtitle: Autonomous Edge Engine (EV6)
+
+  # Seat Comfort Controls
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: custom:mushroom-select-card
+        entity: select.cando_kia_ev6_drivers_seat_comfort
+        name: Driver Seat
+        icon: mdi:car-seat-heater
+        fill_container: true
+
+      - type: custom:mushroom-select-card
+        entity: select.cando_kia_ev6_passengers_seat_comfort
+        name: Passenger Seat
+        icon: mdi:car-seat-heater
+        fill_container: true
+
+  # Steering Wheel & Climate Controls
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: custom:mushroom-entity-card
+        entity: switch.cando_kia_ev6_heated_steering_wheel_toggle
+        name: Heated Wheel
+        icon: mdi:steering
+        tap_action:
+          action: toggle
+
+      - type: custom:mushroom-entity-card
+        entity: button.cando_kia_ev6_remote_climate_start____seats___wheel_
+        name: Remote Climate
+        icon: mdi:fan
+        tap_action:
+          action: toggle
+
+  # Real-time Status Sensors
+  - type: entities
+    title: Vehicle State
+    entities:
+      - entity: sensor.cando_kia_ev6_rear_seats_comfort
+        name: Rear Seat Heat
+      - entity: event.cando_kia_ev6_sw_star
+        name: Star Button Event
+      - entity: event.cando_kia_ev6_sw_menu
+        name: Menu / OK Button Event

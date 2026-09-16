@@ -12,6 +12,7 @@ import { Catalog, Command, CommandOption } from '../types/catalog';
 import {
   exportToCandoJson,
   exportToEsp32FirmwareJson,
+  exportToFullCatalogJson,
   commandToTrigger,
   commandToCondition,
   commandToAction
@@ -41,6 +42,7 @@ import {
   FileJson,
   Cpu,
   RefreshCcw,
+  RefreshCw,
   Eye,
   Info,
   Car
@@ -71,7 +73,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [selectedRuleId, setSelectedRuleId] = useState<string>(
     rules.length > 0 ? rules[0].id : ''
   );
-  const [activeJsonTab, setActiveJsonTab] = useState<'cando' | 'esp32' | 'custom'>('cando');
+  const [activeJsonTab, setActiveJsonTab] = useState<'catalog' | 'cando' | 'esp32' | 'custom'>('catalog');
   const [copied, setCopied] = useState(false);
   const [catalogPickerOpen, setCatalogPickerOpen] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<'trigger' | 'condition' | 'action' | 'off_action'>('trigger');
@@ -217,7 +219,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
   const handleCopyJson = () => {
     let textToCopy = '';
-    if (activeJsonTab === 'cando') {
+    if (activeJsonTab === 'catalog') {
+      textToCopy = exportToFullCatalogJson(catalog, rules);
+    } else if (activeJsonTab === 'cando') {
       textToCopy = exportToCandoJson(rules, settings);
     } else if (activeJsonTab === 'esp32') {
       textToCopy = exportToEsp32FirmwareJson(rules, settings);
@@ -232,7 +236,10 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const handleDownloadJson = () => {
     let content = '';
     let filename = '';
-    if (activeJsonTab === 'cando') {
+    if (activeJsonTab === 'catalog') {
+      content = exportToFullCatalogJson(catalog, rules);
+      filename = 'can_do_catalog.json';
+    } else if (activeJsonTab === 'cando') {
       content = exportToCandoJson(rules, settings);
       filename = 'wican_cando_rules.json';
     } else if (activeJsonTab === 'esp32') {
@@ -261,7 +268,11 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     reader.onload = evt => {
       try {
         const parsed = JSON.parse(evt.target?.result as string);
-        if (parsed.rules && Array.isArray(parsed.rules)) {
+        if (parsed.automations && Array.isArray(parsed.automations)) {
+          onUpdateRules(parsed.automations);
+          if (parsed.automations[0]?.id) setSelectedRuleId(parsed.automations[0].id);
+          alert(`Successfully imported ${parsed.automations.length} automation rules from catalog!`);
+        } else if (parsed.rules && Array.isArray(parsed.rules)) {
           onUpdateRules(parsed.rules);
           if (parsed.settings) onUpdateSettings(parsed.settings);
           if (parsed.rules[0]?.id) setSelectedRuleId(parsed.rules[0].id);
@@ -271,7 +282,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           if (parsed[0]?.id) setSelectedRuleId(parsed[0].id);
           alert(`Successfully imported ${parsed.length} automation rules!`);
         } else {
-          alert('Could not detect a "rules" array in this JSON file.');
+          alert('Could not detect an "automations" or "rules" array in this JSON file.');
         }
       } catch (err: any) {
         alert(`Error parsing JSON: ${err.message}`);
@@ -1256,6 +1267,17 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-950 border border-slate-800 text-[11px]">
                 <button
                   type="button"
+                  onClick={() => setActiveJsonTab('catalog')}
+                  className={`px-2.5 py-1 rounded-lg font-semibold transition ${
+                    activeJsonTab === 'catalog'
+                      ? 'bg-cyan-500 text-slate-950 shadow'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Full Catalog
+                </button>
+                <button
+                  type="button"
                   onClick={() => setActiveJsonTab('cando')}
                   className={`px-2.5 py-1 rounded-lg font-semibold transition ${
                     activeJsonTab === 'cando'
@@ -1312,6 +1334,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
               <FileJson className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
               <span>
+                {activeJsonTab === 'catalog' && 'Full can_do_catalog.json with embedded automations ready for LittleFS flash.'}
                 {activeJsonTab === 'cando' && 'Formatted for SuperSuave/wicant-i-automate LittleFS flash.'}
                 {activeJsonTab === 'esp32' && 'Flat, numeric enums optimized for lightweight ESP32 C parsing.'}
                 {activeJsonTab === 'custom' && 'Sandbox schema for testing your new firmware architecture from scratch.'}
@@ -1330,7 +1353,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               ) : (
                 <pre className="w-full h-full p-3 font-mono text-[11px] text-slate-300 overflow-auto leading-relaxed select-text">
                   <code>
-                    {activeJsonTab === 'cando'
+                    {activeJsonTab === 'catalog'
+                      ? exportToFullCatalogJson(catalog, rules)
+                      : activeJsonTab === 'cando'
                       ? exportToCandoJson(rules, settings)
                       : exportToEsp32FirmwareJson(rules, settings)}
                   </code>
