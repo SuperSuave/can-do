@@ -295,20 +295,23 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const handleSimulateRule = () => {
     if (!activeRule) return;
     setShowSimulateModal(true);
+    const trigs = activeRule.triggers || [];
+    const conds = activeRule.conditions || [];
+    const acts = activeRule.actions || [];
     const logs = [
-      `[ESP32 Boot] Loaded rule: "${activeRule.name}" (Mode: ${activeRule.exec_mode.toUpperCase()})`,
-      `[Trigger Engine] Monitoring ${activeRule.triggers.length} trigger pattern(s)...`,
-      `[Sim Ingress] CAN frame matching trigger ${activeRule.triggers[0]?.can_id || '0x448'} received on Bus ${activeRule.triggers[0]?.bus ?? 0}`,
-      `[Condition Evaluator] Checking ${activeRule.conditions.length} condition(s): ALL PASS (1/1 true)`,
-      `[Dispatcher] Executing ${activeRule.actions.length} action(s) with ${activeRule.cooldown_ms}ms cooldown protection...`
+      `[ESP32 Boot] Loaded rule: "${activeRule.name}" (Mode: ${(activeRule.exec_mode || 'one_shot').toUpperCase()})`,
+      `[Trigger Engine] Monitoring ${trigs.length} trigger pattern(s)...`,
+      `[Sim Ingress] CAN frame matching trigger ${trigs[0]?.can_id || '0x448'} received on Bus ${trigs[0]?.bus ?? 0}`,
+      `[Condition Evaluator] Checking ${conds.length} condition(s): ALL PASS (1/1 true)`,
+      `[Dispatcher] Executing ${acts.length} action(s) with ${activeRule.cooldown_ms || 0}ms cooldown protection...`
     ];
 
-    activeRule.actions.forEach((act, idx) => {
+    acts.forEach((act, idx) => {
       if (act.type === 'precondition') {
         logs.push(`  -> Action #${idx + 1}: Triggered Precondition State Machine (Persistent mode)`);
       } else if (act.type === 'can_tx') {
         logs.push(
-          `  -> Action #${idx + 1}: Injected CAN Frame ID ${act.can_id} [${act.payload}] (Repeat: ${act.repeat || 1}x, Delay: ${act.delay_ms || 0}ms)`
+          `  -> Action #${idx + 1}: Injected CAN Frame ID ${act.can_id} [${typeof act.payload === 'object' ? JSON.stringify(act.payload) : act.payload}] (Repeat: ${act.repeat || 1}x, Delay: ${act.delay_ms || 0}ms)`
         );
       } else {
         logs.push(`  -> Action #${idx + 1}: Executed action type "${act.type}"`);
@@ -318,7 +321,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
       }
     });
 
-    logs.push(`[Success] Rule dry-run verified successfully. Cooldown armed for ${activeRule.cooldown_ms}ms.`);
+    logs.push(`[Success] Rule dry-run verified successfully. Cooldown armed for ${activeRule.cooldown_ms || 0}ms.`);
     setSimulationLog(logs);
   };
 
@@ -482,7 +485,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
                     <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
                       <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 uppercase">
-                        {rule.exec_mode.replace('_', ' ')}
+                        {(rule.exec_mode || 'one_shot').replace('_', ' ')}
                       </span>
                       {rule.ha_expose && (
                         <span className="px-1 py-0.5 rounded bg-orange-950/60 text-orange-300 border border-orange-800/40">
@@ -490,7 +493,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                         </span>
                       )}
                       <span>
-                        {rule.triggers.length}T · {rule.actions.length}A
+                        {(rule.triggers || []).length}T · {(rule.actions || []).length}A
                       </span>
                     </div>
                   </div>
@@ -542,7 +545,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 <div>
                   <label className="block text-slate-400 font-medium mb-1">Execution Mode</label>
                   <select
-                    value={activeRule.exec_mode}
+                    value={activeRule.exec_mode || 'one_shot'}
                     onChange={e => handleUpdateActiveRule({ exec_mode: e.target.value as ExecutionMode })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-cyan-500"
                   >
@@ -557,7 +560,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 <div>
                   <label className="block text-slate-400 font-medium mb-1">Trigger Combination</label>
                   <select
-                    value={activeRule.trigger_mode}
+                    value={activeRule.trigger_mode || 'any'}
                     onChange={e => handleUpdateActiveRule({ trigger_mode: e.target.value as TriggerCombineMode })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-cyan-500"
                   >
@@ -574,7 +577,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   <label className="block text-slate-400 font-medium mb-1">Cooldown (ms)</label>
                   <input
                     type="number"
-                    value={activeRule.cooldown_ms}
+                    value={activeRule.cooldown_ms ?? 0}
                     onChange={e => handleUpdateActiveRule({ cooldown_ms: parseInt(e.target.value) || 0 })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
                   />
@@ -584,7 +587,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   <label className="block text-slate-400 font-medium mb-1">Timeout (ms)</label>
                   <input
                     type="number"
-                    value={activeRule.timeout_reset_ms}
+                    value={activeRule.timeout_reset_ms ?? 0}
                     onChange={e => handleUpdateActiveRule({ timeout_reset_ms: parseInt(e.target.value) || 0 })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
                   />
