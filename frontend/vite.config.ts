@@ -6,7 +6,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
   return {
-    base: '/CAN-Do-Message-Catalog/',
+    base: '/can-do/',
     plugins: [
       react(),
       tailwindcss(),
@@ -19,6 +19,8 @@ export default defineConfig(() => {
               cleanUrl === '/catalog' ||
               cleanUrl === '/catalog/' ||
               cleanUrl === '/catalog/can_do_catalog.json' ||
+              cleanUrl === '/can-do/catalog' ||
+              cleanUrl === '/can-do/catalog/can_do_catalog.json' ||
               cleanUrl === '/CAN-Do-Message-Catalog/catalog' ||
               cleanUrl === '/CAN-Do-Message-Catalog/catalog/can_do_catalog.json'
             ) {
