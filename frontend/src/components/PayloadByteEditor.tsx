@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 interface PayloadByteEditorProps {
-  value: string;
+  value?: string | Record<string, string>;
   onChange: (newValue: string) => void;
   label?: string;
   placeholder?: string;
@@ -15,8 +15,14 @@ export const PayloadByteEditor: React.FC<PayloadByteEditorProps> = ({
   const [isAdvanced, setIsAdvanced] = useState(false);
 
   // Parse current value into 8 tokens (D1..D8)
-  const parseTokens = (str: string): string[] => {
-    const tokens = str ? str.trim().split(/\s+/) : [];
+  const parseTokens = (input?: string | Record<string, string>): string[] => {
+    if (!input) return Array(8).fill('*');
+    if (typeof input === 'object') {
+      const keys = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'];
+      return keys.map(k => (input[k] !== undefined && input[k] !== '' ? String(input[k]) : '*'));
+    }
+    const str = typeof input === 'string' ? input : String(input);
+    const tokens = str.trim() !== '' ? str.trim().split(/\s+/) : [];
     const result: string[] = [];
     for (let i = 0; i < 8; i++) {
       result.push(tokens[i] !== undefined && tokens[i] !== '' ? tokens[i] : '*');
@@ -70,7 +76,7 @@ export const PayloadByteEditor: React.FC<PayloadByteEditorProps> = ({
         <div className="space-y-1.5">
           <input
             type="text"
-            value={value}
+            value={typeof value === 'object' ? Object.entries(value).map(([k, v]) => `${k}:${v}`).join(' ') : (value || '')}
             onChange={e => onChange(e.target.value)}
             placeholder="e.g. * * * * * F8 * *"
             className="w-full px-3 py-2 rounded-lg bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-sm text-cyan-300 focus:outline-none focus:border-cyan-500"

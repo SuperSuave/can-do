@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { CommandOption } from '../types/catalog';
+import { CommandOption, CommandStep } from '../types/catalog';
 import { PayloadByteEditor } from './PayloadByteEditor';
 import { STATE_PRESETS, StatePreset } from '../data/statePresets';
+import { compileToByteMap } from '../utils/automationConverters';
+import { formatPayloadDisplay } from './CommandDetailModal';
 import {
   Layers,
   Plus,
@@ -14,7 +16,11 @@ import {
   Check,
   ArrowUpDown,
   Copy,
-  Car
+  Car,
+  ListOrdered,
+  FileText,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 
 interface StateDefinitionsEditorProps {
@@ -37,6 +43,108 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
   const [expandedActionIndex, setExpandedActionIndex] = useState<number | null>(null);
   const [showPresetsDropdown, setShowPresetsDropdown] = useState(false);
   const [previewActiveByteIndex, setPreviewActiveByteIndex] = useState<number | null>(null);
+  const [actionTabMap, setActionTabMap] = useState<Record<number, 'single' | 'steps'>>({});
+  const [pastingOptIdx, setPastingOptIdx] = useState<number | null>(null);
+  const [pasteStepText, setPasteStepText] = useState('');
+
+  // Step sequence parser for raw multi-step paste
+  const parseStepSequenceText = (text: string): CommandStep[] => {
+    if (!text || text.trim() === '') return [];
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const steps: CommandStep[] = [];
+
+    for (const line of lines) {
+      let repeat = 1;
+      const parenMatch = line.match(/\((\d+)\s*(?:times|x)?\)/i);
+      const endXMatch = line.match(/(?:x|\*)\s*(\d+)\s*$/i);
+      if (parenMatch) {
+        repeat = parseInt(parenMatch[1], 10) || 1;
+      } else if (endXMatch) {
+        repeat = parseInt(endXMatch[1], 10) || 1;
+      }
+
+      const cleanLine = line.replace(/\([^)]*\)/g, '').replace(/(?:x|\*)\s*\d+\s*$/i, '');
+      const rawTokens = cleanLine
+        .replace(/[,;:]/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .filter(t => /^(?:0x)?[0-9A-Fa-f]{1,2}$|^\*$|^![0-9A-Fa-f]{2}$/.test(t));
+
+      if (rawTokens.length > 0) {
+        const paddedTokens = [...rawTokens];
+        while (paddedTokens.length < 8) {
+          paddedTokens.push('*');
+        }
+        const normalizedTokens = paddedTokens.slice(0, 8).map(t => {
+          if (t === '*' || t.startsWith('!')) return t;
+          const hex = t.replace(/^0x/i, '');
+          return hex.length === 1 ? '0' + hex.toUpperCase() : hex.toUpperCase();
+        });
+
+        const byteMap: Record<string, string> = {};
+        normalizedTokens.forEach((t, i) => {
+          byteMap[`D${i + 1}`] = t === '*' ? '*' : `0x${t}`;
+        });
+
+        steps.push({
+          payload: byteMap,
+          repeat
+        });
+      }
+    }
+    return steps;
+  };
+
+  const handleAddOptionStep = (optIdx: number) => {
+    const opt = options[optIdx];
+    const curSteps = opt.steps || [];
+    const newStep: CommandStep = {
+      payload: '* * * * * * * *',
+      repeat: 1
+    };
+    handleUpdateState(optIdx, { steps: [...curSteps, newStep] });
+  };
+
+  const handleUpdateOptionStep = (optIdx: number, stepIdx: number, updated: Partial<CommandStep>) => {
+    const opt = options[optIdx];
+    const curSteps = [...(opt.steps || [])];
+    if (!curSteps[stepIdx]) return;
+    curSteps[stepIdx] = { ...curSteps[stepIdx], ...updated };
+    handleUpdateState(optIdx, { steps: curSteps });
+  };
+
+  const handleRemoveOptionStep = (optIdx: number, stepIdx: number) => {
+    const opt = options[optIdx];
+    const curSteps = (opt.steps || []).filter((_, i) => i !== stepIdx);
+    handleUpdateState(optIdx, { steps: curSteps.length > 0 ? curSteps : undefined });
+  };
+
+  const handleMoveOptionStep = (optIdx: number, fromIdx: number, toIdx: number) => {
+    const opt = options[optIdx];
+    const curSteps = [...(opt.steps || [])];
+    if (toIdx < 0 || toIdx >= curSteps.length) return;
+    const [moved] = curSteps.splice(fromIdx, 1);
+    curSteps.splice(toIdx, 0, moved);
+    handleUpdateState(optIdx, { steps: curSteps });
+  };
+
+  const handleDuplicateOptionStep = (optIdx: number, stepIdx: number) => {
+    const opt = options[optIdx];
+    const curSteps = [...(opt.steps || [])];
+    if (!curSteps[stepIdx]) return;
+    const dup = { ...curSteps[stepIdx] };
+    curSteps.splice(stepIdx + 1, 0, dup);
+    handleUpdateState(optIdx, { steps: curSteps });
+  };
+
+  const handleApplyPastedSteps = (optIdx: number) => {
+    const parsed = parseStepSequenceText(pasteStepText);
+    if (parsed.length > 0) {
+      handleUpdateState(optIdx, { steps: parsed });
+      setPastingOptIdx(null);
+      setPasteStepText('');
+    }
+  };
 
   const handleAddState = () => {
     const nextIdx = options.length + 1;
@@ -396,8 +504,8 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
 
                 <PayloadByteEditor
                   label=""
-                  value={opt.match_payload || (opt.to_payload && !opt.from_payload ? opt.to_payload : '* * * * * * * *')}
-                  onChange={val => handleUpdateState(idx, { match_payload: val })}
+                  value={opt.match || opt.match_payload || (opt.to_payload && !opt.from_payload ? (opt.to_payload || opt.payload) : '* * * * * * * *')}
+                  onChange={val => handleUpdateState(idx, { match_payload: val, match: compileToByteMap(val) })}
                 />
               </div>
 
@@ -411,13 +519,13 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                   <span className="flex items-center gap-1.5">
                     <Sliders className="w-3 h-3 text-emerald-400" />
                     <span>
-                      {opt.to_payload || (opt.steps && opt.steps.length > 0)
+                      {opt.to_payload || opt.payload || (opt.steps && opt.steps.length > 0)
                         ? 'Action Frame (TX) Configured'
                         : '+ Optional Action Transmission (TX) / Trigger Transition'}
                     </span>
-                    {(opt.to_payload || (opt.steps && opt.steps.length > 0)) && (
+                    {(opt.to_payload || opt.payload || (opt.steps && opt.steps.length > 0)) && (
                       <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-800/60">
-                        {opt.steps ? `${opt.steps.length} steps` : opt.to_payload}
+                        {opt.steps ? `${opt.steps.length} steps` : formatPayloadDisplay(opt.to_payload || opt.payload)}
                       </span>
                     )}
                   </span>
@@ -426,46 +534,322 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                   </span>
                 </button>
 
-                {expandedActionIndex === idx && (
-                  <div className="mt-2 p-3 rounded-[10px] bg-slate-950/70 border border-slate-800/80 space-y-3">
-                    <p className="text-[10px] text-slate-400">
-                      If this command can also send a CAN message to actuate this state, configure the Action (TX) payload below:
-                    </p>
+                {expandedActionIndex === idx && (() => {
+                  const hasSteps = opt.steps && opt.steps.length > 0;
+                  const currentMode = actionTabMap[idx] || (hasSteps ? 'steps' : 'single');
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <PayloadByteEditor
-                          label="Action Payload (To Payload / TX)"
-                          value={opt.to_payload || opt.payload || '* * * * * * * *'}
-                          onChange={val => handleUpdateState(idx, { to_payload: val, payload: val })}
-                        />
-                      </div>
+                  return (
+                    <div className="mt-2 p-3 sm:p-4 rounded-[10px] bg-slate-950/80 border border-slate-800/90 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-800/70">
+                        <div>
+                          <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                            <Sliders className="w-3.5 h-3.5 text-emerald-400" />
+                            Action Transmission (TX) / Transition Configuration
+                          </span>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            Configure CAN frame(s) transmitted to trigger or simulate this button / state.
+                          </p>
+                        </div>
 
-                      <div className="space-y-2">
-                        <PayloadByteEditor
-                          label="Trigger Condition (From Payload, optional)"
-                          value={opt.from_payload || '* * * * * * * *'}
-                          onChange={val => handleUpdateState(idx, { from_payload: val })}
-                        />
-
-                        <div className="flex items-center justify-between gap-2 p-2 rounded bg-slate-900 border border-slate-800 text-xs">
-                          <span className="text-slate-300 font-medium text-[11px]">Action Repeat Count:</span>
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="number"
-                              min="1"
-                              max="50"
-                              value={opt.repeat || 1}
-                              onChange={e => handleUpdateState(idx, { repeat: parseInt(e.target.value) || 1 })}
-                              className="w-16 px-2 py-0.5 rounded bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-amber-300 text-center font-bold"
-                            />
-                            <span className="text-[11px] text-slate-400">times</span>
-                          </div>
+                        {/* Mode Selector Pill */}
+                        <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] self-start sm:self-auto shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setActionTabMap(prev => ({ ...prev, [idx]: 'single' }))}
+                            className={`px-2.5 py-1 rounded-md font-medium transition ${
+                              currentMode === 'single'
+                                ? 'bg-slate-800 text-white shadow-sm'
+                                : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            Single Frame
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActionTabMap(prev => ({ ...prev, [idx]: 'steps' }));
+                              if (!opt.steps || opt.steps.length === 0) {
+                                const initialPayload = opt.to_payload || opt.payload || '* * * * * * * *';
+                                handleUpdateState(idx, {
+                                  steps: [{ payload: initialPayload, repeat: opt.repeat || 1 }]
+                                });
+                              }
+                            }}
+                            className={`px-2.5 py-1 rounded-md font-medium flex items-center gap-1.5 transition ${
+                              currentMode === 'steps'
+                                ? 'bg-emerald-950/80 border border-emerald-800/60 text-emerald-300 font-semibold shadow-sm'
+                                : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            <ListOrdered className="w-3 h-3 text-emerald-400" />
+                            <span>Multi-Step Sequence</span>
+                            {opt.steps && opt.steps.length > 0 && (
+                              <span className="text-[10px] font-mono px-1 rounded bg-emerald-900 text-emerald-200">
+                                {opt.steps.length}
+                              </span>
+                            )}
+                          </button>
                         </div>
                       </div>
+
+                      {/* Single Frame Mode */}
+                      {currentMode === 'single' && (
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <PayloadByteEditor
+                                label="Action Payload (To Payload / TX)"
+                                value={opt.to_payload || opt.payload || '* * * * * * * *'}
+                                onChange={val => handleUpdateState(idx, { to_payload: val, payload: compileToByteMap(val) })}
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <PayloadByteEditor
+                                label="Trigger Condition (From Payload, optional)"
+                                value={opt.from_payload || '* * * * * * * *'}
+                                onChange={val => handleUpdateState(idx, { from_payload: val })}
+                              />
+
+                              <div className="flex items-center justify-between gap-2 p-2 rounded bg-slate-900 border border-slate-800 text-xs">
+                                <span className="text-slate-300 font-medium text-[11px]">Action Repeat Count:</span>
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="50"
+                                    value={opt.repeat || 1}
+                                    onChange={e => handleUpdateState(idx, { repeat: parseInt(e.target.value) || 1 })}
+                                    className="w-16 px-2 py-0.5 rounded bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-amber-300 text-center font-bold"
+                                  />
+                                  <span className="text-[11px] text-slate-400">times</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-[10px] text-slate-500">
+                              For buttons requiring multi-frame pulses or setup sequences (e.g. EV6 setup), switch to Multi-Step Sequence.
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActionTabMap(prev => ({ ...prev, [idx]: 'steps' }));
+                                const initialPayload = opt.to_payload || opt.payload || '* * * * * * * *';
+                                handleUpdateState(idx, {
+                                  steps: [{ payload: initialPayload, repeat: opt.repeat || 1 }]
+                                });
+                              }}
+                              className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-medium transition"
+                            >
+                              <ListOrdered className="w-3.5 h-3.5" /> Convert to Multi-Step Sequence →
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Multi-Step Sequence Mode */}
+                      {currentMode === 'steps' && (
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900/60 p-2 rounded-lg border border-slate-800 text-xs">
+                            <span className="text-[11px] text-slate-300 flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                              <span>Frames will be transmitted sequentially in this exact order:</span>
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPastingOptIdx(pastingOptIdx === idx ? null : idx);
+                                  setPasteStepText('');
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[11px] font-medium transition border border-slate-700"
+                              >
+                                <FileText className="w-3 h-3" />
+                                {pastingOptIdx === idx ? 'Close Paste' : 'Paste Step Sequence'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleAddOptionStep(idx)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-[11px] font-semibold transition shadow-sm"
+                              >
+                                <Plus className="w-3 h-3" />
+                                Add Step
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Paste Box */}
+                          {pastingOptIdx === idx && (
+                            <div className="p-3 rounded-lg bg-slate-900 border border-cyan-800/80 space-y-2">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-semibold text-cyan-300 flex items-center gap-1.5">
+                                  <FileText className="w-3.5 h-3.5" /> Paste Raw Step Sequence (Hex & Repeats)
+                                </span>
+                                <span className="text-[10px] text-slate-400">e.g. FF,F1,FF,FF,FF,FF,FF,FF, (3 times)</span>
+                              </div>
+                              <textarea
+                                rows={4}
+                                value={pasteStepText}
+                                onChange={e => setPasteStepText(e.target.value)}
+                                placeholder="Paste lines like:&#10;FF,F1,FF,FF,FF,FF,FF,FF, (3 times)&#10;FF,FF,FF,FF,FF,FF,FF,FF&#10;FF,F0,FF,FF,FF,FF,FF,FF, (3 times)&#10;FF,FF,FF,FF,FF,FF,FF,FF"
+                                className="w-full font-mono text-xs p-2 rounded bg-black/60 border border-slate-700 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500"
+                              />
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-[10px] text-slate-400">
+                                  Auto-detects comma/space separated bytes and (N times) repeats.
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPastingOptIdx(null)}
+                                    className="px-2.5 py-1 text-slate-400 hover:text-white transition text-xs"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={!pasteStepText.trim()}
+                                    onClick={() => handleApplyPastedSteps(idx)}
+                                    className="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-semibold transition text-xs"
+                                  >
+                                    Parse & Apply Steps
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* List of Steps */}
+                          {(!opt.steps || opt.steps.length === 0) ? (
+                            <div className="text-center py-6 px-3 rounded-lg border border-dashed border-slate-800 bg-slate-900/30 text-xs text-slate-400">
+                              <p>No sequence steps defined yet.</p>
+                              <button
+                                type="button"
+                                onClick={() => handleAddOptionStep(idx)}
+                                className="mt-2 inline-flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-semibold"
+                              >
+                                <Plus className="w-3 h-3" /> Add First Step
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-2.5">
+                              {opt.steps.map((step, sIdx) => (
+                                <div
+                                  key={sIdx}
+                                  className="p-3 rounded-lg bg-slate-900/90 border border-slate-800 space-y-2"
+                                >
+                                  <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-5 h-5 rounded-full bg-emerald-950 border border-emerald-700/80 text-emerald-300 text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
+                                        {sIdx + 1}
+                                      </span>
+                                      <span className="font-semibold text-slate-200">
+                                        Frame Step #{sIdx + 1}
+                                      </span>
+                                      {step.repeat && step.repeat > 1 && (
+                                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950/70 text-amber-300 border border-amber-800/60 font-bold">
+                                          Repeated {step.repeat}x
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-[11px] text-slate-400">Repeat:</span>
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          max="50"
+                                          value={step.repeat || 1}
+                                          onChange={e =>
+                                            handleUpdateOptionStep(idx, sIdx, { repeat: parseInt(e.target.value) || 1 })
+                                          }
+                                          className="w-14 px-1.5 py-0.5 rounded bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-amber-300 text-center font-bold"
+                                        />
+                                        <span className="text-[10px] text-slate-400">times</span>
+                                      </div>
+
+                                      <div className="h-4 w-[1px] bg-slate-800 mx-0.5"></div>
+
+                                      {/* Reorder Buttons */}
+                                      <button
+                                        type="button"
+                                        disabled={sIdx === 0}
+                                        onClick={() => handleMoveOptionStep(idx, sIdx, sIdx - 1)}
+                                        title="Move step up"
+                                        className="p-1 text-slate-400 hover:text-white disabled:opacity-30 rounded hover:bg-slate-800 transition"
+                                      >
+                                        <ArrowUp className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={sIdx === (opt.steps?.length || 1) - 1}
+                                        onClick={() => handleMoveOptionStep(idx, sIdx, sIdx + 1)}
+                                        title="Move step down"
+                                        className="p-1 text-slate-400 hover:text-white disabled:opacity-30 rounded hover:bg-slate-800 transition"
+                                      >
+                                        <ArrowDown className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDuplicateOptionStep(idx, sIdx)}
+                                        title="Duplicate step"
+                                        className="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition"
+                                      >
+                                        <Copy className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveOptionStep(idx, sIdx)}
+                                        title="Remove step"
+                                        className="p-1 text-slate-400 hover:text-rose-400 rounded hover:bg-slate-800 transition"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <PayloadByteEditor
+                                    label=""
+                                    value={step.payload || '* * * * * * * *'}
+                                    onChange={val =>
+                                      handleUpdateOptionStep(idx, sIdx, {
+                                        payload: compileToByteMap(val)
+                                      })
+                                    }
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Footer Actions */}
+                          <div className="flex items-center justify-between pt-1 text-xs">
+                            <button
+                              type="button"
+                              onClick={() => handleAddOptionStep(idx)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/70 font-medium transition"
+                            >
+                              <Plus className="w-3.5 h-3.5" /> Add Next Step
+                            </button>
+
+                            {opt.steps && opt.steps.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateState(idx, { steps: undefined })}
+                                className="text-slate-500 hover:text-rose-400 transition text-[11px]"
+                              >
+                                Revert to Single Frame (Remove Steps)
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
           ))}
@@ -514,17 +898,25 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                       )}
                     </td>
                     <td className="p-2.5">
-                      {opt.match_payload ? (
-                        <span className="text-cyan-300 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/50 font-mono text-[11px]">
-                          {opt.match_payload}
-                        </span>
-                      ) : opt.to_payload ? (
-                        <span className="text-emerald-300 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/50 font-mono text-[11px]">
-                          {opt.to_payload}
-                        </span>
-                      ) : (
-                        <span className="text-slate-600">-</span>
-                      )}
+                      <div className="flex flex-col gap-1">
+                        {opt.match || opt.match_payload ? (
+                          <span className="text-cyan-300 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/50 font-mono text-[11px] inline-block w-fit">
+                            RX: {formatPayloadDisplay(opt.match || opt.match_payload)}
+                          </span>
+                        ) : null}
+                        {opt.steps && opt.steps.length > 0 ? (
+                          <span className="text-emerald-300 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/50 font-mono text-[11px] inline-block w-fit">
+                            TX: {opt.steps.length} sequential steps ({opt.steps.map(s => `x${s.repeat || 1}`).join(', ')})
+                          </span>
+                        ) : (opt.to_payload || opt.payload) ? (
+                          <span className="text-emerald-300 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/50 font-mono text-[11px] inline-block w-fit">
+                            TX: {formatPayloadDisplay(opt.to_payload || opt.payload)} {opt.repeat && opt.repeat > 1 ? `x${opt.repeat}` : ''}
+                          </span>
+                        ) : null}
+                        {!opt.match && !opt.match_payload && !opt.steps && !opt.to_payload && !opt.payload && (
+                          <span className="text-slate-600">-</span>
+                        )}
+                      </div>
                     </td>
                     <td className="p-2.5 font-sans text-slate-400 max-w-xs truncate">
                       {opt.description || opt.popup || '-'}

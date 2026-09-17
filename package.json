@@ -9,5 +9,12 @@
     "build": "npm run build --workspace=frontend && rm -rf dist && cp -r frontend/dist dist",
     "preview": "npm run preview --workspace=frontend",
     "lint": "npm run lint --workspace=frontend"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
+  },
+  "dependencies": {
+    "@mdi/js": "^7.4.47"
   }
 }

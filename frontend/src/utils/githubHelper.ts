@@ -1,4 +1,4 @@
-import { Command, Catalog, GitHubRepoConfig, Vehicle } from '../types/catalog';
+import { Command, Catalog, GitHubRepoConfig, Vehicle, getCommandContributors } from '../types/catalog';
 import { validateCommand } from './canValidator';
 
 export const DEFAULT_REPO_CONFIG: GitHubRepoConfig = {
@@ -98,11 +98,9 @@ export function generateIssueMarkdown(
     markdown += `#### ➕ New Commands (${contribution.added.length})\n`;
     contribution.added.forEach(cmd => {
       const canInfo = cmd.state_can_id ? `CAN: \`${cmd.state_can_id}\` (Bus ${cmd.bus ?? 0})` : 'Virtual / Logic';
-      const authorInfo = cmd.contributor?.github
-        ? ` | Author: @${cmd.contributor.github.replace(/^@/, '')}`
-        : cmd.contributor?.name
-        ? ` | Author: ${cmd.contributor.name}`
-        : '';
+      const contribs = getCommandContributors(cmd);
+      const authorList = contribs.map(c => c.github ? `@${c.github.replace(/^@/, '')}` : c.name).filter(Boolean).join(', ');
+      const authorInfo = authorList ? ` | ${contribs.length > 1 ? 'Authors' : 'Author'}: ${authorList}` : '';
       markdown += `- **${cmd.name}** (\`${cmd.id}\`) — ${canInfo} | Roles: \`${cmd.roles.join(', ')}\` | Category: *${cmd.category}*${authorInfo}\n`;
     });
     markdown += `\n`;
@@ -112,11 +110,9 @@ export function generateIssueMarkdown(
     markdown += `#### ✏️ Modified Commands (${contribution.modified.length})\n`;
     contribution.modified.forEach(cmd => {
       const canInfo = cmd.state_can_id ? `CAN: \`${cmd.state_can_id}\` (Bus ${cmd.bus ?? 0})` : 'Virtual / Logic';
-      const authorInfo = cmd.contributor?.github
-        ? ` | Author: @${cmd.contributor.github.replace(/^@/, '')}`
-        : cmd.contributor?.name
-        ? ` | Author: ${cmd.contributor.name}`
-        : '';
+      const contribs = getCommandContributors(cmd);
+      const authorList = contribs.map(c => c.github ? `@${c.github.replace(/^@/, '')}` : c.name).filter(Boolean).join(', ');
+      const authorInfo = authorList ? ` | ${contribs.length > 1 ? 'Authors' : 'Author'}: ${authorList}` : '';
       markdown += `- **${cmd.name}** (\`${cmd.id}\`) — ${canInfo} | Category: *${cmd.category}*${authorInfo}\n`;
     });
     markdown += `\n`;

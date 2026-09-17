@@ -47,12 +47,15 @@ export interface CommandOption {
   steps?: CommandStep[];
   popup?: string;
   popup_message?: string;
+  popup_message_imperial?: string;
   level?: 'info' | 'warning' | 'error';
   default?: boolean;
   repeat?: number;
   requires_feature?: string;
   state_value?: string | number;
+  evaluate?: string | { byte: string; operator: string; value: string | number };
   description?: string;
+  [key: string]: any;
 }
 
 export interface CommandStep {
@@ -64,6 +67,67 @@ export interface ContributorInfo {
   name?: string;
   github?: string;
   notes?: string;
+  tested_vehicle?: string;
+  role?: string;
+}
+
+export function getCommandContributors(item?: { contributor?: ContributorInfo; contributors?: ContributorInfo[] } | null): ContributorInfo[] {
+  if (!item) return [];
+  if (Array.isArray(item.contributors) && item.contributors.length > 0) {
+    return item.contributors.filter(c => Boolean(c && (c.name || c.github || c.notes || c.tested_vehicle || c.role)));
+  }
+  if (item.contributor && (item.contributor.name || item.contributor.github || item.contributor.notes || item.contributor.tested_vehicle || item.contributor.role)) {
+    return [item.contributor];
+  }
+  return [];
+}
+
+export function getCommandNotes(cmd: Command): string | undefined {
+  if (cmd.notes && cmd.notes.trim()) return cmd.notes.trim();
+  const contribs = getCommandContributors(cmd);
+  for (const c of contribs) {
+    if (c.notes && c.notes.trim()) return c.notes.trim();
+  }
+  return undefined;
+}
+
+export function getCommandTestedVehicle(cmd: Command): string | undefined {
+  if (cmd.tested_vehicle && cmd.tested_vehicle.trim()) return cmd.tested_vehicle.trim();
+  const contribs = getCommandContributors(cmd);
+  for (const c of contribs) {
+    if (c.tested_vehicle && c.tested_vehicle.trim()) return c.tested_vehicle.trim();
+  }
+  // Also check if notes contains vehicle pattern like "Tested on 2024 Ioniq 5"
+  for (const c of contribs) {
+    if (c.notes) {
+      const match = c.notes.match(/Tested (?:on|with)\s+([^;,.]+)/i);
+      if (match && match[1]) return match[1].trim();
+    }
+  }
+  if (cmd.notes) {
+    const match = cmd.notes.match(/Tested (?:on|with)\s+([^;,.]+)/i);
+    if (match && match[1]) return match[1].trim();
+  }
+  return undefined;
+}
+
+export function getCommandDisplayNotes(cmd: Command): string | undefined {
+  const notes = getCommandNotes(cmd);
+  if (!notes) return undefined;
+  const vehicle = getCommandTestedVehicle(cmd);
+  if (vehicle) {
+    const lowerNotes = notes.trim().toLowerCase();
+    const lowerVeh = vehicle.toLowerCase();
+    if (
+      lowerNotes === `tested on ${lowerVeh}` ||
+      lowerNotes === `tested with ${lowerVeh}` ||
+      lowerNotes === `tested on: ${lowerVeh}` ||
+      lowerNotes === lowerVeh
+    ) {
+      return undefined;
+    }
+  }
+  return notes;
 }
 
 export interface Command {
@@ -91,7 +155,10 @@ export interface Command {
   popup_message_imperial?: string;
   options?: CommandOption[];
   steps?: CommandStep[];
+  notes?: string;
+  tested_vehicle?: string;
   contributor?: ContributorInfo;
+  contributors?: ContributorInfo[];
   // Home Assistant & MDI Icon metadata
   ha_domain?: string;
   icon?: string;
@@ -128,7 +195,10 @@ export interface Vehicle {
   region: 'us' | 'eu' | 'global' | 'universal' | string;
   family: string;
   features: string[];
+  model_years?: number[] | string;
   contributor?: ContributorInfo;
+  contributors?: ContributorInfo[];
+  [key: string]: any;
 }
 
 export interface Catalog {

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Command, CommandRole, Catalog, CommandOption, CommandStep } from '../types/catalog';
+import { Command, CommandRole, Catalog, CommandOption, CommandStep, ContributorInfo, getCommandContributors } from '../types/catalog';
 import { validateCommand, getAllKnownFeatures } from '../utils/canValidator';
 import { parseCanCaptureNote } from '../utils/canCaptureParser';
+import { compileToByteMap } from '../utils/automationConverters';
 import { PayloadByteVisualizer } from './PayloadByteVisualizer';
 import { PayloadByteEditor } from './PayloadByteEditor';
 import { StateDefinitionsEditor } from './StateDefinitionsEditor';
@@ -17,6 +18,7 @@ import {
   Sparkles,
   Github,
   User,
+  Car,
   FileText,
   ChevronDown,
   ChevronUp,
@@ -30,6 +32,7 @@ interface CommandEditorModalProps {
   onClose: () => void;
   onSave: (cmd: Command, isNew: boolean, originalId?: string) => void;
   onDelete?: (cmdId: string) => void;
+  onOpenCanCapture?: () => void;
 }
 
 const COMMON_CATEGORIES = [
@@ -102,9 +105,30 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
   const [tagsInput, setTagsInput] = useState('');
   const [activePayloadMode, setActivePayloadMode] = useState<'transition' | 'match' | 'options' | 'steps'>('transition');
   const [isIdManuallyEdited, setIsIdManuallyEdited] = useState(false);
-  const [contributorName, setContributorName] = useState('');
-  const [contributorGithub, setContributorGithub] = useState('');
-  const [contributorNotes, setContributorNotes] = useState('');
+  const [contributorsList, setContributorsList] = useState<ContributorInfo[]>([
+    { name: '', github: '', notes: '', tested_vehicle: '', role: '' }
+  ]);
+
+  const handleAddContributor = () => {
+    setContributorsList(prev => [...prev, { name: '', github: '', notes: '', tested_vehicle: '', role: '' }]);
+  };
+
+  const handleUpdateContributor = (index: number, field: keyof ContributorInfo, value: string) => {
+    setContributorsList(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
+
+  const handleRemoveContributor = (index: number) => {
+    setContributorsList(prev => {
+      if (prev.length <= 1) {
+        return [{ name: '', github: '', notes: '', role: '' }];
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+  };
 
   const [showCaptureBox, setShowCaptureBox] = useState(false);
   const [captureNoteText, setCaptureNoteText] = useState('');
@@ -163,14 +187,31 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
       setFormData({ ...initialCommand });
       setIsIdManuallyEdited(true);
       setTagsInput(initialCommand.tags?.join(', ') || '');
-      setContributorName(initialCommand.contributor?.name || '');
-      setContributorGithub(initialCommand.contributor?.github || '');
-      setContributorNotes(initialCommand.contributor?.notes || '');
+      const contribs = getCommandContributors(initialCommand);
+      if (contribs.length > 0) {
+        setContributorsList(
+          contribs.map(c => ({
+            name: c.name || '',
+            github: c.github || '',
+            notes: c.notes || initialCommand.notes || '',
+            tested_vehicle: c.tested_vehicle || initialCommand.tested_vehicle || '',
+            role: c.role || ''
+          }))
+        );
+      } else {
+        setContributorsList([{ 
+          name: '', 
+          github: '', 
+          notes: initialCommand.notes || '', 
+          tested_vehicle: initialCommand.tested_vehicle || '', 
+          role: '' 
+        }]);
+      }
       if (initialCommand.options && initialCommand.options.length > 0) {
         setActivePayloadMode('options');
       } else if (initialCommand.steps && initialCommand.steps.length > 0) {
         setActivePayloadMode('steps');
-      } else if (initialCommand.match_payload) {
+      } else if (initialCommand.match_payload || initialCommand.match) {
         setActivePayloadMode('match');
       } else {
         setActivePayloadMode('transition');
@@ -207,18 +248,20 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
         const saved = localStorage.getItem('can_do_last_contributor');
         if (saved) {
           const parsed = JSON.parse(saved);
-          setContributorName(parsed.name || '');
-          setContributorGithub(parsed.github || '');
-          setContributorNotes(parsed.notes || '');
+          setContributorsList([
+            {
+              name: parsed.name || '',
+              github: parsed.github || '',
+              notes: parsed.notes || '',
+              tested_vehicle: parsed.tested_vehicle || '',
+              role: parsed.role || ''
+            }
+          ]);
         } else {
-          setContributorName('');
-          setContributorGithub('');
-          setContributorNotes('');
+          setContributorsList([{ name: '', github: '', notes: '', tested_vehicle: '', role: '' }]);
         }
       } catch {
-        setContributorName('');
-        setContributorGithub('');
-        setContributorNotes('');
+        setContributorsList([{ name: '', github: '', notes: '', tested_vehicle: '', role: '' }]);
       }
     }
   }, [initialCommand, isOpen]);
@@ -410,28 +453,40 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
       delete cleaned.device_class;
     }
 
-    const trimmedName = contributorName.trim();
-    const trimmedGithub = contributorGithub.trim().replace(/^@/, '');
-    const trimmedNotes = contributorNotes.trim();
+    const validContributors = contributorsList
+      .map(c => ({
+        name: c.name?.trim() || undefined,
+        github: c.github?.trim().replace(/^@/, '') || undefined,
+        notes: c.notes?.trim() || undefined,
+        tested_vehicle: c.tested_vehicle?.trim() || undefined,
+        role: c.role?.trim() || undefined
+      }))
+      .filter(c => Boolean(c.name || c.github || c.notes || c.tested_vehicle || c.role));
 
-    if (trimmedName || trimmedGithub || trimmedNotes) {
-      cleaned.contributor = {
-        name: trimmedName || undefined,
-        github: trimmedGithub || undefined,
-        notes: trimmedNotes || undefined
-      };
+    if (validContributors.length > 0) {
+      cleaned.contributors = validContributors;
+      cleaned.contributor = validContributors[0]; // backward compatibility
+      if (validContributors[0].tested_vehicle) {
+        cleaned.tested_vehicle = validContributors[0].tested_vehicle;
+      } else {
+        delete cleaned.tested_vehicle;
+      }
+      if (validContributors[0].notes) {
+        cleaned.notes = validContributors[0].notes;
+      } else {
+        delete cleaned.notes;
+      }
       try {
         localStorage.setItem(
           'can_do_last_contributor',
-          JSON.stringify({
-            name: trimmedName,
-            github: trimmedGithub,
-            notes: trimmedNotes
-          })
+          JSON.stringify(validContributors[0])
         );
       } catch {}
     } else {
+      delete cleaned.contributors;
       delete cleaned.contributor;
+      delete cleaned.tested_vehicle;
+      delete cleaned.notes;
     }
 
     onSave(cleaned, isNew, initialCommand?.id);
@@ -722,44 +777,6 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                       </span>
                     )}
                   </div>
-
-                  {/* Quick State Definition Link */}
-                  <div className="mt-2 p-2 rounded-[8px] bg-cyan-950/40 border border-cyan-800/60 flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-[11px] font-semibold text-cyan-300 flex items-center gap-1">
-                        <Layers className="w-3 h-3 text-cyan-400" />
-                        State Definitions ("What state is what")
-                      </span>
-                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-cyan-900/80 text-cyan-200 border border-cyan-700/60 font-semibold">
-                        {formData.options && formData.options.length > 0
-                          ? `${formData.options.length} states`
-                          : 'Not set'}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-slate-400 leading-tight">
-                      {formData.options && formData.options.length > 0
-                        ? formData.options.map(o => o.label).slice(0, 3).join(', ') + (formData.options.length > 3 ? '...' : '')
-                        : 'Define what each CAN state means (Park, Drive, Open, Closed, etc.)'}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActivePayloadMode('options');
-                        if (!formData.options || formData.options.length === 0) {
-                          handleAddOption();
-                        }
-                        setTimeout(() => {
-                          const el = document.getElementById('payload-pattern-config-section');
-                          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }, 50);
-                      }}
-                      className="w-full text-center py-1 rounded bg-cyan-900/70 hover:bg-cyan-800 text-cyan-200 border border-cyan-700 text-[11px] font-semibold transition"
-                    >
-                      {formData.options && formData.options.length > 0
-                        ? 'Edit State Mappings ("What state is what")'
-                        : '+ Define States for this CAN ID'}
-                    </button>
-                  </div>
                 </div>
 
                 <div>
@@ -996,12 +1013,12 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                 <div className="p-4 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] space-y-3">
                   <PayloadByteEditor
                     label="Match Payload (Sensor / State Condition)"
-                    value={formData.match_payload || '* * * * * * * *'}
-                    onChange={val => setFormData({ ...formData, match_payload: val })}
+                    value={formData.match || formData.match_payload || '* * * * * * * *'}
+                    onChange={val => setFormData({ ...formData, match_payload: val, match: compileToByteMap(val) })}
                   />
 
                   <div className="pt-2">
-                    <PayloadByteVisualizer matchPayload={formData.match_payload} />
+                    <PayloadByteVisualizer matchPayload={formData.match || formData.match_payload} />
                   </div>
                 </div>
               )}
@@ -1282,63 +1299,154 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
 
             {/* Contributor Attribution */}
             <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800 space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Github className="w-4 h-4 text-cyan-400" />
                   <span className="text-xs font-bold text-white uppercase tracking-wider">
                     Community Contributor Attribution (Optional)
                   </span>
                 </div>
-                <span className="text-[11px] text-slate-400">
-                  Displayed on the CAN block & detail view
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-slate-400 hidden sm:inline">
+                    Credited on card & detail modal
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddContributor}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] bg-cyan-950/60 hover:bg-cyan-900/70 border border-cyan-700/60 text-cyan-300 text-xs font-semibold transition"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Contributor</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    Your Name or Alias
-                  </label>
-                  <div className="relative">
-                    <User className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      placeholder="e.g. Your Name"
-                      value={contributorName}
-                      onChange={e => setContributorName(e.target.value)}
-                      className="w-full pl-8 pr-2.5 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-xs text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
-                    />
-                  </div>
-                </div>
+              <div className="space-y-3">
+                {contributorsList.map((contrib, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 space-y-2.5 relative"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-cyan-400" />
+                        Contributor #{idx + 1}
+                      </span>
+                      {contributorsList.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveContributor(idx)}
+                          className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-950/30 rounded transition"
+                          title="Remove contributor"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
 
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    GitHub Username
-                  </label>
-                  <div className="relative">
-                    <span className="text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-mono">@</span>
-                    <input
-                      type="text"
-                      placeholder="@github-handle"
-                      value={contributorGithub}
-                      onChange={e => setContributorGithub(e.target.value.replace(/^@/, ''))}
-                      className="w-full pl-7 pr-2.5 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-cyan-300 focus:outline-none focus:border-[var(--md-sys-color-primary)]"
-                    />
-                  </div>
-                </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div>
+                        <label className="block text-[10.5px] font-semibold text-slate-300 mb-1">
+                          Name / Alias
+                        </label>
+                        <div className="relative">
+                          <User className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            placeholder="e.g. Jane Doe"
+                            value={contrib.name || ''}
+                            onChange={e => handleUpdateContributor(idx, 'name', e.target.value)}
+                            className="w-full pl-8 pr-2 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-xs text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                          />
+                        </div>
+                      </div>
 
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    Tested Vehicle / Notes
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Tested on 2024 Ioniq 5"
-                    value={contributorNotes}
-                    onChange={e => setContributorNotes(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-xs text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
-                  />
-                </div>
+                      <div>
+                        <label className="block text-[10.5px] font-semibold text-slate-300 mb-1">
+                          GitHub Username
+                        </label>
+                        <div className="relative">
+                          <span className="text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-mono">@</span>
+                          <input
+                            type="text"
+                            placeholder="username"
+                            value={contrib.github || ''}
+                            onChange={e => handleUpdateContributor(idx, 'github', e.target.value.replace(/^@/, ''))}
+                            className="w-full pl-7 pr-2 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-cyan-300 focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10.5px] font-semibold text-slate-300 mb-1">
+                          Role / Tag
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Discovery, Tester"
+                          value={contrib.role || ''}
+                          onChange={e => handleUpdateContributor(idx, 'role', e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-xs text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1.5 border-t border-slate-800/80">
+                      <div>
+                        <label className="block text-[10.5px] font-semibold text-emerald-400 mb-1 flex items-center gap-1.5">
+                          <Car className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Tested Vehicle</span>
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={contrib.tested_vehicle || ''}
+                            onChange={e => handleUpdateContributor(idx, 'tested_vehicle', e.target.value)}
+                            className="w-full pl-2.5 pr-8 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-emerald-800/60 focus:border-emerald-500 text-xs text-emerald-200 focus:outline-none appearance-none cursor-pointer"
+                          >
+                            <option value="" className="bg-slate-900 text-slate-400">
+                              -- Select tested vehicle from catalog --
+                            </option>
+                            {contrib.tested_vehicle && !catalog.vehicles?.some(v => {
+                              const label = v.make === 'Universal' 
+                                ? (v.name || 'All Gen5W Models') 
+                                : `${v.make} ${v.model}${v.trim ? ` ${v.trim}` : ''}${v.region && v.region !== 'universal' ? ` (${v.region.toUpperCase()})` : ''}`;
+                              return contrib.tested_vehicle === label || contrib.tested_vehicle === v.id || contrib.tested_vehicle === v.name;
+                            }) && (
+                              <option value={contrib.tested_vehicle} className="bg-slate-900 text-emerald-300">
+                                {contrib.tested_vehicle} (Custom)
+                              </option>
+                            )}
+                            {catalog.vehicles?.map(v => {
+                              const label = v.make === 'Universal' 
+                                ? (v.name || 'All Gen5W Models') 
+                                : `${v.make} ${v.model}${v.trim ? ` ${v.trim}` : ''}${v.region && v.region !== 'universal' ? ` (${v.region.toUpperCase()})` : ''}`;
+                              return (
+                                <option key={v.id} value={label} className="bg-slate-900 text-white">
+                                  {label}
+                                </option>
+                              );
+                            })}
+                          </select>
+                          <ChevronDown className="w-3.5 h-3.5 text-emerald-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10.5px] font-semibold text-cyan-400 mb-1 flex items-center gap-1.5">
+                          <FileText className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>Notes</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Decoded from CAN-FD frame 463; requires ACC mode"
+                          value={contrib.notes || ''}
+                          onChange={e => handleUpdateContributor(idx, 'notes', e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-cyan-800/60 focus:border-cyan-500 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 

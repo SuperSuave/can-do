@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Catalog, Command, CommandRole, GitHubRepoConfig, Vehicle } from './types/catalog';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Catalog, Command, CommandRole, GitHubRepoConfig, Vehicle, getCommandContributors } from './types/catalog';
 import { DEFAULT_CATALOG, normalizeCatalog } from './data/defaultCatalog';
 import { validateCatalog } from './utils/canValidator';
 import { getSavedRepoConfig, saveRepoConfig } from './utils/githubHelper';
@@ -15,6 +15,7 @@ import { ExportModal, ExportFormat } from './components/ExportModal';
 import { ExportDropdown } from './components/ExportDropdown';
 import { VehiclesTab } from './components/VehiclesTab';
 import { GroupedCommandView } from './components/GroupedCommandView';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { CanDoLogo } from './components/CanDoLogo';
 import { AutomationBuilder } from './components/AutomationBuilder';
 import { 
@@ -42,7 +43,8 @@ import {
   RefreshCw,
   Zap,
   Car,
-  Layers
+  Layers,
+  X
 } from 'lucide-react';
 
 const STORAGE_KEY_CATALOG = 'can_do_catalog_data';
@@ -179,12 +181,37 @@ export default function App() {
     }
   }, [automationSettings]);
 
+  // Main navigation tab slider state
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const [sliderStyle, setSliderStyle] = useState<{ left: number; width: number }>({ left: 0, width: 0 });
+
+  useEffect(() => {
+    const updateSlider = () => {
+      const currentBtn = tabRefs.current[activeMainTab];
+      if (currentBtn) {
+        setSliderStyle({
+          left: currentBtn.offsetLeft,
+          width: currentBtn.offsetWidth,
+        });
+      }
+    };
+    updateSlider();
+    window.addEventListener('resize', updateSlider);
+    const timer = setTimeout(updateSlider, 50);
+    return () => {
+      window.removeEventListener('resize', updateSlider);
+      clearTimeout(timer);
+    };
+  }, [activeMainTab, catalog.commands.length, catalog.vehicles.length, automationRules.length]);
+
   // 5. Filters state
   const [search, setSearch] = useState('');
   const [selectedRole, setSelectedRole] = useState<CommandRole | 'all'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'grouped'>('grouped');
+  const [expandAllSignal, setExpandAllSignal] = useState<number>(0);
+  const [collapseAllSignal, setCollapseAllSignal] = useState<number>(0);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>('all');
   const [selectedMake, setSelectedMake] = useState<string>('all');
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
@@ -351,10 +378,14 @@ export default function App() {
             (o.description || '').toLowerCase().includes(q)
         );
         const cleanQ = q.replace(/^@/, '');
-        const matchesContributor =
-          (cmd.contributor?.name && cmd.contributor.name.toLowerCase().includes(cleanQ)) ||
-          (cmd.contributor?.github && cmd.contributor.github.toLowerCase().includes(cleanQ)) ||
-          (cmd.contributor?.notes && cmd.contributor.notes.toLowerCase().includes(cleanQ));
+        const cmdContribs = getCommandContributors(cmd);
+        const matchesContributor = cmdContribs.some(
+          c =>
+            (c.name && c.name.toLowerCase().includes(cleanQ)) ||
+            (c.github && c.github.toLowerCase().includes(cleanQ)) ||
+            (c.notes && c.notes.toLowerCase().includes(cleanQ)) ||
+            (c.role && c.role.toLowerCase().includes(cleanQ))
+        );
         const matchesHaDomain = (cmd.ha_domain || cmd.ha_metadata?.domain || '').toLowerCase().includes(q);
         const matchesMdi = (cmd.icon?.toLowerCase().includes(q) || cmd.mdi?.toLowerCase().includes(q));
         const matchesDeviceClass = cmd.device_class?.toLowerCase().includes(q);
@@ -784,78 +815,111 @@ export default function App() {
       </section>
 
       {/* Main Tab Navigation Header */}
-      <div className="border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-30">
+      <div className="border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14 gap-2">
-            <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar py-1">
+          <div className="relative flex items-center justify-center h-14">
+            {/* Centered Segmented Tab Group with Sliding Indicator */}
+            <nav
+              className="relative inline-flex items-center p-1 rounded-xl bg-slate-900/90 border border-slate-800/80 shadow-inner overflow-x-auto no-scrollbar"
+              aria-label="Main Navigation"
+            >
+              {/* Sliding Active Indicator Pill */}
+              <div
+                className="absolute top-1 bottom-1 rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm transition-all duration-300 ease-out pointer-events-none"
+                style={{
+                  left: `${sliderStyle.left}px`,
+                  width: `${sliderStyle.width}px`,
+                  opacity: sliderStyle.width > 0 ? 1 : 0,
+                }}
+              />
+
               <button
+                id="main-tab-messages"
+                ref={el => { tabRefs.current['catalog'] = el; }}
                 type="button"
                 onClick={() => setActiveMainTab('catalog')}
-                className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold transition shrink-0 ${
+                className={`relative z-10 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
                   activeMainTab === 'catalog'
-                    ? 'bg-slate-800 text-white shadow-sm border border-slate-700 font-bold'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                    ? 'text-white font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <Layers className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                <span>Commands</span>
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-900/90 text-slate-300 font-mono border border-slate-800">
+                <Layers className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'catalog' ? 'text-cyan-400' : 'text-slate-500'}`} />
+                <span>Messages</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono transition-colors ${
+                    activeMainTab === 'catalog'
+                      ? 'bg-slate-900/90 text-cyan-300 border border-slate-700/70'
+                      : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
+                  }`}
+                >
                   {catalog.commands.length}
                 </span>
               </button>
 
               <button
+                id="main-tab-vehicles"
+                ref={el => { tabRefs.current['vehicles'] = el; }}
                 type="button"
                 onClick={() => setActiveMainTab('vehicles')}
-                className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold transition shrink-0 ${
+                className={`relative z-10 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
                   activeMainTab === 'vehicles'
-                    ? 'bg-slate-800 text-white shadow-sm border border-slate-700 font-bold'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                    ? 'text-white font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <Car className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <Car className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'vehicles' ? 'text-indigo-400' : 'text-slate-500'}`} />
                 <span>Vehicles</span>
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-900/90 text-slate-300 font-mono border border-slate-800">
+                <span
+                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono transition-colors ${
+                    activeMainTab === 'vehicles'
+                      ? 'bg-slate-900/90 text-indigo-300 border border-slate-700/70'
+                      : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
+                  }`}
+                >
                   {catalog.vehicles.length}
                 </span>
               </button>
 
               <button
+                id="main-tab-automations"
+                ref={el => { tabRefs.current['automations'] = el; }}
                 type="button"
                 onClick={() => setActiveMainTab('automations')}
-                className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold transition shrink-0 ${
+                className={`relative z-10 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
                   activeMainTab === 'automations'
-                    ? 'bg-cyan-500 text-slate-950 font-black shadow-md shadow-cyan-500/10'
-                    : 'bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/40 border border-cyan-800/50'
+                    ? 'text-white font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <Zap className="w-3.5 h-3.5 fill-current shrink-0" />
+                <Zap className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'automations' ? 'text-amber-400' : 'text-slate-500'}`} />
                 <span>Automation Builder</span>
                 <span
-                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono transition-colors ${
                     activeMainTab === 'automations'
-                      ? 'bg-slate-950 text-cyan-300'
-                      : 'bg-cyan-900/80 text-cyan-200'
+                      ? 'bg-slate-900/90 text-amber-300 border border-slate-700/70'
+                      : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
                   }`}
                 >
                   {automationRules.length}
                 </span>
               </button>
-            </div>
+            </nav>
 
-            {/* Quick action button */}
-            <div className="flex items-center gap-2 shrink-0">
-              {activeMainTab === 'catalog' && selectedForAutomation.size > 0 && (
+            {/* Quick action button positioned to the right */}
+            {activeMainTab === 'catalog' && selectedForAutomation.size > 0 && (
+              <div className="absolute right-0 flex items-center gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={handleCreateAutomationFromSelected}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 text-xs font-bold transition shadow-sm"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition shadow-sm"
                 >
                   <Zap className="w-3.5 h-3.5 fill-current" />
-                  <span>Build with ({selectedForAutomation.size})</span>
+                  <span className="hidden sm:inline">Build with ({selectedForAutomation.size})</span>
+                  <span className="sm:hidden">({selectedForAutomation.size})</span>
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -895,6 +959,8 @@ export default function App() {
               totalCount={catalog.commands.length}
               activeMainTab={activeMainTab}
               onChangeMainTab={setActiveMainTab}
+              onExpandAll={() => setExpandAllSignal(s => s + 1)}
+              onCollapseAll={() => setCollapseAllSignal(s => s + 1)}
             />
 
             {/* Commands Rendering (Grouped by Subsystem vs Flat Grid) */}
@@ -916,6 +982,8 @@ export default function App() {
                   selectedCommandIdsForAutomation={selectedForAutomation}
                   onToggleSelectForAutomation={handleToggleSelectForAutomation}
                   onAddToAutomation={handleAddToAutomation}
+                  expandAllSignal={expandAllSignal}
+                  collapseAllSignal={collapseAllSignal}
                 />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4 min-w-0">
@@ -1000,37 +1068,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Floating Automation Selection Bar */}
-      {selectedForAutomation.size > 0 && activeMainTab === 'catalog' && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 border border-cyan-500/50 shadow-2xl shadow-cyan-950/80 rounded-2xl p-2.5 px-4 flex items-center gap-3 backdrop-blur-md animate-in fade-in slide-in-from-bottom-4">
-          <div className="flex items-center gap-2 text-xs font-semibold text-cyan-200">
-            <span className="w-6 h-6 rounded-full bg-cyan-500 text-slate-950 flex items-center justify-center font-bold text-xs">
-              {selectedForAutomation.size}
-            </span>
-            <span>commands selected for automation</span>
-          </div>
-
-          <div className="h-4 w-px bg-slate-700" />
-
-          <button
-            type="button"
-            onClick={handleCreateAutomationFromSelected}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold text-xs shadow transition"
-          >
-            <Zap className="w-3.5 h-3.5 fill-current" />
-            <span>Create Rule</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedForAutomation(new Set())}
-            className="text-xs text-slate-400 hover:text-white px-2 py-1 transition"
-          >
-            Clear
-          </button>
-        </div>
-      )}
-
       {/* Footer */}
       <footer className="border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] text-[var(--text-muted)] py-8 px-4 text-xs">
         <div className="max-w-7xl mx-auto flex flex-col items-center justify-center">
@@ -1050,38 +1087,85 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Home Assistant / CAN Do Anchored Floating Save FAB */}
-      <button
-        type="button"
-        onClick={() => setIsContributeOpen(true)}
-        className={`ha-save-fab ${totalPendingCount > 0 ? 'dirty' : ''}`}
-        title="Review & Contribute Changes to GitHub"
-      >
-        <Github className="w-4 h-4" />
-        <span>
-          {totalPendingCount > 0
-            ? `Contribute (${totalPendingCount} Staged)`
-            : 'Contribute to GitHub'}
-        </span>
-      </button>
+      {/* Floating Action Buttons (FAB Stack) */}
+      <div className="ha-fab-stack">
+        {/* Contribute to GitHub FAB: only visible if edits exist */}
+        {totalPendingCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setIsContributeOpen(true)}
+            className="ha-save-fab dirty"
+            title="Review & Contribute Changes to GitHub"
+          >
+            <Github className="w-4 h-4" />
+            <span>Contribute ({totalPendingCount} Staged)</span>
+          </button>
+        )}
+
+        {/* Automate FAB */}
+        {activeMainTab === 'catalog' && (
+          <div className="flex items-center gap-2">
+            {selectedForAutomation.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedForAutomation(new Set())}
+                title="Clear selected commands"
+                className="inline-flex items-center gap-1 h-9 px-3 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold shadow-lg backdrop-blur transition"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Clear</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedForAutomation.size > 0) {
+                  handleCreateAutomationFromSelected();
+                } else {
+                  setActiveMainTab('automations');
+                }
+              }}
+              className={`ha-automate-fab ${selectedForAutomation.size > 0 ? 'active' : ''}`}
+              title={
+                selectedForAutomation.size > 0
+                  ? `Create Automation Rule with ${selectedForAutomation.size} selected command${selectedForAutomation.size > 1 ? 's' : ''}`
+                  : 'Open Automation Builder'
+              }
+            >
+              <Zap className={`w-4 h-4 ${selectedForAutomation.size > 0 ? 'fill-current' : ''}`} />
+              <span>
+                {selectedForAutomation.size > 0
+                  ? `+ Automate (${selectedForAutomation.size})`
+                  : '+ Automate'}
+              </span>
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Modals */}
       {selectedCommand && (
-        <CommandDetailModal
-          command={selectedCommand}
-          catalog={catalog}
-          onClose={() => setSelectedCommand(null)}
-          onDelete={handleDeleteCommand}
-          onEdit={cmd => {
-            setSelectedCommand(null);
-            setEditingCommand(cmd);
-            setIsEditorOpen(true);
-          }}
-          onAddToAutomation={(cmd, role) => {
-            setSelectedCommand(null);
-            handleAddToAutomation(cmd, role);
-          }}
-        />
+        <ErrorBoundary
+          fallbackTitle="Unable to load command details"
+          onReset={() => setSelectedCommand(null)}
+        >
+          <CommandDetailModal
+            command={selectedCommand}
+            catalog={catalog}
+            onClose={() => setSelectedCommand(null)}
+            onDelete={handleDeleteCommand}
+            onEdit={cmd => {
+              setSelectedCommand(null);
+              setEditingCommand(cmd);
+              setIsEditorOpen(true);
+            }}
+            onAddToAutomation={(cmd, role) => {
+              setSelectedCommand(null);
+              handleAddToAutomation(cmd, role);
+            }}
+          />
+        </ErrorBoundary>
       )}
 
       {isEditorOpen && (

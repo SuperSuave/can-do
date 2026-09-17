@@ -250,13 +250,13 @@ export function validateCommand(
       });
     }
   } else {
-    // If it's a can_tx or can_state, state_can_id is usually expected
+    // If it's a can_state, state_can_id is expected for tracking vehicle state
     const netType = command.network?.type || command.type;
-    if (netType === 'can_tx' || netType === 'can_state') {
+    if (netType === 'can_state') {
       issues.push({
         type: 'warning',
         field: 'state_can_id',
-        message: `Command type is '${netType}', but no State CAN ID is specified.`,
+        message: `Command type is 'can_state', but no State CAN ID is specified.`,
         commandId: command.id
       });
     }

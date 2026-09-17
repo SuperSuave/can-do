@@ -1,37 +1,119 @@
 import React from 'react';
+import * as mdiIcons from '@mdi/js';
 import {
-  Compass,
-  Gauge,
-  Thermometer,
-  Car,
-  DoorClosed,
-  BatteryCharging,
-  Battery,
-  Power,
-  Fan,
-  Wind,
-  ShieldAlert,
-  Info,
-  Sun,
-  Flame,
-  Sliders,
-  Camera,
-  Zap,
-  Plug,
-  Shield,
-  Maximize2,
-  RefreshCw,
-  Home,
   Tag,
-  Bell,
-  MessageSquare,
   LucideProps
 } from 'lucide-react';
 
-export interface MdiIconProps extends LucideProps {
+export interface MdiIconProps extends React.SVGProps<SVGSVGElement> {
   icon?: string;
+  className?: string;
+  size?: number | string;
   fallback?: React.ComponentType<LucideProps>;
 }
+
+// Special alias dictionary for common Home Assistant MDI names that differ slightly in @mdi/js
+const MDI_ALIASES: Record<string, string> = {
+  'steering-wheel': 'mdiSteering',
+  'steering': 'mdiSteering',
+  'car-front': 'mdiCarWindshieldOutline',
+  'ev-plug-type2': 'mdiEvPlugType2',
+  'radio': 'mdiRadio',
+  'knob': 'mdiKnob',
+  'music-box-outline': 'mdiMusicBoxOutline',
+  'surround-sound': 'mdiSurroundSound',
+  'speaker': 'mdiSpeaker',
+  'cctv': 'mdiCctv',
+  'car-seat-heater': 'mdiCarSeatHeater',
+  'car-shift-pattern': 'mdiCarShiftPattern',
+  'car-light-dimmed': 'mdiCarLightDimmed',
+  'car-brake-alert': 'mdiCarBrakeAlert',
+  'car-battery': 'mdiCarBattery',
+  'car-door': 'mdiCarDoor',
+  'car-back': 'mdiCarBack',
+  'car-info': 'mdiCarInfo',
+  'wiper': 'mdiWiper',
+  'window-open': 'mdiWindowOpen',
+  'thermostat': 'mdiThermostat',
+  'thermostat-box': 'mdiThermostatBox',
+  'thermometer': 'mdiThermometer',
+  'thermometer-alert': 'mdiThermometerAlert',
+  'message-badge': 'mdiMessageBadge',
+  'message-badge-outline': 'mdiMessageBadgeOutline',
+  'message-text': 'mdiMessageText',
+  'timer-outline': 'mdiTimerOutline',
+  'ev-station': 'mdiEvStation',
+  'speedometer': 'mdiSpeedometer',
+  'radiator': 'mdiRadiator',
+  'power': 'mdiPower',
+  'seatbelt': 'mdiSeatbelt',
+  'sync': 'mdiSync'
+};
+
+/**
+ * Resolves an MDI icon name (e.g. "mdi:steering", "mdi:car-shift-pattern")
+ * to an SVG path string from @mdi/js.
+ */
+export function getMdiSvgPath(iconStr?: string): string | null {
+  if (!iconStr) return null;
+  const clean = iconStr.trim().replace(/^mdi:/i, '');
+  if (!clean) return null;
+
+  const mdiMap = mdiIcons as Record<string, string>;
+
+  // 1. Check direct alias table
+  if (MDI_ALIASES[clean] && mdiMap[MDI_ALIASES[clean]]) {
+    return mdiMap[MDI_ALIASES[clean]];
+  }
+
+  // 2. Convert kebab-case to mdiPascalCase (e.g. "car-door" -> "mdiCarDoor")
+  const pascalName = 'mdi' + clean
+    .split('-')
+    .map(seg => seg.charAt(0).toUpperCase() + seg.slice(1).toLowerCase())
+    .join('');
+
+  if (mdiMap[pascalName]) {
+    return mdiMap[pascalName];
+  }
+
+  // 3. Fallback: case-insensitive search across @mdi/js keys
+  const targetLower = pascalName.toLowerCase();
+  const matchedKey = Object.keys(mdiMap).find(k => k.toLowerCase() === targetLower);
+  if (matchedKey && mdiMap[matchedKey]) {
+    return mdiMap[matchedKey];
+  }
+
+  return null;
+}
+
+export const MdiIcon: React.FC<MdiIconProps> = ({
+  icon,
+  fallback: Fallback,
+  className = 'w-4 h-4',
+  size,
+  ...props
+}) => {
+  const path = getMdiSvgPath(icon);
+
+  if (path) {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        className={`inline-block shrink-0 fill-current ${className}`}
+        width={size}
+        height={size}
+        aria-hidden="true"
+        {...props}
+      >
+        <path d={path} />
+      </svg>
+    );
+  }
+
+  // Fallback if MDI path is not found
+  const FallbackComp = Fallback || Tag;
+  return <FallbackComp className={className} size={size as any} {...(props as any)} />;
+};
 
 export const COMMON_HA_DOMAINS = [
   { id: 'notify', label: 'notify', description: 'OSD toasts, cluster popups & vehicle notifications' },
@@ -72,43 +154,6 @@ export const SUGGESTED_MDI_ICONS = [
   { id: 'mdi:car-shift-pattern', label: 'Gear / Drive Mode', category: 'Drive' },
   { id: 'mdi:wiper', label: 'Wipers / Washers', category: 'Controls' }
 ];
-
-/**
- * Returns an appropriate Lucide icon component corresponding to the MDI identifier.
- */
-export function getMdiComponent(iconStr?: string): React.ComponentType<LucideProps> {
-  if (!iconStr) return Tag;
-  const name = iconStr.toLowerCase().replace(/^mdi:/, '').trim();
-
-  if (name.includes('message') || name.includes('toast') || name.includes('popup') || name.includes('chat')) return MessageSquare;
-  if (name.includes('notify') || name.includes('bell')) return Bell;
-  if (name.includes('steering')) return Compass;
-  if (name.includes('thermostat') || name.includes('temp')) return Thermometer;
-  if (name.includes('speed')) return Gauge;
-  if (name.includes('battery')) return BatteryCharging;
-  if (name.includes('door')) return DoorClosed;
-  if (name.includes('window')) return Maximize2;
-  if (name.includes('plug') || name.includes('station') || name.includes('ev-')) return Plug;
-  if (name.includes('power')) return Power;
-  if (name.includes('radiator') || name.includes('fan')) return Fan;
-  if (name.includes('seat-heater') || name.includes('heat') || name.includes('flame')) return Flame;
-  if (name.includes('wiper') || name.includes('wind')) return Wind;
-  if (name.includes('light')) return Sun;
-  if (name.includes('camera') || name.includes('cctv')) return Camera;
-  if (name.includes('brake') || name.includes('alert')) return ShieldAlert;
-  if (name.includes('seatbelt') || name.includes('shield')) return Shield;
-  if (name.includes('shift') || name.includes('drive')) return Sliders;
-  if (name.includes('info')) return Info;
-  if (name.includes('car')) return Car;
-  if (name.includes('home')) return Home;
-
-  return Tag;
-}
-
-export const MdiIcon: React.FC<MdiIconProps> = ({ icon, fallback: Fallback, className, ...props }) => {
-  const IconComp = getMdiComponent(icon) || Fallback || Tag;
-  return <IconComp className={className} {...props} />;
-};
 
 /**
  * Styles badges for Home Assistant domains

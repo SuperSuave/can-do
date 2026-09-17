@@ -279,12 +279,25 @@
   }
 }
 
-/* Floating Save FAB */
-.ha-save-fab {
+/* Floating Action Buttons Stack */
+.ha-fab-stack {
   position: fixed !important;
   bottom: 24px !important;
   right: 28px !important;
   z-index: 99999 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-end !important;
+  gap: 12px !important;
+  pointer-events: none !important;
+}
+
+.ha-fab-stack > * {
+  pointer-events: auto !important;
+}
+
+/* Floating Save FAB */
+.ha-save-fab {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -319,6 +332,49 @@
   animation: ha-fab-dirty-glow 1.8s infinite alternate ease-in-out !important;
 }
 
+/* Floating Automate FAB */
+.ha-automate-fab {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  padding: 0 18px !important;
+  border-radius: 24px !important;
+  background-color: var(--md-sys-color-surface-container-high) !important;
+  color: #38bdf8 !important;
+  border: 1px solid var(--border-color) !important;
+  font-size: 0.88rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.3px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45) !important;
+  cursor: pointer !important;
+  outline: none !important;
+  transition: opacity 0.25s cubic-bezier(0.2, 0, 0, 1), transform 0.25s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.2s ease, filter 0.2s ease, background-color 0.2s ease, border-color 0.2s ease !important;
+}
+
+.ha-automate-fab:hover {
+  background-color: var(--md-sys-color-surface-container-highest) !important;
+  border-color: #38bdf8 !important;
+  color: #ffffff !important;
+  transform: translateY(-2px) scale(1.02) !important;
+}
+
+.ha-automate-fab.active {
+  background-color: #06b6d4 !important;
+  color: #020617 !important;
+  font-weight: 700 !important;
+  border-color: #22d3ee !important;
+  box-shadow: 0 4px 20px rgba(6, 182, 212, 0.5), 0 0 0 2px rgba(34, 211, 238, 0.4) !important;
+}
+
+.ha-automate-fab.active:hover {
+  background-color: #22d3ee !important;
+  color: #020617 !important;
+  transform: translateY(-2px) scale(1.03) !important;
+}
+
 @keyframes ha-fab-dirty-glow {
   0% {
     box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4), 0 0 0 0 rgba(2, 132, 199, 0.4) !important;
@@ -329,9 +385,13 @@
 }
 
 @media (max-width: 640px) {
-  .ha-save-fab {
+  .ha-fab-stack {
     bottom: 16px !important;
     right: 16px !important;
+    gap: 8px !important;
+  }
+  .ha-save-fab,
+  .ha-automate-fab {
     height: 40px !important;
     padding: 0 14px !important;
     font-size: 0.78rem !important;

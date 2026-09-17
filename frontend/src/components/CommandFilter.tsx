@@ -14,7 +14,9 @@ import {
   Filter,
   LayoutGrid,
   FolderKanban,
-  FileText
+  FileText,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 
 interface CommandFilterProps {
@@ -45,6 +47,8 @@ interface CommandFilterProps {
   totalCount: number;
   activeMainTab?: 'catalog' | 'vehicles' | 'automations';
   onChangeMainTab?: (tab: 'catalog' | 'vehicles' | 'automations') => void;
+  onExpandAll?: () => void;
+  onCollapseAll?: () => void;
 }
 
 export const CommandFilter: React.FC<CommandFilterProps> = ({
@@ -74,7 +78,9 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
   filteredCount,
   totalCount,
   activeMainTab = 'catalog',
-  onChangeMainTab
+  onChangeMainTab,
+  onExpandAll,
+  onCollapseAll
 }) => {
   // Extract unique categories
   const categories = Array.from(new Set(catalog.commands.map(c => c.category))).sort();
@@ -431,54 +437,6 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 min-w-0 bg-[var(--card-bg)]/40 p-2 sm:p-2.5 rounded-xl border border-[var(--border-color)]">
           {/* Left: View Switching & Role Segmentation */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 min-w-0">
-            {/* Commands vs Vehicles Toggle */}
-            {onChangeMainTab && (
-              <div className="ha-segmented-group text-xs shrink-0">
-                <button
-                  type="button"
-                  onClick={() => onChangeMainTab('catalog')}
-                  className={`px-3 py-1.5 rounded-full font-bold transition flex items-center gap-1.5 ${
-                    activeMainTab === 'catalog'
-                      ? 'active !text-white'
-                      : 'text-[var(--text-muted)] hover:text-white'
-                  }`}
-                >
-                  <span>Commands</span>
-                  <span
-                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
-                      activeMainTab === 'catalog'
-                        ? 'bg-black/30 text-white'
-                        : 'bg-[var(--md-sys-color-surface-container-high)] text-slate-300'
-                    }`}
-                  >
-                    {catalog.commands.length}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onChangeMainTab('vehicles')}
-                  className={`px-3 py-1.5 rounded-full font-bold transition flex items-center gap-1.5 ${
-                    activeMainTab === 'vehicles'
-                      ? 'active !text-white'
-                      : 'text-[var(--text-muted)] hover:text-white'
-                  }`}
-                >
-                  <span>Vehicles</span>
-                  <span
-                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
-                      activeMainTab === 'vehicles'
-                        ? 'bg-black/30 text-white'
-                        : 'bg-[var(--md-sys-color-surface-container-high)] text-slate-300'
-                    }`}
-                  >
-                    {catalog.vehicles.length}
-                  </span>
-                </button>
-              </div>
-            )}
-
-            <div className="h-4 w-px bg-slate-800 hidden sm:block shrink-0" />
-
             {/* Role Filter Pills */}
             <div className="flex flex-wrap items-center gap-1 p-1 rounded-full bg-[var(--input-bg)] border border-[var(--border-color)] text-xs">
               <button
@@ -667,8 +625,32 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
           )}
         </div>
 
-        {/* Action buttons: Categories & New CAN Command */}
+        {/* Action buttons: Expand/Collapse (when grouped), Categories & New CAN Command */}
         <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+          {viewMode === 'grouped' && onExpandAll && onCollapseAll && (
+            <div className="inline-flex items-center p-0.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)] text-xs shrink-0 shadow-sm">
+              <button
+                type="button"
+                onClick={onExpandAll}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition text-xs font-semibold"
+                title="Expand all groups"
+              >
+                <Maximize2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span className="whitespace-nowrap">Expand All</span>
+              </button>
+              <div className="h-4 w-px bg-slate-800 shrink-0 mx-0.5" />
+              <button
+                type="button"
+                onClick={onCollapseAll}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition text-xs font-semibold"
+                title="Collapse all groups"
+              >
+                <Minimize2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span className="whitespace-nowrap">Collapse All</span>
+              </button>
+            </div>
+          )}
+
           {onOpenCategoryManager && (
             <button
               type="button"

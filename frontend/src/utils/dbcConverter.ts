@@ -1,4 +1,4 @@
-import { Catalog, Command, CommandOption, CommandRole, ContributorInfo, Vehicle } from '../types/catalog';
+import { Catalog, Command, CommandOption, CommandRole, ContributorInfo, Vehicle, getCommandContributors } from '../types/catalog';
 
 export interface DbcExportOptions {
   vehicleId?: string;
@@ -310,9 +310,13 @@ export function exportToDbc(catalog: Catalog, options: DbcExportOptions = {}): s
         descParts.push(`Command: ${cmd.name} (${cmd.id})`);
         descParts.push(`Roles: ${cmd.roles.join(',')}`);
         if (cmd.requires_feature) descParts.push(`Requires: ${cmd.requires_feature}`);
-        if (cmd.contributor?.github) descParts.push(`Author: @${cmd.contributor.github.replace(/^@/, '')}`);
-        else if (cmd.contributor?.name) descParts.push(`Author: ${cmd.contributor.name}`);
-        if (cmd.contributor?.notes) descParts.push(`Notes: ${cmd.contributor.notes}`);
+        const contribs = getCommandContributors(cmd);
+        if (contribs.length > 0) {
+          const authors = contribs.map(c => c.github ? `@${c.github.replace(/^@/, '')}` : c.name).filter(Boolean).join(', ');
+          if (authors) descParts.push(`Authors: ${authors}`);
+          const notes = contribs.map(c => c.notes).filter(Boolean).join('; ');
+          if (notes) descParts.push(`Notes: ${notes}`);
+        }
 
         const commentText = descParts.join(' | ').replace(/"/g, "'");
         commentLines.push(`CM_ SG_ ${dbcMessageId} ${baseSigName} "${commentText}";`);
@@ -379,8 +383,10 @@ export function exportCommandToDbcSnippet(command: Command): string {
   }
 
   const commentParts: string[] = [`Command: ${command.name}`, `Category: ${command.category}`];
-  if (command.contributor?.github) {
-    commentParts.push(`Author: @${command.contributor.github.replace(/^@/, '')}`);
+  const contribs = getCommandContributors(command);
+  if (contribs.length > 0) {
+    const authors = contribs.map(c => c.github ? `@${c.github.replace(/^@/, '')}` : c.name).filter(Boolean).join(', ');
+    if (authors) commentParts.push(`Authors: ${authors}`);
   }
   lines.push(`CM_ SG_ ${dbcMessageId} ${sigName} "${commentParts.join(' | ')}";`);
 

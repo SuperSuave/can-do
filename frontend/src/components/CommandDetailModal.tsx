@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Command, Catalog } from '../types/catalog';
+import { Command, Catalog, getCommandContributors } from '../types/catalog';
 import { PayloadByteVisualizer } from './PayloadByteVisualizer';
 import { validateCommand } from '../utils/canValidator';
 import { exportCommandToDbcSnippet } from '../utils/dbcConverter';
@@ -36,6 +36,23 @@ interface CommandDetailModalProps {
   onAddToAutomation?: (cmd: Command, option?: any) => void;
 }
 
+export const formatPayloadDisplay = (val: any): string => {
+  if (val === undefined || val === null) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'number') return `0x${val.toString(16).toUpperCase()}`;
+  if (typeof val === 'boolean') return val ? 'true' : 'false';
+  if (typeof val === 'object') {
+    if (val.byte && val.operator) {
+      const op = val.operator === 'greater_than' ? '>' : val.operator === 'less_than' ? '<' : val.operator === 'equals' ? '==' : val.operator;
+      return `${val.byte} ${op} ${val.value ?? ''}`;
+    }
+    const entries = Object.entries(val);
+    if (entries.length === 0) return '{}';
+    return entries.map(([k, v]) => `${k}:${v}`).join(' ');
+  }
+  return String(val);
+};
+
 export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
   command,
   catalog,
@@ -54,6 +71,7 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
 
   if (!command) return null;
 
+  const commandName = command.name || command.ha_metadata?.name || command.id || 'Unnamed Command';
   const dbcSnippet = exportCommandToDbcSnippet(command);
 
   const haYamlSnippet = (() => {
@@ -66,7 +84,7 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
       `# Domain: ${domain}`,
       `${domain}:`,
       `  - platform: can_do`,
-      `    name: "${command.name}"`,
+      `    name: "${commandName}"`,
       `    unique_id: "can_do_${command.id}"`,
       `    icon: "${iconStr}"`
     ];
@@ -81,9 +99,9 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
       lines.push(`    action_can_id: "${txCan}"`);
       lines.push(`    action_bus: ${command.action_bus ?? command.bus ?? 0}`);
     }
-    if (command.from_payload) lines.push(`    from_payload: "${command.from_payload}"`);
-    if (command.to_payload) lines.push(`    to_payload: "${command.to_payload}"`);
-    if (command.match_payload) lines.push(`    match_payload: "${command.match_payload}"`);
+    if (command.from_payload) lines.push(`    from_payload: "${formatPayloadDisplay(command.from_payload)}"`);
+    if (command.to_payload) lines.push(`    to_payload: "${formatPayloadDisplay(command.to_payload)}"`);
+    if (command.match_payload) lines.push(`    match_payload: "${formatPayloadDisplay(command.match_payload)}"`);
     if (command.payload_mask) lines.push(`    payload_mask: "${command.payload_mask}"`);
     if (command.requires_feature) lines.push(`    requires_feature: "${command.requires_feature}"`);
     if (command.options && command.options.length > 0) {
@@ -92,9 +110,9 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
         lines.push(`      - label: "${o.label}"`);
         if (o.popup_message) lines.push(`        popup_message: "${o.popup_message}"`);
         if (o.popup_message_imperial) lines.push(`        popup_message_imperial: "${o.popup_message_imperial}"`);
-        if (o.payload) lines.push(`        payload: "${o.payload}"`);
-        if (o.to_payload) lines.push(`        to_payload: "${o.to_payload}"`);
-        if (o.match_payload) lines.push(`        match_payload: "${o.match_payload}"`);
+        if (o.payload) lines.push(`        payload: "${formatPayloadDisplay(o.payload)}"`);
+        if (o.to_payload) lines.push(`        to_payload: "${formatPayloadDisplay(o.to_payload)}"`);
+        if (o.match_payload || o.match) lines.push(`        match_payload: "${formatPayloadDisplay(o.match_payload || o.match)}"`);
         if (o.default) lines.push(`        default: true`);
       });
     }
@@ -184,25 +202,25 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                   </span>
                 );
               })()}
-              {(command.icon || command.mdi) && (
+              {(command.ha_metadata?.icon || command.icon || command.mdi) && (
                 <span
                   className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-[6px] text-xs font-mono font-medium bg-sky-950/70 text-sky-300 border border-sky-800/60"
-                  title={`MDI Icon: ${command.icon || command.mdi}`}
+                  title={`MDI Icon: ${command.ha_metadata?.icon || command.icon || command.mdi}`}
                 >
-                  <MdiIcon icon={command.icon || command.mdi} className="w-3.5 h-3.5 text-sky-400" />
-                  {command.icon || command.mdi}
+                  <MdiIcon icon={command.ha_metadata?.icon || command.icon || command.mdi} className="w-3.5 h-3.5 text-sky-400" />
+                  {command.ha_metadata?.icon || command.icon || command.mdi}
                 </span>
               )}
             </div>
 
             <div className="flex items-center gap-3">
-              {(command.icon || command.mdi) && (
+              {(command.ha_metadata?.icon || command.icon || command.mdi) && (
                 <div className="w-9 h-9 rounded-xl bg-sky-950/70 border border-sky-800/70 flex items-center justify-center text-sky-300 shrink-0 shadow-sm">
-                  <MdiIcon icon={command.icon || command.mdi} className="w-5 h-5" />
+                  <MdiIcon icon={command.ha_metadata?.icon || command.icon || command.mdi} className="w-5 h-5" />
                 </div>
               )}
               <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">
-                {command.name}
+                {commandName}
               </h2>
             </div>
             <p className="text-xs font-mono text-[var(--text-muted)] mt-1 flex items-center gap-1.5 flex-wrap">
@@ -325,58 +343,109 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
           {activeTab === 'overview' && (
             <div className="space-y-6">
               {/* Community Contributor Credit */}
-              {command.contributor && (command.contributor.name || command.contributor.github) && (
-                <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-700/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-cyan-400 shrink-0">
-                      <Github className="w-5 h-5" />
+              {(() => {
+                const contributors = getCommandContributors(command);
+                if (contributors.length === 0) return null;
+
+                return (
+                  <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-700/80 shadow-sm space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Github className="w-4 h-4 text-cyan-400" />
+                      <span className="text-[11px] uppercase font-bold tracking-wider text-slate-300">
+                        {contributors.length > 1 ? 'Discovered & Contributed By (Research Credits)' : 'Discovered & Contributed By'}
+                      </span>
                     </div>
-                    <div>
-                      <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
-                        Discovered & Contributed By
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        {command.contributor.name && (
-                          <span className="text-sm font-bold text-white">
-                            {command.contributor.name}
-                          </span>
-                        )}
-                        {command.contributor.github && (
-                          <a
-                            href={`https://github.com/${command.contributor.github.replace(/^@/, '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-xs font-mono text-cyan-300 hover:text-cyan-200 bg-cyan-950/60 px-2.5 py-0.5 rounded-md border border-cyan-700/60 hover:border-cyan-500 transition"
+
+                    <div className={`grid gap-3 ${contributors.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+                      {contributors.map((contrib, idx) => {
+                        const handle = contrib.github ? contrib.github.replace(/^@/, '') : '';
+                        return (
+                          <div 
+                            key={idx}
+                            className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/90 flex flex-col justify-between gap-2"
                           >
-                            <span>@{command.contributor.github.replace(/^@/, '')}</span>
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                        )}
-                      </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-7 h-7 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-cyan-400 shrink-0">
+                                  {handle ? <Github className="w-4 h-4" /> : <User className="w-4 h-4" />}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    {contrib.name && (
+                                      <span className="text-sm font-bold text-white truncate">
+                                        {contrib.name}
+                                      </span>
+                                    )}
+                                    {handle && (
+                                      <a
+                                        href={`https://github.com/${handle}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-xs font-mono text-cyan-300 hover:text-cyan-200 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-700/60 hover:border-cyan-500 transition"
+                                      >
+                                        <span>@{handle}</span>
+                                        <ExternalLink className="w-2.5 h-2.5" />
+                                      </a>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {contrib.role && (
+                                <span className="text-[10px] text-cyan-400 uppercase tracking-wider bg-cyan-950/60 border border-cyan-800 px-1.5 py-0.5 rounded font-semibold shrink-0">
+                                  {contrib.role}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Separate Tested Vehicle Box & Notes Box */}
+                            {(contrib.tested_vehicle || (contributors.length === 1 && command.tested_vehicle)) && (
+                              <div className="text-xs text-emerald-300 bg-emerald-950/40 px-2.5 py-1.5 rounded border border-emerald-800/60 flex items-center gap-2">
+                                <Car className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-400/80 shrink-0">Tested Vehicle:</span>
+                                <span className="font-medium text-emerald-200">
+                                  {contrib.tested_vehicle || command.tested_vehicle}
+                                </span>
+                              </div>
+                            )}
+
+                            {(contrib.notes || (contributors.length === 1 && command.notes)) && (
+                              <div className="text-xs text-slate-300 bg-slate-900/80 px-2.5 py-1.5 rounded border border-slate-800/80 flex items-start gap-2">
+                                <FileText className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+                                <div>
+                                  <span className="text-[10px] text-cyan-400/80 font-bold uppercase tracking-wider block mb-0.5">
+                                    Notes:
+                                  </span>
+                                  <span className="leading-relaxed">
+                                    {contrib.notes || command.notes}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-
-                  {command.contributor.notes && (
-                    <div className="text-xs text-slate-300 bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800/90 max-w-sm">
-                      <span className="text-[10px] text-slate-500 font-semibold uppercase block">
-                        Verification & Vehicle Info:
-                      </span>
-                      <span>{command.contributor.notes}</span>
-                    </div>
-                  )}
-                </div>
-              )}
+                );
+              })()}
 
               {/* Payloads section */}
               <div>
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
                   CAN Payload & Byte Transition
                 </h4>
-                <PayloadByteVisualizer
-                  fromPayload={command.from_payload}
-                  toPayload={command.to_payload}
-                  matchPayload={command.match_payload}
-                />
+                {(() => {
+                  const defaultOpt = command.options?.find(o => o.default) || command.options?.[0];
+                  return (
+                    <PayloadByteVisualizer
+                      fromPayload={command.from_payload}
+                      toPayload={command.to_payload}
+                      matchPayload={command.match_payload || (command.from_payload || command.to_payload ? undefined : (defaultOpt?.match || defaultOpt?.match_payload))}
+                      payload={command.payload || (command.from_payload || command.to_payload || command.match_payload ? undefined : (defaultOpt?.payload as any))}
+                    />
+                  );
+                })()}
               </div>
 
               {/* Options / State Breakdown if present */}
@@ -424,16 +493,20 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                             <td className="p-3 text-cyan-300">
                               {opt.state_value !== undefined && opt.state_value !== '' ? (
                                 <span className="bg-cyan-950/60 border border-cyan-800/60 px-2 py-0.5 rounded text-[11px] font-bold">
-                                  {opt.state_value}
+                                  {formatPayloadDisplay(opt.state_value)}
+                                </span>
+                              ) : opt.evaluate ? (
+                                <span className="bg-amber-950/60 border border-amber-800/60 px-2 py-0.5 rounded text-[11px] font-bold text-amber-300 font-mono">
+                                  {formatPayloadDisplay(opt.evaluate)}
                                 </span>
                               ) : (
                                 <span className="text-slate-600">-</span>
                               )}
                             </td>
                             <td className="p-3 text-slate-300">
-                              {opt.match_payload ? (
+                              {(opt.match_payload || opt.match) ? (
                                 <span className="text-cyan-400 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/40 font-mono text-[11px]">
-                                  {opt.match_payload}
+                                  {formatPayloadDisplay(opt.match_payload || opt.match)}
                                 </span>
                               ) : (
                                 <span className="text-slate-600">-</span>
@@ -448,7 +521,7 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                                         key={sidx}
                                         className="bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 px-1.5 py-0.5 rounded text-[10px]"
                                       >
-                                        {st.payload}{' '}
+                                        {formatPayloadDisplay(st.payload)}{' '}
                                         {st.repeat ? (
                                           <span className="text-amber-400 font-bold">x{st.repeat}</span>
                                         ) : null}
@@ -457,22 +530,22 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                                   </div>
                                   {opt.from_payload && (
                                     <span className="text-[10px] text-slate-400 font-sans">
-                                      Trigger: <span className="font-mono text-amber-300">{opt.from_payload}</span>
+                                      Trigger: <span className="font-mono text-amber-300">{formatPayloadDisplay(opt.from_payload)}</span>
                                     </span>
                                   )}
                                 </div>
                               ) : opt.from_payload || opt.to_payload ? (
                                 <span className="inline-flex items-center gap-1">
-                                  <span className="text-amber-300">{opt.from_payload || '*'}</span>
+                                  <span className="text-amber-300">{formatPayloadDisplay(opt.from_payload) || '*'}</span>
                                   <span className="text-slate-500 font-sans">→</span>
-                                  <span className="text-emerald-300">{opt.to_payload || '*'}</span>
+                                  <span className="text-emerald-300">{formatPayloadDisplay(opt.to_payload) || '*'}</span>
                                   {opt.repeat && opt.repeat > 1 && (
                                     <span className="text-amber-400 font-bold ml-1">x{opt.repeat}</span>
                                   )}
                                 </span>
                               ) : opt.payload ? (
                                 <span className="inline-flex items-center gap-1">
-                                  <span className="text-cyan-300">{opt.payload}</span>
+                                  <span className="text-cyan-300">{formatPayloadDisplay(opt.payload)}</span>
                                   {opt.repeat && opt.repeat > 1 && (
                                     <span className="text-amber-400 font-bold ml-1">x{opt.repeat}</span>
                                   )}
@@ -482,7 +555,7 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                               )}
                             </td>
                             <td className="p-3 font-sans text-slate-400">
-                              {opt.description || opt.popup || '-'}
+                              {opt.description || opt.popup || opt.popup_message || '-'}
                             </td>
                             <td className="p-3 text-right">
                               {opt.default ? (
@@ -517,7 +590,7 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                           <span className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-mono text-slate-400">
                             {idx + 1}
                           </span>
-                          <span className="font-mono text-cyan-300">{step.payload}</span>
+                          <span className="font-mono text-cyan-300">{formatPayloadDisplay(step.payload)}</span>
                         </div>
                         <span className="text-slate-400">
                           Repeat: <strong className="text-white">{step.repeat ?? 1}x</strong>
@@ -566,14 +639,14 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                       </div>
                     );
                   })()}
-                  {(command.icon || command.mdi) && (
+                  {(command.ha_metadata?.icon || command.icon || command.mdi) && (
                     <div className="p-3 rounded-lg bg-sky-950/40 border border-sky-800/50">
                       <div className="text-slate-400 mb-1 flex items-center justify-between">
                         <span>Icon (MDI)</span>
                         <button
                           type="button"
                           onClick={() => {
-                            navigator.clipboard.writeText(command.icon || command.mdi || '');
+                            navigator.clipboard.writeText(command.ha_metadata?.icon || command.icon || command.mdi || '');
                             setCopiedIcon(true);
                             setTimeout(() => setCopiedIcon(false), 2000);
                           }}
@@ -584,8 +657,8 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                         </button>
                       </div>
                       <div className="flex items-center gap-1.5 font-mono text-xs font-semibold text-sky-300 truncate">
-                        <MdiIcon icon={command.icon || command.mdi} className="w-4 h-4 text-sky-400 shrink-0" />
-                        <span className="truncate">{command.icon || command.mdi}</span>
+                        <MdiIcon icon={command.ha_metadata?.icon || command.icon || command.mdi} className="w-4 h-4 text-sky-400 shrink-0" />
+                        <span className="truncate">{command.ha_metadata?.icon || command.icon || command.mdi}</span>
                       </div>
                     </div>
                   )}
@@ -784,7 +857,7 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                     <Home className="w-3.5 h-3.5" />
                   </div>
                   <span>
-                    Home Assistant YAML configuration for <strong className="text-white font-mono">{command.name}</strong>
+                    Home Assistant YAML configuration for <strong className="text-white font-mono">{commandName}</strong>
                   </span>
                 </div>
                 <button
@@ -821,8 +894,8 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                 <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">
                   <div className="text-slate-400 text-[10.5px] mb-0.5">MDI Icon</div>
                   <div className="flex items-center gap-1.5 font-mono text-cyan-300 truncate">
-                    <MdiIcon icon={command.icon || command.mdi} className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                    <span className="truncate">{command.icon || command.mdi || 'mdi:car-info'}</span>
+                    <MdiIcon icon={command.ha_metadata?.icon || command.icon || command.mdi} className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                    <span className="truncate">{command.ha_metadata?.icon || command.icon || command.mdi || 'mdi:car-info'}</span>
                   </div>
                 </div>
                 <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">

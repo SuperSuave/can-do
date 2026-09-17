@@ -61,6 +61,8 @@ interface AutomationBuilderProps {
   settings: AutomationSettings;
   onUpdateSettings: (newSettings: AutomationSettings) => void;
   onBackToCatalog?: () => void;
+  onNavigateToCatalog?: () => void;
+  initialSelectedCommandIds?: string[];
   // If items were selected from the catalog to pull into an automation
   pulledCommands?: { command: Command; option?: CommandOption; role?: 'trigger' | 'condition' | 'action' }[];
   onClearPulledCommands?: () => void;
@@ -2161,7 +2163,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                         <label className="block text-[10px] font-sans text-slate-500">Target Match (1-based D1..D8)</label>
                         <input
                           type="text"
-                          value={typeof trig.match === 'object' ? JSON.stringify(trig.match) : (trig.to_payload || '{"D7":"0x0"}')}
+                          value={typeof trig.match === 'object' ? JSON.stringify(trig.match) : typeof trig.to_payload === 'object' ? JSON.stringify(trig.to_payload) : (trig.to_payload || '{"D7":"0x0"}')}
                           onChange={e => {
                             const updated = [...activeRule.triggers];
                             const compiled = compileToByteMap(e.target.value);

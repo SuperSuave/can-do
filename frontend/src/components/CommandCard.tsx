@@ -1,5 +1,5 @@
 import React from 'react';
-import { Command, CommandRole } from '../types/catalog';
+import { Command, CommandRole, getCommandContributors, getCommandTestedVehicle } from '../types/catalog';
 import { PayloadByteVisualizer } from './PayloadByteVisualizer';
 import { MdiIcon, getHaDomainBadgeStyle } from './MdiIcon';
 import { 
@@ -96,32 +96,47 @@ export const CommandCard: React.FC<CommandCardProps> = ({
     const roleOrder: CommandRole[] = ['trigger', 'condition', 'action'];
     const activeRoles = roleOrder.filter(r => command.roles?.includes(r));
     
+    let colors: string[] = [];
     if (activeRoles.length === 0) {
-      if (command.type === 'choose') return 'linear-gradient(to bottom, #8b5cf6, #8b5cf6)';
-      if (command.type === 'ifthen') return 'linear-gradient(to bottom, #0ea5e9, #0ea5e9)';
-      return 'linear-gradient(to bottom, #64748b, #64748b)';
+      if (command.type === 'choose') colors = ['#8b5cf6'];
+      else if (command.type === 'ifthen') colors = ['#0ea5e9'];
+      else colors = ['#64748b'];
+    } else {
+      const roleColors: Record<CommandRole, string> = {
+        trigger: '#f59e0b',   // amber/orange
+        condition: '#0284c7', // cyan/blue
+        action: '#10b981'     // emerald/green
+      };
+      colors = activeRoles.map(r => roleColors[r]);
     }
 
-    const roleColors: Record<CommandRole, string> = {
-      trigger: '#f59e0b',   // amber/orange
-      condition: '#0284c7', // cyan/blue
-      action: '#10b981'     // emerald/green
-    };
+    const fadePct = colors.length === 1 ? 25 : Math.max(12, Math.round(30 / colors.length));
+    const bottomFadePct = 100 - fadePct;
 
-    if (activeRoles.length === 1) {
-      const col = roleColors[activeRoles[0]];
-      return `linear-gradient(to bottom, ${col}, ${col})`;
+    if (colors.length === 1) {
+      const col = colors[0];
+      return `linear-gradient(to bottom, var(--card-bg) 0%, ${col} ${fadePct}%, ${col} ${bottomFadePct}%, var(--card-bg) 100%)`;
     }
 
-    const step = 100 / activeRoles.length;
     const stops: string[] = [];
-    activeRoles.forEach((role, idx) => {
-      const col = roleColors[role];
+    stops.push(`var(--card-bg) 0%`, `${colors[0]} ${fadePct}%`);
+
+    const step = 100 / colors.length;
+    const blendHalf = 2.5; // subtle 5% transition window between adjacent colors
+    colors.forEach((col, idx) => {
       const start = idx * step;
       const end = (idx + 1) * step;
-      stops.push(`${col} ${start}%`, `${col} ${end}%`);
+      if (idx > 0) {
+        const blendStart = Math.max(fadePct, Math.round((start + blendHalf) * 10) / 10);
+        stops.push(`${col} ${blendStart}%`);
+      }
+      if (idx < colors.length - 1) {
+        const blendEnd = Math.min(bottomFadePct, Math.round((end - blendHalf) * 10) / 10);
+        stops.push(`${col} ${blendEnd}%`);
+      }
     });
 
+    stops.push(`${colors[colors.length - 1]} ${bottomFadePct}%`, `var(--card-bg) 100%`);
     return `linear-gradient(to bottom, ${stops.join(', ')})`;
   };
 
@@ -155,7 +170,7 @@ export const CommandCard: React.FC<CommandCardProps> = ({
   return (
     <div
       onClick={() => onSelect(command)}
-      className={`group relative flex flex-col justify-between rounded-[12px] border bg-[var(--card-bg)] p-4 sm:p-5 transition-all duration-200 hover:border-slate-500 hover:shadow-md cursor-pointer min-w-0 ${
+      className={`group relative flex flex-col rounded-[12px] border bg-[var(--card-bg)] p-4 sm:p-5 transition-all duration-200 hover:border-slate-500 hover:shadow-md cursor-pointer min-w-0 ${
         isNew
           ? 'border-emerald-500/50 shadow-emerald-500/5'
           : isModified
@@ -165,7 +180,7 @@ export const CommandCard: React.FC<CommandCardProps> = ({
     >
       {/* Dynamic multi-role split left border indicator */}
       <div 
-        className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-[12px] overflow-hidden pointer-events-none"
+        className="absolute left-[6px] top-[12px] bottom-[12px] w-[6px] pointer-events-none"
         style={{ background: getLeftBorderGradient() }}
       />
       {/* Draft badge indicator */}
@@ -180,7 +195,7 @@ export const CommandCard: React.FC<CommandCardProps> = ({
       )}
 
       <div className="min-w-0">
-        {/* Row 1: Role pills and Automation select checkbox */}
+        {/* Row 1: Role pills */}
         <div className="flex items-center justify-between gap-2 mb-2 min-w-0">
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
             {command.roles && command.roles.length > 0 ? (
@@ -192,70 +207,85 @@ export const CommandCard: React.FC<CommandCardProps> = ({
               </span>
             )}
           </div>
-
-          {onToggleSelectForAutomation && (
-            <div
-              onClick={e => {
-                e.stopPropagation();
-                onToggleSelectForAutomation(command);
-              }}
-              title={isSelectedForAutomation ? 'Selected for automation' : 'Select for automation'}
-              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-semibold cursor-pointer transition ${
-                isSelectedForAutomation
-                  ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-bold shadow'
-                  : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={isSelectedForAutomation || false}
-                onChange={() => {}} // Handled by parent div
-                className="w-3 h-3 rounded pointer-events-none text-cyan-500"
-              />
-              <span>Automate</span>
-            </div>
-          )}
         </div>
 
-        {/* Row 2: TX Bus / RX Bus */}
+        {/* Row 2: Merged CAN Bus & ID Pill */}
         <div className="flex flex-wrap items-center gap-1.5 mb-3 text-xs font-mono">
-          {hasRx && (
+          {hasRx || hasTx ? (
             <div 
-              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-950/80 border border-slate-800/80 text-cyan-300 shrink-0"
-              title={rxCanId ? `RX CAN ID: ${rxCanId} on Bus ${rxBus}` : `RX Bus ${rxBus}`}
+              className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-md bg-slate-950/80 border border-slate-800/80 text-xs font-mono shrink-0 shadow-sm"
+              title={
+                hasRx && hasTx
+                  ? `RX: ${rxCanId || 'N/A'} (Bus ${rxBus}), TX: ${txCanId || 'N/A'} (Bus ${txBus})`
+                  : hasRx
+                  ? `RX: ${rxCanId || 'N/A'} (Bus ${rxBus})`
+                  : `TX: ${txCanId || 'N/A'} (Bus ${txBus})`
+              }
             >
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">RX Bus {rxBus}</span>
-              {rxCanId && (
-                <>
+              {hasRx && hasTx && rxBus === txBus ? (
+                // Unified single bus display when RX and TX share the same bus
+                <div className="inline-flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Bus {rxBus}
+                  </span>
                   <span className="text-slate-600">•</span>
-                  <span className="font-semibold text-cyan-300">{rxCanId}</span>
-                  {command.options && command.options.length > 0 && (
-                    <span className="text-[10px] text-cyan-400 bg-cyan-950/90 px-1 py-0.2 rounded border border-cyan-800/80 font-sans font-medium" title={`${command.options.length} Defined States mapped for this CAN ID`}>
-                      {command.options.length} states
+                  {rxCanId === txCanId ? (
+                    <span className="inline-flex items-center gap-1 text-cyan-300 font-semibold">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">RX/TX</span>
+                      <span>{rxCanId}</span>
                     </span>
+                  ) : (
+                    <div className="inline-flex items-center gap-1.5">
+                      {rxCanId && (
+                        <span className="inline-flex items-center gap-1 text-cyan-300 font-semibold">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400/80">RX</span>
+                          <span>{rxCanId}</span>
+                        </span>
+                      )}
+                      {rxCanId && txCanId && <span className="text-slate-600">•</span>}
+                      {txCanId && (
+                        <span className="inline-flex items-center gap-1 text-emerald-400 font-semibold">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400/80">TX</span>
+                          <span>{txCanId}</span>
+                        </span>
+                      )}
+                    </div>
                   )}
-                </>
+                </div>
+              ) : (
+                // Segmented display when buses differ or single RX/TX
+                <div className="inline-flex items-center gap-2 divide-x divide-slate-800">
+                  {hasRx && (
+                    <div className="inline-flex items-center gap-1.5 text-cyan-300">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        RX Bus {rxBus}
+                      </span>
+                      {rxCanId && (
+                        <>
+                          <span className="text-slate-600">•</span>
+                          <span className="font-semibold text-cyan-300">{rxCanId}</span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {hasTx && (
+                    <div className={`inline-flex items-center gap-1.5 text-emerald-300 ${hasRx ? 'pl-2' : ''}`}>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        TX Bus {txBus}
+                      </span>
+                      {txCanId && (
+                        <>
+                          <span className="text-slate-600">•</span>
+                          <span className="font-semibold text-emerald-400">{txCanId}</span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-          )}
-
-          {hasTx && (
-            <div 
-              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-950/80 border border-slate-800/80 text-emerald-300 shrink-0"
-              title={txCanId ? `TX CAN ID: ${txCanId} on Bus ${txBus}` : `TX Bus ${txBus}`}
-            >
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">TX Bus {txBus}</span>
-              {txCanId && (
-                <>
-                  <span className="text-slate-600">•</span>
-                  <span className="font-semibold text-emerald-400">{txCanId}</span>
-                </>
-              )}
-            </div>
-          )}
-
-          {!hasRx && !hasTx && (
-            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-950/80 border border-slate-800/80 text-slate-400 shrink-0">
+          ) : (
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-slate-950/80 border border-slate-800/80 text-slate-400 shrink-0">
               <span className="text-[10px] uppercase font-bold text-slate-500">Virtual / OSD</span>
             </div>
           )}
@@ -273,29 +303,42 @@ export const CommandCard: React.FC<CommandCardProps> = ({
             {command.name}
           </h3>
         </div>
-        <div className="text-xs text-slate-400 mb-3 flex items-center gap-1.5 min-w-0 overflow-hidden">
-          <span className="font-mono text-slate-400 truncate shrink min-w-0 text-[11px]" title={command.id}>
-            {command.id}
-          </span>
-          <span className="text-slate-600 shrink-0">•</span>
-          <span className="text-slate-400 font-sans truncate shrink-0 max-w-[36%]" title={command.category}>
-            {command.category}
-          </span>
-          {command.subcategory && (
-            <>
-              <span className="text-slate-600 shrink-0">›</span>
-              <span
-                className="text-cyan-400/90 font-medium truncate shrink-0 max-w-[40%] text-[11px] bg-cyan-950/50 px-1.5 py-0.5 rounded border border-cyan-900/50"
-                title={`Subsystem: ${command.subcategory}`}
-              >
-                {command.subcategory}
-              </span>
-            </>
-          )}
-        </div>
+        {/* Zone 1: Tested Vehicle */}
+        {(() => {
+          const testedVehicle = getCommandTestedVehicle(command);
 
-        {/* Payload preview */}
-        <div className="mb-3 min-w-0">
+          if (!testedVehicle) {
+            return (
+              <div className="text-xs text-slate-500 mb-2.5 flex items-center gap-1.5 min-w-0">
+                {command.subcategory ? (
+                  <span
+                    className="text-slate-400 font-medium truncate text-[11px] bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800/80"
+                    title={`Subsystem: ${command.subcategory}`}
+                  >
+                    {command.subcategory}
+                  </span>
+                ) : null}
+              </div>
+            );
+          }
+
+          return (
+            <div className="mb-2.5 min-w-0">
+              <div 
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 text-[11px] font-medium min-w-0 max-w-full shadow-sm"
+                title={`Tested vehicle: ${testedVehicle}`}
+              >
+                <Car className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-400/80 shrink-0">Tested Vehicle:</span>
+                <span className="truncate text-emerald-200 font-medium">{testedVehicle}</span>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Zone 2: Payload preview (Elastic zone that absorbs height variations) */}
+      <div className="flex-1 flex flex-col justify-start min-w-0 mb-3">
           {command.options && command.options.length > 0 ? (
             <div className="bg-slate-950/70 rounded-lg p-2 border border-slate-800 text-xs min-w-0">
               <div className="flex items-center justify-between text-slate-400 mb-1.5 font-medium gap-1 min-w-0">
@@ -381,9 +424,11 @@ export const CommandCard: React.FC<CommandCardProps> = ({
           )}
         </div>
 
+      {/* Zone 3: Bottom Pinned Section (Tags, Contributor, Footer Actions) */}
+      <div className="mt-auto flex flex-col gap-2.5 min-w-0">
         {/* Details below grids/options: HA domain, type, requirements, and tags */}
         {(command.ha_domain || command.type || command.requires_feature || (command.tags && command.tags.length > 0)) && (
-          <div className="flex flex-wrap items-center gap-1.5 mb-3 min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
             {command.ha_domain && (() => {
               const domainStyle = getHaDomainBadgeStyle(command.ha_domain);
               return (
@@ -419,61 +464,88 @@ export const CommandCard: React.FC<CommandCardProps> = ({
         )}
 
         {/* Contributor Attribution */}
-        {command.contributor && (command.contributor.name || command.contributor.github) && (
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400 pt-2 border-t border-slate-800/60 mb-1 min-w-0 overflow-hidden">
-            <span className="text-[10px] text-slate-500 font-medium shrink-0">Contributed by:</span>
-            {command.contributor.github ? (
-              <a
-                href={`https://github.com/${command.contributor.github.replace(/^@/, '')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={e => e.stopPropagation()}
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-900/90 hover:bg-slate-800 border border-slate-700/70 text-cyan-300 hover:text-cyan-200 transition font-mono text-[10.5px] truncate max-w-[140px]"
-                title={`View GitHub profile @${command.contributor.github.replace(/^@/, '')}`}
-              >
-                <Github className="w-3 h-3 text-slate-400 shrink-0" />
-                <span className="truncate">@{command.contributor.github.replace(/^@/, '')}</span>
-              </a>
-            ) : (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-900/90 border border-slate-700/70 text-slate-300 font-medium text-[10.5px] truncate max-w-[140px]">
-                <User className="w-3 h-3 text-slate-400 shrink-0" />
-                <span className="truncate">{command.contributor.name}</span>
+        {(() => {
+          const contributors = getCommandContributors(command);
+          if (contributors.length === 0) return null;
+          return (
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400 pt-2 border-t border-slate-800/60 mb-1 min-w-0">
+              <span className="text-[10px] text-slate-500 font-medium shrink-0">
+                {contributors.length > 1 ? 'Contributors:' : 'Contributed by:'}
               </span>
-            )}
-            {command.contributor.name && command.contributor.github && (
-              <span className="text-[10px] text-slate-400 font-sans truncate max-w-[100px]">
-                ({command.contributor.name})
-              </span>
-            )}
-            {command.contributor.notes && (
-              <span className="text-[10px] text-slate-500 ml-auto truncate max-w-[110px] italic" title={command.contributor.notes}>
-                {command.contributor.notes}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
+              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                {contributors.map((contrib, idx) => {
+                  const handle = contrib.github ? contrib.github.replace(/^@/, '') : '';
+                  return (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-900/90 border border-slate-700/70 text-[10.5px] max-w-[170px] truncate"
+                      title={contrib.notes ? `${contrib.name || handle || 'Contributor'}: ${contrib.notes}` : (contrib.name || handle)}
+                    >
+                      {handle ? (
+                        <a
+                          href={`https://github.com/${handle}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 text-cyan-300 hover:text-cyan-200 font-mono transition truncate"
+                          title={`View @${handle} on GitHub`}
+                        >
+                          <Github className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span className="truncate">@{handle}</span>
+                        </a>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-slate-300 font-medium truncate">
+                          <User className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span className="truncate">{contrib.name}</span>
+                        </span>
+                      )}
+                      {contrib.name && handle && (
+                        <span className="text-[9.5px] text-slate-400 truncate">
+                          ({contrib.name})
+                        </span>
+                      )}
+                      {contrib.role && (
+                        <span className="text-[9px] text-slate-400 uppercase tracking-wider bg-slate-800/90 px-1 py-0.5 rounded">
+                          {contrib.role}
+                        </span>
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
-      {/* Footer action buttons */}
-      <div className="flex items-center justify-between pt-3 border-t border-slate-800/80 mt-2 text-slate-400">
+        {/* Footer action buttons */}
+        <div className="flex items-center justify-between pt-2.5 border-t border-slate-800/80 text-slate-400">
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-slate-500 hover:text-slate-300 flex items-center gap-1">
-            <ExternalLink className="w-3 h-3" /> Details
+            <ExternalLink className="w-3 h-3 text-slate-400" />
+            <span>Details</span>
           </span>
 
-          {onAddToAutomation && (
-            <button
-              type="button"
+          {onToggleSelectForAutomation && (
+            <div
               onClick={e => {
                 e.stopPropagation();
-                onAddToAutomation(command);
+                onToggleSelectForAutomation(command);
               }}
-              title="Add to active automation rule"
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-semibold transition"
+              title={isSelectedForAutomation ? 'Selected for automation' : 'Select for automation'}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10.5px] font-semibold cursor-pointer transition select-none ${
+                isSelectedForAutomation
+                  ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-bold shadow-sm'
+                  : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
+              }`}
             >
-              <Zap className="w-3 h-3 text-cyan-400" />
-              <span>+ Automate</span>
-            </button>
+              <input
+                type="checkbox"
+                checked={isSelectedForAutomation || false}
+                onChange={() => {}} // Handled by parent div
+                className="w-3.5 h-3.5 rounded pointer-events-none accent-cyan-500"
+              />
+              <span>Automate</span>
+            </div>
           )}
         </div>
 
@@ -558,5 +630,6 @@ export const CommandCard: React.FC<CommandCardProps> = ({
         </div>
       </div>
     </div>
+  </div>
   );
 };
