@@ -50,12 +50,12 @@ const std::string MQTT_BASE_TOPIC = "cando";
 esp_mqtt_client_handle_t global_mqtt_client = nullptr;
 
 static esp_err_t init_fs(void) {
-    esp_vfs_littlefs_conf_t conf = {
-        .base_path = "/spiffs",
-        .partition_label = "storage",
-        .format_if_mount_failed = true,
-        .dont_mount = false
-    };
+    esp_vfs_littlefs_conf_t conf = {};
+    conf.base_path = "/spiffs";
+    conf.partition_label = "storage";
+    conf.format_if_mount_failed = true;
+    conf.dont_mount = false;
+
     esp_err_t ret = esp_vfs_littlefs_register(&conf);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to mount LittleFS (%s)", esp_err_to_name(ret));
@@ -110,7 +110,7 @@ static void publish_ha_discovery(esp_mqtt_client_handle_t client, const CanEntit
     std::string topic = "homeassistant/" + entity.ha_domain + "/" + DEVICE_ID + "/" + entity.id + "/config";
     esp_mqtt_client_publish(client, topic.c_str(), payload, 0, 1, 1);
 
-    cJSON_Free(payload);
+    free(payload);
     cJSON_Delete(root);
 }
 

@@ -159,7 +159,7 @@ static esp_err_t api_states_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, json_string);
 
-    cJSON_Free(json_string);
+    free(json_string);
     cJSON_Delete(root);
     return ESP_OK;
 }
@@ -614,57 +614,35 @@ httpd_handle_t start_webserver(void) {
     config.max_uri_handlers = 24;
 
     if (httpd_start(&server, &config) == ESP_OK) {
-        httpd_uri_t api_states = { "/api/states", HTTP_GET, api_states_handler, nullptr };
-        httpd_register_uri_handler(server, &api_states);
+        auto reg_uri = [&](const char* uri, httpd_method_t method, esp_err_t (*handler)(httpd_req_t*), bool is_ws = false) {
+            httpd_uri_t u = {};
+            u.uri = uri;
+            u.method = method;
+            u.handler = handler;
+            u.user_ctx = nullptr;
+#ifdef CONFIG_HTTPD_WS_SUPPORT
+            u.is_websocket = is_ws;
+#endif
+            httpd_register_uri_handler(server, &u);
+        };
 
-        httpd_uri_t api_cmd = { "/api/command", HTTP_POST, api_command_handler, nullptr };
-        httpd_register_uri_handler(server, &api_cmd);
-
-        httpd_uri_t api_test = { "/api/test_automation", HTTP_POST, api_test_automation_handler, nullptr };
-        httpd_register_uri_handler(server, &api_test);
-
-        httpd_uri_t api_get_auto = { "/api/automations", HTTP_GET, api_get_automations_handler, nullptr };
-        httpd_register_uri_handler(server, &api_get_auto);
-
-        httpd_uri_t api_post_auto = { "/api/automations", HTTP_POST, api_post_automations_handler, nullptr };
-        httpd_register_uri_handler(server, &api_post_auto);
-
-        httpd_uri_t api_sys_status = { "/api/system/status", HTTP_GET, api_system_status_handler, nullptr };
-        httpd_register_uri_handler(server, &api_sys_status);
-
-        httpd_uri_t api_sys_ctrl = { "/api/system/control", HTTP_POST, api_system_control_handler, nullptr };
-        httpd_register_uri_handler(server, &api_sys_ctrl);
-
-        httpd_uri_t api_wifi_status = { "/api/wifi/status", HTTP_GET, api_wifi_status_handler, nullptr };
-        httpd_register_uri_handler(server, &api_wifi_status);
-
-        httpd_uri_t api_wifi_get_nets = { "/api/wifi/networks", HTTP_GET, api_wifi_get_networks_handler, nullptr };
-        httpd_register_uri_handler(server, &api_wifi_get_nets);
-
-        httpd_uri_t api_wifi_post_nets = { "/api/wifi/networks", HTTP_POST, api_wifi_post_networks_handler, nullptr };
-        httpd_register_uri_handler(server, &api_wifi_post_nets);
-
-        httpd_uri_t api_wifi_del_nets = { "/api/wifi/networks", HTTP_DELETE, api_wifi_delete_networks_handler, nullptr };
-        httpd_register_uri_handler(server, &api_wifi_del_nets);
-
-        httpd_uri_t api_wifi_scan = { "/api/wifi/scan", HTTP_GET, api_wifi_scan_handler, nullptr };
-        httpd_register_uri_handler(server, &api_wifi_scan);
-
-        httpd_uri_t api_wifi_settings = { "/api/wifi/settings", HTTP_POST, api_wifi_settings_handler, nullptr };
-        httpd_register_uri_handler(server, &api_wifi_settings);
-
-        httpd_uri_t api_up = { "/api/upload", HTTP_POST, api_file_upload_handler, nullptr };
-        httpd_register_uri_handler(server, &api_up);
-
-        httpd_uri_t api_ota = { "/api/ota", HTTP_POST, api_ota_handler, nullptr };
-        httpd_register_uri_handler(server, &api_ota);
-
-        httpd_uri_t ws_uri = { "/ws", HTTP_GET, ws_handler, nullptr, true };
-        httpd_register_uri_handler(server, &ws_uri);
-
-        // Static files fallback
-        httpd_uri_t static_file_uri = { "/*", HTTP_GET, static_file_handler, nullptr };
-        httpd_register_uri_handler(server, &static_file_uri);
+        reg_uri("/api/states", HTTP_GET, api_states_handler);
+        reg_uri("/api/command", HTTP_POST, api_command_handler);
+        reg_uri("/api/test_automation", HTTP_POST, api_test_automation_handler);
+        reg_uri("/api/automations", HTTP_GET, api_get_automations_handler);
+        reg_uri("/api/automations", HTTP_POST, api_post_automations_handler);
+        reg_uri("/api/system/status", HTTP_GET, api_system_status_handler);
+        reg_uri("/api/system/control", HTTP_POST, api_system_control_handler);
+        reg_uri("/api/wifi/status", HTTP_GET, api_wifi_status_handler);
+        reg_uri("/api/wifi/networks", HTTP_GET, api_wifi_get_networks_handler);
+        reg_uri("/api/wifi/networks", HTTP_POST, api_wifi_post_networks_handler);
+        reg_uri("/api/wifi/networks", HTTP_DELETE, api_wifi_delete_networks_handler);
+        reg_uri("/api/wifi/scan", HTTP_GET, api_wifi_scan_handler);
+        reg_uri("/api/wifi/settings", HTTP_POST, api_wifi_settings_handler);
+        reg_uri("/api/upload", HTTP_POST, api_file_upload_handler);
+        reg_uri("/api/ota", HTTP_POST, api_ota_handler);
+        reg_uri("/ws", HTTP_GET, ws_handler, true);
+        reg_uri("/*", HTTP_GET, static_file_handler);
 
         global_web_server = server;
         original_log_vprintf = esp_log_set_vprintf(custom_websocket_logger);
