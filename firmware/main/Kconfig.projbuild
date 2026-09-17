@@ -21,7 +21,7 @@ menu "CAN Do Configuration"
 
     config CAN_DO_AP_SSID
         string "Fallback SoftAP SSID"
-        default "CAN-Do-Edge"
+        default "CAN Do"
         help
             Access Point SSID broadcast when station connection fails or is unconfigured.
 

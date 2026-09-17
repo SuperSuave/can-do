@@ -30,7 +30,7 @@ static std::atomic<bool> s_sta_connected{false};
 static std::atomic<bool> s_ap_active{false};
 
 static ApFallbackMode s_ap_mode = AP_MODE_AUTO;
-static std::string s_ap_ssid = "CAN-Do-Edge";
+static std::string s_ap_ssid = "CAN Do";
 static std::string s_ap_pass = "candorules";
 
 static std::string s_cur_sta_ssid = "";
@@ -50,7 +50,6 @@ static const int MAXIMUM_RETRY = 3;
 // Forward declarations
 static void load_settings_from_fs(void);
 static void save_settings_to_fs(void);
-static void configure_softap_ip(void);
 static void start_softap(void);
 static void stop_softap(void);
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
@@ -170,25 +169,6 @@ static void save_settings_to_fs(void) {
     free(rendered);
 }
 
-static void configure_softap_ip(void) {
-    if (!s_netif_ap) return;
-
-    // 1. Stop DHCP server while modifying IP addresses
-    esp_netif_dhcps_stop(s_netif_ap);
-
-    // 2. Set static IP 192.168.4.1 / 255.255.255.0
-    esp_netif_ip_info_t ip_info;
-    memset(&ip_info, 0, sizeof(ip_info));
-    IP4_ADDR(&ip_info.ip, 192, 168, 4, 1);
-    IP4_ADDR(&ip_info.gw, 192, 168, 4, 1);
-    IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
-    ESP_ERROR_CHECK(esp_netif_set_ip_info(s_netif_ap, &ip_info));
-
-    // 3. Restart DHCP server
-    esp_netif_dhcps_start(s_netif_ap);
-    ESP_LOGI(TAG, "SoftAP IP locked to 192.168.4.1 (Default DHCP pool)");
-}
-
 static void start_softap(void) {
     if (s_ap_mode == AP_MODE_DISABLED) return;
 
@@ -198,6 +178,7 @@ static void start_softap(void) {
     ap_config.ap.authmode = s_ap_pass.empty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
     ap_config.ap.max_connection = 4;
     ap_config.ap.channel = 1;
+    ap_config.ap.ssid_hidden = 0;
 
     wifi_mode_t mode;
     esp_wifi_get_mode(&mode);
@@ -403,7 +384,6 @@ esp_err_t network_mgr_init(void) {
 
     s_netif_sta = esp_netif_create_default_wifi_sta();
     s_netif_ap = esp_netif_create_default_wifi_ap();
-    configure_softap_ip();
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
@@ -413,12 +393,23 @@ esp_err_t network_mgr_init(void) {
 
     // Default mode: APSTA so both interfaces are ready
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
-    ESP_ERROR_CHECK(esp_wifi_start());
 
-    // Initially start SoftAP until STA associates
+    // Set AP config before starting Wi-Fi
     if (s_ap_mode != AP_MODE_DISABLED) {
-        start_softap();
+        wifi_config_t ap_config = {};
+        strncpy(reinterpret_cast<char*>(ap_config.ap.ssid), s_ap_ssid.c_str(), sizeof(ap_config.ap.ssid));
+        strncpy(reinterpret_cast<char*>(ap_config.ap.password), s_ap_pass.c_str(), sizeof(ap_config.ap.password));
+        ap_config.ap.authmode = s_ap_pass.empty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
+        ap_config.ap.max_connection = 4;
+        ap_config.ap.channel = 1;
+        ap_config.ap.ssid_hidden = 0;
+        ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
+        s_ap_active = true;
+        board_led_wifi(true);
     }
+
+    ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_LOGI(TAG, "Wi-Fi started. SoftAP '%s' ready.", s_ap_ssid.c_str());
 
     xTaskCreate(network_roam_task, "net_roam", 4096, nullptr, 3, nullptr);
 

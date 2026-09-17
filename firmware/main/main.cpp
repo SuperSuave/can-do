@@ -187,12 +187,17 @@ extern "C" void app_main(void) {
     // 0. Initialize WiCAN board hardware (CAN Transceiver STB pin and LEDs)
     board_hardware_init();
 
+    // 1. Core Networking Subsystems (MUST be initialized before any sockets or wifi)
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &app_ip_event_handler, nullptr, nullptr));
+
     // Initialize unique Device ID from hardware MAC (can-do-[last 4 of MAC])
     init_device_id();
 
     ESP_LOGI(TAG, "CAN Do ESP32 Firmware starting (Device ID: %s)...", g_device_id.c_str());
 
-    // 1. NVS flash
+    // 2. NVS flash
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -200,37 +205,33 @@ extern "C" void app_main(void) {
     }
     ESP_ERROR_CHECK(ret);
 
-    // 2. Mount LittleFS and load catalog (edge-first: offline execution guaranteed)
+    // 3. Mount LittleFS and load catalog & automations
     init_fs();
     if (!load_catalog_from_fs("/spiffs/catalog/can_do_catalog.json")) {
         load_catalog_from_fs("/spiffs/can_do_catalog.json");
     }
-    // Load active user automations from dedicated LittleFS storage
     load_automations_from_fs("/spiffs/automations.json");
 
-    // 3. Init TWAI (CAN)
+    // 4. Network connectivity (Multi-SSID Roaming, Auto-AP Fallback, 192.168.4.1)
+    network_mgr_init();
+
+    // 5. Start Web Server and WS Hook (now that network stack is running)
+    start_webserver();
+
+    // 6. Start GVRET TCP Port 23 Server (SavvyCAN / SavvyLens)
+    gvret_server_init(23);
+
+    // 7. Init TWAI (CAN)
     ESP_ERROR_CHECK(init_twai());
 
-    // 3b. Init Cluster Track Selection Popup & Preconditioning Subsystems
+    // 8. Init Cluster Track Selection Popup & Preconditioning Subsystems
     precondition_init();
 
-    // 4. Command Queues and Tasks
+    // 9. Command Queues and Tasks
     init_can_engine();
     xTaskCreate(can_rx_task, "CAN_RX", 4096, nullptr, 5, nullptr);
     xTaskCreate(can_tx_task, "CAN_TX", 4096, nullptr, 4, nullptr);
     xTaskCreate(time_scheduler_task, "TIME_SCHED", 3072, nullptr, 3, nullptr);
-
-    // 5. Start Web Server and WS Hook
-    start_webserver();
-
-    // 6. Network connectivity (Multi-SSID Roaming, Auto-AP Fallback, 192.168.4.1)
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &app_ip_event_handler, nullptr, nullptr));
-    network_mgr_init();
-
-    // 7. Start GVRET TCP Port 23 Server (SavvyCAN / SavvyLens)
-    gvret_server_init(23);
 
     ESP_LOGI(TAG, "Initialization complete. Ready.");
 }
