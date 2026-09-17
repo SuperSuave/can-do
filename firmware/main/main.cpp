@@ -20,9 +20,32 @@
 #include "track_popup.h"
 #include "precondition.h"
 
+#include "esp_mac.h"
+
 static const char* TAG = "MAIN";
 
-const std::string DEVICE_ID = "cando_vehicle";
+static std::string g_device_id = "can-do";
+#define DEVICE_ID g_device_id
+
+static void init_device_id(void) {
+#ifdef CONFIG_CAN_DO_DEVICE_IDENTIFIER
+    if (strlen(CONFIG_CAN_DO_DEVICE_IDENTIFIER) > 0) {
+        g_device_id = CONFIG_CAN_DO_DEVICE_IDENTIFIER;
+        ESP_LOGI(TAG, "Device ID configured via Kconfig: %s", g_device_id.c_str());
+        return;
+    }
+#endif
+    uint8_t mac[6] = {0};
+    if (esp_read_mac(mac, ESP_MAC_WIFI_STA) == ESP_OK) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "can-do-%02X%02X", mac[4], mac[5]);
+        g_device_id = buf;
+    } else {
+        g_device_id = "can-do-0000";
+    }
+    ESP_LOGI(TAG, "Device ID initialized from MAC: %s", g_device_id.c_str());
+}
+
 const std::string MQTT_BASE_TOPIC = "cando";
 esp_mqtt_client_handle_t global_mqtt_client = nullptr;
 
@@ -121,11 +144,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 #include "esp_event.h"
 #include "esp_netif.h"
 
-#ifdef CONFIG_CAN_DO_DEVICE_IDENTIFIER
-const std::string DEVICE_ID = CONFIG_CAN_DO_DEVICE_IDENTIFIER;
-#else
-const std::string DEVICE_ID = "cando_vehicle";
-#endif
 
 static void start_mqtt(void) {
 #if defined(CONFIG_CAN_DO_MQTT_BROKER_URL) && !defined(CONFIG_CAN_DO_MQTT_DISABLE)
@@ -165,7 +183,10 @@ static void app_ip_event_handler(void* arg, esp_event_base_t event_base, int32_t
 }
 
 extern "C" void app_main(void) {
-    ESP_LOGI(TAG, "CAN Do ESP32 Firmware starting...");
+    // Initialize unique Device ID from hardware MAC (can-do-[last 4 of MAC])
+    init_device_id();
+
+    ESP_LOGI(TAG, "CAN Do ESP32 Firmware starting (Device ID: %s)...", g_device_id.c_str());
 
     // 1. NVS flash
     esp_err_t ret = nvs_flash_init();

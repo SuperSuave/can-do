@@ -1,0 +1,18 @@
+# Target chip
+CONFIG_IDF_TARGET="esp32c3"
+
+# Partition table
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_OFFSET=0x8000
+
+# Flash size configuration (4MB)
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+
+# Web server WebSocket support (required for /ws endpoint and live logs)
+CONFIG_HTTPD_WS_SUPPORT=y
+
+# FreeRTOS configuration
+CONFIG_FREERTOS_HZ=1000

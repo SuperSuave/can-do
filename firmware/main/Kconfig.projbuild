@@ -1,10 +1,11 @@
 menu "CAN Do Configuration"
 
     config CAN_DO_DEVICE_IDENTIFIER
-        string "Vehicle / Device Identifier"
-        default "cando_kia_ev6"
+        string "Vehicle / Device Identifier (leave empty for can-do-[MAC])"
+        default ""
         help
             Unique ID used for Home Assistant MQTT Auto-Discovery grouping.
+            If left empty, defaults to can-do-(last 4 hex digits of Wi-Fi MAC), e.g. can-do-3A8F.
 
     config CAN_DO_WIFI_SSID
         string "Wi-Fi SSID"
