@@ -34,12 +34,16 @@ idf_component_register(
 set(DASHBOARD_DIR "${CMAKE_SOURCE_DIR}/embedded-dashboard")
 set(STAGING_DIR "${CMAKE_BINARY_DIR}/fs_staging")
 
-file(MAKE_DIRECTORY ${STAGING_DIR}/www)
+file(MAKE_DIRECTORY "${STAGING_DIR}/www")
 
 add_custom_target(copy_fs_files ALL
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${DASHBOARD_DIR} ${STAGING_DIR}/www
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${DASHBOARD_DIR}"
+            "${STAGING_DIR}/www"
     COMMENT "Staging embedded dashboard for LittleFS packaging..."
 )
 
-littlefs_create_partition_image(storage ${STAGING_DIR} FLASH_IN_PROJECT)
-add_dependencies(storage_bin copy_fs_files)
+littlefs_create_partition_image(storage "${STAGING_DIR}" FLASH_IN_PROJECT)
+
+# Ensure the dashboard is copied before storage.bin is generated.
+add_dependencies(storage copy_fs_files)
