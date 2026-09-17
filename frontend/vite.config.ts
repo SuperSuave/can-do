@@ -6,7 +6,10 @@ import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
   return {
-    base: '/',
+    // GitHub Pages serves this project from /can-do/, not the domain root.
+    // This also rewrites the absolute /src/main.tsx entry in index.html to the
+    // correct project-relative asset URL during the production build.
+    base: '/can-do/',
     plugins: [
       react(),
       tailwindcss(),
