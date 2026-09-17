@@ -3,6 +3,7 @@
 #include "can_engine.h"
 #include "network_mgr.h"
 #include "gvret_server.h"
+#include "mqtt_mgr.h"
 #include "cJSON.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
@@ -603,6 +604,69 @@ static esp_err_t api_wifi_settings_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static esp_err_t api_mqtt_get_handler(httpd_req_t *req) {
+    MqttConfig cfg = mqtt_mgr_get_config();
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "enabled", cfg.enabled);
+    cJSON_AddStringToObject(root, "broker_url", cfg.broker_url.c_str());
+    cJSON_AddStringToObject(root, "username", cfg.username.c_str());
+    cJSON_AddBoolToObject(root, "has_password", !cfg.password.empty());
+    cJSON_AddBoolToObject(root, "connected", mqtt_mgr_is_connected());
+
+    char *json_str = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json_str);
+    free(json_str);
+    return ESP_OK;
+}
+
+static esp_err_t api_mqtt_post_handler(httpd_req_t *req) {
+    char buf[512];
+    int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
+    if (ret <= 0) return ESP_FAIL;
+    buf[ret] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    MqttConfig cfg = mqtt_mgr_get_config();
+
+    cJSON *en_item = cJSON_GetObjectItem(root, "enabled");
+    if (cJSON_IsBool(en_item)) {
+        cfg.enabled = cJSON_IsTrue(en_item);
+    }
+
+    cJSON *url_item = cJSON_GetObjectItem(root, "broker_url");
+    if (cJSON_IsString(url_item) && strlen(url_item->valuestring) > 0) {
+        cfg.broker_url = url_item->valuestring;
+    }
+
+    cJSON *user_item = cJSON_GetObjectItem(root, "username");
+    if (cJSON_IsString(user_item)) {
+        cfg.username = user_item->valuestring;
+    }
+
+    cJSON *pass_item = cJSON_GetObjectItem(root, "password");
+    cJSON *keep_item = cJSON_GetObjectItem(root, "keep_password");
+    if (cJSON_IsString(pass_item)) {
+        if (strlen(pass_item->valuestring) > 0 || (keep_item && !cJSON_IsTrue(keep_item))) {
+            cfg.password = pass_item->valuestring;
+        }
+    }
+
+    cJSON_Delete(root);
+
+    mqtt_mgr_save_config(cfg);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"status\":\"ok\",\"message\":\"MQTT settings saved\"}");
+    return ESP_OK;
+}
+
 static esp_err_t ws_handler(httpd_req_t *req) {
     return ESP_OK;
 }
@@ -611,7 +675,7 @@ httpd_handle_t start_webserver(void) {
     httpd_handle_t server = nullptr;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 24;
+    config.max_uri_handlers = 32;
 
     if (httpd_start(&server, &config) == ESP_OK) {
         auto reg_uri = [&](const char* uri, httpd_method_t method, esp_err_t (*handler)(httpd_req_t*), bool is_ws = false) {
@@ -639,6 +703,8 @@ httpd_handle_t start_webserver(void) {
         reg_uri("/api/wifi/networks", HTTP_DELETE, api_wifi_delete_networks_handler);
         reg_uri("/api/wifi/scan", HTTP_GET, api_wifi_scan_handler);
         reg_uri("/api/wifi/settings", HTTP_POST, api_wifi_settings_handler);
+        reg_uri("/api/mqtt", HTTP_GET, api_mqtt_get_handler);
+        reg_uri("/api/mqtt", HTTP_POST, api_mqtt_post_handler);
         reg_uri("/api/upload", HTTP_POST, api_file_upload_handler);
         reg_uri("/api/ota", HTTP_POST, api_ota_handler);
         reg_uri("/ws", HTTP_GET, ws_handler, true);

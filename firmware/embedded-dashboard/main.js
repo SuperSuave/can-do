@@ -573,6 +573,89 @@ class CanDoDashboard {
       if (!file) return;
       this.uploadFile(file, '/api/automations', null, null, 'automations-status');
     });
+
+    // MQTT Settings
+    this.syncMqttSettings();
+    document.getElementById('btn-save-mqtt')?.addEventListener('click', () => {
+      this.saveMqttSettings();
+    });
+  }
+
+  async syncMqttSettings() {
+    try {
+      const res = await fetch('/api/mqtt');
+      if (!res.ok) return;
+      const data = await res.json();
+      const chk = document.getElementById('chk-mqtt-enabled');
+      const broker = document.getElementById('mqtt-broker-url');
+      const user = document.getElementById('mqtt-username');
+      const pass = document.getElementById('mqtt-password');
+      const badge = document.getElementById('mqtt-link-badge');
+
+      if (chk) chk.checked = data.enabled !== false;
+      if (broker && data.broker_url) broker.value = data.broker_url;
+      if (user && data.username) user.value = data.username;
+      if (pass && data.has_password) pass.placeholder = '•••••••• (stored)';
+
+      if (badge) {
+        if (!data.enabled) {
+          badge.textContent = 'Disabled';
+          badge.className = 'entity-badge';
+          badge.style.background = '#374151';
+          badge.style.color = '#9ca3af';
+        } else if (data.connected) {
+          badge.textContent = 'Connected';
+          badge.className = 'entity-badge badge-online';
+        } else {
+          badge.textContent = 'Disconnected';
+          badge.className = 'entity-badge badge-offline';
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to sync MQTT settings:', err);
+    }
+  }
+
+  async saveMqttSettings() {
+    const statusEl = document.getElementById('mqtt-save-status');
+    const enabled = document.getElementById('chk-mqtt-enabled')?.checked ?? true;
+    const broker_url = document.getElementById('mqtt-broker-url')?.value?.trim() || '';
+    const username = document.getElementById('mqtt-username')?.value?.trim() || '';
+    const password = document.getElementById('mqtt-password')?.value || '';
+
+    if (statusEl) {
+      statusEl.textContent = 'Saving...';
+      statusEl.style.color = 'var(--text-muted)';
+    }
+
+    try {
+      const res = await fetch('/api/mqtt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled,
+          broker_url,
+          username,
+          password,
+          keep_password: password === ''
+        })
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (statusEl) {
+        statusEl.textContent = 'Saved! Reconnecting...';
+        statusEl.style.color = 'var(--accent-emerald)';
+      }
+      setTimeout(() => {
+        this.syncMqttSettings();
+        if (statusEl) statusEl.textContent = '';
+      }, 3000);
+    } catch (err) {
+      if (statusEl) {
+        statusEl.textContent = 'Failed: ' + err.message;
+        statusEl.style.color = 'var(--accent-rose)';
+      }
+    }
   }
 
   selectScannedNetwork(ssid) {

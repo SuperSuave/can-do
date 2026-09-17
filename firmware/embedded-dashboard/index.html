@@ -188,6 +188,47 @@
       </div>
     </section>
 
+    <!-- Home Assistant & MQTT Settings -->
+    <section class="card">
+      <div class="card-header">
+        <h2>Home Assistant & MQTT Integration</h2>
+        <span id="mqtt-link-badge" class="entity-badge badge-offline">Disconnected</span>
+      </div>
+      <p class="subtext" style="margin-bottom:0.75rem;">
+        Integrates CAN Do directly into Home Assistant using MQTT Auto-Discovery. Vehicle entities appear automatically.
+      </p>
+
+      <div style="background:#090f1d; border:1px solid var(--card-border); border-radius:8px; padding:0.85rem;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
+          <span class="subtext" style="font-weight:700; color:#fff;">Enable MQTT Integration</span>
+          <label class="switch">
+            <input type="checkbox" id="chk-mqtt-enabled" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:0.5rem; margin-bottom:0.75rem;">
+          <div>
+            <label class="subtext" style="display:block; margin-bottom:0.25rem;">Broker URL (URI)</label>
+            <input type="text" id="mqtt-broker-url" placeholder="mqtt://homeassistant.local:1883" class="input-text" style="width:100%;">
+          </div>
+          <div>
+            <label class="subtext" style="display:block; margin-bottom:0.25rem;">Username</label>
+            <input type="text" id="mqtt-username" placeholder="(optional)" class="input-text" style="width:100%;">
+          </div>
+          <div>
+            <label class="subtext" style="display:block; margin-bottom:0.25rem;">Password</label>
+            <input type="password" id="mqtt-password" placeholder="••••••••" class="input-text" style="width:100%;">
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+          <span id="mqtt-save-status" class="status-msg"></span>
+          <button id="btn-save-mqtt" class="btn btn-primary btn-tiny">Save & Connect</button>
+        </div>
+      </div>
+    </section>
+
     <!-- Controls & Status -->
     <section class="card">
       <div class="card-header">

@@ -13,6 +13,7 @@ idf_component_register(
         "config_server.c"
         "network_mgr.cpp"
         "gvret_server.cpp"
+        "mqtt_mgr.cpp"
     INCLUDE_DIRS "."
     REQUIRES 
         "nvs_flash"
