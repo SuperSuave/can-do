@@ -43,7 +43,5 @@ add_custom_target(copy_fs_files ALL
     COMMENT "Staging embedded dashboard for LittleFS packaging..."
 )
 
-littlefs_create_partition_image(storage "${STAGING_DIR}" FLASH_IN_PROJECT)
-
-# Ensure the dashboard is copied before storage.bin is generated.
-add_dependencies(storage copy_fs_files)
+# Ensure the dashboard is staged before the LittleFS partition image is built
+littlefs_create_partition_image(storage "${STAGING_DIR}" FLASH_IN_PROJECT DEPENDS copy_fs_files)
