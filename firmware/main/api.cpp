@@ -147,7 +147,22 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static void set_cors_headers(httpd_req_t *req) {
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "*");
+    httpd_resp_set_hdr(req, "Access-Control-Max-Age", "86400");
+}
+
+static esp_err_t options_handler(httpd_req_t *req) {
+    set_cors_headers(req);
+    httpd_resp_set_status(req, "204 No Content");
+    httpd_resp_send(req, nullptr, 0);
+    return ESP_OK;
+}
+
 static esp_err_t api_states_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     cJSON *root = cJSON_CreateArray();
     for (const auto& entity : global_catalog) {
         cJSON *item = cJSON_CreateObject();
@@ -318,6 +333,7 @@ static esp_err_t api_ota_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_get_automations_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     const char *filepath = "/spiffs/automations.json";
     FILE *fd = fopen(filepath, "r");
     if (!fd) {
@@ -346,6 +362,7 @@ static esp_err_t api_get_automations_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_post_automations_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     if (req->content_len <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty payload");
         return ESP_FAIL;
@@ -708,6 +725,7 @@ httpd_handle_t start_webserver(void) {
         reg_uri("/api/upload", HTTP_POST, api_file_upload_handler);
         reg_uri("/api/ota", HTTP_POST, api_ota_handler);
         reg_uri("/ws", HTTP_GET, ws_handler, true);
+        reg_uri("/*", HTTP_OPTIONS, options_handler);
         reg_uri("/*", HTTP_GET, static_file_handler);
 
         global_web_server = server;
