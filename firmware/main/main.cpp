@@ -19,6 +19,7 @@
 #include "api.h"
 #include "track_popup.h"
 #include "precondition.h"
+#include "board_pins.h"
 
 #include "esp_mac.h"
 
@@ -64,7 +65,7 @@ static esp_err_t init_fs(void) {
 }
 
 static esp_err_t init_twai(void) {
-    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_4, GPIO_NUM_5, TWAI_MODE_NORMAL);
+    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, TWAI_MODE_NORMAL);
     twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
@@ -183,6 +184,9 @@ static void app_ip_event_handler(void* arg, esp_event_base_t event_base, int32_t
 }
 
 extern "C" void app_main(void) {
+    // 0. Initialize WiCAN board hardware (CAN Transceiver STB pin and LEDs)
+    board_hardware_init();
+
     // Initialize unique Device ID from hardware MAC (can-do-[last 4 of MAC])
     init_device_id();
 

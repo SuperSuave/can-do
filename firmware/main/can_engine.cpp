@@ -10,6 +10,7 @@
 #include "mqtt_client.h"
 #include "track_popup.h"
 #include "precondition.h"
+#include "board_pins.h"
 #include "can.h"
 
 #if defined(_WIN32) && !defined(__GNUC__)
@@ -356,6 +357,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                 continue;
             }
             if (twai_transmit(&msg_to_send, pdMS_TO_TICKS(10)) == ESP_OK) {
+                board_led_can_activity();
                 if (delay_ms > 0) {
                     vTaskDelay(pdMS_TO_TICKS(delay_ms));
                 }
@@ -408,7 +410,7 @@ void can_rx_task(void* arg) {
             twai_stop();
             twai_driver_uninstall();
 
-            twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_4, GPIO_NUM_5, new_mode);
+            twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, new_mode);
             twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
             twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
@@ -424,6 +426,7 @@ void can_rx_task(void* arg) {
         }
 
         if (twai_receive(&rx_msg, pdMS_TO_TICKS(10)) == ESP_OK) {
+            board_led_can_activity();
             precondition_can_rx_hook(&rx_msg, CAN_BUS_0);
             track_popup_rx(&rx_msg, CAN_BUS_0);
 

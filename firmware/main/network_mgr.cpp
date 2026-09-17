@@ -14,6 +14,7 @@
 #include "esp_netif.h"
 #include "cJSON.h"
 #include "lwip/ip4_addr.h"
+#include "board_pins.h"
 
 static const char* TAG = "NET_MGR";
 static const char* NETWORKS_FILE = "/spiffs/networks.json";
@@ -208,6 +209,7 @@ static void start_softap(void) {
 
     esp_wifi_set_config(WIFI_IF_AP, &ap_config);
     s_ap_active = true;
+    board_led_wifi(true);
     ESP_LOGI(TAG, "SoftAP active: SSID='%s', Pass='%s', Gateway=192.168.4.1", s_ap_ssid.c_str(), s_ap_pass.c_str());
 }
 
@@ -222,6 +224,7 @@ static void stop_softap(void) {
         esp_wifi_set_mode(WIFI_MODE_NULL);
     }
     s_ap_active = false;
+    if (!s_sta_connected) board_led_wifi(false);
     ESP_LOGI(TAG, "SoftAP disabled to save power and eliminate 2.4GHz RF contention");
 }
 
@@ -232,6 +235,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
             s_sta_connected = false;
             s_cur_sta_ip = "0.0.0.0";
+            if (!s_ap_active) board_led_wifi(false);
             ESP_LOGW(TAG, "Wi-Fi disconnected from '%s'", s_cur_sta_ssid.c_str());
 
             if (s_retry_num < MAXIMUM_RETRY) {
@@ -282,6 +286,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         s_cur_sta_gw = gw_str;
         s_cur_sta_mask = mask_str;
         s_sta_connected = true;
+        board_led_wifi(true);
         s_retry_num = 0;
 
         wifi_ap_record_t ap_info;
