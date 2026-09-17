@@ -67,6 +67,7 @@ interface AutomationBuilderProps {
 }
 
 interface ConditionNodeEditorProps {
+  key?: React.Key;
   cond: AutomationCondition;
   index: number;
   depth?: number;
@@ -564,6 +565,7 @@ function ConditionListEditor({
 }
 
 interface ActionNodeEditorProps {
+  key?: React.Key;
   act: AutomationAction;
   index: number;
   depth?: number;

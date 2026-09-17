@@ -6,7 +6,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
   return {
-    base: '/can-do/',
+    base: '/',
     plugins: [
       react(),
       tailwindcss(),
@@ -53,6 +53,9 @@ export default defineConfig(() => {
       },
     },
     server: {
+      host: '0.0.0.0',
+      port: 3000,
+      allowedHosts: true,
       fs: {
         allow: [path.resolve(__dirname, '..')],
       },

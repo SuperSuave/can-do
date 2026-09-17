@@ -97,6 +97,7 @@ export interface AutomationAction {
   type: 'can_tx' | 'transmit' | 'entity_command' | 'delay' | 'precondition' | 'climate_target' | 'webhook' | 'choose' | 'if_then' | 'track_popup' | 'popup';
   level?: PopupLevel;
   text?: string;
+  popup_message?: string;
   target_temp_c?: number;
   target_c?: number;
   zone?: 'driver' | 'passenger';
