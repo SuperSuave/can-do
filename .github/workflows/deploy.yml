@@ -38,6 +38,22 @@ jobs:
           test -f package-lock.json
           ls -la
 
+      - name: Verify checkout and lockfile
+        working-directory: frontend
+        run: |
+          echo "Working directory: $PWD"
+          echo "Commit:"
+          git rev-parse HEAD
+          echo "Files:"
+          ls -la
+          echo "Tracked lockfile:"
+          git ls-files --error-unmatch package-lock.json
+          echo "Lockfile header:"
+          head -n 10 package-lock.json
+          echo "npm version:"
+          npm --version
+          npm ci
+
       - name: Install Dependencies
         working-directory: frontend
         run: npm ci
