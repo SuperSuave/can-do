@@ -114,7 +114,7 @@ static esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filepa
 }
 
 static esp_err_t static_file_handler(httpd_req_t *req) {
-    char filepath[128];
+    char filepath[512];
     if (strcmp(req->uri, "/") == 0) {
         snprintf(filepath, sizeof(filepath), "/spiffs/www/index.html");
     } else {

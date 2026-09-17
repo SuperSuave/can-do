@@ -183,16 +183,9 @@ static void configure_softap_ip(void) {
     IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
     ESP_ERROR_CHECK(esp_netif_set_ip_info(s_netif_ap, &ip_info));
 
-    // 3. Set DHCP lease pool from 192.168.4.2 to 192.168.4.20
-    dhcps_lease_t lease;
-    lease.enable = true;
-    IP4_ADDR(&lease.start_ip, 192, 168, 4, 2);
-    IP4_ADDR(&lease.end_ip, 192, 168, 4, 20);
-    esp_netif_dhcps_option(s_netif_ap, ESP_NETIF_OP_SET, ESP_NETIF_REQUESTED_IP_ADDRESS, &lease, sizeof(dhcps_lease_t));
-
-    // 4. Restart DHCP server
+    // 3. Restart DHCP server
     esp_netif_dhcps_start(s_netif_ap);
-    ESP_LOGI(TAG, "SoftAP IP locked to 192.168.4.1 (DHCP pool: .2 - .20)");
+    ESP_LOGI(TAG, "SoftAP IP locked to 192.168.4.1 (Default DHCP pool)");
 }
 
 static void start_softap(void) {
