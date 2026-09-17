@@ -17,11 +17,16 @@ idf_component_register(
     REQUIRES 
         "nvs_flash"
         "esp_http_server"
-        "esp_ota_ops"
+        "app_update"
         "driver"
         "mqtt"
         "esp_wifi"
-        "cjson"
+        "esp_event"
+        "esp_netif"
+        "esp_timer"
+        "esp_partition"
+        "lwip"
+        "json"
         "littlefs"
 )
 

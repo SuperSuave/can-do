@@ -14,7 +14,6 @@
 #include "esp_netif.h"
 #include "cJSON.h"
 #include "lwip/ip4_addr.h"
-#include "dhcpserver/dhcpserver.h"
 
 static const char* TAG = "NET_MGR";
 static const char* NETWORKS_FILE = "/spiffs/networks.json";
