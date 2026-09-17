@@ -48,26 +48,46 @@ export function compileToByteMap(input: string | ByteMap | undefined): ByteMap {
  * Compiles an AutomationCondition into a structured logic block (and/or/not) or masked leaf
  */
 export function compileCondition(cond: AutomationCondition): any {
-  if (cond.logic === 'and' || cond.type === 'and_group') {
+  if (cond.logic === 'and' || cond.type === 'and' || cond.type === 'and_group' || Array.isArray(cond.and)) {
+    const subConds = cond.and || cond.conditions || [];
     return {
       logic: 'and',
-      conditions: (cond.conditions || []).map(compileCondition)
+      conditions: subConds.map(compileCondition)
     };
   }
-  if (cond.logic === 'or' || cond.type === 'or_group') {
+  if (cond.logic === 'or' || cond.type === 'or' || cond.type === 'or_group' || Array.isArray(cond.or)) {
+    const subConds = cond.or || cond.conditions || [];
     return {
       logic: 'or',
-      conditions: (cond.conditions || []).map(compileCondition)
+      conditions: subConds.map(compileCondition)
     };
   }
-  if (cond.logic === 'not' || cond.type === 'not_group') {
+  if (cond.logic === 'not' || cond.type === 'not' || cond.type === 'not_group' || cond.not !== undefined) {
+    let subConds: AutomationCondition[] = [];
+    if (Array.isArray(cond.not)) {
+      subConds = cond.not;
+    } else if (cond.not && typeof cond.not === 'object') {
+      subConds = [cond.not as AutomationCondition];
+    } else {
+      subConds = cond.conditions || [];
+    }
     return {
       logic: 'not',
-      conditions: (cond.conditions || []).map(compileCondition)
+      conditions: subConds.map(compileCondition)
     };
   }
 
-  // Leaf condition
+  // Time window condition
+  if (cond.type === 'time_condition' || cond.type === 'time' || (cond.start_time && cond.end_time)) {
+    return {
+      type: 'time_condition',
+      start_time: cond.start_time || '08:00',
+      end_time: cond.end_time || '18:00',
+      days: cond.days && cond.days.length > 0 ? cond.days : ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+    };
+  }
+
+  // Leaf CAN condition
   const match = compileToByteMap(cond.match || cond.match_payload);
   const dKey = cond.byte || cond.evaluate?.byte || Object.keys(match)[0] || 'D1';
   const targetVal = cond.value || cond.evaluate?.value || match[dKey] || '0x01';
@@ -115,6 +135,32 @@ export function compileAction(act: AutomationAction): any {
     };
   }
 
+  if (act.type === 'track_popup' || act.type === 'popup') {
+    return {
+      type: 'track_popup',
+      level: act.level || 'info',
+      text: act.text || act.popup_message || ''
+    };
+  }
+
+  if (act.type === 'climate_target') {
+    return {
+      type: 'climate_target',
+      target_c: act.target_temp_c ?? act.target_c ?? 21.0,
+      zone: act.zone || 'driver',
+      sync_on: act.sync_on ?? false,
+      driver_only: act.driver_only ?? false
+    };
+  }
+
+  if (act.type === 'precondition') {
+    return {
+      type: 'precondition',
+      mode: act.precon_mode || 'persistent',
+      action: act.precon_action || (act.precon_mode === 'cancel' ? 'stop' : 'start')
+    };
+  }
+
   if (act.type === 'entity_command' || act.entity_id) {
     return {
       type: 'entity_command',
@@ -147,6 +193,14 @@ export function compileAutomationRule(rule: AutomationRule): any {
     exec_mode: rule.exec_mode || 'one_shot',
     cooldown_ms: rule.cooldown_ms ?? 500,
     triggers: (rule.triggers || []).map(trig => {
+      if (trig.type === 'time_schedule' || trig.source === 'time' || trig.time) {
+        return {
+          type: 'time_schedule',
+          time: trig.time || '07:30',
+          days: trig.days && trig.days.length > 0 ? trig.days : ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+        };
+      }
+
       const targetByte = trig.byte || (trig.match ? Object.keys(trig.match)[0] : undefined) || (trig.byte_index !== undefined ? `D${trig.byte_index + 1}` : 'D7');
       const fromHex = trig.from || (trig.from_value !== undefined ? `0x${trig.from_value.toString(16).padStart(2, '0').toUpperCase()}` : '0x00');
       const toHex = trig.to || (trig.match && trig.match[targetByte]) || (trig.to_value !== undefined ? `0x${trig.to_value.toString(16).padStart(2, '0').toUpperCase()}` : '0x10');
@@ -178,7 +232,9 @@ export function exportToCandoJson(
     settings: {
       vehicle_model: settings.vehicle_model || 'all_egmp',
       unit_system: settings.unit_system || 'imperial',
-      firmware_version: settings.firmware_version || '2.0.0'
+      firmware_version: settings.firmware_version || '2.0.0',
+      ntp_server: settings.ntp_server || 'pool.ntp.org',
+      timezone: settings.timezone || 'UTC'
     },
     rules: rules.map(compileAutomationRule)
   };
@@ -258,6 +314,14 @@ export function commandToTrigger(cmd: Command, opt?: CommandOption): AutomationT
   const targetByte = Object.keys(match)[0] || 'D7';
   const targetTo = match[targetByte] || '0x10';
 
+  const rawMask = opt?.mask || cmd.mask;
+  let targetMask = '0xFF';
+  if (typeof rawMask === 'string') {
+    targetMask = rawMask;
+  } else if (rawMask && typeof rawMask === 'object') {
+    targetMask = (rawMask as ByteMap)[targetByte] || '0xFF';
+  }
+
   return {
     id: trigId,
     type: 'byte_transition',
@@ -265,7 +329,7 @@ export function commandToTrigger(cmd: Command, opt?: CommandOption): AutomationT
     can_id: canId,
     bus: cmd.network?.bus ?? cmd.bus ?? 0,
     byte: targetByte,
-    mask: '0xF0',
+    mask: targetMask,
     from: '0x00',
     to: targetTo,
     click_count: 1,
@@ -289,17 +353,28 @@ export function commandToCondition(cmd: Command, opt?: CommandOption): Automatio
   const targetVal = cleanMatch[dKey] || '0x01';
   const byteIdx = parseInt(dKey.replace(/\D/g, ''), 10) - 1;
 
+  const rawMask = opt?.mask || cmd.mask;
+  let targetMask = '0xFF';
+  if (typeof rawMask === 'string') {
+    targetMask = rawMask;
+  } else if (rawMask && typeof rawMask === 'object') {
+    targetMask = (rawMask as ByteMap)[dKey] || '0xFF';
+  }
+
   return {
     id: condId,
     type: 'can_state',
     can_id: canId,
     bus: cmd.network?.bus ?? cmd.bus ?? 0,
     match: cleanMatch,
+    byte: dKey,
+    mask: targetMask,
     evaluate: {
       byte: dKey,
       byte_index: isNaN(byteIdx) ? 0 : byteIdx,
       operator: 'equal',
-      value: targetVal
+      value: targetVal,
+      mask: targetMask
     },
     invert: false,
     source_command_id: cmd.id,
@@ -315,6 +390,31 @@ export function commandToAction(cmd: Command, opt?: CommandOption): AutomationAc
   const actId = `act_${cmd.id}_${Date.now().toString(36).slice(-4)}`;
   const canId = cmd.network?.action_can_id || cmd.action_can_id || cmd.network?.state_can_id || cmd.state_can_id || '0x000';
   const cmdDisplayName = cmd.name || cmd.ha_metadata?.name || cmd.id;
+
+  if (cmd.type === 'climate_target') {
+    return {
+      id: actId,
+      type: 'climate_target',
+      target_temp_c: (cmd as any).target_temp_c ?? 21.0,
+      zone: (cmd as any).climate_zone || 'driver',
+      sync_on: (cmd as any).climate_sync_on ?? true,
+      driver_only: (cmd as any).climate_driver_only ?? false,
+      source_command_id: cmd.id,
+      source_command_name: cmdDisplayName
+    };
+  }
+
+  if (cmd.type === 'precondition' || cmd.id === 'battery_preconditioning') {
+    return {
+      id: actId,
+      type: 'precondition',
+      precon_mode: (opt as any)?.precon_mode || 'persistent',
+      precon_action: (opt as any)?.precon_mode === 'cancel' ? 'stop' : 'start',
+      source_command_id: cmd.id,
+      source_command_name: cmdDisplayName,
+      option_label: opt?.label
+    };
+  }
 
   if ((cmd.options && cmd.options.length > 0) || opt?.label) {
     return {

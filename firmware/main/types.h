@@ -24,14 +24,20 @@ struct ActionStep;
 
 struct AutomationCondition {
     ConditionLogic logic = ConditionLogic::LEAF;
+    std::string type = "can_state"; // "can_state" or "time_condition"
 
-    // Leaf evaluation fields
+    // Leaf CAN evaluation fields
     uint32_t can_id = 0;
     uint8_t bus = 0;
     uint8_t byte_index = 0; // 0..7 (from D1..D8)
     uint8_t byte_mask = 0xFF; // Bitmask (e.g. 0xF0, 0xFF)
     ConditionOperator op = ConditionOperator::EQUAL;
     uint8_t target_value = 0;
+
+    // Time window evaluation fields (minutes from midnight 0..1439, bitmask 1 << tm_wday)
+    uint16_t start_time_min = 0;
+    uint16_t end_time_min = 1439;
+    uint8_t weekdays_mask = 0x7F; // Default all 7 days (bits 0..6: Sun..Sat)
 
     // Nested sub-conditions for AND, OR, NOT groups
     std::vector<AutomationCondition> sub_conditions;
@@ -42,7 +48,10 @@ enum class ActionType {
     ENTITY_COMMAND,
     DELAY,
     IF_THEN,
-    CHOOSE
+    CHOOSE,
+    TRACK_POPUP,
+    CLIMATE_TARGET,
+    PRECONDITION
 };
 
 struct ChoiceBranch {
@@ -61,6 +70,18 @@ struct ActionStep {
     std::string entity_id;
     std::string command;
     std::string popup_message;
+    std::string popup_level = "info"; // "info", "warning", "error"
+    std::string popup_text;
+
+    // For CLIMATE_TARGET
+    float target_temp_c = 21.0f;
+    std::string zone = "driver";
+    bool sync_on = false;
+    bool driver_only = false;
+
+    // For PRECONDITION
+    std::string precon_mode = "persistent";
+    std::string precon_action = "start";
 
     // For IF_THEN
     std::vector<AutomationCondition> if_conditions;
@@ -79,6 +100,7 @@ struct EntityOption {
     uint8_t match_payload[8] = {0};
     uint8_t match_mask = 0;
     uint8_t invert_mask = 0; // Bit set if comparison is inverted ('!0x..')
+    uint8_t byte_masks[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
     std::vector<ActionStep> steps;
 };
 
@@ -97,7 +119,7 @@ struct CanEntity {
 };
 
 struct AutomationTrigger {
-    std::string type = "can_rx"; // "can_rx", "byte_transition", or "mqtt"
+    std::string type = "can_rx"; // "can_rx", "byte_transition", "mqtt", or "time_schedule"
     uint32_t can_id = 0;
     uint8_t bus = 0;
     int byte_index = -1;
@@ -106,6 +128,11 @@ struct AutomationTrigger {
     uint8_t to_value = 0;
     uint8_t match_payload[8] = {0};
     uint8_t match_mask = 0;
+    uint8_t byte_masks[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+
+    // For time_schedule
+    uint16_t schedule_time_min = 0; // minutes from midnight (0..1439)
+    uint8_t weekdays_mask = 0x7F;   // bitmask (bits 0..6: Sun..Sat)
 };
 
 struct AutomationRule {

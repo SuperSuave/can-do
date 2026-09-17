@@ -38,7 +38,49 @@ ConditionOperator parse_operator(const char* op_str) {
     return ConditionOperator::EQUAL;
 }
 
-static void parse_byte_match(cJSON* match_obj, uint8_t match_payload[8], uint8_t& match_mask, uint8_t& invert_mask) {
+uint16_t parse_time_to_minutes(const char* time_str) {
+    if (!time_str) return 0;
+    int h = 0, m = 0;
+    if (sscanf(time_str, "%d:%d", &h, &m) >= 2) {
+        if (h < 0) h = 0;
+        if (h > 23) h = 23;
+        if (m < 0) m = 0;
+        if (m > 59) m = 59;
+        return static_cast<uint16_t>(h * 60 + m);
+    }
+    return 0;
+}
+
+uint8_t parse_weekdays_mask(cJSON* days_arr) {
+    if (!days_arr || !cJSON_IsArray(days_arr) || cJSON_GetArraySize(days_arr) == 0) {
+        return 0x7F; // All 7 days by default (bits 0..6: Sun..Sat)
+    }
+
+    uint8_t mask = 0;
+    cJSON* d = nullptr;
+    cJSON_ArrayForEach(d, days_arr) {
+        if (cJSON_IsString(d)) {
+            const char* s = d->valuestring;
+            if (strcasecmp(s, "sun") == 0 || strcasecmp(s, "sunday") == 0) mask |= (1 << 0);
+            else if (strcasecmp(s, "mon") == 0 || strcasecmp(s, "monday") == 0) mask |= (1 << 1);
+            else if (strcasecmp(s, "tue") == 0 || strcasecmp(s, "tuesday") == 0) mask |= (1 << 2);
+            else if (strcasecmp(s, "wed") == 0 || strcasecmp(s, "wednesday") == 0) mask |= (1 << 3);
+            else if (strcasecmp(s, "thu") == 0 || strcasecmp(s, "thursday") == 0) mask |= (1 << 4);
+            else if (strcasecmp(s, "fri") == 0 || strcasecmp(s, "friday") == 0) mask |= (1 << 5);
+            else if (strcasecmp(s, "sat") == 0 || strcasecmp(s, "saturday") == 0) mask |= (1 << 6);
+            else if (strcasecmp(s, "all") == 0 || strcasecmp(s, "everyday") == 0) mask = 0x7F;
+            else if (strcasecmp(s, "weekdays") == 0) mask |= 0x3E; // Mon-Fri
+            else if (strcasecmp(s, "weekends") == 0) mask |= 0x41; // Sun+Sat
+        } else if (cJSON_IsNumber(d)) {
+            int val = d->valueint;
+            if (val >= 0 && val <= 6) mask |= (1 << val);
+            else if (val == 7) mask |= (1 << 0);
+        }
+    }
+    return mask == 0 ? 0x7F : mask;
+}
+
+static void parse_byte_match(cJSON* match_obj, uint8_t match_payload[8], uint8_t& match_mask, uint8_t& invert_mask, uint8_t* byte_masks = nullptr, cJSON* mask_obj = nullptr) {
     if (!match_obj) return;
     cJSON* item = nullptr;
     cJSON_ArrayForEach(item, match_obj) {
@@ -52,13 +94,32 @@ static void parse_byte_match(cJSON* match_obj, uint8_t match_payload[8], uint8_t
             }
         }
     }
+    if (byte_masks && mask_obj) {
+        if (cJSON_IsString(mask_obj)) {
+            uint8_t m = parse_hex_string(mask_obj->valuestring);
+            for (int i = 0; i < 8; i++) {
+                if (match_mask & (1 << i)) {
+                    byte_masks[i] = m;
+                }
+            }
+        } else if (cJSON_IsObject(mask_obj)) {
+            cJSON* m_item = nullptr;
+            cJSON_ArrayForEach(m_item, mask_obj) {
+                int idx = get_d_index(m_item->string);
+                if (idx >= 0 && cJSON_IsString(m_item)) {
+                    byte_masks[idx] = parse_hex_string(m_item->valuestring);
+                }
+            }
+        }
+    }
 }
 
 bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
     if (!c_item) return false;
 
-    // Check for explicit "logic": "and" | "or" | "not"
+    // Check for explicit "logic": "and" | "or" | "not" or "type": "and" | "or" | "not"
     cJSON* logic_item = cJSON_GetObjectItem(c_item, "logic");
+    if (!logic_item) logic_item = cJSON_GetObjectItem(c_item, "type");
     const char* logic_str = cJSON_IsString(logic_item) ? logic_item->valuestring : nullptr;
 
     // Check shorthand keys { "and": [...] }, { "or": [...] }, { "not": [...] }
@@ -120,6 +181,20 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
 
     // Leaf condition
     cond.logic = ConditionLogic::LEAF;
+
+    // Check if this condition is a time_condition
+    cJSON* type_prop = cJSON_GetObjectItem(c_item, "type");
+    if (cJSON_IsString(type_prop) && (strcmp(type_prop->valuestring, "time_condition") == 0 || strcmp(type_prop->valuestring, "time") == 0)) {
+        cond.type = "time_condition";
+        cJSON* s_time = cJSON_GetObjectItem(c_item, "start_time");
+        if (cJSON_IsString(s_time)) cond.start_time_min = parse_time_to_minutes(s_time->valuestring);
+        cJSON* e_time = cJSON_GetObjectItem(c_item, "end_time");
+        if (cJSON_IsString(e_time)) cond.end_time_min = parse_time_to_minutes(e_time->valuestring);
+        cond.weekdays_mask = parse_weekdays_mask(cJSON_GetObjectItem(c_item, "days"));
+        return true;
+    }
+
+    cond.type = "can_state";
     cJSON* cid = cJSON_GetObjectItem(c_item, "can_id");
     if (cJSON_IsString(cid)) cond.can_id = strtol(cid->valuestring, nullptr, 16);
     else if (cJSON_IsNumber(cid)) cond.can_id = static_cast<uint32_t>(cid->valueint);
@@ -169,6 +244,55 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         cJSON* cmd = cJSON_GetObjectItem(a_item, "command");
         if (cJSON_IsString(eid)) step.entity_id = eid->valuestring;
         if (cJSON_IsString(cmd)) step.command = cmd->valuestring;
+        return true;
+    } else if (strcmp(type_str, "track_popup") == 0 || strcmp(type_str, "popup") == 0) {
+        step.type = ActionType::TRACK_POPUP;
+        cJSON* txt = cJSON_GetObjectItem(a_item, "text");
+        if (!txt) txt = cJSON_GetObjectItem(a_item, "message");
+        if (cJSON_IsString(txt)) step.popup_text = txt->valuestring;
+
+        cJSON* lvl = cJSON_GetObjectItem(a_item, "level");
+        if (cJSON_IsString(lvl)) step.popup_level = lvl->valuestring;
+        else step.popup_level = "info";
+        return true;
+    } else if (strcmp(type_str, "climate_target") == 0) {
+        step.type = ActionType::CLIMATE_TARGET;
+        cJSON* tc = cJSON_GetObjectItem(a_item, "target_c");
+        if (!tc) tc = cJSON_GetObjectItem(a_item, "target_temp_c");
+        if (!tc) tc = cJSON_GetObjectItem(a_item, "target_temp");
+        if (!tc) tc = cJSON_GetObjectItem(a_item, "temp");
+        if (cJSON_IsNumber(tc)) {
+            step.target_temp_c = static_cast<float>(tc->valuedouble);
+        } else {
+            step.target_temp_c = 21.0f;
+        }
+
+        cJSON* zn = cJSON_GetObjectItem(a_item, "zone");
+        if (!zn) zn = cJSON_GetObjectItem(a_item, "climate_zone");
+        if (cJSON_IsString(zn)) step.zone = zn->valuestring;
+        else step.zone = "driver";
+
+        cJSON* sync = cJSON_GetObjectItem(a_item, "sync_on");
+        if (!sync) sync = cJSON_GetObjectItem(a_item, "climate_sync_on");
+        if (cJSON_IsBool(sync)) step.sync_on = cJSON_IsTrue(sync);
+
+        cJSON* d_only = cJSON_GetObjectItem(a_item, "driver_only");
+        if (!d_only) d_only = cJSON_GetObjectItem(a_item, "climate_driver_only");
+        if (cJSON_IsBool(d_only)) step.driver_only = cJSON_IsTrue(d_only);
+
+        return true;
+    } else if (strcmp(type_str, "precondition") == 0 || strcmp(type_str, "battery_preconditioning") == 0) {
+        step.type = ActionType::PRECONDITION;
+        cJSON* mode = cJSON_GetObjectItem(a_item, "precon_mode");
+        if (!mode) mode = cJSON_GetObjectItem(a_item, "mode");
+        if (cJSON_IsString(mode)) step.precon_mode = mode->valuestring;
+        else step.precon_mode = "persistent";
+
+        cJSON* act = cJSON_GetObjectItem(a_item, "action");
+        if (!act) act = cJSON_GetObjectItem(a_item, "command");
+        if (cJSON_IsString(act)) step.precon_action = act->valuestring;
+        else step.precon_action = (step.precon_mode == "cancel" || step.precon_mode == "off") ? "stop" : "start";
+
         return true;
     } else if (strcmp(type_str, "delay") == 0) {
         step.type = ActionType::DELAY;
@@ -329,7 +453,7 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
             cJSON* def = cJSON_GetObjectItem(opt_json, "default");
             if (cJSON_IsBool(def)) opt.is_default = cJSON_IsTrue(def);
 
-            parse_byte_match(cJSON_GetObjectItem(opt_json, "match"), opt.match_payload, opt.match_mask, opt.invert_mask);
+            parse_byte_match(cJSON_GetObjectItem(opt_json, "match"), opt.match_payload, opt.match_mask, opt.invert_mask, opt.byte_masks, cJSON_GetObjectItem(opt_json, "mask"));
             parse_steps(cJSON_GetObjectItem(opt_json, "steps"), opt.steps);
 
             out_entity.options.push_back(opt);
@@ -342,7 +466,7 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
             EntityOption opt;
             opt.label = "Active";
             opt.is_default = true;
-            parse_byte_match(root_match, opt.match_payload, opt.match_mask, opt.invert_mask);
+            parse_byte_match(root_match, opt.match_payload, opt.match_mask, opt.invert_mask, opt.byte_masks, cJSON_GetObjectItem(entity_json, "mask"));
             parse_steps(root_steps, opt.steps);
             out_entity.options.push_back(opt);
         }
@@ -370,34 +494,42 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
             AutomationTrigger tr;
             cJSON* type = cJSON_GetObjectItem(t_item, "type");
             if (cJSON_IsString(type)) tr.type = type->valuestring;
-            cJSON* cid = cJSON_GetObjectItem(t_item, "can_id");
-            if (cJSON_IsString(cid)) tr.can_id = strtol(cid->valuestring, nullptr, 16);
-            cJSON* bus = cJSON_GetObjectItem(t_item, "bus");
-            if (cJSON_IsNumber(bus)) tr.bus = bus->valueint;
 
-            uint8_t dummy_invert = 0;
-            parse_byte_match(cJSON_GetObjectItem(t_item, "match"), tr.match_payload, tr.match_mask, dummy_invert);
+            if (tr.type == "time_schedule" || tr.type == "time") {
+                tr.type = "time_schedule";
+                cJSON* time_val = cJSON_GetObjectItem(t_item, "time");
+                if (cJSON_IsString(time_val)) tr.schedule_time_min = parse_time_to_minutes(time_val->valuestring);
+                tr.weekdays_mask = parse_weekdays_mask(cJSON_GetObjectItem(t_item, "days"));
+            } else {
+                cJSON* cid = cJSON_GetObjectItem(t_item, "can_id");
+                if (cJSON_IsString(cid)) tr.can_id = strtol(cid->valuestring, nullptr, 16);
+                cJSON* bus = cJSON_GetObjectItem(t_item, "bus");
+                if (cJSON_IsNumber(bus)) tr.bus = bus->valueint;
 
-            // Handle byte_transition schema: "byte": "D7", "mask": "0xF0", "from": "0x00", "to": "0x10"
-            cJSON* byte_item = cJSON_GetObjectItem(t_item, "byte");
-            if (cJSON_IsString(byte_item)) {
-                int b_idx = get_d_index(byte_item->valuestring);
-                if (b_idx >= 0) {
-                    tr.byte_index = b_idx;
-                    cJSON* mask_item = cJSON_GetObjectItem(t_item, "mask");
-                    if (cJSON_IsString(mask_item)) {
-                        tr.byte_mask = parse_hex_string(mask_item->valuestring);
-                    } else {
-                        tr.byte_mask = 0xFF;
-                    }
+                uint8_t dummy_invert = 0;
+                parse_byte_match(cJSON_GetObjectItem(t_item, "match"), tr.match_payload, tr.match_mask, dummy_invert, tr.byte_masks, cJSON_GetObjectItem(t_item, "mask"));
 
-                    cJSON* from_item = cJSON_GetObjectItem(t_item, "from");
-                    cJSON* to_item = cJSON_GetObjectItem(t_item, "to");
-                    if (cJSON_IsString(from_item)) tr.from_value = parse_hex_string(from_item->valuestring);
-                    if (cJSON_IsString(to_item)) {
-                        tr.to_value = parse_hex_string(to_item->valuestring);
-                        tr.match_payload[b_idx] = tr.to_value;
-                        tr.match_mask |= (1 << b_idx);
+                // Handle byte_transition schema: "byte": "D7", "mask": "0xF0", "from": "0x00", "to": "0x10"
+                cJSON* byte_item = cJSON_GetObjectItem(t_item, "byte");
+                if (cJSON_IsString(byte_item)) {
+                    int b_idx = get_d_index(byte_item->valuestring);
+                    if (b_idx >= 0) {
+                        tr.byte_index = b_idx;
+                        cJSON* mask_item = cJSON_GetObjectItem(t_item, "mask");
+                        if (cJSON_IsString(mask_item)) {
+                            tr.byte_mask = parse_hex_string(mask_item->valuestring);
+                        } else {
+                            tr.byte_mask = 0xFF;
+                        }
+
+                        cJSON* from_item = cJSON_GetObjectItem(t_item, "from");
+                        cJSON* to_item = cJSON_GetObjectItem(t_item, "to");
+                        if (cJSON_IsString(from_item)) tr.from_value = parse_hex_string(from_item->valuestring);
+                        if (cJSON_IsString(to_item)) {
+                            tr.to_value = parse_hex_string(to_item->valuestring);
+                            tr.match_payload[b_idx] = tr.to_value;
+                            tr.match_mask |= (1 << b_idx);
+                        }
                     }
                 }
             }
@@ -498,3 +630,66 @@ bool load_catalog_from_fs(const char* filepath) {
              global_catalog.size(), global_automations.size());
     return true;
 }
+
+bool load_automations_from_fs(const char* filepath) {
+    ESP_LOGI(TAG, "Loading automations from %s", filepath);
+    FILE* f = fopen(filepath, "r");
+    if (!f) {
+        ESP_LOGW(TAG, "Automations file not found: %s", filepath);
+        return false;
+    }
+
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    if (size <= 0) {
+        fclose(f);
+        ESP_LOGW(TAG, "Automations file %s is empty", filepath);
+        return false;
+    }
+
+    char* buffer = static_cast<char*>(malloc(size + 1));
+    if (!buffer) {
+        fclose(f);
+        ESP_LOGE(TAG, "Out of memory allocating %ld bytes for automations", size);
+        return false;
+    }
+
+    fread(buffer, 1, size, f);
+    buffer[size] = '\0';
+    fclose(f);
+
+    cJSON* root = cJSON_Parse(buffer);
+    free(buffer);
+
+    if (!root) {
+        ESP_LOGE(TAG, "Failed to parse automations JSON");
+        return false;
+    }
+
+    global_automations.clear();
+
+    cJSON* rules_array = nullptr;
+    if (cJSON_IsArray(root)) {
+        rules_array = root;
+    } else if (cJSON_IsObject(root)) {
+        rules_array = cJSON_GetObjectItem(root, "rules");
+        if (!rules_array) rules_array = cJSON_GetObjectItem(root, "automations");
+    }
+
+    if (cJSON_IsArray(rules_array)) {
+        cJSON* auto_json = nullptr;
+        cJSON_ArrayForEach(auto_json, rules_array) {
+            AutomationRule rule;
+            if (parse_automation(auto_json, rule)) {
+                global_automations.push_back(rule);
+            }
+        }
+    }
+
+    cJSON_Delete(root);
+    ESP_LOGI(TAG, "Automations loaded: %zu active rules from %s", global_automations.size(), filepath);
+    return true;
+}
+

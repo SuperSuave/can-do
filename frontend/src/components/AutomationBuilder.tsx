@@ -49,7 +49,9 @@ import {
   Car,
   GitFork,
   Split,
-  Clock
+  Clock,
+  MessageSquare,
+  Thermometer
 } from 'lucide-react';
 
 interface AutomationBuilderProps {
@@ -72,13 +74,103 @@ interface ConditionNodeEditorProps {
   onDelete: () => void;
 }
 
-const ConditionNodeEditor: React.FC<ConditionNodeEditorProps> = ({
+interface ConditionListEditorProps {
+  conditions: AutomationCondition[];
+  depth?: number;
+  label?: string;
+  emptyText?: string;
+  onUpdate: (conditions: AutomationCondition[]) => void;
+  onPullCatalog?: () => void;
+}
+
+const ALL_DAYS = [
+  { id: 'mon', label: 'Mon' },
+  { id: 'tue', label: 'Tue' },
+  { id: 'wed', label: 'Wed' },
+  { id: 'thu', label: 'Thu' },
+  { id: 'fri', label: 'Fri' },
+  { id: 'sat', label: 'Sat' },
+  { id: 'sun', label: 'Sun' },
+];
+
+function DayOfWeekPicker({
+  selectedDays,
+  onChange
+}: {
+  selectedDays?: string[];
+  onChange: (days: string[]) => void;
+}) {
+  const current = selectedDays && selectedDays.length > 0 ? selectedDays : ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+  const toggleDay = (dayId: string) => {
+    if (current.includes(dayId)) {
+      if (current.length === 1) return;
+      onChange(current.filter(d => d !== dayId));
+    } else {
+      onChange([...current, dayId]);
+    }
+  };
+
+  return (
+    <div className="space-y-1.5 pt-1">
+      <div className="flex items-center justify-between text-[10px] text-slate-400">
+        <span className="font-semibold">Active Days</span>
+        <div className="flex items-center gap-1 font-sans">
+          <button
+            type="button"
+            onClick={() => onChange(['mon', 'tue', 'wed', 'thu', 'fri'])}
+            className="hover:text-cyan-400 underline underline-offset-2"
+          >
+            Weekdays
+          </button>
+          <span>•</span>
+          <button
+            type="button"
+            onClick={() => onChange(['sat', 'sun'])}
+            className="hover:text-cyan-400 underline underline-offset-2"
+          >
+            Weekends
+          </button>
+          <span>•</span>
+          <button
+            type="button"
+            onClick={() => onChange(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])}
+            className="hover:text-cyan-400 underline underline-offset-2"
+          >
+            All
+          </button>
+        </div>
+      </div>
+      <div className="flex items-center gap-1 flex-wrap">
+        {ALL_DAYS.map(d => {
+          const active = current.includes(d.id);
+          return (
+            <button
+              key={d.id}
+              type="button"
+              onClick={() => toggleDay(d.id)}
+              className={`px-2 py-0.5 rounded text-[10px] font-bold transition border ${
+                active
+                  ? 'bg-cyan-500 text-slate-950 border-cyan-400'
+                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+              }`}
+            >
+              {d.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ConditionNodeEditor({
   cond,
   index,
   depth = 0,
   onUpdate,
   onDelete
-}) => {
+}: ConditionNodeEditorProps) {
   const isGroup =
     cond.logic === 'and' ||
     cond.logic === 'or' ||
@@ -90,28 +182,7 @@ const ConditionNodeEditor: React.FC<ConditionNodeEditorProps> = ({
     cond.logic ||
     (cond.type === 'and_group' ? 'and' : cond.type === 'or_group' ? 'or' : cond.type === 'not_group' ? 'not' : 'and');
 
-  const addSubCondition = (type: 'leaf' | 'and' | 'or' | 'not') => {
-    const sub = [...(cond.conditions || [])];
-    if (type === 'leaf') {
-      sub.push({
-        id: `cond_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-        logic: 'leaf',
-        can_id: '0x120',
-        bus: 0,
-        byte: 'D1',
-        mask: '0xFF',
-        operator: 'equal',
-        value: '0x01'
-      });
-    } else {
-      sub.push({
-        id: `cond_grp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-        logic: type,
-        conditions: []
-      });
-    }
-    onUpdate({ ...cond, conditions: sub });
-  };
+  const [collapsed, setCollapsed] = useState(false);
 
   if (isGroup) {
     const borderCls =
@@ -128,16 +199,26 @@ const ConditionNodeEditor: React.FC<ConditionNodeEditorProps> = ({
         : 'bg-rose-900 text-rose-200 border-rose-700';
 
     return (
-      <div className={`p-3 rounded-xl border ${borderCls} space-y-2 text-xs`}>
+      <div className={`p-3 rounded-xl border ${borderCls} space-y-2 text-xs transition-all`}>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              className="text-slate-400 hover:text-white transition p-0.5"
+            >
+              {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+            </button>
             <span className={`px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] border ${tagCls}`}>
-              {groupLogic} Group
+              {groupLogic} Group {depth > 0 && `(L${depth + 1})`}
             </span>
-            <span className="text-slate-400 text-[11px]">
-              {groupLogic === 'and' && '(ALL nested conditions must match)'}
-              {groupLogic === 'or' && '(ANY nested condition must match)'}
-              {groupLogic === 'not' && '(Child conditions must NOT match)'}
+            <span className="text-slate-400 text-[11px] hidden sm:inline">
+              {groupLogic === 'and' && '(ALL nested must match)'}
+              {groupLogic === 'or' && '(ANY nested must match)'}
+              {groupLogic === 'not' && '(Children must NOT match)'}
+            </span>
+            <span className="text-slate-500 font-mono text-[10px]">
+              [{(cond.conditions || []).length} items]
             </span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -161,71 +242,77 @@ const ConditionNodeEditor: React.FC<ConditionNodeEditorProps> = ({
           </div>
         </div>
 
-        <div className="space-y-2 pl-2 border-l border-slate-800">
-          {(cond.conditions || []).length === 0 ? (
-            <div className="py-2 text-slate-500 italic text-[11px]">
-              Empty logic block. Add a condition below.
-            </div>
-          ) : (
-            (cond.conditions || []).map((subCond, sIdx) => (
-              <ConditionNodeEditor
-                key={subCond.id || sIdx}
-                cond={subCond}
-                index={sIdx}
-                depth={depth + 1}
-                onUpdate={updatedSub => {
-                  const newSubs = [...(cond.conditions || [])];
-                  newSubs[sIdx] = updatedSub;
-                  onUpdate({ ...cond, conditions: newSubs });
-                }}
-                onDelete={() => {
-                  const newSubs = (cond.conditions || []).filter((_, i) => i !== sIdx);
-                  onUpdate({ ...cond, conditions: newSubs });
-                }}
-              />
-            ))
-          )}
-        </div>
-
-        <div className="flex items-center gap-1.5 pt-1">
-          <button
-            type="button"
-            onClick={() => addSubCondition('leaf')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
-          >
-            <Plus className="w-3 h-3" />
-            <span>Add Condition</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => addSubCondition('and')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-purple-950 hover:bg-purple-900 text-purple-300 border border-purple-800 transition"
-          >
-            <Plus className="w-3 h-3" />
-            <span>Add AND</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => addSubCondition('or')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-800 transition"
-          >
-            <Plus className="w-3 h-3" />
-            <span>Add OR</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => addSubCondition('not')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800 transition"
-          >
-            <Plus className="w-3 h-3" />
-            <span>Add NOT</span>
-          </button>
-        </div>
+        {!collapsed && (
+          <div className="pl-2 border-l border-slate-800/80">
+            <ConditionListEditor
+              conditions={cond.conditions || []}
+              depth={depth + 1}
+              emptyText="Empty group. Add conditions below."
+              onUpdate={updatedSubs => onUpdate({ ...cond, conditions: updatedSubs })}
+            />
+          </div>
+        )}
       </div>
     );
   }
 
-  // Leaf condition
+  // Time window condition
+  if (cond.type === 'time_condition' || cond.type === 'time') {
+    return (
+      <div className="p-3 rounded-xl bg-slate-950 border border-cyan-900/60 space-y-2 text-xs">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded-full bg-cyan-950 text-cyan-300 font-bold text-[10px] flex items-center justify-center border border-cyan-800">
+              C{index + 1}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="font-semibold text-white">Time Window Guardrail</span>
+              <span className="px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 text-[10px] border border-cyan-800/60">
+                {cond.start_time || '08:00'} - {cond.end_time || '18:00'}
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="p-1 text-slate-500 hover:text-rose-400 transition"
+            title="Delete condition"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[10px] font-sans text-slate-400 mb-1">Start Time (24h)</label>
+            <input
+              type="time"
+              value={cond.start_time || '08:00'}
+              onChange={e => onUpdate({ ...cond, start_time: e.target.value })}
+              className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-sans text-slate-400 mb-1">End Time (24h)</label>
+            <input
+              type="time"
+              value={cond.end_time || '18:00'}
+              onChange={e => onUpdate({ ...cond, end_time: e.target.value })}
+              className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
+            />
+          </div>
+        </div>
+
+        <DayOfWeekPicker
+          selectedDays={cond.days}
+          onChange={days => onUpdate({ ...cond, days })}
+        />
+      </div>
+    );
+  }
+
+  // Leaf CAN condition
   const dKey = cond.byte || cond.evaluate?.byte || (cond.match ? Object.keys(cond.match)[0] : 'D1') || 'D1';
   const maskVal = cond.mask || cond.evaluate?.mask || '0xFF';
   const opVal = cond.operator || cond.evaluate?.operator || (cond.invert ? 'not_equal' : 'equal');
@@ -249,54 +336,32 @@ const ConditionNodeEditor: React.FC<ConditionNodeEditorProps> = ({
             </div>
           ) : (
             <span className="font-semibold text-slate-300 font-mono">
-              Byte Check: {cond.can_id || '0x120'} [{dKey}]
+              CAN {cond.can_id || '0x000'} Bus {cond.bus ?? 0}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1 text-[11px] text-slate-400 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={cond.invert || false}
-              onChange={e => onUpdate({ ...cond, invert: e.target.checked })}
-              className="w-3.5 h-3.5 rounded text-purple-500 bg-slate-800 border-slate-700"
-            />
-            <span>Invert (NOT)</span>
-          </label>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="p-1 text-slate-500 hover:text-rose-400 transition"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="p-1 text-slate-500 hover:text-rose-400 transition"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
       </div>
 
-      <div className="grid grid-cols-6 gap-2 font-mono text-[11px]">
+      <div className="grid grid-cols-5 gap-2 font-mono text-[11px]">
         <div className="col-span-1">
           <label className="block text-[10px] font-sans text-slate-500">CAN ID</label>
           <input
             type="text"
             value={cond.can_id || ''}
             onChange={e => onUpdate({ ...cond, can_id: e.target.value })}
-            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
             placeholder="0x120"
+            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
           />
         </div>
         <div className="col-span-1">
-          <label className="block text-[10px] font-sans text-slate-500">Bus</label>
-          <select
-            value={cond.bus ?? 0}
-            onChange={e => onUpdate({ ...cond, bus: parseInt(e.target.value) || 0 })}
-            className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-200"
-          >
-            <option value={0}>0</option>
-            <option value={1}>1</option>
-          </select>
-        </div>
-        <div className="col-span-1">
-          <label className="block text-[10px] font-sans text-slate-500">Byte (D1..D8)</label>
+          <label className="block text-[10px] font-sans text-slate-500">Byte</label>
           <input
             type="text"
             value={dKey}
@@ -366,7 +431,137 @@ const ConditionNodeEditor: React.FC<ConditionNodeEditorProps> = ({
       </div>
     </div>
   );
-};
+}
+
+function ConditionListEditor({
+  conditions,
+  depth = 0,
+  label,
+  emptyText = 'No conditions set.',
+  onUpdate,
+  onPullCatalog
+}: ConditionListEditorProps) {
+  const addCondition = (type: 'leaf' | 'time' | 'and' | 'or' | 'not') => {
+    const next = [...conditions];
+    if (type === 'leaf') {
+      next.push({
+        id: `cond_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        logic: 'leaf',
+        can_id: '0x120',
+        bus: 0,
+        byte: 'D1',
+        mask: '0xFF',
+        operator: 'equal',
+        value: '0x01'
+      });
+    } else if (type === 'time') {
+      next.push({
+        id: `cond_time_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        type: 'time_condition',
+        start_time: '08:00',
+        end_time: '18:00',
+        days: ['mon', 'tue', 'wed', 'thu', 'fri']
+      });
+    } else {
+      next.push({
+        id: `cond_${type}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        logic: type,
+        conditions: []
+      });
+    }
+    onUpdate(next);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        {label && (
+          <span className="text-purple-300 font-bold text-[11px] uppercase tracking-wider">
+            {label} ({conditions.length})
+          </span>
+        )}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {onPullCatalog && (
+            <button
+              type="button"
+              onClick={onPullCatalog}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500 text-slate-950 hover:bg-purple-400 transition"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Pull Catalog</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => addCondition('leaf')}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition"
+          >
+            <Plus className="w-3 h-3" />
+            <span>Byte Value</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => addCondition('time')}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-cyan-300 hover:bg-slate-700 transition border border-cyan-900/50"
+          >
+            <Clock className="w-3 h-3" />
+            <span>Time Window</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => addCondition('and')}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-950 text-purple-300 border border-purple-800 hover:bg-purple-900 transition"
+          >
+            <Plus className="w-3 h-3" />
+            <span>AND</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => addCondition('or')}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-indigo-950 text-indigo-300 border border-indigo-800 hover:bg-indigo-900 transition"
+          >
+            <Plus className="w-3 h-3" />
+            <span>OR</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => addCondition('not')}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-rose-950 text-rose-300 border border-rose-800 hover:bg-rose-900 transition"
+          >
+            <Plus className="w-3 h-3" />
+            <span>NOT</span>
+          </button>
+        </div>
+      </div>
+
+      {conditions.length === 0 ? (
+        <div className="p-3 rounded-xl bg-slate-950/40 border border-dashed border-slate-800 text-center text-xs text-slate-500 italic">
+          {emptyText}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {conditions.map((c, idx) => (
+            <ConditionNodeEditor
+              key={c.id || idx}
+              cond={c}
+              index={idx}
+              depth={depth}
+              onUpdate={updated => {
+                const next = [...conditions];
+                next[idx] = updated;
+                onUpdate(next);
+              }}
+              onDelete={() => {
+                const next = conditions.filter((_, i) => i !== idx);
+                onUpdate(next);
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface ActionNodeEditorProps {
   act: AutomationAction;
@@ -376,159 +571,88 @@ interface ActionNodeEditorProps {
   onDelete: () => void;
 }
 
-const ActionNodeEditor: React.FC<ActionNodeEditorProps> = ({
+interface ActionListEditorProps {
+  actions: AutomationAction[];
+  depth?: number;
+  label?: string;
+  emptyText?: string;
+  onUpdate: (actions: AutomationAction[]) => void;
+  onPullCatalog?: () => void;
+}
+
+function ActionNodeEditor({
   act,
   index,
   depth = 0,
   onUpdate,
   onDelete
-}) => {
+}: ActionNodeEditorProps) {
+  const [collapsed, setCollapsed] = useState(false);
+
   // If IF_THEN:
   if (act.type === 'if_then') {
     return (
       <div className={`p-3 rounded-xl border border-cyan-800/80 bg-cyan-950/20 space-y-3 text-xs`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              className="text-slate-400 hover:text-white transition p-0.5"
+            >
+              {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+            </button>
             <span className="px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] bg-cyan-900 text-cyan-200 border border-cyan-700 flex items-center gap-1">
               <GitFork className="w-3 h-3" />
-              IF - THEN - ELSE Branch
+              IF - THEN - ELSE {depth > 0 && `(Level ${depth + 1})`}
             </span>
           </div>
           <button
             type="button"
             onClick={onDelete}
             className="p-1 text-slate-500 hover:text-rose-400 transition"
+            title="Delete block"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        {/* IF CONDITIONS */}
-        <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-cyan-400 font-bold text-[11px]">IF (Conditions)</span>
-            <button
-              type="button"
-              onClick={() => {
-                const updatedConds = [...(act.conditions || [])];
-                updatedConds.push({
-                  id: `cond_${Date.now().toString(36)}`,
-                  logic: 'leaf',
-                  can_id: '0x120',
-                  bus: 0,
-                  byte: 'D1',
-                  mask: '0xFF',
-                  operator: 'equal',
-                  value: '0x01'
-                });
-                onUpdate({ ...act, conditions: updatedConds });
-              }}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-cyan-950 border border-cyan-800 text-cyan-300 hover:bg-cyan-900"
-            >
-              <Plus className="w-2.5 h-2.5" />
-              <span>Add Condition</span>
-            </button>
-          </div>
-          {(act.conditions || []).map((c, cIdx) => (
-            <ConditionNodeEditor
-              key={c.id || cIdx}
-              cond={c}
-              index={cIdx}
-              depth={depth + 1}
-              onUpdate={u => {
-                const updated = [...(act.conditions || [])];
-                updated[cIdx] = u;
-                onUpdate({ ...act, conditions: updated });
-              }}
-              onDelete={() => {
-                const updated = (act.conditions || []).filter((_, i) => i !== cIdx);
-                onUpdate({ ...act, conditions: updated });
-              }}
-            />
-          ))}
-        </div>
+        {!collapsed && (
+          <div className="space-y-3">
+            {/* IF CONDITIONS */}
+            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2">
+              <ConditionListEditor
+                conditions={act.conditions || []}
+                depth={depth + 1}
+                label="IF (Conditions)"
+                emptyText="No conditions in this IF block."
+                onUpdate={updatedConds => onUpdate({ ...act, conditions: updatedConds })}
+              />
+            </div>
 
-        {/* THEN ACTIONS */}
-        <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-emerald-400 font-bold text-[11px]">THEN (Execute if True)</span>
-            <button
-              type="button"
-              onClick={() => {
-                const updatedThen = [...(act.then || [])];
-                updatedThen.push({
-                  id: `act_${Date.now().toString(36)}`,
-                  type: 'entity_command',
-                  entity_id: 'drivers_seat_comfort',
-                  command: 'Medium Cool'
-                });
-                onUpdate({ ...act, then: updatedThen });
-              }}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-emerald-950 border border-emerald-800 text-emerald-300 hover:bg-emerald-900"
-            >
-              <Plus className="w-2.5 h-2.5" />
-              <span>Add Then Action</span>
-            </button>
-          </div>
-          {(act.then || []).map((tAct, tIdx) => (
-            <ActionNodeEditor
-              key={tAct.id || tIdx}
-              act={tAct}
-              index={tIdx}
-              depth={depth + 1}
-              onUpdate={u => {
-                const updated = [...(act.then || [])];
-                updated[tIdx] = u;
-                onUpdate({ ...act, then: updated });
-              }}
-              onDelete={() => {
-                const updated = (act.then || []).filter((_, i) => i !== tIdx);
-                onUpdate({ ...act, then: updated });
-              }}
-            />
-          ))}
-        </div>
+            {/* THEN ACTIONS */}
+            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2">
+              <ActionListEditor
+                actions={act.then || []}
+                depth={depth + 1}
+                label="THEN (Execute if True)"
+                emptyText="No actions in THEN branch."
+                onUpdate={updatedThen => onUpdate({ ...act, then: updatedThen })}
+              />
+            </div>
 
-        {/* ELSE ACTIONS */}
-        <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-amber-400 font-bold text-[11px]">ELSE (Optional Sequence)</span>
-            <button
-              type="button"
-              onClick={() => {
-                const updatedElse = [...(act.else || [])];
-                updatedElse.push({
-                  id: `act_${Date.now().toString(36)}`,
-                  type: 'entity_command',
-                  entity_id: 'drivers_seat_comfort',
-                  command: 'Off'
-                });
-                onUpdate({ ...act, else: updatedElse });
-              }}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-amber-950 border border-amber-800 text-amber-300 hover:bg-amber-900"
-            >
-              <Plus className="w-2.5 h-2.5" />
-              <span>Add Else Action</span>
-            </button>
+            {/* ELSE ACTIONS */}
+            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2">
+              <ActionListEditor
+                actions={act.else || []}
+                depth={depth + 1}
+                label="ELSE (Execute if False)"
+                emptyText="No actions in ELSE branch."
+                onUpdate={updatedElse => onUpdate({ ...act, else: updatedElse })}
+              />
+            </div>
           </div>
-          {(act.else || []).map((eAct, eIdx) => (
-            <ActionNodeEditor
-              key={eAct.id || eIdx}
-              act={eAct}
-              index={eIdx}
-              depth={depth + 1}
-              onUpdate={u => {
-                const updated = [...(act.else || [])];
-                updated[eIdx] = u;
-                onUpdate({ ...act, else: updated });
-              }}
-              onDelete={() => {
-                const updated = (act.else || []).filter((_, i) => i !== eIdx);
-                onUpdate({ ...act, else: updated });
-              }}
-            />
-          ))}
-        </div>
+        )}
       </div>
     );
   }
@@ -539,9 +663,16 @@ const ActionNodeEditor: React.FC<ActionNodeEditorProps> = ({
       <div className={`p-3 rounded-xl border border-blue-800/80 bg-blue-950/20 space-y-3 text-xs`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              className="text-slate-400 hover:text-white transition p-0.5"
+            >
+              {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+            </button>
             <span className="px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] bg-blue-900 text-blue-200 border border-blue-700 flex items-center gap-1">
               <Split className="w-3 h-3" />
-              CHOOSE (Sequential Branching)
+              CHOOSE (Sequential Branching) {depth > 0 && `(Level ${depth + 1})`}
             </span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -578,159 +709,78 @@ const ActionNodeEditor: React.FC<ActionNodeEditorProps> = ({
               type="button"
               onClick={onDelete}
               className="p-1 text-slate-500 hover:text-rose-400 transition"
+              title="Delete block"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
-        {/* BRANCHES */}
-        <div className="space-y-2.5">
-          {(act.choices || []).map((ch, chIdx) => (
-            <div key={chIdx} className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-blue-300 text-[11px]">Branch #{chIdx + 1}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const choices = (act.choices || []).filter((_, i) => i !== chIdx);
-                    onUpdate({ ...act, choices });
-                  }}
-                  className="p-1 text-slate-500 hover:text-rose-400 transition"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
+        {!collapsed && (
+          <div className="space-y-3">
+            {/* BRANCHES */}
+            <div className="space-y-2.5">
+              {(act.choices || []).map((ch, chIdx) => (
+                <div key={chIdx} className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-blue-300 text-[11px]">Branch #{chIdx + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const choices = (act.choices || []).filter((_, i) => i !== chIdx);
+                        onUpdate({ ...act, choices });
+                      }}
+                      className="p-1 text-slate-500 hover:text-rose-400 transition"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
 
-              {/* Conditions in Choice */}
-              <div className="space-y-1.5 pl-2 border-l border-slate-800">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Conditions</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const choices = [...(act.choices || [])];
-                      choices[chIdx].conditions.push({
-                        id: `cond_${Date.now().toString(36)}`,
-                        logic: 'leaf',
-                        can_id: '0x120',
-                        bus: 0,
-                        byte: 'D1',
-                        mask: '0xFF',
-                        operator: 'equal',
-                        value: '0x01'
-                      });
-                      onUpdate({ ...act, choices });
-                    }}
-                    className="text-[10px] text-blue-400 hover:underline"
-                  >
-                    + Condition
-                  </button>
-                </div>
-                {ch.conditions.map((c, cIdx) => (
-                  <ConditionNodeEditor
-                    key={c.id || cIdx}
-                    cond={c}
-                    index={cIdx}
-                    depth={depth + 1}
-                    onUpdate={u => {
-                      const choices = [...(act.choices || [])];
-                      choices[chIdx].conditions[cIdx] = u;
-                      onUpdate({ ...act, choices });
-                    }}
-                    onDelete={() => {
-                      const choices = [...(act.choices || [])];
-                      choices[chIdx].conditions = choices[chIdx].conditions.filter((_, i) => i !== cIdx);
-                      onUpdate({ ...act, choices });
-                    }}
-                  />
-                ))}
-              </div>
+                  {/* Conditions in Choice */}
+                  <div className="pl-2 border-l border-slate-800">
+                    <ConditionListEditor
+                      conditions={ch.conditions || []}
+                      depth={depth + 1}
+                      label="Branch Conditions"
+                      emptyText="No conditions in this branch."
+                      onUpdate={updatedConds => {
+                        const choices = [...(act.choices || [])];
+                        choices[chIdx].conditions = updatedConds;
+                        onUpdate({ ...act, choices });
+                      }}
+                    />
+                  </div>
 
-              {/* Sequence in Choice */}
-              <div className="space-y-1.5 pl-2 border-l border-slate-800">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Sequence Actions</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const choices = [...(act.choices || [])];
-                      choices[chIdx].sequence.push({
-                        id: `act_${Date.now().toString(36)}`,
-                        type: 'entity_command',
-                        entity_id: 'drivers_seat_comfort',
-                        command: 'Medium Cool'
-                      });
-                      onUpdate({ ...act, choices });
-                    }}
-                    className="text-[10px] text-emerald-400 hover:underline"
-                  >
-                    + Action
-                  </button>
+                  {/* Sequence in Choice */}
+                  <div className="pl-2 border-l border-slate-800 pt-2">
+                    <ActionListEditor
+                      actions={ch.sequence || []}
+                      depth={depth + 1}
+                      label="Branch Sequence Actions"
+                      emptyText="No actions in branch sequence."
+                      onUpdate={updatedSeq => {
+                        const choices = [...(act.choices || [])];
+                        choices[chIdx].sequence = updatedSeq;
+                        onUpdate({ ...act, choices });
+                      }}
+                    />
+                  </div>
                 </div>
-                {ch.sequence.map((sAct, sIdx) => (
-                  <ActionNodeEditor
-                    key={sAct.id || sIdx}
-                    act={sAct}
-                    index={sIdx}
-                    depth={depth + 1}
-                    onUpdate={u => {
-                      const choices = [...(act.choices || [])];
-                      choices[chIdx].sequence[sIdx] = u;
-                      onUpdate({ ...act, choices });
-                    }}
-                    onDelete={() => {
-                      const choices = [...(act.choices || [])];
-                      choices[chIdx].sequence = choices[chIdx].sequence.filter((_, i) => i !== sIdx);
-                      onUpdate({ ...act, choices });
-                    }}
-                  />
-                ))}
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        {/* DEFAULT SEQUENCE */}
-        <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-slate-400 font-bold text-[11px]">DEFAULT (If no branch matches)</span>
-            <button
-              type="button"
-              onClick={() => {
-                const def = [...(act.default || [])];
-                def.push({
-                  id: `act_${Date.now().toString(36)}`,
-                  type: 'entity_command',
-                  entity_id: 'drivers_seat_comfort',
-                  command: 'Off'
-                });
-                onUpdate({ ...act, default: def });
-              }}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-slate-900 border border-slate-700 text-slate-300 hover:bg-slate-800"
-            >
-              <Plus className="w-2.5 h-2.5" />
-              <span>Add Default Action</span>
-            </button>
+            {/* DEFAULT SEQUENCE */}
+            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
+              <ActionListEditor
+                actions={act.default || []}
+                depth={depth + 1}
+                label="DEFAULT (If no branch matches)"
+                emptyText="No actions in DEFAULT branch."
+                onUpdate={updatedDef => onUpdate({ ...act, default: updatedDef })}
+              />
+            </div>
           </div>
-          {(act.default || []).map((dAct, dIdx) => (
-            <ActionNodeEditor
-              key={dAct.id || dIdx}
-              act={dAct}
-              index={dIdx}
-              depth={depth + 1}
-              onUpdate={u => {
-                const def = [...(act.default || [])];
-                def[dIdx] = u;
-                onUpdate({ ...act, default: def });
-              }}
-              onDelete={() => {
-                const def = (act.default || []).filter((_, i) => i !== dIdx);
-                onUpdate({ ...act, default: def });
-              }}
-            />
-          ))}
-        </div>
+        )}
       </div>
     );
   }
@@ -758,8 +808,12 @@ const ActionNodeEditor: React.FC<ActionNodeEditorProps> = ({
                 ? `Entity: ${act.entity_id || 'drivers_seat_comfort'}`
                 : act.type === 'delay'
                 ? `Delay: ${act.delay_ms || act.ms || 500}ms`
+                : act.type === 'track_popup' || act.type === 'popup'
+                ? `Cluster Popup (${(act.level || 'info').toUpperCase()}): ${act.text || act.popup_message || 'Message'}`
+                : act.type === 'climate_target'
+                ? `Climate Target: ${act.target_temp_c ?? act.target_c ?? 21.0}°C (${(act.zone || 'driver').toUpperCase()})`
                 : act.type === 'precondition'
-                ? 'Battery Precondition'
+                ? `Battery Preconditioning: ${(act.precon_action || 'start').toUpperCase()} (${act.precon_mode || 'persistent'})`
                 : `CAN TX ${act.can_id}`}
             </span>
           )}
@@ -782,15 +836,117 @@ const ActionNodeEditor: React.FC<ActionNodeEditorProps> = ({
             className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
           >
             <option value="entity_command">entity_command</option>
+            <option value="precondition">precondition (E-GMP)</option>
+            <option value="climate_target">climate_target (HVAC Temp Target)</option>
+            <option value="track_popup">track_popup (Cluster Popup)</option>
             <option value="can_tx">can_tx (CAN Ingress)</option>
             <option value="delay">delay</option>
             <option value="if_then">if_then (Conditional Branch)</option>
             <option value="choose">choose (Multiple Choices)</option>
-            <option value="precondition">precondition (E-GMP)</option>
-            <option value="climate_target">climate_target</option>
             <option value="webhook">webhook (HTTP)</option>
           </select>
         </div>
+
+        {act.type === 'precondition' && (
+          <>
+            <div>
+              <label className="block text-[10px] font-sans text-slate-500">Operation</label>
+              <select
+                value={act.precon_action || 'start'}
+                onChange={e => onUpdate({ ...act, precon_action: e.target.value as any })}
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+              >
+                <option value="start">Start Preconditioning</option>
+                <option value="stop">Stop / Cancel</option>
+                <option value="toggle">Toggle State</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-sans text-slate-500">Operating Mode</label>
+              <select
+                value={act.precon_mode || 'persistent'}
+                onChange={e => onUpdate({ ...act, precon_mode: e.target.value as any })}
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-orange-300 font-medium font-sans"
+              >
+                <option value="persistent">Persistent (21°C / 70°F)</option>
+                <option value="continuous">Continuous (High Demand)</option>
+                <option value="once">Single Cycle (Once)</option>
+              </select>
+            </div>
+          </>
+        )}
+
+        {act.type === 'climate_target' && (
+          <>
+            <div>
+              <label className="block text-[10px] font-sans text-slate-500">Zone</label>
+              <select
+                value={act.zone || 'driver'}
+                onChange={e => onUpdate({ ...act, zone: e.target.value as any })}
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+              >
+                <option value="driver">Driver Zone</option>
+                <option value="passenger">Passenger Zone</option>
+              </select>
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="block text-[10px] font-sans text-slate-500">Target Temp</label>
+                <span className="text-[9px] text-teal-400 font-mono">
+                  {Math.round(((act.target_temp_c ?? 21.0) * 9 / 5 + 32) * 10) / 10}°F
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  step="0.5"
+                  min="14"
+                  max="32"
+                  value={act.target_temp_c ?? act.target_c ?? 21.0}
+                  onChange={e => {
+                    const val = parseFloat(e.target.value) || 21.0;
+                    onUpdate({ ...act, target_temp_c: val, target_c: val });
+                  }}
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-teal-300 font-bold"
+                />
+                <span className="text-slate-400 font-sans text-xs">°C</span>
+              </div>
+            </div>
+          </>
+        )}
+
+        {(act.type === 'track_popup' || act.type === 'popup') && (
+          <>
+            <div>
+              <label className="block text-[10px] font-sans text-slate-500">Severity Level</label>
+              <select
+                value={act.level || 'info'}
+                onChange={e => onUpdate({ ...act, level: e.target.value as any })}
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+              >
+                <option value="info">ⓘ Info</option>
+                <option value="warning">⚠ Warning</option>
+                <option value="error">‼ Error</option>
+              </select>
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="block text-[10px] font-sans text-slate-500">Popup Text</label>
+                <span className="text-[9px] text-slate-500 font-mono">
+                  {(act.text || act.popup_message || '').length}/50
+                </span>
+              </div>
+              <input
+                type="text"
+                maxLength={50}
+                value={act.text || act.popup_message || ''}
+                onChange={e => onUpdate({ ...act, text: e.target.value, popup_message: e.target.value })}
+                placeholder="Preconditioning Started"
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-amber-300 font-medium"
+              />
+            </div>
+          </>
+        )}
 
         {act.type === 'entity_command' && (
           <>
@@ -867,6 +1023,29 @@ const ActionNodeEditor: React.FC<ActionNodeEditorProps> = ({
         )}
       </div>
 
+      {act.type === 'climate_target' && (
+        <div className="flex items-center gap-4 pt-1 font-sans text-[11px] text-slate-400">
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={act.sync_on ?? true}
+              onChange={e => onUpdate({ ...act, sync_on: e.target.checked })}
+              className="rounded bg-slate-900 border-slate-700 text-teal-500 focus:ring-0"
+            />
+            <span>Sync Passenger Zone (0x4A0)</span>
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={act.driver_only ?? false}
+              onChange={e => onUpdate({ ...act, driver_only: e.target.checked })}
+              className="rounded bg-slate-900 border-slate-700 text-teal-500 focus:ring-0"
+            />
+            <span>Driver Only</span>
+          </label>
+        </div>
+      )}
+
       {act.type === 'can_tx' && (
         <div className="space-y-1.5 font-mono text-[11px]">
           <div>
@@ -886,7 +1065,229 @@ const ActionNodeEditor: React.FC<ActionNodeEditorProps> = ({
       )}
     </div>
   );
-};
+}
+
+function ActionListEditor({
+  actions,
+  depth = 0,
+  label,
+  emptyText = 'No actions defined.',
+  onUpdate,
+  onPullCatalog
+}: ActionListEditorProps) {
+  const addAction = (type: 'entity_command' | 'can_tx' | 'delay' | 'if_then' | 'choose' | 'track_popup' | 'climate_target' | 'precondition') => {
+    const next = [...actions];
+    if (type === 'entity_command') {
+      next.push({
+        id: `act_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        type: 'entity_command',
+        entity_id: 'drivers_seat_comfort',
+        command: 'Medium Cool'
+      });
+    } else if (type === 'climate_target') {
+      next.push({
+        id: `act_climate_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        type: 'climate_target',
+        target_temp_c: 21.0,
+        zone: 'driver',
+        sync_on: true,
+        driver_only: false
+      });
+    } else if (type === 'can_tx') {
+      next.push({
+        id: `act_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        type: 'can_tx',
+        can_id: '0x524',
+        bus: 0,
+        payload: { D1: '0x02', D2: '0x01' },
+        repeat: 1,
+        delay_ms: 50
+      });
+    } else if (type === 'delay') {
+      next.push({
+        id: `act_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        type: 'delay',
+        delay_ms: 500,
+        ms: 500
+      });
+    } else if (type === 'if_then') {
+      next.push({
+        id: `act_if_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        type: 'if_then',
+        conditions: [{
+          id: `cond_${Date.now().toString(36)}`,
+          logic: 'leaf',
+          can_id: '0x120',
+          bus: 0,
+          byte: 'D1',
+          mask: '0xFF',
+          operator: 'equal',
+          value: '0x01'
+        }],
+        then: [{
+          id: `act_${Date.now().toString(36)}_1`,
+          type: 'entity_command',
+          entity_id: 'drivers_seat_comfort',
+          command: 'Medium Cool'
+        }],
+        else: []
+      });
+    } else if (type === 'choose') {
+      next.push({
+        id: `act_choose_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        type: 'choose',
+        choices: [{
+          conditions: [{
+            id: `cond_${Date.now().toString(36)}`,
+            logic: 'leaf',
+            can_id: '0x120',
+            bus: 0,
+            byte: 'D1',
+            mask: '0xFF',
+            operator: 'equal',
+            value: '0x01'
+          }],
+          sequence: [{
+            id: `act_${Date.now().toString(36)}_1`,
+            type: 'entity_command',
+            entity_id: 'drivers_seat_comfort',
+            command: 'Medium Cool'
+          }]
+        }],
+        default: []
+      });
+    } else if (type === 'track_popup') {
+      next.push({
+        id: `act_popup_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        type: 'track_popup',
+        level: 'info',
+        text: 'Preconditioning Started'
+      });
+    } else if (type === 'precondition') {
+      next.push({
+        id: `act_precon_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        type: 'precondition',
+        precon_mode: 'persistent',
+        precon_action: 'start'
+      });
+    }
+    onUpdate(next);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        {label && (
+          <span className="text-emerald-400 font-bold text-[11px] uppercase tracking-wider">
+            {label} ({actions.length})
+          </span>
+        )}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {onPullCatalog && (
+            <button
+              type="button"
+              onClick={onPullCatalog}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Pull Catalog</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => addAction('entity_command')}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition"
+          >
+            <Plus className="w-3 h-3" />
+            <span>Entity Cmd</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => addAction('precondition')}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-orange-950 text-orange-300 border border-orange-800 hover:bg-orange-900 transition"
+          >
+            <Zap className="w-3 h-3" />
+            <span>Precondition</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => addAction('climate_target')}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-teal-950 text-teal-300 border border-teal-800 hover:bg-teal-900 transition"
+          >
+            <Thermometer className="w-3 h-3" />
+            <span>Climate Target</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => addAction('track_popup')}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-amber-950 text-amber-300 border border-amber-800 hover:bg-amber-900 transition"
+          >
+            <MessageSquare className="w-3 h-3" />
+            <span>Show Popup Message</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => addAction('can_tx')}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition"
+          >
+            <Plus className="w-3 h-3" />
+            <span>Raw CAN TX</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => addAction('delay')}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition"
+          >
+            <Clock className="w-3 h-3" />
+            <span>Delay</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => addAction('if_then')}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-cyan-950 text-cyan-300 border border-cyan-800 hover:bg-cyan-900 transition"
+          >
+            <GitFork className="w-3 h-3" />
+            <span>If-Then-Else</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => addAction('choose')}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-950 text-blue-300 border border-blue-800 hover:bg-blue-900 transition"
+          >
+            <Split className="w-3 h-3" />
+            <span>Choose</span>
+          </button>
+        </div>
+      </div>
+
+      {actions.length === 0 ? (
+        <div className="p-3 rounded-xl bg-slate-950/40 border border-dashed border-slate-800 text-center text-xs text-slate-500 italic">
+          {emptyText}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {actions.map((act, idx) => (
+            <ActionNodeEditor
+              key={act.id || idx}
+              act={act}
+              index={idx}
+              depth={depth}
+              onUpdate={updated => {
+                const next = [...actions];
+                next[idx] = updated;
+                onUpdate(next);
+              }}
+              onDelete={() => {
+                const next = actions.filter((_, i) => i !== idx);
+                onUpdate(next);
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   catalog,
@@ -909,6 +1310,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [pickerCategory, setPickerCategory] = useState('all');
   const [showSimulateModal, setShowSimulateModal] = useState(false);
   const [simulationLog, setSimulationLog] = useState<string[]>([]);
+  const [espIp, setEspIp] = useState('192.168.4.1');
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [customJsonSchema, setCustomJsonSchema] = useState<string>(
     JSON.stringify(
       {
@@ -1071,7 +1475,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
       filename = 'can_do_catalog.json';
     } else if (activeJsonTab === 'cando') {
       content = exportToCandoJson(rules, settings);
-      filename = 'wican_cando_rules.json';
+      filename = 'automations.json';
     } else if (activeJsonTab === 'esp32') {
       content = exportToEsp32FirmwareJson(rules, settings);
       filename = 'esp32_automations.json';
@@ -1089,6 +1493,58 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handlePushToEsp = async () => {
+    setSyncing(true);
+    setSyncStatus('Pushing automations.json to ESP32...');
+    try {
+      const payload = exportToCandoJson(rules, settings);
+      const host = espIp.trim().replace(/\/+$/, '');
+      const url = host.startsWith('http') ? `${host}/api/automations` : `http://${host}/api/automations`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      const data = await res.json();
+      setSyncStatus(`Success: ${data.message || 'Saved. Rebooting ESP32...'}`);
+      setTimeout(() => setSyncStatus(null), 6000);
+    } catch (err: any) {
+      setSyncStatus(`Push failed: ${err.message}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handlePullFromEsp = async () => {
+    setSyncing(true);
+    setSyncStatus('Pulling automations.json from ESP32...');
+    try {
+      const host = espIp.trim().replace(/\/+$/, '');
+      const url = host.startsWith('http') ? `${host}/api/automations` : `http://${host}/api/automations`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      const data = await res.json();
+      if (data.rules && Array.isArray(data.rules)) {
+        onUpdateRules(data.rules);
+        if (data.settings) onUpdateSettings(data.settings);
+        if (data.rules[0]?.id) setSelectedRuleId(data.rules[0].id);
+        setSyncStatus(`Imported ${data.rules.length} rule(s) from ESP32!`);
+      } else if (Array.isArray(data)) {
+        onUpdateRules(data);
+        if (data[0]?.id) setSelectedRuleId(data[0].id);
+        setSyncStatus(`Imported ${data.length} rule(s) from ESP32!`);
+      } else {
+        setSyncStatus('No rules array found in device response.');
+      }
+      setTimeout(() => setSyncStatus(null), 6000);
+    } catch (err: any) {
+      setSyncStatus(`Pull failed: ${err.message}`);
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const handleImportJson = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1139,6 +1595,13 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     acts.forEach((act, idx) => {
       if (act.type === 'precondition') {
         logs.push(`  -> Action #${idx + 1}: Triggered Precondition State Machine (Persistent mode)`);
+      } else if (act.type === 'track_popup' || act.type === 'popup') {
+        const pfx = act.level === 'warning' ? '⚠ ' : act.level === 'error' ? '‼ ' : 'ⓘ ';
+        logs.push(`  -> Action #${idx + 1}: Cluster Track Selection Popup [${(act.level || 'info').toUpperCase()}]: "${pfx}${act.text || act.popup_message || ''}"`);
+      } else if (act.type === 'climate_target') {
+        logs.push(
+          `  -> Action #${idx + 1}: Dynamic Climate Target: Adjust ${(act.zone || 'driver').toUpperCase()} zone temp to ${act.target_temp_c ?? act.target_c ?? 21.0}°C via ECU 0x2CF (Sync: ${act.sync_on ? 'ON' : 'OFF'}, Driver-Only: ${act.driver_only ? 'YES' : 'NO'})`
+        );
       } else if (act.type === 'can_tx') {
         logs.push(
           `  -> Action #${idx + 1}: Injected CAN Frame ID ${act.can_id} [${typeof act.payload === 'object' ? JSON.stringify(act.payload) : act.payload}] (Repeat: ${act.repeat || 1}x, Delay: ${act.delay_ms || 0}ms)`
@@ -1527,11 +1990,86 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     <Plus className="w-3 h-3" />
                     <span>Raw CAN</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newTrig: AutomationTrigger = {
+                        id: `trig_time_${Date.now().toString(36)}`,
+                        source: 'time',
+                        type: 'time_schedule',
+                        time: '07:30',
+                        days: ['mon', 'tue', 'wed', 'thu', 'fri']
+                      };
+                      handleUpdateActiveRule({ triggers: [...activeRule.triggers, newTrig] });
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-slate-800 text-cyan-300 hover:bg-slate-700 transition border border-cyan-900/50"
+                  >
+                    <Clock className="w-3 h-3" />
+                    <span>Time Schedule</span>
+                  </button>
                 </div>
               </div>
 
               <div className="space-y-2.5">
-                {activeRule.triggers.map((trig, tIdx) => (
+                {activeRule.triggers.map((trig, tIdx) => {
+                  if (trig.type === 'time_schedule' || trig.source === 'time') {
+                    return (
+                      <div
+                        key={trig.id || tIdx}
+                        className="p-3 rounded-xl bg-slate-950 border border-cyan-900/60 space-y-2 text-xs"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-full bg-cyan-950 text-cyan-300 font-bold text-[10px] flex items-center justify-center border border-cyan-800">
+                              T{tIdx + 1}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                              <span className="font-semibold text-white">Time Schedule Trigger</span>
+                              <span className="px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 text-[10px] border border-cyan-800/60 font-mono">
+                                {trig.time || '07:30'}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = activeRule.triggers.filter((_, i) => i !== tIdx);
+                              handleUpdateActiveRule({ triggers: updated });
+                            }}
+                            className="p-1 text-slate-500 hover:text-rose-400 transition"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-sans text-slate-400 mb-1">Target Time (24h)</label>
+                          <input
+                            type="time"
+                            value={trig.time || '07:30'}
+                            onChange={e => {
+                              const updated = [...activeRule.triggers];
+                              updated[tIdx] = { ...updated[tIdx], time: e.target.value };
+                              handleUpdateActiveRule({ triggers: updated });
+                            }}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
+                          />
+                        </div>
+
+                        <DayOfWeekPicker
+                          selectedDays={trig.days}
+                          onChange={days => {
+                            const updated = [...activeRule.triggers];
+                            updated[tIdx] = { ...updated[tIdx], days };
+                            handleUpdateActiveRule({ triggers: updated });
+                          }}
+                        />
+                      </div>
+                    );
+                  }
+
+                  return (
                   <div
                     key={trig.id || tIdx}
                     className="p-3 rounded-xl bg-slate-950 border border-slate-800/90 space-y-2 text-xs"
@@ -1694,371 +2232,79 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
             {/* SECTION 2: CONDITIONS (AND IF...) */}
             <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="p-1 rounded-lg bg-purple-500/20 text-purple-400">
-                    <Shield className="w-3.5 h-3.5" />
-                  </span>
-                  <span className="text-xs font-bold uppercase tracking-wider text-white">
-                    2. Conditions (And if...)
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPickerTarget('condition');
-                      setCatalogPickerOpen(true);
-                    }}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-purple-500 text-slate-950 hover:bg-purple-400 transition"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>Pull Catalog</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newCond: AutomationCondition = {
-                        id: `cond_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-                        logic: 'leaf',
-                        can_id: '0x120',
-                        bus: 0,
-                        byte: 'D1',
-                        mask: '0xFF',
-                        operator: 'equal',
-                        value: '0x01'
-                      };
-                      handleUpdateActiveRule({ conditions: [...activeRule.conditions, newCond] });
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>Raw CAN</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newCond: AutomationCondition = {
-                        id: `cond_and_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-                        logic: 'and',
-                        conditions: []
-                      };
-                      handleUpdateActiveRule({ conditions: [...activeRule.conditions, newCond] });
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-purple-950 text-purple-300 border border-purple-800 hover:bg-purple-900 transition"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>AND Group</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newCond: AutomationCondition = {
-                        id: `cond_or_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-                        logic: 'or',
-                        conditions: []
-                      };
-                      handleUpdateActiveRule({ conditions: [...activeRule.conditions, newCond] });
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-indigo-950 text-indigo-300 border border-indigo-800 hover:bg-indigo-900 transition"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>OR Group</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newCond: AutomationCondition = {
-                        id: `cond_not_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-                        logic: 'not',
-                        conditions: []
-                      };
-                      handleUpdateActiveRule({ conditions: [...activeRule.conditions, newCond] });
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-rose-950 text-rose-300 border border-rose-800 hover:bg-rose-900 transition"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>NOT Group</span>
-                  </button>
-                </div>
+              <div className="flex items-center gap-2">
+                <span className="p-1 rounded-lg bg-purple-500/20 text-purple-400">
+                  <Shield className="w-3.5 h-3.5" />
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wider text-white">
+                  2. Conditions (And if...)
+                </span>
               </div>
 
-              {activeRule.conditions.length === 0 ? (
-                <div className="p-3 rounded-xl bg-slate-950/40 border border-dashed border-slate-800 text-center text-xs text-slate-500">
-                  No conditions set. Rule will always execute when triggers match.
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {activeRule.conditions.map((cond, cIdx) => (
-                    <ConditionNodeEditor
-                      key={cond.id || cIdx}
-                      cond={cond}
-                      index={cIdx}
-                      onUpdate={updated => {
-                        const newConds = [...activeRule.conditions];
-                        newConds[cIdx] = updated;
-                        handleUpdateActiveRule({ conditions: newConds });
-                      }}
-                      onDelete={() => {
-                        const newConds = activeRule.conditions.filter((_, i) => i !== cIdx);
-                        handleUpdateActiveRule({ conditions: newConds });
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
+              <ConditionListEditor
+                conditions={activeRule.conditions}
+                depth={0}
+                emptyText="No conditions set. Rule will always execute when triggers match."
+                onUpdate={conds => handleUpdateActiveRule({ conditions: conds })}
+                onPullCatalog={() => {
+                  setPickerTarget('condition');
+                  setCatalogPickerOpen(true);
+                }}
+              />
             </div>
 
             {/* SECTION 3: ACTIONS (THEN DO...) */}
             <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400">
-                    <Send className="w-3.5 h-3.5" />
-                  </span>
-                  <span className="text-xs font-bold uppercase tracking-wider text-white">
-                    3. Actions (Then do...)
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPickerTarget('action');
-                      setCatalogPickerOpen(true);
-                    }}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>Pull Catalog</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newAct: AutomationAction = {
-                        id: `act_${Date.now().toString(36)}`,
-                        type: 'entity_command',
-                        entity_id: 'drivers_seat_comfort',
-                        command: 'Medium Cool'
-                      };
-                      handleUpdateActiveRule({ actions: [...activeRule.actions, newAct] });
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>Entity Cmd</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newAct: AutomationAction = {
-                        id: `act_${Date.now().toString(36)}`,
-                        type: 'can_tx',
-                        can_id: '0x524',
-                        bus: 0,
-                        payload: { D1: '0x02', D2: '0x01' },
-                        repeat: 1,
-                        delay_ms: 50
-                      };
-                      handleUpdateActiveRule({ actions: [...activeRule.actions, newAct] });
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>Raw CAN TX</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newAct: AutomationAction = {
-                        id: `act_${Date.now().toString(36)}`,
-                        type: 'delay',
-                        delay_ms: 500,
-                        ms: 500
-                      };
-                      handleUpdateActiveRule({ actions: [...activeRule.actions, newAct] });
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition"
-                  >
-                    <Clock className="w-3 h-3" />
-                    <span>Delay</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newAct: AutomationAction = {
-                        id: `act_if_${Date.now().toString(36)}`,
-                        type: 'if_then',
-                        conditions: [{
-                          id: `cond_${Date.now().toString(36)}`,
-                          logic: 'leaf',
-                          can_id: '0x120',
-                          bus: 0,
-                          byte: 'D1',
-                          mask: '0xFF',
-                          operator: 'equal',
-                          value: '0x01'
-                        }],
-                        then: [{
-                          id: `act_${Date.now().toString(36)}_1`,
-                          type: 'entity_command',
-                          entity_id: 'drivers_seat_comfort',
-                          command: 'Medium Cool'
-                        }],
-                        else: []
-                      };
-                      handleUpdateActiveRule({ actions: [...activeRule.actions, newAct] });
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-cyan-950 text-cyan-300 border border-cyan-800 hover:bg-cyan-900 transition"
-                  >
-                    <GitFork className="w-3 h-3" />
-                    <span>If-Then-Else</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newAct: AutomationAction = {
-                        id: `act_choose_${Date.now().toString(36)}`,
-                        type: 'choose',
-                        choices: [{
-                          conditions: [{
-                            id: `cond_${Date.now().toString(36)}`,
-                            logic: 'leaf',
-                            can_id: '0x120',
-                            bus: 0,
-                            byte: 'D1',
-                            mask: '0xFF',
-                            operator: 'equal',
-                            value: '0x01'
-                          }],
-                          sequence: [{
-                            id: `act_${Date.now().toString(36)}_1`,
-                            type: 'entity_command',
-                            entity_id: 'drivers_seat_comfort',
-                            command: 'Medium Cool'
-                          }]
-                        }],
-                        default: []
-                      };
-                      handleUpdateActiveRule({ actions: [...activeRule.actions, newAct] });
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-950 text-blue-300 border border-blue-800 hover:bg-blue-900 transition"
-                  >
-                    <Split className="w-3 h-3" />
-                    <span>Choose</span>
-                  </button>
-                </div>
+              <div className="flex items-center gap-2">
+                <span className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400">
+                  <Send className="w-3.5 h-3.5" />
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wider text-white">
+                  3. Actions (Then do...)
+                </span>
               </div>
 
-              <div className="space-y-2.5">
-                {activeRule.actions.map((act, aIdx) => (
-                  <ActionNodeEditor
-                    key={act.id || aIdx}
-                    act={act}
-                    index={aIdx}
-                    onUpdate={updated => {
-                      const newActs = [...activeRule.actions];
-                      newActs[aIdx] = updated;
-                      handleUpdateActiveRule({ actions: newActs });
-                    }}
-                    onDelete={() => {
-                      const newActs = activeRule.actions.filter((_, i) => i !== aIdx);
-                      handleUpdateActiveRule({ actions: newActs });
-                    }}
-                  />
-                ))}
-              </div>
+              <ActionListEditor
+                actions={activeRule.actions}
+                depth={0}
+                emptyText="No actions defined."
+                onUpdate={acts => handleUpdateActiveRule({ actions: acts })}
+                onPullCatalog={() => {
+                  setPickerTarget('action');
+                  setCatalogPickerOpen(true);
+                }}
+              />
             </div>
 
             {/* SECTION 4: OFF-ACTIONS (Visible only in Toggle mode) */}
             {activeRule.exec_mode === 'toggle' && (
               <div className="p-4 rounded-2xl bg-slate-900 border border-amber-900/40 shadow-lg space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="p-1 rounded-lg bg-amber-500/20 text-amber-400">
-                      <RotateCw className="w-3.5 h-3.5" />
-                    </span>
-                    <span className="text-xs font-bold uppercase tracking-wider text-amber-300">
-                      4. Off-Actions (When toggled OFF...)
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPickerTarget('off_action');
-                      setCatalogPickerOpen(true);
-                    }}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500 text-slate-950 hover:bg-amber-400 transition"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>Pull Catalog</span>
-                  </button>
+                <div className="flex items-center gap-2">
+                  <span className="p-1 rounded-lg bg-amber-500/20 text-amber-400">
+                    <RotateCw className="w-3.5 h-3.5" />
+                  </span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-amber-300">
+                    4. Off-Actions (When toggled OFF...)
+                  </span>
                 </div>
 
-                {(!activeRule.off_actions || activeRule.off_actions.length === 0) ? (
-                  <div className="p-3 rounded-xl bg-slate-950/40 border border-dashed border-slate-800 text-center text-xs text-slate-500">
-                    No off-actions defined. Specify frames to send when state toggles off.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {activeRule.off_actions.map((offAct, oIdx) => (
-                      <div
-                        key={offAct.id || oIdx}
-                        className="p-3 rounded-xl bg-slate-950 border border-slate-800/90 space-y-2 text-xs"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-white">
-                            {offAct.source_command_name || `Off Action ${offAct.can_id}`}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const updated = activeRule.off_actions?.filter((_, i) => i !== oIdx) || [];
-                              handleUpdateActiveRule({ off_actions: updated });
-                            }}
-                            className="p-1 text-slate-500 hover:text-rose-400 transition"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 font-mono text-[11px]">
-                          <div>
-                            <label className="block text-[10px] font-sans text-slate-500">CAN ID</label>
-                            <input
-                              type="text"
-                              value={offAct.can_id || ''}
-                              onChange={e => {
-                                const updated = [...(activeRule.off_actions || [])];
-                                updated[oIdx].can_id = e.target.value;
-                                handleUpdateActiveRule({ off_actions: updated });
-                              }}
-                              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-sans text-slate-500">Off Payload</label>
-                            <input
-                              type="text"
-                              value={offAct.payload || ''}
-                              onChange={e => {
-                                const updated = [...(activeRule.off_actions || [])];
-                                updated[oIdx].payload = e.target.value;
-                                handleUpdateActiveRule({ off_actions: updated });
-                              }}
-                              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-amber-300 font-bold"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <ActionListEditor
+                  actions={activeRule.off_actions || []}
+                  depth={0}
+                  emptyText="No off-actions defined. Specify actions to run when toggled off."
+                  onUpdate={acts => handleUpdateActiveRule({ off_actions: acts })}
+                  onPullCatalog={() => {
+                    setPickerTarget('off_action');
+                    setCatalogPickerOpen(true);
+                  }}
+                />
               </div>
             )}
           </div>
@@ -2171,16 +2417,78 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               )}
             </div>
 
-            {/* Quick Export Footer */}
-            <div className="flex items-center justify-between pt-2 text-[11px] text-slate-500">
-              <span>{rules.length} automations compiled</span>
-              <button
-                type="button"
-                onClick={handleDownloadJson}
-                className="hover:text-cyan-400 font-semibold underline underline-offset-2 transition"
-              >
-                Download .json file
-              </button>
+            {/* Quick Export & ESP32 Direct Sync Footer */}
+            <div className="pt-3 border-t border-slate-800 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                  <span className="text-[11px] font-semibold text-slate-400 whitespace-nowrap">ESP32 Device:</span>
+                  <input
+                    type="text"
+                    value={espIp}
+                    onChange={e => setEspIp(e.target.value)}
+                    placeholder="192.168.4.1"
+                    className="flex-1 px-2 py-1 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={syncing}
+                    onClick={handlePullFromEsp}
+                    className="px-2.5 py-1 text-xs font-semibold rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition disabled:opacity-50"
+                  >
+                    Pull (/api/automations)
+                  </button>
+                  <button
+                    type="button"
+                    disabled={syncing}
+                    onClick={handlePushToEsp}
+                    className="px-2.5 py-1 text-xs font-semibold rounded bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold transition disabled:opacity-50"
+                  >
+                    Push &amp; Soft-Reset
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 p-2 rounded-lg bg-slate-950/70 border border-slate-800/80 text-xs">
+                <div>
+                  <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">NTP Time Server</label>
+                  <input
+                    type="text"
+                    value={settings.ntp_server || 'pool.ntp.org'}
+                    onChange={e => onUpdateSettings({ ...settings, ntp_server: e.target.value })}
+                    placeholder="pool.ntp.org"
+                    className="w-full px-2 py-1 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">Timezone / POSIX TZ</label>
+                  <input
+                    type="text"
+                    value={settings.timezone || 'America/Los_Angeles'}
+                    onChange={e => onUpdateSettings({ ...settings, timezone: e.target.value })}
+                    placeholder="America/Los_Angeles or PST8PDT"
+                    className="w-full px-2 py-1 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+              </div>
+
+              {syncStatus && (
+                <div className="text-[11px] font-mono text-cyan-400 bg-cyan-950/40 border border-cyan-800/60 rounded px-2.5 py-1">
+                  {syncStatus}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                <span>{rules.length} automations compiled</span>
+                <button
+                  type="button"
+                  onClick={handleDownloadJson}
+                  className="hover:text-cyan-400 font-semibold underline underline-offset-2 transition"
+                >
+                  Download .json file
+                </button>
+              </div>
             </div>
           </div>
         </div>

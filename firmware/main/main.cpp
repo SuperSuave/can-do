@@ -8,12 +8,17 @@
 #include "nvs_flash.h"
 #include "driver/twai.h"
 #include "esp_littlefs.h"
+#include "esp_sntp.h"
 #include "mqtt_client.h"
+#include <ctime>
+#include <sys/time.h>
 
 #include "types.h"
 #include "parser.h"
 #include "can_engine.h"
 #include "api.h"
+#include "track_popup.h"
+#include "precondition.h"
 
 static const char* TAG = "MAIN";
 
@@ -140,69 +145,22 @@ static void start_mqtt(void) {
 #endif
 }
 
-static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();
-    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        ESP_LOGW(TAG, "Wi-Fi disconnected, retrying...");
-        esp_wifi_connect();
-    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
-        auto event = static_cast<ip_event_got_ip_t*>(event_data);
-        ESP_LOGI(TAG, "Wi-Fi connected. IP: " IPSTR, IP2STR(&event->ip_info.ip));
-        start_mqtt();
-    }
+static void init_sntp(void) {
+    ESP_LOGI(TAG, "Initializing SNTP time synchronization (pool.ntp.org)...");
+    esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    esp_sntp_setservername(0, "pool.ntp.org");
+    esp_sntp_init();
 }
 
-static void init_wifi(void) {
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+#include "network_mgr.h"
+#include "gvret_server.h"
 
-    std::string sta_ssid = "";
-#ifdef CONFIG_CAN_DO_WIFI_SSID
-    sta_ssid = CONFIG_CAN_DO_WIFI_SSID;
-#endif
-
-    if (!sta_ssid.empty()) {
-        esp_netif_create_default_wifi_sta();
-        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-        ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
-        ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, nullptr, nullptr));
-        ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, nullptr, nullptr));
-
-        wifi_config_t wifi_config = {};
-        strncpy(reinterpret_cast<char*>(wifi_config.sta.ssid), sta_ssid.c_str(), sizeof(wifi_config.sta.ssid));
-#ifdef CONFIG_CAN_DO_WIFI_PASSWORD
-        strncpy(reinterpret_cast<char*>(wifi_config.sta.password), CONFIG_CAN_DO_WIFI_PASSWORD, sizeof(wifi_config.sta.password));
-#endif
-        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-        ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-        ESP_ERROR_CHECK(esp_wifi_start());
-        ESP_LOGI(TAG, "Connecting to Wi-Fi: %s", sta_ssid.c_str());
-    } else {
-        // Fallback to standalone SoftAP
-        esp_netif_create_default_wifi_ap();
-        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-        ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
-        wifi_config_t ap_config = {};
-        const char* ap_ssid = "CAN-Do-Edge";
-        const char* ap_pass = "candorules";
-#ifdef CONFIG_CAN_DO_AP_SSID
-        ap_ssid = CONFIG_CAN_DO_AP_SSID;
-#endif
-#ifdef CONFIG_CAN_DO_AP_PASSWORD
-        ap_pass = CONFIG_CAN_DO_AP_PASSWORD;
-#endif
-        strncpy(reinterpret_cast<char*>(ap_config.ap.ssid), ap_ssid, sizeof(ap_config.ap.ssid));
-        strncpy(reinterpret_cast<char*>(ap_config.ap.password), ap_pass, sizeof(ap_config.ap.password));
-        ap_config.ap.authmode = strlen(ap_pass) > 0 ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
-        ap_config.ap.max_connection = 4;
-
-        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-        ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
-        ESP_ERROR_CHECK(esp_wifi_start());
-        ESP_LOGI(TAG, "Broadcasting SoftAP: %s (Password: %s, Web: 192.168.4.1)", ap_ssid, ap_pass);
+static void app_ip_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        auto event = static_cast<ip_event_got_ip_t*>(event_data);
+        ESP_LOGI(TAG, "Network ready. IP: " IPSTR, IP2STR(&event->ip_info.ip));
+        init_sntp();
+        start_mqtt();
     }
 }
 
@@ -222,20 +180,33 @@ extern "C" void app_main(void) {
     if (!load_catalog_from_fs("/spiffs/catalog/can_do_catalog.json")) {
         load_catalog_from_fs("/spiffs/can_do_catalog.json");
     }
+    // Load active user automations from dedicated LittleFS storage
+    load_automations_from_fs("/spiffs/automations.json");
 
     // 3. Init TWAI (CAN)
     ESP_ERROR_CHECK(init_twai());
+
+    // 3b. Init Cluster Track Selection Popup & Preconditioning Subsystems
+    precondition_init();
 
     // 4. Command Queues and Tasks
     init_can_engine();
     xTaskCreate(can_rx_task, "CAN_RX", 4096, nullptr, 5, nullptr);
     xTaskCreate(can_tx_task, "CAN_TX", 4096, nullptr, 4, nullptr);
+    xTaskCreate(time_scheduler_task, "TIME_SCHED", 3072, nullptr, 3, nullptr);
 
     // 5. Start Web Server and WS Hook
     start_webserver();
 
-    // 6. Network connectivity (STA with AP fallback)
-    init_wifi();
+    // 6. Network connectivity (Multi-SSID Roaming, Auto-AP Fallback, 192.168.4.1)
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &app_ip_event_handler, nullptr, nullptr));
+    network_mgr_init();
+
+    // 7. Start GVRET TCP Port 23 Server (SavvyCAN / SavvyLens)
+    gvret_server_init(23);
 
     ESP_LOGI(TAG, "Initialization complete. Ready.");
 }
+

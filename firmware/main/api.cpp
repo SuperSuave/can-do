@@ -1,6 +1,8 @@
 #include "api.h"
 #include "parser.h"
 #include "can_engine.h"
+#include "network_mgr.h"
+#include "gvret_server.h"
 #include "cJSON.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
@@ -53,6 +55,23 @@ void broadcast_ws_raw(const std::string& json_str) {
 void broadcast_ws_state(const std::string& entity_id, const std::string& state) {
     std::string json = "{\"type\":\"state\",\"entity\":\"" + entity_id + "\",\"state\":\"" + state + "\"}";
     broadcast_ws_raw(json);
+}
+
+void broadcast_ws_can_frame(const twai_message_t* msg) {
+    if (!msg || !global_web_server) return;
+    char hex_data[17] = {0};
+    uint8_t dlc = msg->data_length_code > 8 ? 8 : msg->data_length_code;
+    for (int i = 0; i < dlc; i++) {
+        snprintf(&hex_data[i * 2], 3, "%02X", msg->data[i]);
+    }
+    char buf[128];
+    snprintf(buf, sizeof(buf),
+             "{\"type\":\"can_frame\",\"id\":\"0x%03lX\",\"extd\":%s,\"dlc\":%d,\"data\":\"%s\"}",
+             (unsigned long)msg->identifier,
+             msg->extd ? "true" : "false",
+             (int)dlc,
+             hex_data);
+    broadcast_ws_raw(buf);
 }
 
 int custom_websocket_logger(const char *fmt, va_list args) {
@@ -297,6 +316,293 @@ static esp_err_t api_ota_handler(httpd_req_t *req) {
     return ESP_FAIL;
 }
 
+static esp_err_t api_get_automations_handler(httpd_req_t *req) {
+    const char *filepath = "/spiffs/automations.json";
+    FILE *fd = fopen(filepath, "r");
+    if (!fd) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"settings\":{\"vehicle_model\":\"all_egmp\",\"unit_system\":\"imperial\",\"firmware_version\":\"2.0.0\"},\"rules\":[]}");
+        return ESP_OK;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+
+    char chunk[1024];
+    size_t chunksize;
+    do {
+        chunksize = fread(chunk, 1, sizeof(chunk), fd);
+        if (chunksize > 0) {
+            if (httpd_resp_send_chunk(req, chunk, chunksize) != ESP_OK) {
+                fclose(fd);
+                return ESP_FAIL;
+            }
+        }
+    } while (chunksize != 0);
+
+    fclose(fd);
+    httpd_resp_send_chunk(req, nullptr, 0);
+    return ESP_OK;
+}
+
+static esp_err_t api_post_automations_handler(httpd_req_t *req) {
+    if (req->content_len <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty payload");
+        return ESP_FAIL;
+    }
+
+    const char *temp_filepath = "/spiffs/automations.json.tmp";
+    const char *target_filepath = "/spiffs/automations.json";
+
+    FILE *fd = fopen(temp_filepath, "w");
+    if (!fd) {
+        fd = fopen(target_filepath, "w");
+        if (!fd) {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open automations file for write");
+            return ESP_FAIL;
+        }
+        temp_filepath = target_filepath;
+    }
+
+    char buf[1024];
+    int remaining = req->content_len;
+    while (remaining > 0) {
+        int recv_len = httpd_req_recv(req, buf, std::min(remaining, static_cast<int>(sizeof(buf))));
+        if (recv_len <= 0) {
+            fclose(fd);
+            if (temp_filepath != target_filepath) remove(temp_filepath);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed receiving automation payload");
+            return ESP_FAIL;
+        }
+        fwrite(buf, 1, recv_len, fd);
+        remaining -= recv_len;
+    }
+    fclose(fd);
+
+    if (temp_filepath != target_filepath) {
+        remove(target_filepath);
+        if (rename(temp_filepath, target_filepath) != 0) {
+            ESP_LOGE(TAG, "Failed to rename temp automations file");
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed committing automations file");
+            return ESP_FAIL;
+        }
+    }
+
+    ESP_LOGI(TAG, "New automations.json written (%d bytes). Triggering soft-reset...", req->content_len);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"Automations saved successfully. Soft-resetting engine...\"}");
+
+    xTaskCreate(restart_task, "restart_task", 2048, nullptr, 5, nullptr);
+    return ESP_OK;
+}
+
+static esp_err_t api_system_status_handler(httpd_req_t *req) {
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "automations_enabled", g_automations_enabled.load());
+    cJSON_AddBoolToObject(root, "sniffer_mode", g_sniffer_mode.load());
+    cJSON_AddBoolToObject(root, "hardware_listen_only", g_hardware_listen_only.load());
+    cJSON_AddNumberToObject(root, "gvret_clients", gvret_get_client_count());
+
+    char *json_str = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json_str);
+    free(json_str);
+    return ESP_OK;
+}
+
+static esp_err_t api_system_control_handler(httpd_req_t *req) {
+    char buf[128];
+    int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
+    if (ret <= 0) return ESP_FAIL;
+    buf[ret] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    cJSON *auto_item = cJSON_GetObjectItem(root, "automations_enabled");
+    if (cJSON_IsBool(auto_item)) {
+        set_automations_enabled(cJSON_IsTrue(auto_item));
+    }
+
+    cJSON *sniff_item = cJSON_GetObjectItem(root, "sniffer_mode");
+    cJSON *hw_item = cJSON_GetObjectItem(root, "hardware_listen_only");
+    if (cJSON_IsBool(sniff_item)) {
+        bool hw_listen = cJSON_IsBool(hw_item) ? cJSON_IsTrue(hw_item) : g_hardware_listen_only.load();
+        set_sniffer_mode(cJSON_IsTrue(sniff_item), hw_listen);
+    } else if (cJSON_IsBool(hw_item)) {
+        set_sniffer_mode(g_sniffer_mode.load(), cJSON_IsTrue(hw_item));
+    }
+
+    cJSON_Delete(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
+    return ESP_OK;
+}
+
+static esp_err_t api_wifi_status_handler(httpd_req_t *req) {
+    NetworkStatusInfo st = network_mgr_get_status();
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "sta_connected", st.sta_connected);
+    cJSON_AddStringToObject(root, "sta_ssid", st.sta_ssid.c_str());
+    cJSON_AddStringToObject(root, "sta_ip", st.sta_ip.c_str());
+    cJSON_AddStringToObject(root, "sta_gw", st.sta_gw.c_str());
+    cJSON_AddStringToObject(root, "sta_mask", st.sta_mask.c_str());
+    cJSON_AddNumberToObject(root, "sta_rssi", st.sta_rssi);
+
+    cJSON_AddBoolToObject(root, "ap_active", st.ap_active);
+    cJSON_AddStringToObject(root, "ap_ssid", st.ap_ssid.c_str());
+    cJSON_AddStringToObject(root, "ap_ip", st.ap_ip.c_str());
+    cJSON_AddNumberToObject(root, "ap_clients", st.ap_clients);
+
+    const char* ap_mode_str = "auto";
+    if (st.ap_mode == AP_MODE_ALWAYS_ON) ap_mode_str = "always_on";
+    else if (st.ap_mode == AP_MODE_DISABLED) ap_mode_str = "disabled";
+    cJSON_AddStringToObject(root, "ap_mode", ap_mode_str);
+
+    char *json_str = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json_str);
+    free(json_str);
+    return ESP_OK;
+}
+
+static esp_err_t api_wifi_get_networks_handler(httpd_req_t *req) {
+    auto list = network_mgr_get_known_networks();
+    cJSON *root = cJSON_CreateArray();
+    for (const auto& net : list) {
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "ssid", net.ssid.c_str());
+        cJSON_AddNumberToObject(item, "priority", net.priority);
+        cJSON_AddItemToArray(root, item);
+    }
+    char *json_str = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json_str);
+    free(json_str);
+    return ESP_OK;
+}
+
+static esp_err_t api_wifi_post_networks_handler(httpd_req_t *req) {
+    char buf[256];
+    int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
+    if (ret <= 0) return ESP_FAIL;
+    buf[ret] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    cJSON *ssid = cJSON_GetObjectItem(root, "ssid");
+    cJSON *pass = cJSON_GetObjectItem(root, "password");
+    cJSON *prio = cJSON_GetObjectItem(root, "priority");
+
+    if (cJSON_IsString(ssid) && strlen(ssid->valuestring) > 0) {
+        std::string password = cJSON_IsString(pass) ? pass->valuestring : "";
+        int priority = cJSON_IsNumber(prio) ? prio->valueint : 50;
+        network_mgr_add_known_network(ssid->valuestring, password, priority);
+        cJSON_Delete(root);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"status\":\"ok\",\"message\":\"Network saved\"}");
+        return ESP_OK;
+    }
+
+    cJSON_Delete(root);
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing SSID");
+    return ESP_FAIL;
+}
+
+static esp_err_t api_wifi_delete_networks_handler(httpd_req_t *req) {
+    char buf[128];
+    int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
+    if (ret <= 0) return ESP_FAIL;
+    buf[ret] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    cJSON *ssid = cJSON_GetObjectItem(root, "ssid");
+    if (cJSON_IsString(ssid)) {
+        bool removed = network_mgr_remove_known_network(ssid->valuestring);
+        cJSON_Delete(root);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, removed ? "{\"status\":\"ok\"}" : "{\"status\":\"not_found\"}");
+        return ESP_OK;
+    }
+
+    cJSON_Delete(root);
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing SSID");
+    return ESP_FAIL;
+}
+
+static esp_err_t api_wifi_scan_handler(httpd_req_t *req) {
+    if (!network_mgr_is_scanning()) {
+        network_mgr_start_scan();
+    }
+
+    auto results = network_mgr_get_scan_results();
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "scanning", network_mgr_is_scanning());
+
+    cJSON *arr = cJSON_AddArrayToObject(root, "results");
+    for (const auto& res : results) {
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "ssid", res.ssid.c_str());
+        cJSON_AddNumberToObject(item, "rssi", res.rssi);
+        cJSON_AddNumberToObject(item, "authmode", res.authmode);
+        cJSON_AddBoolToObject(item, "in_known_list", res.in_known_list);
+        cJSON_AddItemToArray(arr, item);
+    }
+
+    char *json_str = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json_str);
+    free(json_str);
+    return ESP_OK;
+}
+
+static esp_err_t api_wifi_settings_handler(httpd_req_t *req) {
+    char buf[256];
+    int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
+    if (ret <= 0) return ESP_FAIL;
+    buf[ret] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    cJSON *ap_mode_item = cJSON_GetObjectItem(root, "ap_mode");
+    if (cJSON_IsString(ap_mode_item)) {
+        if (strcmp(ap_mode_item->valuestring, "always_on") == 0) network_mgr_set_ap_mode(AP_MODE_ALWAYS_ON);
+        else if (strcmp(ap_mode_item->valuestring, "disabled") == 0) network_mgr_set_ap_mode(AP_MODE_DISABLED);
+        else network_mgr_set_ap_mode(AP_MODE_AUTO);
+    }
+
+    cJSON *ap_ssid_item = cJSON_GetObjectItem(root, "ap_ssid");
+    cJSON *ap_pass_item = cJSON_GetObjectItem(root, "ap_password");
+    if (cJSON_IsString(ap_ssid_item)) {
+        std::string pass = cJSON_IsString(ap_pass_item) ? ap_pass_item->valuestring : "";
+        network_mgr_set_ap_credentials(ap_ssid_item->valuestring, pass);
+    }
+
+    cJSON_Delete(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
+    return ESP_OK;
+}
+
 static esp_err_t ws_handler(httpd_req_t *req) {
     return ESP_OK;
 }
@@ -305,7 +611,7 @@ httpd_handle_t start_webserver(void) {
     httpd_handle_t server = nullptr;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 12;
+    config.max_uri_handlers = 24;
 
     if (httpd_start(&server, &config) == ESP_OK) {
         httpd_uri_t api_states = { "/api/states", HTTP_GET, api_states_handler, nullptr };
@@ -316,6 +622,36 @@ httpd_handle_t start_webserver(void) {
 
         httpd_uri_t api_test = { "/api/test_automation", HTTP_POST, api_test_automation_handler, nullptr };
         httpd_register_uri_handler(server, &api_test);
+
+        httpd_uri_t api_get_auto = { "/api/automations", HTTP_GET, api_get_automations_handler, nullptr };
+        httpd_register_uri_handler(server, &api_get_auto);
+
+        httpd_uri_t api_post_auto = { "/api/automations", HTTP_POST, api_post_automations_handler, nullptr };
+        httpd_register_uri_handler(server, &api_post_auto);
+
+        httpd_uri_t api_sys_status = { "/api/system/status", HTTP_GET, api_system_status_handler, nullptr };
+        httpd_register_uri_handler(server, &api_sys_status);
+
+        httpd_uri_t api_sys_ctrl = { "/api/system/control", HTTP_POST, api_system_control_handler, nullptr };
+        httpd_register_uri_handler(server, &api_sys_ctrl);
+
+        httpd_uri_t api_wifi_status = { "/api/wifi/status", HTTP_GET, api_wifi_status_handler, nullptr };
+        httpd_register_uri_handler(server, &api_wifi_status);
+
+        httpd_uri_t api_wifi_get_nets = { "/api/wifi/networks", HTTP_GET, api_wifi_get_networks_handler, nullptr };
+        httpd_register_uri_handler(server, &api_wifi_get_nets);
+
+        httpd_uri_t api_wifi_post_nets = { "/api/wifi/networks", HTTP_POST, api_wifi_post_networks_handler, nullptr };
+        httpd_register_uri_handler(server, &api_wifi_post_nets);
+
+        httpd_uri_t api_wifi_del_nets = { "/api/wifi/networks", HTTP_DELETE, api_wifi_delete_networks_handler, nullptr };
+        httpd_register_uri_handler(server, &api_wifi_del_nets);
+
+        httpd_uri_t api_wifi_scan = { "/api/wifi/scan", HTTP_GET, api_wifi_scan_handler, nullptr };
+        httpd_register_uri_handler(server, &api_wifi_scan);
+
+        httpd_uri_t api_wifi_settings = { "/api/wifi/settings", HTTP_POST, api_wifi_settings_handler, nullptr };
+        httpd_register_uri_handler(server, &api_wifi_settings);
 
         httpd_uri_t api_up = { "/api/upload", HTTP_POST, api_file_upload_handler, nullptr };
         httpd_register_uri_handler(server, &api_up);
@@ -335,3 +671,4 @@ httpd_handle_t start_webserver(void) {
     }
     return server;
 }
+

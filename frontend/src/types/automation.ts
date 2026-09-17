@@ -12,7 +12,7 @@ export type TriggerCombineMode = 'any' | 'all' | 'sequence';
 export interface AutomationTrigger {
   id: string;
   source: 'preset' | 'can' | 'time' | 'voltage' | 'mqtt';
-  type?: string;
+  type?: 'byte_transition' | 'time_schedule' | 'can_rx' | 'mqtt' | string;
   can_id?: string;
   bus?: number;
   click_count?: number; // 1 = single, 2 = double, 3 = triple
@@ -33,6 +33,7 @@ export interface AutomationTrigger {
   source_command_name?: string;
   option_label?: string;
   time?: string;
+  days?: string[];
   interval_sec?: number;
   voltage_val?: string;
   voltage_dir?: 'above' | 'below';
@@ -43,7 +44,7 @@ export interface AutomationTrigger {
 
 export interface AutomationCondition {
   id: string;
-  type?: 'can_state' | 'param_range' | 'time' | 'voltage' | 'and_group' | 'or_group' | 'not_group';
+  type?: 'can_state' | 'byte_value' | 'time_condition' | 'time' | 'param_range' | 'voltage' | 'and' | 'or' | 'not' | 'and_group' | 'or_group' | 'not_group';
   logic?: 'and' | 'or' | 'not' | 'leaf';
   can_id?: string;
   bus?: number;
@@ -73,6 +74,9 @@ export interface AutomationCondition {
   voltage_val?: string;
   voltage_dir?: 'above' | 'below';
   conditions?: AutomationCondition[];
+  and?: AutomationCondition[];
+  or?: AutomationCondition[];
+  not?: AutomationCondition[] | AutomationCondition;
 }
 
 export interface AutomationActionChoice {
@@ -86,9 +90,18 @@ export interface AutomationActionStep {
   delay_ms?: number;
 }
 
+export type PopupLevel = 'info' | 'warning' | 'error';
+
 export interface AutomationAction {
   id: string;
-  type: 'can_tx' | 'transmit' | 'entity_command' | 'delay' | 'precondition' | 'climate_target' | 'webhook' | 'choose' | 'if_then';
+  type: 'can_tx' | 'transmit' | 'entity_command' | 'delay' | 'precondition' | 'climate_target' | 'webhook' | 'choose' | 'if_then' | 'track_popup' | 'popup';
+  level?: PopupLevel;
+  text?: string;
+  target_temp_c?: number;
+  target_c?: number;
+  zone?: 'driver' | 'passenger';
+  sync_on?: boolean;
+  driver_only?: boolean;
   trigger_id?: string;
   can_id?: string;
   bus?: number;
@@ -100,8 +113,8 @@ export interface AutomationAction {
   delay_ms?: number;
   ms?: number;
   steps?: AutomationActionStep[];
-  popup_message?: string;
-  precon_mode?: 'persistent' | 'timed' | 'toggle';
+  precon_mode?: 'persistent' | 'continuous' | 'once' | 'cancel' | string;
+  precon_action?: 'start' | 'stop' | 'toggle' | string;
   precon_press?: 'short' | 'long';
   source_command_id?: string;
   source_command_name?: string;
@@ -144,6 +157,8 @@ export interface AutomationSettings {
   unit_system?: 'imperial' | 'metric';
   firmware_version?: string;
   capture_mode?: 'auto' | 'paused' | 'disabled';
+  ntp_server?: string;
+  timezone?: string;
 }
 
 export interface CandoRulesExport {

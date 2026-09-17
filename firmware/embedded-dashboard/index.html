@@ -12,23 +12,179 @@
       <span class="brand-title">CAN Do</span>
       <span class="brand-sub">Edge Engine</span>
     </div>
-    <div id="connection-status" class="status-badge offline">Connecting...</div>
+    <div style="display:flex; align-items:center; gap:0.5rem;">
+      <span id="gvret-badge" class="entity-badge" title="TCP Port 23 GVRET (SavvyCAN / SavvyLens)">GVRET: 0</span>
+      <div id="connection-status" class="status-badge offline">Connecting...</div>
+    </div>
   </header>
 
   <main class="container">
     <!-- Quick Stats -->
     <section class="card stats-bar">
       <div class="stat-item">
-        <span class="stat-label">Active State</span>
-        <span id="stat-active" class="stat-value">Ready</span>
+        <span class="stat-label">Automations</span>
+        <span id="stat-automations-toggle" class="stat-value" style="color:var(--accent-emerald);">Active</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Sniffer Mode</span>
+        <span id="stat-sniffer" class="stat-value" style="color:var(--text-muted);">Off</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Wi-Fi Link</span>
+        <span id="stat-wifi-link" class="stat-value">--</span>
       </div>
       <div class="stat-item">
         <span class="stat-label">Entities</span>
         <span id="stat-entities" class="stat-value">--</span>
       </div>
-      <div class="stat-item">
-        <span class="stat-label">Automations</span>
-        <span id="stat-automations" class="stat-value">--</span>
+    </section>
+
+    <!-- Dashboard Control: Automations & Sniffer Mode -->
+    <section class="card">
+      <div class="card-header">
+        <h2>Engine Control & Passive Sniffer</h2>
+      </div>
+
+      <div class="control-row">
+        <div class="control-info">
+          <span class="control-title">Automations Execution</span>
+          <span class="subtext">Enable or disable scheduled time rules and real-time CAN event triggers</span>
+        </div>
+        <div class="toggle-container">
+          <span id="label-automations-state" class="subtext" style="font-weight:600; color:var(--accent-emerald);">ENABLED</span>
+          <label class="switch">
+            <input type="checkbox" id="toggle-automations" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="control-row">
+        <div class="control-info">
+          <span class="control-title">Sniffer / Passive Monitor Mode</span>
+          <span class="subtext">Suppresses all automated and manual CAN transmissions to ensure clean, zero-interference monitoring</span>
+        </div>
+        <div class="toggle-container">
+          <span id="label-sniffer-state" class="subtext" style="font-weight:600; color:var(--text-muted);">INACTIVE</span>
+          <label class="switch">
+            <input type="checkbox" id="toggle-sniffer">
+            <span class="slider slider-amber"></span>
+          </label>
+        </div>
+      </div>
+
+      <div style="margin-top:0.5rem; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem;">
+        <label class="checkbox-label" title="Reconfigures TWAI peripheral into true listen-only mode without sending hardware PHY ACK bits">
+          <input type="checkbox" id="chk-hw-listen-only">
+          <span>Hardware Listen-Only Mode (Zero PHY ACKs for stealth vehicle tapping)</span>
+        </label>
+        <span class="subtext" id="twai-mode-status">TWAI Mode: NORMAL</span>
+      </div>
+
+      <!-- Sniffer Alert Banner -->
+      <div id="sniffer-alert" class="alert-banner amber" style="display:none; margin-top:1rem;">
+        <span>⚠ <strong>Passive Sniffer Mode Active:</strong> All outgoing CAN transmissions (Automations, Buttons, GVRET) are blocked.</span>
+      </div>
+
+      <!-- Live CAN Frame Monitor Box -->
+      <div style="margin-top:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+          <h3 style="font-size:0.85rem; color:var(--text-muted); text-transform:uppercase;">Live Bus Sniffer Feed</h3>
+          <div style="display:flex; gap:0.4rem;">
+            <button id="btn-pause-sniffer" class="btn btn-secondary btn-tiny">Pause</button>
+            <button id="btn-clear-sniffer" class="btn btn-secondary btn-tiny">Clear</button>
+          </div>
+        </div>
+        <div class="sniffer-table-container">
+          <table class="sniffer-table">
+            <thead>
+              <tr>
+                <th>Time (ms)</th>
+                <th>CAN ID</th>
+                <th>DLC</th>
+                <th>Payload (Hex)</th>
+                <th>Count</th>
+              </tr>
+            </thead>
+            <tbody id="sniffer-tbody">
+              <tr>
+                <td colspan="5" style="text-align:center; color:var(--text-muted); padding:1rem;">No frames captured yet. Activate Sniffer Mode or connect SavvyCAN to begin capture.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Multi-Network / Multi-SSID Roaming Manager -->
+    <section class="card">
+      <div class="card-header">
+        <h2>Wi-Fi & Network Roaming Manager</h2>
+        <div style="display:flex; gap:0.5rem;">
+          <button id="btn-scan-wifi" class="btn btn-secondary btn-tiny">Scan Nearby</button>
+        </div>
+      </div>
+
+      <!-- Current Connection Banner -->
+      <div class="net-status-box">
+        <div class="net-status-item">
+          <span class="stat-label">Station Connection</span>
+          <span id="net-sta-status" class="subtext" style="font-weight:700; color:#fff;">Disconnected</span>
+        </div>
+        <div class="net-status-item">
+          <span class="stat-label">Station IP</span>
+          <span id="net-sta-ip" class="subtext">0.0.0.0</span>
+        </div>
+        <div class="net-status-item">
+          <span class="stat-label">SoftAP Interface</span>
+          <span id="net-ap-status" class="subtext" style="color:var(--accent-cyan); font-weight:700;">Active (192.168.4.1)</span>
+        </div>
+        <div class="net-status-item">
+          <span class="stat-label">AP Fallback Policy</span>
+          <select id="select-ap-mode" class="select-field" style="padding:0.2rem 0.5rem; font-size:0.8rem; margin-top:0.2rem;">
+            <option value="auto">Auto Fallback (Recommended)</option>
+            <option value="always_on">Always On</option>
+            <option value="disabled">Disabled</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Nearby Scan Dropdown/List (Collapsible) -->
+      <div id="scan-container" style="display:none; margin-bottom:1rem;">
+        <span class="subtext" style="font-weight:600;">Nearby Networks (Click to populate form below):</span>
+        <div id="scan-list" class="scan-list">
+          <div style="padding:0.5rem; color:var(--text-muted);">Scanning...</div>
+        </div>
+      </div>
+
+      <!-- Known Networks Table -->
+      <span class="subtext" style="font-weight:600; margin-bottom:0.4rem; display:block;">Stored Known Networks (Attempted in order of Priority & Signal Strength):</span>
+      <table class="net-table">
+        <thead>
+          <tr>
+            <th>SSID</th>
+            <th>Priority</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="known-nets-tbody">
+          <tr>
+            <td colspan="3" style="text-align:center; color:var(--text-muted); padding:0.5rem;">No saved networks. Device will broadcast SoftAP.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Add Stored Network Form -->
+      <div style="background:#090f1d; border:1px solid var(--card-border); border-radius:8px; padding:0.85rem;">
+        <span class="subtext" style="font-weight:700; color:#fff; display:block; margin-bottom:0.5rem;">Add / Update Stored Network:</span>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:0.5rem; margin-bottom:0.5rem;">
+          <input type="text" id="add-net-ssid" placeholder="Network SSID" class="input-text">
+          <input type="password" id="add-net-pass" placeholder="Passphrase (optional)" class="input-text">
+          <input type="number" id="add-net-prio" placeholder="Priority (1-100)" value="50" min="1" max="100" class="input-text">
+        </div>
+        <div style="display:flex; justify-content:flex-end;">
+          <button id="btn-save-net" class="btn btn-primary btn-tiny">Save Network</button>
+        </div>
       </div>
     </section>
 
@@ -88,10 +244,13 @@
           <span id="ota-status" class="status-msg"></span>
         </div>
         <div class="ota-box">
-          <h3>Catalog Update (.json)</h3>
-          <p class="subtext">Uploads rules and restarts engine</p>
-          <input type="file" id="catalog-input" accept=".json" class="file-input">
-          <span id="catalog-status" class="status-msg"></span>
+          <h3>Automations Sync (.json)</h3>
+          <p class="subtext">Pull or push active rules on LittleFS</p>
+          <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
+            <button id="btn-download-automations" class="btn btn-secondary btn-tiny" style="flex:1;">Download Rules</button>
+          </div>
+          <input type="file" id="automations-input" accept=".json" class="file-input">
+          <span id="automations-status" class="status-msg"></span>
         </div>
       </div>
     </section>

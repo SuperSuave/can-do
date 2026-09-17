@@ -1,0 +1,54 @@
+#ifndef __PRECONDITION_H__
+#define __PRECONDITION_H__
+
+#include <stdbool.h>
+#include <stdint.h>
+#include "hsm.h"
+#include "can.h"
+#include "driver/twai.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void precondition_init(void);
+void precondition_can_rx_hook(twai_message_t *to_push, can_bus_t rx_bus);
+fwd_result_t precondition_fwd_hook(twai_message_t *to_send, can_bus_t fwd_bus);
+void precondition_tick(void);
+
+typedef struct {
+    int8_t min_c;
+    int8_t max_c;
+    int64_t updated_at_us;
+} precondition_temperature_t;
+
+bool precondition_get_battery_temperature(precondition_temperature_t *out);
+
+typedef struct {
+    bool requested;
+    bool active;
+    bool starting;
+} precondition_state_t;
+
+void precondition_toggle_request(void);
+void precondition_start_request(int mode);
+void precondition_stop_request(void);
+void precondition_execute_action(const char *mode, const char *action);
+bool precondition_get_state(precondition_state_t *out);
+
+// SoC on 0x2FC frame is transmitted in half-percent steps.
+#define BATTERY_SOC_SCALE 0.5f
+
+typedef struct {
+    // raw byte from the frame; percent is raw * BATTERY_SOC_SCALE
+    uint8_t raw;
+    int64_t updated_at_us;
+} precondition_soc_t;
+
+bool precondition_get_battery_soc(precondition_soc_t *out);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

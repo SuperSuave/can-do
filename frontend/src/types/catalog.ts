@@ -23,6 +23,9 @@ export interface CommandNetwork {
   state_can_id?: string;
   action_can_id?: string;
   delay_ms?: number;
+  flow_control_can_id?: string;
+  trigger_frame_can_id?: string;
+  transports?: Record<string, { tx_id: string; flow_control_id: string }>;
 }
 
 export interface CommandHaMetadata {
@@ -35,6 +38,7 @@ export interface CommandOption {
   label: string;
   payload?: string | ByteMap;
   match?: ByteMap;
+  mask?: string | ByteMap;
   from_payload?: string;
   to_payload?: string;
   match_payload?: string;
@@ -42,6 +46,8 @@ export interface CommandOption {
   action_can_id?: string;
   steps?: CommandStep[];
   popup?: string;
+  popup_message?: string;
+  level?: 'info' | 'warning' | 'error';
   default?: boolean;
   repeat?: number;
   requires_feature?: string;
@@ -69,6 +75,7 @@ export interface Command {
   network?: CommandNetwork;
   ha_metadata?: CommandHaMetadata;
   match?: ByteMap;
+  mask?: string | ByteMap;
   state_can_id?: string;
   action_can_id?: string;
   bus?: number;

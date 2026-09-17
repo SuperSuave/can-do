@@ -9,6 +9,11 @@ class CanDoDashboard {
     this.autoScrollChk = document.getElementById('chk-autoscroll');
     this.filterInput = document.getElementById('filter-input');
 
+    // Sniffer State
+    this.snifferPaused = false;
+    this.snifferFrames = new Map(); // id -> { id, dlc, data, count, ts }
+    this.snifferOrder = [];
+
     this.initEvents();
     this.connect();
   }
@@ -20,7 +25,7 @@ class CanDoDashboard {
 
     this.ws.onopen = () => {
       this.updateStatus(true);
-      this.syncInitialStates();
+      this.syncAllStates();
     };
 
     this.ws.onmessage = (event) => {
@@ -30,6 +35,8 @@ class CanDoDashboard {
           this.appendLog(data.msg);
         } else if (data.type === 'state') {
           this.updateEntityState(data.entity, data.state);
+        } else if (data.type === 'can_frame') {
+          this.handleCanFrame(data);
         }
       } catch (err) {
         this.appendLog(event.data);
@@ -57,6 +64,15 @@ class CanDoDashboard {
     }
   }
 
+  async syncAllStates() {
+    await Promise.all([
+      this.syncInitialStates(),
+      this.syncSystemStatus(),
+      this.syncWifiStatus(),
+      this.syncKnownNetworks()
+    ]);
+  }
+
   async syncInitialStates() {
     try {
       const res = await fetch('/api/states');
@@ -66,13 +82,209 @@ class CanDoDashboard {
       const statEnt = document.getElementById('stat-entities');
       if (statEnt) statEnt.textContent = this.entities.length;
 
-      const statAuto = document.getElementById('stat-automations');
-      if (statAuto) statAuto.textContent = '1';
-
       this.renderEntityGrid();
     } catch (e) {
       console.error('Failed to fetch states', e);
     }
+  }
+
+  async syncSystemStatus() {
+    try {
+      const res = await fetch('/api/system/status');
+      if (!res.ok) return;
+      const data = await res.json();
+
+      // Automations toggle
+      const autoChk = document.getElementById('toggle-automations');
+      const autoLbl = document.getElementById('label-automations-state');
+      const statAuto = document.getElementById('stat-automations-toggle');
+      if (autoChk) autoChk.checked = data.automations_enabled;
+      if (autoLbl) {
+        autoLbl.textContent = data.automations_enabled ? 'ENABLED' : 'DISABLED';
+        autoLbl.style.color = data.automations_enabled ? 'var(--accent-emerald)' : 'var(--text-muted)';
+      }
+      if (statAuto) {
+        statAuto.textContent = data.automations_enabled ? 'Active' : 'Paused';
+        statAuto.style.color = data.automations_enabled ? 'var(--accent-emerald)' : 'var(--text-muted)';
+      }
+
+      // Sniffer toggle
+      const sniffChk = document.getElementById('toggle-sniffer');
+      const sniffLbl = document.getElementById('label-sniffer-state');
+      const sniffAlert = document.getElementById('sniffer-alert');
+      const statSniff = document.getElementById('stat-sniffer');
+      if (sniffChk) sniffChk.checked = data.sniffer_mode;
+      if (sniffLbl) {
+        sniffLbl.textContent = data.sniffer_mode ? 'ACTIVE' : 'INACTIVE';
+        sniffLbl.style.color = data.sniffer_mode ? 'var(--accent-amber)' : 'var(--text-muted)';
+      }
+      if (sniffAlert) sniffAlert.style.display = data.sniffer_mode ? 'flex' : 'none';
+      if (statSniff) {
+        statSniff.textContent = data.sniffer_mode ? 'Active' : 'Off';
+        statSniff.style.color = data.sniffer_mode ? 'var(--accent-amber)' : 'var(--text-muted)';
+      }
+
+      // Hardware listen only
+      const hwChk = document.getElementById('chk-hw-listen-only');
+      const twaiModeLbl = document.getElementById('twai-mode-status');
+      if (hwChk) hwChk.checked = data.hardware_listen_only;
+      if (twaiModeLbl) {
+        twaiModeLbl.textContent = data.hardware_listen_only ? 'TWAI Mode: LISTEN-ONLY (No ACK)' : 'TWAI Mode: NORMAL (ACK)';
+        twaiModeLbl.style.color = data.hardware_listen_only ? 'var(--accent-amber)' : 'var(--text-muted)';
+      }
+
+      // GVRET clients badge
+      const gvretBadge = document.getElementById('gvret-badge');
+      if (gvretBadge) {
+        gvretBadge.textContent = `GVRET: ${data.gvret_clients}`;
+        gvretBadge.style.background = data.gvret_clients > 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(6, 182, 212, 0.15)';
+        gvretBadge.style.color = data.gvret_clients > 0 ? 'var(--accent-emerald)' : 'var(--accent-cyan)';
+      }
+    } catch (e) {
+      console.error('Failed to fetch system status', e);
+    }
+  }
+
+  async syncWifiStatus() {
+    try {
+      const res = await fetch('/api/wifi/status');
+      if (!res.ok) return;
+      const data = await res.json();
+
+      const staStatus = document.getElementById('net-sta-status');
+      const staIp = document.getElementById('net-sta-ip');
+      const apStatus = document.getElementById('net-ap-status');
+      const apSelect = document.getElementById('select-ap-mode');
+      const statWifi = document.getElementById('stat-wifi-link');
+
+      if (staStatus) {
+        if (data.sta_connected) {
+          staStatus.textContent = `Connected to "${data.sta_ssid}" (${data.sta_rssi} dBm)`;
+          staStatus.style.color = 'var(--accent-emerald)';
+        } else {
+          staStatus.textContent = 'Disconnected';
+          staStatus.style.color = 'var(--text-muted)';
+        }
+      }
+
+      if (staIp) {
+        staIp.textContent = data.sta_connected ? `${data.sta_ip} (GW: ${data.sta_gw})` : '0.0.0.0';
+      }
+
+      if (apStatus) {
+        if (data.ap_active) {
+          apStatus.textContent = `Active: "${data.ap_ssid}" (${data.ap_ip}) [Clients: ${data.ap_clients}]`;
+          apStatus.style.color = 'var(--accent-cyan)';
+        } else {
+          apStatus.textContent = 'Torn Down (STA Connected)';
+          apStatus.style.color = 'var(--text-muted)';
+        }
+      }
+
+      if (apSelect) {
+        apSelect.value = data.ap_mode || 'auto';
+      }
+
+      if (statWifi) {
+        if (data.sta_connected) {
+          statWifi.textContent = data.sta_ssid;
+          statWifi.style.color = 'var(--accent-emerald)';
+        } else if (data.ap_active) {
+          statWifi.textContent = 'SoftAP';
+          statWifi.style.color = 'var(--accent-cyan)';
+        } else {
+          statWifi.textContent = 'Offline';
+          statWifi.style.color = 'var(--accent-rose)';
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch wifi status', e);
+    }
+  }
+
+  async syncKnownNetworks() {
+    try {
+      const res = await fetch('/api/wifi/networks');
+      if (!res.ok) return;
+      const networks = await res.json();
+      const tbody = document.getElementById('known-nets-tbody');
+      if (!tbody) return;
+
+      if (!networks || networks.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:var(--text-muted); padding:0.6rem;">No stored networks. Add one below.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = networks.map(net => `
+        <tr>
+          <td style="font-weight:600; color:#fff;">${net.ssid}</td>
+          <td><span class="entity-badge" style="background:#1e293b; color:#93c5fd;">Prio: ${net.priority}</span></td>
+          <td>
+            <button class="btn btn-danger btn-tiny" onclick="window.dashboard.removeNetwork('${net.ssid}')">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    } catch (e) {
+      console.error('Failed fetching networks', e);
+    }
+  }
+
+  handleCanFrame(frame) {
+    if (this.snifferPaused) return;
+
+    const key = frame.id;
+    let existing = this.snifferFrames.get(key);
+    const now = new Date().toLocaleTimeString();
+
+    if (existing) {
+      existing.data = frame.data;
+      existing.dlc = frame.dlc;
+      existing.ts = now;
+      existing.count++;
+    } else {
+      existing = {
+        id: frame.id,
+        extd: frame.extd,
+        dlc: frame.dlc,
+        data: frame.data,
+        ts: now,
+        count: 1
+      };
+      this.snifferFrames.set(key, existing);
+      this.snifferOrder.unshift(key);
+      if (this.snifferOrder.length > 50) {
+        const removed = this.snifferOrder.pop();
+        this.snifferFrames.delete(removed);
+      }
+    }
+
+    this.renderSnifferTable();
+  }
+
+  renderSnifferTable() {
+    const tbody = document.getElementById('sniffer-tbody');
+    if (!tbody) return;
+
+    if (this.snifferOrder.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:1rem;">Listening for CAN traffic...</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = this.snifferOrder.map(key => {
+      const f = this.snifferFrames.get(key);
+      if (!f) return '';
+      // Format spaced hex bytes: e.g. "00 11 22"
+      const hexSpaced = (f.data.match(/.{1,2}/g) || []).join(' ');
+      return `
+        <tr>
+          <td style="color:var(--text-muted);">${f.ts}</td>
+          <td><span class="can-id-badge">${f.id}</span></td>
+          <td>${f.dlc}</td>
+          <td><span class="can-data-hex">${hexSpaced}</span></td>
+          <td style="font-weight:700; color:var(--accent-cyan);">${f.count}</td>
+        </tr>
+      `;
+    }).join('');
   }
 
   renderEntityGrid() {
@@ -165,6 +377,22 @@ class CanDoDashboard {
     }
   }
 
+  async removeNetwork(ssid) {
+    if (!confirm(`Delete stored Wi-Fi network "${ssid}"?`)) return;
+    try {
+      const res = await fetch('/api/wifi/networks', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ssid })
+      });
+      if (res.ok) {
+        this.syncKnownNetworks();
+      }
+    } catch (err) {
+      alert('Failed to remove network: ' + err.message);
+    }
+  }
+
   initEvents() {
     this.filterInput?.addEventListener('input', () => this.renderEntityGrid());
 
@@ -175,6 +403,142 @@ class CanDoDashboard {
       if (this.terminal) this.terminal.innerHTML = '';
     });
 
+    // Automations execution toggle
+    document.getElementById('toggle-automations')?.addEventListener('change', async (e) => {
+      const enabled = e.target.checked;
+      try {
+        await fetch('/api/system/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ automations_enabled: enabled })
+        });
+        this.syncSystemStatus();
+      } catch (err) {
+        console.error('Failed toggling automations', err);
+      }
+    });
+
+    // Sniffer mode toggle
+    document.getElementById('toggle-sniffer')?.addEventListener('change', async (e) => {
+      const enabled = e.target.checked;
+      const hwListen = document.getElementById('chk-hw-listen-only')?.checked || false;
+      try {
+        await fetch('/api/system/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sniffer_mode: enabled, hardware_listen_only: hwListen })
+        });
+        this.syncSystemStatus();
+      } catch (err) {
+        console.error('Failed toggling sniffer mode', err);
+      }
+    });
+
+    // Hardware listen-only toggle
+    document.getElementById('chk-hw-listen-only')?.addEventListener('change', async (e) => {
+      const hwListen = e.target.checked;
+      const snifferActive = document.getElementById('toggle-sniffer')?.checked || false;
+      try {
+        await fetch('/api/system/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sniffer_mode: snifferActive, hardware_listen_only: hwListen })
+        });
+        this.syncSystemStatus();
+      } catch (err) {
+        console.error('Failed updating hardware listen-only mode', err);
+      }
+    });
+
+    // Sniffer table controls
+    const btnPauseSniffer = document.getElementById('btn-pause-sniffer');
+    btnPauseSniffer?.addEventListener('click', () => {
+      this.snifferPaused = !this.snifferPaused;
+      btnPauseSniffer.textContent = this.snifferPaused ? 'Resume' : 'Pause';
+      btnPauseSniffer.className = this.snifferPaused ? 'btn btn-primary btn-tiny' : 'btn btn-secondary btn-tiny';
+    });
+
+    document.getElementById('btn-clear-sniffer')?.addEventListener('click', () => {
+      this.snifferFrames.clear();
+      this.snifferOrder = [];
+      this.renderSnifferTable();
+    });
+
+    // AP Fallback mode change
+    document.getElementById('select-ap-mode')?.addEventListener('change', async (e) => {
+      const mode = e.target.value;
+      try {
+        await fetch('/api/wifi/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ap_mode: mode })
+        });
+        this.syncWifiStatus();
+      } catch (err) {
+        console.error('Failed updating AP mode', err);
+      }
+    });
+
+    // Scan Wi-Fi Networks
+    document.getElementById('btn-scan-wifi')?.addEventListener('click', async () => {
+      const scanCont = document.getElementById('scan-container');
+      const scanList = document.getElementById('scan-list');
+      if (scanCont) scanCont.style.display = 'block';
+      if (scanList) scanList.innerHTML = `<div style="padding:0.5rem; color:var(--text-muted);">Scanning 2.4GHz Wi-Fi channels (non-blocking)...</div>`;
+
+      try {
+        const res = await fetch('/api/wifi/scan');
+        const data = await res.json();
+        const results = data.results || [];
+
+        if (results.length === 0) {
+          scanList.innerHTML = `<div style="padding:0.5rem; color:var(--text-muted);">Scan in progress or no networks found. Click again in a moment.</div>`;
+          return;
+        }
+
+        scanList.innerHTML = results.map(ap => `
+          <div class="scan-item" onclick="window.dashboard.selectScannedNetwork('${ap.ssid}')">
+            <span style="font-weight:600; color:#fff;">${ap.ssid}</span>
+            <span class="subtext" style="color:var(--accent-cyan);">${ap.rssi} dBm ${ap.in_known_list ? '★ Stored' : ''}</span>
+          </div>
+        `).join('');
+      } catch (err) {
+        scanList.innerHTML = `<div style="padding:0.5rem; color:var(--accent-rose);">Scan failed: ${err.message}</div>`;
+      }
+    });
+
+    // Add Stored Network
+    document.getElementById('btn-save-net')?.addEventListener('click', async () => {
+      const ssidInput = document.getElementById('add-net-ssid');
+      const passInput = document.getElementById('add-net-pass');
+      const prioInput = document.getElementById('add-net-prio');
+
+      const ssid = ssidInput?.value.trim();
+      const password = passInput?.value || '';
+      const priority = parseInt(prioInput?.value || '50', 10);
+
+      if (!ssid) {
+        alert('Please provide an SSID.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/wifi/networks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ssid, password, priority })
+        });
+        if (res.ok) {
+          if (ssidInput) ssidInput.value = '';
+          if (passInput) passInput.value = '';
+          this.syncKnownNetworks();
+          this.syncWifiStatus();
+        }
+      } catch (err) {
+        alert('Failed saving network: ' + err.message);
+      }
+    });
+
     // OTA Firmware Upload
     const fwInput = document.getElementById('firmware-input');
     fwInput?.addEventListener('change', (e) => {
@@ -183,13 +547,40 @@ class CanDoDashboard {
       this.uploadFile(file, '/api/ota', null, 'ota-progress', 'ota-status');
     });
 
-    // Catalog Upload
-    const catInput = document.getElementById('catalog-input');
-    catInput?.addEventListener('change', (e) => {
+    // Automations Download
+    document.getElementById('btn-download-automations')?.addEventListener('click', async () => {
+      try {
+        const res = await fetch('/api/automations');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'automations.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        alert('Failed to download automations: ' + err.message);
+      }
+    });
+
+    // Automations Upload
+    const autoInput = document.getElementById('automations-input');
+    autoInput?.addEventListener('change', (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      this.uploadFile(file, '/api/upload', '/spiffs/catalog/can_do_catalog.json', null, 'catalog-status');
+      this.uploadFile(file, '/api/automations', null, null, 'automations-status');
     });
+  }
+
+  selectScannedNetwork(ssid) {
+    const ssidInput = document.getElementById('add-net-ssid');
+    if (ssidInput) {
+      ssidInput.value = ssid;
+      document.getElementById('add-net-pass')?.focus();
+    }
   }
 
   uploadFile(file, url, destHeader, progId, statusId) {
