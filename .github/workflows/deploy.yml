@@ -30,6 +30,14 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'frontend/package-lock.json'
 
+      - name: Verify frontend lockfile
+        working-directory: frontend
+        run: |
+          pwd
+          test -f package.json
+          test -f package-lock.json
+          ls -la
+
       - name: Install Dependencies
         working-directory: frontend
         run: npm ci
