@@ -51,6 +51,9 @@ jobs:
         with:
           submodules: "recursive"
 
+      - name: Ensure ccache directory exists
+        run: mkdir -p ~/.ccache
+
       - name: Cache ccache
         uses: actions/cache@v4
         with:
@@ -68,7 +71,7 @@ jobs:
           path: "firmware"
           extra_docker_args: "-e IDF_CCACHE_ENABLE=1 -v ~/.ccache:/root/.ccache"
           command: |
-            sh -c "idf.py build && esptool.py --chip ${{ inputs.target || 'esp32c3' }} merge_bin -o build/can-do-${{ inputs.target || 'esp32c3' }}-merged.bin @build/flash_args"
+            sh -c "idf.py build && cd build && esptool.py --chip ${{ inputs.target || 'esp32c3' }} merge_bin -o can-do-${{ inputs.target || 'esp32c3' }}-merged.bin @flash_args"
 
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
