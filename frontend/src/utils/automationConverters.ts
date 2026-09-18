@@ -130,12 +130,17 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
   }
 
   if (act.type === 'climate_target') {
+    const isPass = act.zone === 'passenger' || act.zone === 'pass';
+    const tempC = act.target_temp_c ?? act.target_c ?? 21.0;
+    const clamped = Math.max(17.0, Math.min(27.5, tempC));
+    const rawVal = Math.min(0x1A, Math.max(0x06, 0x06 + Math.round((clamped - 17.0) * 2.0)));
+    const hexVal = '0x' + rawVal.toString(16).toUpperCase().padStart(2, '0');
     return {
-      type: 'climate_target',
-      target_c: act.target_temp_c ?? act.target_c ?? 21.0,
-      zone: act.zone || 'driver',
-      sync_on: act.sync_on ?? false,
-      driver_only: act.driver_only ?? false
+      type: 'transmit',
+      can_id: '0x4A0',
+      bus: 0,
+      payload: isPass ? { D8: hexVal } : { D2: hexVal },
+      repeat: 1
     };
   }
 
@@ -155,12 +160,17 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
 
     if (cmd) {
       if (cmd.type === 'climate_target') {
+        const isPass = act.zone === 'passenger' || act.zone === 'pass';
+        const tempC = act.target_temp_c ?? (cmd as any).target_temp_c ?? 21.0;
+        const clamped = Math.max(17.0, Math.min(27.5, tempC));
+        const rawVal = Math.min(0x1A, Math.max(0x06, 0x06 + Math.round((clamped - 17.0) * 2.0)));
+        const hexVal = '0x' + rawVal.toString(16).toUpperCase().padStart(2, '0');
         return {
-          type: 'climate_target',
-          target_c: act.target_temp_c ?? (cmd as any).target_temp_c ?? 21.0,
-          zone: act.zone || (cmd as any).climate_zone || 'driver',
-          sync_on: act.sync_on ?? (cmd as any).climate_sync_on ?? true,
-          driver_only: act.driver_only ?? (cmd as any).climate_driver_only ?? false
+          type: 'transmit',
+          can_id: '0x4A0',
+          bus: 0,
+          payload: isPass ? { D8: hexVal } : { D2: hexVal },
+          repeat: 1
         };
       }
 

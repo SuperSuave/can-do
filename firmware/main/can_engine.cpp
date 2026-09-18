@@ -76,79 +76,6 @@ bool can_state_cache_get(uint32_t can_id, uint8_t byte_index, uint32_t* out_val)
     return false;
 }
 
-#define CLIMATE_CMD_CAN_ID 0x2CF  /* Corrected CAN ID from 0x49F */
-
-void cando_execute_climate_target(float target_c, const char *zone, bool sync_on, bool driver_only)
-{
-    if (target_c < 14.0f) target_c = 14.0f;
-    if (target_c > 32.0f) target_c = 32.0f;
-
-    bool is_passenger = (zone && (strcasecmp(zone, "passenger") == 0 || strcasecmp(zone, "pass") == 0));
-    uint8_t target_raw = (uint8_t)((int)roundf((target_c - 14.0f) * 2.0f));
-
-    /* 1. Pull current raw state directly from the RAM state cache (0x380) */
-    uint32_t state_val = 0;
-    bool has_state = can_state_cache_get(0x380, is_passenger ? 4 : 3, &state_val);
-    
-    uint8_t cur_raw = 14; /* Default fallback 21.0C */
-    if (has_state && state_val > 0 && state_val <= 36) {
-        cur_raw = (uint8_t)state_val;
-    }
-
-    int delta = (int)target_raw - (int)cur_raw;
-    if (delta == 0) {
-        ESP_LOGI(TAG, "Cabin temp already at target (raw=%d, target_c=%.1f)", cur_raw, target_c);
-        return;
-    }
-
-    int steps = (delta > 0) ? delta : -delta;
-    if (steps > 28) steps = 28;
-
-    ESP_LOGI(TAG, "Adjusting Temp [%s]: cur=%d -> target=%d, steps=%d",
-             is_passenger ? "PASS" : "DRIV", cur_raw, target_raw, steps);
-
-    /* 2. Determine payload structure based on packet capture */
-    // Driver Up:   Byte 1 = 0x01, Byte 2 = 0xFF
-    // Driver Down: Byte 1 = 0x80, Byte 2 = 0xFF
-    // Pass Up:     Byte 1 = 0xFF, Byte 2 = 0x01
-    // Pass Down:   Byte 1 = 0xFF, Byte 2 = 0x80
-    uint8_t val_b1 = is_passenger ? 0xFF : (delta > 0 ? 0x01 : 0x80);
-    uint8_t val_b2 = is_passenger ? (delta > 0 ? 0x01 : 0x80) : 0xFF;
-
-    /* Rolling sequence nibble array: 0x0F -> 0x1F -> 0x2F */
-    const uint8_t seq_counters[3] = { 0x0F, 0x1F, 0x2F };
-
-    for (int i = 0; i < steps; i++) {
-        /* Cycle through the rolling counter for each step */
-        uint8_t counter_val = seq_counters[i % 3];
-
-        /* Send the 3 required repetition frames per step */
-        for (int rep = 0; rep < 3; rep++) {
-            twai_message_t tx_msg = {};
-            tx_msg.identifier = CLIMATE_CMD_CAN_ID;
-            tx_msg.extd = 0;
-            tx_msg.data_length_code = 8;
-            tx_msg.data[0] = counter_val;
-            tx_msg.data[1] = val_b1;
-            tx_msg.data[2] = val_b2;
-            can_send(CAN_BUS_0, &tx_msg, pdMS_TO_TICKS(10));
-            vTaskDelay(pdMS_TO_TICKS(20)); // Inter-frame pacing
-        }
-        
-        /* Brief pause between individual steps to let the HVAC ECU process */
-        vTaskDelay(pdMS_TO_TICKS(40));
-    }
-
-    if (sync_on && !driver_only) {
-        twai_message_t sync_msg = {};
-        sync_msg.identifier = 0x4A0;
-        sync_msg.extd = 0;
-        sync_msg.data_length_code = 8;
-        sync_msg.data[3] = 0x0B;
-        can_send(CAN_BUS_0, &sync_msg, pdMS_TO_TICKS(10));
-    }
-}
-
 void init_can_engine(void) {
     if (!tx_command_queue) {
         tx_command_queue = xQueueCreate(16, sizeof(CanBurstCmd*));
@@ -326,7 +253,19 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
         }
 
         if (step.type == ActionType::CLIMATE_TARGET) {
-            cando_execute_climate_target(step.target_temp_c, step.zone.c_str(), step.sync_on, step.driver_only);
+            bool is_pass = (step.zone == "passenger" || step.zone == "pass");
+            float t = step.target_temp_c;
+            if (t < 17.0f) t = 17.0f;
+            if (t > 27.5f) t = 27.5f;
+            uint8_t raw_val = 0x06 + (uint8_t)roundf((t - 17.0f) * 2.0f);
+            if (raw_val > 0x1A) raw_val = 0x1A;
+
+            twai_message_t tx_temp = {};
+            tx_temp.identifier = 0x4A0;
+            tx_temp.data_length_code = 8;
+            tx_temp.data[is_pass ? 7 : 1] = raw_val;
+            can_send(CAN_BUS_0, &tx_temp, pdMS_TO_TICKS(10));
+            ESP_LOGI(TAG, "Set Temp [0x4A0 %s]: %.1fC -> 0x%02X", is_pass ? "D8" : "D2", t, raw_val);
             continue;
         }
 

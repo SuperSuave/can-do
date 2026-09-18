@@ -1767,7 +1767,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D4 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
       },
       "network": {
         "bus": 0,
@@ -1775,7 +1775,7 @@
         "state_can_id": "0x380",
         "action_can_id": "0x4A0",
         "state_byte": "D2",
-        "action_byte": "D4",
+        "action_byte": "D2",
         "min": 62,
         "max": 82,
         "step": 1,
@@ -1790,7 +1790,7 @@
             "D2": "0x06"
           },
           "payload": {
-            "D4": "0x06"
+            "D2": "0x06"
           },
           "mask": "0xFF"
         },
@@ -1800,7 +1800,7 @@
             "D2": "0x07"
           },
           "payload": {
-            "D4": "0x07"
+            "D2": "0x07"
           },
           "mask": "0xFF"
         },
@@ -1810,7 +1810,7 @@
             "D2": "0x08"
           },
           "payload": {
-            "D4": "0x08"
+            "D2": "0x08"
           },
           "mask": "0xFF"
         },
@@ -1820,7 +1820,7 @@
             "D2": "0x09"
           },
           "payload": {
-            "D4": "0x09"
+            "D2": "0x09"
           },
           "mask": "0xFF"
         },
@@ -1830,7 +1830,7 @@
             "D2": "0x0A"
           },
           "payload": {
-            "D4": "0x0A"
+            "D2": "0x0A"
           },
           "mask": "0xFF"
         },
@@ -1840,7 +1840,7 @@
             "D2": "0x0B"
           },
           "payload": {
-            "D4": "0x0B"
+            "D2": "0x0B"
           },
           "mask": "0xFF"
         },
@@ -1850,7 +1850,7 @@
             "D2": "0x0C"
           },
           "payload": {
-            "D4": "0x0C"
+            "D2": "0x0C"
           },
           "mask": "0xFF"
         },
@@ -1860,7 +1860,7 @@
             "D2": "0x0D"
           },
           "payload": {
-            "D4": "0x0D"
+            "D2": "0x0D"
           },
           "mask": "0xFF"
         },
@@ -1870,7 +1870,7 @@
             "D2": "0x0E"
           },
           "payload": {
-            "D4": "0x0E"
+            "D2": "0x0E"
           },
           "mask": "0xFF",
           "default": true
@@ -1881,7 +1881,7 @@
             "D2": "0x0F"
           },
           "payload": {
-            "D4": "0x0F"
+            "D2": "0x0F"
           },
           "mask": "0xFF"
         },
@@ -1891,7 +1891,7 @@
             "D2": "0x10"
           },
           "payload": {
-            "D4": "0x10"
+            "D2": "0x10"
           },
           "mask": "0xFF"
         },
@@ -1901,7 +1901,7 @@
             "D2": "0x11"
           },
           "payload": {
-            "D4": "0x11"
+            "D2": "0x11"
           },
           "mask": "0xFF"
         },
@@ -1911,7 +1911,7 @@
             "D2": "0x12"
           },
           "payload": {
-            "D4": "0x12"
+            "D2": "0x12"
           },
           "mask": "0xFF"
         },
@@ -1921,7 +1921,7 @@
             "D2": "0x13"
           },
           "payload": {
-            "D4": "0x13"
+            "D2": "0x13"
           },
           "mask": "0xFF"
         },
@@ -1931,7 +1931,7 @@
             "D2": "0x14"
           },
           "payload": {
-            "D4": "0x14"
+            "D2": "0x14"
           },
           "mask": "0xFF"
         },
@@ -1941,7 +1941,7 @@
             "D2": "0x15"
           },
           "payload": {
-            "D4": "0x15"
+            "D2": "0x15"
           },
           "mask": "0xFF"
         },
@@ -1951,7 +1951,7 @@
             "D2": "0x16"
           },
           "payload": {
-            "D4": "0x16"
+            "D2": "0x16"
           },
           "mask": "0xFF"
         },
@@ -1961,7 +1961,7 @@
             "D2": "0x17"
           },
           "payload": {
-            "D4": "0x17"
+            "D2": "0x17"
           },
           "mask": "0xFF"
         },
@@ -1971,7 +1971,7 @@
             "D2": "0x18"
           },
           "payload": {
-            "D4": "0x18"
+            "D2": "0x18"
           },
           "mask": "0xFF"
         },
@@ -1981,7 +1981,7 @@
             "D2": "0x19"
           },
           "payload": {
-            "D4": "0x19"
+            "D2": "0x19"
           },
           "mask": "0xFF"
         },
@@ -1991,7 +1991,7 @@
             "D2": "0x1A"
           },
           "payload": {
-            "D4": "0x1A"
+            "D2": "0x1A"
           },
           "mask": "0xFF"
         },
@@ -2034,7 +2034,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D5 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
       },
       "network": {
         "bus": 0,
@@ -2042,7 +2042,7 @@
         "state_can_id": "0x380",
         "action_can_id": "0x4A0",
         "state_byte": "D3",
-        "action_byte": "D5",
+        "action_byte": "D8",
         "min": 62,
         "max": 82,
         "step": 1,
@@ -2057,7 +2057,7 @@
             "D3": "0x06"
           },
           "payload": {
-            "D5": "0x06"
+            "D8": "0x06"
           },
           "mask": "0xFF"
         },
@@ -2067,7 +2067,7 @@
             "D3": "0x07"
           },
           "payload": {
-            "D5": "0x07"
+            "D8": "0x07"
           },
           "mask": "0xFF"
         },
@@ -2077,7 +2077,7 @@
             "D3": "0x08"
           },
           "payload": {
-            "D5": "0x08"
+            "D8": "0x08"
           },
           "mask": "0xFF"
         },
@@ -2087,7 +2087,7 @@
             "D3": "0x09"
           },
           "payload": {
-            "D5": "0x09"
+            "D8": "0x09"
           },
           "mask": "0xFF"
         },
@@ -2097,7 +2097,7 @@
             "D3": "0x0A"
           },
           "payload": {
-            "D5": "0x0A"
+            "D8": "0x0A"
           },
           "mask": "0xFF"
         },
@@ -2107,7 +2107,7 @@
             "D3": "0x0B"
           },
           "payload": {
-            "D5": "0x0B"
+            "D8": "0x0B"
           },
           "mask": "0xFF"
         },
@@ -2117,7 +2117,7 @@
             "D3": "0x0C"
           },
           "payload": {
-            "D5": "0x0C"
+            "D8": "0x0C"
           },
           "mask": "0xFF"
         },
@@ -2127,7 +2127,7 @@
             "D3": "0x0D"
           },
           "payload": {
-            "D5": "0x0D"
+            "D8": "0x0D"
           },
           "mask": "0xFF"
         },
@@ -2137,7 +2137,7 @@
             "D3": "0x0E"
           },
           "payload": {
-            "D5": "0x0E"
+            "D8": "0x0E"
           },
           "mask": "0xFF",
           "default": true
@@ -2148,7 +2148,7 @@
             "D3": "0x0F"
           },
           "payload": {
-            "D5": "0x0F"
+            "D8": "0x0F"
           },
           "mask": "0xFF"
         },
@@ -2158,7 +2158,7 @@
             "D3": "0x10"
           },
           "payload": {
-            "D5": "0x10"
+            "D8": "0x10"
           },
           "mask": "0xFF"
         },
@@ -2168,7 +2168,7 @@
             "D3": "0x11"
           },
           "payload": {
-            "D5": "0x11"
+            "D8": "0x11"
           },
           "mask": "0xFF"
         },
@@ -2178,7 +2178,7 @@
             "D3": "0x12"
           },
           "payload": {
-            "D5": "0x12"
+            "D8": "0x12"
           },
           "mask": "0xFF"
         },
@@ -2188,7 +2188,7 @@
             "D3": "0x13"
           },
           "payload": {
-            "D5": "0x13"
+            "D8": "0x13"
           },
           "mask": "0xFF"
         },
@@ -2198,7 +2198,7 @@
             "D3": "0x14"
           },
           "payload": {
-            "D5": "0x14"
+            "D8": "0x14"
           },
           "mask": "0xFF"
         },
@@ -2208,7 +2208,7 @@
             "D3": "0x15"
           },
           "payload": {
-            "D5": "0x15"
+            "D8": "0x15"
           },
           "mask": "0xFF"
         },
@@ -2218,7 +2218,7 @@
             "D3": "0x16"
           },
           "payload": {
-            "D5": "0x16"
+            "D8": "0x16"
           },
           "mask": "0xFF"
         },
@@ -2228,7 +2228,7 @@
             "D3": "0x17"
           },
           "payload": {
-            "D5": "0x17"
+            "D8": "0x17"
           },
           "mask": "0xFF"
         },
@@ -2238,7 +2238,7 @@
             "D3": "0x18"
           },
           "payload": {
-            "D5": "0x18"
+            "D8": "0x18"
           },
           "mask": "0xFF"
         },
@@ -2248,7 +2248,7 @@
             "D3": "0x19"
           },
           "payload": {
-            "D5": "0x19"
+            "D8": "0x19"
           },
           "mask": "0xFF"
         },
@@ -2258,7 +2258,7 @@
             "D3": "0x1A"
           },
           "payload": {
-            "D5": "0x1A"
+            "D8": "0x1A"
           },
           "mask": "0xFF"
         },
@@ -2300,7 +2300,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Simultaneous driver and passenger target cabin temperature presets across 0x380 (state D2, D3) and 0x4A0 (action D4, D5)"
+        "notes": "Simultaneous driver and passenger target cabin temperature presets across 0x380 (state D2, D3) and 0x4A0 (action D2, D8)"
       },
       "network": {
         "bus": 0,
@@ -2316,8 +2316,8 @@
             "D3": "0x0E"
           },
           "payload": {
-            "D4": "0x0E",
-            "D5": "0x0E"
+            "D2": "0x0E",
+            "D8": "0x0E"
           },
           "default": true
         },
@@ -2328,8 +2328,8 @@
             "D3": "0x0C"
           },
           "payload": {
-            "D4": "0x0C",
-            "D5": "0x0C"
+            "D2": "0x0C",
+            "D8": "0x0C"
           }
         },
         {
@@ -2339,8 +2339,8 @@
             "D3": "0x10"
           },
           "payload": {
-            "D4": "0x10",
-            "D5": "0x10"
+            "D2": "0x10",
+            "D8": "0x10"
           }
         },
         {
@@ -2350,8 +2350,8 @@
             "D3": "0x08"
           },
           "payload": {
-            "D4": "0x08",
-            "D5": "0x08"
+            "D2": "0x08",
+            "D8": "0x08"
           }
         },
         {
@@ -2361,8 +2361,8 @@
             "D3": "0x14"
           },
           "payload": {
-            "D4": "0x14",
-            "D5": "0x14"
+            "D2": "0x14",
+            "D8": "0x14"
           }
         }
       ]
