@@ -16,6 +16,9 @@
 #include <algorithm>
 
 static const char* TAG = "WEB_API";
+extern std::string g_device_id;
+#define DEVICE_ID g_device_id
+
 httpd_handle_t global_web_server = nullptr;
 static vprintf_like_t original_log_vprintf = nullptr;
 
@@ -637,6 +640,7 @@ static esp_err_t api_post_automations_handler(httpd_req_t *req) {
 
 static esp_err_t api_system_status_handler(httpd_req_t *req) {
     cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "device_id", DEVICE_ID.c_str());
     cJSON_AddBoolToObject(root, "automations_enabled", g_automations_enabled.load());
     cJSON_AddBoolToObject(root, "sniffer_mode", g_sniffer_mode.load());
     cJSON_AddBoolToObject(root, "hardware_listen_only", g_hardware_listen_only.load());
