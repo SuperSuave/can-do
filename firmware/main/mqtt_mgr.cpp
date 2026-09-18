@@ -1,11 +1,13 @@
 #include "mqtt_mgr.h"
 #include "parser.h"
 #include "can_engine.h"
+#include "track_popup.h"
 #include "cJSON.h"
 #include "esp_log.h"
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <unordered_set>
 
 static const char* TAG = "MQTT_MGR";
 static const char* MQTT_CONFIG_FILE = "/spiffs/mqtt.json";
@@ -19,6 +21,41 @@ esp_mqtt_client_handle_t global_mqtt_client = nullptr;
 static std::mutex s_mqtt_mutex;
 static MqttConfig s_mqtt_cfg;
 static std::atomic<bool> s_mqtt_connected{false};
+static std::string s_lwt_topic;
+
+// Default monitored CAN IDs (Gen5W / E-GMP vehicle telemetry)
+static std::unordered_set<uint32_t> s_monitored_ids = {
+    0x038, 0x0A2, 0x130, 0x152, 0x1AC, 0x1CF, 0x226, 0x227,
+    0x2AD, 0x2AF, 0x2C0, 0x2FC, 0x31B, 0x380, 0x384, 0x3AA,
+    0x3C1, 0x411, 0x412, 0x414, 0x418, 0x435, 0x438, 0x442,
+    0x448, 0x474, 0x475, 0x476, 0x478, 0x47F, 0x496, 0x4CE,
+    0x540, 0x541, 0x594, 0x60E, 0x651, 0x652
+};
+static std::mutex s_monitored_mutex;
+
+void mqtt_mgr_publish_can_state(uint32_t can_id, const uint8_t* data, size_t len) {
+    if (!global_mqtt_client || !s_mqtt_connected.load()) return;
+    char topic[64];
+    snprintf(topic, sizeof(topic), "%s/%s/state/0x%03lX", MQTT_BASE_TOPIC.c_str(), DEVICE_ID.c_str(), (unsigned long)can_id);
+    char hex_payload[17] = {0};
+    for (size_t i = 0; i < len && i < 8; i++) {
+        snprintf(&hex_payload[i * 2], 3, "%02X", data[i]);
+    }
+    esp_mqtt_client_publish(global_mqtt_client, topic, hex_payload, 0, 1, 1);
+}
+
+void mqtt_mgr_set_monitored_ids(const std::vector<uint32_t>& ids) {
+    std::lock_guard<std::mutex> lock(s_monitored_mutex);
+    s_monitored_ids.clear();
+    for (uint32_t id : ids) {
+        s_monitored_ids.insert(id);
+    }
+}
+
+bool mqtt_mgr_is_monitored_id(uint32_t can_id) {
+    std::lock_guard<std::mutex> lock(s_monitored_mutex);
+    return s_monitored_ids.find(can_id) != s_monitored_ids.end();
+}
 
 static void publish_ha_discovery(esp_mqtt_client_handle_t client, const CanEntity& entity) {
     if (!client || entity.ha_domain.empty()) return;
@@ -64,14 +101,43 @@ static void publish_ha_discovery(esp_mqtt_client_handle_t client, const CanEntit
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
     auto event = static_cast<esp_mqtt_event_handle_t>(event_data);
     switch (event->event_id) {
-        case MQTT_EVENT_CONNECTED:
+        case MQTT_EVENT_CONNECTED: {
             s_mqtt_connected = true;
-            ESP_LOGI(TAG, "MQTT connected to broker. Publishing Home Assistant discovery & subscribing...");
+            ESP_LOGI(TAG, "MQTT connected to broker (%s)", s_mqtt_cfg.broker_url.c_str());
+
+            // 1. Publish LWT online status
+            std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/status";
+            esp_mqtt_client_publish(global_mqtt_client, status_topic.c_str(), "online", 6, 1, 1);
+
+            // 2. Subscribe to control topics
+            std::string tx_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/tx";
+            esp_mqtt_client_subscribe(global_mqtt_client, tx_topic.c_str(), 1);
+
+            std::string notify_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/notify";
+            esp_mqtt_client_subscribe(global_mqtt_client, notify_topic.c_str(), 1);
+
+            std::string sub_ids_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/subscribe_ids";
+            esp_mqtt_client_subscribe(global_mqtt_client, sub_ids_topic.c_str(), 1);
+
             esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/set/#").c_str(), 1);
+
+            // 3. Publish initial state of all currently cached monitored IDs
+            {
+                std::lock_guard<std::mutex> lock(s_monitored_mutex);
+                for (uint32_t can_id : s_monitored_ids) {
+                    uint8_t data[8] = {0};
+                    if (get_cached_can_frame(can_id, data)) {
+                        mqtt_mgr_publish_can_state(can_id, data, 8);
+                    }
+                }
+            }
+
+            // 4. Publish HA discovery if any global catalog entities exist
             for (const auto& entity : global_catalog) {
                 publish_ha_discovery(global_mqtt_client, entity);
             }
             break;
+        }
 
         case MQTT_EVENT_DISCONNECTED:
             s_mqtt_connected = false;
@@ -81,9 +147,108 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         case MQTT_EVENT_DATA: {
             std::string topic(event->topic, event->topic_len);
             std::string payload(event->data, event->data_len);
-            std::string base_path = MQTT_BASE_TOPIC + "/set/";
-            if (topic.rfind(base_path, 0) == 0) {
-                std::string entity_id = topic.substr(base_path.length());
+
+            std::string tx_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/tx";
+            std::string notify_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/notify";
+            std::string sub_ids_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/subscribe_ids";
+            std::string set_prefix = MQTT_BASE_TOPIC + "/set/";
+
+            if (topic == notify_topic) {
+                ESP_LOGI(TAG, "Received cluster notify request: %s", payload.c_str());
+                std::string msg = payload;
+                std::string level = "info";
+                cJSON* root = cJSON_Parse(payload.c_str());
+                if (root) {
+                    cJSON* m = cJSON_GetObjectItem(root, "message");
+                    if (!m) m = cJSON_GetObjectItem(root, "text");
+                    if (!m) m = cJSON_GetObjectItem(root, "popup_message");
+                    if (m && cJSON_IsString(m)) msg = m->valuestring;
+
+                    cJSON* l = cJSON_GetObjectItem(root, "level");
+                    if (l && cJSON_IsString(l)) level = l->valuestring;
+                    cJSON_Delete(root);
+                }
+                if (level == "warning") {
+                    track_popup_show_warning(msg.c_str());
+                } else if (level == "error") {
+                    track_popup_show_error(msg.c_str());
+                } else {
+                    track_popup_show_info(msg.c_str());
+                }
+            } else if (topic == tx_topic) {
+                ESP_LOGI(TAG, "Received raw action burst: %s", payload.c_str());
+                cJSON* root = cJSON_Parse(payload.c_str());
+                if (root) {
+                    uint32_t can_id = 0;
+                    cJSON* id_item = cJSON_GetObjectItem(root, "can_id");
+                    if (id_item && cJSON_IsString(id_item)) {
+                        can_id = strtoul(id_item->valuestring, nullptr, 0);
+                    } else if (id_item && cJSON_IsNumber(id_item)) {
+                        can_id = (uint32_t)id_item->valueint;
+                    }
+
+                    uint32_t delay_ms = 20;
+                    cJSON* del_item = cJSON_GetObjectItem(root, "delay_ms");
+                    if (del_item && cJSON_IsNumber(del_item)) {
+                        delay_ms = del_item->valueint;
+                    }
+
+                    std::vector<ActionStep> steps;
+                    cJSON* steps_arr = cJSON_GetObjectItem(root, "steps");
+                    if (steps_arr && cJSON_IsArray(steps_arr)) {
+                        int count = cJSON_GetArraySize(steps_arr);
+                        for (int i = 0; i < count; i++) {
+                            cJSON* s = cJSON_GetArrayItem(steps_arr, i);
+                            if (!s) continue;
+                            ActionStep step;
+                            step.type = ActionType::CAN_TX;
+                            step.can_id = can_id;
+                            step.repeat = 1;
+                            step.delay_ms = delay_ms;
+
+                            cJSON* rep = cJSON_GetObjectItem(s, "repeat");
+                            if (rep && cJSON_IsNumber(rep)) step.repeat = rep->valueint;
+
+                            cJSON* sdel = cJSON_GetObjectItem(s, "delay_ms");
+                            if (sdel && cJSON_IsNumber(sdel)) step.delay_ms = sdel->valueint;
+
+                            cJSON* pay = cJSON_GetObjectItem(s, "payload");
+                            if (pay && cJSON_IsString(pay)) {
+                                const char* hex = pay->valuestring;
+                                size_t hlen = strlen(hex);
+                                for (size_t b = 0; b < 8 && (b * 2 + 1) < hlen; b++) {
+                                    char byte_str[3] = {hex[b * 2], hex[b * 2 + 1], '\0'};
+                                    step.payload[b] = (uint8_t)strtoul(byte_str, nullptr, 16);
+                                }
+                            }
+                            steps.push_back(step);
+                        }
+                    }
+                    cJSON_Delete(root);
+
+                    if (!steps.empty()) {
+                        queue_action_steps(can_id, delay_ms, steps);
+                    }
+                }
+            } else if (topic == sub_ids_topic) {
+                cJSON* root = cJSON_Parse(payload.c_str());
+                if (root && cJSON_IsArray(root)) {
+                    std::vector<uint32_t> ids;
+                    int count = cJSON_GetArraySize(root);
+                    for (int i = 0; i < count; i++) {
+                        cJSON* itm = cJSON_GetArrayItem(root, i);
+                        if (itm && cJSON_IsString(itm)) {
+                            ids.push_back(strtoul(itm->valuestring, nullptr, 0));
+                        } else if (itm && cJSON_IsNumber(itm)) {
+                            ids.push_back((uint32_t)itm->valueint);
+                        }
+                    }
+                    mqtt_mgr_set_monitored_ids(ids);
+                    ESP_LOGI(TAG, "Updated monitored CAN IDs (%d IDs)", (int)ids.size());
+                }
+                if (root) cJSON_Delete(root);
+            } else if (topic.rfind(set_prefix, 0) == 0) {
+                std::string entity_id = topic.substr(set_prefix.length());
                 queue_entity_command(entity_id, payload);
             }
             break;
@@ -183,6 +348,14 @@ void mqtt_mgr_start(void) {
     if (!s_mqtt_cfg.password.empty()) {
         mqtt_cfg.credentials.authentication.password = s_mqtt_cfg.password.c_str();
     }
+
+    // Set LWT (Last Will and Testament)
+    s_lwt_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/status";
+    mqtt_cfg.session.last_will.topic = s_lwt_topic.c_str();
+    mqtt_cfg.session.last_will.msg = "offline";
+    mqtt_cfg.session.last_will.msg_len = 7;
+    mqtt_cfg.session.last_will.qos = 1;
+    mqtt_cfg.session.last_will.retain = 1;
 
     global_mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
     if (global_mqtt_client) {

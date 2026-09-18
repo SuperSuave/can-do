@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include <vector>
+#include <unordered_set>
 #include <atomic>
 #include "esp_err.h"
 #include "mqtt_client.h"
@@ -22,3 +24,7 @@ bool mqtt_mgr_is_connected(void);
 MqttConfig mqtt_mgr_get_config(void);
 bool mqtt_mgr_save_config(const MqttConfig& cfg);
 void mqtt_mgr_publish_discovery(void);
+
+void mqtt_mgr_publish_can_state(uint32_t can_id, const uint8_t* data, size_t len);
+void mqtt_mgr_set_monitored_ids(const std::vector<uint32_t>& ids);
+bool mqtt_mgr_is_monitored_id(uint32_t can_id);

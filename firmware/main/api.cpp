@@ -4,6 +4,7 @@
 #include "network_mgr.h"
 #include "gvret_server.h"
 #include "mqtt_mgr.h"
+#include "track_popup.h"
 #include "cJSON.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
@@ -922,6 +923,50 @@ static esp_err_t api_mqtt_post_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static esp_err_t api_notify_handler(httpd_req_t *req) {
+    char buf[256];
+    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (ret <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty request");
+        return ESP_FAIL;
+    }
+    buf[ret] = '\0';
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+    cJSON *msg_item = cJSON_GetObjectItem(root, "message");
+    if (!msg_item) msg_item = cJSON_GetObjectItem(root, "text");
+    std::string msg = (msg_item && cJSON_IsString(msg_item)) ? msg_item->valuestring : "";
+    cJSON *lvl_item = cJSON_GetObjectItem(root, "level");
+    std::string lvl = (lvl_item && cJSON_IsString(lvl_item)) ? lvl_item->valuestring : "info";
+    cJSON_Delete(root);
+
+    if (msg.empty()) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing message");
+        return ESP_FAIL;
+    }
+
+    bool sent = false;
+    if (lvl == "warning") {
+        sent = track_popup_show_warning(msg.c_str());
+    } else if (lvl == "error") {
+        sent = track_popup_show_error(msg.c_str());
+    } else {
+        sent = track_popup_show_info(msg.c_str());
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    if (sent) {
+        httpd_resp_sendstr(req, "{\"status\":\"ok\",\"message\":\"Notification queued for cluster\"}");
+        return ESP_OK;
+    } else {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to queue notification");
+        return ESP_FAIL;
+    }
+}
+
 static esp_err_t ws_handler(httpd_req_t *req) {
     return ESP_OK;
 }
@@ -950,6 +995,7 @@ httpd_handle_t start_webserver(void) {
 
         reg_uri("/api/states", HTTP_GET, api_states_handler);
         reg_uri("/api/command", HTTP_POST, api_command_handler);
+        reg_uri("/api/notify", HTTP_POST, api_notify_handler);
         reg_uri("/api/test_automation", HTTP_POST, api_test_automation_handler);
         reg_uri("/api/automations/diagnostics", HTTP_GET, api_automations_diagnostics_handler);
         reg_uri("/api/automations", HTTP_GET, api_get_automations_handler);

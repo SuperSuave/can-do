@@ -402,7 +402,49 @@ static fwd_result_t trigger_fwd(sm_t *sm, twai_message_t *msg,
     return FWD_PASSTHROUGH;
 }
 
+static void trigger_rx(sm_t *sm, const twai_message_t *msg, can_bus_t rx_bus) {
+    (void)rx_bus;
+    track_popup_t *service = owner(sm);
+    if (msg->identifier == TRACK_POPUP_MEDIA_FRAME_ID && msg->data_length_code >= 2U) {
+        if (!trigger_ctx.strategy_selected
+                && !select_active_media_strategy(service, msg->data[0])) {
+            select_fallback_strategy(service);
+        }
+
+        if (trigger_ctx.trigger_frames_remaining > 0U) {
+            twai_message_t inj = *msg;
+            inj.extd = 0;
+            inj.rtr = 0;
+            if (service->media_type_owned) {
+                inj.data[0] = TRACK_POPUP_FALLBACK_MEDIA_TYPE;
+            }
+            inj.data[1] = 0x11U;
+            can_send(TRACK_POPUP_TARGET_BUS, &inj, pdMS_TO_TICKS(10));
+            trigger_ctx.trigger_frames_remaining--;
+            ESP_LOGI(TAG, "Sent 0x4CE trigger injection (media=0x%02X, remaining=%u)",
+                     inj.data[0], trigger_ctx.trigger_frames_remaining);
+            if (trigger_ctx.trigger_frames_remaining == 0U) {
+                trigger_ctx.trigger_forwarded_at_us = sm_now(sm);
+            }
+        }
+    }
+}
+
 // ********************* sending state *********************
+
+static void popup_owned_rx(sm_t *sm, const twai_message_t *msg, can_bus_t rx_bus) {
+    (void)rx_bus;
+    track_popup_t *service = owner(sm);
+    if (service->media_type_owned
+            && msg->identifier == TRACK_POPUP_MEDIA_FRAME_ID
+            && msg->data_length_code >= 2U) {
+        twai_message_t inj = *msg;
+        inj.extd = 0;
+        inj.rtr = 0;
+        inj.data[0] = TRACK_POPUP_FALLBACK_MEDIA_TYPE;
+        can_send(TRACK_POPUP_TARGET_BUS, &inj, pdMS_TO_TICKS(10));
+    }
+}
 
 static void sending_tick(sm_t *sm) {
     track_popup_t *service = owner(sm);
@@ -420,6 +462,7 @@ static void sending_tick(sm_t *sm) {
 }
 
 static void sending_rx(sm_t *sm, const twai_message_t *msg, can_bus_t rx_bus) {
+    popup_owned_rx(sm, msg, rx_bus);
     isotp_tx_rx(&owner(sm)->isotp, msg, rx_bus);
 }
 
@@ -452,6 +495,10 @@ static void hold_tick(sm_t *sm) {
     }
 }
 
+static void hold_rx(sm_t *sm, const twai_message_t *msg, can_bus_t rx_bus) {
+    popup_owned_rx(sm, msg, rx_bus);
+}
+
 // ********************* state definitions *********************
 
 static const sm_state_t S_IDLE = {
@@ -466,6 +513,7 @@ static const sm_state_t S_TRIGGER = {
     .ctx_size = sizeof(trigger_ctx),
     .enter = trigger_enter,
     .tick = trigger_tick,
+    .rx = trigger_rx,
     .fwd = trigger_fwd,
 };
 
@@ -479,6 +527,7 @@ static const sm_state_t S_SENDING = {
 static const sm_state_t S_HOLD = {
     .name = "hold",
     .tick = hold_tick,
+    .rx = hold_rx,
     .fwd = popup_owned_fwd,
 };
 

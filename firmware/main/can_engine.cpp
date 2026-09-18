@@ -13,6 +13,7 @@
 #include "precondition.h"
 #include "board_pins.h"
 #include "can.h"
+#include "mqtt_mgr.h"
 
 #if defined(_WIN32) && !defined(__GNUC__)
 #define strcasecmp _stricmp
@@ -252,23 +253,6 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             continue;
         }
 
-        if (step.type == ActionType::CLIMATE_TARGET) {
-            bool is_pass = (step.zone == "passenger" || step.zone == "pass");
-            float t = step.target_temp_c;
-            if (t < 17.0f) t = 17.0f;
-            if (t > 27.5f) t = 27.5f;
-            uint8_t raw_val = 0x06 + (uint8_t)roundf((t - 17.0f) * 2.0f);
-            if (raw_val > 0x1A) raw_val = 0x1A;
-
-            twai_message_t tx_temp = {};
-            tx_temp.identifier = 0x4A0;
-            tx_temp.data_length_code = 8;
-            tx_temp.data[is_pass ? 7 : 1] = raw_val;
-            can_send(CAN_BUS_0, &tx_temp, pdMS_TO_TICKS(10));
-            ESP_LOGI(TAG, "Set Temp [0x4A0 %s]: %.1fC -> 0x%02X", is_pass ? "D8" : "D2", t, raw_val);
-            continue;
-        }
-
         if (step.type == ActionType::PRECONDITION) {
             precondition_execute_action(step.precon_mode.c_str(), step.precon_action.c_str());
             continue;
@@ -452,6 +436,13 @@ void can_rx_task(void* arg) {
 
             // 1. Always update state cache
             update_state_cache(rx_msg.identifier, rx_msg.data);
+
+            // Publish state change to MQTT if this CAN ID is monitored
+            if (!has_prev || memcmp(prev_data, rx_msg.data, 8) != 0) {
+                if (mqtt_mgr_is_monitored_id(rx_msg.identifier)) {
+                    mqtt_mgr_publish_can_state(rx_msg.identifier, rx_msg.data, rx_msg.data_length_code);
+                }
+            }
 
             // 2. Evaluate automations if globally enabled
             if (g_automations_enabled.load()) {
