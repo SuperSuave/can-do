@@ -9,6 +9,7 @@ import {
   AutomationAction
 } from '../types/automation';
 import { Command, CommandOption, Catalog, ByteMap } from '../types/catalog';
+import { DEFAULT_CATALOG } from '../data/defaultCatalog';
 
 /**
  * Cleanly compiles any payload or glob into a strict 1-based ByteMap ({ D1: "0x.." })
@@ -45,58 +46,35 @@ export function compileToByteMap(input: string | ByteMap | undefined): ByteMap {
 }
 
 /**
- * Compiles an AutomationCondition into a structured logic block (and/or/not) or masked leaf
+ * Compiles a condition into standard CAN Do schema
  */
 export function compileCondition(cond: AutomationCondition): any {
-  if (cond.logic === 'and' || cond.type === 'and' || cond.type === 'and_group' || Array.isArray(cond.and)) {
-    const subConds = cond.and || cond.conditions || [];
-    return {
-      logic: 'and',
-      conditions: subConds.map(compileCondition)
-    };
-  }
-  if (cond.logic === 'or' || cond.type === 'or' || cond.type === 'or_group' || Array.isArray(cond.or)) {
-    const subConds = cond.or || cond.conditions || [];
-    return {
-      logic: 'or',
-      conditions: subConds.map(compileCondition)
-    };
-  }
-  if (cond.logic === 'not' || cond.type === 'not' || cond.type === 'not_group' || cond.not !== undefined) {
-    let subConds: AutomationCondition[] = [];
-    if (Array.isArray(cond.not)) {
-      subConds = cond.not;
-    } else if (cond.not && typeof cond.not === 'object') {
-      subConds = [cond.not as AutomationCondition];
-    } else {
-      subConds = cond.conditions || [];
-    }
-    return {
-      logic: 'not',
-      conditions: subConds.map(compileCondition)
-    };
+  if (cond.logic === 'and' || cond.logic === 'or' || cond.logic === 'not') {
+    const subConds = (cond.conditions || []).map(compileCondition);
+    if (cond.logic === 'and') return { and: subConds };
+    if (cond.logic === 'or') return { or: subConds };
+    if (cond.logic === 'not') return { not: subConds[0] || {} };
   }
 
-  // Triggered by condition
-  if (cond.type === 'triggered_by' || cond.type === 'trigger' || cond.trigger_id !== undefined) {
-    return {
-      type: 'triggered_by',
-      trigger_id: cond.trigger_id || ''
-    };
-  }
-
-  // Time window condition
-  if (cond.type === 'time_condition' || cond.type === 'time' || (cond.start_time && cond.end_time)) {
+  if (cond.type === 'time_condition' || cond.type === 'time') {
     return {
       type: 'time_condition',
       start_time: cond.start_time || '08:00',
       end_time: cond.end_time || '18:00',
-      days: cond.days && cond.days.length > 0 ? cond.days : ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+      days: cond.days && cond.days.length > 0 ? cond.days : ['mon', 'tue', 'wed', 'thu', 'fri']
     };
   }
 
-  // Leaf CAN condition
-  const match = compileToByteMap(cond.match || cond.match_payload);
+  if (cond.type === 'param_range' || cond.type === 'voltage') {
+    return {
+      type: 'param_range',
+      can_id: cond.can_id || '0x100',
+      operator: cond.operator || (cond.voltage_dir === 'above' ? 'greater' : 'less'),
+      value: cond.value || cond.voltage_val || '50'
+    };
+  }
+
+  const match = compileToByteMap(cond.match || cond.evaluate?.match || cond.payload);
   const dKey = cond.byte || cond.evaluate?.byte || Object.keys(match)[0] || 'D1';
   const targetVal = cond.value || cond.evaluate?.value || match[dKey] || '0x01';
   const maskVal = cond.mask || cond.evaluate?.mask || '0xFF';
@@ -113,15 +91,15 @@ export function compileCondition(cond: AutomationCondition): any {
 }
 
 /**
- * Compiles an AutomationAction into an entity_command, transmit, delay, if_then, or choose block
+ * Compiles an AutomationAction into an inlined transmit sequence, delay, if_then, choose, popup, or climate target
  */
-export function compileAction(act: AutomationAction): any {
+export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_CATALOG): any | any[] {
   if (act.type === 'if_then') {
     return {
       type: 'if_then',
       conditions: (act.conditions || []).map(compileCondition),
-      then: (act.then || []).map(compileAction),
-      else: (act.else || []).map(compileAction)
+      then: compileActionList(act.then || [], catalog),
+      else: compileActionList(act.else || [], catalog)
     };
   }
 
@@ -130,9 +108,9 @@ export function compileAction(act: AutomationAction): any {
       type: 'choose',
       choices: (act.choices || []).map(c => ({
         conditions: (c.conditions || []).map(compileCondition),
-        sequence: (c.sequence || []).map(compileAction)
+        sequence: compileActionList(c.sequence || [], catalog)
       })),
-      default: (act.default || []).map(compileAction)
+      default: compileActionList(act.default || [], catalog)
     };
   }
 
@@ -169,11 +147,125 @@ export function compileAction(act: AutomationAction): any {
     };
   }
 
-  if (act.type === 'entity_command' || act.entity_id) {
+  // Handle entity_command: Inline catalog command definition into native CAN transmit bursts
+  if (act.type === 'entity_command' || act.entity_id || act.source_command_id) {
+    const entityId = act.entity_id || act.source_command_id;
+    const commandLabel = act.command || act.option_label;
+    const cmd = (catalog?.commands || []).find(c => c.id === entityId);
+
+    if (cmd) {
+      if (cmd.type === 'climate_target') {
+        return {
+          type: 'climate_target',
+          target_c: act.target_temp_c ?? (cmd as any).target_temp_c ?? 21.0,
+          zone: act.zone || (cmd as any).climate_zone || 'driver',
+          sync_on: act.sync_on ?? (cmd as any).climate_sync_on ?? true,
+          driver_only: act.driver_only ?? (cmd as any).climate_driver_only ?? false
+        };
+      }
+
+      if (cmd.type === 'precondition' || cmd.id === 'battery_preconditioning') {
+        return {
+          type: 'precondition',
+          mode: act.precon_mode || (cmd as any).precon_mode || 'persistent',
+          action: act.precon_action || (act.precon_mode === 'cancel' ? 'stop' : 'start')
+        };
+      }
+
+      // Match designated option
+      const opt = (cmd.options || []).find(
+        o => o.label === commandLabel || (commandLabel && o.label?.toLowerCase() === commandLabel.toLowerCase())
+      ) || (cmd.options || []).find(o => o.default) || (cmd.options || [])[0];
+
+      const canId = cmd.network?.action_can_id || cmd.action_can_id || cmd.network?.state_can_id || cmd.state_can_id || act.can_id || '0x000';
+      const bus = cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? act.bus ?? 0;
+      const delayMs = cmd.network?.delay_ms ?? cmd.delay_ms ?? act.delay_ms ?? 20;
+
+      // Case A: Option defines multi-step burst (e.g. heated/cooled seat sequence)
+      if (opt?.steps && opt.steps.length > 0) {
+        const inlinedSteps: any[] = [];
+        opt.steps.forEach((step: any, idx: number) => {
+          const stepPayload = compileToByteMap(step.payload);
+          inlinedSteps.push({
+            type: 'transmit',
+            can_id: step.can_id || canId,
+            bus: step.bus ?? bus,
+            payload: Object.keys(stepPayload).length > 0 ? stepPayload : { D1: '0x01' },
+            repeat: step.repeat || 1
+          });
+          if (idx < opt.steps.length - 1 && delayMs > 0) {
+            inlinedSteps.push({
+              type: 'delay',
+              ms: delayMs
+            });
+          }
+        });
+        return inlinedSteps;
+      }
+
+      // Case B: Option defines a single payload
+      if (opt?.payload) {
+        const p = compileToByteMap(opt.payload);
+        return {
+          type: 'transmit',
+          can_id: canId,
+          bus: bus,
+          payload: Object.keys(p).length > 0 ? p : { D1: '0x01' },
+          repeat: opt.repeat || 1
+        };
+      }
+
+      // Case C: Command defines root steps
+      if (cmd.steps && cmd.steps.length > 0) {
+        const inlinedSteps: any[] = [];
+        cmd.steps.forEach((step: any, idx: number) => {
+          const stepPayload = compileToByteMap(step.payload);
+          inlinedSteps.push({
+            type: 'transmit',
+            can_id: step.can_id || canId,
+            bus: step.bus ?? bus,
+            payload: Object.keys(stepPayload).length > 0 ? stepPayload : { D1: '0x01' },
+            repeat: step.repeat || 1
+          });
+          if (idx < cmd.steps.length - 1 && delayMs > 0) {
+            inlinedSteps.push({
+              type: 'delay',
+              ms: delayMs
+            });
+          }
+        });
+        return inlinedSteps;
+      }
+
+      // Case D: Command defines root payload
+      if (cmd.payload) {
+        const p = compileToByteMap(cmd.payload);
+        return {
+          type: 'transmit',
+          can_id: canId,
+          bus: bus,
+          payload: Object.keys(p).length > 0 ? p : { D1: '0x01' },
+          repeat: cmd.repeat || 1
+        };
+      }
+    }
+
+    // Fallback: If can_id and payload provided, transmit it; otherwise entity_command
+    if (act.can_id && act.payload) {
+      const payload = compileToByteMap(act.payload || act.to_payload);
+      return {
+        type: 'transmit',
+        can_id: act.can_id,
+        bus: act.bus ?? 0,
+        payload: Object.keys(payload).length > 0 ? payload : { D1: '0x01' },
+        repeat: act.repeat || 1
+      };
+    }
+
     return {
       type: 'entity_command',
-      entity_id: act.entity_id || act.source_command_id || 'drivers_seat_comfort',
-      command: act.command || act.option_label || 'Medium Cool'
+      entity_id: entityId || 'drivers_seat_comfort',
+      command: commandLabel || 'Medium Cool'
     };
   }
 
@@ -188,10 +280,31 @@ export function compileAction(act: AutomationAction): any {
 }
 
 /**
- * Compiles a single AutomationRule into a clean, wildcard-free schema conforming strictly
- * to docs/architecture.md and the exact outcome format.
+ * Compiles a list of actions, flattening inlined action sequences
  */
-export function compileAutomationRule(rule: AutomationRule): any {
+export function compileActionList(
+  actions: AutomationAction[],
+  catalog: Catalog = DEFAULT_CATALOG
+): any[] {
+  const result: any[] = [];
+  for (const act of actions) {
+    const compiled = compileAction(act, catalog);
+    if (Array.isArray(compiled)) {
+      result.push(...compiled);
+    } else if (compiled) {
+      result.push(compiled);
+    }
+  }
+  return result;
+}
+
+/**
+ * Compiles a single AutomationRule into a clean, self-contained schema with inlined actions.
+ */
+export function compileAutomationRule(
+  rule: AutomationRule,
+  catalog: Catalog = DEFAULT_CATALOG
+): any {
   return {
     id: rule.id,
     name: rule.name,
@@ -225,7 +338,7 @@ export function compileAutomationRule(rule: AutomationRule): any {
       };
     }),
     conditions: (rule.conditions || []).map(compileCondition),
-    actions: (rule.actions || []).map(compileAction)
+    actions: compileActionList(rule.actions || [], catalog)
   };
 }
 
@@ -234,7 +347,8 @@ export function compileAutomationRule(rule: AutomationRule): any {
  */
 export function exportToCandoJson(
   rules: AutomationRule[],
-  settings: AutomationSettings = {}
+  settings: AutomationSettings = {},
+  catalog: Catalog = DEFAULT_CATALOG
 ): string {
   const exportPayload = {
     settings: {
@@ -244,7 +358,7 @@ export function exportToCandoJson(
       ntp_server: settings.ntp_server || 'pool.ntp.org',
       timezone: settings.timezone || 'UTC'
     },
-    rules: rules.map(compileAutomationRule)
+    rules: rules.map(r => compileAutomationRule(r, catalog))
   };
 
   return JSON.stringify(exportPayload, null, 2);
@@ -257,7 +371,7 @@ export function exportToFullCatalogJson(
   catalog: Catalog,
   rules: AutomationRule[]
 ): string {
-  const cleanAutomations = rules.map(compileAutomationRule);
+  const cleanAutomations = rules.map(r => compileAutomationRule(r, catalog));
 
   return JSON.stringify({
     ...catalog,
@@ -270,7 +384,8 @@ export function exportToFullCatalogJson(
  */
 export function exportToEsp32FirmwareJson(
   rules: AutomationRule[],
-  settings: AutomationSettings = {}
+  settings: AutomationSettings = {},
+  catalog: Catalog = DEFAULT_CATALOG
 ): string {
   const modeMap: Record<string, number> = {
     one_shot: 0,
@@ -281,7 +396,7 @@ export function exportToEsp32FirmwareJson(
   };
 
   const firmwareRules: Esp32FirmwareRule[] = rules.map(r => {
-    const compiled = compileAutomationRule(r);
+    const compiled = compileAutomationRule(r, catalog);
     return {
       id: compiled.id,
       name: compiled.name,

@@ -1370,9 +1370,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     if (activeJsonTab === 'catalog') {
       textToCopy = exportToFullCatalogJson(catalog, rules);
     } else if (activeJsonTab === 'cando') {
-      textToCopy = exportToCandoJson(rules, settings);
+      textToCopy = exportToCandoJson(rules, settings, catalog);
     } else if (activeJsonTab === 'esp32') {
-      textToCopy = exportToEsp32FirmwareJson(rules, settings);
+      textToCopy = exportToEsp32FirmwareJson(rules, settings, catalog);
     } else {
       textToCopy = customJsonSchema;
     }
@@ -1388,10 +1388,10 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
       content = exportToFullCatalogJson(catalog, rules);
       filename = 'can_do_catalog.json';
     } else if (activeJsonTab === 'cando') {
-      content = exportToCandoJson(rules, settings);
+      content = exportToCandoJson(rules, settings, catalog);
       filename = 'automations.json';
     } else if (activeJsonTab === 'esp32') {
-      content = exportToEsp32FirmwareJson(rules, settings);
+      content = exportToEsp32FirmwareJson(rules, settings, catalog);
       filename = 'esp32_automations.json';
     } else {
       content = customJsonSchema;
@@ -1413,7 +1413,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     setSyncing(true);
     setSyncStatus('Pushing automations.json to ESP32...');
     try {
-      const payload = exportToCandoJson(rules, settings);
+      const payload = exportToCandoJson(rules, settings, catalog);
       const host = espIp.trim().replace(/\/+$/, '');
       const url = host.startsWith('http') ? `${host}/api/automations` : `http://${host}/api/automations`;
       const res = await fetch(url, {
@@ -2314,8 +2314,8 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     {activeJsonTab === 'catalog'
                       ? exportToFullCatalogJson(catalog, rules)
                       : activeJsonTab === 'cando'
-                      ? exportToCandoJson(rules, settings)
-                      : exportToEsp32FirmwareJson(rules, settings)}
+                      ? exportToCandoJson(rules, settings, catalog)
+                      : exportToEsp32FirmwareJson(rules, settings, catalog)}
                   </code>
                 </pre>
               )}
