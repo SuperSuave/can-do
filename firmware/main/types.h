@@ -124,6 +124,7 @@ struct AutomationTrigger {
     uint8_t bus = 0;
     int byte_index = -1;
     uint8_t byte_mask = 0xFF; // Bitmask for specific byte/nibble (e.g. 0xF0)
+    bool has_from_value = false;
     uint8_t from_value = 0;
     uint8_t to_value = 0;
     uint8_t match_payload[8] = {0};
@@ -139,6 +140,9 @@ struct AutomationRule {
     std::string id;
     std::string name;
     bool enabled = true;
+    uint32_t cooldown_ms = 0;
+    std::string exec_mode = "one_shot"; // "one_shot", "toggle", "continuous_hold", etc.
+    uint32_t last_exec_time_ms = 0;
     std::vector<AutomationTrigger> triggers;
     std::vector<AutomationCondition> conditions;
     std::vector<ActionStep> actions;

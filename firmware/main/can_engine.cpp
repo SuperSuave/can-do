@@ -8,6 +8,7 @@
 #include <sys/time.h>
 #include "esp_log.h"
 #include "mqtt_client.h"
+#include "esp_timer.h"
 #include "track_popup.h"
 #include "precondition.h"
 #include "board_pins.h"
@@ -137,7 +138,7 @@ void cando_execute_climate_target(float target_c, const char *zone, bool sync_on
 
 void init_can_engine(void) {
     if (!tx_command_queue) {
-        tx_command_queue = xQueueCreate(16, sizeof(CanBurstCmd));
+        tx_command_queue = xQueueCreate(16, sizeof(CanBurstCmd*));
     }
 }
 
@@ -240,9 +241,17 @@ static inline bool evaluate_masked_byte(uint8_t actual_value, uint8_t target_val
     return (actual_value & mask) == (target_value & mask);
 }
 
-static bool is_trigger_match(const uint8_t* incoming_data, const AutomationTrigger& trig) {
+static bool is_trigger_match(const uint8_t* incoming_data, const uint8_t* previous_data, const AutomationTrigger& trig) {
     if (trig.type == "byte_transition" && trig.byte_index >= 0 && trig.byte_index < 8) {
-        return evaluate_masked_byte(incoming_data[trig.byte_index], trig.to_value, trig.byte_mask);
+        if (!previous_data) return false;
+        bool is_to = evaluate_masked_byte(incoming_data[trig.byte_index], trig.to_value, trig.byte_mask);
+        if (trig.has_from_value) {
+            bool was_from = evaluate_masked_byte(previous_data[trig.byte_index], trig.from_value, trig.byte_mask);
+            return was_from && is_to && ((previous_data[trig.byte_index] & trig.byte_mask) != (incoming_data[trig.byte_index] & trig.byte_mask));
+        } else {
+            bool was_to = evaluate_masked_byte(previous_data[trig.byte_index], trig.to_value, trig.byte_mask);
+            return !was_to && is_to;
+        }
     }
 
     if (trig.match_mask == 0) return true; // match whole ID if no byte mask
@@ -267,7 +276,23 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
         }
 
         if (step.type == ActionType::ENTITY_COMMAND) {
-            queue_entity_command(step.entity_id, step.command);
+            bool executed_inline = false;
+            for (const auto& entity : global_catalog) {
+                if (entity.id == step.entity_id) {
+                    for (const auto& option : entity.options) {
+                        if (option.label == step.command || (entity.options.size() == 1 && step.command.empty())) {
+                            execute_can_burst(entity.action_can_id, option.steps, entity.delay_ms);
+                            executed_inline = true;
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+            if (!executed_inline) {
+                ESP_LOGW(TAG, "Entity '%s' command '%s' not found for inline execution",
+                         step.entity_id.c_str(), step.command.c_str());
+            }
             continue;
         }
 
@@ -373,11 +398,15 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
         if (entity.id == entity_id) {
             for (const auto& option : entity.options) {
                 if (option.label == command_label || (entity.options.size() == 1 && command_label.empty())) {
-                    CanBurstCmd cmd;
-                    cmd.can_id = entity.action_can_id;
-                    cmd.delay_ms = entity.delay_ms;
-                    cmd.steps = &option.steps;
-                    return xQueueSend(tx_command_queue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
+                    CanBurstCmd* cmd = new CanBurstCmd();
+                    cmd->can_id = entity.action_can_id;
+                    cmd->delay_ms = entity.delay_ms;
+                    cmd->steps = &option.steps;
+                    if (xQueueSend(tx_command_queue, &cmd, pdMS_TO_TICKS(10)) != pdTRUE) {
+                        delete cmd;
+                        return false;
+                    }
+                    return true;
                 }
             }
             ESP_LOGW(TAG, "Option '%s' not found for entity '%s'", command_label.c_str(), entity_id.c_str());
@@ -389,11 +418,15 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
 }
 
 bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>& steps) {
-    CanBurstCmd cmd;
-    cmd.can_id = can_id;
-    cmd.delay_ms = delay_ms;
-    cmd.inline_steps = steps;
-    return xQueueSend(tx_command_queue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
+    CanBurstCmd* cmd = new CanBurstCmd();
+    cmd->can_id = can_id;
+    cmd->delay_ms = delay_ms;
+    cmd->inline_steps = steps;
+    if (xQueueSend(tx_command_queue, &cmd, pdMS_TO_TICKS(10)) != pdTRUE) {
+        delete cmd;
+        return false;
+    }
+    return true;
 }
 
 void can_rx_task(void* arg) {
@@ -440,17 +473,31 @@ void can_rx_task(void* arg) {
 
             if (rx_msg.rtr) continue;
 
+            uint8_t prev_data[8] = {0};
+            bool has_prev = false;
+            auto it = can_state_cache.find(rx_msg.identifier);
+            if (it != can_state_cache.end()) {
+                memcpy(prev_data, it->second.data(), 8);
+                has_prev = true;
+            }
+
             // 1. Always update state cache
             update_state_cache(rx_msg.identifier, rx_msg.data);
 
             // 2. Evaluate automations if globally enabled
             if (g_automations_enabled.load()) {
-                for (const auto& rule : global_automations) {
+                uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+                for (auto& rule : global_automations) {
                     if (!rule.enabled) continue;
 
                     for (const auto& trig : rule.triggers) {
                         if ((trig.type == "can_rx" || trig.type == "byte_transition") && trig.can_id == rx_msg.identifier) {
-                            if (is_trigger_match(rx_msg.data, trig)) {
+                            if (is_trigger_match(rx_msg.data, has_prev ? prev_data : nullptr, trig)) {
+                                // Check cooldown
+                                if (rule.last_exec_time_ms != 0 && (now_ms - rule.last_exec_time_ms < rule.cooldown_ms)) {
+                                    continue;
+                                }
+
                                 // Check conditions
                                 bool passed = true;
                                 for (const auto& cond : rule.conditions) {
@@ -462,6 +509,7 @@ void can_rx_task(void* arg) {
 
                                 if (passed) {
                                     ESP_LOGI(TAG, "Automation fired: %s", rule.name.c_str());
+                                    rule.last_exec_time_ms = now_ms;
                                     queue_action_steps(0, 20, rule.actions);
                                 }
                             }
@@ -500,16 +548,17 @@ void can_rx_task(void* arg) {
 }
 
 void can_tx_task(void* arg) {
-    CanBurstCmd cmd;
+    CanBurstCmd* cmd = nullptr;
     ESP_LOGI(TAG, "CAN TX task running");
 
     while (true) {
-        if (xQueueReceive(tx_command_queue, &cmd, portMAX_DELAY) == pdTRUE) {
-            if (cmd.steps && !cmd.steps->empty()) {
-                execute_can_burst(cmd.can_id, *cmd.steps, cmd.delay_ms);
-            } else if (!cmd.inline_steps.empty()) {
-                execute_can_burst(cmd.can_id, cmd.inline_steps, cmd.delay_ms);
+        if (xQueueReceive(tx_command_queue, &cmd, portMAX_DELAY) == pdTRUE && cmd) {
+            if (cmd->steps && !cmd->steps->empty()) {
+                execute_can_burst(cmd->can_id, *cmd->steps, cmd->delay_ms);
+            } else if (!cmd->inline_steps.empty()) {
+                execute_can_burst(cmd->can_id, cmd->inline_steps, cmd->delay_ms);
             }
+            delete cmd;
         }
     }
 }
@@ -543,12 +592,17 @@ void time_scheduler_task(void* arg) {
             continue;
         }
 
-        for (const auto& rule : global_automations) {
+        uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+        for (auto& rule : global_automations) {
             if (!rule.enabled) continue;
 
             for (const auto& trig : rule.triggers) {
                 if (trig.type == "time_schedule") {
                     if (trig.schedule_time_min == cur_min && (trig.weekdays_mask & (1 << cur_wday))) {
+                        if (rule.last_exec_time_ms != 0 && (now_ms - rule.last_exec_time_ms < rule.cooldown_ms)) {
+                            continue;
+                        }
+
                         bool passed = true;
                         for (const auto& cond : rule.conditions) {
                             if (!evaluate_condition(cond)) {
@@ -559,6 +613,7 @@ void time_scheduler_task(void* arg) {
 
                         if (passed) {
                             ESP_LOGI(TAG, "Time schedule fired rule: %s (%02d:%02d)", rule.name.c_str(), timeinfo.tm_hour, timeinfo.tm_min);
+                            rule.last_exec_time_ms = now_ms;
                             queue_action_steps(0, 20, rule.actions);
                         }
                     }

@@ -486,6 +486,12 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
     cJSON* en = cJSON_GetObjectItem(auto_json, "enabled");
     if (cJSON_IsBool(en)) out_rule.enabled = cJSON_IsTrue(en);
 
+    cJSON* cd = cJSON_GetObjectItem(auto_json, "cooldown_ms");
+    if (cJSON_IsNumber(cd)) out_rule.cooldown_ms = static_cast<uint32_t>(cd->valueint);
+
+    cJSON* mode = cJSON_GetObjectItem(auto_json, "exec_mode");
+    if (cJSON_IsString(mode)) out_rule.exec_mode = mode->valuestring;
+
     // Triggers
     cJSON* trigs = cJSON_GetObjectItem(auto_json, "triggers");
     if (cJSON_IsArray(trigs)) {
@@ -503,6 +509,7 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
             } else {
                 cJSON* cid = cJSON_GetObjectItem(t_item, "can_id");
                 if (cJSON_IsString(cid)) tr.can_id = strtol(cid->valuestring, nullptr, 16);
+                else if (cJSON_IsNumber(cid)) tr.can_id = static_cast<uint32_t>(cid->valueint);
                 cJSON* bus = cJSON_GetObjectItem(t_item, "bus");
                 if (cJSON_IsNumber(bus)) tr.bus = bus->valueint;
 
@@ -524,7 +531,10 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
 
                         cJSON* from_item = cJSON_GetObjectItem(t_item, "from");
                         cJSON* to_item = cJSON_GetObjectItem(t_item, "to");
-                        if (cJSON_IsString(from_item)) tr.from_value = parse_hex_string(from_item->valuestring);
+                        if (cJSON_IsString(from_item)) {
+                            tr.from_value = parse_hex_string(from_item->valuestring);
+                            tr.has_from_value = true;
+                        }
                         if (cJSON_IsString(to_item)) {
                             tr.to_value = parse_hex_string(to_item->valuestring);
                             tr.match_payload[b_idx] = tr.to_value;
