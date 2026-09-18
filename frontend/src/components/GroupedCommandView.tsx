@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Command, CommandRole } from '../types/catalog';
+import { Command, CommandRole, CommandOption } from '../types/catalog';
 import { CommandCard } from './CommandCard';
 import {
   ChevronDown,
@@ -20,7 +20,7 @@ interface GroupedCommandViewProps {
   onSelectSubcategory?: (subcat: string) => void;
   selectedCommandIdsForAutomation?: Set<string>;
   onToggleSelectForAutomation?: (cmd: Command) => void;
-  onAddToAutomation?: (cmd: Command, role?: CommandRole) => void;
+  onAddToAutomation?: (cmd: Command, role?: CommandRole, option?: CommandOption) => void;
   expandAllSignal?: number;
   collapseAllSignal?: number;
 }

@@ -51,8 +51,11 @@ import {
   Split,
   Clock,
   MessageSquare,
-  Thermometer
+  Thermometer,
+  Radio,
+  X
 } from 'lucide-react';
+import { AddElementModal, AddElementTarget } from './AddElementModal';
 
 interface AutomationBuilderProps {
   catalog: Catalog;
@@ -73,8 +76,10 @@ interface ConditionNodeEditorProps {
   cond: AutomationCondition;
   index: number;
   depth?: number;
+  availableTriggers?: AutomationTrigger[];
   onUpdate: (updated: AutomationCondition) => void;
   onDelete: () => void;
+  onOpenAddConditionDialog?: (onAdd: (cond: AutomationCondition) => void) => void;
 }
 
 interface ConditionListEditorProps {
@@ -82,8 +87,9 @@ interface ConditionListEditorProps {
   depth?: number;
   label?: string;
   emptyText?: string;
+  availableTriggers?: AutomationTrigger[];
   onUpdate: (conditions: AutomationCondition[]) => void;
-  onPullCatalog?: () => void;
+  onOpenAddConditionDialog?: (onAdd: (cond: AutomationCondition) => void) => void;
 }
 
 const ALL_DAYS = [
@@ -171,8 +177,10 @@ function ConditionNodeEditor({
   cond,
   index,
   depth = 0,
+  availableTriggers,
   onUpdate,
-  onDelete
+  onDelete,
+  onOpenAddConditionDialog
 }: ConditionNodeEditorProps) {
   const isGroup =
     cond.logic === 'and' ||
@@ -250,9 +258,83 @@ function ConditionNodeEditor({
             <ConditionListEditor
               conditions={cond.conditions || []}
               depth={depth + 1}
+              availableTriggers={availableTriggers}
               emptyText="Empty group. Add conditions below."
               onUpdate={updatedSubs => onUpdate({ ...cond, conditions: updatedSubs })}
+              onOpenAddConditionDialog={onOpenAddConditionDialog}
             />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Triggered by condition
+  if (cond.type === 'triggered_by' || cond.type === 'trigger' || cond.trigger_id !== undefined) {
+    const matchedTrig = (availableTriggers || []).find(t => t.id === cond.trigger_id);
+    return (
+      <div className="p-3 rounded-xl bg-slate-950 border border-amber-900/60 space-y-2 text-xs">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded-full bg-amber-950 text-amber-300 font-bold text-[10px] flex items-center justify-center border border-amber-800">
+              C{index + 1}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Radio className="w-3.5 h-3.5 text-amber-400" />
+              <span className="font-semibold text-white">Triggered By</span>
+              {cond.trigger_id && (
+                <span className="px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 text-[10px] border border-amber-800/60 font-mono">
+                  {cond.trigger_id}
+                </span>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="p-1 text-slate-500 hover:text-rose-400 transition"
+            title="Delete condition"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[11px]">
+          <div>
+            <label className="block text-[10px] font-sans text-slate-400 mb-1">Select Trigger</label>
+            <select
+              value={cond.trigger_id || ''}
+              onChange={e => onUpdate({ ...cond, type: 'triggered_by', trigger_id: e.target.value })}
+              className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-amber-300 font-mono text-xs focus:outline-none focus:border-amber-500"
+            >
+              <option value="">-- Choose Rule Trigger --</option>
+              {(availableTriggers || []).map((t, tIdx) => (
+                <option key={t.id || tIdx} value={t.id}>
+                  {t.id} ({t.source_command_name || t.can_id || `Trigger ${tIdx + 1}`})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-sans text-slate-400 mb-1">Trigger ID (Exact Match)</label>
+            <input
+              type="text"
+              value={cond.trigger_id || ''}
+              onChange={e => onUpdate({ ...cond, type: 'triggered_by', trigger_id: e.target.value })}
+              placeholder="trig_xxx"
+              className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-amber-300 font-mono text-xs focus:outline-none focus:border-amber-500"
+            />
+          </div>
+        </div>
+        {matchedTrig && (
+          <div className="text-[11px] text-slate-400 font-sans flex items-center gap-1.5 pt-0.5">
+            <span className="text-slate-500">Source:</span>
+            <span className="text-slate-300 font-semibold">{matchedTrig.source_command_name || matchedTrig.can_id}</span>
+            {matchedTrig.option_label && (
+              <span className="px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 text-[10px]">
+                {matchedTrig.option_label}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -441,101 +523,34 @@ function ConditionListEditor({
   depth = 0,
   label,
   emptyText = 'No conditions set.',
+  availableTriggers,
   onUpdate,
-  onPullCatalog
+  onOpenAddConditionDialog
 }: ConditionListEditorProps) {
-  const addCondition = (type: 'leaf' | 'time' | 'and' | 'or' | 'not') => {
+  const addDefaultCondition = () => {
     const next = [...conditions];
-    if (type === 'leaf') {
-      next.push({
-        id: `cond_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-        logic: 'leaf',
-        can_id: '0x120',
-        bus: 0,
-        byte: 'D1',
-        mask: '0xFF',
-        operator: 'equal',
-        value: '0x01'
-      });
-    } else if (type === 'time') {
-      next.push({
-        id: `cond_time_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-        type: 'time_condition',
-        start_time: '08:00',
-        end_time: '18:00',
-        days: ['mon', 'tue', 'wed', 'thu', 'fri']
-      });
-    } else {
-      next.push({
-        id: `cond_${type}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-        logic: type,
-        conditions: []
-      });
-    }
+    next.push({
+      id: `cond_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+      logic: 'leaf',
+      can_id: '0x120',
+      bus: 0,
+      byte: 'D1',
+      mask: '0xFF',
+      operator: 'equal',
+      value: '0x01'
+    });
     onUpdate(next);
   };
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        {label && (
+      {label && (
+        <div className="flex items-center justify-between gap-2">
           <span className="text-purple-300 font-bold text-[11px] uppercase tracking-wider">
             {label} ({conditions.length})
           </span>
-        )}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {onPullCatalog && (
-            <button
-              type="button"
-              onClick={onPullCatalog}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500 text-slate-950 hover:bg-purple-400 transition"
-            >
-              <Plus className="w-3 h-3" />
-              <span>Pull Catalog</span>
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => addCondition('leaf')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition"
-          >
-            <Plus className="w-3 h-3" />
-            <span>Byte Value</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => addCondition('time')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-cyan-300 hover:bg-slate-700 transition border border-cyan-900/50"
-          >
-            <Clock className="w-3 h-3" />
-            <span>Time Window</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => addCondition('and')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-950 text-purple-300 border border-purple-800 hover:bg-purple-900 transition"
-          >
-            <Plus className="w-3 h-3" />
-            <span>AND</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => addCondition('or')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-indigo-950 text-indigo-300 border border-indigo-800 hover:bg-indigo-900 transition"
-          >
-            <Plus className="w-3 h-3" />
-            <span>OR</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => addCondition('not')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-rose-950 text-rose-300 border border-rose-800 hover:bg-rose-900 transition"
-          >
-            <Plus className="w-3 h-3" />
-            <span>NOT</span>
-          </button>
         </div>
-      </div>
+      )}
 
       {conditions.length === 0 ? (
         <div className="p-3 rounded-xl bg-slate-950/40 border border-dashed border-slate-800 text-center text-xs text-slate-500 italic">
@@ -549,6 +564,7 @@ function ConditionListEditor({
               cond={c}
               index={idx}
               depth={depth}
+              availableTriggers={availableTriggers}
               onUpdate={updated => {
                 const next = [...conditions];
                 next[idx] = updated;
@@ -558,10 +574,26 @@ function ConditionListEditor({
                 const next = conditions.filter((_, i) => i !== idx);
                 onUpdate(next);
               }}
+              onOpenAddConditionDialog={onOpenAddConditionDialog}
             />
           ))}
         </div>
       )}
+
+      <button
+        type="button"
+        onClick={() => {
+          if (onOpenAddConditionDialog) {
+            onOpenAddConditionDialog(newCond => onUpdate([...conditions, newCond]));
+          } else {
+            addDefaultCondition();
+          }
+        }}
+        className="ha-section-add-btn accent-cond"
+      >
+        <Plus className="w-4 h-4" />
+        <span>Add Condition</span>
+      </button>
     </div>
   );
 }
@@ -571,8 +603,11 @@ interface ActionNodeEditorProps {
   act: AutomationAction;
   index: number;
   depth?: number;
+  availableTriggers?: AutomationTrigger[];
   onUpdate: (updated: AutomationAction) => void;
   onDelete: () => void;
+  onOpenAddConditionDialog?: (onAdd: (cond: AutomationCondition) => void) => void;
+  onOpenAddActionDialog?: (onAdd: (act: AutomationAction) => void) => void;
 }
 
 interface ActionListEditorProps {
@@ -580,16 +615,22 @@ interface ActionListEditorProps {
   depth?: number;
   label?: string;
   emptyText?: string;
+  availableTriggers?: AutomationTrigger[];
   onUpdate: (actions: AutomationAction[]) => void;
   onPullCatalog?: () => void;
+  onOpenAddConditionDialog?: (onAdd: (cond: AutomationCondition) => void) => void;
+  onOpenAddActionDialog?: (onAdd: (act: AutomationAction) => void) => void;
 }
 
 function ActionNodeEditor({
   act,
   index,
   depth = 0,
+  availableTriggers,
   onUpdate,
-  onDelete
+  onDelete,
+  onOpenAddConditionDialog,
+  onOpenAddActionDialog
 }: ActionNodeEditorProps) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -630,7 +671,9 @@ function ActionNodeEditor({
                 depth={depth + 1}
                 label="IF (Conditions)"
                 emptyText="No conditions in this IF block."
+                availableTriggers={availableTriggers}
                 onUpdate={updatedConds => onUpdate({ ...act, conditions: updatedConds })}
+                onOpenAddConditionDialog={onOpenAddConditionDialog}
               />
             </div>
 
@@ -641,7 +684,10 @@ function ActionNodeEditor({
                 depth={depth + 1}
                 label="THEN (Execute if True)"
                 emptyText="No actions in THEN branch."
+                availableTriggers={availableTriggers}
                 onUpdate={updatedThen => onUpdate({ ...act, then: updatedThen })}
+                onOpenAddConditionDialog={onOpenAddConditionDialog}
+                onOpenAddActionDialog={onOpenAddActionDialog}
               />
             </div>
 
@@ -652,7 +698,10 @@ function ActionNodeEditor({
                 depth={depth + 1}
                 label="ELSE (Execute if False)"
                 emptyText="No actions in ELSE branch."
+                availableTriggers={availableTriggers}
                 onUpdate={updatedElse => onUpdate({ ...act, else: updatedElse })}
+                onOpenAddConditionDialog={onOpenAddConditionDialog}
+                onOpenAddActionDialog={onOpenAddActionDialog}
               />
             </div>
           </div>
@@ -704,7 +753,7 @@ function ActionNodeEditor({
                 });
                 onUpdate({ ...act, choices });
               }}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-blue-900 hover:bg-blue-800 text-white font-semibold"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-blue-900 hover:bg-blue-800 text-white font-semibold transition"
             >
               <Plus className="w-3 h-3" />
               <span>Add Choice Branch</span>
@@ -747,11 +796,13 @@ function ActionNodeEditor({
                       depth={depth + 1}
                       label="Branch Conditions"
                       emptyText="No conditions in this branch."
+                      availableTriggers={availableTriggers}
                       onUpdate={updatedConds => {
                         const choices = [...(act.choices || [])];
                         choices[chIdx].conditions = updatedConds;
                         onUpdate({ ...act, choices });
                       }}
+                      onOpenAddConditionDialog={onOpenAddConditionDialog}
                     />
                   </div>
 
@@ -762,11 +813,14 @@ function ActionNodeEditor({
                       depth={depth + 1}
                       label="Branch Sequence Actions"
                       emptyText="No actions in branch sequence."
+                      availableTriggers={availableTriggers}
                       onUpdate={updatedSeq => {
                         const choices = [...(act.choices || [])];
                         choices[chIdx].sequence = updatedSeq;
                         onUpdate({ ...act, choices });
                       }}
+                      onOpenAddConditionDialog={onOpenAddConditionDialog}
+                      onOpenAddActionDialog={onOpenAddActionDialog}
                     />
                   </div>
                 </div>
@@ -780,7 +834,10 @@ function ActionNodeEditor({
                 depth={depth + 1}
                 label="DEFAULT (If no branch matches)"
                 emptyText="No actions in DEFAULT branch."
+                availableTriggers={availableTriggers}
                 onUpdate={updatedDef => onUpdate({ ...act, default: updatedDef })}
+                onOpenAddConditionDialog={onOpenAddConditionDialog}
+                onOpenAddActionDialog={onOpenAddActionDialog}
               />
             </div>
           </div>
@@ -928,9 +985,9 @@ function ActionNodeEditor({
                 onChange={e => onUpdate({ ...act, level: e.target.value as any })}
                 className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
               >
-                <option value="info">ⓘ Info</option>
-                <option value="warning">⚠ Warning</option>
-                <option value="error">‼ Error</option>
+                <option value="info">Info</option>
+                <option value="warning">Warning</option>
+                <option value="error">Error</option>
               </select>
             </div>
             <div>
@@ -1076,193 +1133,31 @@ function ActionListEditor({
   depth = 0,
   label,
   emptyText = 'No actions defined.',
+  availableTriggers,
   onUpdate,
-  onPullCatalog
+  onOpenAddConditionDialog,
+  onOpenAddActionDialog
 }: ActionListEditorProps) {
-  const addAction = (type: 'entity_command' | 'can_tx' | 'delay' | 'if_then' | 'choose' | 'track_popup' | 'climate_target' | 'precondition') => {
+  const addDefaultAction = () => {
     const next = [...actions];
-    if (type === 'entity_command') {
-      next.push({
-        id: `act_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-        type: 'entity_command',
-        entity_id: 'drivers_seat_comfort',
-        command: 'Medium Cool'
-      });
-    } else if (type === 'climate_target') {
-      next.push({
-        id: `act_climate_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-        type: 'climate_target',
-        target_temp_c: 21.0,
-        zone: 'driver',
-        sync_on: true,
-        driver_only: false
-      });
-    } else if (type === 'can_tx') {
-      next.push({
-        id: `act_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-        type: 'can_tx',
-        can_id: '0x524',
-        bus: 0,
-        payload: { D1: '0x02', D2: '0x01' },
-        repeat: 1,
-        delay_ms: 50
-      });
-    } else if (type === 'delay') {
-      next.push({
-        id: `act_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-        type: 'delay',
-        delay_ms: 500,
-        ms: 500
-      });
-    } else if (type === 'if_then') {
-      next.push({
-        id: `act_if_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-        type: 'if_then',
-        conditions: [{
-          id: `cond_${Date.now().toString(36)}`,
-          logic: 'leaf',
-          can_id: '0x120',
-          bus: 0,
-          byte: 'D1',
-          mask: '0xFF',
-          operator: 'equal',
-          value: '0x01'
-        }],
-        then: [{
-          id: `act_${Date.now().toString(36)}_1`,
-          type: 'entity_command',
-          entity_id: 'drivers_seat_comfort',
-          command: 'Medium Cool'
-        }],
-        else: []
-      });
-    } else if (type === 'choose') {
-      next.push({
-        id: `act_choose_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-        type: 'choose',
-        choices: [{
-          conditions: [{
-            id: `cond_${Date.now().toString(36)}`,
-            logic: 'leaf',
-            can_id: '0x120',
-            bus: 0,
-            byte: 'D1',
-            mask: '0xFF',
-            operator: 'equal',
-            value: '0x01'
-          }],
-          sequence: [{
-            id: `act_${Date.now().toString(36)}_1`,
-            type: 'entity_command',
-            entity_id: 'drivers_seat_comfort',
-            command: 'Medium Cool'
-          }]
-        }],
-        default: []
-      });
-    } else if (type === 'track_popup') {
-      next.push({
-        id: `act_popup_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-        type: 'track_popup',
-        level: 'info',
-        text: 'Preconditioning Started'
-      });
-    } else if (type === 'precondition') {
-      next.push({
-        id: `act_precon_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-        type: 'precondition',
-        precon_mode: 'persistent',
-        precon_action: 'start'
-      });
-    }
+    next.push({
+      id: `act_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+      type: 'entity_command',
+      entity_id: 'drivers_seat_comfort',
+      command: 'Medium Cool'
+    });
     onUpdate(next);
   };
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        {label && (
+      {label && (
+        <div className="flex items-center justify-between gap-2">
           <span className="text-emerald-400 font-bold text-[11px] uppercase tracking-wider">
             {label} ({actions.length})
           </span>
-        )}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {onPullCatalog && (
-            <button
-              type="button"
-              onClick={onPullCatalog}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition"
-            >
-              <Plus className="w-3 h-3" />
-              <span>Pull Catalog</span>
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => addAction('entity_command')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition"
-          >
-            <Plus className="w-3 h-3" />
-            <span>Entity Cmd</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => addAction('precondition')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-orange-950 text-orange-300 border border-orange-800 hover:bg-orange-900 transition"
-          >
-            <Zap className="w-3 h-3" />
-            <span>Precondition</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => addAction('climate_target')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-teal-950 text-teal-300 border border-teal-800 hover:bg-teal-900 transition"
-          >
-            <Thermometer className="w-3 h-3" />
-            <span>Climate Target</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => addAction('track_popup')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-amber-950 text-amber-300 border border-amber-800 hover:bg-amber-900 transition"
-          >
-            <MessageSquare className="w-3 h-3" />
-            <span>Show Popup Message</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => addAction('can_tx')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition"
-          >
-            <Plus className="w-3 h-3" />
-            <span>Raw CAN TX</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => addAction('delay')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition"
-          >
-            <Clock className="w-3 h-3" />
-            <span>Delay</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => addAction('if_then')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-cyan-950 text-cyan-300 border border-cyan-800 hover:bg-cyan-900 transition"
-          >
-            <GitFork className="w-3 h-3" />
-            <span>If-Then-Else</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => addAction('choose')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-950 text-blue-300 border border-blue-800 hover:bg-blue-900 transition"
-          >
-            <Split className="w-3 h-3" />
-            <span>Choose</span>
-          </button>
         </div>
-      </div>
+      )}
 
       {actions.length === 0 ? (
         <div className="p-3 rounded-xl bg-slate-950/40 border border-dashed border-slate-800 text-center text-xs text-slate-500 italic">
@@ -1276,6 +1171,7 @@ function ActionListEditor({
               act={act}
               index={idx}
               depth={depth}
+              availableTriggers={availableTriggers}
               onUpdate={updated => {
                 const next = [...actions];
                 next[idx] = updated;
@@ -1285,10 +1181,27 @@ function ActionListEditor({
                 const next = actions.filter((_, i) => i !== idx);
                 onUpdate(next);
               }}
+              onOpenAddConditionDialog={onOpenAddConditionDialog}
+              onOpenAddActionDialog={onOpenAddActionDialog}
             />
           ))}
         </div>
       )}
+
+      <button
+        type="button"
+        onClick={() => {
+          if (onOpenAddActionDialog) {
+            onOpenAddActionDialog(newAct => onUpdate([...actions, newAct]));
+          } else {
+            addDefaultAction();
+          }
+        }}
+        className="ha-section-add-btn accent-act"
+      >
+        <Plus className="w-4 h-4" />
+        <span>Add Action</span>
+      </button>
     </div>
   );
 }
@@ -1308,10 +1221,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   );
   const [activeJsonTab, setActiveJsonTab] = useState<'catalog' | 'cando' | 'esp32' | 'custom'>('catalog');
   const [copied, setCopied] = useState(false);
-  const [catalogPickerOpen, setCatalogPickerOpen] = useState(false);
-  const [pickerTarget, setPickerTarget] = useState<'trigger' | 'condition' | 'action' | 'off_action'>('trigger');
-  const [pickerSearch, setPickerSearch] = useState('');
-  const [pickerCategory, setPickerCategory] = useState('all');
+  const [addElementTarget, setAddElementTarget] = useState<AddElementTarget | null>(null);
   const [showSimulateModal, setShowSimulateModal] = useState(false);
   const [simulationLog, setSimulationLog] = useState<string[]>([]);
   const [espIp, setEspIp] = useState('192.168.4.1');
@@ -1600,7 +1510,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
       if (act.type === 'precondition') {
         logs.push(`  -> Action #${idx + 1}: Triggered Precondition State Machine (Persistent mode)`);
       } else if (act.type === 'track_popup' || act.type === 'popup') {
-        const pfx = act.level === 'warning' ? '⚠ ' : act.level === 'error' ? '‼ ' : 'ⓘ ';
+        const pfx = act.level === 'warning' ? '[WARN] ' : act.level === 'error' ? '[ERR] ' : '[INFO] ';
         logs.push(`  -> Action #${idx + 1}: Cluster Track Selection Popup [${(act.level || 'info').toUpperCase()}]: "${pfx}${act.text || act.popup_message || ''}"`);
       } else if (act.type === 'climate_target') {
         logs.push(
@@ -1622,42 +1532,32 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     setSimulationLog(logs);
   };
 
-  // Filter commands for the catalog pull picker
-  const filteredPickerCommands = (catalog?.commands || []).filter(cmd => {
-    const cmdName = cmd.name || cmd.ha_metadata?.name || cmd.id || '';
-    const cmdId = cmd.id || '';
-    const stateCanId = cmd.state_can_id || cmd.network?.state_can_id || '';
-    const actionCanId = cmd.action_can_id || cmd.network?.action_can_id || '';
-    const q = (pickerSearch || '').toLowerCase();
-
-    const matchesSearch =
-      cmdName.toLowerCase().includes(q) ||
-      cmdId.toLowerCase().includes(q) ||
-      stateCanId.toLowerCase().includes(q) ||
-      actionCanId.toLowerCase().includes(q);
-    const matchesCat = pickerCategory === 'all' || cmd.category === pickerCategory;
-    return matchesSearch && matchesCat;
-  });
-
-  const handleSelectFromPicker = (cmd: Command, opt?: CommandOption) => {
-    if (!activeRule) return;
-    if (pickerTarget === 'trigger') {
-      const newTrig = commandToTrigger(cmd, opt);
-      handleUpdateActiveRule({ triggers: [...activeRule.triggers, newTrig] });
-    } else if (pickerTarget === 'condition') {
-      const newCond = commandToCondition(cmd, opt);
-      handleUpdateActiveRule({ conditions: [...activeRule.conditions, newCond] });
-    } else if (pickerTarget === 'action') {
-      const newAct = commandToAction(cmd, opt);
-      handleUpdateActiveRule({ actions: [...activeRule.actions, newAct] });
-    } else if (pickerTarget === 'off_action') {
-      const newOffAct = commandToAction(cmd, opt);
-      handleUpdateActiveRule({ off_actions: [...(activeRule.off_actions || []), newOffAct] });
-    }
-    setCatalogPickerOpen(false);
+  const openAddTriggerDialog = (onAdd: (t: AutomationTrigger) => void) => {
+    setAddElementTarget({
+      type: 'trigger',
+      title: 'Add Trigger (When...)',
+      contextHint: 'Select an event, gesture, sensor transition, or schedule to trigger this automation.',
+      onAdd: (item) => onAdd(item as AutomationTrigger)
+    });
   };
 
-  const categories = Array.from(new Set(catalog.commands.map(c => c.category))).filter(Boolean);
+  const openAddConditionDialog = (onAdd: (c: AutomationCondition) => void) => {
+    setAddElementTarget({
+      type: 'condition',
+      title: 'Add Condition (And If...)',
+      contextHint: 'Select states, logical gates (AND/OR/NOT), or time windows required for the rule to proceed.',
+      onAdd: (item) => onAdd(item as AutomationCondition)
+    });
+  };
+
+  const openAddActionDialog = (onAdd: (a: AutomationAction) => void) => {
+    setAddElementTarget({
+      type: 'action',
+      title: 'Add Action (Then Do...)',
+      contextHint: 'Select vehicle actuators, cluster popups, delays, or branching logic (IF/CHOOSE) to execute.',
+      onAdd: (item) => onAdd(item as AutomationAction)
+    });
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -1723,103 +1623,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
       {/* Main Builder Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Rule Selector & Management (3 cols) */}
-        <div className="lg:col-span-3 space-y-4">
-          <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Automations</span>
-              <button
-                type="button"
-                onClick={handleAddRule}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/40 transition"
-              >
-                <Plus className="w-3 h-3" />
-                <span>New</span>
-              </button>
-            </div>
-
-            <div className="space-y-1.5 max-h-[520px] overflow-y-auto pr-1">
-              {rules.map((rule, idx) => {
-                const isSelected = rule.id === activeRule?.id;
-                return (
-                  <div
-                    key={rule.id}
-                    onClick={() => setSelectedRuleId(rule.id)}
-                    className={`group p-2.5 rounded-xl cursor-pointer border transition text-left flex flex-col gap-1.5 ${
-                      isSelected
-                        ? 'bg-slate-800 border-cyan-500/80 shadow-md shadow-cyan-950/40 text-white'
-                        : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:bg-slate-800/60 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-1.5">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span
-                          className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                            rule.enabled ? 'bg-emerald-400' : 'bg-slate-600'
-                          }`}
-                        />
-                        <span className="text-xs font-semibold truncate">{rule.name || `Rule #${idx + 1}`}</span>
-                      </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                        <button
-                          type="button"
-                          onClick={e => {
-                            e.stopPropagation();
-                            handleDuplicateRule(rule);
-                          }}
-                          title="Duplicate rule"
-                          className="p-1 hover:text-cyan-300 text-slate-400"
-                        >
-                          <Copy className="w-3 h-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={e => {
-                            e.stopPropagation();
-                            handleDeleteRule(rule.id);
-                          }}
-                          title="Delete rule"
-                          className="p-1 hover:text-rose-400 text-slate-400"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
-                      <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 uppercase">
-                        {(rule.exec_mode || 'one_shot').replace('_', ' ')}
-                      </span>
-                      {rule.ha_expose && (
-                        <span className="px-1 py-0.5 rounded bg-orange-950/60 text-orange-300 border border-orange-800/40">
-                          HA
-                        </span>
-                      )}
-                      <span>
-                        {(rule.triggers || []).length}T · {(rule.actions || []).length}A
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Quick Info & ESP32 Firmware Notes */}
-          <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 text-xs text-slate-400 space-y-2">
-            <div className="flex items-center gap-1.5 font-semibold text-slate-300">
-              <Info className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Firmware Redesign Note</span>
-            </div>
-            <p className="text-[11px] leading-relaxed text-slate-400">
-              As you rewrite the ESP32 firmware, this interface serves as the primary logic orchestrator. The ESP32 simply ingests and executes the generated JSON.
-            </p>
-          </div>
-        </div>
-
-        {/* Middle Column: Active Rule Editor (5 cols) */}
+        {/* Left Column: Active Rule Editor (8 cols = ~2/3 of area) */}
         {activeRule ? (
-          <div className="lg:col-span-5 space-y-4">
+          <div className="lg:col-span-8 space-y-4">
             {/* Rule Config Header Card */}
             <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
               <div className="flex items-center justify-between gap-3">
@@ -1951,89 +1757,137 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             </div>
 
             {/* SECTION 1: TRIGGERS (WHEN...) */}
-            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-3">
+            <div className="can-do-section-box trig-section space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="p-1 rounded-lg bg-cyan-500/20 text-cyan-400">
+                  <span className="p-1 rounded-lg bg-amber-500/20 text-amber-400">
                     <Zap className="w-3.5 h-3.5" />
                   </span>
                   <span className="text-xs font-bold uppercase tracking-wider text-white">
                     1. Triggers (When...)
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPickerTarget('trigger');
-                      setCatalogPickerOpen(true);
-                    }}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-500 text-slate-950 hover:bg-cyan-400 transition"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>Pull Catalog</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newTrig: AutomationTrigger = {
-                        id: `trig_${Date.now().toString(36)}`,
-                        source: 'can',
-                        can_id: '0x448',
-                        bus: 0,
-                        click_count: 1,
-                        byte_index: 6,
-                        from_value: 0,
-                        to_value: 1,
-                        match: { D7: '0x0' }
-                      };
-                      handleUpdateActiveRule({ triggers: [...activeRule.triggers, newTrig] });
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>Raw CAN</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newTrig: AutomationTrigger = {
-                        id: `trig_time_${Date.now().toString(36)}`,
-                        source: 'time',
-                        type: 'time_schedule',
-                        time: '07:30',
-                        days: ['mon', 'tue', 'wed', 'thu', 'fri']
-                      };
-                      handleUpdateActiveRule({ triggers: [...activeRule.triggers, newTrig] });
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-slate-800 text-cyan-300 hover:bg-slate-700 transition border border-cyan-900/50"
-                  >
-                    <Clock className="w-3 h-3" />
-                    <span>Time Schedule</span>
-                  </button>
-                </div>
+                <span className="text-[11px] font-mono text-amber-400 font-semibold">
+                  {activeRule.triggers.length} {activeRule.triggers.length === 1 ? 'Trigger' : 'Triggers'}
+                </span>
               </div>
 
-              <div className="space-y-2.5">
-                {activeRule.triggers.map((trig, tIdx) => {
-                  if (trig.type === 'time_schedule' || trig.source === 'time') {
+              {activeRule.triggers.length === 0 ? (
+                <div className="p-3 rounded-xl bg-slate-950/40 border border-dashed border-slate-800 text-center text-xs text-slate-500 italic">
+                  No triggers defined. Automation will never fire.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {activeRule.triggers.map((trig, tIdx) => {
+                    if (trig.type === 'time_schedule' || trig.source === 'time') {
+                      return (
+                        <div
+                          key={trig.id || tIdx}
+                          className="p-3 rounded-xl bg-slate-950 border border-cyan-900/60 space-y-2 text-xs"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="w-5 h-5 rounded-full bg-cyan-950 text-cyan-300 font-bold text-[10px] flex items-center justify-center border border-cyan-800">
+                                T{tIdx + 1}
+                              </span>
+                              <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                                <span className="text-[10px] text-slate-500 font-sans">ID:</span>
+                                <input
+                                  type="text"
+                                  value={trig.id || ''}
+                                  onChange={e => {
+                                    const updated = [...activeRule.triggers];
+                                    updated[tIdx] = { ...updated[tIdx], id: e.target.value };
+                                    handleUpdateActiveRule({ triggers: updated });
+                                  }}
+                                  placeholder={`trig_${tIdx + 1}`}
+                                  className="bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 text-amber-300 text-[11px] font-mono focus:outline-none focus:border-amber-500 w-24"
+                                />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                                <span className="font-semibold text-white">Time Schedule</span>
+                                <span className="px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 text-[10px] border border-cyan-800/60 font-mono">
+                                  {trig.time || '07:30'}
+                                </span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = activeRule.triggers.filter((_, i) => i !== tIdx);
+                                handleUpdateActiveRule({ triggers: updated });
+                              }}
+                              className="p-1 text-slate-500 hover:text-rose-400 transition"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-sans text-slate-400 mb-1">Target Time (24h)</label>
+                            <input
+                              type="time"
+                              value={trig.time || '07:30'}
+                              onChange={e => {
+                                const updated = [...activeRule.triggers];
+                                updated[tIdx] = { ...updated[tIdx], time: e.target.value };
+                                handleUpdateActiveRule({ triggers: updated });
+                              }}
+                              className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
+                            />
+                          </div>
+
+                          <DayOfWeekPicker
+                            selectedDays={trig.days}
+                            onChange={days => {
+                              const updated = [...activeRule.triggers];
+                              updated[tIdx] = { ...updated[tIdx], days };
+                              handleUpdateActiveRule({ triggers: updated });
+                            }}
+                          />
+                        </div>
+                      );
+                    }
+
                     return (
                       <div
                         key={trig.id || tIdx}
-                        className="p-3 rounded-xl bg-slate-950 border border-cyan-900/60 space-y-2 text-xs"
+                        className="p-3 rounded-xl bg-slate-950 border border-slate-800/90 space-y-2 text-xs"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
-                            <span className="w-5 h-5 rounded-full bg-cyan-950 text-cyan-300 font-bold text-[10px] flex items-center justify-center border border-cyan-800">
+                            <span className="w-5 h-5 rounded-full bg-amber-950 text-amber-300 font-bold text-[10px] flex items-center justify-center border border-amber-800">
                               T{tIdx + 1}
                             </span>
-                            <div className="flex items-center gap-1.5">
-                              <Clock className="w-3.5 h-3.5 text-cyan-400" />
-                              <span className="font-semibold text-white">Time Schedule Trigger</span>
-                              <span className="px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 text-[10px] border border-cyan-800/60 font-mono">
-                                {trig.time || '07:30'}
-                              </span>
+                            <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                              <span className="text-[10px] text-slate-500 font-sans">ID:</span>
+                              <input
+                                type="text"
+                                value={trig.id || ''}
+                                onChange={e => {
+                                  const updated = [...activeRule.triggers];
+                                  updated[tIdx] = { ...updated[tIdx], id: e.target.value };
+                                  handleUpdateActiveRule({ triggers: updated });
+                                }}
+                                placeholder={`trig_${tIdx + 1}`}
+                                className="bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 text-amber-300 text-[11px] font-mono focus:outline-none focus:border-amber-500 w-24"
+                              />
                             </div>
+                            {trig.source_command_name ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-semibold text-white">{trig.source_command_name}</span>
+                                {trig.option_label && (
+                                  <span className="px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 text-[10px] border border-amber-800/60">
+                                    {trig.option_label}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="font-semibold text-slate-300 font-mono">
+                                CAN Trigger {trig.can_id}
+                              </span>
+                            )}
                           </div>
                           <button
                             type="button"
@@ -2047,286 +1901,332 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                           </button>
                         </div>
 
-                        <div>
-                          <label className="block text-[10px] font-sans text-slate-400 mb-1">Target Time (24h)</label>
-                          <input
-                            type="time"
-                            value={trig.time || '07:30'}
-                            onChange={e => {
-                              const updated = [...activeRule.triggers];
-                              updated[tIdx] = { ...updated[tIdx], time: e.target.value };
-                              handleUpdateActiveRule({ triggers: updated });
-                            }}
-                            className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
-                          />
+                        <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
+                          <div>
+                            <label className="block text-[10px] font-sans text-slate-500">CAN ID</label>
+                            <input
+                              type="text"
+                              value={trig.can_id || ''}
+                              onChange={e => {
+                                const updated = [...activeRule.triggers];
+                                updated[tIdx].can_id = e.target.value;
+                                handleUpdateActiveRule({ triggers: updated });
+                              }}
+                              placeholder="0x448"
+                              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-sans text-slate-500">Bus</label>
+                            <select
+                              value={trig.bus ?? 0}
+                              onChange={e => {
+                                const updated = [...activeRule.triggers];
+                                updated[tIdx].bus = parseInt(e.target.value) || 0;
+                                handleUpdateActiveRule({ triggers: updated });
+                              }}
+                              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                            >
+                              <option value={0}>Bus 0</option>
+                              <option value={1}>Bus 1</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-sans text-slate-500">Gesture / Clicks</label>
+                            <select
+                              value={trig.click_count || 1}
+                              onChange={e => {
+                                const updated = [...activeRule.triggers];
+                                updated[tIdx].click_count = parseInt(e.target.value) || 1;
+                                handleUpdateActiveRule({ triggers: updated });
+                              }}
+                              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans text-[11px]"
+                            >
+                              <option value={1}>Single Click</option>
+                              <option value={2}>Double Click</option>
+                              <option value={3}>Triple Click</option>
+                            </select>
+                          </div>
                         </div>
 
-                        <DayOfWeekPicker
-                          selectedDays={trig.days}
-                          onChange={days => {
-                            const updated = [...activeRule.triggers];
-                            updated[tIdx] = { ...updated[tIdx], days };
-                            handleUpdateActiveRule({ triggers: updated });
-                          }}
-                        />
+                        <div className="grid grid-cols-2 gap-2 font-mono text-[11px]">
+                          <div>
+                            <label className="block text-[10px] font-sans text-slate-500">Target Match (1-based D1..D8)</label>
+                            <input
+                              type="text"
+                              value={typeof trig.match === 'object' ? JSON.stringify(trig.match) : typeof trig.to_payload === 'object' ? JSON.stringify(trig.to_payload) : (trig.to_payload || '{"D7":"0x0"}')}
+                              onChange={e => {
+                                const updated = [...activeRule.triggers];
+                                const compiled = compileToByteMap(e.target.value);
+                                updated[tIdx].match = compiled;
+                                updated[tIdx].to_payload = compiled;
+                                handleUpdateActiveRule({ triggers: updated });
+                              }}
+                              placeholder='{"D7":"0x0"}'
+                              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-cyan-300 font-bold"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-sans text-slate-500">Byte Transition (Byte, Mask, From, To)</label>
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                placeholder="D7"
+                                value={trig.byte || (trig.byte_index !== undefined ? `D${trig.byte_index + 1}` : 'D7')}
+                                onChange={e => {
+                                  const updated = [...activeRule.triggers];
+                                  updated[tIdx].byte = e.target.value.toUpperCase();
+                                  const num = parseInt(e.target.value.replace(/\D/g, ''), 10);
+                                  if (!isNaN(num) && num >= 1 && num <= 8) {
+                                    updated[tIdx].byte_index = num - 1;
+                                  }
+                                  handleUpdateActiveRule({ triggers: updated });
+                                }}
+                                className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 text-center font-bold"
+                                title="1-based Byte (D1..D8)"
+                              />
+                              <input
+                                type="text"
+                                placeholder="Mask"
+                                value={trig.mask || '0xF0'}
+                                onChange={e => {
+                                  const updated = [...activeRule.triggers];
+                                  updated[tIdx].mask = e.target.value;
+                                  handleUpdateActiveRule({ triggers: updated });
+                                }}
+                                className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-yellow-300 text-center font-bold"
+                                title="Byte Bitmask (e.g. 0xF0)"
+                              />
+                              <input
+                                type="text"
+                                placeholder="From"
+                                value={trig.from || (trig.from_value !== undefined ? `0x${trig.from_value.toString(16).padStart(2, '0').toUpperCase()}` : '0x00')}
+                                onChange={e => {
+                                  const updated = [...activeRule.triggers];
+                                  updated[tIdx].from = e.target.value;
+                                  updated[tIdx].from_value = parseInt(e.target.value, 16) || 0;
+                                  handleUpdateActiveRule({ triggers: updated });
+                                }}
+                                className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 text-center"
+                                title="From Value (e.g. 0x00)"
+                              />
+                              <input
+                                type="text"
+                                placeholder="To"
+                                value={trig.to || (trig.to_value !== undefined ? `0x${trig.to_value.toString(16).padStart(2, '0').toUpperCase()}` : '0x10')}
+                                onChange={e => {
+                                  const updated = [...activeRule.triggers];
+                                  updated[tIdx].to = e.target.value;
+                                  updated[tIdx].to_value = parseInt(e.target.value, 16) || 0;
+                                  handleUpdateActiveRule({ triggers: updated });
+                                }}
+                                className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-cyan-300 text-center font-bold"
+                                title="To Value (e.g. 0x10)"
+                              />
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     );
-                  }
+                  })}
+                </div>
+              )}
 
-                  return (
-                  <div
-                    key={trig.id || tIdx}
-                    className="p-3 rounded-xl bg-slate-950 border border-slate-800/90 space-y-2 text-xs"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-cyan-950 text-cyan-300 font-bold text-[10px] flex items-center justify-center border border-cyan-800">
-                          T{tIdx + 1}
-                        </span>
-                        {trig.source_command_name ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-semibold text-white">{trig.source_command_name}</span>
-                            {trig.option_label && (
-                              <span className="px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 text-[10px] border border-cyan-800/60">
-                                {trig.option_label}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="font-semibold text-slate-300 font-mono">
-                            CAN Trigger {trig.can_id}
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const updated = activeRule.triggers.filter((_, i) => i !== tIdx);
-                          handleUpdateActiveRule({ triggers: updated });
-                        }}
-                        className="p-1 text-slate-500 hover:text-rose-400 transition"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
-                      <div>
-                        <label className="block text-[10px] font-sans text-slate-500">CAN ID</label>
-                        <input
-                          type="text"
-                          value={trig.can_id || ''}
-                          onChange={e => {
-                            const updated = [...activeRule.triggers];
-                            updated[tIdx].can_id = e.target.value;
-                            handleUpdateActiveRule({ triggers: updated });
-                          }}
-                          placeholder="0x448"
-                          className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-sans text-slate-500">Bus</label>
-                        <select
-                          value={trig.bus ?? 0}
-                          onChange={e => {
-                            const updated = [...activeRule.triggers];
-                            updated[tIdx].bus = parseInt(e.target.value) || 0;
-                            handleUpdateActiveRule({ triggers: updated });
-                          }}
-                          className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
-                        >
-                          <option value={0}>Bus 0</option>
-                          <option value={1}>Bus 1</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-sans text-slate-500">Gesture / Clicks</label>
-                        <select
-                          value={trig.click_count || 1}
-                          onChange={e => {
-                            const updated = [...activeRule.triggers];
-                            updated[tIdx].click_count = parseInt(e.target.value) || 1;
-                            handleUpdateActiveRule({ triggers: updated });
-                          }}
-                          className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans text-[11px]"
-                        >
-                          <option value={1}>Single Click</option>
-                          <option value={2}>Double Click</option>
-                          <option value={3}>Triple Click</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 font-mono text-[11px]">
-                      <div>
-                        <label className="block text-[10px] font-sans text-slate-500">Target Match (1-based D1..D8)</label>
-                        <input
-                          type="text"
-                          value={typeof trig.match === 'object' ? JSON.stringify(trig.match) : typeof trig.to_payload === 'object' ? JSON.stringify(trig.to_payload) : (trig.to_payload || '{"D7":"0x0"}')}
-                          onChange={e => {
-                            const updated = [...activeRule.triggers];
-                            const compiled = compileToByteMap(e.target.value);
-                            updated[tIdx].match = compiled;
-                            updated[tIdx].to_payload = compiled;
-                            handleUpdateActiveRule({ triggers: updated });
-                          }}
-                          placeholder='{"D7":"0x0"}'
-                          className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-cyan-300 font-bold"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-sans text-slate-500">Byte Transition (Byte, Mask, From, To)</label>
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="text"
-                            placeholder="D7"
-                            value={trig.byte || (trig.byte_index !== undefined ? `D${trig.byte_index + 1}` : 'D7')}
-                            onChange={e => {
-                              const updated = [...activeRule.triggers];
-                              updated[tIdx].byte = e.target.value.toUpperCase();
-                              const num = parseInt(e.target.value.replace(/\D/g, ''), 10);
-                              if (!isNaN(num) && num >= 1 && num <= 8) {
-                                updated[tIdx].byte_index = num - 1;
-                              }
-                              handleUpdateActiveRule({ triggers: updated });
-                            }}
-                            className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 text-center font-bold"
-                            title="1-based Byte (D1..D8)"
-                          />
-                          <input
-                            type="text"
-                            placeholder="Mask"
-                            value={trig.mask || '0xF0'}
-                            onChange={e => {
-                              const updated = [...activeRule.triggers];
-                              updated[tIdx].mask = e.target.value;
-                              handleUpdateActiveRule({ triggers: updated });
-                            }}
-                            className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-yellow-300 text-center font-bold"
-                            title="Byte Bitmask (e.g. 0xF0)"
-                          />
-                          <input
-                            type="text"
-                            placeholder="From"
-                            value={trig.from || (trig.from_value !== undefined ? `0x${trig.from_value.toString(16).padStart(2, '0').toUpperCase()}` : '0x00')}
-                            onChange={e => {
-                              const updated = [...activeRule.triggers];
-                              updated[tIdx].from = e.target.value;
-                              updated[tIdx].from_value = parseInt(e.target.value, 16) || 0;
-                              handleUpdateActiveRule({ triggers: updated });
-                            }}
-                            className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 text-center"
-                            title="From Value (e.g. 0x00)"
-                          />
-                          <input
-                            type="text"
-                            placeholder="To"
-                            value={trig.to || (trig.to_value !== undefined ? `0x${trig.to_value.toString(16).padStart(2, '0').toUpperCase()}` : '0x10')}
-                            onChange={e => {
-                              const updated = [...activeRule.triggers];
-                              updated[tIdx].to = e.target.value;
-                              updated[tIdx].to_value = parseInt(e.target.value, 16) || 0;
-                              handleUpdateActiveRule({ triggers: updated });
-                            }}
-                            className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-cyan-300 text-center font-bold"
-                            title="To Value (e.g. 0x10)"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  );
-                })}
-              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  openAddTriggerDialog(newTrig =>
+                    handleUpdateActiveRule({ triggers: [...activeRule.triggers, newTrig] })
+                  )
+                }
+                className="ha-section-add-btn accent-trig"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Trigger</span>
+              </button>
             </div>
 
             {/* SECTION 2: CONDITIONS (AND IF...) */}
-            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="p-1 rounded-lg bg-purple-500/20 text-purple-400">
-                  <Shield className="w-3.5 h-3.5" />
-                </span>
-                <span className="text-xs font-bold uppercase tracking-wider text-white">
-                  2. Conditions (And if...)
+            <div className="can-do-section-box cond-section space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="p-1 rounded-lg bg-sky-500/20 text-sky-400">
+                    <Shield className="w-3.5 h-3.5" />
+                  </span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-white">
+                    2. Conditions (And if...)
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  Optional gate evaluated before actions run
                 </span>
               </div>
 
               <ConditionListEditor
                 conditions={activeRule.conditions}
                 depth={0}
+                availableTriggers={activeRule.triggers}
                 emptyText="No conditions set. Rule will always execute when triggers match."
                 onUpdate={conds => handleUpdateActiveRule({ conditions: conds })}
-                onPullCatalog={() => {
-                  setPickerTarget('condition');
-                  setCatalogPickerOpen(true);
-                }}
+                onOpenAddConditionDialog={openAddConditionDialog}
               />
             </div>
 
             {/* SECTION 3: ACTIONS (THEN DO...) */}
-            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400">
-                  <Send className="w-3.5 h-3.5" />
-                </span>
-                <span className="text-xs font-bold uppercase tracking-wider text-white">
-                  3. Actions (Then do...)
+            <div className="can-do-section-box act-section space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400">
+                    <Send className="w-3.5 h-3.5" />
+                  </span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-white">
+                    3. Actions (Then do...)
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  Executed in sequence when triggers &amp; conditions match
                 </span>
               </div>
 
               <ActionListEditor
                 actions={activeRule.actions}
                 depth={0}
+                availableTriggers={activeRule.triggers}
                 emptyText="No actions defined."
                 onUpdate={acts => handleUpdateActiveRule({ actions: acts })}
-                onPullCatalog={() => {
-                  setPickerTarget('action');
-                  setCatalogPickerOpen(true);
-                }}
+                onOpenAddConditionDialog={openAddConditionDialog}
+                onOpenAddActionDialog={openAddActionDialog}
               />
             </div>
 
             {/* SECTION 4: OFF-ACTIONS (Visible only in Toggle mode) */}
             {activeRule.exec_mode === 'toggle' && (
-              <div className="p-4 rounded-2xl bg-slate-900 border border-amber-900/40 shadow-lg space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="p-1 rounded-lg bg-amber-500/20 text-amber-400">
-                    <RotateCw className="w-3.5 h-3.5" />
-                  </span>
-                  <span className="text-xs font-bold uppercase tracking-wider text-amber-300">
-                    4. Off-Actions (When toggled OFF...)
+              <div className="can-do-section-box off-act-section space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1 rounded-lg bg-rose-500/20 text-rose-400">
+                      <RotateCw className="w-3.5 h-3.5" />
+                    </span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-rose-300">
+                      4. Off-Actions (When toggled OFF...)
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-rose-400/80">
+                    Executed when toggled off or when auto-revert expires
                   </span>
                 </div>
 
                 <ActionListEditor
                   actions={activeRule.off_actions || []}
                   depth={0}
+                  availableTriggers={activeRule.triggers}
                   emptyText="No off-actions defined. Specify actions to run when toggled off."
                   onUpdate={acts => handleUpdateActiveRule({ off_actions: acts })}
-                  onPullCatalog={() => {
-                    setPickerTarget('off_action');
-                    setCatalogPickerOpen(true);
-                  }}
+                  onOpenAddConditionDialog={openAddConditionDialog}
+                  onOpenAddActionDialog={openAddActionDialog}
                 />
               </div>
             )}
           </div>
         ) : (
-          <div className="lg:col-span-5 flex items-center justify-center p-12 text-slate-500 text-sm">
-            Select or create a rule to start editing.
+          <div className="lg:col-span-8 flex items-center justify-center p-12 rounded-2xl bg-slate-900 border border-slate-800 text-slate-500 text-sm">
+            Select or create an automation rule to start editing.
           </div>
         )}
 
-        {/* Right Column: Live JSON Inspector & Output (4 cols) */}
+        {/* Right Column: Automations List & JSON Inspector (4 cols = ~1/3 of area) */}
         <div className="lg:col-span-4 space-y-4">
-          <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg flex flex-col h-full space-y-3">
-            <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-950 border border-slate-800 text-[11px]">
+          {/* Card 1: Automations List (Compact) */}
+          <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Automations ({rules.length})
+              </span>
+              <button
+                type="button"
+                onClick={handleAddRule}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/40 transition"
+              >
+                <Plus className="w-3 h-3" />
+                <span>New</span>
+              </button>
+            </div>
+
+            <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
+              {rules.map((rule, idx) => {
+                const isSelected = rule.id === activeRule?.id;
+                return (
+                  <div
+                    key={rule.id}
+                    onClick={() => setSelectedRuleId(rule.id)}
+                    className={`group p-2.5 rounded-xl cursor-pointer border transition text-left flex flex-col gap-1.5 ${
+                      isSelected
+                        ? 'bg-slate-800 border-cyan-500/80 shadow-md shadow-cyan-950/40 text-white'
+                        : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:bg-slate-800/60 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                            rule.enabled ? 'bg-emerald-400' : 'bg-slate-600'
+                          }`}
+                        />
+                        <span className="text-xs font-semibold truncate">{rule.name || `Rule #${idx + 1}`}</span>
+                      </div>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                        <button
+                          type="button"
+                          onClick={e => {
+                            e.stopPropagation();
+                            handleDuplicateRule(rule);
+                          }}
+                          title="Duplicate rule"
+                          className="p-1 hover:text-cyan-300 text-slate-400"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={e => {
+                            e.stopPropagation();
+                            handleDeleteRule(rule.id);
+                          }}
+                          title="Delete rule"
+                          className="p-1 hover:text-rose-400 text-slate-400"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+                      <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 uppercase">
+                        {(rule.exec_mode || 'one_shot').replace('_', ' ')}
+                      </span>
+                      {rule.ha_expose && (
+                        <span className="px-1 py-0.5 rounded bg-orange-950/60 text-orange-300 border border-orange-800/40">
+                          HA
+                        </span>
+                      )}
+                      <span>
+                        {(rule.triggers || []).length}T · {(rule.actions || []).length}A
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Card 2: Live JSON Inspector & Output (Compact) */}
+          <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-3">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+              <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-950 border border-slate-800 text-[10px]">
                 <button
                   type="button"
                   onClick={() => setActiveJsonTab('catalog')}
-                  className={`px-2.5 py-1 rounded-lg font-semibold transition ${
+                  className={`px-2 py-0.5 rounded font-semibold transition ${
                     activeJsonTab === 'catalog'
                       ? 'bg-cyan-500 text-slate-950 shadow'
                       : 'text-slate-400 hover:text-slate-200'
@@ -2337,7 +2237,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 <button
                   type="button"
                   onClick={() => setActiveJsonTab('cando')}
-                  className={`px-2.5 py-1 rounded-lg font-semibold transition ${
+                  className={`px-2 py-0.5 rounded font-semibold transition ${
                     activeJsonTab === 'cando'
                       ? 'bg-cyan-500 text-slate-950 shadow'
                       : 'text-slate-400 hover:text-slate-200'
@@ -2348,7 +2248,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 <button
                   type="button"
                   onClick={() => setActiveJsonTab('esp32')}
-                  className={`px-2.5 py-1 rounded-lg font-semibold transition ${
+                  className={`px-2 py-0.5 rounded font-semibold transition ${
                     activeJsonTab === 'esp32'
                       ? 'bg-cyan-500 text-slate-950 shadow'
                       : 'text-slate-400 hover:text-slate-200'
@@ -2359,20 +2259,20 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 <button
                   type="button"
                   onClick={() => setActiveJsonTab('custom')}
-                  className={`px-2.5 py-1 rounded-lg font-semibold transition ${
+                  className={`px-2 py-0.5 rounded font-semibold transition ${
                     activeJsonTab === 'custom'
                       ? 'bg-cyan-500 text-slate-950 shadow'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  Custom Schema
+                  Custom
                 </button>
               </div>
 
               <button
                 type="button"
                 onClick={handleCopyJson}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition border border-slate-700"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition border border-slate-700"
               >
                 {copied ? (
                   <>
@@ -2391,25 +2291,25 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             {/* Tab descriptions */}
             <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
               <FileJson className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
-              <span>
-                {activeJsonTab === 'catalog' && 'Full can_do_catalog.json with embedded automations ready for LittleFS flash.'}
-                {activeJsonTab === 'cando' && 'Formatted for SuperSuave/wicant-i-automate LittleFS flash.'}
-                {activeJsonTab === 'esp32' && 'Flat, numeric enums optimized for lightweight ESP32 C parsing.'}
-                {activeJsonTab === 'custom' && 'Sandbox schema for testing your new firmware architecture from scratch.'}
+              <span className="truncate">
+                {activeJsonTab === 'catalog' && 'can_do_catalog.json for LittleFS flash.'}
+                {activeJsonTab === 'cando' && 'WiCAN LittleFS automation format.'}
+                {activeJsonTab === 'esp32' && 'Flat numeric enums for C parsing.'}
+                {activeJsonTab === 'custom' && 'Sandbox schema for testing firmware.'}
               </span>
             </div>
 
-            {/* Code Output Area */}
-            <div className="relative flex-1 min-h-[420px] max-h-[600px] overflow-hidden rounded-xl bg-slate-950 border border-slate-800">
+            {/* Code Output Area (Compact height 190px) */}
+            <div className="relative h-[190px] max-h-[190px] overflow-hidden rounded-xl bg-slate-950 border border-slate-800">
               {activeJsonTab === 'custom' ? (
                 <textarea
                   value={customJsonSchema}
                   onChange={e => setCustomJsonSchema(e.target.value)}
-                  className="w-full h-full p-3 font-mono text-[11px] text-cyan-300 bg-transparent resize-none focus:outline-none focus:ring-1 focus:ring-cyan-500 leading-relaxed overflow-y-auto"
+                  className="w-full h-full p-2.5 font-mono text-[11px] text-cyan-300 bg-transparent resize-none focus:outline-none focus:ring-1 focus:ring-cyan-500 leading-relaxed overflow-y-auto"
                   spellCheck={false}
                 />
               ) : (
-                <pre className="w-full h-full p-3 font-mono text-[11px] text-slate-300 overflow-auto leading-relaxed select-text">
+                <pre className="w-full h-full p-2.5 font-mono text-[11px] text-slate-300 overflow-auto leading-relaxed select-text">
                   <code>
                     {activeJsonTab === 'catalog'
                       ? exportToFullCatalogJson(catalog, rules)
@@ -2422,68 +2322,45 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             </div>
 
             {/* Quick Export & ESP32 Direct Sync Footer */}
-            <div className="pt-3 border-t border-slate-800 space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-lg bg-slate-950/70 border border-slate-800/80">
-                <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-                  <span className="text-[11px] font-semibold text-slate-400 whitespace-nowrap">ESP32 Device:</span>
+            <div className="pt-2 border-t border-slate-800 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-1.5 p-2 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                <div className="flex items-center gap-1.5 flex-1 min-w-[150px]">
+                  <span className="text-[10px] font-semibold text-slate-400 whitespace-nowrap">ESP IP:</span>
                   <input
                     type="text"
                     value={espIp}
                     onChange={e => setEspIp(e.target.value)}
                     placeholder="192.168.4.1"
-                    className="flex-1 px-2 py-1 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    className="flex-1 px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                   />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
                     disabled={syncing}
                     onClick={handlePullFromEsp}
-                    className="px-2.5 py-1 text-xs font-semibold rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition disabled:opacity-50"
+                    className="px-2 py-1 text-[11px] font-semibold rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition disabled:opacity-50"
                   >
-                    Pull (/api/automations)
+                    Pull
                   </button>
                   <button
                     type="button"
                     disabled={syncing}
                     onClick={handlePushToEsp}
-                    className="px-2.5 py-1 text-xs font-semibold rounded bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold transition disabled:opacity-50"
+                    className="px-2.5 py-1 text-[11px] font-semibold rounded bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold transition disabled:opacity-50"
                   >
-                    Push &amp; Soft-Reset
+                    Push
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 p-2 rounded-lg bg-slate-950/70 border border-slate-800/80 text-xs">
-                <div>
-                  <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">NTP Time Server</label>
-                  <input
-                    type="text"
-                    value={settings.ntp_server || 'pool.ntp.org'}
-                    onChange={e => onUpdateSettings({ ...settings, ntp_server: e.target.value })}
-                    placeholder="pool.ntp.org"
-                    className="w-full px-2 py-1 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">Timezone / POSIX TZ</label>
-                  <input
-                    type="text"
-                    value={settings.timezone || 'America/Los_Angeles'}
-                    onChange={e => onUpdateSettings({ ...settings, timezone: e.target.value })}
-                    placeholder="America/Los_Angeles or PST8PDT"
-                    className="w-full px-2 py-1 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                  />
-                </div>
-              </div>
-
               {syncStatus && (
-                <div className="text-[11px] font-mono text-cyan-400 bg-cyan-950/40 border border-cyan-800/60 rounded px-2.5 py-1">
+                <div className="text-[10px] font-mono text-cyan-400 bg-cyan-950/40 border border-cyan-800/60 rounded px-2 py-0.5">
                   {syncStatus}
                 </div>
               )}
 
-              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-0.5">
                 <span>{rules.length} automations compiled</span>
                 <button
                   type="button"
@@ -2495,122 +2372,27 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Card 3: Quick Info & ESP32 Firmware Notes */}
+          <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 text-xs text-slate-400 space-y-1.5">
+            <div className="flex items-center gap-1.5 font-semibold text-slate-300">
+              <Info className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Firmware Redesign Note</span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-slate-400">
+              As you rewrite the ESP32 firmware, this interface serves as the primary logic orchestrator. The ESP32 simply ingests and executes the generated JSON.
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* MODAL: Catalog Command Pull Picker */}
-      {catalogPickerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white">
-                    Pull Command into {pickerTarget.toUpperCase()}
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    Select a catalog item or state to populate into this rule.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCatalogPickerOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Search & Filter */}
-            <div className="p-3 border-b border-slate-800 bg-slate-950/50 flex flex-wrap gap-2">
-              <div className="relative flex-1 min-w-[180px]">
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
-                <input
-                  type="text"
-                  value={pickerSearch}
-                  onChange={e => setPickerSearch(e.target.value)}
-                  placeholder="Search commands or CAN IDs..."
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
-                />
-              </div>
-
-              <select
-                value={pickerCategory}
-                onChange={e => setPickerCategory(e.target.value)}
-                className="bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none"
-              >
-                <option value="all">All Categories</option>
-                {categories.map(c => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Command List */}
-            <div className="p-4 overflow-y-auto space-y-2 flex-1">
-              {filteredPickerCommands.length === 0 ? (
-                <div className="p-8 text-center text-xs text-slate-500">No commands found.</div>
-              ) : (
-                filteredPickerCommands.map(cmd => (
-                  <div
-                    key={cmd.id}
-                    className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-slate-700 transition flex flex-col gap-2"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-white">{cmd.name || cmd.ha_metadata?.name || cmd.id}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 font-mono">
-                            {cmd.category}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono mt-0.5">
-                          {(cmd.state_can_id || cmd.network?.state_can_id) && (
-                            <span>RX: {cmd.state_can_id || cmd.network?.state_can_id}</span>
-                          )}
-                          {(cmd.action_can_id || cmd.network?.action_can_id) && (
-                            <span>TX: {cmd.action_can_id || cmd.network?.action_can_id}</span>
-                          )}
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleSelectFromPicker(cmd)}
-                        className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-500 text-slate-950 hover:bg-cyan-400 transition"
-                      >
-                        Select Base Command
-                      </button>
-                    </div>
-
-                    {/* Specific Options/States if available */}
-                    {cmd.options && cmd.options.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-1 border-t border-slate-900">
-                        <span className="text-[10px] text-slate-500 font-medium self-center">Or Pick State:</span>
-                        {cmd.options.map((opt, oIdx) => (
-                          <button
-                            key={oIdx}
-                            type="button"
-                            onClick={() => handleSelectFromPicker(cmd, opt)}
-                            className="text-[10px] px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-slate-800 transition"
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
+      {/* MODAL: Add Element (HA-style Categorized Selector) */}
+      {addElementTarget && (
+        <AddElementModal
+          target={addElementTarget}
+          catalog={catalog}
+          onClose={() => setAddElementTarget(null)}
+        />
       )}
 
       {/* MODAL: Rule Dry Run / Simulation Log */}
@@ -2634,7 +2416,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 onClick={() => setShowSimulateModal(false)}
                 className="text-slate-400 hover:text-white p-1 rounded-lg"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 

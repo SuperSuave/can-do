@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CommandOption, CommandStep } from '../types/catalog';
 import { PayloadByteEditor } from './PayloadByteEditor';
+import { MdiIcon } from './MdiIcon';
 import { STATE_PRESETS, StatePreset } from '../data/statePresets';
 import { compileToByteMap } from '../utils/automationConverters';
 import { formatPayloadDisplay } from './CommandDetailModal';
@@ -254,7 +255,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                       onClick={() => handleApplyPreset(preset)}
                       className="w-full text-left p-2 rounded-lg hover:bg-slate-800 transition flex items-start gap-2.5 group"
                     >
-                      <span className="text-base shrink-0 mt-0.5">{preset.icon}</span>
+                      <MdiIcon icon={preset.icon} className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-semibold text-white group-hover:text-cyan-300 transition flex items-center justify-between">
                           <span>{preset.name}</span>

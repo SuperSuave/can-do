@@ -44,8 +44,9 @@ export interface AutomationTrigger {
 
 export interface AutomationCondition {
   id: string;
-  type?: 'can_state' | 'byte_value' | 'time_condition' | 'time' | 'param_range' | 'voltage' | 'and' | 'or' | 'not' | 'and_group' | 'or_group' | 'not_group';
+  type?: 'can_state' | 'byte_value' | 'time_condition' | 'time' | 'param_range' | 'voltage' | 'and' | 'or' | 'not' | 'and_group' | 'or_group' | 'not_group' | 'triggered_by' | 'trigger';
   logic?: 'and' | 'or' | 'not' | 'leaf';
+  trigger_id?: string;
   can_id?: string;
   bus?: number;
   byte?: string;

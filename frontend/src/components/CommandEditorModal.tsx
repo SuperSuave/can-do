@@ -637,7 +637,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Star (⭐) Button"
+                  placeholder="e.g. Steering Wheel Star Button"
                   value={formData.name || ''}
                   onChange={e => handleNameChange(e.target.value)}
                   className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[var(--md-sys-color-primary)]"

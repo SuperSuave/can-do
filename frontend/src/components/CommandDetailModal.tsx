@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Command, Catalog, getCommandContributors } from '../types/catalog';
+import { Command, CommandRole, CommandOption, Catalog, getCommandContributors } from '../types/catalog';
 import { PayloadByteVisualizer } from './PayloadByteVisualizer';
 import { validateCommand } from '../utils/canValidator';
 import { exportCommandToDbcSnippet } from '../utils/dbcConverter';
@@ -24,7 +24,9 @@ import {
   FileText,
   Home,
   Sparkles,
-  Zap
+  Zap,
+  Play,
+  Radio
 } from 'lucide-react';
 
 interface CommandDetailModalProps {
@@ -33,7 +35,7 @@ interface CommandDetailModalProps {
   onClose: () => void;
   onEdit: (cmd: Command) => void;
   onDelete?: (cmdId: string) => void;
-  onAddToAutomation?: (cmd: Command, option?: any) => void;
+  onAddToAutomation?: (cmd: Command, role?: CommandRole, option?: CommandOption) => void;
 }
 
 export const formatPayloadDisplay = (val: any): string => {
@@ -68,6 +70,7 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
   const [copiedIcon, setCopiedIcon] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'vehicles' | 'cancapture' | 'homeassistant' | 'raw_json' | 'dbc'>('overview');
+  const [selectedOptionIdx, setSelectedOptionIdx] = useState<number>(0);
 
   if (!command) return null;
 
@@ -474,7 +477,8 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                           <th className="p-3 font-mono">RX CAN Match Pattern</th>
                           <th className="p-3 font-mono">Action Frame (TX)</th>
                           <th className="p-3">Description / Toast</th>
-                          <th className="p-3 text-right">Default</th>
+                          <th className="p-3 text-center">Default</th>
+                          <th className="p-3 text-right">Automate</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60 font-mono">
@@ -557,13 +561,43 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                             <td className="p-3 font-sans text-slate-400">
                               {opt.description || opt.popup || opt.popup_message || '-'}
                             </td>
-                            <td className="p-3 text-right">
+                            <td className="p-3 text-center">
                               {opt.default ? (
                                 <span className="px-2 py-0.5 rounded text-[10px] font-sans font-bold uppercase bg-cyan-950 text-cyan-300 border border-cyan-700">
                                   Default
                                 </span>
                               ) : (
                                 '-'
+                              )}
+                            </td>
+                            <td className="p-3 text-right">
+                              {onAddToAutomation && (
+                                <div className="inline-flex items-center gap-1.5 justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onAddToAutomation(command, 'action', opt);
+                                      onClose();
+                                    }}
+                                    title={`Add "${opt.label}" as Action to Automation`}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold bg-emerald-950/90 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/70 transition shadow-sm"
+                                  >
+                                    <Play className="w-3 h-3 fill-current" />
+                                    <span>Action</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onAddToAutomation(command, 'trigger', opt);
+                                      onClose();
+                                    }}
+                                    title={`Add "${opt.label}" as Trigger to Automation`}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold bg-amber-950/90 hover:bg-amber-900 text-amber-300 border border-amber-700/70 transition shadow-sm"
+                                  >
+                                    <Radio className="w-3 h-3" />
+                                    <span>Trigger</span>
+                                  </button>
+                                </div>
                               )}
                             </td>
                           </tr>
@@ -996,17 +1030,36 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
 
           <div className="flex items-center gap-2">
             {onAddToAutomation && (
-              <button
-                type="button"
-                onClick={() => {
-                  onAddToAutomation(command);
-                  onClose();
-                }}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold text-slate-950 bg-cyan-400 hover:bg-cyan-300 transition shadow-sm"
-              >
-                <Zap className="w-3.5 h-3.5 fill-current" />
-                <span>Add to Automation</span>
-              </button>
+              <div className="flex items-center gap-1.5">
+                {command.options && command.options.length > 0 && (
+                  <select
+                    value={selectedOptionIdx}
+                    onChange={e => setSelectedOptionIdx(parseInt(e.target.value) || 0)}
+                    className="bg-slate-900 border border-slate-700 rounded-full px-3 py-1.5 text-xs text-slate-200 font-medium focus:outline-none focus:border-cyan-500"
+                    title="Select specific state for automation"
+                  >
+                    {command.options.map((opt, oIdx) => (
+                      <option key={oIdx} value={oIdx}>
+                        State: {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const chosenOpt = command.options && command.options.length > 0
+                      ? command.options[selectedOptionIdx] || command.options[0]
+                      : undefined;
+                    onAddToAutomation(command, undefined, chosenOpt);
+                    onClose();
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold text-slate-950 bg-cyan-400 hover:bg-cyan-300 transition shadow-sm"
+                >
+                  <Zap className="w-3.5 h-3.5 fill-current" />
+                  <span>Add to Automation</span>
+                </button>
+              </div>
             )}
             <button
               type="button"

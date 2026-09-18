@@ -1,5 +1,5 @@
 import React from 'react';
-import { Command, CommandRole, getCommandContributors, getCommandTestedVehicle } from '../types/catalog';
+import { Command, CommandRole, CommandOption, getCommandContributors, getCommandTestedVehicle } from '../types/catalog';
 import { PayloadByteVisualizer } from './PayloadByteVisualizer';
 import { MdiIcon, getHaDomainBadgeStyle } from './MdiIcon';
 import { 
@@ -15,7 +15,8 @@ import {
   CheckCircle2,
   Github,
   User,
-  Zap
+  Zap,
+  Sparkles
 } from 'lucide-react';
 
 interface CommandCardProps {
@@ -28,7 +29,7 @@ interface CommandCardProps {
   isNew?: boolean;
   isSelectedForAutomation?: boolean;
   onToggleSelectForAutomation?: (cmd: Command) => void;
-  onAddToAutomation?: (cmd: Command, role?: CommandRole) => void;
+  onAddToAutomation?: (cmd: Command, role?: CommandRole, option?: CommandOption) => void;
 }
 
 export const CommandCard: React.FC<CommandCardProps> = ({
@@ -185,11 +186,15 @@ export const CommandCard: React.FC<CommandCardProps> = ({
       />
       {/* Draft badge indicator */}
       {(isNew || isModified) && (
-        <div className="absolute -top-2.5 right-4 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-950 border shadow">
+        <div className="absolute -top-2.5 right-4 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-950 border border-slate-800 shadow">
           {isNew ? (
-            <span className="text-emerald-400">✨ New Contribution</span>
+            <span className="text-emerald-400 inline-flex items-center gap-1">
+              <Sparkles className="w-3 h-3" /> New Contribution
+            </span>
           ) : (
-            <span className="text-amber-400">✏️ Draft Modified</span>
+            <span className="text-amber-400 inline-flex items-center gap-1">
+              <Edit3 className="w-3 h-3" /> Draft Modified
+            </span>
           )}
         </div>
       )}
@@ -354,7 +359,7 @@ export const CommandCard: React.FC<CommandCardProps> = ({
                 {command.options.slice(0, 3).map((opt, i) => (
                   <div
                     key={i}
-                    className={`p-1.5 rounded text-[11px] font-mono flex items-center justify-between gap-2 ${
+                    className={`group/opt p-1.5 rounded text-[11px] font-mono flex items-center justify-between gap-2 ${
                       opt.default
                         ? 'bg-cyan-950/40 text-cyan-300 border border-cyan-700/40'
                         : 'bg-slate-900/80 text-slate-300 border border-slate-800'
@@ -385,6 +390,19 @@ export const CommandCard: React.FC<CommandCardProps> = ({
                           TX: {formatByteMap(opt.payload || opt.to_payload)} {opt.repeat ? <strong className="text-amber-400 font-bold">x{opt.repeat}</strong> : null}
                         </span>
                       ) : null}
+                      {onAddToAutomation && (
+                        <button
+                          type="button"
+                          onClick={e => {
+                            e.stopPropagation();
+                            onAddToAutomation(command, 'action', opt);
+                          }}
+                          title={`Add "${opt.label}" to Automation`}
+                          className="opacity-0 group-hover/opt:opacity-100 p-0.5 hover:bg-slate-700 text-cyan-400 rounded transition"
+                        >
+                          <Zap className="w-3 h-3 fill-current" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -562,6 +580,19 @@ export const CommandCard: React.FC<CommandCardProps> = ({
               <Copy className="w-3.5 h-3.5" />
             )}
           </button>
+          {onAddToAutomation && (
+            <button
+              type="button"
+              onClick={e => {
+                e.stopPropagation();
+                onAddToAutomation(command);
+              }}
+              title="Add command to automation"
+              className="p-1.5 hover:text-cyan-400 hover:bg-slate-800 rounded transition text-slate-400"
+            >
+              <Zap className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             type="button"
             onClick={e => {

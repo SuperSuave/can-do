@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Catalog, Command, CommandRole, GitHubRepoConfig, Vehicle, getCommandContributors } from './types/catalog';
+import { Catalog, Command, CommandRole, CommandOption, GitHubRepoConfig, Vehicle, getCommandContributors } from './types/catalog';
 import { DEFAULT_CATALOG, normalizeCatalog } from './data/defaultCatalog';
 import { validateCatalog } from './utils/canValidator';
+import { commandToAction, commandToTrigger } from './utils/automationConverters';
 import { getSavedRepoConfig, saveRepoConfig } from './utils/githubHelper';
 import { CommandFilter } from './components/CommandFilter';
 import { CommandCard } from './components/CommandCard';
@@ -581,7 +582,7 @@ export default function App() {
     setDraftModifiedVehicleIds([]);
   };
 
-  const handleAddToAutomation = (command: Command, role?: CommandRole) => {
+  const handleAddToAutomation = (command: Command, role?: CommandRole, option?: CommandOption) => {
     const isAction = role === 'action' || (!role && command.roles?.includes('action') && !command.roles?.includes('trigger'));
 
     setAutomationRules(prev => {
@@ -591,10 +592,10 @@ export default function App() {
       if (!activeRule) {
         activeRule = {
           id: `rule_${Date.now()}`,
-          name: `Automate: ${command.name}`,
+          name: `Automate: ${command.name}${option?.label ? ` (${option.label})` : ''}`,
           enabled: true,
           ha_expose: true,
-          ha_icon: 'mdi:car-cog',
+          ha_icon: command.icon || command.mdi || 'mdi:car-cog',
           exec_mode: 'one_shot',
           trigger_mode: 'any',
           cooldown_ms: 500,
@@ -615,28 +616,9 @@ export default function App() {
       }
 
       if (isAction) {
-        activeRule.actions.push({
-          id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          type: 'can_tx',
-          source_command_id: command.id,
-          source_command_name: command.name,
-          bus: command.action_bus ?? command.bus ?? 0,
-          can_id: command.action_can_id || command.state_can_id || '0x000',
-          payload: command.options?.[0]?.payload || command.from_payload || command.match_payload || '00 00 00 00 00 00 00 00',
-          repeat: 1,
-          delay_ms: 0
-        });
+        activeRule.actions.push(commandToAction(command, option));
       } else {
-        activeRule.triggers.push({
-          id: `trig_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          source: 'can',
-          source_command_id: command.id,
-          source_command_name: command.name,
-          bus: command.bus ?? 0,
-          can_id: command.state_can_id || command.action_can_id || '0x000',
-          match_payload: command.options?.[0]?.payload || command.match_payload || command.from_payload || '00 00 00 00 00 00 00 00',
-          click_count: 1
-        });
+        activeRule.triggers.push(commandToTrigger(command, option));
       }
 
       return nextRules;
@@ -1160,9 +1142,9 @@ export default function App() {
               setEditingCommand(cmd);
               setIsEditorOpen(true);
             }}
-            onAddToAutomation={(cmd, role) => {
+            onAddToAutomation={(cmd, role, opt) => {
               setSelectedCommand(null);
-              handleAddToAutomation(cmd, role);
+              handleAddToAutomation(cmd, role, opt);
             }}
           />
         </ErrorBoundary>

@@ -77,6 +77,14 @@ export function compileCondition(cond: AutomationCondition): any {
     };
   }
 
+  // Triggered by condition
+  if (cond.type === 'triggered_by' || cond.type === 'trigger' || cond.trigger_id !== undefined) {
+    return {
+      type: 'triggered_by',
+      trigger_id: cond.trigger_id || ''
+    };
+  }
+
   // Time window condition
   if (cond.type === 'time_condition' || cond.type === 'time' || (cond.start_time && cond.end_time)) {
     return {

@@ -398,3 +398,115 @@
     gap: 6px !important;
   }
 }
+
+/* ==========================================================================
+   CAN Do / Home Assistant Automation Pipeline & Section Styles
+   ========================================================================== */
+.can-do-section-box {
+  position: relative;
+  background: var(--md-sys-color-surface-container-lowest, #0c0e13);
+  border: 1px solid var(--border-color, #282d36);
+  border-left: 4px solid var(--border-color, #282d36);
+  border-radius: 14px;
+  padding: 1.15rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.can-do-section-box.trig-section {
+  border-left-color: #f59e0b;
+}
+
+.can-do-section-box.cond-section {
+  border-left-color: #0284c7;
+}
+
+.can-do-section-box.act-section {
+  border-left-color: #10b981;
+}
+
+.can-do-section-box.off-act-section {
+  border-left-color: #ef4444;
+}
+
+.can-do-section-box:hover {
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
+.can-do-section-box.trig-section:hover {
+  border-left-color: #fbbf24;
+}
+
+.can-do-section-box.cond-section:hover {
+  border-left-color: #38bdf8;
+}
+
+.can-do-section-box.act-section:hover {
+  border-left-color: #34d399;
+}
+
+.can-do-section-box.off-act-section:hover {
+  border-left-color: #f87171;
+}
+
+.ha-section-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  border: 1px solid var(--border-color, #282d36);
+  background: var(--input-bg, #171a20);
+  color: var(--text-heading, #e2e2e6);
+  margin-top: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.ha-section-add-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.ha-section-add-btn.accent-trig {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+.ha-section-add-btn.accent-trig:hover {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: #f59e0b;
+}
+
+.ha-section-add-btn.accent-cond {
+  color: #38bdf8;
+  background: rgba(2, 132, 199, 0.08);
+  border-color: rgba(2, 132, 199, 0.35);
+}
+.ha-section-add-btn.accent-cond:hover {
+  background: rgba(2, 132, 199, 0.18);
+  border-color: #0284c7;
+}
+
+.ha-section-add-btn.accent-act {
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+.ha-section-add-btn.accent-act:hover {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: #10b981;
+}
+
+.ha-section-add-btn.accent-opt {
+  color: #a78bfa;
+  background: rgba(139, 92, 246, 0.08);
+  border-color: rgba(139, 92, 246, 0.35);
+}
+.ha-section-add-btn.accent-opt:hover {
+  background: rgba(139, 92, 246, 0.18);
+  border-color: #8b5cf6;
+}
+
