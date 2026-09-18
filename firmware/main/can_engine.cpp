@@ -398,6 +398,9 @@ void can_rx_task(void* arg) {
             twai_driver_uninstall();
 
             twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, new_mode);
+            g_config.rx_queue_len = 64;
+            g_config.tx_queue_len = 32;
+            g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR | TWAI_ALERT_RX_QUEUE_FULL;
             twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
             twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
@@ -410,6 +413,18 @@ void can_rx_task(void* arg) {
                 ESP_LOGE(TAG, "Failed reinstalling TWAI driver (%s)", esp_err_to_name(ret));
             }
             g_twai_reconfig_pending.store(false);
+        }
+
+        // Auto-recover TWAI peripheral if in BUS_OFF or STOPPED state
+        twai_status_info_t twai_status;
+        if (twai_get_status_info(&twai_status) == ESP_OK) {
+            if (twai_status.state == TWAI_STATE_BUS_OFF) {
+                ESP_LOGW(TAG, "TWAI controller in BUS_OFF! Initiating auto-recovery...");
+                twai_initiate_recovery();
+            } else if (twai_status.state == TWAI_STATE_STOPPED) {
+                ESP_LOGI(TAG, "TWAI recovered from bus-off. Restarting controller...");
+                twai_start();
+            }
         }
 
         if (twai_receive(&rx_msg, pdMS_TO_TICKS(10)) == ESP_OK) {

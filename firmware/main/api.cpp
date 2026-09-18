@@ -9,6 +9,7 @@
 #include "esp_ota_ops.h"
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "driver/twai.h"
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
@@ -639,6 +640,23 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
     cJSON_AddBoolToObject(root, "sniffer_mode", g_sniffer_mode.load());
     cJSON_AddBoolToObject(root, "hardware_listen_only", g_hardware_listen_only.load());
     cJSON_AddNumberToObject(root, "gvret_clients", gvret_get_client_count());
+
+    twai_status_info_t twai_st;
+    if (twai_get_status_info(&twai_st) == ESP_OK) {
+        const char* state_str = "unknown";
+        switch (twai_st.state) {
+            case TWAI_STATE_STOPPED: state_str = "stopped"; break;
+            case TWAI_STATE_RUNNING: state_str = "running"; break;
+            case TWAI_STATE_BUS_OFF: state_str = "bus_off"; break;
+            case TWAI_STATE_RECOVERING: state_str = "recovering"; break;
+        }
+        cJSON_AddStringToObject(root, "twai_state", state_str);
+        cJSON_AddNumberToObject(root, "tx_error_counter", twai_st.tx_error_counter);
+        cJSON_AddNumberToObject(root, "rx_error_counter", twai_st.rx_error_counter);
+        cJSON_AddNumberToObject(root, "rx_missed_count", twai_st.rx_missed_count);
+        cJSON_AddNumberToObject(root, "rx_overrun_count", twai_st.rx_overrun_count);
+        cJSON_AddNumberToObject(root, "bus_error_count", twai_st.bus_error_count);
+    }
 
     char *json_str = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);

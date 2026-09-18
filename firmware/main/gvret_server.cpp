@@ -38,13 +38,19 @@ int gvret_get_client_count(void) {
     return s_client_count.load();
 }
 
-static void send_flush_buffer(int sock, uint8_t* buffer, size_t& len) {
-    if (len == 0 || sock < 0) return;
-    int sent = send(sock, buffer, len, 0);
-    if (sent < 0) {
-        ESP_LOGW(TAG, "Socket send error (%d)", errno);
-    }
+static bool send_flush_buffer(int sock, uint8_t* buffer, size_t& len) {
+    if (len == 0 || sock < 0) return true;
+    int sent = send(sock, buffer, len, MSG_DONTWAIT);
     len = 0;
+    if (sent < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            // Buffer full / client paused capture: discard batch silently without log flooding
+            return true;
+        }
+        ESP_LOGW(TAG, "GVRET socket send error (%d), peer disconnected", errno);
+        return false;
+    }
+    return true;
 }
 
 static void pack_can_frame(uint8_t* dest, size_t& offset, const twai_message_t* msg, uint32_t timestamp_us) {
@@ -86,10 +92,18 @@ static void pack_can_frame(uint8_t* dest, size_t& offset, const twai_message_t* 
     dest[offset++] = 0x00; // Checksum / trailing byte
 }
 
-static void handle_client_rx(int sock) {
+static bool handle_client_rx(int sock) {
     uint8_t rx_buf[256];
     int r = recv(sock, rx_buf, sizeof(rx_buf), MSG_DONTWAIT);
-    if (r <= 0) return;
+    if (r == 0) {
+        return false; // Client closed connection
+    }
+    if (r < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            return true; // No data available
+        }
+        return false; // Fatal socket error
+    }
 
     int idx = 0;
     while (idx < r) {
@@ -127,6 +141,8 @@ static void handle_client_rx(int sock) {
                         } else {
                             ESP_LOGD(TAG, "Sniffer mode active: GVRET client TX 0x%03lX suppressed", (unsigned long)tx_msg.identifier);
                         }
+                    } else {
+                        idx += (len <= (size_t)(r - idx)) ? len : (r - idx);
                     }
                 }
             } else if (cmd == 0x01) {
@@ -139,29 +155,69 @@ static void handle_client_rx(int sock) {
                     (uint8_t)((now_us >> 16) & 0xFF),
                     (uint8_t)((now_us >> 24) & 0xFF)
                 };
-                send(sock, reply, sizeof(reply), 0);
+                send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            } else if (cmd == 0x02) {
+                // Digital inputs
+                uint8_t reply[3] = { 0xF1, 0x02, 0x00 };
+                send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            } else if (cmd == 0x03) {
+                // Analog inputs: 8 zeros
+                uint8_t reply[10] = { 0xF1, 0x03, 0, 0, 0, 0, 0, 0, 0, 0 };
+                send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            } else if (cmd == 0x04) {
+                // Set digital outputs: 1 byte
+                if (idx < r) idx++;
+            } else if (cmd == 0x05) {
+                // Setup CAN bus: 8 bytes (4 bytes bus0 baud/flags, 4 bytes bus1 baud/flags)
+                if (idx + 8 <= r) {
+                    uint32_t bus0_cfg = rx_buf[idx] | (rx_buf[idx+1] << 8) | (rx_buf[idx+2] << 16) | (rx_buf[idx+3] << 24);
+                    idx += 8;
+                    bool listen_only = (bus0_cfg & 0x20000000) != 0;
+                    ESP_LOGI(TAG, "GVRET bus setup: 0x%08lX (listen_only=%d)", (unsigned long)bus0_cfg, listen_only ? 1 : 0);
+                } else {
+                    idx = r;
+                }
             } else if (cmd == 0x06) {
-                // Bus configuration: reply 0xF1 0x06 + bus0 speed (500k = 500000 = 0x0007A120)
-                uint32_t baud = 500000;
-                uint8_t reply[6] = {
+                // Bus configuration: reply 0xF1 0x06 + bus0 speed (500k = 500000 = 0x0007A120) + bus1
+                uint32_t baud0 = 500000 | 0x80000000 | 0x40000000;
+                uint32_t baud1 = 0;
+                uint8_t reply[10] = {
                     0xF1, 0x06,
-                    (uint8_t)(baud & 0xFF),
-                    (uint8_t)((baud >> 8) & 0xFF),
-                    (uint8_t)((baud >> 16) & 0xFF),
-                    (uint8_t)((baud >> 24) & 0xFF)
+                    (uint8_t)(baud0 & 0xFF),
+                    (uint8_t)((baud0 >> 8) & 0xFF),
+                    (uint8_t)((baud0 >> 16) & 0xFF),
+                    (uint8_t)((baud0 >> 24) & 0xFF),
+                    (uint8_t)(baud1 & 0xFF),
+                    (uint8_t)((baud1 >> 8) & 0xFF),
+                    (uint8_t)((baud1 >> 16) & 0xFF),
+                    (uint8_t)((baud1 >> 24) & 0xFF)
                 };
-                send(sock, reply, sizeof(reply), 0);
+                send(sock, reply, sizeof(reply), MSG_DONTWAIT);
             } else if (cmd == 0x07) {
                 // Device Info: reply 0xF1 0x07 + build_lo, build_hi, eeprom_ver, file_ver, num_buses
                 uint8_t reply[7] = { 0xF1, 0x07, 0x20, 0x00, 0x01, 0x01, 0x01 };
-                send(sock, reply, sizeof(reply), 0);
+                send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            } else if (cmd == 0x08) {
+                // Single wire mode
+                if (idx < r) idx++;
             } else if (cmd == 0x09) {
                 // Keepalive
                 uint8_t reply[4] = { 0xF1, 0x09, 0xDE, 0xAD };
-                send(sock, reply, sizeof(reply), 0);
+                send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            } else if (cmd == 0x0A) {
+                // System type
+                if (idx < r) idx++;
+            } else if (cmd == 0x0C) {
+                // Num buses: 1
+                uint8_t reply[3] = { 0xF1, 0x0C, 0x01 };
+                send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            } else if (cmd == 0x0D) {
+                // Extended buses
+                idx += (idx + 12 <= r) ? 12 : (r - idx);
             }
         }
     }
+    return true;
 }
 
 static void gvret_server_task(void* pvParameters) {
@@ -269,9 +325,14 @@ static void gvret_server_task(void* pvParameters) {
         size_t batch_len = 0;
         int64_t last_flush_us = esp_timer_get_time();
 
+        int64_t last_check_us = esp_timer_get_time();
+
         while (true) {
             // 1. Process client incoming commands/frames
-            handle_client_rx(client_sock);
+            if (!handle_client_rx(client_sock)) {
+                ESP_LOGI(TAG, "GVRET client disconnected (rx error/close)");
+                break;
+            }
 
             // 2. Dequeue outbound CAN frames
             twai_message_t frame;
@@ -287,16 +348,20 @@ static void gvret_server_task(void* pvParameters) {
             bool size_flush = (batch_len >= (GVRET_BATCH_SIZE - 32));
 
             if (batch_len > 0 && (size_flush || timeout_flush)) {
-                send_flush_buffer(client_sock, batch_buf, batch_len);
+                if (!send_flush_buffer(client_sock, batch_buf, batch_len)) {
+                    ESP_LOGI(TAG, "GVRET client disconnected (tx error)");
+                    break;
+                }
                 last_flush_us = cur_us;
             }
 
-            // Check if client is still alive
-            if (!got_frame) {
+            // Periodic peer liveness check (every 500ms)
+            if (cur_us - last_check_us >= 500000) {
+                last_check_us = cur_us;
                 char probe;
                 int check = recv(client_sock, &probe, 1, MSG_PEEK | MSG_DONTWAIT);
                 if (check == 0 || (check < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
-                    ESP_LOGI(TAG, "GVRET client disconnected");
+                    ESP_LOGI(TAG, "GVRET client disconnected (connection closed)");
                     break;
                 }
             }
