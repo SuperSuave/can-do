@@ -1,0 +1,5722 @@
+{
+  "catalog_version": "1.0",
+  "vehicles": [
+    {
+      "id": "all_egmp",
+      "name": "All Gen5W Models",
+      "make": "Universal",
+      "model": "All Models",
+      "trim": "All Trims",
+      "region": "universal",
+      "family": "all_egmp",
+      "features": [
+        "heated_seats",
+        "ventilated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "camera_360",
+        "sunroof",
+        "touch_bar",
+        "asd",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "hi5_limited",
+      "name": "Limited",
+      "make": "Hyundai",
+      "model": "Ioniq 5",
+      "trim": "Limited",
+      "region": "us",
+      "family": "hyundai_ioniq5",
+      "features": [
+        "heated_seats",
+        "ventilated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "camera_360",
+        "sunroof",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "hi5_sel",
+      "name": "SEL",
+      "make": "Hyundai",
+      "model": "Ioniq 5",
+      "trim": "SEL",
+      "region": "us",
+      "family": "hyundai_ioniq5",
+      "features": [
+        "heated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "hi5_se",
+      "name": "SE / Standard Range",
+      "make": "Hyundai",
+      "model": "Ioniq 5",
+      "trim": "SE / Standard Range",
+      "region": "us",
+      "family": "hyundai_ioniq5",
+      "features": [
+        "heated_seats",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "hi5_n",
+      "name": "Ioniq 5 N",
+      "make": "Hyundai",
+      "model": "Ioniq 5",
+      "trim": "Ioniq 5 N",
+      "region": "global",
+      "family": "hyundai_ioniq5",
+      "features": [
+        "heated_seats",
+        "ventilated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "camera_360",
+        "asd",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "hi5_ultimate",
+      "name": "Ultimate / Namsan",
+      "make": "Hyundai",
+      "model": "Ioniq 5",
+      "trim": "Ultimate / Namsan",
+      "region": "eu",
+      "family": "hyundai_ioniq5",
+      "features": [
+        "heated_seats",
+        "ventilated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "camera_360",
+        "sunroof",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "hi5_premium",
+      "name": "Premium / N-Line",
+      "make": "Hyundai",
+      "model": "Ioniq 5",
+      "trim": "Premium / N-Line",
+      "region": "eu",
+      "family": "hyundai_ioniq5",
+      "features": [
+        "heated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "hi5_advance",
+      "name": "Advance / SE Connect",
+      "make": "Hyundai",
+      "model": "Ioniq 5",
+      "trim": "Advance / SE Connect",
+      "region": "eu",
+      "family": "hyundai_ioniq5",
+      "features": [
+        "heated_seats",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "ev6_gtline",
+      "name": "GT-Line",
+      "make": "Kia",
+      "model": "EV6",
+      "trim": "GT-Line",
+      "region": "us",
+      "family": "kia_ev6",
+      "features": [
+        "heated_seats",
+        "ventilated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "camera_360",
+        "sunroof",
+        "touch_bar",
+        "asd",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "ev6_wind",
+      "name": "Wind",
+      "make": "Kia",
+      "model": "EV6",
+      "trim": "Wind",
+      "region": "us",
+      "family": "kia_ev6",
+      "features": [
+        "heated_seats",
+        "ventilated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "touch_bar",
+        "asd",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "ev6_gt",
+      "name": "GT",
+      "make": "Kia",
+      "model": "EV6",
+      "trim": "GT",
+      "region": "global",
+      "family": "kia_ev6",
+      "features": [
+        "heated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "camera_360",
+        "sunroof",
+        "touch_bar",
+        "asd",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "ev6_light",
+      "name": "Light / Standard Range",
+      "make": "Kia",
+      "model": "EV6",
+      "trim": "Light / Standard Range",
+      "region": "us",
+      "family": "kia_ev6",
+      "features": [
+        "heated_seats",
+        "touch_bar",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "ev6_gtline_s",
+      "name": "GT-Line S",
+      "make": "Kia",
+      "model": "EV6",
+      "trim": "GT-Line S",
+      "region": "eu",
+      "family": "kia_ev6",
+      "features": [
+        "heated_seats",
+        "ventilated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "camera_360",
+        "sunroof",
+        "touch_bar",
+        "asd",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "ev6_air",
+      "name": "Air",
+      "make": "Kia",
+      "model": "EV6",
+      "trim": "Air",
+      "region": "eu",
+      "family": "kia_ev6",
+      "features": [
+        "heated_seats",
+        "heated_wheel",
+        "touch_bar",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "hi6_limited",
+      "name": "Limited",
+      "make": "Hyundai",
+      "model": "Ioniq 6",
+      "trim": "Limited",
+      "region": "us",
+      "family": "hyundai_ioniq6",
+      "features": [
+        "heated_seats",
+        "ventilated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "camera_360",
+        "sunroof",
+        "asd",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "hi6_sel",
+      "name": "SEL",
+      "make": "Hyundai",
+      "model": "Ioniq 6",
+      "trim": "SEL",
+      "region": "us",
+      "family": "hyundai_ioniq6",
+      "features": [
+        "heated_seats",
+        "power_tailgate",
+        "asd",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "hi6_se",
+      "name": "SE",
+      "make": "Hyundai",
+      "model": "Ioniq 6",
+      "trim": "SE",
+      "region": "us",
+      "family": "hyundai_ioniq6",
+      "features": [
+        "heated_seats",
+        "power_tailgate",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "hi6_ultimate",
+      "name": "Ultimate / First Edition",
+      "make": "Hyundai",
+      "model": "Ioniq 6",
+      "trim": "Ultimate / First Edition",
+      "region": "eu",
+      "family": "hyundai_ioniq6",
+      "features": [
+        "heated_seats",
+        "ventilated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "camera_360",
+        "sunroof",
+        "asd",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "hi6_premium",
+      "name": "Premium",
+      "make": "Hyundai",
+      "model": "Ioniq 6",
+      "trim": "Premium",
+      "region": "eu",
+      "family": "hyundai_ioniq6",
+      "features": [
+        "heated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "asd",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "gv60_performance",
+      "name": "Performance",
+      "make": "Genesis",
+      "model": "GV60",
+      "trim": "Performance",
+      "region": "global",
+      "family": "genesis_gv60",
+      "features": [
+        "heated_seats",
+        "ventilated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "camera_360",
+        "sunroof",
+        "asd",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "gv60_advanced",
+      "name": "Advanced",
+      "make": "Genesis",
+      "model": "GV60",
+      "trim": "Advanced",
+      "region": "us",
+      "family": "genesis_gv60",
+      "features": [
+        "heated_seats",
+        "ventilated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "camera_360",
+        "sunroof",
+        "asd",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "gv60_standard",
+      "name": "Standard / RWD",
+      "make": "Genesis",
+      "model": "GV60",
+      "trim": "Standard",
+      "region": "global",
+      "family": "genesis_gv60",
+      "features": [
+        "heated_seats",
+        "ventilated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "gv60_premium",
+      "name": "Premium",
+      "make": "Genesis",
+      "model": "GV60",
+      "trim": "Premium",
+      "region": "eu",
+      "family": "genesis_gv60",
+      "features": [
+        "heated_seats",
+        "ventilated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "camera_360",
+        "sunroof",
+        "asd",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "gv60_sport",
+      "name": "Sport / Sport Plus",
+      "make": "Genesis",
+      "model": "GV60",
+      "trim": "Sport Plus",
+      "region": "eu",
+      "family": "genesis_gv60",
+      "features": [
+        "heated_seats",
+        "ventilated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "camera_360",
+        "sunroof",
+        "asd",
+        "preconditioning"
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "id": "sw_star",
+      "ha_metadata": {
+        "name": "Star Button",
+        "domain": "event",
+        "icon": "mdi:steering"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Steering Wheel",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x448"
+      },
+      "match": {
+        "D6": "0x10"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "mask": "0xF0",
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "sw_mode",
+      "ha_metadata": {
+        "name": "Mode Button",
+        "domain": "event",
+        "icon": "mdi:steering"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Steering Wheel",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x448"
+      },
+      "match": {
+        "D3": "0x40"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "mask": "0xF0",
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "sw_speak",
+      "ha_metadata": {
+        "name": "Voice / Speak Button",
+        "domain": "event",
+        "icon": "mdi:steering"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Steering Wheel",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x448"
+      },
+      "match": {
+        "D4": "0x01"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "mask": "0x0F",
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "sw_call",
+      "ha_metadata": {
+        "name": "Call / Phone Button",
+        "domain": "event",
+        "icon": "mdi:steering"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Steering Wheel",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x448"
+      },
+      "match": {
+        "D4": "0x04"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "mask": "0x0F",
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "sw_volume",
+      "ha_metadata": {
+        "name": "Volume Control",
+        "domain": "event",
+        "icon": "mdi:steering"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Steering Wheel",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x448"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Steering wheel volume rocker (Up, Down, Press/Mute)"
+      },
+      "options": [
+        {
+          "label": "Volume Up",
+          "match": {
+            "D5": "0x01"
+          },
+          "default": true,
+          "mask": "0x0F"
+        },
+        {
+          "label": "Volume Down",
+          "match": {
+            "D5": "0x40"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Volume Press / Mute",
+          "match": {
+            "D5": "0x04"
+          },
+          "mask": "0x0F"
+        }
+      ]
+    },
+    {
+      "id": "sw_seek",
+      "ha_metadata": {
+        "name": "Seek / Track Control",
+        "domain": "event",
+        "icon": "mdi:steering"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Steering Wheel",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x448"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Steering wheel seek / track rocker"
+      },
+      "options": [
+        {
+          "label": "Seek / Skip Up",
+          "match": {
+            "D4": "0x10"
+          },
+          "default": true,
+          "mask": "0xF0"
+        },
+        {
+          "label": "Seek / Skip Down",
+          "match": {
+            "D4": "0x04"
+          },
+          "mask": "0x0F"
+        }
+      ]
+    },
+    {
+      "id": "sw_menu",
+      "ha_metadata": {
+        "name": "Menu / OK Control",
+        "domain": "event",
+        "icon": "mdi:steering"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Steering Wheel",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x448"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Consolidated cluster menu navigation rocker and press"
+      },
+      "options": [
+        {
+          "label": "Menu Up",
+          "match": {
+            "D7": "0x40"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Menu Down",
+          "match": {
+            "D7": "0x01"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Menu OK / Press",
+          "match": {
+            "D7": "0x10"
+          },
+          "default": true,
+          "mask": "0xF0"
+        }
+      ]
+    },
+    {
+      "id": "steering_paddles",
+      "ha_metadata": {
+        "name": "Regenerative Braking Paddles",
+        "domain": "event",
+        "icon": "mdi:steering"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Steering Wheel",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x1CF"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Regen braking paddles decoded from CAN-FD frame 463 (0x1CF)"
+      },
+      "options": [
+        {
+          "label": "Left Paddle Pulled",
+          "match": {
+            "D4": "0x80"
+          },
+          "default": true,
+          "mask": "0xF0"
+        },
+        {
+          "label": "Right Paddle Pulled",
+          "match": {
+            "D4": "0x20"
+          },
+          "mask": "0xF0"
+        }
+      ]
+    },
+    {
+      "id": "sw_cruise_cluster",
+      "ha_metadata": {
+        "name": "Steering Wheel Cruise & ADAS Controls",
+        "domain": "event",
+        "icon": "mdi:steering"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Steering Wheel",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x1CF"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Decoded from CAN-FD frame 463 (0x1CF)"
+      },
+      "options": [
+        {
+          "label": "Adaptive Cruise Main Button",
+          "match": {
+            "D3": "0x80"
+          },
+          "default": true,
+          "mask": "0xF0"
+        },
+        {
+          "label": "Lane Following Assist (LDA) Button",
+          "match": {
+            "D4": "0x80"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Distance Gap Cycle Button",
+          "match": {
+            "D3": "0x30"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Resume / Accel Toggle (+)",
+          "match": {
+            "D3": "0x10"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Set / Decel Toggle (-)",
+          "match": {
+            "D3": "0x20"
+          },
+          "mask": "0xF0"
+        }
+      ]
+    },
+    {
+      "id": "blinker_stalks",
+      "ha_metadata": {
+        "name": "Headlight & Turn Signal Stalk",
+        "domain": "event",
+        "icon": "mdi:car-light-dimmed"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Steering Wheel",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x3C1"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Decoded from CAN-FD frame 961 (0x3C1)"
+      },
+      "options": [
+        {
+          "label": "High Beam Flash (Pull)",
+          "match": {
+            "D4": "0x40"
+          },
+          "default": true,
+          "mask": "0xF0"
+        },
+        {
+          "label": "High Beam On (Push)",
+          "match": {
+            "D3": "0x40"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Left Turn Stalk Engaged",
+          "match": {
+            "D5": "0x40"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Right Turn Stalk Engaged",
+          "match": {
+            "D5": "0x10"
+          },
+          "mask": "0xF0"
+        }
+      ]
+    },
+    {
+      "id": "steering_wheel_touch",
+      "ha_metadata": {
+        "name": "Steering Wheel Hands-On Touch (HOD)",
+        "domain": "binary_sensor",
+        "icon": "mdi:steering"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Steering Wheel",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x2AF"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Capacitive rim sensor decoded from CAN-FD frame 687 (0x2AF)"
+      },
+      "options": [
+        {
+          "label": "Hands Off Rim",
+          "match": {
+            "D3": "0x00"
+          },
+          "default": true,
+          "mask": "0xF0"
+        },
+        {
+          "label": "Hands Touching Rim",
+          "match": {
+            "D3": "0x10"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Hands Gripping Rim",
+          "match": {
+            "D3": "0x30"
+          },
+          "mask": "0xF0"
+        }
+      ]
+    },
+    {
+      "id": "gear_shifter_dial",
+      "ha_metadata": {
+        "name": "Rotary Gear Shifter Dial & Park Switch",
+        "domain": "event",
+        "icon": "mdi:car-shift-pattern"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Dashboard / Center Console",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x130"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Decoded from CAN-FD frame 304 (0x130)"
+      },
+      "options": [
+        {
+          "label": "Park Button Pressed",
+          "match": {
+            "D5": "0x10"
+          },
+          "default": true,
+          "mask": "0xF0"
+        },
+        {
+          "label": "Knob Turned to Drive (D)",
+          "match": {
+            "D6": "0x50"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Knob Turned to Reverse (R)",
+          "match": {
+            "D6": "0x10"
+          },
+          "mask": "0xF0"
+        }
+      ]
+    },
+    {
+      "id": "hvac_touch_buttons",
+      "ha_metadata": {
+        "name": "HVAC Touch Strip Buttons",
+        "domain": "event",
+        "icon": "mdi:thermostat"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Dashboard / Center Console",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x47F"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Decoded from CAN-FD frame 1151 (0x47F)"
+      },
+      "options": [
+        {
+          "label": "Auto Button",
+          "match": {
+            "D2": "0x80"
+          },
+          "default": true,
+          "mask": "0xF0"
+        },
+        {
+          "label": "Sync Button",
+          "match": {
+            "D2": "0x08"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Front Defrost Button",
+          "match": {
+            "D3": "0x10"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Rear Defrost Button",
+          "match": {
+            "D3": "0x40"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Driver Only Button",
+          "match": {
+            "D6": "0x10"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Heat Button",
+          "match": {
+            "D7": "0x10"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "AC Button",
+          "match": {
+            "D6": "0x80"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Recirculation Button",
+          "match": {
+            "D7": "0x80"
+          },
+          "mask": "0xF0"
+        }
+      ]
+    },
+    {
+      "id": "avn_star",
+      "ha_metadata": {
+        "name": "AVN Dash Star Button",
+        "domain": "event",
+        "icon": "mdi:car-info"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Dashboard / Center Console",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x652"
+      },
+      "match": {
+        "D3": "0x04"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "mask": "0x0F",
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "avn_knob_buttons",
+      "ha_metadata": {
+        "name": "AVN Volume & Tuner Knob Center Buttons",
+        "domain": "event",
+        "icon": "mdi:knob"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Dashboard / Center Console",
+      "roles": [
+        "trigger"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Decoded from AVN rotary knob press frame 0x651"
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x651"
+      },
+      "options": [
+        {
+          "label": "Volume Knob Press (Power / Mute)",
+          "match": {
+            "D2": "0x40"
+          },
+          "mask": "0xF0",
+          "default": true
+        },
+        {
+          "label": "Tuner Knob Press",
+          "match": {
+            "D4": "0x40"
+          },
+          "mask": "0xF0"
+        }
+      ]
+    },
+    {
+      "id": "avn_dash_media_buttons",
+      "ha_metadata": {
+        "name": "AVN Dash Navigation & Media Buttons",
+        "domain": "event",
+        "icon": "mdi:radio"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Dashboard / Center Console",
+      "roles": [
+        "trigger",
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Decoded from AVN physical navigation and media button event frame 0x652. EV6 setup button requires multi-step sequence (FF,F1 x3 -> FF,FF x1 -> FF,F0 x3 -> FF,FF x1) to actuate setup screen."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x652",
+        "action_can_id": "0x652"
+      },
+      "options": [
+        {
+          "label": "Map Button",
+          "match": {
+            "D1": "0x40"
+          },
+          "mask": "0xF0",
+          "default": true
+        },
+        {
+          "label": "Nav Button",
+          "match": {
+            "D1": "0x10"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Media Button",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Tuner Up Button",
+          "match": {
+            "D4": "0x04"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Tuner Down Button",
+          "match": {
+            "D4": "0x01"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "EV6 Setup Button",
+          "match": {
+            "D2": "0x01"
+          },
+          "mask": "0x0F",
+          "steps": [
+            {
+              "payload": {
+                "D1": "0xFF",
+                "D2": "0xF1",
+                "D3": "0xFF",
+                "D4": "0xFF",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0xFF",
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D1": "0xFF",
+                "D2": "0xFF",
+                "D3": "0xFF",
+                "D4": "0xFF",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0xFF",
+                "D8": "0xFF"
+              },
+              "repeat": 1
+            },
+            {
+              "payload": {
+                "D1": "0xFF",
+                "D2": "0xF0",
+                "D3": "0xFF",
+                "D4": "0xFF",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0xFF",
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D1": "0xFF",
+                "D2": "0xFF",
+                "D3": "0xFF",
+                "D4": "0xFF",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0xFF",
+                "D8": "0xFF"
+              },
+              "repeat": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ev6_mode_strip",
+      "ha_metadata": {
+        "name": "EV6 Touch Bar Mode Switch",
+        "domain": "event",
+        "icon": "mdi:car-info"
+      },
+      "tags": [
+        "kia_ev6"
+      ],
+      "requires_feature": "touch_bar",
+      "category": "Dashboard / Center Console",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x652"
+      },
+      "match": {
+        "D4": "0x50"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "mask": "0xF0",
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "camera_btn",
+      "ha_metadata": {
+        "name": "360 Surround View Camera Button",
+        "domain": "event",
+        "icon": "mdi:cctv"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "requires_feature": "camera_360",
+      "category": "Dashboard / Center Console",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x476"
+      },
+      "match": {
+        "D3": "0x42"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "cluster_brightness",
+      "ha_metadata": {
+        "name": "Cluster Brightness (+ / -)",
+        "domain": "event",
+        "icon": "mdi:car-info"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Dashboard / Center Console",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x474"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "options": [
+        {
+          "label": "Brightness Up (+)",
+          "match": {
+            "D8": "0x4A"
+          },
+          "default": true
+        },
+        {
+          "label": "Brightness Down (-)",
+          "match": {
+            "D8": "0x8A"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "head_unit_media_source",
+      "ha_metadata": {
+        "name": "Head Unit Active Media Source",
+        "domain": "sensor",
+        "icon": "mdi:music-box-outline"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Dashboard / Center Console",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x4CE"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Active media source decoded from AVN head unit frame 0x4CE (Byte D1)"
+      },
+      "options": [
+        {
+          "label": "Media Off / Standby",
+          "match": {
+            "D1": "0x14"
+          },
+          "mask": "0xFF",
+          "default": true
+        },
+        {
+          "label": "Apple CarPlay",
+          "match": {
+            "D1": "0xDC"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Android Auto",
+          "match": {
+            "D1": "0xDE"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Bluetooth Audio",
+          "match": {
+            "D1": "0x10"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "USB Audio",
+          "match": {
+            "D1": "0xC4"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "AM / FM Radio",
+          "match": {
+            "D1": "0x22"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "SiriusXM Satellite Radio",
+          "match": {
+            "D1": "0x62"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "DAB Digital Radio",
+          "match": {
+            "D1": "0x6C"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Sounds of Nature / Apps",
+          "match": {
+            "D1": "0x04"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Pandora / iPod",
+          "match": {
+            "D1": "0xC2"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "DMB / TV",
+          "match": {
+            "D1": "0x82"
+          },
+          "mask": "0xFF"
+        }
+      ]
+    },
+    {
+      "id": "audio_sound_focus",
+      "ha_metadata": {
+        "name": "Infotainment Sound Stage Focus",
+        "domain": "select",
+        "icon": "mdi:surround-sound"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Dashboard / Center Console",
+      "roles": [
+        "trigger",
+        "condition",
+        "state",
+        "action"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Named vehicle seating sound zones mapped across balance (D2) and fader (D3) on CAN ID 0x60E"
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x60E",
+        "action_can_id": "0x60E"
+      },
+      "options": [
+        {
+          "label": "Center",
+          "match": {
+            "D2": "0x0A",
+            "D3": "0x0A"
+          },
+          "payload": {
+            "D2": "0x0A",
+            "D3": "0x0A"
+          },
+          "default": true
+        },
+        {
+          "label": "Front Driver",
+          "match": {
+            "D2": "0x05",
+            "D3": "0x0E"
+          },
+          "payload": {
+            "D2": "0x05",
+            "D3": "0x0E"
+          }
+        },
+        {
+          "label": "Front Center",
+          "match": {
+            "D2": "0x0A",
+            "D3": "0x0E"
+          },
+          "payload": {
+            "D2": "0x0A",
+            "D3": "0x0E"
+          }
+        },
+        {
+          "label": "Front Passenger",
+          "match": {
+            "D2": "0x0F",
+            "D3": "0x0E"
+          },
+          "payload": {
+            "D2": "0x0F",
+            "D3": "0x0E"
+          }
+        },
+        {
+          "label": "Rear Left",
+          "match": {
+            "D2": "0x05",
+            "D3": "0x05"
+          },
+          "payload": {
+            "D2": "0x05",
+            "D3": "0x05"
+          }
+        },
+        {
+          "label": "Rear Center",
+          "match": {
+            "D2": "0x0A",
+            "D3": "0x05"
+          },
+          "payload": {
+            "D2": "0x0A",
+            "D3": "0x05"
+          }
+        },
+        {
+          "label": "Rear Right",
+          "match": {
+            "D2": "0x0F",
+            "D3": "0x05"
+          },
+          "payload": {
+            "D2": "0x0F",
+            "D3": "0x05"
+          }
+        }
+      ]
+    },
+    {
+      "id": "audio_speaker_balance",
+      "ha_metadata": {
+        "name": "Audio Speaker Balance",
+        "domain": "number",
+        "icon": "mdi:surround-sound"
+      },
+      "type": "linear_scale",
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Dashboard / Center Console",
+      "roles": [
+        "trigger",
+        "condition",
+        "state"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Infotainment speaker Left/Right balance on CAN ID 0x60E Byte D2 (offset 10: Center 0x0A, Left -9 to -1, Right +1 to +10)"
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x60E",
+        "byte": "D2",
+        "offset": 10,
+        "min": -9,
+        "max": 10,
+        "step": 1
+      },
+      "options": [
+        {
+          "label": "Center (0)",
+          "match": {
+            "D2": "0x0A"
+          },
+          "mask": "0xFF",
+          "default": true
+        },
+        {
+          "label": "Driver Side / Left (< 0)",
+          "evaluate": {
+            "byte": "D2",
+            "operator": "less_than",
+            "value": "0x0A"
+          }
+        },
+        {
+          "label": "Passenger Side / Right (> 0)",
+          "evaluate": {
+            "byte": "D2",
+            "operator": "greater_than",
+            "value": "0x0A"
+          }
+        },
+        {
+          "label": "Full Left (-9)",
+          "match": {
+            "D2": "0x01"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Full Right (+10)",
+          "match": {
+            "D2": "0x14"
+          },
+          "mask": "0xFF"
+        }
+      ]
+    },
+    {
+      "id": "audio_speaker_fade",
+      "ha_metadata": {
+        "name": "Audio Speaker Fade",
+        "domain": "number",
+        "icon": "mdi:speaker"
+      },
+      "type": "linear_scale",
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Dashboard / Center Console",
+      "roles": [
+        "trigger",
+        "condition",
+        "state"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Infotainment speaker Front/Rear fade on CAN ID 0x60E Byte D3 (offset 10: Center 0x0A, Rear -9 to -1, Front +1 to +10)"
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x60E",
+        "byte": "D3",
+        "offset": 10,
+        "min": -9,
+        "max": 10,
+        "step": 1
+      },
+      "options": [
+        {
+          "label": "Center (0)",
+          "match": {
+            "D3": "0x0A"
+          },
+          "mask": "0xFF",
+          "default": true
+        },
+        {
+          "label": "Rear Seats Focus (< 0)",
+          "evaluate": {
+            "byte": "D3",
+            "operator": "less_than",
+            "value": "0x0A"
+          }
+        },
+        {
+          "label": "Front Seats Focus (> 0)",
+          "evaluate": {
+            "byte": "D3",
+            "operator": "greater_than",
+            "value": "0x0A"
+          }
+        },
+        {
+          "label": "Full Rear (-9)",
+          "match": {
+            "D3": "0x01"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Full Front (+10)",
+          "match": {
+            "D3": "0x14"
+          },
+          "mask": "0xFF"
+        }
+      ]
+    },
+    {
+      "id": "heated_wheel_btn",
+      "ha_metadata": {
+        "name": "Heated Steering Wheel Button",
+        "domain": "sensor",
+        "icon": "mdi:steering-wheel"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "requires_feature": "heated_wheel",
+      "category": "Comfort & Climate",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x418"
+      },
+      "match": {
+        "D3": "0x00"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "climate_rear_defog",
+      "ha_metadata": {
+        "name": "Rear Defogger & Mirrors Active",
+        "domain": "binary_sensor",
+        "icon": "mdi:thermostat"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Comfort & Climate",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x541"
+      },
+      "match": {
+        "D5": "0x10"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "mask": "0xF0",
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "climate_temp_status",
+      "ha_metadata": {
+        "name": "Target Temperature Change",
+        "domain": "sensor",
+        "icon": "mdi:thermostat"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Comfort & Climate",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x380"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "climate_driver_temp",
+      "ha_metadata": {
+        "name": "Driver Cabin Target Temperature",
+        "domain": "climate",
+        "icon": "mdi:thermometer"
+      },
+      "type": "linear_scale",
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Comfort & Climate",
+      "roles": [
+        "trigger",
+        "condition",
+        "state",
+        "action"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x380",
+        "action_can_id": "0x4A0",
+        "state_byte": "D2",
+        "action_byte": "D2",
+        "min": 62,
+        "max": 82,
+        "step": 1,
+        "unit": "°F",
+        "raw_min": "0x06",
+        "raw_max": "0x1A"
+      },
+      "options": [
+        {
+          "label": "62°F / 17.0°C (Lo / Min)",
+          "match": {
+            "D2": "0x06"
+          },
+          "payload": {
+            "D2": "0x06"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "63°F / 17.5°C",
+          "match": {
+            "D2": "0x07"
+          },
+          "payload": {
+            "D2": "0x07"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "64°F / 18.0°C",
+          "match": {
+            "D2": "0x08"
+          },
+          "payload": {
+            "D2": "0x08"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "65°F / 18.5°C",
+          "match": {
+            "D2": "0x09"
+          },
+          "payload": {
+            "D2": "0x09"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "66°F / 19.0°C",
+          "match": {
+            "D2": "0x0A"
+          },
+          "payload": {
+            "D2": "0x0A"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "67°F / 19.5°C",
+          "match": {
+            "D2": "0x0B"
+          },
+          "payload": {
+            "D2": "0x0B"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "68°F / 20.0°C",
+          "match": {
+            "D2": "0x0C"
+          },
+          "payload": {
+            "D2": "0x0C"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "69°F / 20.5°C",
+          "match": {
+            "D2": "0x0D"
+          },
+          "payload": {
+            "D2": "0x0D"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "70°F / 21.0°C (Default Comfort)",
+          "match": {
+            "D2": "0x0E"
+          },
+          "payload": {
+            "D2": "0x0E"
+          },
+          "mask": "0xFF",
+          "default": true
+        },
+        {
+          "label": "71°F / 21.5°C",
+          "match": {
+            "D2": "0x0F"
+          },
+          "payload": {
+            "D2": "0x0F"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "72°F / 22.0°C",
+          "match": {
+            "D2": "0x10"
+          },
+          "payload": {
+            "D2": "0x10"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "73°F / 23.0°C",
+          "match": {
+            "D2": "0x11"
+          },
+          "payload": {
+            "D2": "0x11"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "74°F / 23.5°C",
+          "match": {
+            "D2": "0x12"
+          },
+          "payload": {
+            "D2": "0x12"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "75°F / 24.0°C",
+          "match": {
+            "D2": "0x13"
+          },
+          "payload": {
+            "D2": "0x13"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "76°F / 24.5°C",
+          "match": {
+            "D2": "0x14"
+          },
+          "payload": {
+            "D2": "0x14"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "77°F / 25.0°C",
+          "match": {
+            "D2": "0x15"
+          },
+          "payload": {
+            "D2": "0x15"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "78°F / 25.5°C",
+          "match": {
+            "D2": "0x16"
+          },
+          "payload": {
+            "D2": "0x16"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "79°F / 26.0°C",
+          "match": {
+            "D2": "0x17"
+          },
+          "payload": {
+            "D2": "0x17"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "80°F / 26.5°C",
+          "match": {
+            "D2": "0x18"
+          },
+          "payload": {
+            "D2": "0x18"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "81°F / 27.0°C",
+          "match": {
+            "D2": "0x19"
+          },
+          "payload": {
+            "D2": "0x19"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "82°F / 27.5°C (Hi / Max)",
+          "match": {
+            "D2": "0x1A"
+          },
+          "payload": {
+            "D2": "0x1A"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Warmer than 70°F (> 21°C)",
+          "evaluate": {
+            "byte": "D2",
+            "operator": "greater_than",
+            "value": "0x0E"
+          }
+        },
+        {
+          "label": "Cooler than 70°F (< 21°C)",
+          "evaluate": {
+            "byte": "D2",
+            "operator": "less_than",
+            "value": "0x0E"
+          }
+        }
+      ]
+    },
+    {
+      "id": "climate_passenger_temp",
+      "ha_metadata": {
+        "name": "Passenger Cabin Target Temperature",
+        "domain": "climate",
+        "icon": "mdi:thermometer"
+      },
+      "type": "linear_scale",
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Comfort & Climate",
+      "roles": [
+        "trigger",
+        "condition",
+        "state",
+        "action"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x380",
+        "action_can_id": "0x4A0",
+        "state_byte": "D3",
+        "action_byte": "D8",
+        "min": 62,
+        "max": 82,
+        "step": 1,
+        "unit": "°F",
+        "raw_min": "0x06",
+        "raw_max": "0x1A"
+      },
+      "options": [
+        {
+          "label": "62°F / 17.0°C (Lo / Min)",
+          "match": {
+            "D3": "0x06"
+          },
+          "payload": {
+            "D8": "0x06"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "63°F / 17.5°C",
+          "match": {
+            "D3": "0x07"
+          },
+          "payload": {
+            "D8": "0x07"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "64°F / 18.0°C",
+          "match": {
+            "D3": "0x08"
+          },
+          "payload": {
+            "D8": "0x08"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "65°F / 18.5°C",
+          "match": {
+            "D3": "0x09"
+          },
+          "payload": {
+            "D8": "0x09"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "66°F / 19.0°C",
+          "match": {
+            "D3": "0x0A"
+          },
+          "payload": {
+            "D8": "0x0A"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "67°F / 19.5°C",
+          "match": {
+            "D3": "0x0B"
+          },
+          "payload": {
+            "D8": "0x0B"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "68°F / 20.0°C",
+          "match": {
+            "D3": "0x0C"
+          },
+          "payload": {
+            "D8": "0x0C"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "69°F / 20.5°C",
+          "match": {
+            "D3": "0x0D"
+          },
+          "payload": {
+            "D8": "0x0D"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "70°F / 21.0°C (Default Comfort)",
+          "match": {
+            "D3": "0x0E"
+          },
+          "payload": {
+            "D8": "0x0E"
+          },
+          "mask": "0xFF",
+          "default": true
+        },
+        {
+          "label": "71°F / 21.5°C",
+          "match": {
+            "D3": "0x0F"
+          },
+          "payload": {
+            "D8": "0x0F"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "72°F / 22.0°C",
+          "match": {
+            "D3": "0x10"
+          },
+          "payload": {
+            "D8": "0x10"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "73°F / 23.0°C",
+          "match": {
+            "D3": "0x11"
+          },
+          "payload": {
+            "D8": "0x11"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "74°F / 23.5°C",
+          "match": {
+            "D3": "0x12"
+          },
+          "payload": {
+            "D8": "0x12"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "75°F / 24.0°C",
+          "match": {
+            "D3": "0x13"
+          },
+          "payload": {
+            "D8": "0x13"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "76°F / 24.5°C",
+          "match": {
+            "D3": "0x14"
+          },
+          "payload": {
+            "D8": "0x14"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "77°F / 25.0°C",
+          "match": {
+            "D3": "0x15"
+          },
+          "payload": {
+            "D8": "0x15"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "78°F / 25.5°C",
+          "match": {
+            "D3": "0x16"
+          },
+          "payload": {
+            "D8": "0x16"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "79°F / 26.0°C",
+          "match": {
+            "D3": "0x17"
+          },
+          "payload": {
+            "D8": "0x17"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "80°F / 26.5°C",
+          "match": {
+            "D3": "0x18"
+          },
+          "payload": {
+            "D8": "0x18"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "81°F / 27.0°C",
+          "match": {
+            "D3": "0x19"
+          },
+          "payload": {
+            "D8": "0x19"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "82°F / 27.5°C (Hi / Max)",
+          "match": {
+            "D3": "0x1A"
+          },
+          "payload": {
+            "D8": "0x1A"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Warmer than 70°F (> 21°C)",
+          "evaluate": {
+            "byte": "D3",
+            "operator": "greater_than",
+            "value": "0x0E"
+          }
+        },
+        {
+          "label": "Cooler than 70°F (< 21°C)",
+          "evaluate": {
+            "byte": "D3",
+            "operator": "less_than",
+            "value": "0x0E"
+          }
+        }
+      ]
+    },
+    {
+      "id": "climate_dual_cabin_temp",
+      "ha_metadata": {
+        "name": "Cabin Dual Climate Target",
+        "domain": "climate",
+        "icon": "mdi:thermostat-box"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Comfort & Climate",
+      "roles": [
+        "trigger",
+        "condition",
+        "state",
+        "action"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Simultaneous driver and passenger target cabin temperature presets across 0x380 (state D2, D3) and 0x4A0 (action D2, D8)"
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x380",
+        "action_can_id": "0x4A0"
+      },
+      "options": [
+        {
+          "label": "Cabin All 21.0°C / 70°F",
+          "match": {
+            "D2": "0x0E",
+            "D3": "0x0E"
+          },
+          "payload": {
+            "D2": "0x0E",
+            "D8": "0x0E"
+          },
+          "default": true
+        },
+        {
+          "label": "Cabin All 20.0°C / 68°F",
+          "match": {
+            "D2": "0x0C",
+            "D3": "0x0C"
+          },
+          "payload": {
+            "D2": "0x0C",
+            "D8": "0x0C"
+          }
+        },
+        {
+          "label": "Cabin All 22.0°C / 72°F",
+          "match": {
+            "D2": "0x10",
+            "D3": "0x10"
+          },
+          "payload": {
+            "D2": "0x10",
+            "D8": "0x10"
+          }
+        },
+        {
+          "label": "Cabin Pre-Cool 18.0°C / 64°F",
+          "match": {
+            "D2": "0x08",
+            "D3": "0x08"
+          },
+          "payload": {
+            "D2": "0x08",
+            "D8": "0x08"
+          }
+        },
+        {
+          "label": "Cabin Pre-Heat 24.0°C / 75°F",
+          "match": {
+            "D2": "0x14",
+            "D3": "0x14"
+          },
+          "payload": {
+            "D2": "0x14",
+            "D8": "0x14"
+          }
+        }
+      ]
+    },
+    {
+      "id": "climate_sync_toggle",
+      "ha_metadata": {
+        "name": "Climate Sync Passenger Zone",
+        "domain": "button",
+        "icon": "mdi:sync"
+      },
+      "type": "button",
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Comfort & Climate",
+      "roles": [
+        "action"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Sync passenger zone temperature to driver on CAN ID 0x4A0 Byte D4 value 0x0B"
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "action_can_id": "0x4A0"
+      },
+      "options": [
+        {
+          "label": "Sync Passenger to Driver",
+          "payload": {
+            "D4": "0x0B"
+          },
+          "mask": "0xFF",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "climate_fan_active",
+      "ha_metadata": {
+        "name": "HVAC Fan Started",
+        "domain": "binary_sensor",
+        "icon": "mdi:thermostat"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Comfort & Climate",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x31B"
+      },
+      "match": {
+        "D4": "0x20"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "mask": "0xF0",
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "climate_recirc_on",
+      "ha_metadata": {
+        "name": "Cabin Recirculation Toggled",
+        "domain": "binary_sensor",
+        "icon": "mdi:thermostat"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Comfort & Climate",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x31B"
+      },
+      "match": {
+        "D5": "0x40"
+      },
+      "roles": [
+        "trigger"
+      ],
+      "mask": "0xF0",
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "remote_climate_state",
+      "ha_metadata": {
+        "name": "Remote Climate Execution State",
+        "domain": "binary_sensor",
+        "icon": "mdi:radiator"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Comfort & Climate",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x384"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Decoded from E-GMP frame 900 (0x384) byte 3"
+      },
+      "options": [
+        {
+          "label": "Remote Climate Active",
+          "match": {
+            "D4": "0x0A"
+          },
+          "default": true
+        },
+        {
+          "label": "Remote Climate Off",
+          "match": {
+            "D4": "0x00"
+          }
+        }
+      ]
+    },
+    {
+      "id": "car_ready_state",
+      "ha_metadata": {
+        "name": "Car READY State Transition",
+        "domain": "binary_sensor",
+        "icon": "mdi:power"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x038"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "options": [
+        {
+          "label": "Vehicle Ready",
+          "match": {
+            "D1": "0x04"
+          },
+          "default": true
+        },
+        {
+          "label": "Vehicle Awake Not Ready",
+          "match": {
+            "D1": "0x01"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "doors_status",
+      "ha_metadata": {
+        "name": "Cabin Doors",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-door"
+      },
+      "device_class": "door",
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x411"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Decoded from E-GMP Body_Status frame 1041 (0x411)"
+      },
+      "options": [
+        {
+          "label": "Driver Door Opened",
+          "match": {
+            "D4": "0x01"
+          },
+          "default": true
+        },
+        {
+          "label": "Driver Door Closed",
+          "match": {
+            "D4": "0x00"
+          }
+        },
+        {
+          "label": "Passenger Door Opened",
+          "match": {
+            "D5": "0x04"
+          }
+        },
+        {
+          "label": "Passenger Door Closed",
+          "match": {
+            "D5": "0x00"
+          }
+        },
+        {
+          "label": "Rear Left Door Opened",
+          "match": {
+            "D7": "0x10"
+          }
+        },
+        {
+          "label": "Rear Left Door Closed",
+          "match": {
+            "D7": "0x00"
+          }
+        },
+        {
+          "label": "Rear Right Door Opened",
+          "match": {
+            "D8": "0x01"
+          }
+        },
+        {
+          "label": "Rear Right Door Closed",
+          "match": {
+            "D8": "0x00"
+          }
+        }
+      ]
+    },
+    {
+      "id": "doors_lock_state",
+      "ha_metadata": {
+        "name": "Door Locks",
+        "domain": "lock",
+        "icon": "mdi:car-door"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x411"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Decoded from E-GMP Body_Status frame 1041 (0x411) bit 22"
+      },
+      "options": [
+        {
+          "label": "Unlocked / Unlock",
+          "match": {
+            "D3": "0x40"
+          },
+          "default": true
+        },
+        {
+          "label": "Locked / Lock",
+          "match": {
+            "D3": "0x00"
+          }
+        }
+      ]
+    },
+    {
+      "id": "seatbelts_status",
+      "ha_metadata": {
+        "name": "Seatbelts",
+        "domain": "binary_sensor",
+        "icon": "mdi:seatbelt"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x411"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Decoded from E-GMP Body_Status frame 1041 (0x411) bits 36 and 42"
+      },
+      "options": [
+        {
+          "label": "Driver Buckled",
+          "match": {
+            "D6": "0x04"
+          },
+          "default": true
+        },
+        {
+          "label": "Driver Unbuckled",
+          "match": {
+            "D6": "0x00"
+          }
+        },
+        {
+          "label": "Passenger Buckled",
+          "match": {
+            "D5": "0x10"
+          }
+        },
+        {
+          "label": "Passenger Unbuckled",
+          "match": {
+            "D5": "0x00"
+          }
+        }
+      ]
+    },
+    {
+      "id": "trunk",
+      "ha_metadata": {
+        "name": "Trunk / Tailgate",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-back"
+      },
+      "device_class": "door",
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x414"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "options": [
+        {
+          "label": "Opened / Open",
+          "match": {
+            "D4": "0x01"
+          },
+          "default": true
+        },
+        {
+          "label": "Closed / Shut",
+          "match": {
+            "D4": "0x00"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "charge_port",
+      "ha_metadata": {
+        "name": "Charge Port Door",
+        "domain": "binary_sensor",
+        "icon": "mdi:ev-plug-type2"
+      },
+      "device_class": "door",
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x3AA"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "options": [
+        {
+          "label": "Opened / Open",
+          "match": {
+            "D5": "0x02"
+          },
+          "default": true
+        },
+        {
+          "label": "Closed / Shut",
+          "match": {
+            "D5": "0x00"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "hood",
+      "ha_metadata": {
+        "name": "Hood / Front Trunk",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-front"
+      },
+      "device_class": "door",
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x411"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Decoded from E-GMP Body_Status frame 1041 (0x411) bit 44"
+      },
+      "options": [
+        {
+          "label": "Opened / Open",
+          "match": {
+            "D6": "0x10"
+          },
+          "default": true
+        },
+        {
+          "label": "Closed / Shut",
+          "match": {
+            "D6": "0x00"
+          }
+        }
+      ]
+    },
+    {
+      "id": "sunroof_extended",
+      "ha_metadata": {
+        "name": "Sunroof Glass & Cover",
+        "domain": "binary_sensor",
+        "icon": "mdi:window-open"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "requires_feature": "sunroof",
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x442"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Decoded from E-GMP Sunroof_Status frame 1090 (0x442) bytes 6 and 7"
+      },
+      "options": [
+        {
+          "label": "Glass Opened",
+          "match": {
+            "D7": "0x60"
+          },
+          "default": true
+        },
+        {
+          "label": "Glass Tilted / Windbreak",
+          "match": {
+            "D7": "0x00"
+          }
+        },
+        {
+          "label": "Glass Closed",
+          "match": {
+            "D7": "0x10"
+          }
+        },
+        {
+          "label": "Cover Opened",
+          "match": {
+            "D8": "0x60"
+          }
+        },
+        {
+          "label": "Cover Closed",
+          "match": {
+            "D8": "0x30"
+          }
+        }
+      ]
+    },
+    {
+      "id": "hazard_lights",
+      "ha_metadata": {
+        "name": "Hazard Warning Lights",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-light-dimmed"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x541"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "options": [
+        {
+          "label": "Turned ON / Active",
+          "match": {
+            "D5": "0x20"
+          },
+          "default": true,
+          "mask": "0xF0"
+        },
+        {
+          "label": "Turned OFF / Inactive",
+          "match": {
+            "D5": "0x00"
+          },
+          "mask": "0xF0"
+        }
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "wipers",
+      "ha_metadata": {
+        "name": "Windshield Wipers",
+        "domain": "binary_sensor",
+        "icon": "mdi:wiper"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x541"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "options": [
+        {
+          "label": "Turned ON / Active",
+          "match": {
+            "D4": "0x10"
+          },
+          "default": true,
+          "mask": "0xF0"
+        },
+        {
+          "label": "Turned OFF / Inactive",
+          "match": {
+            "D4": "0x00"
+          },
+          "mask": "0xF0"
+        }
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "brake_pedal_state",
+      "ha_metadata": {
+        "name": "Brake Pedal Switch & Application",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-brake-alert"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x412"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Decoded from E-GMP Brake_Pedal_Status frame 1042 (0x412) byte 6"
+      },
+      "options": [
+        {
+          "label": "Brake Pressed",
+          "match": {
+            "D7": "0x04"
+          },
+          "default": true
+        },
+        {
+          "label": "Brake Released",
+          "match": {
+            "D7": "0x00"
+          }
+        }
+      ]
+    },
+    {
+      "id": "power_state",
+      "ha_metadata": {
+        "name": "Vehicle Ignition / Power State",
+        "domain": "binary_sensor",
+        "icon": "mdi:power"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x435"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Decoded from E-GMP Power_CAN_Status frame 1077 (0x435) byte 7"
+      },
+      "options": [
+        {
+          "label": "Ignition ON / Ready",
+          "match": {
+            "D8": "0x00"
+          },
+          "default": true
+        },
+        {
+          "label": "Ignition OFF / Asleep",
+          "match": {
+            "D8": "0xFF"
+          }
+        }
+      ]
+    },
+    {
+      "id": "drive_mode_state",
+      "ha_metadata": {
+        "name": "Vehicle Drive Mode",
+        "domain": "sensor",
+        "icon": "mdi:car-info"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x478"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Decoded from CAN-FD frame 1144 (0x478) signal DRIVE_MODE2"
+      },
+      "options": [
+        {
+          "label": "Eco Mode",
+          "match": {
+            "D4": "0x20"
+          },
+          "default": true,
+          "mask": "0xF0"
+        },
+        {
+          "label": "Normal Mode",
+          "match": {
+            "D4": "0x10"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Sport Mode",
+          "match": {
+            "D4": "0x30"
+          },
+          "mask": "0xF0"
+        }
+      ]
+    },
+    {
+      "id": "drivers_seat_comfort",
+      "ha_metadata": {
+        "name": "Driver Seat Comfort",
+        "domain": "select",
+        "icon": "mdi:car-seat-heater"
+      },
+      "category": "Seats & Steering Wheel Comfort",
+      "subcategory": "Seat Comfort",
+      "roles": [
+        "trigger",
+        "condition",
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "state_can_id": "0x496",
+        "action_can_id": "0x4A2",
+        "delay_ms": 20
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "popup_message": "",
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Consolidated driver seat heat and ventilation states"
+      },
+      "options": [
+        {
+          "label": "Off",
+          "popup": "Driver Seat: Off",
+          "match": {
+            "D1": "0x16"
+          },
+          "default": true,
+          "steps": [
+            {
+              "payload": {
+                "D5": "0x2F"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Low Heat",
+          "popup": "Driver Seat: Heat Low",
+          "requires_feature": "heated_seats",
+          "match": {
+            "D1": "0x36"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D5": "0x6F"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Medium Heat",
+          "popup": "Driver Seat: Heat Med",
+          "requires_feature": "heated_seats",
+          "match": {
+            "D1": "0x4E"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D5": "0x7F"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "High Heat",
+          "popup": "Driver Seat: Heat High",
+          "requires_feature": "heated_seats",
+          "match": {
+            "D1": "0x46"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D5": "0x8F"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Low Cool",
+          "popup": "Driver Seat: Cool Low",
+          "requires_feature": "ventilated_seats",
+          "match": {
+            "D1": "0x1E"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D5": "0x3F"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Medium Cool",
+          "popup": "Driver Seat: Cool Med",
+          "requires_feature": "ventilated_seats",
+          "match": {
+            "D1": "0x26"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D5": "0x4F"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "High Cool",
+          "popup": "Driver Seat: Cool High",
+          "requires_feature": "ventilated_seats",
+          "match": {
+            "D1": "0x2E"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D5": "0x5F"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "passengers_seat_comfort",
+      "ha_metadata": {
+        "name": "Passenger Seat Comfort",
+        "domain": "select",
+        "icon": "mdi:car-seat-heater"
+      },
+      "category": "Seats & Steering Wheel Comfort",
+      "subcategory": "Seat Comfort",
+      "roles": [
+        "trigger",
+        "condition",
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "state_can_id": "0x475",
+        "action_can_id": "0x4A2",
+        "delay_ms": 20
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "popup_message": "",
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Consolidated passenger seat heat and ventilation states"
+      },
+      "options": [
+        {
+          "label": "Off",
+          "popup": "Passenger Seat: Off",
+          "match": {
+            "D1": "0x16"
+          },
+          "default": true,
+          "steps": [
+            {
+              "payload": {
+                "D5": "0xF2"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Low Heat",
+          "popup": "Passenger Seat: Heat Low",
+          "requires_feature": "heated_seats",
+          "match": {
+            "D1": "0x36"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D5": "0xF6"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Medium Heat",
+          "popup": "Passenger Seat: Heat Med",
+          "requires_feature": "heated_seats",
+          "match": {
+            "D1": "0x4E"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D5": "0xF7"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "High Heat",
+          "popup": "Passenger Seat: Heat High",
+          "requires_feature": "heated_seats",
+          "match": {
+            "D1": "0x46"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D5": "0xF8"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Low Cool",
+          "popup": "Passenger Seat: Cool Low",
+          "requires_feature": "ventilated_seats",
+          "match": {
+            "D1": "0x1E"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D5": "0xF3"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Medium Cool",
+          "popup": "Passenger Seat: Cool Med",
+          "requires_feature": "ventilated_seats",
+          "match": {
+            "D1": "0x26"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D5": "0xF4"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "High Cool",
+          "popup": "Passenger Seat: Cool High",
+          "requires_feature": "ventilated_seats",
+          "match": {
+            "D1": "0x2E"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D5": "0xF5"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rear_seats_comfort",
+      "ha_metadata": {
+        "name": "Rear Seats Heated State",
+        "domain": "sensor",
+        "icon": "mdi:car-seat-heater"
+      },
+      "category": "Seats & Steering Wheel Comfort",
+      "subcategory": "Seat Comfort",
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x438"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Decoded from E-GMP RearLeft_Seat_Heating frame 1080 (0x438) and 1107 (0x453)"
+      },
+      "options": [
+        {
+          "label": "Rear Left High",
+          "match": {
+            "D1": "0x41"
+          },
+          "default": true
+        },
+        {
+          "label": "Rear Left Low",
+          "match": {
+            "D1": "0x31"
+          }
+        },
+        {
+          "label": "Rear Left Off",
+          "match": {
+            "D1": "0x11"
+          }
+        }
+      ]
+    },
+    {
+      "id": "heated_steering_wheel_toggle",
+      "ha_metadata": {
+        "name": "Heated Steering Wheel Toggle",
+        "domain": "switch",
+        "icon": "mdi:car-info"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "requires_feature": "heated_wheel",
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x418",
+        "delay_ms": 20
+      },
+      "popup_message": "Heated Wheel Toggle",
+      "steps": [
+        {
+          "payload": {
+            "D3": "0x01"
+          },
+          "repeat": 3
+        },
+        {
+          "payload": {},
+          "repeat": 3
+        }
+      ],
+      "category": "Seats & Steering Wheel Comfort",
+      "roles": [
+        "action"
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "battery_preconditioning",
+      "ha_metadata": {
+        "name": "Battery Preconditioning Control",
+        "domain": "select",
+        "icon": "mdi:car-battery"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "type": "precondition",
+      "category": "Battery Preconditioning",
+      "roles": [
+        "action"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Consolidated preconditioning operational modes"
+      },
+      "options": [
+        {
+          "label": "Persistent",
+          "precon_mode": "persistent",
+          "precon_press": "short",
+          "default": true,
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x40",
+                "D5": "0x03"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D4": "0xE0",
+                "D5": "0x07"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Continuous",
+          "precon_mode": "continuous",
+          "precon_press": "short",
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x40",
+                "D5": "0x03"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D4": "0xE0",
+                "D5": "0x07"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Single Cycle",
+          "precon_mode": "once",
+          "precon_press": "short",
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x40",
+                "D5": "0x03"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D4": "0xE0",
+                "D5": "0x07"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Cancel / Off",
+          "precon_mode": "cancel",
+          "precon_press": "short",
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D4": "0xE0",
+                "D5": "0x07"
+              },
+              "repeat": 3
+            }
+          ]
+        }
+      ],
+      "network": {
+        "bus": 0,
+        "type": "precondition",
+        "action_can_id": "0x0C7"
+      }
+    },
+    {
+      "id": "battery_preconditioning_state",
+      "ha_metadata": {
+        "name": "Battery Preconditioning State",
+        "domain": "sensor",
+        "icon": "mdi:car-battery"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Battery Preconditioning",
+      "roles": [
+        "trigger",
+        "condition",
+        "state"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Decoded from BMU status frame 0x2AD (0x0A82AA03 on Ioniq 6) byte D2 with mask 0x1F"
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x2AD"
+      },
+      "options": [
+        {
+          "label": "Preconditioning Off / Idle",
+          "match": {
+            "D2": "0x01"
+          },
+          "mask": "0x1F",
+          "default": true
+        },
+        {
+          "label": "Preconditioning Starting / Handshake",
+          "match": {
+            "D2": "0x05"
+          },
+          "mask": "0x1F"
+        },
+        {
+          "label": "Preconditioning Active / Heating Running",
+          "match": {
+            "D2": "0x15"
+          },
+          "mask": "0x1F"
+        }
+      ]
+    },
+    {
+      "id": "cluster_telemetry_popup",
+      "ha_metadata": {
+        "name": "Cluster Telemetry Toast",
+        "domain": "notify",
+        "icon": "mdi:message-badge"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "type": "popup",
+      "category": "Cluster OSD Popups",
+      "roles": [
+        "action"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Consolidated cluster popup formats"
+      },
+      "options": [
+        {
+          "label": "Live Batt Temp & Voltage",
+          "popup_message": "Batt: {battery_temp}C ({voltage}V)",
+          "popup_message_imperial": "Batt: {battery_temp_f}F ({voltage}V)",
+          "default": true
+        },
+        {
+          "label": "Min / Max Batt Temp Range",
+          "popup_message": "Batt: {temp_min}C to {temp_max}C",
+          "popup_message_imperial": "Batt: {temp_min}F to {temp_max}F"
+        },
+        {
+          "label": "Preconditioning Status & Temp",
+          "popup_message": "Precon: {status} ({battery_temp}C)",
+          "popup_message_imperial": "Precon: {status} ({battery_temp_f}F)"
+        },
+        {
+          "label": "Charge Port Opened Toast",
+          "popup_message": "CHARGE PORT OPEN"
+        },
+        {
+          "label": "Sport Mode Active Toast",
+          "popup_message": "SPORT MODE ACTIVE"
+        }
+      ],
+      "network": {
+        "bus": 0,
+        "type": "popup"
+      }
+    },
+    {
+      "id": "cluster_track_popup_message",
+      "ha_metadata": {
+        "name": "Cluster Track-Selection Popup Notification",
+        "domain": "notify",
+        "icon": "mdi:message-text"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "type": "track_popup",
+      "category": "Cluster OSD Popups",
+      "roles": [
+        "action"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Arbitrary UTF-16LE text rendered in instrument cluster OSD via ISO-TP transport (0x6E0 default, or paired active media transport)"
+      },
+      "network": {
+        "bus": 0,
+        "type": "track_popup",
+        "action_can_id": "0x6E0",
+        "flow_control_can_id": "0x6BE",
+        "trigger_frame_can_id": "0x4CE",
+        "transports": {
+          "apps": {
+            "tx_id": "0x6E0",
+            "flow_control_id": "0x6BE"
+          },
+          "bluetooth": {
+            "tx_id": "0x6D4",
+            "flow_control_id": "0x6B4"
+          },
+          "pandora_ipod": {
+            "tx_id": "0x6E1",
+            "flow_control_id": "0x6BF"
+          },
+          "radio": {
+            "tx_id": "0x6DC",
+            "flow_control_id": "0x6BB"
+          },
+          "sxm": {
+            "tx_id": "0x6EC",
+            "flow_control_id": "0x6CA"
+          },
+          "dab": {
+            "tx_id": "0x6D8",
+            "flow_control_id": "0x6B8"
+          },
+          "dmb_tv": {
+            "tx_id": "0x6D9",
+            "flow_control_id": "0x6B9"
+          },
+          "usb": {
+            "tx_id": "0x6EA",
+            "flow_control_id": "0x6C8"
+          },
+          "carplay": {
+            "tx_id": "0x6D6",
+            "flow_control_id": "0x6B6"
+          },
+          "android_auto": {
+            "tx_id": "0x6D2",
+            "flow_control_id": "0x6B2"
+          }
+        }
+      },
+      "options": [
+        {
+          "label": "Info Notification (ⓘ)",
+          "level": "info",
+          "popup_message": "Preconditioning Active",
+          "default": true
+        },
+        {
+          "label": "Warning Notification (⚠)",
+          "level": "warning",
+          "popup_message": "Battery Cold / Limited"
+        },
+        {
+          "label": "Fault Notification (‼)",
+          "level": "error",
+          "popup_message": "Charge Interrupted"
+        },
+        {
+          "label": "Cabin Climate Pre-Heat Toast",
+          "level": "info",
+          "popup_message": "Cabin Pre-heat Active"
+        },
+        {
+          "label": "Seat Comfort Auto-Set Toast",
+          "level": "info",
+          "popup_message": "Seat Comfort Set"
+        },
+        {
+          "label": "Door / Tailgate Ajar Warning",
+          "level": "warning",
+          "popup_message": "Tailgate Open"
+        }
+      ]
+    },
+    {
+      "id": "cluster_nav_osd_countdown",
+      "ha_metadata": {
+        "name": "Cluster Preconditioning Countdown & Nav OSD",
+        "domain": "notify",
+        "icon": "mdi:timer-outline"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "type": "can_tx",
+      "category": "Cluster OSD Popups",
+      "roles": [
+        "action"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Instrument cluster navigation distance/flag display injection used by preconditioning to display countdown and status flags"
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x4E8",
+        "control_can_id": "0x4CC"
+      },
+      "options": [
+        {
+          "label": "Show 60s Countdown (0x4E8)",
+          "payload": {
+            "D1": "0x01",
+            "D5": "0x3C",
+            "D6": "0x00",
+            "D7": "0x0F"
+          },
+          "default": true
+        },
+        {
+          "label": "Clear Countdown Display",
+          "payload": {
+            "D1": "0x00",
+            "D5": "0xFF",
+            "D6": "0xFF",
+            "D7": "0x0F"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cluster_track_popup_state",
+      "ha_metadata": {
+        "name": "Cluster Track Popup Trigger State",
+        "domain": "binary_sensor",
+        "icon": "mdi:message-badge-outline"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Cluster OSD Popups",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x4CE"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Track selection popup trigger status in frame 0x4CE (Byte D2)"
+      },
+      "options": [
+        {
+          "label": "Triggering Track Popup",
+          "match": {
+            "D2": "0x11"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Idle / Normal Playback",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0xFF",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "ev_charge_limits",
+      "ha_metadata": {
+        "name": "EV Max Charge Limit",
+        "domain": "select",
+        "icon": "mdi:ev-station"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x4C5",
+        "delay_ms": 20
+      },
+      "category": "EV Charging Limits",
+      "roles": [
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "AC (D5) and DC (D6) charge limit control targeting 0x4C5 with reset pulse"
+      },
+      "options": [
+        {
+          "label": "AC 50%",
+          "popup": "AC Limit: 50%",
+          "steps": [
+            {
+              "payload": {
+                "D5": "0x64"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "AC 60%",
+          "popup": "AC Limit: 60%",
+          "steps": [
+            {
+              "payload": {
+                "D5": "0x78"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "AC 70%",
+          "popup": "AC Limit: 70%",
+          "steps": [
+            {
+              "payload": {
+                "D5": "0x8C"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "AC 80%",
+          "popup": "AC Limit: 80%",
+          "default": true,
+          "steps": [
+            {
+              "payload": {
+                "D5": "0xA0"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "AC 90%",
+          "popup": "AC Limit: 90%",
+          "steps": [
+            {
+              "payload": {
+                "D5": "0xB4"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "AC 100%",
+          "popup": "AC Limit: 100%",
+          "steps": [
+            {
+              "payload": {
+                "D5": "0xC8"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "DC 50%",
+          "popup": "DC Limit: 50%",
+          "steps": [
+            {
+              "payload": {
+                "D6": "0x64"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "DC 60%",
+          "popup": "DC Limit: 60%",
+          "steps": [
+            {
+              "payload": {
+                "D6": "0x78"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "DC 70%",
+          "popup": "DC Limit: 70%",
+          "steps": [
+            {
+              "payload": {
+                "D6": "0x8C"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "DC 80%",
+          "popup": "DC Limit: 80%",
+          "steps": [
+            {
+              "payload": {
+                "D6": "0xA0"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "DC 90%",
+          "popup": "DC Limit: 90%",
+          "steps": [
+            {
+              "payload": {
+                "D6": "0xB4"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "DC 100%",
+          "popup": "DC Limit: 100%",
+          "steps": [
+            {
+              "payload": {
+                "D6": "0xC8"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Both 50% (AC & DC)",
+          "popup": "Charge Limit: 50%",
+          "steps": [
+            {
+              "payload": {
+                "D5": "0x64",
+                "D6": "0x64"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF",
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Both 60% (AC & DC)",
+          "popup": "Charge Limit: 60%",
+          "steps": [
+            {
+              "payload": {
+                "D5": "0x78",
+                "D6": "0x78"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF",
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Both 70% (AC & DC)",
+          "popup": "Charge Limit: 70%",
+          "steps": [
+            {
+              "payload": {
+                "D5": "0x8C",
+                "D6": "0x8C"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF",
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Both 80% (AC & DC)",
+          "popup": "Charge Limit: 80%",
+          "steps": [
+            {
+              "payload": {
+                "D5": "0xA0",
+                "D6": "0xA0"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF",
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Both 90% (AC & DC)",
+          "popup": "Charge Limit: 90%",
+          "steps": [
+            {
+              "payload": {
+                "D5": "0xB4",
+                "D6": "0xB4"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF",
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Both 100% (AC & DC)",
+          "popup": "Charge Limit: 100%",
+          "steps": [
+            {
+              "payload": {
+                "D5": "0xC8",
+                "D6": "0xC8"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D5": "0xFF",
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "remote_climate_start____seats___wheel_",
+      "ha_metadata": {
+        "name": "Remote Climate Start (+ Seats & Wheel)",
+        "domain": "button",
+        "icon": "mdi:car-seat-heater"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x4A2",
+        "delay_ms": 50
+      },
+      "popup_message": "Remote Climate Started",
+      "options": [
+        {
+          "label": "Start (+ Seats & Wheel)",
+          "payload": {
+            "D3": "0xFF",
+            "D4": "0xF3",
+            "D5": "0xFF",
+            "D6": "0xFF",
+            "D7": "0x7F"
+          },
+          "popup": "Climate + Warmers Started",
+          "default": true
+        },
+        {
+          "label": "Start (Climate Only)",
+          "payload": {
+            "D3": "0xFF",
+            "D4": "0x03",
+            "D5": "0xFF",
+            "D6": "0xFF"
+          },
+          "popup": "Remote Climate Started"
+        },
+        {
+          "label": "Turn OFF",
+          "payload": {},
+          "popup": "Remote Climate Stopped"
+        }
+      ],
+      "steps": [
+        {
+          "payload": {
+            "D3": "0x0F",
+            "D4": "0x03"
+          },
+          "repeat": 3
+        },
+        {
+          "payload": {
+            "D3": "0xFF",
+            "D4": "0xF3",
+            "D5": "0xFF",
+            "D6": "0xFF",
+            "D7": "0x7F"
+          },
+          "repeat": 30
+        }
+      ],
+      "category": "Cabin Climate Control",
+      "roles": [
+        "action"
+      ],
+      "contributor": {
+        "name": "liz",
+        "github": "L1Z3"
+      }
+    },
+    {
+      "id": "deep_sleep_network_wake_pulse",
+      "ha_metadata": {
+        "name": "Deep Sleep Network Wake Pulse",
+        "domain": "button",
+        "icon": "mdi:thermostat"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x604",
+        "delay_ms": 40
+      },
+      "popup_message": "Vehicle Network Woken",
+      "options": [
+        {
+          "label": "Wake Pulse",
+          "payload": {
+            "D1": "0x4B",
+            "D2": "0x14",
+            "D3": "0x14",
+            "D4": "0x14",
+            "D5": "0x14",
+            "D6": "0x14",
+            "D7": "0xFF",
+            "D8": "0xFF"
+          },
+          "default": true
+        }
+      ],
+      "steps": [
+        {
+          "payload": {
+            "D1": "0x4B",
+            "D2": "0x14",
+            "D3": "0x14",
+            "D4": "0x14",
+            "D5": "0x14",
+            "D6": "0x14",
+            "D7": "0xFF",
+            "D8": "0xFF"
+          },
+          "repeat": 30
+        }
+      ],
+      "category": "Cabin Climate Control",
+      "roles": [
+        "action"
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "set_target_cabin_temp",
+      "ha_metadata": {
+        "name": "Set Target Cabin Temp",
+        "domain": "climate",
+        "icon": "mdi:thermostat"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "type": "climate_target",
+      "climate_zone": "driver",
+      "target_temp_c": 21,
+      "target_temp_f": 70,
+      "pass_temp_c": 21,
+      "pass_temp_f": 70,
+      "climate_sync_on": true,
+      "climate_driver_only": false,
+      "popup_message": "Climate: 21C",
+      "popup_message_imperial": "Climate: 70F",
+      "category": "Cabin Climate Control",
+      "roles": [
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "climate_target"
+      },
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "active_sound_design__asd__profile",
+      "ha_metadata": {
+        "name": "Active Sound Design (ASD) Profile",
+        "domain": "select",
+        "icon": "mdi:car-info"
+      },
+      "tags": [
+        "kia_ev6"
+      ],
+      "requires_feature": "asd",
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x658",
+        "delay_ms": 20
+      },
+      "popup_message": "ASD: Dynamic",
+      "options": [
+        {
+          "label": "Off",
+          "payload": {
+            "D1": "0x7F",
+            "D2": "0x7F",
+            "D3": "0xAF"
+          },
+          "popup": "ASD: Off"
+        },
+        {
+          "label": "Stylish",
+          "payload": {
+            "D1": "0x87",
+            "D2": "0x87",
+            "D3": "0xAF"
+          },
+          "popup": "ASD: Stylish"
+        },
+        {
+          "label": "Dynamic",
+          "payload": {
+            "D1": "0x8B",
+            "D2": "0x8B",
+            "D3": "0xAF"
+          },
+          "popup": "ASD: Dynamic",
+          "default": true
+        },
+        {
+          "label": "Cyber",
+          "payload": {
+            "D1": "0x8F",
+            "D2": "0x8F",
+            "D3": "0xAF"
+          },
+          "popup": "ASD: Cyber"
+        }
+      ],
+      "steps": [
+        {
+          "payload": {
+            "D1": "0x8B",
+            "D2": "0x8B",
+            "D3": "0xAF"
+          },
+          "repeat": 3
+        },
+        {
+          "payload": {},
+          "repeat": 3
+        }
+      ],
+      "category": "Vehicle Actuators & Features",
+      "roles": [
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave"
+      }
+    },
+    {
+      "id": "surround_view_camera",
+      "ha_metadata": {
+        "name": "360 Surround View Camera",
+        "domain": "button",
+        "icon": "mdi:cctv"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "requires_feature": "camera_360",
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x476",
+        "delay_ms": 20
+      },
+      "popup_message": "Camera View",
+      "steps": [
+        {
+          "payload": {
+            "D3": "0x52"
+          },
+          "repeat": 3
+        },
+        {
+          "payload": {},
+          "repeat": 3
+        }
+      ],
+      "category": "Vehicle Actuators & Features",
+      "roles": [
+        "action"
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "keepalive___wakeup_ping",
+      "ha_metadata": {
+        "name": "Keepalive / Wakeup Ping",
+        "domain": "button",
+        "icon": "mdi:car-info"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x7DF",
+        "delay_ms": 10
+      },
+      "popup_message": "Keepalive Ping",
+      "steps": [
+        {
+          "payload": {
+            "D1": "0x02",
+            "D2": "0x01"
+          },
+          "repeat": 3
+        }
+      ],
+      "category": "Vehicle Actuators & Features",
+      "roles": [
+        "action"
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "multi_frame_burst_sequence__x3_",
+      "ha_metadata": {
+        "name": "Multi-Frame Burst Sequence (x3)",
+        "domain": "button",
+        "icon": "mdi:car-info"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x652",
+        "delay_ms": 20
+      },
+      "popup_message": "",
+      "steps": [
+        {
+          "payload": {
+            "D3": "0x01"
+          },
+          "repeat": 3
+        },
+        {
+          "payload": {},
+          "repeat": 3
+        }
+      ],
+      "category": "Vehicle Actuators & Features",
+      "roles": [
+        "action"
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "home_assistant_webhook_event",
+      "ha_metadata": {
+        "name": "Home Assistant Webhook Event",
+        "domain": "button",
+        "icon": "mdi:car-info"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "type": "webhook",
+      "webhook_url": "http://homeassistant.local:8123/api/webhook/wican_event",
+      "category": "Home Assistant & Cloud",
+      "roles": [
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "webhook"
+      },
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "mqtt_json_event_alert",
+      "ha_metadata": {
+        "name": "MQTT JSON Event Alert",
+        "domain": "button",
+        "icon": "mdi:car-info"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "type": "mqtt",
+      "mqtt_topic": "wican/event/alert",
+      "mqtt_payload": "{\"event\": \"triggered\", \"status\": \"active\"}",
+      "category": "Home Assistant & Cloud",
+      "roles": [
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "mqtt"
+      },
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "ambient_mood_lighting",
+      "ha_metadata": {
+        "name": "Ambient Mood Lighting",
+        "domain": "light",
+        "icon": "mdi:car-light-dimmed"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x4AD",
+        "delay_ms": 20
+      },
+      "popup_message": "Ambient Light: {option}",
+      "options": [
+        {
+          "label": "Electric Blue",
+          "payload": {
+            "D2": "0x54",
+            "D3": "0xF1",
+            "D4": "0x0F"
+          },
+          "popup": "Ambient: Electric Blue"
+        },
+        {
+          "label": "Cyan / Aqua Wave",
+          "payload": {
+            "D2": "0x64",
+            "D3": "0x53",
+            "D4": "0x0F"
+          },
+          "popup": "Ambient: Cyan / Aqua"
+        },
+        {
+          "label": "Deep Purple / Violet",
+          "payload": {
+            "D1": "0x80",
+            "D3": "0xF0",
+            "D4": "0x0F"
+          },
+          "popup": "Ambient: Violet",
+          "default": true
+        },
+        {
+          "label": "Magenta / Neon Pink",
+          "payload": {
+            "D1": "0xFF",
+            "D3": "0x10",
+            "D4": "0x0F"
+          },
+          "popup": "Ambient: Magenta"
+        },
+        {
+          "label": "Crimson Red",
+          "payload": {
+            "D1": "0xFE",
+            "D2": "0x88"
+          },
+          "popup": "Ambient: Crimson Red"
+        },
+        {
+          "label": "Warm Sunset / Amber",
+          "payload": {
+            "D1": "0xFF",
+            "D2": "0x50",
+            "D3": "0x72",
+            "D4": "0x07"
+          },
+          "popup": "Ambient: Sunset Orange"
+        },
+        {
+          "label": "Lime / Mint Glow",
+          "payload": {
+            "D1": "0xF7",
+            "D2": "0xFC",
+            "D3": "0x63",
+            "D4": "0x0B"
+          },
+          "popup": "Ambient: Mint / Lime"
+        },
+        {
+          "label": "Warm White / Champagne",
+          "payload": {
+            "D1": "0xFE",
+            "D2": "0xB4",
+            "D3": "0x53",
+            "D4": "0x0A"
+          },
+          "popup": "Ambient: Champagne"
+        },
+        {
+          "label": "Ambient Light Changed",
+          "payload": {
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "default": false,
+          "match": {
+            "D1": "!0x00",
+            "D2": "!0x02",
+            "D3": "!0x08",
+            "D4": "!0x20",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          }
+        }
+      ],
+      "category": "Lighting",
+      "subcategory": "Interior Lighting",
+      "roles": [
+        "action",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "cond_speed_zero",
+      "ha_metadata": {
+        "name": "Vehicle Stopped / Parked (Speed == 0)",
+        "domain": "binary_sensor",
+        "icon": "mdi:speedometer"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "type": "speed_zero",
+      "category": "Vehicle State & Safety",
+      "roles": [
+        "condition"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "speed_zero"
+      },
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "selected_gear",
+      "ha_metadata": {
+        "name": "Selected Gear",
+        "domain": "sensor",
+        "icon": "mdi:car-shift-pattern"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x2C0"
+      },
+      "roles": [
+        "condition",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Consolidated PRND gear selector positions"
+      },
+      "options": [
+        {
+          "label": "Park (P)",
+          "match": {
+            "D3": "0x00"
+          },
+          "default": true
+        },
+        {
+          "label": "Reverse (R)",
+          "match": {
+            "D3": "0x07"
+          }
+        },
+        {
+          "label": "Neutral (N)",
+          "match": {
+            "D3": "0x06"
+          }
+        },
+        {
+          "label": "Drive (D)",
+          "match": {
+            "D3": "0x05"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cond_doors_closed",
+      "ha_metadata": {
+        "name": "All Doors & Trunk Closed",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-door"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x540"
+      },
+      "match": {
+        "D1": "0x00",
+        "D2": "0x00",
+        "D3": "0x00",
+        "D4": "0x00"
+      },
+      "roles": [
+        "condition",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "cond_climate_off",
+      "ha_metadata": {
+        "name": "Climate / HVAC is OFF",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-info"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x476"
+      },
+      "match": {
+        "D2": "0x00"
+      },
+      "roles": [
+        "condition"
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "cond_charging",
+      "ha_metadata": {
+        "name": "Vehicle Plugged In / EV Charging",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-info"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x594"
+      },
+      "match": {
+        "D3": "0x01"
+      },
+      "roles": [
+        "condition",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "Unknown",
+        "github": ""
+      }
+    },
+    {
+      "id": "cond_ambient_temperature",
+      "ha_metadata": {
+        "name": "Outdoor Ambient Temperature Thresholds",
+        "domain": "sensor",
+        "icon": "mdi:thermostat"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "type": "param_range",
+      "category": "Environment & Weather",
+      "roles": [
+        "condition"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x226"
+      },
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Consolidated outdoor temperature condition ranges"
+      },
+      "options": [
+        {
+          "label": "Freezing (<= 0C / 32F)",
+          "expression": "[B3] <= 40",
+          "default": true
+        },
+        {
+          "label": "Cold (< 15C / 59F)",
+          "expression": "[B3] < 55"
+        },
+        {
+          "label": "Warm (> 25C / 77F)",
+          "expression": "[B3] > 65"
+        }
+      ]
+    },
+    {
+      "id": "hv_battery_temperatures",
+      "ha_metadata": {
+        "name": "HV Battery Cell Module Temperatures",
+        "domain": "sensor",
+        "icon": "mdi:thermometer-alert"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Battery & Power",
+      "roles": [
+        "trigger",
+        "condition",
+        "state"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "High-voltage battery module min (D1) and max (D2) temperatures in deg C from BMS frame 0x152"
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x152"
+      },
+      "options": [
+        {
+          "label": "Target Reached (Min Temp >= 21C / 70F)",
+          "match": {
+            "D1": "0x15"
+          },
+          "mask": "0xFF",
+          "default": true
+        },
+        {
+          "label": "Cold Battery (Min Temp < 15C / 59F)",
+          "match": {
+            "D1": "0x0F"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Freezing Battery (Min Temp < 0C / 32F)",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "DC Fast Charge Temp (Min Temp >= 25C / 77F)",
+          "match": {
+            "D1": "0x19"
+          },
+          "mask": "0xFF"
+        }
+      ]
+    },
+    {
+      "id": "cond_hv_battery_soc",
+      "ha_metadata": {
+        "name": "High Voltage (HV) Battery SOC Thresholds",
+        "domain": "sensor",
+        "icon": "mdi:car-battery"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "type": "param_range",
+      "category": "Battery & Power",
+      "roles": [
+        "condition"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x2FC"
+      },
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Consolidated traction battery state-of-charge thresholds"
+      },
+      "options": [
+        {
+          "label": "Safe for Preconditioning (SOC > 20%)",
+          "expression": "[B7] >= 40",
+          "default": true
+        },
+        {
+          "label": "High Battery (SOC > 50%)",
+          "expression": "[B7] >= 100"
+        },
+        {
+          "label": "Low Battery (SOC < 20%)",
+          "expression": "[B7] < 40"
+        }
+      ]
+    },
+    {
+      "id": "cond_aux_12v_battery",
+      "ha_metadata": {
+        "name": "12V Auxiliary Battery Voltage",
+        "domain": "sensor",
+        "icon": "mdi:car-battery"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "type": "voltage",
+      "category": "Battery & Power",
+      "roles": [
+        "condition"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "voltage"
+      },
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Consolidated 12V lead-acid/AGM threshold levels"
+      },
+      "options": [
+        {
+          "label": "Healthy (> 12.4V)",
+          "voltage_val": "12.4",
+          "voltage_dir": "above",
+          "default": true
+        },
+        {
+          "label": "Low (< 12.0V)",
+          "voltage_val": "12.0",
+          "voltage_dir": "below"
+        }
+      ]
+    },
+    {
+      "id": "cond_day_of_week",
+      "ha_metadata": {
+        "name": "Day of Week Selection",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-info"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "type": "day_of_week",
+      "category": "Schedule & Calendar",
+      "roles": [
+        "condition"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "day_of_week"
+      },
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Consolidated calendar day filter"
+      },
+      "options": [
+        {
+          "label": "Weekdays Only (Mon - Fri)",
+          "days": [
+            "mon",
+            "tue",
+            "wed",
+            "thu",
+            "fri"
+          ],
+          "default": true
+        },
+        {
+          "label": "Weekends Only (Sat - Sun)",
+          "days": [
+            "sat",
+            "sun"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cond_time_window",
+      "ha_metadata": {
+        "name": "Time of Day Window",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-info"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "type": "time_window",
+      "category": "Schedule & Calendar",
+      "roles": [
+        "condition"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "time_window"
+      },
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Consolidated diurnal time window filter"
+      },
+      "options": [
+        {
+          "label": "Daytime Hours (07:00 - 19:00)",
+          "start_time": "07:00",
+          "end_time": "19:00",
+          "default": true
+        },
+        {
+          "label": "Nighttime / Overnight (19:00 - 07:00)",
+          "start_time": "19:00",
+          "end_time": "07:00"
+        }
+      ]
+    },
+    {
+      "id": "wheel_speeds",
+      "ha_metadata": {
+        "name": "Wheel Speeds (4 Wheels)",
+        "domain": "sensor",
+        "icon": "mdi:car-speed-limiter"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "subcategory": "Driving Dynamics",
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x0A2"
+      },
+      "notes": "Decoded from E-GMP WHEEL_SPEEDS frame 162 (0x0A2). Four 16-bit Little Endian (Intel) unsigned wheel speeds (factor 0.03125 kph, 0-2047.96 kph): Wheel 1 (bits 0-15), Wheel 2 (bits 16-31), Wheel 3 (bits 32-47), Wheel 4 (bits 48-63).",
+      "contributor": {
+        "name": "Tichael",
+        "github": "tichael",
+        "notes": "E-GMP wheel speed telemetry sensors"
+      },
+      "options": [
+        {
+          "label": "All Wheels Stopped (0 kph)",
+          "match": {
+            "D1": "0x00",
+            "D2": "0x00",
+            "D3": "0x00",
+            "D4": "0x00"
+          },
+          "default": true
+        },
+        {
+          "label": "Vehicle Moving (> 5 kph)",
+          "evaluate": {
+            "byte": "D1",
+            "operator": "greater_than",
+            "value": "0xA0"
+          }
+        },
+        {
+          "label": "City Cruising (> 40 kph)",
+          "evaluate": {
+            "byte": "D2",
+            "operator": "greater_than",
+            "value": "0x05"
+          }
+        },
+        {
+          "label": "Highway Speed (> 100 kph)",
+          "evaluate": {
+            "byte": "D2",
+            "operator": "greater_than",
+            "value": "0x0C"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cluster_vehicle_speed",
+      "ha_metadata": {
+        "name": "Cluster Vehicle Speed",
+        "domain": "sensor",
+        "icon": "mdi:speedometer"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Dashboard / Center Console",
+      "subcategory": "Cluster Speedometer",
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x1AC"
+      },
+      "notes": "Decoded from E-GMP CLUSTER_INFO frame 428 (0x1AC) Byte 0 (Speed in kph, factor 1.0, range 0-255 kph).",
+      "contributor": {
+        "name": "Tichael",
+        "github": "tichael",
+        "notes": "Instrument cluster reported road speed"
+      },
+      "options": [
+        {
+          "label": "Vehicle Stopped (0 kph)",
+          "match": {
+            "D1": "0x00"
+          },
+          "default": true
+        },
+        {
+          "label": "Vehicle In Motion (> 0 kph)",
+          "evaluate": {
+            "byte": "D1",
+            "operator": "greater_than",
+            "value": "0x00"
+          }
+        },
+        {
+          "label": "City Speed (> 40 kph / ~25 mph)",
+          "evaluate": {
+            "byte": "D1",
+            "operator": "greater_than",
+            "value": "0x28"
+          }
+        },
+        {
+          "label": "Highway Speed (> 100 kph / ~62 mph)",
+          "evaluate": {
+            "byte": "D1",
+            "operator": "greater_than",
+            "value": "0x64"
+          }
+        }
+      ]
+    },
+    {
+      "id": "vehicle_odometer",
+      "ha_metadata": {
+        "name": "Vehicle Odometer",
+        "domain": "sensor",
+        "icon": "mdi:counter"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Dashboard / Center Console",
+      "subcategory": "Odometer & Mileage",
+      "roles": [
+        "condition",
+        "trigger"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x227"
+      },
+      "notes": "Decoded from E-GMP ODOMETER frame 551 (0x227). 24-bit unsigned integer Little Endian (Intel) across bytes 1-3 with factor 0.1 km (0 to 1,677,721 km).",
+      "contributor": {
+        "name": "Tichael",
+        "github": "tichael",
+        "notes": "Instrument cluster cumulative odometer mileage"
+      },
+      "options": [
+        {
+          "label": "Odometer Telemetry Active",
+          "evaluate": {
+            "byte": "D2",
+            "operator": "greater_than",
+            "value": "0x00"
+          },
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "climate_airflow_direction",
+      "ha_metadata": {
+        "name": "Climate Airflow Direction",
+        "domain": "select",
+        "icon": "mdi:air-conditioner"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Comfort & Climate",
+      "subcategory": "HVAC Airflow",
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x31B"
+      },
+      "notes": "Decoded from E-GMP CLIMATE_STATUS frame 795 (0x31B) Start Bit 28, Length 4 (bits 28-31 = high nibble of Byte D4, mask 0xF0). Values: 0: Auto, 1: Body, 2: Body&Legs, 3: Legs, 4: Legs&Defog.",
+      "contributor": {
+        "name": "Tichael",
+        "github": "tichael",
+        "notes": "HVAC vent airflow distribution state"
+      },
+      "options": [
+        {
+          "label": "Auto",
+          "match": {
+            "D4": "0x00"
+          },
+          "mask": "0xF0",
+          "default": true
+        },
+        {
+          "label": "Body / Face Vents",
+          "match": {
+            "D4": "0x10"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Body & Legs",
+          "match": {
+            "D4": "0x20"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Legs / Floor Vents",
+          "match": {
+            "D4": "0x30"
+          },
+          "mask": "0xF0"
+        },
+        {
+          "label": "Legs & Windshield Defog",
+          "match": {
+            "D4": "0x40"
+          },
+          "mask": "0xF0"
+        }
+      ]
+    },
+    {
+      "id": "climate_fan_speed_level",
+      "ha_metadata": {
+        "name": "Climate Fan Speed Level",
+        "domain": "select",
+        "icon": "mdi:fan"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Comfort & Climate",
+      "subcategory": "HVAC Fan",
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x31B"
+      },
+      "notes": "Decoded from E-GMP CLIMATE_STATUS frame 795 (0x31B) Start Bit 24, Length 4 (bits 24-27 = low nibble of Byte D4, mask 0x0F). Values: 0: Off, 2-9: Speeds 1 to 8.",
+      "contributor": {
+        "name": "Tichael",
+        "github": "tichael",
+        "notes": "HVAC blower fan speed 1 to 8"
+      },
+      "options": [
+        {
+          "label": "Off",
+          "match": {
+            "D4": "0x00"
+          },
+          "mask": "0x0F",
+          "default": true
+        },
+        {
+          "label": "Speed 1",
+          "match": {
+            "D4": "0x02"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Speed 2",
+          "match": {
+            "D4": "0x03"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Speed 3",
+          "match": {
+            "D4": "0x04"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Speed 4",
+          "match": {
+            "D4": "0x05"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Speed 5",
+          "match": {
+            "D4": "0x06"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Speed 6",
+          "match": {
+            "D4": "0x07"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Speed 7",
+          "match": {
+            "D4": "0x08"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Speed 8 (Max)",
+          "match": {
+            "D4": "0x09"
+          },
+          "mask": "0x0F"
+        }
+      ]
+    },
+    {
+      "id": "climate_rear_cabin_temp",
+      "ha_metadata": {
+        "name": "Rear Cabin Target Temperature",
+        "domain": "climate",
+        "icon": "mdi:thermometer"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Comfort & Climate",
+      "subcategory": "Rear Cabin Climate",
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x380"
+      },
+      "notes": "Decoded from E-GMP CLIMATE_TEMPERATURE frame 896 (0x380) Rear_Temp_1_Raw (Start Bit 40, Length 8, Factor 0.5, Offset 14 C, Byte D6) and Rear_Temp_2_Raw (Start Bit 48, Length 8, Factor 0.5, Offset 14 C, Byte D7).",
+      "contributor": {
+        "name": "Tichael",
+        "github": "tichael",
+        "notes": "Rear cabin seat row climate setpoints"
+      },
+      "options": [
+        {
+          "label": "Rear Climate Off",
+          "match": {
+            "D6": "0x00"
+          },
+          "default": true
+        },
+        {
+          "label": "Rear Temp 20.0°C / 68°F",
+          "match": {
+            "D6": "0x0C"
+          }
+        },
+        {
+          "label": "Rear Temp 21.0°C / 70°F",
+          "match": {
+            "D6": "0x0E"
+          }
+        },
+        {
+          "label": "Rear Temp 22.0°C / 72°F",
+          "match": {
+            "D6": "0x10"
+          }
+        }
+      ]
+    }
+  ],
+  "automations": [
+    {
+      "id": "menu_ok_cool_driver_seat",
+      "name": "Menu OK Sets Driver Seat Medium Cool",
+      "enabled": true,
+      "ha_expose": true,
+      "ha_icon": "mdi:car-cog",
+      "exec_mode": "one_shot",
+      "cooldown_ms": 500,
+      "triggers": [
+        {
+          "type": "byte_transition",
+          "can_id": "0x448",
+          "bus": 0,
+          "byte": "D7",
+          "mask": "0xF0",
+          "from": "0x00",
+          "to": "0x10"
+        }
+      ],
+      "conditions": [],
+      "actions": [
+        {
+          "type": "entity_command",
+          "entity_id": "drivers_seat_comfort",
+          "command": "Medium Cool"
+        }
+      ]
+    }
+  ]
+}

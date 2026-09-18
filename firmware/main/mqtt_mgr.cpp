@@ -201,8 +201,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                             cJSON* s = cJSON_GetArrayItem(steps_arr, i);
                             if (!s) continue;
                             ActionStep step;
-                            step.type = ActionType::CAN_TX;
+                            step.type = ActionType::TRANSMIT_FRAME;
                             step.can_id = can_id;
+                            step.mask = 0xFF;
                             step.repeat = 1;
                             step.delay_ms = delay_ms;
 
