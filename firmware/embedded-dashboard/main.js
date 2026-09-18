@@ -9,6 +9,12 @@ class CanDoDashboard {
     this.autoScrollChk = document.getElementById('chk-autoscroll');
     this.filterInput = document.getElementById('filter-input');
 
+    // Diagnostics State
+    this.automations = [];
+    this.autoFilter = '';
+    this.autoDiagContainer = document.getElementById('automations-diag-container');
+    this.autoFilterInput = document.getElementById('auto-filter-input');
+
     // Sniffer State
     this.snifferPaused = false;
     this.snifferFrames = new Map(); // id -> { id, dlc, data, count, ts }
@@ -16,6 +22,13 @@ class CanDoDashboard {
 
     this.initEvents();
     this.connect();
+
+    // Periodic background sync of diagnostics every 3 seconds
+    setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.syncAutomationDiagnostics(true);
+      }
+    }, 3000);
   }
 
   connect() {
@@ -37,6 +50,8 @@ class CanDoDashboard {
           this.updateEntityState(data.entity, data.state);
         } else if (data.type === 'can_frame') {
           this.handleCanFrame(data);
+        } else if (data.type === 'automation_fired') {
+          this.handleAutomationFired(data);
         }
       } catch (err) {
         this.appendLog(event.data);
@@ -67,6 +82,7 @@ class CanDoDashboard {
   async syncAllStates() {
     await Promise.all([
       this.syncInitialStates(),
+      this.syncAutomationDiagnostics(),
       this.syncSystemStatus(),
       this.syncWifiStatus(),
       this.syncKnownNetworks()
@@ -361,6 +377,437 @@ class CanDoDashboard {
     }
   }
 
+  async syncAutomationDiagnostics(silent = false) {
+    try {
+      const diagRes = await fetch('/api/automations/diagnostics');
+      if (diagRes.ok) {
+        const data = await diagRes.json();
+        this.automations = data.rules || [];
+      } else {
+        const autoRes = await fetch('/api/automations');
+        if (autoRes.ok) {
+          const autoData = await autoRes.json();
+          this.automations = (autoData.rules || []).map(r => {
+            const trigs = (r.triggers || []).map(t => ({
+              type: t.type,
+              can_id: t.can_id,
+              bus: t.bus,
+              byte_name: t.byte || (t.byte_index !== undefined ? `D${t.byte_index + 1}` : 'D1'),
+              byte_mask: t.mask || '0xFF',
+              has_from_value: t.from !== undefined,
+              from_val: t.from,
+              to_val: t.to,
+              schedule_time: t.schedule_time,
+              frame_seen: false
+            }));
+
+            const conds = [];
+            if (r.conditions) {
+              r.conditions.forEach(c => conds.push({
+                type: c.type || 'can_state',
+                can_id: c.can_id,
+                byte_name: c.byte || (c.byte_index !== undefined ? `D${c.byte_index + 1}` : 'D1'),
+                byte_mask: c.mask || '0xFF',
+                op: c.operator === 'equal' ? '==' : (c.op || '=='),
+                target_val: c.value || c.target_val || '0x00',
+                passed: false,
+                frame_seen: false
+              }));
+            }
+            if (r.actions) {
+              r.actions.forEach(a => {
+                if (a.type === 'choose' && a.choices) {
+                  a.choices.forEach(ch => {
+                    if (ch.conditions) {
+                      ch.conditions.forEach(c => conds.push({
+                        type: c.type || 'can_state',
+                        can_id: c.can_id,
+                        byte_name: c.byte || (c.byte_index !== undefined ? `D${c.byte_index + 1}` : 'D1'),
+                        byte_mask: c.mask || '0xFF',
+                        op: c.operator === 'equal' ? '==' : (c.op || '=='),
+                        target_val: c.value || c.target_val || '0x00',
+                        passed: false,
+                        frame_seen: false
+                      }));
+                    }
+                  });
+                }
+              });
+            }
+
+            const acts = [];
+            (r.actions || []).forEach(a => {
+              if (a.type === 'choose' && a.choices) {
+                acts.push({ type: 'choose', summary: `Choose (${a.choices.length} branches)` });
+                a.choices.forEach((ch) => {
+                  if (ch.sequence) {
+                    ch.sequence.forEach(s => {
+                      acts.push({
+                        type: s.type || 'transmit',
+                        can_id: s.can_id,
+                        repeat: s.repeat || 1,
+                        delay_ms: s.ms || s.delay_ms || 20
+                      });
+                    });
+                  }
+                });
+              } else {
+                acts.push({
+                  type: a.type,
+                  can_id: a.can_id,
+                  repeat: a.repeat || 1,
+                  delay_ms: a.ms || a.delay_ms || 20,
+                  level: a.level,
+                  message: a.text || a.message,
+                  target_temp_c: a.target_temp_c,
+                  zone: a.zone,
+                  entity: a.entity_id || a.entity,
+                  command: a.command,
+                  action: a.action
+                });
+              }
+            });
+
+            return {
+              id: r.id,
+              name: r.name,
+              enabled: r.enabled !== false,
+              exec_mode: r.exec_mode || 'one_shot',
+              cooldown_ms: r.cooldown_ms || 0,
+              triggers: trigs,
+              conditions: conds,
+              actions: acts,
+              all_conditions_passed: false
+            };
+          });
+        }
+      }
+
+      if (!this.automations) this.automations = [];
+
+      // Update count badge in stats bar
+      const statCount = document.getElementById('stat-automations-count');
+      if (statCount) {
+        statCount.textContent = `${this.automations.length} Active Rule${this.automations.length === 1 ? '' : 's'}`;
+      }
+
+      // Sync select dropdown in testing bar
+      const select = document.getElementById('automation-select');
+      if (select && this.automations.length > 0) {
+        const curVal = select.value;
+        select.innerHTML = '';
+        this.automations.forEach(rule => {
+          const opt = document.createElement('option');
+          opt.value = rule.id;
+          opt.textContent = `${rule.name} (${rule.id})`;
+          select.appendChild(opt);
+        });
+        if (curVal && this.automations.some(r => r.id === curVal)) {
+          select.value = curVal;
+        }
+      }
+
+      this.renderAutomationsDiagnostics();
+    } catch (e) {
+      if (!silent) console.error('Failed to sync automation diagnostics', e);
+    }
+  }
+
+  renderAutomationsDiagnostics() {
+    if (!this.autoDiagContainer) return;
+
+    const filter = (this.autoFilter || '').toLowerCase().trim();
+    const rules = this.automations.filter(rule => {
+      if (!filter) return true;
+      return (rule.name && rule.name.toLowerCase().includes(filter)) ||
+             (rule.id && rule.id.toLowerCase().includes(filter));
+    });
+
+    if (rules.length === 0) {
+      this.autoDiagContainer.innerHTML = `
+        <div class="loading-placeholder">
+          ${this.automations.length === 0 ? 'No automation rules loaded in storage (/spiffs/automations.json).' : 'No rules match filter.'}
+        </div>`;
+      return;
+    }
+
+    const existingFeedbacks = {};
+    document.querySelectorAll('.diag-feedback').forEach(el => {
+      const id = el.dataset.ruleId;
+      if (id && el.textContent) {
+        existingFeedbacks[id] = { text: el.textContent, className: el.className };
+      }
+    });
+
+    this.autoDiagContainer.innerHTML = rules.map(rule => {
+      const enabledPill = rule.enabled 
+        ? `<span class="diag-pill diag-pill-enabled">Enabled</span>`
+        : `<span class="diag-pill diag-pill-disabled">Disabled</span>`;
+      
+      const modePill = `<span class="diag-pill diag-pill-mode">${rule.exec_mode || 'one_shot'}</span>`;
+      const cdPill = rule.cooldown_ms > 0 ? `<span class="diag-pill diag-pill-mode">${rule.cooldown_ms}ms cd</span>` : '';
+
+      let lastFiredText = 'Never Fired';
+      let lastFiredClass = 'diag-pill diag-pill-mode';
+      if (rule.last_exec_sec_ago !== undefined && rule.last_exec_sec_ago >= 0) {
+        if (rule.last_exec_sec_ago < 60) {
+          lastFiredText = `Fired ${rule.last_exec_sec_ago}s ago`;
+          lastFiredClass = 'diag-pill diag-pill-fired';
+        } else if (rule.last_exec_sec_ago < 3600) {
+          lastFiredText = `Fired ${Math.floor(rule.last_exec_sec_ago / 60)}m ago`;
+          lastFiredClass = 'diag-pill diag-pill-fired';
+        } else {
+          lastFiredText = `Fired ${Math.floor(rule.last_exec_sec_ago / 3600)}h ago`;
+        }
+      }
+
+      // Render Triggers
+      let triggersHtml = '';
+      if (!rule.triggers || rule.triggers.length === 0) {
+        triggersHtml = `<div class="subtext" style="color:var(--text-muted);">No triggers defined</div>`;
+      } else {
+        triggersHtml = rule.triggers.map(t => {
+          if (t.type === 'time_schedule') {
+            return `
+              <div class="diag-item">
+                <div class="diag-item-row">
+                  <span><strong>Schedule:</strong> <span class="hex-badge target">${t.schedule_time || '--:--'}</span></span>
+                  <span class="status-tag waiting">Time Window</span>
+                </div>
+              </div>`;
+          }
+
+          const canIdStr = t.can_id || '0x???';
+          const byteStr = t.byte_name ? `${t.byte_name}` : `D${(t.byte_index !== undefined ? t.byte_index : 0) + 1}`;
+          const maskStr = t.byte_mask ? ` & ${t.byte_mask}` : '';
+          const targetTrans = t.has_from_value 
+            ? `${t.from_val || '0x00'} -> ${t.to_val || '0x00'}`
+            : `-> ${t.to_val || '0x00'}`;
+
+          let liveStatusBadge = '';
+          let liveByteHtml = '';
+          if (!t.frame_seen) {
+            liveStatusBadge = `<span class="status-tag waiting">Waiting on Bus</span>`;
+            liveByteHtml = `<span class="subtext" style="color:var(--text-muted);">Frame not seen yet</span>`;
+          } else {
+            const isMatch = t.matches_target;
+            liveStatusBadge = isMatch 
+              ? `<span class="status-tag pass">Matches Target</span>`
+              : `<span class="status-tag waiting">Idle / Waiting</span>`;
+            liveByteHtml = `
+              <span class="subtext">
+                Live Bus: <span class="hex-badge ${isMatch ? 'live-match' : 'live-idle'}">${t.current_byte || '0x00'}</span>
+                <span style="font-family:ui-monospace, monospace; color:var(--text-muted); font-size:0.7rem; margin-left:0.3rem;">[${t.current_payload || ''}]</span>
+              </span>`;
+          }
+
+          return `
+            <div class="diag-item">
+              <div class="diag-item-row">
+                <span>
+                  <strong style="color:var(--accent-cyan);">${canIdStr}</strong>
+                  <span class="hex-badge">${byteStr}${maskStr}</span>
+                  <span style="color:var(--text-muted); font-size:0.72rem; margin-left:0.2rem;">${t.type === 'byte_transition' ? 'Transition' : 'Match'}</span>
+                </span>
+                ${liveStatusBadge}
+              </div>
+              <div class="diag-item-row">
+                <span class="subtext">Expected: <span class="hex-badge target">${targetTrans}</span></span>
+                ${liveByteHtml}
+              </div>
+            </div>`;
+        }).join('');
+      }
+
+      // Render Conditions
+      let conditionsHtml = '';
+      if (!rule.conditions || rule.conditions.length === 0) {
+        conditionsHtml = `<div class="subtext" style="color:var(--accent-emerald);">None (Always executes on trigger)</div>`;
+      } else {
+        conditionsHtml = rule.conditions.map(c => {
+          if (c.type === 'time_condition') {
+            const passBadge = c.passed 
+              ? `<span class="status-tag pass">PASS</span>`
+              : `<span class="status-tag fail">FAIL</span>`;
+            return `
+              <div class="diag-item">
+                <div class="diag-item-row">
+                  <span><strong>Time Window:</strong> <span class="hex-badge">${c.time_window || ''}</span></span>
+                  ${passBadge}
+                </div>
+              </div>`;
+          }
+
+          const canIdStr = c.can_id || '0x???';
+          const byteStr = c.byte_name ? `${c.byte_name}` : `D${(c.byte_index !== undefined ? c.byte_index : 0) + 1}`;
+          const maskStr = c.byte_mask ? ` & ${c.byte_mask}` : '';
+          const opStr = c.op || '==';
+          const targetStr = c.target_val || '0x00';
+          const passBadge = c.passed 
+            ? `<span class="status-tag pass">PASS</span>`
+            : `<span class="status-tag fail">FAIL</span>`;
+
+          let liveValHtml = '';
+          if (!c.frame_seen) {
+            liveValHtml = `<span class="subtext" style="color:var(--text-muted);">Frame not seen yet</span>`;
+          } else {
+            liveValHtml = `
+              <span class="subtext">
+                Current: <span class="hex-badge ${c.passed ? 'live-match' : 'target'}">${c.current_byte || '0x00'}</span>
+                ${c.byte_mask !== '0xFF' ? `(Masked: ${c.current_masked || '0x00'})` : ''}
+              </span>`;
+          }
+
+          return `
+            <div class="diag-item">
+              <div class="diag-item-row">
+                <span>
+                  <strong style="color:var(--accent-cyan);">${canIdStr}</strong>
+                  <span class="hex-badge">${byteStr}${maskStr}</span>
+                  <span style="font-family:ui-monospace, monospace; font-size:0.75rem; color:#cbd5e1;">${opStr} ${targetStr}</span>
+                </span>
+                ${passBadge}
+              </div>
+              <div class="diag-item-row">
+                <span></span>
+                ${liveValHtml}
+              </div>
+            </div>`;
+        }).join('');
+      }
+
+      // Render Actions
+      let actionsHtml = '';
+      if (!rule.actions || rule.actions.length === 0) {
+        actionsHtml = `<div class="subtext" style="color:var(--text-muted);">No actions defined</div>`;
+      } else {
+        const chips = rule.actions.map(act => {
+          if (act.type === 'transmit') {
+            return `<span class="action-chip">TX ${act.can_id} [${act.repeat}x, ${act.delay_ms}ms]</span>`;
+          } else if (act.type === 'track_popup') {
+            return `<span class="action-chip" style="color:var(--accent-amber);">Track Popup: ${act.can_id} [${act.level}]</span>`;
+          } else if (act.type === 'climate_target') {
+            return `<span class="action-chip" style="color:var(--accent-cyan);">Climate: ${act.target_temp_c}C (${act.zone})</span>`;
+          } else if (act.type === 'entity_command') {
+            return `<span class="action-chip">Cmd: ${act.entity}.${act.command}</span>`;
+          } else if (act.type === 'delay') {
+            return `<span class="action-chip">Delay: ${act.delay_ms}ms</span>`;
+          } else if (act.type === 'precondition') {
+            return `<span class="action-chip">Precondition: ${act.action}</span>`;
+          }
+          return `<span class="action-chip">${act.type}</span>`;
+        }).join('');
+        actionsHtml = `<div class="actions-pill-list">${chips}</div>`;
+      }
+
+      const prevFb = existingFeedbacks[rule.id];
+      const feedbackHtml = prevFb 
+        ? `<span class="${prevFb.className}" data-rule-id="${rule.id}">${prevFb.text}</span>`
+        : `<span class="diag-feedback" data-rule-id="${rule.id}"></span>`;
+
+      return `
+        <div class="diag-card" id="card-rule-${rule.id}">
+          <div class="diag-header">
+            <div class="diag-rule-name">
+              <span>${rule.name}</span>
+              <span class="diag-rule-id">${rule.id}</span>
+            </div>
+            <div class="diag-badges">
+              ${enabledPill}
+              ${modePill}
+              ${cdPill}
+              <span id="last-fired-${rule.id}" class="${lastFiredClass}">${lastFiredText}</span>
+            </div>
+          </div>
+
+          <div class="diag-grid">
+            <div class="diag-box">
+              <div class="diag-box-title">
+                <span>Triggers (Listeners)</span>
+                <span style="color:var(--accent-cyan); font-weight:normal;">${rule.triggers?.length || 0}</span>
+              </div>
+              ${triggersHtml}
+            </div>
+
+            <div class="diag-box">
+              <div class="diag-box-title">
+                <span>Conditions (Gates)</span>
+                <span class="${rule.all_conditions_passed ? 'status-tag pass' : 'status-tag fail'}" style="font-size:0.6rem;">
+                  ${rule.all_conditions_passed ? 'ALL PASS' : 'GATED'}
+                </span>
+              </div>
+              ${conditionsHtml}
+            </div>
+          </div>
+
+          <div class="diag-box" style="margin-bottom:0.75rem;">
+            <div class="diag-box-title">Actions Sequence</div>
+            ${actionsHtml}
+          </div>
+
+          <div class="diag-footer">
+            ${feedbackHtml}
+            <div style="display:flex; gap:0.4rem;">
+              <button class="btn btn-secondary btn-tiny" onclick="window.dashboard.testRuleDirect('${rule.id}', 'dry_run')">Test Conditions</button>
+              <button class="btn btn-primary btn-tiny" onclick="window.dashboard.testRuleDirect('${rule.id}', 'live_fire')">Live Fire</button>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  handleAutomationFired(data) {
+    this.appendLog(`[AUTOMATION FIRED] ${data.name || data.id}`);
+    const card = document.getElementById(`card-rule-${data.id}`);
+    if (card) {
+      card.classList.remove('fired-pulse');
+      void card.offsetWidth;
+      card.classList.add('fired-pulse');
+    }
+    const firedPill = document.getElementById(`last-fired-${data.id}`);
+    if (firedPill) {
+      firedPill.textContent = 'Fired Just Now!';
+      firedPill.className = 'diag-pill diag-pill-fired';
+    }
+    setTimeout(() => this.syncAutomationDiagnostics(true), 400);
+  }
+
+  async testRuleDirect(ruleId, mode) {
+    const feedbackEl = document.querySelector(`.diag-feedback[data-rule-id="${ruleId}"]`);
+    if (feedbackEl) {
+      feedbackEl.textContent = `Evaluating ${mode}...`;
+      feedbackEl.className = 'diag-feedback';
+    }
+
+    try {
+      const res = await fetch('/api/test_automation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: ruleId, mode })
+      });
+      const data = await res.json();
+      if (feedbackEl) {
+        feedbackEl.textContent = `[${mode.toUpperCase()}] ${data.message || JSON.stringify(data)}`;
+        feedbackEl.className = data.status === 'ok' ? 'diag-feedback ok' : 'diag-feedback fail';
+      }
+      this.appendLog(`[TEST ${mode.toUpperCase()} - ${ruleId}]: ${data.message || 'Complete'}`);
+      if (mode === 'live_fire') {
+        const card = document.getElementById(`card-rule-${ruleId}`);
+        if (card) {
+          card.classList.remove('fired-pulse');
+          void card.offsetWidth;
+          card.classList.add('fired-pulse');
+        }
+      }
+    } catch (err) {
+      if (feedbackEl) {
+        feedbackEl.textContent = `Error: ${err.message}`;
+        feedbackEl.className = 'diag-feedback fail';
+      }
+      this.appendLog(`[TEST ERROR - ${ruleId}]: ${err.message}`);
+    }
+  }
+
   appendLog(msg) {
     if (!this.terminal) return;
     const line = document.createElement('div');
@@ -395,6 +842,15 @@ class CanDoDashboard {
 
   initEvents() {
     this.filterInput?.addEventListener('input', () => this.renderEntityGrid());
+
+    this.autoFilterInput?.addEventListener('input', (e) => {
+      this.autoFilter = e.target.value;
+      this.renderAutomationsDiagnostics();
+    });
+
+    document.getElementById('btn-refresh-diagnostics')?.addEventListener('click', () => {
+      this.syncAutomationDiagnostics();
+    });
 
     document.getElementById('btn-dry-run')?.addEventListener('click', () => this.testAutomation('dry_run'));
     document.getElementById('btn-live-fire')?.addEventListener('click', () => this.testAutomation('live_fire'));

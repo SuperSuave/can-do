@@ -31,6 +31,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
 bool queue_entity_command(const std::string& entity_id, const std::string& command_label);
 bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>& steps);
 bool can_state_cache_get(uint32_t can_id, uint8_t byte_index, uint32_t* out_val);
+bool get_cached_can_frame(uint32_t can_id, uint8_t out_data[8]);
 void cando_execute_climate_target(float target_c, const char *zone, bool sync_on, bool driver_only);
 
 void can_rx_task(void* arg);

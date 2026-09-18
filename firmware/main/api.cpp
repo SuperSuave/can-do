@@ -75,6 +75,15 @@ void broadcast_ws_can_frame(const twai_message_t* msg) {
     broadcast_ws_raw(buf);
 }
 
+void broadcast_ws_automation_event(const std::string& id, const std::string& name) {
+    char buf[256];
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    snprintf(buf, sizeof(buf),
+             "{\"type\":\"automation_fired\",\"id\":\"%s\",\"name\":\"%s\",\"ts\":%lu}",
+             id.c_str(), name.c_str(), (unsigned long)now_ms);
+    broadcast_ws_raw(buf);
+}
+
 int custom_websocket_logger(const char *fmt, va_list args) {
     char log_buffer[256];
     va_list args_copy;
@@ -256,6 +265,216 @@ static esp_err_t api_test_automation_handler(httpd_req_t *req) {
     cJSON_Delete(root);
     httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Automation rule not found");
     return ESP_FAIL;
+}
+
+static esp_err_t api_automations_diagnostics_handler(httpd_req_t *req) {
+    set_cors_headers(req);
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "automations_enabled", g_automations_enabled.load());
+    cJSON *rules_arr = cJSON_CreateArray();
+    cJSON_AddItemToObject(root, "rules", rules_arr);
+
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+
+    for (const auto& rule : global_automations) {
+        cJSON *rule_obj = cJSON_CreateObject();
+        cJSON_AddStringToObject(rule_obj, "id", rule.id.c_str());
+        cJSON_AddStringToObject(rule_obj, "name", rule.name.c_str());
+        cJSON_AddBoolToObject(rule_obj, "enabled", rule.enabled);
+        cJSON_AddStringToObject(rule_obj, "exec_mode", rule.exec_mode.c_str());
+        cJSON_AddNumberToObject(rule_obj, "cooldown_ms", rule.cooldown_ms);
+        cJSON_AddNumberToObject(rule_obj, "last_exec_ms", rule.last_exec_time_ms);
+        if (rule.last_exec_time_ms > 0 && now_ms >= rule.last_exec_time_ms) {
+            cJSON_AddNumberToObject(rule_obj, "last_exec_sec_ago", (now_ms - rule.last_exec_time_ms) / 1000);
+        } else {
+            cJSON_AddNumberToObject(rule_obj, "last_exec_sec_ago", -1);
+        }
+
+        // Triggers
+        cJSON *trigs_arr = cJSON_CreateArray();
+        cJSON_AddItemToObject(rule_obj, "triggers", trigs_arr);
+        for (const auto& trig : rule.triggers) {
+            cJSON *t_obj = cJSON_CreateObject();
+            cJSON_AddStringToObject(t_obj, "type", trig.type.c_str());
+            if (trig.can_id != 0) {
+                char hex_id[16];
+                snprintf(hex_id, sizeof(hex_id), "0x%03lX", (unsigned long)trig.can_id);
+                cJSON_AddStringToObject(t_obj, "can_id", hex_id);
+            }
+            cJSON_AddNumberToObject(t_obj, "bus", trig.bus);
+            cJSON_AddNumberToObject(t_obj, "byte_index", trig.byte_index);
+            if (trig.byte_index >= 0 && trig.byte_index < 8) {
+                char bname[8];
+                snprintf(bname, sizeof(bname), "D%d", trig.byte_index + 1);
+                cJSON_AddStringToObject(t_obj, "byte_name", bname);
+            }
+
+            char hex_mask[8];
+            snprintf(hex_mask, sizeof(hex_mask), "0x%02X", trig.byte_mask);
+            cJSON_AddStringToObject(t_obj, "byte_mask", hex_mask);
+
+            if (trig.has_from_value) {
+                char hex_from[8];
+                snprintf(hex_from, sizeof(hex_from), "0x%02X", trig.from_value);
+                cJSON_AddStringToObject(t_obj, "from_val", hex_from);
+            }
+            char hex_to[8];
+            snprintf(hex_to, sizeof(hex_to), "0x%02X", trig.to_value);
+            cJSON_AddStringToObject(t_obj, "to_val", hex_to);
+
+            if (trig.type == "time_schedule") {
+                char sched_buf[16];
+                snprintf(sched_buf, sizeof(sched_buf), "%02d:%02d", trig.schedule_time_min / 60, trig.schedule_time_min % 60);
+                cJSON_AddStringToObject(t_obj, "schedule_time", sched_buf);
+                cJSON_AddNumberToObject(t_obj, "weekdays_mask", trig.weekdays_mask);
+            }
+
+            // Live state from cache
+            uint8_t cached_bytes[8] = {0};
+            bool frame_seen = (trig.can_id != 0) && get_cached_can_frame(trig.can_id, cached_bytes);
+            cJSON_AddBoolToObject(t_obj, "frame_seen", frame_seen);
+            if (frame_seen) {
+                char hex_payload[17] = {0};
+                for (int i = 0; i < 8; i++) snprintf(&hex_payload[i * 2], 3, "%02X", cached_bytes[i]);
+                cJSON_AddStringToObject(t_obj, "current_payload", hex_payload);
+
+                if (trig.byte_index >= 0 && trig.byte_index < 8) {
+                    uint8_t cur_val = cached_bytes[trig.byte_index];
+                    char hex_byte[8];
+                    snprintf(hex_byte, sizeof(hex_byte), "0x%02X", cur_val);
+                    cJSON_AddStringToObject(t_obj, "current_byte", hex_byte);
+
+                    uint8_t masked_cur = cur_val & trig.byte_mask;
+                    uint8_t masked_target = trig.to_value & trig.byte_mask;
+                    cJSON_AddBoolToObject(t_obj, "matches_target", masked_cur == masked_target);
+                }
+            }
+            cJSON_AddItemToArray(trigs_arr, t_obj);
+        }
+
+        // Conditions
+        cJSON *conds_arr = cJSON_CreateArray();
+        cJSON_AddItemToObject(rule_obj, "conditions", conds_arr);
+        bool all_conds_pass = true;
+
+        for (const auto& cond : rule.conditions) {
+            bool passed = evaluate_condition(cond);
+            if (!passed) all_conds_pass = false;
+
+            cJSON *c_obj = cJSON_CreateObject();
+            cJSON_AddStringToObject(c_obj, "type", cond.type.c_str());
+            cJSON_AddBoolToObject(c_obj, "passed", passed);
+
+            if (cond.type == "time_condition") {
+                char t_window[32];
+                snprintf(t_window, sizeof(t_window), "%02d:%02d-%02d:%02d",
+                         cond.start_time_min / 60, cond.start_time_min % 60,
+                         cond.end_time_min / 60, cond.end_time_min % 60);
+                cJSON_AddStringToObject(c_obj, "time_window", t_window);
+                cJSON_AddNumberToObject(c_obj, "weekdays_mask", cond.weekdays_mask);
+            } else {
+                char hex_id[16];
+                snprintf(hex_id, sizeof(hex_id), "0x%03lX", (unsigned long)cond.can_id);
+                cJSON_AddStringToObject(c_obj, "can_id", hex_id);
+                cJSON_AddNumberToObject(c_obj, "bus", cond.bus);
+                cJSON_AddNumberToObject(c_obj, "byte_index", cond.byte_index);
+                if (cond.byte_index < 8) {
+                    char bname[8];
+                    snprintf(bname, sizeof(bname), "D%d", cond.byte_index + 1);
+                    cJSON_AddStringToObject(c_obj, "byte_name", bname);
+                }
+
+                char hex_mask[8];
+                snprintf(hex_mask, sizeof(hex_mask), "0x%02X", cond.byte_mask);
+                cJSON_AddStringToObject(c_obj, "byte_mask", hex_mask);
+
+                const char* op_str = "==";
+                if (cond.op == ConditionOperator::NOT_EQUAL) op_str = "!=";
+                else if (cond.op == ConditionOperator::LESS_THAN) op_str = "<";
+                else if (cond.op == ConditionOperator::GREATER_THAN) op_str = ">";
+                cJSON_AddStringToObject(c_obj, "op", op_str);
+
+                char hex_target[8];
+                snprintf(hex_target, sizeof(hex_target), "0x%02X", cond.target_value);
+                cJSON_AddStringToObject(c_obj, "target_val", hex_target);
+
+                uint8_t cached_bytes[8] = {0};
+                bool frame_seen = (cond.can_id != 0) && get_cached_can_frame(cond.can_id, cached_bytes);
+                cJSON_AddBoolToObject(c_obj, "frame_seen", frame_seen);
+
+                if (frame_seen && cond.byte_index < 8) {
+                    uint8_t cur_val = cached_bytes[cond.byte_index];
+                    char hex_byte[8];
+                    snprintf(hex_byte, sizeof(hex_byte), "0x%02X", cur_val);
+                    cJSON_AddStringToObject(c_obj, "current_byte", hex_byte);
+
+                    char hex_masked[8];
+                    snprintf(hex_masked, sizeof(hex_masked), "0x%02X", cur_val & cond.byte_mask);
+                    cJSON_AddStringToObject(c_obj, "current_masked", hex_masked);
+                }
+            }
+            cJSON_AddItemToArray(conds_arr, c_obj);
+        }
+        cJSON_AddBoolToObject(rule_obj, "all_conditions_passed", all_conds_pass);
+
+        // Actions summary
+        cJSON *acts_arr = cJSON_CreateArray();
+        cJSON_AddItemToObject(rule_obj, "actions", acts_arr);
+        for (const auto& act : rule.actions) {
+            cJSON *a_obj = cJSON_CreateObject();
+            if (act.type == ActionType::TRANSMIT_FRAME) {
+                cJSON_AddStringToObject(a_obj, "type", "transmit");
+                char hex_id[16];
+                snprintf(hex_id, sizeof(hex_id), "0x%03lX", (unsigned long)act.can_id);
+                cJSON_AddStringToObject(a_obj, "can_id", hex_id);
+                cJSON_AddNumberToObject(a_obj, "repeat", act.repeat);
+                cJSON_AddNumberToObject(a_obj, "delay_ms", act.delay_ms);
+                char hex_payload[17] = {0};
+                for (int i = 0; i < 8; i++) snprintf(&hex_payload[i * 2], 3, "%02X", act.payload[i]);
+                cJSON_AddStringToObject(a_obj, "payload", hex_payload);
+            } else if (act.type == ActionType::TRACK_POPUP) {
+                cJSON_AddStringToObject(a_obj, "type", "track_popup");
+                char hex_id[16];
+                snprintf(hex_id, sizeof(hex_id), "0x%03lX", (unsigned long)act.can_id);
+                cJSON_AddStringToObject(a_obj, "can_id", hex_id);
+                cJSON_AddStringToObject(a_obj, "level", act.popup_level.c_str());
+                cJSON_AddStringToObject(a_obj, "message", act.popup_message.c_str());
+            } else if (act.type == ActionType::CLIMATE_TARGET) {
+                cJSON_AddStringToObject(a_obj, "type", "climate_target");
+                cJSON_AddNumberToObject(a_obj, "target_temp_c", act.target_temp_c);
+                cJSON_AddStringToObject(a_obj, "zone", act.zone.c_str());
+            } else if (act.type == ActionType::ENTITY_COMMAND) {
+                cJSON_AddStringToObject(a_obj, "type", "entity_command");
+                cJSON_AddStringToObject(a_obj, "entity", act.entity_id.c_str());
+                cJSON_AddStringToObject(a_obj, "command", act.command.c_str());
+            } else if (act.type == ActionType::DELAY) {
+                cJSON_AddStringToObject(a_obj, "type", "delay");
+                cJSON_AddNumberToObject(a_obj, "delay_ms", act.delay_ms);
+            } else if (act.type == ActionType::PRECONDITION) {
+                cJSON_AddStringToObject(a_obj, "type", "precondition");
+                cJSON_AddStringToObject(a_obj, "mode", act.precon_mode.c_str());
+                cJSON_AddStringToObject(a_obj, "action", act.precon_action.c_str());
+            } else {
+                cJSON_AddStringToObject(a_obj, "type", "other");
+            }
+            cJSON_AddItemToArray(acts_arr, a_obj);
+        }
+
+        cJSON_AddItemToArray(rules_arr, rule_obj);
+    }
+
+    char *json_str = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+
+    httpd_resp_set_type(req, "application/json");
+    if (json_str) {
+        httpd_resp_sendstr(req, json_str);
+        free(json_str);
+    } else {
+        httpd_resp_sendstr(req, "{\"automations_enabled\":true,\"rules\":[]}");
+    }
+    return ESP_OK;
 }
 
 static esp_err_t api_file_upload_handler(httpd_req_t *req) {
@@ -713,6 +932,7 @@ httpd_handle_t start_webserver(void) {
         reg_uri("/api/states", HTTP_GET, api_states_handler);
         reg_uri("/api/command", HTTP_POST, api_command_handler);
         reg_uri("/api/test_automation", HTTP_POST, api_test_automation_handler);
+        reg_uri("/api/automations/diagnostics", HTTP_GET, api_automations_diagnostics_handler);
         reg_uri("/api/automations", HTTP_GET, api_get_automations_handler);
         reg_uri("/api/automations", HTTP_POST, api_post_automations_handler);
         reg_uri("/api/system/status", HTTP_GET, api_system_status_handler);

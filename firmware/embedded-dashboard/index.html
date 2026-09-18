@@ -24,6 +24,7 @@
       <div class="stat-item">
         <span class="stat-label">Automations</span>
         <span id="stat-automations-toggle" class="stat-value" style="color:var(--accent-emerald);">Active</span>
+        <span id="stat-automations-count" class="subtext" style="font-size:0.7rem; color:var(--text-muted);">-- rules</span>
       </div>
       <div class="stat-item">
         <span class="stat-label">Sniffer Mode</span>
@@ -83,7 +84,7 @@
 
       <!-- Sniffer Alert Banner -->
       <div id="sniffer-alert" class="alert-banner amber" style="display:none; margin-top:1rem;">
-        <span>⚠ <strong>Passive Sniffer Mode Active:</strong> All outgoing CAN transmissions (Automations, Buttons, GVRET) are blocked.</span>
+        <span><strong>[ALERT] Passive Sniffer Mode Active:</strong> All outgoing CAN transmissions (Automations, Buttons, GVRET) are blocked.</span>
       </div>
 
       <!-- Live CAN Frame Monitor Box -->
@@ -226,6 +227,23 @@
           <span id="mqtt-save-status" class="status-msg"></span>
           <button id="btn-save-mqtt" class="btn btn-primary btn-tiny">Save & Connect</button>
         </div>
+      </div>
+    </section>
+
+    <!-- Automations & Entity State Diagnostics -->
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <h2>Automations &amp; Live State Diagnostics</h2>
+          <p class="subtext">Real-time bus matching, trigger transitions, and condition evaluation for active automation rules</p>
+        </div>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+          <input type="text" id="auto-filter-input" placeholder="Filter rules..." class="input-search" style="min-width:140px;">
+          <button id="btn-refresh-diagnostics" class="btn btn-secondary btn-tiny">Refresh</button>
+        </div>
+      </div>
+      <div id="automations-diag-container" class="automations-diag-container">
+        <div class="loading-placeholder">Loading automation diagnostics...</div>
       </div>
     </section>
 

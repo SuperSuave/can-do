@@ -54,10 +54,23 @@ void set_sniffer_mode(bool enabled, bool hardware_listen_only) {
     ESP_LOGI(TAG, "Sniffer mode: %s (HW listen-only=%d)", enabled ? "ACTIVE" : "OFF", hardware_listen_only ? 1 : 0);
 }
 
-bool can_state_cache_get(uint32_t can_id, uint8_t byte_index, uint32_t* out_val) {
+static portMUX_TYPE s_cache_mux = portMUX_INITIALIZER_UNLOCKED;
+
+bool get_cached_can_frame(uint32_t can_id, uint8_t out_data[8]) {
+    portENTER_CRITICAL(&s_cache_mux);
     auto it = can_state_cache.find(can_id);
-    if (it != can_state_cache.end() && byte_index < 8) {
-        if (out_val) *out_val = it->second[byte_index];
+    bool found = (it != can_state_cache.end());
+    if (found && out_data) {
+        memcpy(out_data, it->second.data(), 8);
+    }
+    portEXIT_CRITICAL(&s_cache_mux);
+    return found;
+}
+
+bool can_state_cache_get(uint32_t can_id, uint8_t byte_index, uint32_t* out_val) {
+    uint8_t data[8];
+    if (get_cached_can_frame(can_id, data) && byte_index < 8) {
+        if (out_val) *out_val = data[byte_index];
         return true;
     }
     return false;
@@ -145,7 +158,9 @@ void init_can_engine(void) {
 void update_state_cache(uint32_t can_id, const uint8_t* data) {
     std::array<uint8_t, 8> payload;
     memcpy(payload.data(), data, 8);
+    portENTER_CRITICAL(&s_cache_mux);
     can_state_cache[can_id] = payload;
+    portEXIT_CRITICAL(&s_cache_mux);
 }
 
 bool evaluate_condition(const AutomationCondition& cond) {
@@ -510,6 +525,7 @@ void can_rx_task(void* arg) {
                                 if (passed) {
                                     ESP_LOGI(TAG, "Automation fired: %s", rule.name.c_str());
                                     rule.last_exec_time_ms = now_ms;
+                                    broadcast_ws_automation_event(rule.id, rule.name);
                                     queue_action_steps(0, 20, rule.actions);
                                 }
                             }
@@ -614,6 +630,7 @@ void time_scheduler_task(void* arg) {
                         if (passed) {
                             ESP_LOGI(TAG, "Time schedule fired rule: %s (%02d:%02d)", rule.name.c_str(), timeinfo.tm_hour, timeinfo.tm_min);
                             rule.last_exec_time_ms = now_ms;
+                            broadcast_ws_automation_event(rule.id, rule.name);
                             queue_action_steps(0, 20, rule.actions);
                         }
                     }
