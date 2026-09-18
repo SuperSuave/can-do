@@ -693,6 +693,9 @@ httpd_handle_t start_webserver(void) {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.max_uri_handlers = 32;
+    config.lru_purge_enable = true;
+    config.keep_alive_enable = true;
+    config.keep_alive_idle = 5;
 
     if (httpd_start(&server, &config) == ESP_OK) {
         auto reg_uri = [&](const char* uri, httpd_method_t method, esp_err_t (*handler)(httpd_req_t*), bool is_ws = false) {

@@ -168,52 +168,82 @@ static void gvret_server_task(void* pvParameters) {
     uint16_t port = reinterpret_cast<uintptr_t>(pvParameters);
     ESP_LOGI(TAG, "Starting GVRET TCP server on port %d...", port);
 
-    int listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (listen_sock < 0) {
-        ESP_LOGE(TAG, "Failed creating socket: errno %d", errno);
-        vTaskDelete(nullptr);
-        return;
-    }
-
+    int listen_sock_primary = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    int listen_sock_secondary = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     int enable = 1;
-    setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int));
 
-    struct sockaddr_in server_addr = {};
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    server_addr.sin_port = htons(port);
+    uint16_t primary_port = port > 0 ? port : 23;
+    uint16_t secondary_port = (primary_port == 3333) ? 23 : 3333;
 
-    if (bind(listen_sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) != 0) {
-        ESP_LOGE(TAG, "Failed binding port %d: errno %d", port, errno);
-        close(listen_sock);
-        vTaskDelete(nullptr);
-        return;
+    struct sockaddr_in addr_pri = {};
+    addr_pri.sin_family = AF_INET;
+    addr_pri.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr_pri.sin_port = htons(primary_port);
+
+    struct sockaddr_in addr_sec = {};
+    addr_sec.sin_family = AF_INET;
+    addr_sec.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr_sec.sin_port = htons(secondary_port);
+
+    if (listen_sock_primary >= 0) {
+        setsockopt(listen_sock_primary, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int));
+        if (bind(listen_sock_primary, (struct sockaddr*)&addr_pri, sizeof(addr_pri)) == 0) {
+            listen(listen_sock_primary, 2);
+            ESP_LOGI(TAG, "GVRET server listening on port %d", primary_port);
+        } else {
+            ESP_LOGW(TAG, "Failed binding port %d: errno %d", primary_port, errno);
+        }
     }
 
-    if (listen(listen_sock, 2) != 0) {
-        ESP_LOGE(TAG, "Failed listening on port %d: errno %d", port, errno);
-        close(listen_sock);
-        vTaskDelete(nullptr);
-        return;
+    if (listen_sock_secondary >= 0) {
+        setsockopt(listen_sock_secondary, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int));
+        if (bind(listen_sock_secondary, (struct sockaddr*)&addr_sec, sizeof(addr_sec)) == 0) {
+            listen(listen_sock_secondary, 2);
+            ESP_LOGI(TAG, "GVRET server listening on port %d (WiCAN / SavvyCAN alternate)", secondary_port);
+        } else {
+            ESP_LOGW(TAG, "Failed binding secondary port %d: errno %d", secondary_port, errno);
+        }
     }
-
-    ESP_LOGI(TAG, "GVRET server listening on port %d (SavvyCAN / SavvyLens ready)", port);
 
     uint8_t* batch_buf = (uint8_t*)malloc(GVRET_BATCH_SIZE + 64);
     if (!batch_buf) {
         ESP_LOGE(TAG, "Failed allocating batch buffer");
-        close(listen_sock);
+        if (listen_sock_primary >= 0) close(listen_sock_primary);
+        if (listen_sock_secondary >= 0) close(listen_sock_secondary);
         vTaskDelete(nullptr);
         return;
     }
 
     while (true) {
+        fd_set read_fds;
+        FD_ZERO(&read_fds);
+        int max_fd = -1;
+
+        if (listen_sock_primary >= 0) {
+            FD_SET(listen_sock_primary, &read_fds);
+            if (listen_sock_primary > max_fd) max_fd = listen_sock_primary;
+        }
+        if (listen_sock_secondary >= 0) {
+            FD_SET(listen_sock_secondary, &read_fds);
+            if (listen_sock_secondary > max_fd) max_fd = listen_sock_secondary;
+        }
+
+        struct timeval tv = {1, 0};
+        int s = select(max_fd + 1, &read_fds, nullptr, nullptr, &tv);
+        if (s <= 0) continue;
+
+        int client_sock = -1;
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
-        int client_sock = accept(listen_sock, (struct sockaddr*)&client_addr, &client_len);
+
+        if (listen_sock_primary >= 0 && FD_ISSET(listen_sock_primary, &read_fds)) {
+            client_sock = accept(listen_sock_primary, (struct sockaddr*)&client_addr, &client_len);
+        } else if (listen_sock_secondary >= 0 && FD_ISSET(listen_sock_secondary, &read_fds)) {
+            client_sock = accept(listen_sock_secondary, (struct sockaddr*)&client_addr, &client_len);
+        }
 
         if (client_sock < 0) {
-            vTaskDelay(pdMS_TO_TICKS(100));
+            vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
 
@@ -274,7 +304,8 @@ static void gvret_server_task(void* pvParameters) {
     }
 
     free(batch_buf);
-    close(listen_sock);
+    if (listen_sock_primary >= 0) close(listen_sock_primary);
+    if (listen_sock_secondary >= 0) close(listen_sock_secondary);
     vTaskDelete(nullptr);
 }
 
