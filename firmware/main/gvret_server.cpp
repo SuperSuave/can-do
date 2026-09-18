@@ -260,6 +260,12 @@ static void gvret_server_task(void* pvParameters) {
         ESP_LOGI(TAG, "SavvyCAN / GVRET client connected from %s:%d",
                  inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
 
+        bool prev_automations_state = g_automations_enabled.load();
+        if (prev_automations_state) {
+            set_automations_enabled(false);
+            ESP_LOGI(TAG, "Automations automatically paused while SavvyCAN/SavvyLens is connected");
+        }
+
         size_t batch_len = 0;
         int64_t last_flush_us = esp_timer_get_time();
 
@@ -301,6 +307,11 @@ static void gvret_server_task(void* pvParameters) {
         s_client_count.store(0);
         // Clear queue on disconnect
         xQueueReset(s_gvret_queue);
+
+        if (prev_automations_state) {
+            set_automations_enabled(true);
+            ESP_LOGI(TAG, "Automations automatically resumed after SavvyCAN/SavvyLens disconnected");
+        }
     }
 
     free(batch_buf);
