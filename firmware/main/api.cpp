@@ -138,7 +138,7 @@ static esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filepa
 static void set_cors_headers(httpd_req_t *req);
 
 static esp_err_t static_file_handler(httpd_req_t *req) {
-    char filepath[256];
+    char filepath[600];
 
     // Determine candidate file path
     if (strcmp(req->uri, "/") == 0) {
@@ -157,7 +157,7 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
     char *query = strchr(filepath, '?');
     if (query) *query = '\0';
 
-    char gz_filepath[266];
+    char gz_filepath[610];
     snprintf(gz_filepath, sizeof(gz_filepath), "%s.gz", filepath);
 
     struct stat file_stat;
@@ -200,15 +200,23 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
     }
 
     // 4. Stream file out in 2KB chunks to minimize RAM usage
-    char chunk[2048];
+    char *chunk = (char *)malloc(2048);
+    if (!chunk) {
+        close(fd);
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
     ssize_t read_bytes;
-    while ((read_bytes = read(fd, chunk, sizeof(chunk))) > 0) {
+    while ((read_bytes = read(fd, chunk, 2048)) > 0) {
         if (httpd_resp_send_chunk(req, chunk, read_bytes) != ESP_OK) {
+            free(chunk);
             close(fd);
             return ESP_FAIL;
         }
     }
 
+    free(chunk);
     close(fd);
     httpd_resp_send_chunk(req, nullptr, 0); // Terminate chunked response
     return ESP_OK;
@@ -1030,6 +1038,7 @@ static esp_err_t ws_handler(httpd_req_t *req) {
 httpd_handle_t start_webserver(void) {
     httpd_handle_t server = nullptr;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.stack_size = 8192;
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.max_uri_handlers = 32;
     config.lru_purge_enable = true;
