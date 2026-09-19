@@ -74,7 +74,7 @@ export function compileCondition(cond: AutomationCondition): any {
     };
   }
 
-  const match = compileToByteMap(cond.match || cond.evaluate?.match || cond.payload);
+  const match = compileToByteMap(cond.match || (cond.evaluate as any)?.match || (cond as any).payload);
   const dKey = cond.byte || cond.evaluate?.byte || Object.keys(match)[0] || 'D1';
   const targetVal = cond.value || cond.evaluate?.value || match[dKey] || '0x01';
   const maskVal = cond.mask || cond.evaluate?.mask || '0xFF';
@@ -130,7 +130,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
   }
 
   if (act.type === 'climate_target') {
-    const isPass = act.zone === 'passenger' || act.zone === 'pass';
+    const isPass = act.zone === 'passenger' || (act.zone as string) === 'pass';
     const tempC = act.target_temp_c ?? act.target_c ?? 21.0;
     const clamped = Math.max(17.0, Math.min(27.5, tempC));
     const rawVal = Math.min(0x1A, Math.max(0x06, 0x06 + Math.round((clamped - 17.0) * 2.0)));
@@ -160,7 +160,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
 
     if (cmd) {
       if (cmd.type === 'climate_target') {
-        const isPass = act.zone === 'passenger' || act.zone === 'pass';
+        const isPass = act.zone === 'passenger' || (act.zone as string) === 'pass';
         const tempC = act.target_temp_c ?? (cmd as any).target_temp_c ?? 21.0;
         const clamped = Math.max(17.0, Math.min(27.5, tempC));
         const rawVal = Math.min(0x1A, Math.max(0x06, 0x06 + Math.round((clamped - 17.0) * 2.0)));

@@ -5,12 +5,16 @@ on:
     branches: ["main", "master"]
     paths:
       - "firmware/**"
+      - "frontend/**"
+      - "catalog/**"
       - ".github/workflows/firmware.yml"
 
   pull_request:
     branches: ["main", "master"]
     paths:
       - "firmware/**"
+      - "frontend/**"
+      - "catalog/**"
       - ".github/workflows/firmware.yml"
 
   workflow_dispatch:
@@ -62,6 +66,19 @@ jobs:
           restore-keys: |
             esp-idf-ccache-${{ runner.os }}-${{ inputs.target || 'esp32c3' }}-
             esp-idf-ccache-${{ runner.os }}-
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build Embedded React Frontend for LittleFS
+        run: |
+          cd frontend
+          npm ci
+          npm run build
 
       - name: Build with ESP-IDF
         uses: espressif/esp-idf-ci-action@v1

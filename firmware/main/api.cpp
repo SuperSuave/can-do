@@ -14,6 +14,9 @@
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 static const char* TAG = "WEB_API";
 extern std::string g_device_id;
@@ -126,39 +129,88 @@ static esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filepa
     if (strstr(filepath, ".css")) return httpd_resp_set_type(req, "text/css");
     if (strstr(filepath, ".json")) return httpd_resp_set_type(req, "application/json");
     if (strstr(filepath, ".svg")) return httpd_resp_set_type(req, "image/svg+xml");
+    if (strstr(filepath, ".png")) return httpd_resp_set_type(req, "image/png");
+    if (strstr(filepath, ".ico")) return httpd_resp_set_type(req, "image/x-icon");
+    if (strstr(filepath, ".woff2")) return httpd_resp_set_type(req, "font/woff2");
     return httpd_resp_set_type(req, "text/plain");
 }
 
+static void set_cors_headers(httpd_req_t *req);
+
 static esp_err_t static_file_handler(httpd_req_t *req) {
-    char filepath[600];
+    char filepath[256];
+
+    // Determine candidate file path
     if (strcmp(req->uri, "/") == 0) {
         snprintf(filepath, sizeof(filepath), "/spiffs/www/index.html");
+    } else if (strncmp(req->uri, "/catalog.json", 13) == 0) {
+        snprintf(filepath, sizeof(filepath), "/spiffs/catalog.json");
+    } else if (strncmp(req->uri, "/automations.json", 17) == 0) {
+        snprintf(filepath, sizeof(filepath), "/spiffs/automations.json");
+    } else if (strstr(req->uri, "can_do_catalog.json")) {
+        snprintf(filepath, sizeof(filepath), "/spiffs/catalog.json");
     } else {
         snprintf(filepath, sizeof(filepath), "/spiffs/www%s", req->uri);
     }
 
-    FILE *fd = fopen(filepath, "r");
-    if (!fd) {
+    // Strip any query parameters
+    char *query = strchr(filepath, '?');
+    if (query) *query = '\0';
+
+    char gz_filepath[266];
+    snprintf(gz_filepath, sizeof(gz_filepath), "%s.gz", filepath);
+
+    struct stat file_stat;
+    bool is_gz = false;
+    int fd = -1;
+
+    // 1. Check if a pre-gzipped version exists (.gz)
+    if (stat(gz_filepath, &file_stat) == 0) {
+        fd = open(gz_filepath, O_RDONLY, 0);
+        is_gz = true;
+    } else if (stat(filepath, &file_stat) == 0) {
+        fd = open(filepath, O_RDONLY, 0);
+    } else {
+        // 2. SPA Fallback: serve index.html or index.html.gz for client-side routing
+        const char *dot = strrchr(req->uri, '.');
+        if (!dot || strcmp(dot, ".html") == 0) {
+            snprintf(gz_filepath, sizeof(gz_filepath), "/spiffs/www/index.html.gz");
+            if (stat(gz_filepath, &file_stat) == 0) {
+                fd = open(gz_filepath, O_RDONLY, 0);
+                is_gz = true;
+                strcpy(filepath, "/spiffs/www/index.html");
+            } else if (stat("/spiffs/www/index.html", &file_stat) == 0) {
+                fd = open("/spiffs/www/index.html", O_RDONLY, 0);
+                strcpy(filepath, "/spiffs/www/index.html");
+            }
+        }
+    }
+
+    if (fd == -1) {
+        set_cors_headers(req);
         httpd_resp_send_404(req);
         return ESP_FAIL;
     }
 
+    // 3. Set headers (CORS, MIME type, Content-Encoding: gzip)
+    set_cors_headers(req);
     set_content_type_from_file(req, filepath);
+    if (is_gz) {
+        httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+    }
 
-    char chunk[1024];
-    size_t chunksize;
-    do {
-        chunksize = fread(chunk, 1, sizeof(chunk), fd);
-        if (chunksize > 0) {
-            if (httpd_resp_send_chunk(req, chunk, chunksize) != ESP_OK) {
-                fclose(fd);
-                return ESP_FAIL;
-            }
+    // 4. Stream file out in 2KB chunks to minimize RAM usage
+    char chunk[2048];
+    ssize_t read_bytes;
+    while ((read_bytes = read(fd, chunk, sizeof(chunk))) > 0) {
+        if (httpd_resp_send_chunk(req, chunk, read_bytes) != ESP_OK) {
+            close(fd);
+            return ESP_FAIL;
         }
-    } while (chunksize != 0);
+    }
 
-    fclose(fd);
-    httpd_resp_send_chunk(req, nullptr, 0);
+    close(fd);
+    httpd_resp_send_chunk(req, nullptr, 0); // Terminate chunked response
     return ESP_OK;
 }
 

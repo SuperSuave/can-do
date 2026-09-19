@@ -1,5 +1,40 @@
 import React from 'react';
-import * as mdiIcons from '@mdi/js';
+import {
+  mdiSteering,
+  mdiCarWindshieldOutline,
+  mdiEvPlugType2,
+  mdiRadio,
+  mdiKnob,
+  mdiMusicBoxOutline,
+  mdiSurroundSound,
+  mdiSpeaker,
+  mdiCctv,
+  mdiCarSeatHeater,
+  mdiCarShiftPattern,
+  mdiCarLightDimmed,
+  mdiCarBrakeAlert,
+  mdiCarBattery,
+  mdiCarDoor,
+  mdiCarBack,
+  mdiCarInfo,
+  mdiWiper,
+  mdiWindowOpen,
+  mdiThermostat,
+  mdiThermostatBox,
+  mdiThermometer,
+  mdiThermometerAlert,
+  mdiMessageBadge,
+  mdiMessageBadgeOutline,
+  mdiMessageText,
+  mdiTimerOutline,
+  mdiEvStation,
+  mdiSpeedometer,
+  mdiRadiator,
+  mdiPower,
+  mdiSeatbelt,
+  mdiSync,
+  mdiBellBadge
+} from '@mdi/js';
 import {
   Tag,
   LucideProps
@@ -12,75 +47,64 @@ export interface MdiIconProps extends React.SVGProps<SVGSVGElement> {
   fallback?: React.ComponentType<LucideProps>;
 }
 
-// Special alias dictionary for common Home Assistant MDI names that differ slightly in @mdi/js
-const MDI_ALIASES: Record<string, string> = {
-  'steering-wheel': 'mdiSteering',
-  'steering': 'mdiSteering',
-  'car-front': 'mdiCarWindshieldOutline',
-  'ev-plug-type2': 'mdiEvPlugType2',
-  'radio': 'mdiRadio',
-  'knob': 'mdiKnob',
-  'music-box-outline': 'mdiMusicBoxOutline',
-  'surround-sound': 'mdiSurroundSound',
-  'speaker': 'mdiSpeaker',
-  'cctv': 'mdiCctv',
-  'car-seat-heater': 'mdiCarSeatHeater',
-  'car-shift-pattern': 'mdiCarShiftPattern',
-  'car-light-dimmed': 'mdiCarLightDimmed',
-  'car-brake-alert': 'mdiCarBrakeAlert',
-  'car-battery': 'mdiCarBattery',
-  'car-door': 'mdiCarDoor',
-  'car-back': 'mdiCarBack',
-  'car-info': 'mdiCarInfo',
-  'wiper': 'mdiWiper',
-  'window-open': 'mdiWindowOpen',
-  'thermostat': 'mdiThermostat',
-  'thermostat-box': 'mdiThermostatBox',
-  'thermometer': 'mdiThermometer',
-  'thermometer-alert': 'mdiThermometerAlert',
-  'message-badge': 'mdiMessageBadge',
-  'message-badge-outline': 'mdiMessageBadgeOutline',
-  'message-text': 'mdiMessageText',
-  'timer-outline': 'mdiTimerOutline',
-  'ev-station': 'mdiEvStation',
-  'speedometer': 'mdiSpeedometer',
-  'radiator': 'mdiRadiator',
-  'power': 'mdiPower',
-  'seatbelt': 'mdiSeatbelt',
-  'sync': 'mdiSync'
+// Map of supported MDI icon names to SVG path strings
+const ICON_MAP: Record<string, string> = {
+  'steering-wheel': mdiSteering,
+  'steering': mdiSteering,
+  'car-front': mdiCarWindshieldOutline,
+  'ev-plug-type2': mdiEvPlugType2,
+  'radio': mdiRadio,
+  'knob': mdiKnob,
+  'music-box-outline': mdiMusicBoxOutline,
+  'surround-sound': mdiSurroundSound,
+  'speaker': mdiSpeaker,
+  'cctv': mdiCctv,
+  'car-seat-heater': mdiCarSeatHeater,
+  'car-shift-pattern': mdiCarShiftPattern,
+  'car-light-dimmed': mdiCarLightDimmed,
+  'car-brake-alert': mdiCarBrakeAlert,
+  'car-battery': mdiCarBattery,
+  'car-door': mdiCarDoor,
+  'car-back': mdiCarBack,
+  'car-info': mdiCarInfo,
+  'wiper': mdiWiper,
+  'window-open': mdiWindowOpen,
+  'thermostat': mdiThermostat,
+  'thermostat-box': mdiThermostatBox,
+  'thermometer': mdiThermometer,
+  'thermometer-alert': mdiThermometerAlert,
+  'message-badge': mdiMessageBadge,
+  'message-badge-outline': mdiMessageBadgeOutline,
+  'message-text': mdiMessageText,
+  'timer-outline': mdiTimerOutline,
+  'ev-station': mdiEvStation,
+  'speedometer': mdiSpeedometer,
+  'radiator': mdiRadiator,
+  'power': mdiPower,
+  'seatbelt': mdiSeatbelt,
+  'sync': mdiSync,
+  'bell-badge': mdiBellBadge
 };
 
 /**
  * Resolves an MDI icon name (e.g. "mdi:steering", "mdi:car-shift-pattern")
- * to an SVG path string from @mdi/js.
+ * to an SVG path string.
  */
 export function getMdiSvgPath(iconStr?: string): string | null {
   if (!iconStr) return null;
-  const clean = iconStr.trim().replace(/^mdi:/i, '');
+  const clean = iconStr.trim().replace(/^mdi:/i, '').toLowerCase();
   if (!clean) return null;
 
-  const mdiMap = mdiIcons as Record<string, string>;
-
-  // 1. Check direct alias table
-  if (MDI_ALIASES[clean] && mdiMap[MDI_ALIASES[clean]]) {
-    return mdiMap[MDI_ALIASES[clean]];
+  if (ICON_MAP[clean]) {
+    return ICON_MAP[clean];
   }
 
-  // 2. Convert kebab-case to mdiPascalCase (e.g. "car-door" -> "mdiCarDoor")
-  const pascalName = 'mdi' + clean
-    .split('-')
-    .map(seg => seg.charAt(0).toUpperCase() + seg.slice(1).toLowerCase())
-    .join('');
-
-  if (mdiMap[pascalName]) {
-    return mdiMap[pascalName];
-  }
-
-  // 3. Fallback: case-insensitive search across @mdi/js keys
-  const targetLower = pascalName.toLowerCase();
-  const matchedKey = Object.keys(mdiMap).find(k => k.toLowerCase() === targetLower);
-  if (matchedKey && mdiMap[matchedKey]) {
-    return mdiMap[matchedKey];
+  // Check alias without hyphens or exact match
+  const stripped = clean.replace(/[^a-z0-9]/g, '');
+  for (const [key, path] of Object.entries(ICON_MAP)) {
+    if (key.replace(/[^a-z0-9]/g, '') === stripped) {
+      return path;
+    }
   }
 
   return null;

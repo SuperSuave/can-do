@@ -14,7 +14,8 @@ import {
   Sparkles,
   Layers,
   Settings,
-  Zap
+  Zap,
+  Radio
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -27,8 +28,8 @@ interface NavbarProps {
   onResetCatalog: () => void;
   onOpenExportModal?: (format?: ExportFormat) => void;
   onOpenDbcExport?: () => void;
-  activeMainTab: 'catalog' | 'vehicles' | 'automations';
-  onChangeMainTab: (tab: 'catalog' | 'vehicles' | 'automations') => void;
+  activeMainTab: 'catalog' | 'vehicles' | 'automations' | 'device';
+  onChangeMainTab: (tab: 'catalog' | 'vehicles' | 'automations' | 'device') => void;
   repoConfig: GitHubRepoConfig;
   rulesCount?: number;
 }
@@ -130,6 +131,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                     {rulesCount}
                   </span>
                 )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onChangeMainTab('device')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition ${
+                  activeMainTab === 'device'
+                    ? 'bg-emerald-500 text-slate-950 shadow font-bold'
+                    : 'text-emerald-400 hover:text-emerald-300 hover:bg-slate-800/80'
+                }`}
+              >
+                <Radio className="w-3.5 h-3.5" />
+                <span>Device</span>
               </button>
             </div>
           </div>

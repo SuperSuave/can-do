@@ -19,6 +19,7 @@ import { GroupedCommandView } from './components/GroupedCommandView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { CanDoLogo } from './components/CanDoLogo';
 import { AutomationBuilder } from './components/AutomationBuilder';
+import { DeviceDashboard } from './components/DeviceDashboard';
 import { 
   AutomationRule, 
   AutomationSettings, 
@@ -45,6 +46,7 @@ import {
   Zap,
   Car,
   Layers,
+  Radio,
   X
 } from 'lucide-react';
 
@@ -128,7 +130,7 @@ export default function App() {
   const [repoConfig, setRepoConfig] = useState<GitHubRepoConfig>(() => getSavedRepoConfig());
 
   // 4. Navigation & Modals state
-  const [activeMainTab, setActiveMainTab] = useState<'catalog' | 'vehicles' | 'automations'>('catalog');
+  const [activeMainTab, setActiveMainTab] = useState<'catalog' | 'vehicles' | 'automations' | 'device'>('catalog');
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
   const [editingCommand, setEditingCommand] = useState<Command | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -582,6 +584,44 @@ export default function App() {
     setDraftModifiedVehicleIds([]);
   };
 
+  const handleSyncAutomationsToDevice = async () => {
+    try {
+      const host = localStorage.getItem('cando_device_host') || window.location.origin;
+      const payload = {
+        version: "1.0",
+        settings: automationSettings,
+        rules: automationRules
+      };
+      const res = await fetch(`${host.replace(/\/$/, '')}/api/automations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    } catch (err: any) {
+      alert(`Failed to deploy automations to device: ${err.message}`);
+      throw err;
+    }
+  };
+
+  const handlePullAutomationsFromDevice = async () => {
+    try {
+      const host = localStorage.getItem('cando_device_host') || window.location.origin;
+      const res = await fetch(`${host.replace(/\/$/, '')}/api/automations`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      const data = await res.json();
+      if (data && Array.isArray(data.rules)) {
+        setAutomationRules(data.rules);
+      }
+      if (data && data.settings) {
+        setAutomationSettings(data.settings);
+      }
+    } catch (err: any) {
+      alert(`Failed to pull automations from device: ${err.message}`);
+      throw err;
+    }
+  };
+
   const handleAddToAutomation = (command: Command, role?: CommandRole, option?: CommandOption) => {
     const isAction = role === 'action' || (!role && command.roles?.includes('action') && !command.roles?.includes('trigger'));
 
@@ -886,6 +926,21 @@ export default function App() {
                   {automationRules.length}
                 </span>
               </button>
+
+              <button
+                id="main-tab-device"
+                ref={el => { tabRefs.current['device'] = el; }}
+                type="button"
+                onClick={() => setActiveMainTab('device')}
+                className={`relative z-10 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
+                  activeMainTab === 'device'
+                    ? 'text-white font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Radio className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'device' ? 'text-emerald-400' : 'text-slate-500'}`} />
+                <span>Device Console</span>
+              </button>
             </nav>
 
             {/* Quick action button positioned to the right */}
@@ -1036,7 +1091,7 @@ export default function App() {
             activeMainTab={activeMainTab}
             onChangeMainTab={setActiveMainTab}
           />
-        ) : (
+        ) : activeMainTab === 'automations' ? (
           /* Automation Builder Tab */
           <AutomationBuilder
             catalog={catalog}
@@ -1046,6 +1101,12 @@ export default function App() {
             onUpdateSettings={setAutomationSettings}
             initialSelectedCommandIds={Array.from(selectedForAutomation)}
             onNavigateToCatalog={() => setActiveMainTab('catalog')}
+          />
+        ) : (
+          /* Device Console Tab */
+          <DeviceDashboard
+            onSyncAutomationsToDevice={handleSyncAutomationsToDevice}
+            onPullAutomationsFromDevice={handlePullAutomationsFromDevice}
           />
         )}
       </main>

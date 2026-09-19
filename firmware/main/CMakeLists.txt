@@ -32,18 +32,12 @@ idf_component_register(
         "mdns"
 )
 
-# Automated LittleFS staging (embedded dashboard only)
-set(DASHBOARD_DIR "${CMAKE_SOURCE_DIR}/embedded-dashboard")
-set(STAGING_DIR "${CMAKE_BINARY_DIR}/fs_staging")
+# --- LittleFS 3-Tier Architecture Staging ---
+# Target the shared data folder that Vite builds into
+set(FS_DIR "${CMAKE_CURRENT_LIST_DIR}/../data")
 
-file(MAKE_DIRECTORY "${STAGING_DIR}/www")
+# Create the data directory if it doesn't exist yet
+file(MAKE_DIRECTORY "${FS_DIR}/www")
 
-add_custom_target(copy_fs_files ALL
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${DASHBOARD_DIR}"
-            "${STAGING_DIR}/www"
-    COMMENT "Staging embedded dashboard for LittleFS packaging..."
-)
-
-# Ensure the dashboard is staged before the LittleFS partition image is built
-littlefs_create_partition_image(storage "${STAGING_DIR}" FLASH_IN_PROJECT DEPENDS copy_fs_files)
+# Package the data folder (containing catalog.json, automations.json, and the www folder)
+littlefs_create_partition_image(storage "${FS_DIR}" FLASH_IN_PROJECT)

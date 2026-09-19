@@ -3,16 +3,29 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import fs from 'fs';
 import { defineConfig } from 'vite';
+import viteCompression from 'vite-plugin-compression';
 
 export default defineConfig(() => {
   return {
-    // GitHub Pages serves this project from /can-do/, not the domain root.
-    // This also rewrites the absolute /src/main.tsx entry in index.html to the
-    // correct project-relative asset URL during the production build.
-    base: '/can-do/',
+    // 1. Relative base path so it resolves cleanly when served directly by ESP32 IP or mDNS
+    base: './',
+
+    // 2. Output directly to the ESP-IDF data staging folder
+    build: {
+      outDir: path.resolve(__dirname, '../firmware/data/www'),
+      emptyOutDir: true,
+      chunkSizeWarningLimit: 1000,
+    },
+
     plugins: [
       react(),
       tailwindcss(),
+      // 3. Compress files to .gz to save LittleFS partition space
+      viteCompression({
+        algorithm: 'gzip',
+        ext: '.gz',
+        deleteOriginFile: true,
+      }),
       {
         name: 'serve-root-catalog',
         configureServer(server) {
@@ -25,7 +38,8 @@ export default defineConfig(() => {
               cleanUrl === '/can-do/catalog' ||
               cleanUrl === '/can-do/catalog/can_do_catalog.json' ||
               cleanUrl === '/CAN-Do-Message-Catalog/catalog' ||
-              cleanUrl === '/CAN-Do-Message-Catalog/catalog/can_do_catalog.json'
+              cleanUrl === '/CAN-Do-Message-Catalog/catalog/can_do_catalog.json' ||
+              cleanUrl === '/catalog.json'
             ) {
               const catalogFile = path.resolve(__dirname, '../catalog/can_do_catalog.json');
               if (fs.existsSync(catalogFile)) {
@@ -41,11 +55,25 @@ export default defineConfig(() => {
         generateBundle() {
           const catalogFile = path.resolve(__dirname, '../catalog/can_do_catalog.json');
           if (fs.existsSync(catalogFile)) {
+            // Also emit within www bundle
             this.emitFile({
               type: 'asset',
               fileName: 'catalog/can_do_catalog.json',
               source: fs.readFileSync(catalogFile, 'utf-8'),
             });
+
+            // Stage in firmware/data/catalog.json (LittleFS root)
+            const dataDir = path.resolve(__dirname, '../firmware/data');
+            if (!fs.existsSync(dataDir)) {
+              fs.mkdirSync(dataDir, { recursive: true });
+            }
+            fs.copyFileSync(catalogFile, path.join(dataDir, 'catalog.json'));
+
+            // Also copy automations.json if present in repo root or firmware
+            const repoAuto = path.resolve(__dirname, '../firmware/automations.json');
+            if (fs.existsSync(repoAuto)) {
+              fs.copyFileSync(repoAuto, path.join(dataDir, 'automations.json'));
+            }
           }
         },
       },

@@ -134,8 +134,10 @@ extern "C" void app_main(void) {
 
     // 3. Mount LittleFS and load catalog & automations
     init_fs();
-    if (!load_catalog_from_fs("/spiffs/catalog/can_do_catalog.json")) {
-        load_catalog_from_fs("/spiffs/can_do_catalog.json");
+    if (!load_catalog_from_fs("/spiffs/catalog.json")) {
+        if (!load_catalog_from_fs("/spiffs/catalog/can_do_catalog.json")) {
+            load_catalog_from_fs("/spiffs/can_do_catalog.json");
+        }
     }
     load_automations_from_fs("/spiffs/automations.json");
     mqtt_mgr_init();
