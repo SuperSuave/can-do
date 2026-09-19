@@ -620,7 +620,7 @@
     {
       "id": "sw_menu",
       "ha_metadata": {
-        "name": "Menu / OK Control",
+        "name": "Menu / OK Button",
         "domain": "event",
         "icon": "mdi:steering"
       },
