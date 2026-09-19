@@ -4,6 +4,7 @@ import { DEFAULT_CATALOG, normalizeCatalog } from './data/defaultCatalog';
 import { validateCatalog } from './utils/canValidator';
 import { commandToAction, commandToTrigger } from './utils/automationConverters';
 import { getSavedRepoConfig, saveRepoConfig } from './utils/githubHelper';
+import { isRunningOnDevice, resolveDeviceBaseUrl } from './utils/hostUtils';
 import { CommandFilter } from './components/CommandFilter';
 import { CommandCard } from './components/CommandCard';
 import { CommandDetailModal } from './components/CommandDetailModal';
@@ -615,13 +616,13 @@ export default function App() {
 
   const handleSyncAutomationsToDevice = async () => {
     try {
-      const host = localStorage.getItem('cando_device_host') || window.location.origin;
+      const base = resolveDeviceBaseUrl(localStorage.getItem('cando_device_host'));
       const payload = {
         version: "1.0",
         settings: automationSettings,
         rules: automationRules
       };
-      const res = await fetch(`${host.replace(/\/$/, '')}/api/automations`, {
+      const res = await fetch(`${base}/api/automations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -633,10 +634,10 @@ export default function App() {
     }
   };
 
-  const handlePullAutomationsFromDevice = async () => {
+  const handlePullAutomationsFromDevice = async (silent: boolean = false) => {
     try {
-      const host = localStorage.getItem('cando_device_host') || window.location.origin;
-      const res = await fetch(`${host.replace(/\/$/, '')}/api/automations`);
+      const base = resolveDeviceBaseUrl(localStorage.getItem('cando_device_host'));
+      const res = await fetch(`${base}/api/automations`);
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       const data = await res.json();
       if (data && Array.isArray(data.rules)) {
@@ -646,10 +647,21 @@ export default function App() {
         setAutomationSettings(data.settings);
       }
     } catch (err: any) {
-      alert(`Failed to pull automations from device: ${err.message}`);
+      if (!silent) {
+        alert(`Failed to pull automations from device: ${err.message}`);
+      }
       throw err;
     }
   };
+
+  // Automatically pull automations from device on boot if running on-device
+  const hasAutoPulledDevice = useRef(false);
+  useEffect(() => {
+    if (isRunningOnDevice() && !hasAutoPulledDevice.current) {
+      hasAutoPulledDevice.current = true;
+      handlePullAutomationsFromDevice(true).catch(() => {});
+    }
+  }, []);
 
   const handleAddToAutomation = (command: Command, role?: CommandRole, option?: CommandOption) => {
     const isAction = role === 'action' || (!role && command.roles?.includes('action') && !command.roles?.includes('trigger'));

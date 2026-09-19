@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { isRunningOnDevice, getDefaultDeviceHost, resolveDeviceBaseUrl } from '../utils/hostUtils';
 import {
   Cpu,
   Wifi,
@@ -132,9 +133,7 @@ export interface DeviceDashboardProps {
 
 const PRESET_ENDPOINTS = [
   { label: 'Auto (Current Host)', value: 'auto' },
-  { label: 'CAN Do SoftAP (192.168.4.1)', value: 'http://192.168.4.1' },
-  { label: 'Default Vehicle STA (192.168.107.50)', value: 'http://192.168.107.50' },
-  { label: 'Local Dev (localhost:80)', value: 'http://localhost:80' }
+  { label: 'CAN Do SoftAP (192.168.4.1)', value: 'http://192.168.4.1' }
 ];
 
 export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
@@ -148,15 +147,27 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   onCreateAutomationFromFrame
 }) => {
   // Device endpoint config (persisted in localStorage)
-  const isEmbedded = typeof window !== 'undefined' && (!window.location.port || window.location.port !== '3000');
   const [deviceHost, setDeviceHost] = useState<string>(() => {
-    return localStorage.getItem('cando_device_host') || (isEmbedded ? window.location.origin : 'http://192.168.107.50');
+    const saved = localStorage.getItem('cando_device_host');
+    if (saved && saved !== 'http://192.168.107.50' && saved !== '192.168.107.50') {
+      return saved;
+    }
+    return getDefaultDeviceHost();
   });
 
   const getApiUrl = useCallback((endpoint: string) => {
-    const base = deviceHost.replace(/\/$/, '');
+    const base = resolveDeviceBaseUrl(deviceHost);
     return `${base}${endpoint}`;
   }, [deviceHost]);
+
+  // Auto-pull automations if running directly on device
+  const hasAutoPulled = useRef(false);
+  useEffect(() => {
+    if (isRunningOnDevice() && onPullAutomationsFromDevice && !hasAutoPulled.current) {
+      hasAutoPulled.current = true;
+      onPullAutomationsFromDevice().catch(() => {});
+    }
+  }, [onPullAutomationsFromDevice]);
 
   // Connection & Telemetry state
   const [connected, setConnected] = useState<boolean>(false);
@@ -718,16 +729,17 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             <Globe className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
             <select
               value={
-                PRESET_ENDPOINTS.some(p => p.value === deviceHost)
+                deviceHost === 'auto' || deviceHost === (typeof window !== 'undefined' ? window.location.origin : '')
+                  ? 'auto'
+                  : PRESET_ENDPOINTS.some(p => p.value === deviceHost)
                   ? deviceHost
                   : 'custom'
               }
               onChange={(e) => {
                 const val = e.target.value;
                 if (val === 'auto') {
-                  const autoHost = window.location.origin;
-                  setDeviceHost(autoHost);
-                  localStorage.setItem('cando_device_host', autoHost);
+                  setDeviceHost('auto');
+                  localStorage.setItem('cando_device_host', 'auto');
                 } else if (val !== 'custom') {
                   setDeviceHost(val);
                   localStorage.setItem('cando_device_host', val);
@@ -738,8 +750,6 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             >
               <option value="auto" className="bg-slate-900 text-slate-100">Auto (Current Host)</option>
               <option value="http://192.168.4.1" className="bg-slate-900 text-slate-100">CAN Do SoftAP (192.168.4.1)</option>
-              <option value="http://192.168.107.50" className="bg-slate-900 text-slate-100">Vehicle STA (192.168.107.50)</option>
-              <option value="http://localhost:80" className="bg-slate-900 text-slate-100">Local Dev (Port 80)</option>
               <option value="custom" className="bg-slate-900 text-slate-100">Custom IP / URL...</option>
             </select>
           </div>
@@ -747,12 +757,12 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           {/* Custom Host Input */}
           <input
             type="text"
-            value={deviceHost}
+            value={deviceHost === 'auto' ? (typeof window !== 'undefined' ? window.location.origin : 'auto') : deviceHost}
             onChange={(e) => {
               setDeviceHost(e.target.value);
               localStorage.setItem('cando_device_host', e.target.value);
             }}
-            placeholder="http://192.168.107.50"
+            placeholder="http://192.168.4.1"
             className="px-2.5 py-1 rounded-lg bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-heading)] font-mono text-xs w-36 sm:w-44 focus:outline-none focus:border-[var(--md-sys-color-primary)] transition"
             title="Device IP or mDNS hostname"
           />

@@ -20,6 +20,7 @@ import {
   applyOptionToTrigger,
   applyOptionToAction
 } from '../utils/automationConverters';
+import { getDefaultEspIp, resolveDeviceBaseUrl, isRunningOnDevice } from '../utils/hostUtils';
 import {
   Zap,
   Shield,
@@ -1961,7 +1962,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [addElementTarget, setAddElementTarget] = useState<AddElementTarget | null>(null);
   const [showSimulateModal, setShowSimulateModal] = useState(false);
   const [simulationLog, setSimulationLog] = useState<string[]>([]);
-  const [espIp, setEspIp] = useState('192.168.4.1');
+  const [espIp, setEspIp] = useState<string>(() => getDefaultEspIp());
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [customJsonSchema, setCustomJsonSchema] = useState<string>(
@@ -2188,8 +2189,8 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     setSyncStatus('Pushing automations.json to ESP32...');
     try {
       const payload = exportToCandoJson(rules, settings, catalog);
-      const host = espIp.trim().replace(/\/+$/, '');
-      const url = host.startsWith('http') ? `${host}/api/automations` : `http://${host}/api/automations`;
+      const base = resolveDeviceBaseUrl(espIp);
+      const url = `${base}/api/automations`;
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2210,8 +2211,8 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     setSyncing(true);
     setSyncStatus('Pulling automations.json from ESP32...');
     try {
-      const host = espIp.trim().replace(/\/+$/, '');
-      const url = host.startsWith('http') ? `${host}/api/automations` : `http://${host}/api/automations`;
+      const base = resolveDeviceBaseUrl(espIp);
+      const url = `${base}/api/automations`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       const data = await res.json();
@@ -2234,6 +2235,15 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
       setSyncing(false);
     }
   };
+
+  // Automatically pull automations from device when running directly on-device
+  const hasAutoPulled = useRef(false);
+  React.useEffect(() => {
+    if (isRunningOnDevice() && !hasAutoPulled.current) {
+      hasAutoPulled.current = true;
+      handlePullFromEsp();
+    }
+  }, []);
 
   const handleImportJson = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2765,7 +2775,8 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     type="text"
                     value={espIp}
                     onChange={e => setEspIp(e.target.value)}
-                    placeholder="192.168.4.1"
+                    placeholder={getDefaultEspIp()}
+                    title="Device IP address or hostname"
                     className="flex-1 px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                   />
                 </div>
