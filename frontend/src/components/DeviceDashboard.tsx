@@ -106,9 +106,17 @@ export interface AutomationDiag {
   id: string;
   name: string;
   enabled: boolean;
-  trigger_count: number;
+  trigger_count?: number;
   last_fired?: string;
   conditions_met?: boolean;
+  exec_mode?: string;
+  cooldown_ms?: number;
+  last_exec_ms?: number;
+  last_exec_sec_ago?: number;
+  triggers?: any[];
+  conditions?: any[];
+  all_conditions_passed?: boolean;
+  actions?: any[];
 }
 
 export interface DeviceDashboardProps {
@@ -343,9 +351,11 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       const res = await fetch(getApiUrl('/api/wifi/networks'));
       if (res.ok) {
         const data = await res.json();
-        setNetworks(data || []);
+        setNetworks(Array.isArray(data) ? data : (data?.networks || []));
       }
-    } catch {}
+    } catch {
+      setNetworks([]);
+    }
   };
 
   // REST: Fetch automation diagnostics
@@ -355,9 +365,11 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       const res = await fetch(getApiUrl('/api/automations/diagnostics'));
       if (res.ok) {
         const data = await res.json();
-        setAutomations(data || []);
+        const rulesList = Array.isArray(data) ? data : (data?.rules || []);
+        setAutomations(rulesList);
       }
     } catch {
+      setAutomations([]);
     } finally {
       setAutomationsLoading(false);
     }
@@ -455,7 +467,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       const res = await fetch(getApiUrl('/api/wifi/scan'));
       if (res.ok) {
         const data = await res.json();
-        setScanResults(data || []);
+        setScanResults(Array.isArray(data) ? data : (data?.results || data?.networks || []));
       }
     } catch (e: any) {
       showNotice(`Wi-Fi scan failed: ${e.message}`, 'error');
@@ -1415,7 +1427,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-            {automations.length === 0 ? (
+            {(!Array.isArray(automations) || automations.length === 0) ? (
               <div className="col-span-2 text-center py-12 text-[var(--text-muted)] border border-dashed border-[var(--border-color)] rounded-xl">
                 <Zap className="w-8 h-8 text-amber-500/50 mx-auto mb-2" />
                 <h4 className="text-sm font-semibold text-[var(--text-heading)]">
@@ -1460,12 +1472,21 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
                   <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-2 border-t border-[var(--border-color)]/60 text-[var(--text-muted)]">
                     <div>
-                      Fired Counter:{' '}
-                      <strong className="text-amber-300">{rule.trigger_count || 0}</strong>
+                      Mode: <strong className="text-cyan-300 uppercase">{rule.exec_mode || 'one_shot'}</strong>
+                    </div>
+                    <div>
+                      Cooldown: <strong className="text-slate-300">{rule.cooldown_ms ?? 500}ms</strong>
+                    </div>
+                    <div>
+                      Triggers: <strong className="text-amber-300">{rule.triggers?.length || 0}</strong>
                     </div>
                     <div>
                       Last Fired:{' '}
-                      <strong className="text-[var(--text-heading)]">{rule.last_fired || 'Never'}</strong>
+                      <strong className="text-[var(--text-heading)]">
+                        {rule.last_exec_sec_ago !== undefined && rule.last_exec_sec_ago >= 0
+                          ? `${rule.last_exec_sec_ago}s ago`
+                          : rule.last_fired || 'Never'}
+                      </strong>
                     </div>
                   </div>
                 </div>
@@ -1578,7 +1599,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               Saved Roaming Profiles
             </h4>
             <div className="divide-y divide-[var(--border-color)]/60 rounded-xl border border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-lowest)]">
-              {networks.length === 0 ? (
+              {(!Array.isArray(networks) || networks.length === 0) ? (
                 <div className="p-4 text-center text-xs text-[var(--text-muted)]">
                   No known roaming networks configured on device LittleFS.
                 </div>
@@ -1622,7 +1643,12 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               </button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {scanResults.map((res, i) => (
+              {(!Array.isArray(scanResults) || scanResults.length === 0) ? (
+                <div className="col-span-full p-4 text-center text-xs text-[var(--text-muted)] border border-dashed border-[var(--border-color)] rounded-xl">
+                  {scanning ? 'Scanning nearby channels...' : 'No networks scanned yet. Click "Scan Networks" to search airwaves.'}
+                </div>
+              ) : (
+                scanResults.map((res, i) => (
                 <div
                   key={`${res.ssid}-${i}`}
                   onClick={() => setNewSsid(res.ssid)}
@@ -1642,7 +1668,8 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                     <span className="text-cyan-400">Click to fill</span>
                   </div>
                 </div>
-              ))}
+              ))
+            )}
             </div>
           </div>
         </div>
