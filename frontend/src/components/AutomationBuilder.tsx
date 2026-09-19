@@ -54,6 +54,7 @@ import {
   MessageSquare,
   Thermometer,
   Radio,
+  Bluetooth,
   X
 } from 'lucide-react';
 import { AddElementModal, AddElementTarget } from './AddElementModal';
@@ -799,6 +800,103 @@ function TriggerNodeEditor({
           selectedDays={trig.days}
           onChange={days => onUpdate({ ...trig, days })}
         />
+      </div>
+    );
+  }
+
+  // Bluetooth Remote / Button Trigger
+  if (trig.type === 'ble_button' || trig.type === 'ble_key' || trig.source === 'ble') {
+    return (
+      <div
+        key={trig.id || tIdx}
+        className="p-3.5 rounded-xl bg-slate-950 border border-blue-800/80 space-y-2.5 text-xs shadow-sm"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded-full bg-blue-950 text-blue-300 font-bold text-[10px] flex items-center justify-center border border-blue-800 shrink-0">
+              T{tIdx + 1}
+            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 text-blue-400 font-semibold">
+                <Bluetooth className="w-3.5 h-3.5" />
+                <span>Bluetooth Remote Button</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-200 text-[10px] font-mono border border-blue-700/50">
+                {trig.ble_button || 'volume_up'} • {trig.ble_action || 'press'}
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition"
+            title="Delete trigger"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px]">
+          <div>
+            <label className="block text-[10px] font-sans text-slate-400 mb-1">Button / Macro Key</label>
+            <select
+              value={trig.ble_button || 'volume_up'}
+              onChange={e => onUpdate({ ...trig, ble_button: e.target.value })}
+              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-blue-300 font-sans"
+            >
+              <optgroup label="Media & Volume (Phone / Remote / Shutter)">
+                <option value="volume_up">Volume Up (+)</option>
+                <option value="volume_down">Volume Down (-)</option>
+                <option value="play_pause">Play / Pause</option>
+                <option value="next_track">Next Track (&gt;&gt;)</option>
+                <option value="prev_track">Previous Track (&lt;&lt;)</option>
+                <option value="mute">Mute</option>
+                <option value="shutter">Camera Shutter (Enter)</option>
+              </optgroup>
+              <optgroup label="Macro Keypad (1 - 9)">
+                <option value="key_1">Key 1</option>
+                <option value="key_2">Key 2</option>
+                <option value="key_3">Key 3</option>
+                <option value="key_4">Key 4</option>
+                <option value="key_5">Key 5</option>
+                <option value="key_6">Key 6</option>
+                <option value="key_7">Key 7</option>
+                <option value="key_8">Key 8</option>
+                <option value="key_9">Key 9</option>
+              </optgroup>
+              <optgroup label="Navigation Keys">
+                <option value="key_space">Spacebar</option>
+                <option value="key_enter">Enter</option>
+                <option value="key_escape">Escape</option>
+                <option value="key_tab">Tab</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-sans text-slate-400 mb-1">Action Event</label>
+            <select
+              value={trig.ble_action || 'press'}
+              onChange={e => onUpdate({ ...trig, ble_action: e.target.value as any })}
+              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+            >
+              <option value="press">Button Pressed</option>
+              <option value="release">Button Released</option>
+              <option value="any">Any (Press or Release)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-sans text-slate-400 mb-1">Device Filter (Optional)</label>
+            <input
+              type="text"
+              value={trig.ble_device || ''}
+              onChange={e => onUpdate({ ...trig, ble_device: e.target.value })}
+              placeholder="Leave blank for any device"
+              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+            />
+          </div>
+        </div>
       </div>
     );
   }

@@ -11,8 +11,8 @@ export type TriggerCombineMode = 'any' | 'all' | 'sequence';
 
 export interface AutomationTrigger {
   id: string;
-  source: 'preset' | 'can' | 'time' | 'voltage' | 'mqtt';
-  type?: 'byte_transition' | 'time_schedule' | 'can_rx' | 'mqtt' | string;
+  source: 'preset' | 'can' | 'time' | 'voltage' | 'mqtt' | 'ble';
+  type?: 'byte_transition' | 'time_schedule' | 'can_rx' | 'mqtt' | 'ble_button' | 'ble_key' | string;
   can_id?: string;
   bus?: number;
   click_count?: number; // 1 = single, 2 = double, 3 = triple
@@ -40,6 +40,10 @@ export interface AutomationTrigger {
   expression?: string;
   mqtt_topic?: string;
   mqtt_payload?: string;
+  // Bluetooth BLE trigger fields
+  ble_button?: string; // e.g. "volume_up", "volume_down", "play_pause", "key_1", etc.
+  ble_action?: 'press' | 'release' | 'hold' | 'any';
+  ble_device?: string; // optional device name or address filter
 }
 
 export interface AutomationCondition {

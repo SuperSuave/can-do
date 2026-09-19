@@ -506,6 +506,21 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
                 cJSON* time_val = cJSON_GetObjectItem(t_item, "time");
                 if (cJSON_IsString(time_val)) tr.schedule_time_min = parse_time_to_minutes(time_val->valuestring);
                 tr.weekdays_mask = parse_weekdays_mask(cJSON_GetObjectItem(t_item, "days"));
+            } else if (tr.type == "ble_button" || tr.type == "ble_key" || tr.type == "ble") {
+                tr.type = "ble_button";
+                cJSON* btn = cJSON_GetObjectItem(t_item, "ble_button");
+                if (!btn) btn = cJSON_GetObjectItem(t_item, "button");
+                if (!btn) btn = cJSON_GetObjectItem(t_item, "key");
+                if (cJSON_IsString(btn)) tr.ble_button = btn->valuestring;
+
+                cJSON* act = cJSON_GetObjectItem(t_item, "ble_action");
+                if (!act) act = cJSON_GetObjectItem(t_item, "action");
+                if (cJSON_IsString(act)) tr.ble_action = act->valuestring;
+                else tr.ble_action = "press";
+
+                cJSON* dev = cJSON_GetObjectItem(t_item, "ble_device");
+                if (!dev) dev = cJSON_GetObjectItem(t_item, "device");
+                if (cJSON_IsString(dev)) tr.ble_device = dev->valuestring;
             } else {
                 cJSON* cid = cJSON_GetObjectItem(t_item, "can_id");
                 if (cJSON_IsString(cid)) tr.can_id = strtol(cid->valuestring, nullptr, 16);

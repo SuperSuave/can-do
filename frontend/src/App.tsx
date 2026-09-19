@@ -1196,6 +1196,24 @@ export default function App() {
               setAutomationRules(prev => [newRule, ...prev]);
               setActiveMainTab('automations');
             }}
+            onCreateAutomationWithTrigger={(trigger) => {
+              const newRule: AutomationRule = {
+                id: `rule_ble_${Date.now()}`,
+                name: `Bluetooth ${trigger.ble_button || 'Button'} Trigger`,
+                enabled: true,
+                ha_expose: true,
+                ha_icon: 'mdi:bluetooth',
+                exec_mode: 'one_shot',
+                trigger_mode: 'any',
+                cooldown_ms: 0,
+                timeout_reset_ms: 0,
+                triggers: [trigger],
+                conditions: [],
+                actions: []
+              };
+              setAutomationRules(prev => [newRule, ...prev]);
+              setActiveMainTab('automations');
+            }}
           />
         )}
       </main>

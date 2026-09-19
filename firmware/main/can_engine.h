@@ -33,6 +33,9 @@ bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<Ac
 bool can_state_cache_get(uint32_t can_id, uint8_t byte_index, uint32_t* out_val);
 bool get_cached_can_frame(uint32_t can_id, uint8_t out_data[8]);
 
+struct BleButtonEvent;
+void can_engine_trigger_ble_event(const BleButtonEvent& event);
+
 void can_rx_task(void* arg);
 void can_tx_task(void* arg);
 void time_scheduler_task(void* arg);

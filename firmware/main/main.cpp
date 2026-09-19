@@ -23,6 +23,7 @@
 #include "mqtt_mgr.h"
 #include "network_mgr.h"
 #include "gvret_server.h"
+#include "ble_mgr.h"
 
 #include "esp_mac.h"
 #include "esp_wifi.h"
@@ -141,6 +142,9 @@ extern "C" void app_main(void) {
     }
     load_automations_from_fs("/spiffs/automations.json");
     mqtt_mgr_init();
+
+    // 3.5. Init Bluetooth Low Energy (BLE HID Controller)
+    ble_mgr_init();
 
     // 4. Network connectivity (Multi-SSID Roaming, Auto-AP Fallback, 192.168.4.1)
     network_mgr_init();

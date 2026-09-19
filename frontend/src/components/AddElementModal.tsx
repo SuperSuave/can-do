@@ -13,6 +13,7 @@ import {
 import {
   Radio,
   Clock,
+  Bluetooth,
   Cpu,
   Sliders,
   Zap,
@@ -129,6 +130,20 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
             type: 'time_schedule',
             time: '',
             days: []
+          })
+        },
+        {
+          id: 'ble_button',
+          title: 'Bluetooth Remote / Keypad Button',
+          desc: 'Fire on wireless media buttons (Volume +/-, Next/Prev, Play/Pause, Shutter) or wireless macro keys',
+          icon: Bluetooth,
+          color: 'text-blue-400 bg-blue-950/40 border-blue-800/60',
+          create: (): AutomationTrigger => ({
+            id: `trig_ble_${Date.now().toString(36)}`,
+            source: 'ble',
+            type: 'ble_button',
+            ble_button: 'volume_up',
+            ble_action: 'press'
           })
         }
       ];

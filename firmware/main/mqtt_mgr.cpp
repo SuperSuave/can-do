@@ -2,6 +2,7 @@
 #include "parser.h"
 #include "can_engine.h"
 #include "track_popup.h"
+#include "ble_mgr.h"
 #include "cJSON.h"
 #include "esp_log.h"
 #include <cstdio>
@@ -424,10 +425,96 @@ bool mqtt_mgr_save_config(const MqttConfig& cfg) {
     return true;
 }
 
+static void publish_ha_ble_discovery(esp_mqtt_client_handle_t client) {
+    if (!client) return;
+
+    // 1. Home Assistant Event Entity for BLE Button / Macro Controller
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "name", "Bluetooth Button Controller");
+    std::string unique_id = DEVICE_ID + "_ble_button";
+    cJSON_AddStringToObject(root, "unique_id", unique_id.c_str());
+    cJSON_AddStringToObject(root, "object_id", "ble_button");
+    cJSON_AddStringToObject(root, "icon", "mdi:bluetooth-audio");
+    cJSON_AddStringToObject(root, "state_topic", (MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/event/ble_button").c_str());
+
+    cJSON *event_types = cJSON_AddArrayToObject(root, "event_types");
+    const char* types[] = {
+        "press", "release", "volume_up", "volume_down", "play_pause",
+        "next_track", "prev_track", "mute", "key_1", "key_2", "key_3",
+        "key_4", "key_5", "key_6", "key_7", "key_8", "key_9", "key_enter", "key_space"
+    };
+    for (size_t i = 0; i < sizeof(types)/sizeof(types[0]); i++) {
+        cJSON_AddItemToArray(event_types, cJSON_CreateString(types[i]));
+    }
+
+    cJSON *device = cJSON_AddObjectToObject(root, "device");
+    cJSON_AddStringToObject(device, "identifiers", DEVICE_ID.c_str());
+    cJSON_AddStringToObject(device, "name", ("CAN Do (" + DEVICE_ID + ")").c_str());
+    cJSON_AddStringToObject(device, "model", "Edge Engine");
+    cJSON_AddStringToObject(device, "manufacturer", "CAN Do");
+
+    char *payload = cJSON_PrintUnformatted(root);
+    std::string topic = "homeassistant/event/" + DEVICE_ID + "/ble_button/config";
+    esp_mqtt_client_publish(client, topic.c_str(), payload, 0, 1, 1);
+    free(payload);
+    cJSON_Delete(root);
+
+    // 2. Home Assistant Sensor for BLE Connection Status
+    cJSON *s_root = cJSON_CreateObject();
+    cJSON_AddStringToObject(s_root, "name", "Bluetooth Controller Status");
+    std::string s_uid = DEVICE_ID + "_ble_status";
+    cJSON_AddStringToObject(s_root, "unique_id", s_uid.c_str());
+    cJSON_AddStringToObject(s_root, "object_id", "ble_status");
+    cJSON_AddStringToObject(s_root, "icon", "mdi:bluetooth-connect");
+    cJSON_AddStringToObject(s_root, "state_topic", (MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/ble/status").c_str());
+    cJSON *s_dev = cJSON_AddObjectToObject(s_root, "device");
+    cJSON_AddStringToObject(s_dev, "identifiers", DEVICE_ID.c_str());
+    cJSON_AddStringToObject(s_dev, "name", ("CAN Do (" + DEVICE_ID + ")").c_str());
+    cJSON_AddStringToObject(s_dev, "model", "Edge Engine");
+    cJSON_AddStringToObject(s_dev, "manufacturer", "CAN Do");
+
+    char *s_payload = cJSON_PrintUnformatted(s_root);
+    std::string s_topic = "homeassistant/sensor/" + DEVICE_ID + "/ble_status/config";
+    esp_mqtt_client_publish(client, s_topic.c_str(), s_payload, 0, 1, 1);
+    free(s_payload);
+    cJSON_Delete(s_root);
+}
+
+void mqtt_mgr_publish_ble_event(const BleButtonEvent& event) {
+    if (!global_mqtt_client || !s_mqtt_connected.load()) return;
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "event_type", event.button_name.c_str());
+    cJSON_AddStringToObject(root, "button", event.button_name.c_str());
+    cJSON_AddStringToObject(root, "action", event.action.c_str());
+    cJSON_AddStringToObject(root, "device", event.device_name.c_str());
+    cJSON_AddStringToObject(root, "address", event.device_address.c_str());
+    cJSON_AddNumberToObject(root, "keycode", event.key_code);
+    cJSON_AddNumberToObject(root, "ts", event.timestamp_ms);
+
+    char *payload = cJSON_PrintUnformatted(root);
+    std::string topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/event/ble_button";
+    esp_mqtt_client_publish(global_mqtt_client, topic.c_str(), payload, 0, 1, 0);
+
+    free(payload);
+    cJSON_Delete(root);
+}
+
+void mqtt_mgr_publish_ble_status(void) {
+    if (!global_mqtt_client || !s_mqtt_connected.load()) return;
+
+    BleDeviceInfo dev;
+    bool connected = ble_mgr_get_connected_device(&dev);
+    std::string status_str = connected ? "connected" : "disconnected";
+    std::string topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/ble/status";
+    esp_mqtt_client_publish(global_mqtt_client, topic.c_str(), status_str.c_str(), 0, 1, 1);
+}
+
 void mqtt_mgr_publish_discovery(void) {
     if (global_mqtt_client && s_mqtt_connected.load()) {
         for (const auto& entity : global_catalog) {
             publish_ha_discovery(global_mqtt_client, entity);
         }
+        publish_ha_ble_discovery(global_mqtt_client);
     }
 }

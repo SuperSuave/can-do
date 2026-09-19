@@ -14,6 +14,7 @@ idf_component_register(
         "network_mgr.cpp"
         "gvret_server.cpp"
         "mqtt_mgr.cpp"
+        "ble_mgr.cpp"
     INCLUDE_DIRS "."
     REQUIRES 
         "nvs_flash"
@@ -30,6 +31,7 @@ idf_component_register(
         "json"
         "littlefs"
         "mdns"
+        "bt"
 )
 
 # --- LittleFS 3-Tier Architecture Staging ---

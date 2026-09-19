@@ -43,11 +43,13 @@ import {
   Lock,
   Unlock,
   ChevronRight,
-  Info
+  Info,
+  Bluetooth
 } from 'lucide-react';
 import { Catalog, Command } from '../types/catalog';
-import { AutomationRule } from '../types/automation';
+import { AutomationRule, AutomationTrigger } from '../types/automation';
 import { MdiIcon } from './MdiIcon';
+import { BluetoothManager } from './BluetoothManager';
 
 export interface SystemStatus {
   device_id: string;
@@ -129,6 +131,7 @@ export interface DeviceDashboardProps {
   onNavigateToAutomations?: () => void;
   onCreateCommandFromCanId?: (canId: string, sampleData?: string) => void;
   onCreateAutomationFromFrame?: (canId: string, sampleData?: string) => void;
+  onCreateAutomationWithTrigger?: (trigger: AutomationTrigger) => void;
 }
 
 const PRESET_ENDPOINTS = [
@@ -144,7 +147,8 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   onNavigateToCatalog,
   onNavigateToAutomations,
   onCreateCommandFromCanId,
-  onCreateAutomationFromFrame
+  onCreateAutomationFromFrame,
+  onCreateAutomationWithTrigger
 }) => {
   // Device endpoint config (persisted in localStorage)
   const [deviceHost, setDeviceHost] = useState<string>(() => {
@@ -174,7 +178,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const [lastPingMs, setLastPingMs] = useState<number | null>(null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [wifi, setWifi] = useState<WifiStatus | null>(null);
-  const [activeTab, setActiveTab] = useState<'sniffer' | 'automations' | 'wifi' | 'console' | 'ota'>('sniffer');
+  const [activeTab, setActiveTab] = useState<'sniffer' | 'automations' | 'bluetooth' | 'wifi' | 'console' | 'ota'>('sniffer');
 
   // Sniffer state
   const [snifferFrames, setSnifferFrames] = useState<Map<string, CanFrame>>(new Map());
@@ -1058,7 +1062,21 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             </span>
           </button>
 
-          {/* Tab 3: Wi-Fi & SoftAP */}
+          {/* Tab 3: Bluetooth Remote Controller */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('bluetooth')}
+            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors shrink-0 ${
+              activeTab === 'bluetooth'
+                ? 'bg-slate-800 text-white font-semibold shadow-sm'
+                : 'text-[var(--text-muted)] hover:text-white'
+            }`}
+          >
+            <Bluetooth className={`w-3.5 h-3.5 ${activeTab === 'bluetooth' ? 'text-blue-400' : 'text-slate-500'}`} />
+            <span>Bluetooth Remote</span>
+          </button>
+
+          {/* Tab 4: Wi-Fi & SoftAP */}
           <button
             type="button"
             onClick={() => setActiveTab('wifi')}
@@ -1504,6 +1522,23 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* =========================================================================
+          TAB: Bluetooth Remote & Button Controller
+         ========================================================================= */}
+      {activeTab === 'bluetooth' && (
+        <BluetoothManager
+          deviceHost={deviceHost}
+          onSelectTriggerForAutomation={(trigger) => {
+            if (onCreateAutomationWithTrigger) {
+              onCreateAutomationWithTrigger(trigger);
+            }
+            if (onNavigateToAutomations) {
+              onNavigateToAutomations();
+            }
+          }}
+        />
       )}
 
       {/* =========================================================================
