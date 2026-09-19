@@ -11,7 +11,7 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.service_info.mqtt import MqttServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
-from .catalog_loader import get_vehicles
+from .catalog_loader import async_get_vehicles
 from .const import (
     CONF_BASE_TOPIC,
     CONF_DEVICE_ID,
@@ -40,7 +40,7 @@ class CanDoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle the initial setup step."""
         errors: Dict[str, str] = {}
 
-        vehicles = get_vehicles()
+        vehicles = await async_get_vehicles(self.hass)
         vehicle_map = {vid: label for vid, label in vehicles}
         if DEFAULT_VEHICLE_ID not in vehicle_map and vehicles:
             default_vid = vehicles[0][0]
@@ -115,7 +115,7 @@ class CanDoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         device_id = self._discovered_device.get(CONF_DEVICE_ID, DEFAULT_DEVICE_ID)
         base_topic = self._discovered_device.get(CONF_BASE_TOPIC, DEFAULT_BASE_TOPIC)
 
-        vehicles = get_vehicles()
+        vehicles = await async_get_vehicles(self.hass)
         vehicle_map = {vid: label for vid, label in vehicles}
         if DEFAULT_VEHICLE_ID not in vehicle_map and vehicles:
             default_vid = vehicles[0][0]
@@ -163,7 +163,7 @@ class CanDoOptionsFlow(config_entries.OptionsFlow):
         self, user_input: Optional[Dict[str, Any]] = None
     ) -> FlowResult:
         """Manage the options."""
-        vehicles = get_vehicles()
+        vehicles = await async_get_vehicles(self.hass)
         vehicle_map = {vid: label for vid, label in vehicles}
 
         if user_input is not None:

@@ -8,7 +8,13 @@ from homeassistant.components import mqtt
 from homeassistant.core import HomeAssistant, callback
 
 from .catalog_loader import get_monitored_can_ids, get_vehicle_commands
-from .const import CONF_BASE_TOPIC, CONF_DEVICE_ID, CONF_VEHICLE_ID, DEFAULT_BASE_TOPIC
+from .const import (
+    CONF_BASE_TOPIC,
+    CONF_DEVICE_ID,
+    CONF_VEHICLE_ID,
+    DEFAULT_BASE_TOPIC,
+    DEFAULT_VEHICLE_ID,
+)
 
 _LOGGER = logging.getLogger(__name__)
 

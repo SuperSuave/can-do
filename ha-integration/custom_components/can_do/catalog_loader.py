@@ -43,6 +43,14 @@ def load_catalog() -> Dict[str, Any]:
     return _CATALOG_DATA
 
 
+async def async_load_catalog(hass: Any) -> Dict[str, Any]:
+    """Load catalog asynchronously via executor to avoid blocking the event loop."""
+    global _CATALOG_DATA
+    if _CATALOG_DATA is not None:
+        return _CATALOG_DATA
+    return await hass.async_add_executor_job(load_catalog)
+
+
 def get_vehicles() -> List[Tuple[str, str]]:
     """Return list of (vehicle_id, display_name)."""
     catalog = load_catalog()
@@ -57,6 +65,12 @@ def get_vehicles() -> List[Tuple[str, str]]:
         label = f"{make} {model} {trim}{reg_str}".strip()
         vehicles.append((vid, label))
     return vehicles
+
+
+async def async_get_vehicles(hass: Any) -> List[Tuple[str, str]]:
+    """Return list of (vehicle_id, display_name) asynchronously via executor."""
+    await async_load_catalog(hass)
+    return get_vehicles()
 
 
 def get_vehicle_definition(vehicle_id: str) -> Optional[Dict[str, Any]]:
