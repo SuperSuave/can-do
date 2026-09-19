@@ -145,7 +145,36 @@ export default function App() {
   const [automationRules, setAutomationRules] = useState<AutomationRule[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_AUTOMATIONS_RULES);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((rule: AutomationRule) => ({
+            ...rule,
+            triggers: (rule.triggers || []).map(trig => {
+              if (trig.id === 'trig_menu_ok' || (!trig.source_command_id && trig.can_id === '0x448')) {
+                return {
+                  ...trig,
+                  source_command_id: trig.source_command_id || 'sw_menu',
+                  source_command_name: trig.source_command_name || 'Menu / OK Button',
+                  option_label: trig.option_label || 'Menu OK / Press'
+                };
+              }
+              return trig;
+            }),
+            actions: (rule.actions || []).map(act => {
+              if (act.id === 'act_cool_driver_seat' || act.entity_id === 'drivers_seat_comfort') {
+                return {
+                  ...act,
+                  source_command_id: act.source_command_id || 'drivers_seat_comfort',
+                  source_command_name: act.source_command_name || 'Driver Seat Comfort',
+                  option_label: act.option_label || act.command || 'Medium Cool'
+                };
+              }
+              return act;
+            })
+          }));
+        }
+      }
     } catch (e) {
       console.error('Failed to load automation rules from storage', e);
     }
@@ -915,7 +944,7 @@ export default function App() {
                 }`}
               >
                 <Zap className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'automations' ? 'text-amber-400' : 'text-slate-500'}`} />
-                <span>Automation Builder</span>
+                <span>Automations</span>
                 <span
                   className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono transition-colors ${
                     activeMainTab === 'automations'
@@ -1105,8 +1134,56 @@ export default function App() {
         ) : (
           /* Device Console Tab */
           <DeviceDashboard
+            catalog={catalog}
+            automationRules={automationRules}
             onSyncAutomationsToDevice={handleSyncAutomationsToDevice}
             onPullAutomationsFromDevice={handlePullAutomationsFromDevice}
+            onNavigateToCatalog={(searchQuery) => {
+              if (searchQuery) setSearch(searchQuery);
+              setActiveMainTab('catalog');
+            }}
+            onNavigateToAutomations={() => setActiveMainTab('automations')}
+            onCreateCommandFromCanId={(canId, sampleData) => {
+              setEditingCommand({
+                id: `cmd_${canId.toLowerCase().replace(/^0x/, '')}_${Date.now().toString(36).slice(-4)}`,
+                name: `CAN Message ${canId}`,
+                category: 'telemetry',
+                subcategory: 'general',
+                can_id: canId,
+                state_can_id: canId,
+                bus: 0,
+                roles: ['trigger'],
+                match_payload: sampleData || '00 00 00 00 00 00 00 00',
+                from_payload: sampleData || '00 00 00 00 00 00 00 00',
+                notes: `Captured from live TWAI CAN bus`
+              });
+              setIsEditorOpen(true);
+            }}
+            onCreateAutomationFromFrame={(canId, sampleData) => {
+              const newRule: AutomationRule = {
+                id: `rule_can_${canId.toLowerCase().replace(/^0x/, '')}_${Date.now()}`,
+                name: `React to CAN ${canId}`,
+                enabled: true,
+                ha_expose: true,
+                ha_icon: 'mdi:car-cog',
+                exec_mode: 'one_shot',
+                trigger_mode: 'any',
+                cooldown_ms: 500,
+                timeout_reset_ms: 0,
+                triggers: [{
+                  id: `trig_${Date.now()}`,
+                  source: 'can',
+                  bus: 0,
+                  can_id: canId,
+                  match_payload: sampleData || '00 00 00 00 00 00 00 00',
+                  click_count: 1
+                }],
+                conditions: [],
+                actions: []
+              };
+              setAutomationRules(prev => [newRule, ...prev]);
+              setActiveMainTab('automations');
+            }}
           />
         )}
       </main>

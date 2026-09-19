@@ -20,12 +20,18 @@ export const DEFAULT_AUTOMATION_RULES: AutomationRule[] = [
         id: 'trig_menu_ok',
         source: 'can',
         type: 'byte_transition',
+        source_command_id: 'sw_menu',
+        source_command_name: 'Menu / OK Button',
+        option_label: 'Menu OK / Press',
         can_id: '0x448',
         bus: 0,
         byte: 'D7',
+        byte_index: 6,
         mask: '0xF0',
         from: '0x00',
-        to: '0x10'
+        to: '0x10',
+        match: { D7: '0x10' },
+        to_payload: { D7: '0x10' }
       }
     ],
     conditions: [],
@@ -34,7 +40,10 @@ export const DEFAULT_AUTOMATION_RULES: AutomationRule[] = [
         id: 'act_cool_driver_seat',
         type: 'entity_command',
         entity_id: 'drivers_seat_comfort',
-        command: 'Medium Cool'
+        source_command_id: 'drivers_seat_comfort',
+        source_command_name: 'Driver Seat Comfort',
+        command: 'Medium Cool',
+        option_label: 'Medium Cool'
       }
     ]
   }

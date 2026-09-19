@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   AutomationTrigger,
   AutomationCondition,
@@ -61,6 +61,32 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'blocks' | 'catalog'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    // Trigger entrance animation immediately after mount
+    const raf = requestAnimationFrame(() => {
+      setIsOpen(true);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const handleClose = () => {
+    setIsOpen(false);
+    setTimeout(() => {
+      onClose();
+    }, 200);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const categories = useMemo(() => {
     return Array.from(new Set(catalog.commands.map(c => c.category))).filter(Boolean);
@@ -81,13 +107,14 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           create: (): AutomationTrigger => ({
             id: `trig_${Date.now().toString(36)}`,
             source: 'can',
-            can_id: '0x448',
+            can_id: '',
             bus: 0,
             click_count: 1,
-            byte_index: 6,
-            from_value: 0,
-            to_value: 1,
-            match: { D7: '0x0' }
+            byte: '',
+            mask: '',
+            from: '',
+            to: '',
+            match: {}
           })
         },
         {
@@ -100,8 +127,8 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
             id: `trig_time_${Date.now().toString(36)}`,
             source: 'time',
             type: 'time_schedule',
-            time: '07:30',
-            days: ['mon', 'tue', 'wed', 'thu', 'fri']
+            time: '',
+            days: []
           })
         }
       ];
@@ -118,7 +145,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           create: (): AutomationCondition => ({
             id: `cond_trig_${Date.now().toString(36)}`,
             type: 'triggered_by',
-            trigger_id: availableTriggers[0]?.id || ''
+            trigger_id: ''
           })
         },
         {
@@ -130,12 +157,12 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           create: (): AutomationCondition => ({
             id: `cond_${Date.now().toString(36)}`,
             logic: 'leaf',
-            can_id: '0x120',
+            can_id: '',
             bus: 0,
-            byte: 'D1',
-            mask: '0xFF',
+            byte: '',
+            mask: '',
             operator: 'equal',
-            value: '0x01'
+            value: ''
           })
         },
         {
@@ -147,9 +174,9 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           create: (): AutomationCondition => ({
             id: `cond_time_${Date.now().toString(36)}`,
             type: 'time_condition',
-            start_time: '08:00',
-            end_time: '18:00',
-            days: ['mon', 'tue', 'wed', 'thu', 'fri']
+            start_time: '',
+            end_time: '',
+            days: []
           })
         },
         {
@@ -161,9 +188,9 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           create: (): AutomationCondition => ({
             id: `cond_param_${Date.now().toString(36)}`,
             type: 'param_range',
-            can_id: '0x100',
-            operator: 'greater',
-            value: '50'
+            can_id: '',
+            operator: 'equal',
+            value: ''
           })
         },
         {
@@ -176,7 +203,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
             id: `cond_volt_${Date.now().toString(36)}`,
             type: 'voltage',
             voltage_dir: 'above',
-            voltage_val: '12.6'
+            voltage_val: ''
           })
         },
         {
@@ -243,23 +270,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         create: (): AutomationAction => ({
           id: `act_choose_${Date.now().toString(36)}`,
           type: 'choose',
-          choices: [
-            {
-              conditions: [
-                {
-                  id: `cond_${Date.now().toString(36)}`,
-                  logic: 'leaf',
-                  can_id: '0x120',
-                  bus: 0,
-                  byte: 'D1',
-                  mask: '0xFF',
-                  operator: 'equal',
-                  value: '0x01'
-                }
-              ],
-              sequence: []
-            }
-          ],
+          choices: [],
           default: []
         })
       },
@@ -285,9 +296,9 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         create: (): AutomationAction => ({
           id: `act_can_${Date.now().toString(36)}`,
           type: 'can_tx',
-          can_id: '0x120',
+          can_id: '',
           bus: 0,
-          payload: '01 00 00 00 00 00 00 00',
+          payload: '',
           repeat: 1,
           delay_ms: 0
         })
@@ -301,7 +312,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         create: (): AutomationAction => ({
           id: `act_delay_${Date.now().toString(36)}`,
           type: 'delay',
-          delay_ms: 500
+          delay_ms: 0
         })
       },
       {
@@ -314,7 +325,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           id: `act_pop_${Date.now().toString(36)}`,
           type: 'track_popup',
           level: 'info',
-          text: 'Alert Message'
+          text: ''
         })
       },
       {
@@ -326,7 +337,6 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         create: (): AutomationAction => ({
           id: `act_clim_${Date.now().toString(36)}`,
           type: 'climate_target',
-          target_c: 21.0,
           zone: 'driver',
           sync_on: true
         })
@@ -375,7 +385,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
 
   const handleSelectBlock = (block: BuildingBlockDef) => {
     target.onAdd(block.create());
-    onClose();
+    handleClose();
   };
 
   const handleSelectCatalogItem = (cmd: Command, opt?: CommandOption) => {
@@ -386,7 +396,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
     } else {
       target.onAdd(commandToAction(cmd, opt));
     }
-    onClose();
+    handleClose();
   };
 
   const typeConfig = {
@@ -414,8 +424,18 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
   }[target.type];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
-      <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]">
+    <div
+      onClick={handleClose}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm transition-opacity duration-200 ease-out ${
+        isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      }`}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        className={`w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh] transition-all duration-200 ease-out transform ${
+          isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-3'
+        }`}
+      >
         {/* Header */}
         <div className="p-4 border-b border-slate-800 flex items-center justify-between gap-3 bg-slate-900/90">
           <div className="flex items-center gap-2.5">
@@ -433,7 +453,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition"
           >
             <X className="w-4 h-4" />

@@ -74,7 +74,7 @@ export function compileCondition(cond: AutomationCondition): any {
     };
   }
 
-  const match = compileToByteMap(cond.match || (cond.evaluate as any)?.match || (cond as any).payload);
+  const match = compileToByteMap(cond.match || (cond as any).evaluate?.match || (cond as any).payload || cond.match_payload);
   const dKey = cond.byte || cond.evaluate?.byte || Object.keys(match)[0] || 'D1';
   const targetVal = cond.value || cond.evaluate?.value || match[dKey] || '0x01';
   const maskVal = cond.mask || cond.evaluate?.mask || '0xFF';
@@ -130,7 +130,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
   }
 
   if (act.type === 'climate_target') {
-    const isPass = act.zone === 'passenger' || (act.zone as string) === 'pass';
+    const isPass = act.zone === 'passenger';
     const tempC = act.target_temp_c ?? act.target_c ?? 21.0;
     const clamped = Math.max(17.0, Math.min(27.5, tempC));
     const rawVal = Math.min(0x1A, Math.max(0x06, 0x06 + Math.round((clamped - 17.0) * 2.0)));
@@ -160,7 +160,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
 
     if (cmd) {
       if (cmd.type === 'climate_target') {
-        const isPass = act.zone === 'passenger' || (act.zone as string) === 'pass';
+        const isPass = act.zone === 'passenger';
         const tempC = act.target_temp_c ?? (cmd as any).target_temp_c ?? 21.0;
         const clamped = Math.max(17.0, Math.min(27.5, tempC));
         const rawVal = Math.min(0x1A, Math.max(0x06, 0x06 + Math.round((clamped - 17.0) * 2.0)));
@@ -274,17 +274,17 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
 
     return {
       type: 'entity_command',
-      entity_id: entityId || 'drivers_seat_comfort',
-      command: commandLabel || 'Medium Cool'
+      entity_id: entityId || '',
+      command: commandLabel || ''
     };
   }
 
   const payload = compileToByteMap(act.payload || act.to_payload);
   return {
     type: 'transmit',
-    can_id: act.can_id || '0x000',
+    can_id: act.can_id || '',
     bus: act.bus ?? 0,
-    payload: Object.keys(payload).length > 0 ? payload : { D1: '0x01' },
+    payload: Object.keys(payload).length > 0 ? payload : {},
     repeat: act.repeat || 1
   };
 }
@@ -339,12 +339,12 @@ export function compileAutomationRule(
 
       return {
         type: 'byte_transition',
-        can_id: trig.can_id || '0x448',
+        can_id: trig.can_id || '',
         bus: trig.bus ?? 0,
-        byte: targetByte,
-        mask: maskHex,
-        from: fromHex,
-        to: toHex
+        byte: targetByte || '',
+        mask: maskHex || '',
+        from: fromHex || '',
+        to: toHex || ''
       };
     }),
     conditions: (rule.conditions || []).map(compileCondition),
@@ -575,5 +575,232 @@ export function commandToAction(cmd: Command, opt?: CommandOption): AutomationAc
     delay_ms: 50,
     source_command_id: cmd.id,
     source_command_name: cmdDisplayName
+  };
+}
+
+/**
+ * Resolves the catalog command and matched option for a trigger.
+ * Handles explicit source_command_id, name patterns (e.g. trig_menu_ok -> sw_menu),
+ * and reverse lookup by CAN ID & Byte/Mask match.
+ */
+export function resolveCatalogCommandForTrigger(
+  trig: AutomationTrigger,
+  catalog: Catalog
+): { command?: Command; matchedOption?: CommandOption } {
+  if (!catalog?.commands) return {};
+
+  // 1. Direct ID match
+  if (trig.source_command_id) {
+    const cmd = catalog.commands.find(c => c.id === trig.source_command_id);
+    if (cmd) {
+      const opt = findMatchingOptionForTrigger(cmd, trig);
+      return { command: cmd, matchedOption: opt };
+    }
+  }
+
+  // 2. ID name hint match (e.g. trig_menu_ok -> sw_menu)
+  if (trig.id) {
+    const lowerId = trig.id.toLowerCase();
+    if (lowerId.includes('menu') || lowerId.includes('ok')) {
+      const swMenu = catalog.commands.find(c => c.id === 'sw_menu');
+      if (swMenu) {
+        const opt = findMatchingOptionForTrigger(swMenu, trig);
+        return { command: swMenu, matchedOption: opt };
+      }
+    }
+  }
+
+  // 3. Match by CAN ID
+  if (trig.can_id) {
+    const normCanId = trig.can_id.toLowerCase();
+    const candidateCmds = catalog.commands.filter(c => {
+      const stateId = (c.network?.state_can_id || c.state_can_id || '').toLowerCase();
+      const actionId = (c.network?.action_can_id || c.action_can_id || '').toLowerCase();
+      return stateId === normCanId || actionId === normCanId;
+    });
+
+    if (candidateCmds.length === 1) {
+      const cmd = candidateCmds[0];
+      const opt = findMatchingOptionForTrigger(cmd, trig);
+      return { command: cmd, matchedOption: opt };
+    }
+
+    if (candidateCmds.length > 1) {
+      // Find candidate whose options match byte/value
+      for (const cmd of candidateCmds) {
+        const opt = findMatchingOptionForTrigger(cmd, trig);
+        if (opt) {
+          return { command: cmd, matchedOption: opt };
+        }
+      }
+      // Check command-level match
+      for (const cmd of candidateCmds) {
+        if (cmd.match && trig.byte && cmd.match[trig.byte]) {
+          return { command: cmd, matchedOption: cmd.options?.[0] };
+        }
+      }
+      return { command: candidateCmds[0], matchedOption: candidateCmds[0].options?.[0] };
+    }
+  }
+
+  return {};
+}
+
+function findMatchingOptionForTrigger(cmd: Command, trig: AutomationTrigger): CommandOption | undefined {
+  if (!cmd.options || cmd.options.length === 0) return undefined;
+  if (trig.option_label) {
+    const byLabel = cmd.options.find(o => o.label.toLowerCase() === trig.option_label?.toLowerCase());
+    if (byLabel) return byLabel;
+  }
+  const byteKey = trig.byte || (trig.byte_index !== undefined ? `D${trig.byte_index + 1}` : undefined);
+  const trigValHex = trig.to
+    ? (trig.to.startsWith('0x') ? trig.to : `0x${trig.to}`).toLowerCase()
+    : trig.to_value !== undefined
+    ? `0x${trig.to_value.toString(16).padStart(2, '0')}`.toLowerCase()
+    : undefined;
+
+  for (const opt of cmd.options) {
+    if (opt.match && byteKey && opt.match[byteKey]) {
+      const optVal = (opt.match[byteKey].startsWith('0x') ? opt.match[byteKey] : `0x${opt.match[byteKey]}`).toLowerCase();
+      if (trigValHex && optVal === trigValHex) return opt;
+    }
+  }
+  if (trig.match && typeof trig.match === 'object') {
+    for (const opt of cmd.options) {
+      if (opt.match && typeof opt.match === 'object') {
+        const matchKeys = Object.keys(trig.match);
+        if (matchKeys.length > 0 && matchKeys.every(k => opt.match?.[k] === trig.match?.[k])) {
+          return opt;
+        }
+      }
+    }
+  }
+  return cmd.options.find(o => o.default) || cmd.options[0];
+}
+
+/**
+ * Resolves the catalog command and matched option for an action.
+ */
+export function resolveCatalogCommandForAction(
+  act: AutomationAction,
+  catalog: Catalog
+): { command?: Command; matchedOption?: CommandOption } {
+  if (!catalog?.commands) return {};
+
+  const targetId = act.source_command_id || act.entity_id;
+  if (targetId) {
+    const cmd = catalog.commands.find(c => c.id === targetId);
+    if (cmd) {
+      const opt = findMatchingOptionForAction(cmd, act);
+      return { command: cmd, matchedOption: opt };
+    }
+  }
+
+  if (act.can_id) {
+    const normCanId = act.can_id.toLowerCase();
+    const candidateCmds = catalog.commands.filter(c => {
+      const actionId = (c.network?.action_can_id || c.action_can_id || '').toLowerCase();
+      const stateId = (c.network?.state_can_id || c.state_can_id || '').toLowerCase();
+      return actionId === normCanId || stateId === normCanId;
+    });
+
+    if (candidateCmds.length === 1) {
+      const cmd = candidateCmds[0];
+      const opt = findMatchingOptionForAction(cmd, act);
+      return { command: cmd, matchedOption: opt };
+    }
+
+    if (candidateCmds.length > 1) {
+      for (const cmd of candidateCmds) {
+        const opt = findMatchingOptionForAction(cmd, act);
+        if (opt) return { command: cmd, matchedOption: opt };
+      }
+      return { command: candidateCmds[0], matchedOption: candidateCmds[0].options?.[0] };
+    }
+  }
+
+  return {};
+}
+
+function findMatchingOptionForAction(cmd: Command, act: AutomationAction): CommandOption | undefined {
+  if (!cmd.options || cmd.options.length === 0) return undefined;
+  const labelToMatch = act.option_label || act.command;
+  if (labelToMatch) {
+    const byLabel = cmd.options.find(o => o.label.toLowerCase() === labelToMatch.toLowerCase());
+    if (byLabel) return byLabel;
+  }
+  return cmd.options.find(o => o.default) || cmd.options[0];
+}
+
+/**
+ * Apply a selected catalog option to a trigger
+ */
+export function applyOptionToTrigger(trig: AutomationTrigger, cmd: Command, opt: CommandOption): AutomationTrigger {
+  const cleanMatch = compileToByteMap(opt.match || opt.payload || cmd.match || cmd.payload);
+  const dKey = Object.keys(cleanMatch)[0] || 'D7';
+  const targetTo = cleanMatch[dKey] || '0x10';
+  const byteNum = parseInt(dKey.replace(/\D/g, ''), 10);
+  const byteIdx = isNaN(byteNum) ? 6 : byteNum - 1;
+
+  const rawMask = opt.mask || cmd.mask;
+  let targetMask = '0xFF';
+  if (typeof rawMask === 'string') {
+    targetMask = rawMask;
+  } else if (rawMask && typeof rawMask === 'object') {
+    targetMask = (rawMask as ByteMap)[dKey] || '0xFF';
+  }
+
+  const toVal = parseInt(targetTo.replace('0x', ''), 16);
+  const friendlyName = cmd.id === 'sw_menu' ? 'Menu / OK Button' : (cmd.ha_metadata?.name || cmd.name || cmd.id);
+
+  return {
+    ...trig,
+    source_command_id: cmd.id,
+    source_command_name: friendlyName,
+    option_label: opt.label,
+    can_id: cmd.network?.state_can_id || cmd.state_can_id || trig.can_id || '0x448',
+    bus: cmd.network?.bus ?? cmd.bus ?? trig.bus ?? 0,
+    byte: dKey,
+    byte_index: byteIdx,
+    mask: targetMask,
+    to: targetTo,
+    to_value: isNaN(toVal) ? undefined : toVal,
+    match: cleanMatch,
+    to_payload: cleanMatch
+  };
+}
+
+/**
+ * Apply a selected catalog option to an action
+ */
+export function applyOptionToAction(act: AutomationAction, cmd: Command, opt: CommandOption): AutomationAction {
+  const canId = cmd.network?.action_can_id || cmd.action_can_id || cmd.network?.state_can_id || cmd.state_can_id || act.can_id || '0x000';
+  const cmdDisplayName = cmd.ha_metadata?.name || cmd.name || cmd.id;
+
+  if (act.type === 'entity_command' || (cmd.options && cmd.options.length > 0)) {
+    return {
+      ...act,
+      source_command_id: cmd.id,
+      source_command_name: cmdDisplayName,
+      entity_id: cmd.id,
+      command: opt.label,
+      option_label: opt.label,
+      can_id: canId,
+      bus: cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? act.bus ?? 0,
+      popup_message: opt.popup || `${cmdDisplayName} - ${opt.label}`
+    };
+  }
+
+  const payload = compileToByteMap(opt.payload || cmd.payload || (opt.steps && opt.steps[0]?.payload));
+  return {
+    ...act,
+    source_command_id: cmd.id,
+    source_command_name: cmdDisplayName,
+    command: opt.label,
+    option_label: opt.label,
+    can_id: canId,
+    bus: cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? act.bus ?? 0,
+    payload: Object.keys(payload).length > 0 ? payload : act.payload,
+    popup_message: opt.popup || act.popup_message
   };
 }

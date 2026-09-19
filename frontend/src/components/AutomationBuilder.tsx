@@ -1,12 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   AutomationRule,
   AutomationSettings,
   AutomationTrigger,
   AutomationCondition,
-  AutomationAction,
-  ExecutionMode,
-  TriggerCombineMode
+  AutomationAction
 } from '../types/automation';
 import { Catalog, Command, CommandOption } from '../types/catalog';
 import {
@@ -16,9 +14,12 @@ import {
   commandToTrigger,
   commandToCondition,
   commandToAction,
-  compileToByteMap
+  compileToByteMap,
+  resolveCatalogCommandForTrigger,
+  resolveCatalogCommandForAction,
+  applyOptionToTrigger,
+  applyOptionToAction
 } from '../utils/automationConverters';
-import { MdiIcon, SUGGESTED_MDI_ICONS } from './MdiIcon';
 import {
   Zap,
   Shield,
@@ -27,6 +28,7 @@ import {
   Trash2,
   Copy,
   Check,
+  CheckSquare,
   Download,
   Upload,
   Play,
@@ -34,14 +36,12 @@ import {
   Sliders,
   Sparkles,
   Layers,
-  ArrowRight,
   ChevronDown,
   ChevronUp,
   Search,
   ExternalLink,
   Code,
   FileJson,
-  Cpu,
   RefreshCcw,
   RefreshCw,
   Eye,
@@ -353,9 +353,11 @@ function ConditionNodeEditor({
             <div className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-cyan-400" />
               <span className="font-semibold text-white">Time Window Guardrail</span>
-              <span className="px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 text-[10px] border border-cyan-800/60">
-                {cond.start_time || '08:00'} - {cond.end_time || '18:00'}
-              </span>
+              {(cond.start_time || cond.end_time) && (
+                <span className="px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 text-[10px] border border-cyan-800/60 font-mono">
+                  {cond.start_time || '--:--'} - {cond.end_time || '--:--'}
+                </span>
+              )}
             </div>
           </div>
           <button
@@ -373,7 +375,7 @@ function ConditionNodeEditor({
             <label className="block text-[10px] font-sans text-slate-400 mb-1">Start Time (24h)</label>
             <input
               type="time"
-              value={cond.start_time || '08:00'}
+              value={cond.start_time || ''}
               onChange={e => onUpdate({ ...cond, start_time: e.target.value })}
               className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
             />
@@ -382,7 +384,7 @@ function ConditionNodeEditor({
             <label className="block text-[10px] font-sans text-slate-400 mb-1">End Time (24h)</label>
             <input
               type="time"
-              value={cond.end_time || '18:00'}
+              value={cond.end_time || ''}
               onChange={e => onUpdate({ ...cond, end_time: e.target.value })}
               className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
             />
@@ -398,10 +400,10 @@ function ConditionNodeEditor({
   }
 
   // Leaf CAN condition
-  const dKey = cond.byte || cond.evaluate?.byte || (cond.match ? Object.keys(cond.match)[0] : 'D1') || 'D1';
-  const maskVal = cond.mask || cond.evaluate?.mask || '0xFF';
+  const dKey = cond.byte ?? cond.evaluate?.byte ?? (cond.match && Object.keys(cond.match).length > 0 ? Object.keys(cond.match)[0] : '') ?? '';
+  const maskVal = cond.mask ?? cond.evaluate?.mask ?? '';
   const opVal = cond.operator || cond.evaluate?.operator || (cond.invert ? 'not_equal' : 'equal');
-  const targetVal = cond.value || cond.evaluate?.value || (cond.match ? cond.match[dKey] : '0x01') || '0x01';
+  const targetVal = cond.value ?? cond.evaluate?.value ?? (cond.match && dKey ? cond.match[dKey] : '') ?? '';
 
   return (
     <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/90 space-y-2 text-xs">
@@ -421,7 +423,7 @@ function ConditionNodeEditor({
             </div>
           ) : (
             <span className="font-semibold text-slate-300 font-mono">
-              CAN {cond.can_id || '0x000'} Bus {cond.bus ?? 0}
+              CAN {cond.can_id || 'unassigned'} Bus {cond.bus ?? 0}
             </span>
           )}
         </div>
@@ -532,12 +534,12 @@ function ConditionListEditor({
     next.push({
       id: `cond_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
       logic: 'leaf',
-      can_id: '0x120',
+      can_id: '',
       bus: 0,
-      byte: 'D1',
-      mask: '0xFF',
+      byte: '',
+      mask: '',
       operator: 'equal',
-      value: '0x01'
+      value: ''
     });
     onUpdate(next);
   };
@@ -598,12 +600,455 @@ function ConditionListEditor({
   );
 }
 
+interface OptionGridGroup {
+  key?: string;
+  items: {
+    opt: CommandOption;
+    origIndex: number;
+  }[];
+}
+
+/**
+ * Groups command options into rows/grids based on common words (e.g. "Heat", "Cool", "Vent", "Front", "Rear").
+ * Ensures groups like Low Heat, Medium Heat, High Heat are displayed horizontally in a single row.
+ */
+function groupOptionsIntoGridRows(options?: CommandOption[]): OptionGridGroup[] {
+  if (!options || options.length === 0) return [];
+  if (options.length <= 1) {
+    return [{ items: options.map((opt, origIndex) => ({ opt, origIndex })) }];
+  }
+
+  // Parse labels into words and components
+  const parsed = options.map((opt, origIndex) => {
+    const rawLabel = opt.label || '';
+    // Strip parenthesized text for classification e.g. "Released (Idle)" -> "Released"
+    const cleaned = rawLabel.replace(/\([^)]*\)/g, '').trim();
+    const words = cleaned.split(/[\s\-_/]+/).filter(Boolean);
+    const firstWord = words.length > 0 ? words[0].toLowerCase() : '';
+    const lastWord = words.length > 1 ? words[words.length - 1].toLowerCase() : '';
+    return {
+      opt,
+      origIndex,
+      words,
+      firstWord,
+      lastWord,
+      isSingleWord: words.length <= 1
+    };
+  });
+
+  // Count suffix frequencies (e.g., "Heat", "Cool", "Vent", "Click", "Press", "Speed")
+  const suffixCounts = new Map<string, number>();
+  parsed.forEach(p => {
+    if (p.lastWord) {
+      suffixCounts.set(p.lastWord, (suffixCounts.get(p.lastWord) || 0) + 1);
+    }
+  });
+
+  // Count prefix frequencies (e.g., "Front", "Rear", "Driver", "Passenger", "Stage", "Level")
+  const prefixCounts = new Map<string, number>();
+  parsed.forEach(p => {
+    if (p.firstWord && !p.isSingleWord) {
+      prefixCounts.set(p.firstWord, (prefixCounts.get(p.firstWord) || 0) + 1);
+    }
+  });
+
+  let maxSuffixCount = 0;
+  for (const count of suffixCounts.values()) {
+    if (count > maxSuffixCount) maxSuffixCount = count;
+  }
+
+  let maxPrefixCount = 0;
+  for (const count of prefixCounts.values()) {
+    if (count > maxPrefixCount) maxPrefixCount = count;
+  }
+
+  // Suffix is preferred if at least 2 items and >= prefix count (e.g. Low Heat, Med Heat, High Heat)
+  const useSuffix = maxSuffixCount >= 2 && maxSuffixCount >= maxPrefixCount;
+  const usePrefix = !useSuffix && maxPrefixCount >= 2;
+
+  if (useSuffix || usePrefix) {
+    const keyMap = new Map<string, { opt: CommandOption; origIndex: number }[]>();
+    const ungrouped: { opt: CommandOption; origIndex: number }[] = [];
+
+    parsed.forEach(p => {
+      const k = useSuffix ? p.lastWord : p.firstWord;
+      const count = useSuffix ? (suffixCounts.get(p.lastWord) || 0) : (prefixCounts.get(p.firstWord) || 0);
+
+      if (k && count >= 2) {
+        if (!keyMap.has(k)) {
+          keyMap.set(k, []);
+        }
+        keyMap.get(k)!.push({ opt: p.opt, origIndex: p.origIndex });
+      } else {
+        ungrouped.push({ opt: p.opt, origIndex: p.origIndex });
+      }
+    });
+
+    const isOffLike = (lbl: string) => /^(off|none|idle|auto|normal|cancel|stop|released)/i.test(lbl.trim());
+    const offLike = ungrouped.filter(u => isOffLike(u.opt.label || ''));
+    const nonOffUngrouped = ungrouped.filter(u => !isOffLike(u.opt.label || ''));
+
+    const result: OptionGridGroup[] = [];
+
+    // Off/Neutral options in row 1
+    if (offLike.length > 0) {
+      result.push({ key: 'off', items: offLike });
+    }
+
+    // Matched groups (e.g. Low Heat, Medium Heat, High Heat)
+    for (const [key, items] of keyMap.entries()) {
+      result.push({ key, items });
+    }
+
+    // Any remaining items
+    if (nonOffUngrouped.length > 0) {
+      result.push({ items: nonOffUngrouped });
+    }
+
+    if (result.length > 0) {
+      return result;
+    }
+  }
+
+  // If between 2 and 4 options total, display in a single row
+  if (options.length <= 4) {
+    return [{ items: options.map((opt, origIndex) => ({ opt, origIndex })) }];
+  }
+
+  // Fallback for > 4 items: chunk into rows of 3 or 4
+  const chunked: OptionGridGroup[] = [];
+  const chunkSize = options.length === 6 ? 3 : options.length <= 8 ? 4 : 3;
+  for (let i = 0; i < options.length; i += chunkSize) {
+    chunked.push({
+      items: options.slice(i, i + chunkSize).map((opt, idx) => ({ opt, origIndex: i + idx }))
+    });
+  }
+  return chunked;
+}
+
+interface TriggerNodeEditorProps {
+  trig: AutomationTrigger;
+  tIdx: number;
+  catalog?: Catalog;
+  onUpdate: (updated: AutomationTrigger) => void;
+  onDelete: () => void;
+}
+
+function TriggerNodeEditor({
+  trig,
+  tIdx,
+  catalog,
+  onUpdate,
+  onDelete,
+}: TriggerNodeEditorProps) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Time-based schedule trigger
+  if (trig.type === 'time_schedule' || trig.source === 'time') {
+    return (
+      <div
+        key={trig.id || tIdx}
+        className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 space-y-2.5 text-xs"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded-full bg-cyan-950 text-cyan-300 font-bold text-[10px] flex items-center justify-center border border-cyan-800 shrink-0">
+              T{tIdx + 1}
+            </span>
+            <div className="flex items-center gap-1.5 font-mono text-[11px]">
+              <span className="text-[10px] text-slate-500 font-sans">ID:</span>
+              <input
+                type="text"
+                value={trig.id || ''}
+                onChange={e => onUpdate({ ...trig, id: e.target.value })}
+                placeholder={`trig_${tIdx + 1}`}
+                className="bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 text-cyan-300 text-[11px] font-mono focus:outline-none focus:border-cyan-500 w-24"
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="font-semibold text-white">Time Schedule</span>
+              {trig.time && (
+                <span className="px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 text-[10px] border border-cyan-800/60 font-mono">
+                  {trig.time}
+                </span>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-sans text-slate-400 mb-1">Target Time (24h)</label>
+          <input
+            type="time"
+            value={trig.time || ''}
+            onChange={e => onUpdate({ ...trig, time: e.target.value })}
+            className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
+          />
+        </div>
+
+        <DayOfWeekPicker
+          selectedDays={trig.days}
+          onChange={days => onUpdate({ ...trig, days })}
+        />
+      </div>
+    );
+  }
+
+  // CAN Trigger: Dual-View with Catalog recognition
+  const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForTrigger(trig, catalog) : {};
+  const hasOptions = !!(catalogCmd?.options && catalogCmd.options.length > 0);
+  const triggerName =
+    catalogCmd?.ha_metadata?.name ||
+    catalogCmd?.name ||
+    trig.source_command_name ||
+    (trig.can_id ? `CAN Trigger ${trig.can_id}` : `Trigger ${tIdx + 1}`);
+
+  return (
+    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 hover:border-slate-700/80 space-y-2.5 text-xs transition-all shadow-sm">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="w-5 h-5 rounded-full bg-amber-950 text-amber-300 font-bold text-[10px] flex items-center justify-center border border-amber-800 shrink-0">
+            T{tIdx + 1}
+          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-white text-sm tracking-tight">{triggerName}</span>
+            {catalogCmd?.category && (
+              <span className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 text-[10px] border border-slate-800">
+                {catalogCmd.category}
+              </span>
+            )}
+            <span className="px-1.5 py-0.5 rounded bg-amber-950/60 text-amber-300/90 text-[10px] font-mono border border-amber-800/50">
+              {trig.can_id ? `CAN ${trig.can_id}` : 'CAN'} • Bus {trig.bus ?? 0}
+            </span>
+            {trig.click_count && trig.click_count > 1 && (
+              <span className="px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-200 text-[10px] border border-amber-700/60 font-medium">
+                {trig.click_count === 2 ? 'Double Click' : 'Triple Click'}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          {hasOptions && (
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
+                showAdvanced
+                  ? 'bg-amber-950/60 text-amber-300 border-amber-800/80 shadow'
+                  : 'bg-slate-900 text-slate-300 hover:text-white border-slate-800 hover:bg-slate-850'
+              }`}
+              title="Toggle configuration details"
+            >
+              <Sliders className="w-3.5 h-3.5 text-amber-400" />
+              <span>{showAdvanced ? 'Simple View' : 'Edit Details'}</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onDelete}
+            className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition"
+            title="Delete trigger"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Option Selector Big Pills in Smart Grid Rows */}
+      {hasOptions && (
+        <div className="space-y-1.5 pt-0.5">
+          {groupOptionsIntoGridRows(catalogCmd.options).map((group, gIdx) => {
+            const itemCount = group.items.length;
+            const gridClass =
+              itemCount === 1
+                ? 'flex'
+                : itemCount === 2
+                ? 'grid grid-cols-2 gap-1.5'
+                : itemCount === 3
+                ? 'grid grid-cols-3 gap-1.5'
+                : itemCount === 4
+                ? 'grid grid-cols-4 gap-1.5'
+                : 'grid grid-cols-2 sm:grid-cols-3 gap-1.5';
+
+            return (
+              <div key={group.key || gIdx} className={gridClass}>
+                {group.items.map(({ opt, origIndex }) => {
+                  const isSelected =
+                    (trig.option_label && opt.label.toLowerCase() === trig.option_label.toLowerCase()) ||
+                    (matchedOption && opt.label.toLowerCase() === matchedOption.label.toLowerCase()) ||
+                    (!trig.option_label && !matchedOption && origIndex === 0);
+
+                  return (
+                    <button
+                      key={opt.label || origIndex}
+                      type="button"
+                      onClick={() => {
+                        const updated = applyOptionToTrigger(trig, catalogCmd, opt);
+                        onUpdate(updated);
+                      }}
+                      className={`${
+                        itemCount === 1 ? 'px-4 min-w-[90px]' : 'w-full px-2'
+                      } py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 border cursor-pointer text-center ${
+                        isSelected
+                          ? 'bg-amber-500/20 text-amber-200 border-amber-500/80 font-semibold shadow-sm ring-1 ring-amber-500/40'
+                          : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border-slate-800'
+                      }`}
+                    >
+                      <span className="truncate">{opt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Advanced Details View */}
+      {(!hasOptions || showAdvanced) && (
+        <div className={`space-y-3 ${hasOptions ? 'pt-2.5 border-t border-slate-850' : ''}`}>
+          <div className="grid grid-cols-4 gap-2 font-mono text-[11px]">
+            <div>
+              <label className="block text-[10px] font-sans text-slate-500">Trigger ID</label>
+              <input
+                type="text"
+                value={trig.id || ''}
+                onChange={e => onUpdate({ ...trig, id: e.target.value })}
+                placeholder={`trig_${tIdx + 1}`}
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-amber-300 text-[11px] font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-sans text-slate-500">CAN ID</label>
+              <input
+                type="text"
+                value={trig.can_id || ''}
+                onChange={e => onUpdate({ ...trig, can_id: e.target.value })}
+                placeholder="0x448"
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-sans text-slate-500">Bus</label>
+              <select
+                value={trig.bus ?? 0}
+                onChange={e => onUpdate({ ...trig, bus: parseInt(e.target.value) || 0 })}
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+              >
+                <option value={0}>Bus 0</option>
+                <option value={1}>Bus 1</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-sans text-slate-500">Gesture / Clicks</label>
+              <select
+                value={trig.click_count || 1}
+                onChange={e => onUpdate({ ...trig, click_count: parseInt(e.target.value) || 1 })}
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans text-[11px]"
+              >
+                <option value={1}>Single Click</option>
+                <option value={2}>Double Click</option>
+                <option value={3}>Triple Click</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 font-mono text-[11px]">
+            <div>
+              <label className="block text-[10px] font-sans text-slate-500">Target Match (1-based D1..D8)</label>
+              <input
+                type="text"
+                value={
+                  typeof trig.match === 'object' && Object.keys(trig.match).length > 0
+                    ? JSON.stringify(trig.match)
+                    : typeof trig.to_payload === 'object' && Object.keys(trig.to_payload).length > 0
+                    ? JSON.stringify(trig.to_payload)
+                    : typeof trig.to_payload === 'string'
+                    ? trig.to_payload
+                    : ''
+                }
+                onChange={e => {
+                  const compiled = compileToByteMap(e.target.value);
+                  onUpdate({ ...trig, match: compiled, to_payload: compiled });
+                }}
+                placeholder='{"D7":"0x0"}'
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-cyan-300 font-bold"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-sans text-slate-500">Byte Transition (Byte, Mask, From, To)</label>
+              <div className="flex items-center gap-1">
+                <input
+                  type="text"
+                  placeholder="D7"
+                  value={trig.byte || (trig.byte_index !== undefined ? `D${trig.byte_index + 1}` : '')}
+                  onChange={e => {
+                    const byte = e.target.value.toUpperCase();
+                    const num = parseInt(e.target.value.replace(/\D/g, ''), 10);
+                    const byte_index = !isNaN(num) && num >= 1 && num <= 8 ? num - 1 : trig.byte_index;
+                    onUpdate({ ...trig, byte, byte_index });
+                  }}
+                  className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 text-center font-bold"
+                  title="1-based Byte (D1..D8)"
+                />
+                <input
+                  type="text"
+                  placeholder="Mask"
+                  value={trig.mask || ''}
+                  onChange={e => onUpdate({ ...trig, mask: e.target.value })}
+                  className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-yellow-300 text-center font-bold"
+                  title="Byte Bitmask (e.g. 0xF0)"
+                />
+                <input
+                  type="text"
+                  placeholder="From"
+                  value={trig.from || (trig.from_value !== undefined ? `0x${trig.from_value.toString(16).padStart(2, '0').toUpperCase()}` : '')}
+                  onChange={e => {
+                    const from = e.target.value;
+                    const from_value = e.target.value === '' ? undefined : parseInt(e.target.value, 16) || 0;
+                    onUpdate({ ...trig, from, from_value });
+                  }}
+                  className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 text-center"
+                  title="From Value (e.g. 0x00)"
+                />
+                <input
+                  type="text"
+                  placeholder="To"
+                  value={trig.to || (trig.to_value !== undefined ? `0x${trig.to_value.toString(16).padStart(2, '0').toUpperCase()}` : '')}
+                  onChange={e => {
+                    const to = e.target.value;
+                    const to_value = e.target.value === '' ? undefined : parseInt(e.target.value, 16) || 0;
+                    onUpdate({ ...trig, to, to_value });
+                  }}
+                  className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-cyan-300 text-center font-bold"
+                  title="To Value (e.g. 0x10)"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface ActionNodeEditorProps {
   key?: React.Key;
   act: AutomationAction;
   index: number;
   depth?: number;
   availableTriggers?: AutomationTrigger[];
+  catalog?: Catalog;
   onUpdate: (updated: AutomationAction) => void;
   onDelete: () => void;
   onOpenAddConditionDialog?: (onAdd: (cond: AutomationCondition) => void) => void;
@@ -616,6 +1061,7 @@ interface ActionListEditorProps {
   label?: string;
   emptyText?: string;
   availableTriggers?: AutomationTrigger[];
+  catalog?: Catalog;
   onUpdate: (actions: AutomationAction[]) => void;
   onPullCatalog?: () => void;
   onOpenAddConditionDialog?: (onAdd: (cond: AutomationCondition) => void) => void;
@@ -627,12 +1073,14 @@ function ActionNodeEditor({
   index,
   depth = 0,
   availableTriggers,
+  catalog,
   onUpdate,
   onDelete,
   onOpenAddConditionDialog,
   onOpenAddActionDialog
 }: ActionNodeEditorProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // If IF_THEN:
   if (act.type === 'if_then') {
@@ -685,6 +1133,7 @@ function ActionNodeEditor({
                 label="THEN (Execute if True)"
                 emptyText="No actions in THEN branch."
                 availableTriggers={availableTriggers}
+                catalog={catalog}
                 onUpdate={updatedThen => onUpdate({ ...act, then: updatedThen })}
                 onOpenAddConditionDialog={onOpenAddConditionDialog}
                 onOpenAddActionDialog={onOpenAddActionDialog}
@@ -699,6 +1148,7 @@ function ActionNodeEditor({
                 label="ELSE (Execute if False)"
                 emptyText="No actions in ELSE branch."
                 availableTriggers={availableTriggers}
+                catalog={catalog}
                 onUpdate={updatedElse => onUpdate({ ...act, else: updatedElse })}
                 onOpenAddConditionDialog={onOpenAddConditionDialog}
                 onOpenAddActionDialog={onOpenAddActionDialog}
@@ -734,22 +1184,8 @@ function ActionNodeEditor({
               onClick={() => {
                 const choices = [...(act.choices || [])];
                 choices.push({
-                  conditions: [{
-                    id: `cond_${Date.now().toString(36)}`,
-                    logic: 'leaf',
-                    can_id: '0x120',
-                    bus: 0,
-                    byte: 'D1',
-                    mask: '0xFF',
-                    operator: 'equal',
-                    value: '0x01'
-                  }],
-                  sequence: [{
-                    id: `act_${Date.now().toString(36)}`,
-                    type: 'entity_command',
-                    entity_id: 'drivers_seat_comfort',
-                    command: 'Medium Cool'
-                  }]
+                  conditions: [],
+                  sequence: []
                 });
                 onUpdate({ ...act, choices });
               }}
@@ -814,6 +1250,7 @@ function ActionNodeEditor({
                       label="Branch Sequence Actions"
                       emptyText="No actions in branch sequence."
                       availableTriggers={availableTriggers}
+                      catalog={catalog}
                       onUpdate={updatedSeq => {
                         const choices = [...(act.choices || [])];
                         choices[chIdx].sequence = updatedSeq;
@@ -835,6 +1272,7 @@ function ActionNodeEditor({
                 label="DEFAULT (If no branch matches)"
                 emptyText="No actions in DEFAULT branch."
                 availableTriggers={availableTriggers}
+                catalog={catalog}
                 onUpdate={updatedDef => onUpdate({ ...act, default: updatedDef })}
                 onOpenAddConditionDialog={onOpenAddConditionDialog}
                 onOpenAddActionDialog={onOpenAddActionDialog}
@@ -847,281 +1285,366 @@ function ActionNodeEditor({
   }
 
   // Regular action step
+  const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForAction(act, catalog) : {};
+  const hasOptions = !!(catalogCmd?.options && catalogCmd.options.length > 0);
+  const actionName =
+    catalogCmd?.ha_metadata?.name ||
+    catalogCmd?.name ||
+    act.source_command_name ||
+    (act.type === 'entity_command'
+      ? act.entity_id || 'Entity Command'
+      : act.type === 'climate_target'
+      ? 'Climate Target'
+      : act.type === 'precondition'
+      ? 'Battery Preconditioning'
+      : act.type === 'track_popup' || act.type === 'popup'
+      ? 'Cluster Popup'
+      : act.can_id
+      ? `CAN Ingress ${act.can_id}`
+      : `Action ${index + 1}`);
+
   return (
-    <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/90 space-y-2 text-xs">
+    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 hover:border-slate-700/80 space-y-2.5 text-xs transition-all shadow-sm">
+      {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="w-5 h-5 rounded-full bg-emerald-950 text-emerald-300 font-bold text-[10px] flex items-center justify-center border border-emerald-800">
+          <span className="w-5 h-5 rounded-full bg-emerald-950 text-emerald-300 font-bold text-[10px] flex items-center justify-center border border-emerald-800 shrink-0">
             A{index + 1}
           </span>
-          {act.source_command_name ? (
-            <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-white">{act.source_command_name}</span>
-              {act.option_label && (
-                <span className="px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 text-[10px] border border-emerald-800/60">
-                  {act.option_label}
-                </span>
-              )}
-            </div>
-          ) : (
-            <span className="font-semibold text-slate-300 font-mono">
-              {act.type === 'entity_command'
-                ? `Entity: ${act.entity_id || 'drivers_seat_comfort'}`
-                : act.type === 'delay'
-                ? `Delay: ${act.delay_ms || act.ms || 500}ms`
-                : act.type === 'track_popup' || act.type === 'popup'
-                ? `Cluster Popup (${(act.level || 'info').toUpperCase()}): ${act.text || act.popup_message || 'Message'}`
-                : act.type === 'climate_target'
-                ? `Climate Target: ${act.target_temp_c ?? act.target_c ?? 21.0}°C (${(act.zone || 'driver').toUpperCase()})`
-                : act.type === 'precondition'
-                ? `Battery Preconditioning: ${(act.precon_action || 'start').toUpperCase()} (${act.precon_mode || 'persistent'})`
-                : `CAN TX ${act.can_id}`}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-white text-sm tracking-tight">{actionName}</span>
+            {catalogCmd?.category && (
+              <span className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 text-[10px] border border-slate-800">
+                {catalogCmd.category}
+              </span>
+            )}
+            <span className="px-1.5 py-0.5 rounded bg-emerald-950/60 text-emerald-300/90 text-[10px] font-mono border border-emerald-800/50">
+              {act.can_id ? `CAN ${act.can_id}` : act.type} • Bus {act.bus ?? 0}
             </span>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="p-1 text-slate-500 hover:text-rose-400 transition"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
-        <div>
-          <label className="block text-[10px] font-sans text-slate-500">Action Type</label>
-          <select
-            value={act.type}
-            onChange={e => onUpdate({ ...act, type: e.target.value as any })}
-            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
-          >
-            <option value="entity_command">entity_command</option>
-            <option value="precondition">precondition (E-GMP)</option>
-            <option value="climate_target">climate_target (HVAC Temp Target)</option>
-            <option value="track_popup">track_popup (Cluster Popup)</option>
-            <option value="can_tx">can_tx (CAN Ingress)</option>
-            <option value="delay">delay</option>
-            <option value="if_then">if_then (Conditional Branch)</option>
-            <option value="choose">choose (Multiple Choices)</option>
-            <option value="webhook">webhook (HTTP)</option>
-          </select>
-        </div>
-
-        {act.type === 'precondition' && (
-          <>
-            <div>
-              <label className="block text-[10px] font-sans text-slate-500">Operation</label>
-              <select
-                value={act.precon_action || 'start'}
-                onChange={e => onUpdate({ ...act, precon_action: e.target.value as any })}
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
-              >
-                <option value="start">Start Preconditioning</option>
-                <option value="stop">Stop / Cancel</option>
-                <option value="toggle">Toggle State</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-[10px] font-sans text-slate-500">Operating Mode</label>
-              <select
-                value={act.precon_mode || 'persistent'}
-                onChange={e => onUpdate({ ...act, precon_mode: e.target.value as any })}
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-orange-300 font-medium font-sans"
-              >
-                <option value="persistent">Persistent (21°C / 70°F)</option>
-                <option value="continuous">Continuous (High Demand)</option>
-                <option value="once">Single Cycle (Once)</option>
-              </select>
-            </div>
-          </>
-        )}
-
-        {act.type === 'climate_target' && (
-          <>
-            <div>
-              <label className="block text-[10px] font-sans text-slate-500">Zone</label>
-              <select
-                value={act.zone || 'driver'}
-                onChange={e => onUpdate({ ...act, zone: e.target.value as any })}
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
-              >
-                <option value="driver">Driver Zone</option>
-                <option value="passenger">Passenger Zone</option>
-              </select>
-            </div>
-            <div>
-              <div className="flex items-center justify-between">
-                <label className="block text-[10px] font-sans text-slate-500">Target Temp</label>
-                <span className="text-[9px] text-teal-400 font-mono">
-                  {Math.round(((act.target_temp_c ?? 21.0) * 9 / 5 + 32) * 10) / 10}°F
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  step="0.5"
-                  min="14"
-                  max="32"
-                  value={act.target_temp_c ?? act.target_c ?? 21.0}
-                  onChange={e => {
-                    const val = parseFloat(e.target.value) || 21.0;
-                    onUpdate({ ...act, target_temp_c: val, target_c: val });
-                  }}
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-teal-300 font-bold"
-                />
-                <span className="text-slate-400 font-sans text-xs">°C</span>
-              </div>
-            </div>
-          </>
-        )}
-
-        {(act.type === 'track_popup' || act.type === 'popup') && (
-          <>
-            <div>
-              <label className="block text-[10px] font-sans text-slate-500">Severity Level</label>
-              <select
-                value={act.level || 'info'}
-                onChange={e => onUpdate({ ...act, level: e.target.value as any })}
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
-              >
-                <option value="info">Info</option>
-                <option value="warning">Warning</option>
-                <option value="error">Error</option>
-              </select>
-            </div>
-            <div>
-              <div className="flex items-center justify-between">
-                <label className="block text-[10px] font-sans text-slate-500">Popup Text</label>
-                <span className="text-[9px] text-slate-500 font-mono">
-                  {(act.text || act.popup_message || '').length}/50
-                </span>
-              </div>
-              <input
-                type="text"
-                maxLength={50}
-                value={act.text || act.popup_message || ''}
-                onChange={e => onUpdate({ ...act, text: e.target.value, popup_message: e.target.value })}
-                placeholder="Preconditioning Started"
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-amber-300 font-medium"
-              />
-            </div>
-          </>
-        )}
-
-        {act.type === 'entity_command' && (
-          <>
-            <div>
-              <label className="block text-[10px] font-sans text-slate-500">Entity ID</label>
-              <input
-                type="text"
-                value={act.entity_id || ''}
-                onChange={e => onUpdate({ ...act, entity_id: e.target.value })}
-                placeholder="drivers_seat_comfort"
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-sans text-slate-500">Command</label>
-              <input
-                type="text"
-                value={act.command || ''}
-                onChange={e => onUpdate({ ...act, command: e.target.value })}
-                placeholder="Medium Cool"
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-cyan-300 font-bold"
-              />
-            </div>
-          </>
-        )}
-
-        {act.type === 'delay' && (
-          <div className="col-span-2">
-            <label className="block text-[10px] font-sans text-slate-500">Delay Duration (ms)</label>
-            <input
-              type="number"
-              value={act.delay_ms || act.ms || 500}
-              onChange={e => {
-                const val = parseInt(e.target.value) || 0;
-                onUpdate({ ...act, delay_ms: val, ms: val });
-              }}
-              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
-            />
           </div>
-        )}
+        </div>
 
-        {act.type === 'can_tx' && (
-          <>
-            <div>
-              <label className="block text-[10px] font-sans text-slate-500">Target CAN ID</label>
-              <input
-                type="text"
-                value={act.can_id || ''}
-                onChange={e => onUpdate({ ...act, can_id: e.target.value })}
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
-                placeholder="0x524"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-sans text-slate-500">Repeat × Delay</label>
-              <div className="flex items-center gap-1">
-                <input
-                  type="number"
-                  value={act.repeat || 1}
-                  onChange={e => onUpdate({ ...act, repeat: parseInt(e.target.value) || 1 })}
-                  className="w-12 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-200"
-                />
-                <span className="text-slate-500 font-sans">×</span>
-                <input
-                  type="number"
-                  value={act.delay_ms || 0}
-                  onChange={e => onUpdate({ ...act, delay_ms: parseInt(e.target.value) || 0 })}
-                  placeholder="ms"
-                  className="w-16 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-200"
-                />
-              </div>
-            </div>
-          </>
-        )}
+        <div className="flex items-center gap-1.5">
+          {hasOptions && (
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
+                showAdvanced
+                  ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80 shadow'
+                  : 'bg-slate-900 text-slate-300 hover:text-white border-slate-800 hover:bg-slate-850'
+              }`}
+              title="Toggle configuration details"
+            >
+              <Sliders className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{showAdvanced ? 'Simple View' : 'Edit Details'}</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onDelete}
+            className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition"
+            title="Delete action"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
-      {act.type === 'climate_target' && (
-        <div className="flex items-center gap-4 pt-1 font-sans text-[11px] text-slate-400">
-          <label className="flex items-center gap-1.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={act.sync_on ?? true}
-              onChange={e => onUpdate({ ...act, sync_on: e.target.checked })}
-              className="rounded bg-slate-900 border-slate-700 text-teal-500 focus:ring-0"
-            />
-            <span>Sync Passenger Zone (0x4A0)</span>
-          </label>
-          <label className="flex items-center gap-1.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={act.driver_only ?? false}
-              onChange={e => onUpdate({ ...act, driver_only: e.target.checked })}
-              className="rounded bg-slate-900 border-slate-700 text-teal-500 focus:ring-0"
-            />
-            <span>Driver Only</span>
-          </label>
+      {/* Option Selector Big Pills in Smart Grid Rows */}
+      {hasOptions && (
+        <div className="space-y-1.5 pt-0.5">
+          {groupOptionsIntoGridRows(catalogCmd.options).map((group, gIdx) => {
+            const itemCount = group.items.length;
+            const gridClass =
+              itemCount === 1
+                ? 'flex'
+                : itemCount === 2
+                ? 'grid grid-cols-2 gap-1.5'
+                : itemCount === 3
+                ? 'grid grid-cols-3 gap-1.5'
+                : itemCount === 4
+                ? 'grid grid-cols-4 gap-1.5'
+                : 'grid grid-cols-2 sm:grid-cols-3 gap-1.5';
+
+            return (
+              <div key={group.key || gIdx} className={gridClass}>
+                {group.items.map(({ opt, origIndex }) => {
+                  const isSelected =
+                    (act.option_label && opt.label.toLowerCase() === act.option_label.toLowerCase()) ||
+                    (act.command && opt.label.toLowerCase() === act.command.toLowerCase()) ||
+                    (matchedOption && opt.label.toLowerCase() === matchedOption.label.toLowerCase()) ||
+                    (!act.option_label && !act.command && !matchedOption && origIndex === 0);
+
+                  return (
+                    <button
+                      key={opt.label || origIndex}
+                      type="button"
+                      onClick={() => {
+                        const updated = applyOptionToAction(act, catalogCmd, opt);
+                        onUpdate(updated);
+                      }}
+                      className={`${
+                        itemCount === 1 ? 'px-4 min-w-[90px]' : 'w-full px-2'
+                      } py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 border cursor-pointer text-center ${
+                        isSelected
+                          ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/80 font-semibold shadow-sm ring-1 ring-emerald-500/40'
+                          : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border-slate-800'
+                      }`}
+                    >
+                      <span className="truncate">{opt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {act.type === 'can_tx' && (
-        <div className="space-y-1.5 font-mono text-[11px]">
-          <div>
-            <label className="block text-[10px] font-sans text-slate-500">Payload (1-based D1..D8)</label>
-            <input
-              type="text"
-              value={typeof act.payload === 'object' ? JSON.stringify(act.payload) : act.payload || '{"D1":"0x02","D2":"0x01"}'}
-              onChange={e => {
-                const compiled = compileToByteMap(e.target.value);
-                onUpdate({ ...act, payload: Object.keys(compiled).length > 0 ? compiled : e.target.value });
-              }}
-              placeholder='{"D1":"0x02","D2":"0x01"}'
-              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-emerald-300 font-bold"
-            />
+      {/* Advanced Details View */}
+      {(!hasOptions || showAdvanced) && (
+        <div className={`space-y-3 ${hasOptions ? 'pt-2.5 border-t border-slate-850' : ''}`}>
+          <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
+            <div>
+              <label className="block text-[10px] font-sans text-slate-500">Action Type</label>
+              <select
+                value={act.type}
+                onChange={e => onUpdate({ ...act, type: e.target.value as any })}
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+              >
+                <option value="entity_command">entity_command</option>
+                <option value="precondition">precondition (E-GMP)</option>
+                <option value="climate_target">climate_target (HVAC Temp Target)</option>
+                <option value="track_popup">track_popup (Cluster Popup)</option>
+                <option value="can_tx">can_tx (CAN Ingress)</option>
+                <option value="delay">delay</option>
+                <option value="if_then">if_then (Conditional Branch)</option>
+                <option value="choose">choose (Multiple Choices)</option>
+                <option value="webhook">webhook (HTTP)</option>
+              </select>
+            </div>
+
+            {act.type === 'precondition' && (
+              <>
+                <div>
+                  <label className="block text-[10px] font-sans text-slate-500">Operation</label>
+                  <select
+                    value={act.precon_action || 'start'}
+                    onChange={e => onUpdate({ ...act, precon_action: e.target.value as any })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+                  >
+                    <option value="start">Start Preconditioning</option>
+                    <option value="stop">Stop / Cancel</option>
+                    <option value="toggle">Toggle State</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-sans text-slate-500">Operating Mode</label>
+                  <select
+                    value={act.precon_mode || 'persistent'}
+                    onChange={e => onUpdate({ ...act, precon_mode: e.target.value as any })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-orange-300 font-medium font-sans"
+                  >
+                    <option value="persistent">Persistent (21°C / 70°F)</option>
+                    <option value="continuous">Continuous (High Demand)</option>
+                    <option value="once">Single Cycle (Once)</option>
+                  </select>
+                </div>
+              </>
+            )}
+
+            {act.type === 'climate_target' && (
+              <>
+                <div>
+                  <label className="block text-[10px] font-sans text-slate-500">Zone</label>
+                  <select
+                    value={act.zone || 'driver'}
+                    onChange={e => onUpdate({ ...act, zone: e.target.value as any })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+                  >
+                    <option value="driver">Driver Zone</option>
+                    <option value="passenger">Passenger Zone</option>
+                  </select>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[10px] font-sans text-slate-500">Target Temp</label>
+                    <span className="text-[9px] text-teal-400 font-mono">
+                      {act.target_temp_c !== undefined || act.target_c !== undefined
+                        ? `${Math.round(((act.target_temp_c ?? act.target_c ?? 21.0) * 9 / 5 + 32) * 10) / 10}°F`
+                        : '--°F'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="14"
+                      max="32"
+                      value={act.target_temp_c ?? act.target_c ?? ''}
+                      onChange={e => {
+                        const val = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                        onUpdate({ ...act, target_temp_c: val, target_c: val });
+                      }}
+                      placeholder="21.0"
+                      className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-teal-300 font-bold"
+                    />
+                    <span className="text-slate-400 font-sans text-xs">°C</span>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {(act.type === 'track_popup' || act.type === 'popup') && (
+              <>
+                <div>
+                  <label className="block text-[10px] font-sans text-slate-500">Severity Level</label>
+                  <select
+                    value={act.level || 'info'}
+                    onChange={e => onUpdate({ ...act, level: e.target.value as any })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+                  >
+                    <option value="info">Info</option>
+                    <option value="warning">Warning</option>
+                    <option value="error">Error</option>
+                  </select>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[10px] font-sans text-slate-500">Popup Text</label>
+                    <span className="text-[9px] text-slate-500 font-mono">
+                      {(act.text || act.popup_message || '').length}/50
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    maxLength={50}
+                    value={act.text || act.popup_message || ''}
+                    onChange={e => onUpdate({ ...act, text: e.target.value, popup_message: e.target.value })}
+                    placeholder="Message text..."
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-amber-300 font-medium"
+                  />
+                </div>
+              </>
+            )}
+
+            {act.type === 'entity_command' && (
+              <>
+                <div>
+                  <label className="block text-[10px] font-sans text-slate-500">Entity ID</label>
+                  <input
+                    type="text"
+                    value={act.entity_id || ''}
+                    onChange={e => onUpdate({ ...act, entity_id: e.target.value })}
+                    placeholder="e.g. drivers_seat_comfort"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-sans text-slate-500">Command</label>
+                  <input
+                    type="text"
+                    value={act.command || ''}
+                    onChange={e => onUpdate({ ...act, command: e.target.value })}
+                    placeholder="e.g. Medium Cool"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-cyan-300 font-bold"
+                  />
+                </div>
+              </>
+            )}
+
+            {act.type === 'delay' && (
+              <div className="col-span-2">
+                <label className="block text-[10px] font-sans text-slate-500">Delay Duration (ms)</label>
+                <input
+                  type="number"
+                  value={act.delay_ms !== undefined && act.delay_ms !== null ? act.delay_ms : (act.ms !== undefined && act.ms !== null ? act.ms : '')}
+                  onChange={e => {
+                    const val = e.target.value === '' ? 0 : parseInt(e.target.value) || 0;
+                    onUpdate({ ...act, delay_ms: val, ms: val });
+                  }}
+                  placeholder="0"
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                />
+              </div>
+            )}
+
+            {act.type === 'can_tx' && (
+              <>
+                <div>
+                  <label className="block text-[10px] font-sans text-slate-500">Target CAN ID</label>
+                  <input
+                    type="text"
+                    value={act.can_id || ''}
+                    onChange={e => onUpdate({ ...act, can_id: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                    placeholder="0x524"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-sans text-slate-500">Repeat × Delay</label>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={act.repeat !== undefined ? act.repeat : 1}
+                      onChange={e => onUpdate({ ...act, repeat: parseInt(e.target.value) || 1 })}
+                      className="w-12 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-200"
+                    />
+                    <span className="text-slate-500 font-sans">×</span>
+                    <input
+                      type="number"
+                      value={act.delay_ms !== undefined ? act.delay_ms : 0}
+                      onChange={e => onUpdate({ ...act, delay_ms: parseInt(e.target.value) || 0 })}
+                      placeholder="ms"
+                      className="w-16 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-200"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
+
+          {act.type === 'climate_target' && (
+            <div className="flex items-center gap-4 pt-1 font-sans text-[11px] text-slate-400">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={act.sync_on ?? true}
+                  onChange={e => onUpdate({ ...act, sync_on: e.target.checked })}
+                  className="rounded bg-slate-900 border-slate-700 text-teal-500 focus:ring-0"
+                />
+                <span>Sync Passenger Zone (0x4A0)</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={act.driver_only ?? false}
+                  onChange={e => onUpdate({ ...act, driver_only: e.target.checked })}
+                  className="rounded bg-slate-900 border-slate-700 text-teal-500 focus:ring-0"
+                />
+                <span>Driver Only</span>
+              </label>
+            </div>
+          )}
+
+          {act.type === 'can_tx' && (
+            <div className="space-y-1.5 font-mono text-[11px]">
+              <div>
+                <label className="block text-[10px] font-sans text-slate-500">Payload (1-based D1..D8)</label>
+                <input
+                  type="text"
+                  value={typeof act.payload === 'object' && Object.keys(act.payload).length > 0 ? JSON.stringify(act.payload) : (typeof act.payload === 'string' ? act.payload : '')}
+                  onChange={e => {
+                    const compiled = compileToByteMap(e.target.value);
+                    onUpdate({ ...act, payload: Object.keys(compiled).length > 0 ? compiled : e.target.value });
+                  }}
+                  placeholder='{"D1":"0x02","D2":"0x01"}'
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-emerald-300 font-bold"
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1134,6 +1657,7 @@ function ActionListEditor({
   label,
   emptyText = 'No actions defined.',
   availableTriggers,
+  catalog,
   onUpdate,
   onOpenAddConditionDialog,
   onOpenAddActionDialog
@@ -1142,9 +1666,12 @@ function ActionListEditor({
     const next = [...actions];
     next.push({
       id: `act_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-      type: 'entity_command',
-      entity_id: 'drivers_seat_comfort',
-      command: 'Medium Cool'
+      type: 'can_tx',
+      can_id: '',
+      bus: 0,
+      payload: '',
+      repeat: 1,
+      delay_ms: 0
     });
     onUpdate(next);
   };
@@ -1172,6 +1699,7 @@ function ActionListEditor({
               index={idx}
               depth={depth}
               availableTriggers={availableTriggers}
+              catalog={catalog}
               onUpdate={updated => {
                 const next = [...actions];
                 next[idx] = updated;
@@ -1206,6 +1734,213 @@ function ActionListEditor({
   );
 }
 
+interface SwipeableRuleItemProps {
+  rule: AutomationRule;
+  idx: number;
+  isSelected: boolean;
+  isSelectMode: boolean;
+  isCheckedForDelete: boolean;
+  onToggleCheck: (id: string) => void;
+  onSelect: (id: string) => void;
+  onDuplicate: (rule: AutomationRule) => void;
+  onDelete: (id: string) => void;
+}
+
+const SwipeableRuleItem: React.FC<SwipeableRuleItemProps> = ({
+  rule,
+  idx,
+  isSelected,
+  isSelectMode,
+  isCheckedForDelete,
+  onToggleCheck,
+  onSelect,
+  onDuplicate,
+  onDelete
+}) => {
+  const [dragOffset, setDragOffset] = useState(0);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const isDraggingRef = useRef(false);
+  const swipingRef = useRef(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (isSelectMode) return;
+    touchStartRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY
+    };
+    isDraggingRef.current = false;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartRef.current || isSelectMode) return;
+    const dx = e.touches[0].clientX - touchStartRef.current.x;
+    const dy = e.touches[0].clientY - touchStartRef.current.y;
+
+    if (!isDraggingRef.current && Math.abs(dy) > Math.abs(dx)) {
+      return;
+    }
+
+    if (Math.abs(dx) > 10) {
+      isDraggingRef.current = true;
+      swipingRef.current = true;
+      const clamped = Math.max(-90, Math.min(90, dx));
+      setDragOffset(clamped);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!isDraggingRef.current) {
+      touchStartRef.current = null;
+      return;
+    }
+
+    if (dragOffset < -55) {
+      setDragOffset(-80);
+    } else if (dragOffset > 55) {
+      setDragOffset(0);
+      onDuplicate(rule);
+    } else {
+      setDragOffset(0);
+    }
+
+    touchStartRef.current = null;
+    isDraggingRef.current = false;
+    setTimeout(() => {
+      swipingRef.current = false;
+    }, 150);
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (swipingRef.current) {
+      e.stopPropagation();
+      return;
+    }
+    if (dragOffset !== 0) {
+      setDragOffset(0);
+      return;
+    }
+    if (isSelectMode) {
+      onToggleCheck(rule.id);
+    } else {
+      onSelect(rule.id);
+    }
+  };
+
+  return (
+    <div className="relative overflow-hidden rounded-xl group select-none">
+      {/* Background action reveal buttons */}
+      <div className="absolute inset-0 flex items-center justify-between rounded-xl overflow-hidden pointer-events-auto">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setDragOffset(0);
+            onDuplicate(rule);
+          }}
+          className="h-full px-3.5 bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 text-white flex items-center gap-1.5 text-xs font-bold transition shadow-inner"
+          title="Duplicate automation"
+        >
+          <Copy className="w-4 h-4" />
+          <span className="text-[11px] font-semibold">Copy</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setDragOffset(0);
+            onDelete(rule.id);
+          }}
+          className="h-full px-3.5 bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white flex items-center gap-1.5 text-xs font-bold transition ml-auto shadow-inner"
+          title="Delete automation"
+        >
+          <Trash2 className="w-4 h-4" />
+          <span className="text-[11px] font-semibold">Delete</span>
+        </button>
+      </div>
+
+      {/* Foreground Swipeable Card */}
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={handleClick}
+        style={{
+          transform: `translateX(${dragOffset}px)`,
+          transition: isDraggingRef.current ? 'none' : 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)'
+        }}
+        className={`relative z-10 p-2.5 rounded-xl cursor-pointer border text-left flex flex-col gap-1.5 transition-colors ${
+          isSelected
+            ? 'bg-slate-800 border-cyan-500/80 shadow-md shadow-cyan-950/40 text-white'
+            : 'bg-slate-950/90 border-slate-800 text-slate-300 hover:bg-slate-800/60 hover:border-slate-700'
+        }`}
+      >
+        <div className="flex items-center justify-between gap-1.5">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {isSelectMode ? (
+              <input
+                type="checkbox"
+                checked={isCheckedForDelete}
+                onChange={() => onToggleCheck(rule.id)}
+                onClick={(e) => e.stopPropagation()}
+                className="w-4 h-4 rounded text-rose-500 bg-slate-800 border-slate-700 focus:ring-rose-400 cursor-pointer flex-shrink-0"
+              />
+            ) : (
+              <span
+                className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                  rule.enabled ? 'bg-emerald-400' : 'bg-slate-600'
+                }`}
+              />
+            )}
+            <span className="text-xs font-semibold truncate">{rule.name || `Rule #${idx + 1}`}</span>
+          </div>
+
+          {!isSelectMode && (
+            <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition flex-shrink-0">
+              <button
+                type="button"
+                onClick={e => {
+                  e.stopPropagation();
+                  onDuplicate(rule);
+                }}
+                title="Duplicate rule"
+                className="p-1.5 hover:text-cyan-300 text-slate-400 hover:bg-slate-700/60 active:bg-slate-700 rounded-lg transition"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={e => {
+                  e.stopPropagation();
+                  onDelete(rule.id);
+                }}
+                title="Delete rule"
+                className="p-1.5 hover:text-rose-400 text-slate-400 hover:bg-rose-500/10 active:bg-rose-500/20 rounded-lg transition"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+          <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 uppercase">
+            {(rule.exec_mode || 'one_shot').replace('_', ' ')}
+          </span>
+          {rule.ha_expose && (
+            <span className="px-1 py-0.5 rounded bg-orange-950/60 text-orange-300 border border-orange-800/40">
+              HA
+            </span>
+          )}
+          <span>
+            {(rule.triggers || []).length}T · {(rule.actions || []).length}A
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   catalog,
   rules,
@@ -1219,6 +1954,8 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [selectedRuleId, setSelectedRuleId] = useState<string>(
     rules.length > 0 ? rules[0].id : ''
   );
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedRuleIdsForDelete, setSelectedRuleIdsForDelete] = useState<Set<string>>(new Set());
   const [activeJsonTab, setActiveJsonTab] = useState<'catalog' | 'cando' | 'esp32' | 'custom'>('catalog');
   const [copied, setCopied] = useState(false);
   const [addElementTarget, setAddElementTarget] = useState<AddElementTarget | null>(null);
@@ -1306,36 +2043,14 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
       name: `New Automation Rule #${rules.length + 1}`,
       enabled: true,
       ha_expose: true,
-      ha_icon: 'mdi:car-defrost-rear',
+      ha_icon: 'mdi:car-cog',
       exec_mode: 'one_shot',
       trigger_mode: 'any',
-      cooldown_ms: 500,
-      timeout_reset_ms: 2000,
-      triggers: [
-        {
-          id: `trig_${Date.now().toString(36)}`,
-          source: 'can',
-          can_id: '0x448',
-          bus: 0,
-          click_count: 1,
-          byte_index: 6,
-          from_value: 0,
-          to_value: 1,
-          match: { D7: '0x0' }
-        }
-      ],
+      cooldown_ms: 0,
+      timeout_reset_ms: 0,
+      triggers: [],
       conditions: [],
-      actions: [
-        {
-          id: `act_${Date.now().toString(36)}`,
-          type: 'can_tx',
-          can_id: '0x524',
-          bus: 0,
-          payload: { D1: '0x02', D2: '0x01' },
-          repeat: 1,
-          delay_ms: 50
-        }
-      ]
+      actions: []
     };
 
     onUpdateRules([...rules, newRule]);
@@ -1354,15 +2069,74 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   };
 
   const handleDeleteRule = (ruleId: string) => {
-    if (rules.length <= 1) {
-      alert('You must keep at least one automation rule.');
-      return;
-    }
     const newRules = rules.filter(r => r.id !== ruleId);
-    onUpdateRules(newRules);
-    if (selectedRuleId === ruleId) {
-      setSelectedRuleId(newRules[0]?.id || '');
+    if (newRules.length === 0) {
+      const newId = `rule_${Date.now().toString(36)}`;
+      const freshRule: AutomationRule = {
+        id: newId,
+        name: 'New Automation Rule #1',
+        enabled: true,
+        ha_expose: true,
+        ha_icon: 'mdi:car-cog',
+        exec_mode: 'one_shot',
+        trigger_mode: 'any',
+        cooldown_ms: 0,
+        timeout_reset_ms: 0,
+        triggers: [],
+        conditions: [],
+        actions: []
+      };
+      onUpdateRules([freshRule]);
+      setSelectedRuleId(newId);
+    } else {
+      onUpdateRules(newRules);
+      if (selectedRuleId === ruleId) {
+        setSelectedRuleId(newRules[0].id);
+      }
     }
+  };
+
+  const handleToggleCheckForDelete = (ruleId: string) => {
+    setSelectedRuleIdsForDelete(prev => {
+      const next = new Set(prev);
+      if (next.has(ruleId)) {
+        next.delete(ruleId);
+      } else {
+        next.add(ruleId);
+      }
+      return next;
+    });
+  };
+
+  const handleBatchDelete = () => {
+    if (selectedRuleIdsForDelete.size === 0) return;
+    const remaining = rules.filter(r => !selectedRuleIdsForDelete.has(r.id));
+    if (remaining.length === 0) {
+      const newId = `rule_${Date.now().toString(36)}`;
+      const freshRule: AutomationRule = {
+        id: newId,
+        name: 'New Automation Rule #1',
+        enabled: true,
+        ha_expose: true,
+        ha_icon: 'mdi:car-cog',
+        exec_mode: 'one_shot',
+        trigger_mode: 'any',
+        cooldown_ms: 0,
+        timeout_reset_ms: 0,
+        triggers: [],
+        conditions: [],
+        actions: []
+      };
+      onUpdateRules([freshRule]);
+      setSelectedRuleId(newId);
+    } else {
+      onUpdateRules(remaining);
+      if (selectedRuleIdsForDelete.has(selectedRuleId)) {
+        setSelectedRuleId(remaining[0].id);
+      }
+    }
+    setSelectedRuleIdsForDelete(new Set());
+    setIsSelectMode(false);
   };
 
   const handleCopyJson = () => {
@@ -1561,202 +2335,60 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-      {/* Top Header & Context Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800 shadow-xl">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-inner">
-            <Cpu className="w-6 h-6 animate-pulse" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-white tracking-tight">CAN Do Automation Builder</h1>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 font-mono border border-cyan-800">
-                The Brains
-              </span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-medium">
-                {rules.length} {rules.length === 1 ? 'Rule' : 'Rules'}
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Select catalog commands to generate reactive trigger-action automations for the ESP32 firmware.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {onBackToCatalog && (
-            <button
-              type="button"
-              onClick={onBackToCatalog}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition"
-            >
-              <ArrowRight className="w-3.5 h-3.5 rotate-180" />
-              <span>Back to Catalog</span>
-            </button>
-          )}
-
-          <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 cursor-pointer transition">
-            <Upload className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Import JSON</span>
-            <input type="file" accept=".json" onChange={handleImportJson} className="hidden" />
-          </label>
-
-          <button
-            type="button"
-            onClick={handleDownloadJson}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition shadow"
-          >
-            <Download className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Export JSON</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSimulateRule}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-cyan-950 bg-cyan-400 hover:bg-cyan-300 transition shadow-md shadow-cyan-500/20"
-          >
-            <Play className="w-3.5 h-3.5 fill-current" />
-            <span>Dry Run Rule</span>
-          </button>
-        </div>
-      </div>
-
       {/* Main Builder Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Active Rule Editor (8 cols = ~2/3 of area) */}
         {activeRule ? (
           <div className="lg:col-span-8 space-y-4">
-            {/* Rule Config Header Card */}
-            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
-              <div className="flex items-center justify-between gap-3">
+            {/* Active Rule Action Strip */}
+            <div className="flex items-center justify-between gap-2.5 p-3 rounded-xl bg-slate-900 border border-slate-800 shadow-sm">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <span
+                  className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                    activeRule.enabled ? 'bg-emerald-400' : 'bg-slate-600'
+                  }`}
+                />
                 <input
                   type="text"
                   value={activeRule.name}
                   onChange={e => handleUpdateActiveRule({ name: e.target.value })}
-                  placeholder="Rule Name"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-bold text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition"
+                  placeholder="Automation Name"
+                  className="bg-transparent text-sm font-bold text-white focus:outline-none focus:ring-1 focus:ring-cyan-500/50 rounded px-1.5 py-0.5 w-full min-w-0 truncate"
                 />
-                <label className="flex items-center gap-2 cursor-pointer flex-shrink-0">
-                  <span className="text-xs font-semibold text-slate-300">
-                    {activeRule.enabled ? 'Enabled' : 'Disabled'}
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={activeRule.enabled}
-                    onChange={e => handleUpdateActiveRule({ enabled: e.target.checked })}
-                    className="w-4 h-4 rounded text-cyan-500 bg-slate-800 border-slate-700 focus:ring-cyan-400"
-                  />
-                </label>
               </div>
-
-              {/* Execution Mode & Combining */}
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <label className="block text-slate-400 font-medium mb-1">Execution Mode</label>
-                  <select
-                    value={activeRule.exec_mode || 'one_shot'}
-                    onChange={e => handleUpdateActiveRule({ exec_mode: e.target.value as ExecutionMode })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-cyan-500"
-                  >
-                    <option value="one_shot">one_shot (Edge release)</option>
-                    <option value="toggle">toggle (Stateful On/Off)</option>
-                    <option value="continuous_hold">continuous_hold (While held)</option>
-                    <option value="on_change">on_change (Value change)</option>
-                    <option value="poll_verify">poll_verify (Verification loop)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 font-medium mb-1">Trigger Combination</label>
-                  <select
-                    value={activeRule.trigger_mode || 'any'}
-                    onChange={e => handleUpdateActiveRule({ trigger_mode: e.target.value as TriggerCombineMode })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-cyan-500"
-                  >
-                    <option value="any">ANY (OR - Any trigger fires)</option>
-                    <option value="all">ALL (AND - Simultaneous Chord)</option>
-                    <option value="sequence">SEQUENCE (Ordered chain)</option>
-                  </select>
-                </div>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleUpdateActiveRule({ enabled: !activeRule.enabled })}
+                  className={`px-2 py-1 rounded-lg text-xs font-semibold border transition ${
+                    activeRule.enabled
+                      ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}
+                >
+                  {activeRule.enabled ? 'Enabled' : 'Disabled'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDuplicateRule(activeRule)}
+                  title="Duplicate active rule"
+                  className="p-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                >
+                  <Copy className="w-3.5 h-3.5 text-cyan-400" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteRule(activeRule.id)}
+                  title="Delete active rule"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition active:scale-95"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  <span className="hidden sm:inline">Delete</span>
+                </button>
               </div>
-
-              {/* Cooldown, Timeout & Auto-Revert */}
-              <div className="grid grid-cols-3 gap-2.5 text-xs">
-                <div>
-                  <label className="block text-slate-400 font-medium mb-1">Cooldown (ms)</label>
-                  <input
-                    type="number"
-                    value={activeRule.cooldown_ms ?? 0}
-                    onChange={e => handleUpdateActiveRule({ cooldown_ms: parseInt(e.target.value) || 0 })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 font-medium mb-1">Timeout (ms)</label>
-                  <input
-                    type="number"
-                    value={activeRule.timeout_reset_ms ?? 0}
-                    onChange={e => handleUpdateActiveRule({ timeout_reset_ms: parseInt(e.target.value) || 0 })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
-                  />
-                </div>
-
-                {activeRule.exec_mode === 'toggle' ? (
-                  <div>
-                    <label className="block text-slate-400 font-medium mb-1">Auto-Revert (sec)</label>
-                    <input
-                      type="number"
-                      value={activeRule.auto_revert_sec || 0}
-                      onChange={e => handleUpdateActiveRule({ auto_revert_sec: parseInt(e.target.value) || 0 })}
-                      placeholder="0 = disabled"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
-                    />
-                  </div>
-                ) : (
-                  <div>
-                    <label className="block text-slate-400 font-medium mb-1">HA Integration</label>
-                    <div className="flex items-center gap-2 pt-1.5">
-                      <input
-                        type="checkbox"
-                        checked={activeRule.ha_expose}
-                        onChange={e => handleUpdateActiveRule({ ha_expose: e.target.checked })}
-                        className="w-4 h-4 rounded text-orange-500 bg-slate-800 border-slate-700"
-                      />
-                      <span className="text-slate-300">Expose Entity</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Home Assistant MDI Icon selector */}
-              {activeRule.ha_expose && (
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 flex items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-orange-950/60 border border-orange-800/60 flex items-center justify-center text-orange-400">
-                      <MdiIcon icon={activeRule.ha_icon} className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="text-[11px] font-semibold text-slate-300">HA Entity Icon</div>
-                      <div className="text-[10px] text-slate-400 font-mono">{activeRule.ha_icon}</div>
-                    </div>
-                  </div>
-                  <select
-                    value={activeRule.ha_icon}
-                    onChange={e => handleUpdateActiveRule({ ha_icon: e.target.value })}
-                    className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-slate-200 font-mono text-[11px]"
-                  >
-                    {SUGGESTED_MDI_ICONS.map(i => (
-                      <option key={i.id} value={i.id}>
-                        {i.label} ({i.id})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
             </div>
 
-            {/* SECTION 1: TRIGGERS (WHEN...) */}
+            {/* SECTION 1: TRIGGERS */}
             <div className="can-do-section-box trig-section space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -1764,7 +2396,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     <Zap className="w-3.5 h-3.5" />
                   </span>
                   <span className="text-xs font-bold uppercase tracking-wider text-white">
-                    1. Triggers (When...)
+                    Triggers
                   </span>
                 </div>
                 <span className="text-[11px] font-mono text-amber-400 font-semibold">
@@ -1778,257 +2410,23 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 </div>
               ) : (
                 <div className="space-y-2.5">
-                  {activeRule.triggers.map((trig, tIdx) => {
-                    if (trig.type === 'time_schedule' || trig.source === 'time') {
-                      return (
-                        <div
-                          key={trig.id || tIdx}
-                          className="p-3 rounded-xl bg-slate-950 border border-cyan-900/60 space-y-2 text-xs"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="w-5 h-5 rounded-full bg-cyan-950 text-cyan-300 font-bold text-[10px] flex items-center justify-center border border-cyan-800">
-                                T{tIdx + 1}
-                              </span>
-                              <div className="flex items-center gap-1.5 font-mono text-[11px]">
-                                <span className="text-[10px] text-slate-500 font-sans">ID:</span>
-                                <input
-                                  type="text"
-                                  value={trig.id || ''}
-                                  onChange={e => {
-                                    const updated = [...activeRule.triggers];
-                                    updated[tIdx] = { ...updated[tIdx], id: e.target.value };
-                                    handleUpdateActiveRule({ triggers: updated });
-                                  }}
-                                  placeholder={`trig_${tIdx + 1}`}
-                                  className="bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 text-amber-300 text-[11px] font-mono focus:outline-none focus:border-amber-500 w-24"
-                                />
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <Clock className="w-3.5 h-3.5 text-cyan-400" />
-                                <span className="font-semibold text-white">Time Schedule</span>
-                                <span className="px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 text-[10px] border border-cyan-800/60 font-mono">
-                                  {trig.time || '07:30'}
-                                </span>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const updated = activeRule.triggers.filter((_, i) => i !== tIdx);
-                                handleUpdateActiveRule({ triggers: updated });
-                              }}
-                              className="p-1 text-slate-500 hover:text-rose-400 transition"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-
-                          <div>
-                            <label className="block text-[10px] font-sans text-slate-400 mb-1">Target Time (24h)</label>
-                            <input
-                              type="time"
-                              value={trig.time || '07:30'}
-                              onChange={e => {
-                                const updated = [...activeRule.triggers];
-                                updated[tIdx] = { ...updated[tIdx], time: e.target.value };
-                                handleUpdateActiveRule({ triggers: updated });
-                              }}
-                              className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
-                            />
-                          </div>
-
-                          <DayOfWeekPicker
-                            selectedDays={trig.days}
-                            onChange={days => {
-                              const updated = [...activeRule.triggers];
-                              updated[tIdx] = { ...updated[tIdx], days };
-                              handleUpdateActiveRule({ triggers: updated });
-                            }}
-                          />
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div
-                        key={trig.id || tIdx}
-                        className="p-3 rounded-xl bg-slate-950 border border-slate-800/90 space-y-2 text-xs"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="w-5 h-5 rounded-full bg-amber-950 text-amber-300 font-bold text-[10px] flex items-center justify-center border border-amber-800">
-                              T{tIdx + 1}
-                            </span>
-                            <div className="flex items-center gap-1.5 font-mono text-[11px]">
-                              <span className="text-[10px] text-slate-500 font-sans">ID:</span>
-                              <input
-                                type="text"
-                                value={trig.id || ''}
-                                onChange={e => {
-                                  const updated = [...activeRule.triggers];
-                                  updated[tIdx] = { ...updated[tIdx], id: e.target.value };
-                                  handleUpdateActiveRule({ triggers: updated });
-                                }}
-                                placeholder={`trig_${tIdx + 1}`}
-                                className="bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 text-amber-300 text-[11px] font-mono focus:outline-none focus:border-amber-500 w-24"
-                              />
-                            </div>
-                            {trig.source_command_name ? (
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-semibold text-white">{trig.source_command_name}</span>
-                                {trig.option_label && (
-                                  <span className="px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 text-[10px] border border-amber-800/60">
-                                    {trig.option_label}
-                                  </span>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="font-semibold text-slate-300 font-mono">
-                                CAN Trigger {trig.can_id}
-                              </span>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const updated = activeRule.triggers.filter((_, i) => i !== tIdx);
-                              handleUpdateActiveRule({ triggers: updated });
-                            }}
-                            className="p-1 text-slate-500 hover:text-rose-400 transition"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
-                          <div>
-                            <label className="block text-[10px] font-sans text-slate-500">CAN ID</label>
-                            <input
-                              type="text"
-                              value={trig.can_id || ''}
-                              onChange={e => {
-                                const updated = [...activeRule.triggers];
-                                updated[tIdx].can_id = e.target.value;
-                                handleUpdateActiveRule({ triggers: updated });
-                              }}
-                              placeholder="0x448"
-                              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-sans text-slate-500">Bus</label>
-                            <select
-                              value={trig.bus ?? 0}
-                              onChange={e => {
-                                const updated = [...activeRule.triggers];
-                                updated[tIdx].bus = parseInt(e.target.value) || 0;
-                                handleUpdateActiveRule({ triggers: updated });
-                              }}
-                              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
-                            >
-                              <option value={0}>Bus 0</option>
-                              <option value={1}>Bus 1</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-sans text-slate-500">Gesture / Clicks</label>
-                            <select
-                              value={trig.click_count || 1}
-                              onChange={e => {
-                                const updated = [...activeRule.triggers];
-                                updated[tIdx].click_count = parseInt(e.target.value) || 1;
-                                handleUpdateActiveRule({ triggers: updated });
-                              }}
-                              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans text-[11px]"
-                            >
-                              <option value={1}>Single Click</option>
-                              <option value={2}>Double Click</option>
-                              <option value={3}>Triple Click</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 font-mono text-[11px]">
-                          <div>
-                            <label className="block text-[10px] font-sans text-slate-500">Target Match (1-based D1..D8)</label>
-                            <input
-                              type="text"
-                              value={typeof trig.match === 'object' ? JSON.stringify(trig.match) : typeof trig.to_payload === 'object' ? JSON.stringify(trig.to_payload) : (trig.to_payload || '{"D7":"0x0"}')}
-                              onChange={e => {
-                                const updated = [...activeRule.triggers];
-                                const compiled = compileToByteMap(e.target.value);
-                                updated[tIdx].match = compiled;
-                                updated[tIdx].to_payload = compiled;
-                                handleUpdateActiveRule({ triggers: updated });
-                              }}
-                              placeholder='{"D7":"0x0"}'
-                              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-cyan-300 font-bold"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-sans text-slate-500">Byte Transition (Byte, Mask, From, To)</label>
-                            <div className="flex items-center gap-1">
-                              <input
-                                type="text"
-                                placeholder="D7"
-                                value={trig.byte || (trig.byte_index !== undefined ? `D${trig.byte_index + 1}` : 'D7')}
-                                onChange={e => {
-                                  const updated = [...activeRule.triggers];
-                                  updated[tIdx].byte = e.target.value.toUpperCase();
-                                  const num = parseInt(e.target.value.replace(/\D/g, ''), 10);
-                                  if (!isNaN(num) && num >= 1 && num <= 8) {
-                                    updated[tIdx].byte_index = num - 1;
-                                  }
-                                  handleUpdateActiveRule({ triggers: updated });
-                                }}
-                                className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 text-center font-bold"
-                                title="1-based Byte (D1..D8)"
-                              />
-                              <input
-                                type="text"
-                                placeholder="Mask"
-                                value={trig.mask || '0xF0'}
-                                onChange={e => {
-                                  const updated = [...activeRule.triggers];
-                                  updated[tIdx].mask = e.target.value;
-                                  handleUpdateActiveRule({ triggers: updated });
-                                }}
-                                className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-yellow-300 text-center font-bold"
-                                title="Byte Bitmask (e.g. 0xF0)"
-                              />
-                              <input
-                                type="text"
-                                placeholder="From"
-                                value={trig.from || (trig.from_value !== undefined ? `0x${trig.from_value.toString(16).padStart(2, '0').toUpperCase()}` : '0x00')}
-                                onChange={e => {
-                                  const updated = [...activeRule.triggers];
-                                  updated[tIdx].from = e.target.value;
-                                  updated[tIdx].from_value = parseInt(e.target.value, 16) || 0;
-                                  handleUpdateActiveRule({ triggers: updated });
-                                }}
-                                className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 text-center"
-                                title="From Value (e.g. 0x00)"
-                              />
-                              <input
-                                type="text"
-                                placeholder="To"
-                                value={trig.to || (trig.to_value !== undefined ? `0x${trig.to_value.toString(16).padStart(2, '0').toUpperCase()}` : '0x10')}
-                                onChange={e => {
-                                  const updated = [...activeRule.triggers];
-                                  updated[tIdx].to = e.target.value;
-                                  updated[tIdx].to_value = parseInt(e.target.value, 16) || 0;
-                                  handleUpdateActiveRule({ triggers: updated });
-                                }}
-                                className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-cyan-300 text-center font-bold"
-                                title="To Value (e.g. 0x10)"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {activeRule.triggers.map((trig, tIdx) => (
+                    <TriggerNodeEditor
+                      key={trig.id || tIdx}
+                      trig={trig}
+                      tIdx={tIdx}
+                      catalog={catalog}
+                      onUpdate={updated => {
+                        const next = [...activeRule.triggers];
+                        next[tIdx] = updated;
+                        handleUpdateActiveRule({ triggers: next });
+                      }}
+                      onDelete={() => {
+                        const next = activeRule.triggers.filter((_, i) => i !== tIdx);
+                        handleUpdateActiveRule({ triggers: next });
+                      }}
+                    />
+                  ))}
                 </div>
               )}
 
@@ -2046,7 +2444,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               </button>
             </div>
 
-            {/* SECTION 2: CONDITIONS (AND IF...) */}
+            {/* SECTION 2: CONDITIONS */}
             <div className="can-do-section-box cond-section space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -2054,7 +2452,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     <Shield className="w-3.5 h-3.5" />
                   </span>
                   <span className="text-xs font-bold uppercase tracking-wider text-white">
-                    2. Conditions (And if...)
+                    Conditions
                   </span>
                 </div>
                 <span className="text-[11px] text-slate-400">
@@ -2072,7 +2470,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               />
             </div>
 
-            {/* SECTION 3: ACTIONS (THEN DO...) */}
+            {/* SECTION 3: ACTIONS */}
             <div className="can-do-section-box act-section space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -2080,7 +2478,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     <Send className="w-3.5 h-3.5" />
                   </span>
                   <span className="text-xs font-bold uppercase tracking-wider text-white">
-                    3. Actions (Then do...)
+                    Actions
                   </span>
                 </div>
                 <span className="text-[11px] text-slate-400">
@@ -2092,6 +2490,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 actions={activeRule.actions}
                 depth={0}
                 availableTriggers={activeRule.triggers}
+                catalog={catalog}
                 emptyText="No actions defined."
                 onUpdate={acts => handleUpdateActiveRule({ actions: acts })}
                 onOpenAddConditionDialog={openAddConditionDialog}
@@ -2108,7 +2507,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       <RotateCw className="w-3.5 h-3.5" />
                     </span>
                     <span className="text-xs font-bold uppercase tracking-wider text-rose-300">
-                      4. Off-Actions (When toggled OFF...)
+                      Off-Actions
                     </span>
                   </div>
                   <span className="text-[11px] text-rose-400/80">
@@ -2120,6 +2519,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   actions={activeRule.off_actions || []}
                   depth={0}
                   availableTriggers={activeRule.triggers}
+                  catalog={catalog}
                   emptyText="No off-actions defined. Specify actions to run when toggled off."
                   onUpdate={acts => handleUpdateActiveRule({ off_actions: acts })}
                   onOpenAddConditionDialog={openAddConditionDialog}
@@ -2138,85 +2538,120 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         <div className="lg:col-span-4 space-y-4">
           {/* Card 1: Automations List (Compact) */}
           <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Automations ({rules.length})
-              </span>
-              <button
-                type="button"
-                onClick={handleAddRule}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/40 transition"
-              >
-                <Plus className="w-3 h-3" />
-                <span>New</span>
-              </button>
-            </div>
-
-            <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
-              {rules.map((rule, idx) => {
-                const isSelected = rule.id === activeRule?.id;
-                return (
-                  <div
-                    key={rule.id}
-                    onClick={() => setSelectedRuleId(rule.id)}
-                    className={`group p-2.5 rounded-xl cursor-pointer border transition text-left flex flex-col gap-1.5 ${
-                      isSelected
-                        ? 'bg-slate-800 border-cyan-500/80 shadow-md shadow-cyan-950/40 text-white'
-                        : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:bg-slate-800/60 hover:border-slate-700'
-                    }`}
+            {!isSelectMode ? (
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Automations ({rules.length})
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSelectMode(true);
+                      setSelectedRuleIdsForDelete(new Set());
+                    }}
+                    title="Select automations to delete"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
                   >
-                    <div className="flex items-center justify-between gap-1.5">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span
-                          className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                            rule.enabled ? 'bg-emerald-400' : 'bg-slate-600'
-                          }`}
-                        />
-                        <span className="text-xs font-semibold truncate">{rule.name || `Rule #${idx + 1}`}</span>
-                      </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                        <button
-                          type="button"
-                          onClick={e => {
-                            e.stopPropagation();
-                            handleDuplicateRule(rule);
-                          }}
-                          title="Duplicate rule"
-                          className="p-1 hover:text-cyan-300 text-slate-400"
-                        >
-                          <Copy className="w-3 h-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={e => {
-                            e.stopPropagation();
-                            handleDeleteRule(rule.id);
-                          }}
-                          title="Delete rule"
-                          className="p-1 hover:text-rose-400 text-slate-400"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
+                    <CheckSquare className="w-3 h-3 text-cyan-400" />
+                    <span>Select</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSimulateRule}
+                    title="Dry run active rule simulation"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 transition"
+                  >
+                    <Play className="w-3 h-3 fill-current" />
+                    <span>Dry Run</span>
+                  </button>
+                  <label
+                    title="Import automation JSON"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer transition"
+                  >
+                    <Upload className="w-3 h-3 text-cyan-400" />
+                    <span>Import</span>
+                    <input type="file" accept=".json" onChange={handleImportJson} className="hidden" />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAddRule}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/40 transition"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>New</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-2 flex-wrap bg-slate-950/80 -m-1 p-2 rounded-xl border border-slate-800">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-cyan-300">
+                    Select Mode
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedRuleIdsForDelete.size === rules.length) {
+                        setSelectedRuleIdsForDelete(new Set());
+                      } else {
+                        setSelectedRuleIdsForDelete(new Set(rules.map(r => r.id)));
+                      }
+                    }}
+                    className="text-[11px] text-slate-400 hover:text-cyan-300 transition underline underline-offset-2"
+                  >
+                    {selectedRuleIdsForDelete.size === rules.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                </div>
 
-                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
-                      <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 uppercase">
-                        {(rule.exec_mode || 'one_shot').replace('_', ' ')}
-                      </span>
-                      {rule.ha_expose && (
-                        <span className="px-1 py-0.5 rounded bg-orange-950/60 text-orange-300 border border-orange-800/40">
-                          HA
-                        </span>
-                      )}
-                      <span>
-                        {(rule.triggers || []).length}T · {(rule.actions || []).length}A
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+                <div className="flex items-center gap-1.5">
+                  {selectedRuleIdsForDelete.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleBatchDelete}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition shadow-sm animate-pulse"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete ({selectedRuleIdsForDelete.size})</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSelectMode(false);
+                      setSelectedRuleIdsForDelete(new Set());
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+                  >
+                    <span>Done</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
+              {rules.map((rule, idx) => (
+                <SwipeableRuleItem
+                  key={rule.id}
+                  rule={rule}
+                  idx={idx}
+                  isSelected={rule.id === activeRule?.id}
+                  isSelectMode={isSelectMode}
+                  isCheckedForDelete={selectedRuleIdsForDelete.has(rule.id)}
+                  onToggleCheck={handleToggleCheckForDelete}
+                  onSelect={setSelectedRuleId}
+                  onDuplicate={handleDuplicateRule}
+                  onDelete={handleDeleteRule}
+                />
+              ))}
             </div>
+
+            {/* Mobile swipe hint */}
+            {!isSelectMode && rules.length > 0 && (
+              <p className="text-[10px] text-slate-500 text-center pt-1 block sm:hidden">
+                Swipe left to delete · Swipe right to duplicate
+              </p>
+            )}
           </div>
 
           {/* Card 2: Live JSON Inspector & Output (Compact) */}
