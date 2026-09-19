@@ -15,6 +15,13 @@ export default defineConfig(() => {
       outDir: path.resolve(__dirname, '../firmware/data/www'),
       emptyOutDir: true,
       chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          entryFileNames: '[name]-[hash].js',
+          chunkFileNames: '[name]-[hash].js',
+          assetFileNames: '[name]-[hash].[ext]',
+        },
+      },
     },
 
     plugins: [
@@ -55,13 +62,6 @@ export default defineConfig(() => {
         generateBundle() {
           const catalogFile = path.resolve(__dirname, '../catalog/can_do_catalog.json');
           if (fs.existsSync(catalogFile)) {
-            // Also emit within www bundle
-            this.emitFile({
-              type: 'asset',
-              fileName: 'catalog/can_do_catalog.json',
-              source: fs.readFileSync(catalogFile, 'utf-8'),
-            });
-
             // Stage in firmware/data/catalog.json (LittleFS root)
             const dataDir = path.resolve(__dirname, '../firmware/data');
             if (!fs.existsSync(dataDir)) {

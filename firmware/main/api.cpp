@@ -125,9 +125,9 @@ static void restart_task(void *arg) {
 
 static esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filepath) {
     if (strstr(filepath, ".html")) return httpd_resp_set_type(req, "text/html");
+    if (strstr(filepath, ".json")) return httpd_resp_set_type(req, "application/json");
     if (strstr(filepath, ".js")) return httpd_resp_set_type(req, "application/javascript");
     if (strstr(filepath, ".css")) return httpd_resp_set_type(req, "text/css");
-    if (strstr(filepath, ".json")) return httpd_resp_set_type(req, "application/json");
     if (strstr(filepath, ".svg")) return httpd_resp_set_type(req, "image/svg+xml");
     if (strstr(filepath, ".png")) return httpd_resp_set_type(req, "image/png");
     if (strstr(filepath, ".ico")) return httpd_resp_set_type(req, "image/x-icon");
@@ -171,9 +171,9 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
     } else if (stat(filepath, &file_stat) == 0) {
         fd = open(filepath, O_RDONLY, 0);
     } else {
-        // 2. SPA Fallback: serve index.html or index.html.gz for client-side routing
+        // 2. SPA Fallback: serve index.html or index.html.gz for client-side routing (never for /api/)
         const char *dot = strrchr(req->uri, '.');
-        if (!dot || strcmp(dot, ".html") == 0) {
+        if (strncmp(req->uri, "/api/", 5) != 0 && (!dot || strcmp(dot, ".html") == 0)) {
             snprintf(gz_filepath, sizeof(gz_filepath), "/spiffs/www/index.html.gz");
             if (stat(gz_filepath, &file_stat) == 0) {
                 fd = open(gz_filepath, O_RDONLY, 0);
@@ -543,6 +543,23 @@ static esp_err_t api_automations_diagnostics_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static void ensure_parent_dirs(const char *filepath) {
+    char temp[256];
+    strncpy(temp, filepath, sizeof(temp) - 1);
+    temp[sizeof(temp) - 1] = '\0';
+    char *slash = strrchr(temp, '/');
+    if (!slash) return;
+    *slash = '\0';
+    for (char *p = temp + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            mkdir(temp, 0755);
+            *p = '/';
+        }
+    }
+    mkdir(temp, 0755);
+}
+
 static esp_err_t api_file_upload_handler(httpd_req_t *req) {
     char filepath[128];
     if (httpd_req_get_hdr_value_str(req, "X-File-Path", filepath, sizeof(filepath)) != ESP_OK) {
@@ -554,6 +571,8 @@ static esp_err_t api_file_upload_handler(httpd_req_t *req) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid path: must start with /spiffs/");
         return ESP_FAIL;
     }
+
+    ensure_parent_dirs(filepath);
 
     FILE *fd = fopen(filepath, "w");
     if (!fd) {
