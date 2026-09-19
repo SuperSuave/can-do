@@ -437,10 +437,58 @@ void can_rx_task(void* arg) {
             // 1. Always update state cache
             update_state_cache(rx_msg.identifier, rx_msg.data);
 
-            // Publish state change to MQTT if this CAN ID is monitored
-            if (!has_prev || memcmp(prev_data, rx_msg.data, 8) != 0) {
-                if (mqtt_mgr_is_monitored_id(rx_msg.identifier)) {
-                    mqtt_mgr_publish_can_state(rx_msg.identifier, rx_msg.data, rx_msg.data_length_code);
+            // Helper: Mask out rolling counter and checksum bytes during MQTT change detection
+            auto get_can_comparison_mask = [](uint32_t can_id, uint8_t mask_out[8]) {
+                memset(mask_out, 0xFF, 8);
+                switch (can_id) {
+                    // Hyundai/Kia/Genesis E-GMP & Gen5W frames with alive counter and/or CRC in Byte 7:
+                    case 0x0A2: // Wheel speeds
+                    case 0x130: // Steering angle
+                    case 0x152: // BMS Battery telemetry
+                    case 0x1AC: // Cluster speed and info
+                    case 0x226: // Shifter / Gear status
+                    case 0x2AD: // Throttle & brake pedal
+                    case 0x380: // Climate cabin temperatures
+                    case 0x31B: // Climate blower fan & airflow
+                    case 0x476: // Center console & camera switch panel
+                    case 0x448: // Steering wheel media & cruise controls
+                    case 0x4CE: // Head unit media & cluster popup
+                        mask_out[7] = 0x00;
+                        break;
+                    default:
+                        break;
+                }
+            };
+
+            auto has_masked_can_data_changed = [&](uint32_t can_id, const uint8_t* prev, const uint8_t* curr, size_t len) -> bool {
+                if (!prev) return true;
+                uint8_t mask[8];
+                get_can_comparison_mask(can_id, mask);
+                for (size_t i = 0; i < len && i < 8; i++) {
+                    if ((prev[i] & mask[i]) != (curr[i] & mask[i])) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            // Publish state change to MQTT if this CAN ID is monitored and actual payload data changed
+            if (mqtt_mgr_is_monitored_id(rx_msg.identifier)) {
+                if (!has_prev || has_masked_can_data_changed(rx_msg.identifier, prev_data, rx_msg.data, rx_msg.data_length_code)) {
+                    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+                    static std::unordered_map<uint32_t, uint32_t> s_last_mqtt_pub_ms;
+                    auto pit = s_last_mqtt_pub_ms.find(rx_msg.identifier);
+                    bool throttle = false;
+                    // For continuous high-frequency telemetry (speed 0x1AC, wheels 0x0A2), throttle to max 10Hz (100ms)
+                    if (rx_msg.identifier == 0x1AC || rx_msg.identifier == 0x0A2) {
+                        if (pit != s_last_mqtt_pub_ms.end() && (now_ms - pit->second < 100)) {
+                            throttle = true;
+                        }
+                    }
+                    if (!throttle) {
+                        s_last_mqtt_pub_ms[rx_msg.identifier] = now_ms;
+                        mqtt_mgr_publish_can_state(rx_msg.identifier, rx_msg.data, rx_msg.data_length_code);
+                    }
                 }
             }
 

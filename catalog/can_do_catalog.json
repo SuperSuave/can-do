@@ -1256,7 +1256,10 @@
         "state_can_id": "0x476"
       },
       "match": {
-        "D3": "0x42"
+        "D3": "0x40"
+      },
+      "mask": {
+        "D3": "0x40"
       },
       "roles": [
         "trigger"
@@ -1729,6 +1732,7 @@
         "domain": "sensor",
         "icon": "mdi:thermostat"
       },
+      "type": "linear_scale",
       "tags": [
         "all_egmp"
       ],
@@ -1736,7 +1740,13 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x380"
+        "state_can_id": "0x380",
+        "state_byte": "D2",
+        "min": 62,
+        "max": 82,
+        "unit": "°F",
+        "raw_min": "0x06",
+        "raw_max": "0x1A"
       },
       "roles": [
         "trigger"
@@ -5392,7 +5402,10 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x1AC"
+        "state_can_id": "0x1AC",
+        "state_byte": "D1",
+        "unit": "km/h",
+        "factor": 1.0
       },
       "notes": "Decoded from E-GMP CLUSTER_INFO frame 428 (0x1AC) Byte 0 (Speed in kph, factor 1.0, range 0-255 kph).",
       "contributor": {

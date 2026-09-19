@@ -162,7 +162,15 @@ class CanDoDataCoordinator:
             byte_vals = [
                 int(hex_payload[i : i + 2], 16) for i in range(0, len(hex_payload), 2)
             ]
+            prev_vals = self.can_states.get(can_id)
             self.can_states[can_id] = byte_vals
+
+            # Filter out alive counter / checksum changes (E-GMP Byte 7 / D8)
+            if prev_vals is not None and len(prev_vals) == len(byte_vals) == 8:
+                if prev_vals[:7] == byte_vals[:7]:
+                    # Only rolling counter / CRC changed; skip notifying listeners to prevent event flood
+                    return
+
             self._notify_can_listeners(can_id)
         except ValueError as err:
             _LOGGER.warning("Malformed hex payload on %s: %s (%s)", msg.topic, hex_payload, err)
