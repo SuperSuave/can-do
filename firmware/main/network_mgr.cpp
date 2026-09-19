@@ -19,6 +19,8 @@
 static const char* TAG = "NET_MGR";
 static const char* NETWORKS_FILE = "/spiffs/networks.json";
 
+extern std::string g_device_id;
+
 static esp_netif_t* s_netif_sta = nullptr;
 static esp_netif_t* s_netif_ap = nullptr;
 
@@ -384,6 +386,21 @@ esp_err_t network_mgr_init(void) {
 
     s_netif_sta = esp_netif_create_default_wifi_sta();
     s_netif_ap = esp_netif_create_default_wifi_ap();
+
+    // Set network hostname for DHCP Option 12 (Router / UniFi client name)
+    if (!g_device_id.empty()) {
+        esp_netif_set_hostname(s_netif_sta, g_device_id.c_str());
+        esp_netif_set_hostname(s_netif_ap, g_device_id.c_str());
+        ESP_LOGI(TAG, "Network hostname configured: %s", g_device_id.c_str());
+
+        // Update default AP SSID with device suffix if not customized
+        if (s_ap_ssid == "CAN Do") {
+            auto dash = g_device_id.find_last_of('-');
+            if (dash != std::string::npos) {
+                s_ap_ssid = "CAN Do-" + g_device_id.substr(dash + 1);
+            }
+        }
+    }
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));

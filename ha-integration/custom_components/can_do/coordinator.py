@@ -19,9 +19,10 @@ class CanDoDataCoordinator:
     def __init__(self, hass: HomeAssistant, entry_data: Dict[str, Any]) -> None:
         """Initialize the CAN Do coordinator."""
         self.hass = hass
-        self.device_id: str = entry_data[CONF_DEVICE_ID]
-        self.vehicle_id: str = entry_data[CONF_VEHICLE_ID]
+        self.device_id: str = entry_data.get(CONF_DEVICE_ID, "auto")
+        self.vehicle_id: str = entry_data.get(CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID)
         self.base_topic: str = entry_data.get(CONF_BASE_TOPIC, DEFAULT_BASE_TOPIC)
+        self.active_device_id: Optional[str] = None if self.device_id in ("auto", "*", "") else self.device_id
 
         self.available: bool = True
         self.can_states: Dict[str, List[int]] = {}
@@ -32,45 +33,50 @@ class CanDoDataCoordinator:
         self.monitored_can_ids = get_monitored_can_ids(self.vehicle_id)
 
     @property
+    def effective_device_id(self) -> str:
+        """Return the active or configured device ID."""
+        return self.active_device_id or (self.device_id if self.device_id not in ("auto", "*", "") else "can-do")
+
+    @property
     def status_topic(self) -> str:
-        """Return MQTT LWT status topic."""
-        return f"{self.base_topic}/{self.device_id}/status"
-
-    @property
-    def tx_topic(self) -> str:
-        """Return MQTT raw action burst topic."""
-        return f"{self.base_topic}/{self.device_id}/tx"
-
-    @property
-    def notify_topic(self) -> str:
-        """Return MQTT cluster notification topic."""
-        return f"{self.base_topic}/{self.device_id}/notify"
-
-    @property
-    def sub_ids_topic(self) -> str:
-        """Return MQTT dynamic monitored CAN IDs topic."""
-        return f"{self.base_topic}/{self.device_id}/subscribe_ids"
+        """Return MQTT LWT status topic wildcard."""
+        return f"{self.base_topic}/+/status"
 
     @property
     def state_wildcard_topic(self) -> str:
         """Return wildcard topic for CAN state reception."""
-        return f"{self.base_topic}/{self.device_id}/state/+"
+        return f"{self.base_topic}/+/state/+"
+
+    @property
+    def tx_topic(self) -> str:
+        """Return MQTT raw action burst topic."""
+        return f"{self.base_topic}/{self.effective_device_id}/tx"
+
+    @property
+    def notify_topic(self) -> str:
+        """Return MQTT cluster notification topic."""
+        return f"{self.base_topic}/{self.effective_device_id}/notify"
+
+    @property
+    def sub_ids_topic(self) -> str:
+        """Return MQTT dynamic monitored CAN IDs topic."""
+        return f"{self.base_topic}/{self.effective_device_id}/subscribe_ids"
 
     async def async_start(self) -> None:
         """Subscribe to MQTT topics and request vehicle telemetry IDs."""
         _LOGGER.info(
             "Starting CAN Do coordinator for device '%s' (vehicle: %s)",
-            self.device_id,
+            self.effective_device_id,
             self.vehicle_id,
         )
 
-        # 1. Subscribe to LWT status topic
+        # 1. Subscribe to LWT status topic wildcard (e.g. cando/+/status)
         unsub_status = await mqtt.async_subscribe(
             self.hass, self.status_topic, self._handle_status_message, qos=1
         )
         self._unsub_list.append(unsub_status)
 
-        # 2. Subscribe to raw CAN state updates
+        # 2. Subscribe to raw CAN state updates wildcard (e.g. cando/+/state/+)
         unsub_states = await mqtt.async_subscribe(
             self.hass, self.state_wildcard_topic, self._handle_can_state_message, qos=1
         )
@@ -79,6 +85,18 @@ class CanDoDataCoordinator:
         # 3. Inform ESP32 edge device of the state CAN IDs we want it to publish
         if self.monitored_can_ids:
             await self.async_publish_monitored_ids()
+            # Also publish to known hardware MAC topic if different
+            if self.effective_device_id != "can-do-6C84":
+                try:
+                    await mqtt.async_publish(
+                        self.hass,
+                        f"{self.base_topic}/can-do-6C84/subscribe_ids",
+                        json.dumps(self.monitored_can_ids),
+                        qos=1,
+                        retain=True,
+                    )
+                except Exception as err:
+                    _LOGGER.warning("Could not publish initial subscribe_ids: %s", err)
 
     async def async_stop(self) -> None:
         """Unsubscribe all MQTT handlers."""
@@ -100,12 +118,22 @@ class CanDoDataCoordinator:
     @callback
     def _handle_status_message(self, msg: mqtt.ReceiveMessage) -> None:
         """Handle LWT online/offline transition."""
+        parts = msg.topic.split("/")
+        if len(parts) >= 3:
+            dev_id = parts[1]
+            if dev_id != "+" and dev_id != self.active_device_id:
+                self.active_device_id = dev_id
+                _LOGGER.info("CAN Do coordinator bound to active device ID '%s'", dev_id)
+
         status = msg.payload.strip().lower()
         new_avail = status == "online"
         if new_avail != self.available:
             self.available = new_avail
-            _LOGGER.info("CAN Do device '%s' status changed: %s", self.device_id, status)
+            _LOGGER.info("CAN Do device '%s' status changed: %s", self.effective_device_id, status)
             self._notify_all_listeners()
+
+        if new_avail and self.monitored_can_ids:
+            self.hass.async_create_task(self.async_publish_monitored_ids())
 
     @callback
     def _handle_can_state_message(self, msg: mqtt.ReceiveMessage) -> None:
@@ -114,7 +142,17 @@ class CanDoDataCoordinator:
         parts = msg.topic.split("/")
         if len(parts) < 4:
             return
+        dev_id = parts[1]
         can_id = parts[3].lower()
+
+        if dev_id != "+" and dev_id != self.active_device_id:
+            self.active_device_id = dev_id
+            _LOGGER.info("CAN Do coordinator bound to active device ID '%s'", dev_id)
+
+        # Receiving live CAN states indicates the edge device is online
+        if not self.available:
+            self.available = True
+            self._notify_all_listeners()
 
         hex_payload = msg.payload.strip()
         if len(hex_payload) < 2:

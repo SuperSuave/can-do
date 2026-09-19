@@ -9,6 +9,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
+from .catalog_loader import load_catalog
 from .const import DOMAIN, PLATFORMS
 from .coordinator import CanDoDataCoordinator
 
@@ -18,12 +19,14 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up the CAN Do component."""
     hass.data.setdefault(DOMAIN, {})
+    await hass.async_add_executor_job(load_catalog)
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up CAN Do from a config entry."""
     hass.data.setdefault(DOMAIN, {})
+    await hass.async_add_executor_job(load_catalog)
 
     coordinator = CanDoDataCoordinator(hass, entry.data)
     await coordinator.async_start()

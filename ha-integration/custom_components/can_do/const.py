@@ -7,8 +7,8 @@ CONF_VEHICLE_ID = "vehicle_id"
 CONF_BASE_TOPIC = "base_topic"
 
 DEFAULT_BASE_TOPIC = "cando"
-DEFAULT_DEVICE_ID = "can-do-c2f4"
-DEFAULT_VEHICLE_ID = "hi5_limited"
+DEFAULT_DEVICE_ID = "auto"
+DEFAULT_VEHICLE_ID = "ev6_gtline"
 
 PLATFORMS = [
     "notify",

@@ -19,3 +19,6 @@ CONFIG_FREERTOS_HZ=1000
 
 # Increase maximum open sockets so HTTP, WebSocket, MQTT, and GVRET can operate concurrently
 CONFIG_LWIP_MAX_SOCKETS=16
+
+# Default DHCP and network hostname
+CONFIG_LWIP_LOCAL_HOSTNAME="can-do"

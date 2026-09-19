@@ -29,6 +29,7 @@ idf_component_register(
         "lwip"
         "json"
         "littlefs"
+        "mdns"
 )
 
 # Automated LittleFS staging (embedded dashboard only)

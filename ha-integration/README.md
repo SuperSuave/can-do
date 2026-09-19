@@ -1,41 +1,67 @@
-# CAN Do: Home Assistant MQTT Integration
+# CAN Do: Home Assistant Integration
 
-CAN Do features native, zero-code Home Assistant integration via **MQTT Auto-Discovery**. 
-
-Because the ESP32 acts as an autonomous edge engine, Home Assistant serves as an optional UI view and remote command dispatch. No custom HACS components or custom Python classes (`WiCANVehicleClimateEntity`, etc.) are needed.
+This directory contains the custom Home Assistant integration for **CAN Do**, providing high-performance, bidirectional control and telemetry for Hyundai/Kia/Genesis vehicles (E-GMP / Gen5W platforms) communicating purely over **MQTT**.
 
 ---
 
-## ⚡ How It Works
+## 🌟 Highlights
 
-1. **Boot Announcement**: When the ESP32 connects to Wi-Fi and the MQTT broker, it reads the local `can_do_catalog.json` and dynamically publishes an Auto-Discovery configuration payload for every entity defined in the catalog.
-2. **Unified Device Registry**: Every entity includes a common `device` block with matching `identifiers`:
-   ```json
-   "device": {
-     "identifiers": ["cando_kia_ev6"],
-     "name": "Kia EV6",
-     "manufacturer": "CAN Do",
-     "model": "EV6 GT-Line"
-   }
+- **Pure MQTT**: Operates 100% via MQTT topics with Last Will and Testament (LWT) availability. Works seamlessly even when the vehicle is remote or behind cellular/NAT connections.
+- **Instrument Cluster Notifications (`notify`)**: Send arbitrary notifications, warnings, and alerts directly into the vehicle's instrument cluster track popup display using ISO-TP.
+- **Lean Edge Device**: The ESP32 does not need to store or parse the 127 kB master catalog. It executes lightweight raw CAN action bursts and streams state transitions for monitored CAN IDs.
+- **Full Domain Support**:
+  - `notify`: Cluster OSD popups & toast notifications
+  - `climate`: Driver and passenger cabin target temperature controls (0.5°C increments)
+  - `switch`: Heated steering wheel, defrost, comfort toggles
+  - `button`: Momentary pulses, climate sync toggle, wake pings
+  - `select`: Multi-state options (drive modes, sound stage focus, comfort levels)
+  - `sensor`: Road speed, gear selector (PRND), high-voltage battery SOC & temperatures
+  - `binary_sensor`: Door locks, tailgate opening, hands-on detection (HOD)
+  - `event`: Steering wheel buttons (Star button, Mode button, paddles)
+  - `lock`: Door lock and unlock controls
+  - `number`: Audio balance and fader controls
+  - `light`: Ambient mood lighting controls
+- **Native Enable / Disable**: All vehicle entities are registered in Home Assistant's Entity Registry, allowing you to easily disable any features your trim does not have.
+
+---
+
+## 🚀 Installation
+
+1. Copy the `custom_components/can_do` folder to your Home Assistant's `config/custom_components/` directory:
+   ```bash
+   cp -r ha-integration/custom_components/can_do /config/custom_components/
    ```
-   This automatically bundles seat comfort, heated steering wheel, door locks, ambient lighting, and cluster notifications under a single, unified **Vehicle Device** page in Home Assistant (`Settings -> Devices & Services -> MQTT`).
-3. **Bi-Directional Decoupled Topics**:
-   - **Command Topic (`cando/set/{entity_id}`)**: Home Assistant publishes friendly string states (e.g. `Medium Cool`, `High Heat`, `Off`). The ESP32 router intercepts the string, translates it to the binary CAN burst mask, and executes the physical button injection.
-   - **State Topic (`cando/state/{entity_id}`)**: Only updated when the ESP32's TWAI RX task detects a physical state confirmation frame on the vehicle bus (e.g. `0x496`). Published with `QoS 1, Retain = true` so states survive Home Assistant server reboots without state desyncs.
+2. Restart Home Assistant.
+3. Go to **Settings -> Devices & Services -> Add Integration** and search for **CAN Do**.
+4. Configure your device:
+   - **Device ID**: Enter your device ID (e.g. `can-do-c2f4`).
+   - **Vehicle Model**: Choose your vehicle from the dropdown (e.g. `Hyundai Ioniq 5 Limited [US]`, `Kia EV6 GT-Line`, etc.).
+   - **Base Topic**: Default is `cando`.
 
 ---
 
-## 📡 Topic Architecture
+## 💬 Sending Cluster Notifications
 
-| Direction | Topic Format | Payload Example | Description |
-|-----------|--------------|-----------------|-------------|
-| ESP32 -> HA | `homeassistant/{domain}/cando_{vehicle}/{entity_id}/config` | JSON | Discovery manifest declaring entity name, icon, options, and topics |
-| HA -> ESP32 | `cando/set/{entity_id}` | `Medium Cool` | Friendly string command published from HA UI or HA automation |
-| ESP32 -> HA | `cando/state/{entity_id}` | `Medium Cool` | Verified physical state parsed from CAN bus |
+You can send custom messages to your car's cluster from any Home Assistant automation, script, or Developer Tools:
+
+```yaml
+service: notify.send_message
+target:
+  entity_id: notify.can_do_c2f4_instrument_cluster_notification
+data:
+  message: "Charge Complete!"
+  data:
+    level: "info" # Options: "info", "warning", "error"
+```
 
 ---
 
-## 📋 Included Reference Files
+## 📡 MQTT Topic Contract
 
-- [`lovelace_dashboard.yaml`](lovelace_dashboard.yaml): Complete dashboard layout with seat comfort, climate, and steering wheel controls.
-- [`sample_automations.yaml`](sample_automations.yaml): HA automations demonstrating Android Auto profile triggers and preconditioning schedules.
+| Direction | Topic | Payload | Description |
+|---|---|---|---|
+| ESP32 -> HA | `cando/{device_id}/status` | `"online"` / `"offline"` | Device availability (Retained, QoS 1 LWT) |
+| ESP32 -> HA | `cando/{device_id}/state/0x{CAN_ID}` | `16-char hex` (e.g. `14010000C200F8FF`) | Broadcasted when a monitored CAN ID changes |
+| HA -> ESP32 | `cando/{device_id}/notify` | `{"message": "...", "level": "info"}` | Triggers instrument cluster track popup |
+| HA -> ESP32 | `cando/{device_id}/tx` | `{"can_id": "0x4A0", "delay_ms": 20, "steps": [...]}` | Executes raw CAN action burst |
+| HA -> ESP32 | `cando/{device_id}/subscribe_ids` | `["0x448", "0x4ce", ...]` | Sets dynamic list of CAN IDs to monitor |

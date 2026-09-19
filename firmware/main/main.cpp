@@ -28,6 +28,7 @@
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_netif.h"
+#include "mdns.h"
 
 static const char* TAG = "MAIN";
 
@@ -87,11 +88,24 @@ static void init_sntp(void) {
     esp_sntp_init();
 }
 
+static void init_mdns(void) {
+    esp_err_t err = mdns_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "mDNS init failed: %s", esp_err_to_name(err));
+        return;
+    }
+    mdns_hostname_set(g_device_id.c_str());
+    mdns_instance_name_set("CAN Do Vehicle Interface");
+    mdns_service_add(nullptr, "_http", "_tcp", 80, nullptr, 0);
+    ESP_LOGI(TAG, "mDNS responder started: http://%s.local", g_device_id.c_str());
+}
+
 static void app_ip_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         auto event = static_cast<ip_event_got_ip_t*>(event_data);
         ESP_LOGI(TAG, "Network ready. IP: " IPSTR, IP2STR(&event->ip_info.ip));
         init_sntp();
+        init_mdns();
         mqtt_mgr_start();
     }
 }

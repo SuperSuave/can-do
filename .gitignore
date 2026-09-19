@@ -16,6 +16,14 @@ firmware/managed_components/
 .env.local
 *.local
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Scratch / OTA artifacts
+firmware_ota*/
+
 # System & IDE artifacts
 .DS_Store
 Thumbs.db
