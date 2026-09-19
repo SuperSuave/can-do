@@ -1,0 +1,32 @@
+notify:
+  name: Send Instrument Cluster Notification
+  description: Send a text popup notification to the vehicle instrument cluster OSD.
+  fields:
+    message:
+      name: Message
+      description: The notification message text to display on the cluster.
+      example: "Driveway Gate Opening"
+      required: true
+      selector:
+        text:
+    title:
+      name: Title
+      description: Optional title or prefix for the notification.
+      example: "Alert"
+      required: false
+      selector:
+        text:
+    level:
+      name: Severity Level
+      description: Popup severity level (controls cluster icon / color).
+      example: "info"
+      default: "info"
+      selector:
+        select:
+          options:
+            - label: Info (White/Blue)
+              value: info
+            - label: Warning (Amber/Yellow)
+              value: warning
+            - label: Error (Red)
+              value: error

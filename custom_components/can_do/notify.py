@@ -28,11 +28,26 @@ async def async_setup_entry(
         if cmd.get("ha_metadata", {}).get("domain") == "notify":
             entities.append(CanDoNotifyEntity(coordinator, cmd))
 
-    # 2. Always ensure a default cluster notification entity exists
+    # 2. Always ensure the master cluster notification entity (notify.can_do) exists
     if not any(isinstance(e, CanDoClusterMasterNotifyEntity) for e in entities):
         entities.append(CanDoClusterMasterNotifyEntity(coordinator))
 
     async_add_entities(entities)
+
+    # 3. Register direct notify.can_do and can_do.notify services for convenient automation calls
+    async def async_send_cluster_notification(call: Any) -> None:
+        """Handle notify.can_do service call."""
+        message = call.data.get("message", "")
+        title = call.data.get("title")
+        data = call.data.get("data") or {}
+        level = data.get("level", call.data.get("level", "info"))
+
+        full_msg = f"{title}: {message}" if title else message
+        _LOGGER.info("Cluster notify service called: '%s' (level=%s)", full_msg, level)
+        await coordinator.async_send_notification(full_msg, level=level)
+
+    hass.services.async_register("notify", "can_do", async_send_cluster_notification)
+    hass.services.async_register(DOMAIN, "notify", async_send_cluster_notification)
 
 
 class CanDoNotifyEntity(CanDoEntity, NotifyEntity):
@@ -47,7 +62,6 @@ class CanDoNotifyEntity(CanDoEntity, NotifyEntity):
         data = kwargs.get("data") or {}
         level = data.get("level", "info")
 
-        # Allow title prefix if provided
         full_msg = f"{title}: {message}" if title else message
         _LOGGER.info(
             "Sending cluster notification '%s' (level=%s) via entity %s",
@@ -59,7 +73,7 @@ class CanDoNotifyEntity(CanDoEntity, NotifyEntity):
 
 
 class CanDoClusterMasterNotifyEntity(NotifyEntity):
-    """General Instrument Cluster Notification entity."""
+    """General Instrument Cluster Notification entity mapped to notify.can_do."""
 
     _attr_has_entity_name = True
     _attr_should_poll = False
@@ -68,8 +82,9 @@ class CanDoClusterMasterNotifyEntity(NotifyEntity):
     def __init__(self, coordinator: CanDoDataCoordinator) -> None:
         """Initialize master notify entity."""
         self.coordinator = coordinator
-        self._attr_name = "Instrument Cluster Notification"
+        self._attr_name = "Cluster Notification"
         self._attr_unique_id = f"{coordinator.device_id}_cluster_notify"
+        self.entity_id = "notify.can_do"
 
     @property
     def device_info(self) -> Any:

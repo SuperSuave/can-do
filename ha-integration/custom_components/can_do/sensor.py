@@ -9,7 +9,13 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfSpeed, UnitOfTemperature
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfElectricPotential,
+    UnitOfLength,
+    UnitOfSpeed,
+    UnitOfTemperature,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -59,7 +65,15 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
         elif "odometer" in cid or unit in ("km", "mi"):
             self._attr_device_class = SensorDeviceClass.DISTANCE
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
-            self._attr_native_unit_of_measurement = "km"
+            self._attr_native_unit_of_measurement = UnitOfLength.MILES if "mi" in unit.lower() else UnitOfLength.KILOMETERS
+        elif "soc" in cid or unit == "%":
+            self._attr_device_class = SensorDeviceClass.BATTERY
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+            self._attr_native_unit_of_measurement = PERCENTAGE
+        elif "voltage" in cid or (("battery" in cid or "12v" in cid) and unit in ("v", "V")):
+            self._attr_device_class = SensorDeviceClass.VOLTAGE
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+            self._attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
 
     @property
     def native_value(self) -> Any:
@@ -98,11 +112,37 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                         return 62 + (raw - 0x06)
                     return round(17.0 + (raw - 0x06) * 0.5, 1)
 
-        # 1D. HV Battery Module Temperatures (0x152: Byte D1=Min, D2=Max signed deg C)
-        if "battery_temp" in cid or cid == "hv_battery_temperatures":
+        # 1D. Outdoor Ambient Temperature (0x226: Byte D3 = deg C + 40)
+        if "ambient_temp" in cid or cid == "cond_ambient_temperature" or (self.state_can_id.lower() == "0x226" and "temp" in cid):
+            if len(payload) >= 3:
+                raw = payload[2]
+                temp_c = float(raw - 40)
+                if self._attr_native_unit_of_measurement == UnitOfTemperature.FAHRENHEIT:
+                    return round(temp_c * 1.8 + 32, 1)
+                return temp_c
+
+        # 1E. HV Battery Module Temperatures (0x152: Byte D1=Min, D2=Max signed deg C)
+        if "battery_temp" in cid or cid == "hv_battery_temperatures" or (self.state_can_id.lower() == "0x152" and "temp" in cid):
             if len(payload) >= 1:
                 raw = payload[0]
-                return raw if raw < 128 else raw - 256
+                temp_c = float(raw if raw < 128 else raw - 256)
+                if self._attr_native_unit_of_measurement == UnitOfTemperature.FAHRENHEIT:
+                    return round(temp_c * 1.8 + 32, 1)
+                return temp_c
+
+        # 1F. High Voltage Battery SOC (0x2FC: Byte D7 = factor 0.5 %)
+        if "soc" in cid or cid == "cond_hv_battery_soc" or (self.state_can_id.lower() == "0x2fc" and "soc" in cid):
+            if len(payload) >= 7:
+                raw = payload[6]
+                return round(raw * 0.5, 1)
+
+        # 1G. Vehicle Odometer (0x227: 24-bit LE across D1-D3, factor 0.1 km)
+        if "odometer" in cid or cid == "vehicle_odometer" or self.state_can_id.lower() == "0x227":
+            if len(payload) >= 3:
+                raw_km = (payload[0] | (payload[1] << 8) | (payload[2] << 16)) * 0.1
+                if self._attr_native_unit_of_measurement == UnitOfLength.MILES:
+                    return round(raw_km * 0.621371, 1)
+                return round(raw_km, 1)
 
         # 1E. Generic Linear Scale
         if self.command.get("type") == "linear_scale" or "min" in net:
