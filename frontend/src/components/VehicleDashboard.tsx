@@ -30,7 +30,8 @@ import {
   CheckCircle2,
   ChevronRight,
   Info,
-  Maximize2
+  Maximize2,
+  Activity
 } from 'lucide-react';
 import {
   EgmpModel,
@@ -173,7 +174,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
   // UI / Perspective State
   const [perspective, setPerspective] = useState<ViewPerspective>('exterior');
-  const [isSimulating, setIsSimulating] = useState<boolean>(true);
+  const [framesCount, setFramesCount] = useState<number>(0);
+  const [lastRxTimestamp, setLastRxTimestamp] = useState<string | null>(null);
+  const [speedKph, setSpeedKph] = useState<number>(0);
   const [recentCanLogs, setRecentCanLogs] = useState<DecodedCanMessage[]>([]);
   const [connectedDevice, setConnectedDevice] = useState<boolean>(false);
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
@@ -194,10 +197,13 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     return { label: 'Comfortable', color: 'text-emerald-400 bg-emerald-950/60 border-emerald-800/60' };
   }, [ambientTempC]);
 
-  // Estimated driving range based on SOC (approx 310 mi EPA for 100%)
+  // Estimated driving range based on SOC (approx 310 mi / 500 km EPA for 100%)
   const estimatedRangeMiles = useMemo(() => {
+    if (unitSystem === 'metric') {
+      return Math.round((soc / 100) * 500);
+    }
     return Math.round((soc / 100) * 310);
-  }, [soc]);
+  }, [soc, unitSystem]);
 
   // Temporary feedback toast
   const triggerNotice = (msg: string) => {
@@ -205,27 +211,6 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     setTimeout(() => {
       setFeedbackNotice(null);
     }, 2800);
-  };
-
-  // Model switching handler with vehicle catalog synchronization
-  const handleSelectModel = (newModel: EgmpModel) => {
-    setSelectedModel(newModel);
-    const spec = EGMP_MODELS[newModel];
-    triggerNotice(`Model Architecture: ${spec.brand} ${spec.name} (${spec.category})`);
-
-    if (onSelectVehicle && catalog?.vehicles) {
-      const match = catalog.vehicles.find(v => {
-        const s = `${v.id || ''} ${v.name || ''} ${v.model || ''} ${v.make || ''}`.toLowerCase();
-        if (newModel === 'ev6' && s.includes('ev6')) return true;
-        if (newModel === 'ioniq5' && (s.includes('ioniq 5') || s.includes('hi5'))) return true;
-        if (newModel === 'ioniq6' && (s.includes('ioniq 6') || s.includes('hi6'))) return true;
-        if (newModel === 'gv60' && s.includes('gv60')) return true;
-        return false;
-      });
-      if (match) {
-        onSelectVehicle(match.id);
-      }
-    }
   };
 
   // Sunroof toggles
@@ -279,11 +264,99 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         body: JSON.stringify({ entity, command: cmd })
       });
     } catch {
-      // Offline / standalone browser preview mode - visual state reflects immediately
+      // Offline / standalone browser preview mode
     }
   };
 
-  // 2. Real-time WebSocket connection to physical CAN Do device (if online)
+  const recordLog = (id: string, name: string, decoded: string, raw: string, timestamp: string) => {
+    setRecentCanLogs(prev => [
+      { id, name, decoded, raw, timestamp },
+      ...prev.slice(0, 19)
+    ]);
+  };
+
+  // Parser for high-level catalog entity states (broadcast via WebSocket or fetched via /api/states)
+  const handleIncomingEntityState = (entity: string, stateStr: string) => {
+    const normState = stateStr.toLowerCase();
+    if (entity === 'doors_status') {
+      if (normState.includes('driver door opened')) setDoors(d => ({ ...d, frontLeft: true }));
+      else if (normState.includes('driver door closed')) setDoors(d => ({ ...d, frontLeft: false }));
+      if (normState.includes('passenger door opened')) setDoors(d => ({ ...d, frontRight: true }));
+      else if (normState.includes('passenger door closed')) setDoors(d => ({ ...d, frontRight: false }));
+      if (normState.includes('rear left door opened')) setDoors(d => ({ ...d, rearLeft: true }));
+      else if (normState.includes('rear left door closed')) setDoors(d => ({ ...d, rearLeft: false }));
+      if (normState.includes('rear right door opened')) setDoors(d => ({ ...d, rearRight: true }));
+      else if (normState.includes('rear right door closed')) setDoors(d => ({ ...d, rearRight: false }));
+    } else if (entity === 'doors_lock_state') {
+      setLocked(normState.includes('lock') && !normState.includes('unlock'));
+    } else if (entity === 'trunk') {
+      setTrunkOpen(normState.includes('open'));
+    } else if (entity === 'hood') {
+      setHoodOpen(normState.includes('open'));
+    } else if (entity === 'charge_port') {
+      setChargePortOpen(normState.includes('open'));
+    } else if (entity === 'selected_gear') {
+      if (normState.includes('park') || normState === 'p') setGear('P');
+      else if (normState.includes('reverse') || normState === 'r') setGear('R');
+      else if (normState.includes('neutral') || normState === 'n') setGear('N');
+      else if (normState.includes('drive') || normState === 'd') setGear('D');
+    } else if (entity === 'cond_charging') {
+      setIsCharging(normState.includes('true') || normState.includes('on') || normState.includes('active') || normState.includes('charging') || normState.includes('plugged'));
+    } else if (entity === 'drivers_seat_comfort') {
+      if (normState.includes('high heat')) setDriverSeat('heat_high');
+      else if (normState.includes('medium heat')) setDriverSeat('heat_med');
+      else if (normState.includes('low heat')) setDriverSeat('heat_low');
+      else if (normState.includes('high cool')) setDriverSeat('cool_high');
+      else if (normState.includes('medium cool')) setDriverSeat('cool_med');
+      else if (normState.includes('low cool')) setDriverSeat('cool_low');
+      else setDriverSeat('off');
+    } else if (entity === 'passengers_seat_comfort') {
+      if (normState.includes('high heat')) setPassengerSeat('heat_high');
+      else if (normState.includes('medium heat')) setPassengerSeat('heat_med');
+      else if (normState.includes('low heat')) setPassengerSeat('heat_low');
+      else if (normState.includes('high cool')) setPassengerSeat('cool_high');
+      else if (normState.includes('medium cool')) setPassengerSeat('cool_med');
+      else if (normState.includes('low cool')) setPassengerSeat('cool_low');
+      else setPassengerSeat('off');
+    } else if (entity === 'heated_steering_wheel_toggle' || entity === 'heated_wheel_btn') {
+      if (normState.includes('high')) setSteeringWheelHeat('high');
+      else if (normState.includes('low')) setSteeringWheelHeat('low');
+      else setSteeringWheelHeat('off');
+    } else if (entity === 'hazard_lights') {
+      setHazards(normState.includes('active') || normState.includes('on'));
+    } else if (entity === 'climate_rear_defog') {
+      setRearDefrost(normState.includes('active') || normState.includes('on'));
+    }
+  };
+
+  // 1. Initial State Synchronization via /api/states REST endpoint
+  useEffect(() => {
+    let cancelled = false;
+    const fetchCurrentStates = async () => {
+      try {
+        const baseUrl = resolveDeviceBaseUrl();
+        const res = await fetch(`${baseUrl}/api/states`);
+        if (res.ok && !cancelled) {
+          const states: Array<{ entity: string; state: string }> = await res.json();
+          if (Array.isArray(states)) {
+            states.forEach(item => {
+              if (item?.entity && item?.state) {
+                handleIncomingEntityState(item.entity, item.state);
+              }
+            });
+          }
+        }
+      } catch {
+        // Device offline or standalone browser preview
+      }
+    };
+    fetchCurrentStates();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 2. Real-time WebSocket connection to physical CAN Do device
   useEffect(() => {
     let ws: WebSocket | null = null;
     let reconnectTimeout: any = null;
@@ -299,8 +372,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
         ws.onopen = () => {
           setConnectedDevice(true);
-          setIsSimulating(false);
-          triggerNotice('Connected to live CAN Do device telemetry');
+          triggerNotice('Connected to live CAN Do vehicle telemetry stream');
         };
 
         ws.onmessage = (event) => {
@@ -308,6 +380,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
             const data = JSON.parse(event.data);
             if (data.type === 'can_frame') {
               handleIncomingCanFrame(data.id, data.data || '');
+            } else if (data.type === 'state' && data.entity && data.state) {
+              handleIncomingEntityState(data.entity, data.state);
             }
           } catch {
             // Ignore non-json frames
@@ -316,7 +390,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
         ws.onclose = () => {
           setConnectedDevice(false);
-          reconnectTimeout = setTimeout(connect, 6000);
+          reconnectTimeout = setTimeout(connect, 5000);
         };
 
         ws.onerror = () => {
@@ -336,14 +410,23 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     };
   }, []);
 
-  // 3. CAN Frame Decoder
+  // 3. Real-Time CAN Frame Decoder (Direct from vehicle TWAI bus)
   const handleIncomingCanFrame = (idStr: string, hexPayload: string) => {
     const normId = idStr.toLowerCase().replace(/^0x/, '');
     const bytes = hexPayload.trim().split(/\s+/).map(h => parseInt(h, 16));
     const now = new Date().toLocaleTimeString();
 
+    // 0x1AC: Vehicle Road Speed (D1 = km/h, E-GMP CLUSTER_INFO frame 428)
+    if (normId === '1ac' && bytes.length >= 1) {
+      const kph = bytes[0];
+      const mph = Math.round(kph * 0.621371);
+      setSpeedKph(kph);
+      setSpeedMph(mph);
+      recordLog('0x1AC', 'Cluster Speedometer', `${kph} km/h (${mph} mph)`, hexPayload, now);
+    }
+
     // 0x226: Ambient Outdoor Temperature ([B3] / D4 = raw - 40 deg C)
-    if (normId === '226' && bytes.length >= 4) {
+    else if (normId === '226' && bytes.length >= 4) {
       const raw = bytes[3];
       if (raw > 0 && raw < 255) {
         const c = raw - 40;
@@ -352,12 +435,73 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       }
     }
 
-    // 0x2FC: HV Battery SOC ([B7] / D8 * 0.5%)
+    // 0x2FC: HV Traction Battery SOC ([B7] / D8 * 0.5%)
     else if (normId === '2fc' && bytes.length >= 8) {
       const raw = bytes[7];
       const newSoc = Math.round(raw * 0.5 * 10) / 10;
       setSoc(newSoc);
       recordLog('0x2FC', 'Traction Battery SOC', `${newSoc}%`, hexPayload, now);
+    }
+
+    // 0x152: BMS Module Min/Max Temperatures & 12V Aux Voltage
+    else if (normId === '152' && bytes.length >= 2) {
+      const minT = bytes[0];
+      const maxT = bytes[1];
+      setBatteryMinTempC(minT);
+      setBatteryMaxTempC(maxT);
+      if (bytes.length >= 4 && bytes[2] > 0) {
+        const v = Math.round(bytes[2] * 0.1 * 10) / 10;
+        setAux12V(v);
+      }
+      recordLog('0x152', 'HV Battery Module Temps', `Min: ${minT}°C / Max: ${maxT}°C`, hexPayload, now);
+    }
+
+    // 0x2C0: Selected Gear (D3: 0x00=P, 0x07=R, 0x06=N, 0x05=D)
+    else if (normId === '2c0' && bytes.length >= 3) {
+      const gVal = bytes[2];
+      let newGear: GearMode = 'P';
+      if (gVal === 0x07) newGear = 'R';
+      else if (gVal === 0x06) newGear = 'N';
+      else if (gVal === 0x05) newGear = 'D';
+      setGear(newGear);
+      if (newGear === 'P') setSpeedMph(0);
+      recordLog('0x2C0', 'Gear Selector', `Position: ${newGear}`, hexPayload, now);
+    }
+
+    // 0x411: Body Closures & Locks (E-GMP Body_Status frame 1041)
+    else if (normId === '411' && bytes.length >= 8) {
+      const fl = Boolean(bytes[3] & 0x01); // D4 bit 0: Driver Door
+      const fr = Boolean(bytes[4] & 0x04); // D5 bit 2: Passenger Door
+      const hood = Boolean(bytes[5] & 0x10); // D6 bit 4: Hood / Frunk
+      const rl = Boolean(bytes[6] & 0x10); // D7 bit 4: Rear Left Door
+      const rr = Boolean(bytes[7] & 0x01); // D8 bit 0: Rear Right Door
+      const isLocked = (bytes[2] & 0x40) === 0; // D3 bit 6: Unlocked (0x40) vs Locked (0x00)
+      setDoors({ frontLeft: fl, frontRight: fr, rearLeft: rl, rearRight: rr });
+      setHoodOpen(hood);
+      setLocked(isLocked);
+      recordLog('0x411', 'Body Closures & Security', `Doors: ${fl || fr || rl || rr ? 'Ajar' : 'Latched'}, Frunk: ${hood ? 'Open' : 'Closed'}`, hexPayload, now);
+    }
+
+    // 0x414: Tailgate / Trunk Status (D4 bit 0)
+    else if (normId === '414' && bytes.length >= 4) {
+      const tr = Boolean(bytes[3] & 0x01);
+      setTrunkOpen(tr);
+      recordLog('0x414', 'Power Liftgate / Trunk', tr ? 'OPEN' : 'Closed', hexPayload, now);
+    }
+
+    // 0x3AA: EV Charge Port Door (D5 bit 1)
+    else if (normId === '3aa' && bytes.length >= 5) {
+      const cp = Boolean(bytes[4] & 0x02);
+      setChargePortOpen(cp);
+      recordLog('0x3AA', 'Charge Port Door', cp ? 'OPEN' : 'Closed', hexPayload, now);
+    }
+
+    // 0x594: Vehicle Plugged In / EV Charging (D3 bit 0)
+    else if (normId === '594' && bytes.length >= 3) {
+      const charging = Boolean(bytes[2] & 0x01);
+      setIsCharging(charging);
+      if (!charging) setChargeRateKw(0);
+      recordLog('0x594', 'EV Charging Status', charging ? 'ACTIVE / PLUGGED IN' : 'INACTIVE', hexPayload, now);
     }
 
     // 0x227: Odometer (Bytes D2-D4, 24-bit LE)
@@ -384,11 +528,15 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       recordLog('0x380', 'Cabin Target Temp', `Driver: ${bytes[1]} / Pass: ${bytes[2]}`, hexPayload, now);
     }
 
-    // 0x541: Rear Defroster (D1 bit 0)
+    // 0x541: Rear Defroster (D1 bit 0) & Hazards (D5 bit 5)
     else if (normId === '541' && bytes.length >= 1) {
       const def = Boolean(bytes[0] & 0x01);
       setRearDefrost(def);
-      recordLog('0x541', 'Rear Defroster', def ? 'ON' : 'OFF', hexPayload, now);
+      if (bytes.length >= 5) {
+        const haz = Boolean(bytes[4] & 0x20);
+        setHazards(haz);
+      }
+      recordLog('0x541', 'Rear Defroster & Lights', def ? 'DEFROST ON' : 'DEFROST OFF', hexPayload, now);
     }
 
     // 0x418: Heated Steering Wheel (D1 bit 0..1)
@@ -414,6 +562,20 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       recordLog('0x496', 'Driver Seat Comfort', lvl, hexPayload, now);
     }
 
+    // 0x475: Passenger Seat Comfort (D1)
+    else if (normId === '475' && bytes.length >= 1) {
+      const b = bytes[0];
+      let lvl: SeatLevel = 'off';
+      if (b === 0x0E) lvl = 'heat_low';
+      else if (b === 0x0A) lvl = 'heat_med';
+      else if (b === 0x02) lvl = 'heat_high';
+      else if (b === 0x14) lvl = 'cool_low';
+      else if (b === 0x12) lvl = 'cool_med';
+      else if (b === 0x10) lvl = 'cool_high';
+      setPassengerSeat(lvl);
+      recordLog('0x475', 'Passenger Seat Comfort', lvl, hexPayload, now);
+    }
+
     // 0x31B: Blower Fan Speed & Airflow (D4)
     else if (normId === '31b' && bytes.length >= 4) {
       const fanRaw = bytes[3] & 0x0F;
@@ -422,35 +584,25 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       if (bytes.length >= 5) {
         setRecirc(Boolean(bytes[4] & 0x40));
       }
-      recordLog('0x31B', 'HVAC Blower / Vents', `Fan ${speed}, Recirc ${recirc ? 'ON' : 'OFF'}`, hexPayload, now);
+      recordLog('0x31B', 'HVAC Blower / Vents', `Fan ${speed}`, hexPayload, now);
     }
-  };
 
-  const recordLog = (id: string, name: string, decoded: string, raw: string, timestamp: string) => {
-    setRecentCanLogs(prev => [
-      { id, name, decoded, raw, timestamp },
-      ...prev.slice(0, 19)
-    ]);
-  };
-
-  // 4. Live Simulation Loop (for instant visual demonstration & interactive testing)
-  useEffect(() => {
-    if (!isSimulating) return;
-
-    const interval = setInterval(() => {
-      // Realistic micro-fluctuations in driving / telemetry
-      if (gear === 'D') {
-        setSpeedMph(prev => Math.min(74, Math.max(55, prev + (Math.random() * 2 - 1))));
-        setSoc(prev => Math.max(12, Number((prev - 0.01).toFixed(2))));
-        setOdometer(prev => prev + 1);
-      } else if (isCharging) {
-        setSoc(prev => Math.min(chargeLimit, Number((prev + 0.08).toFixed(2))));
-        setChargeRateKw(prev => Math.min(175, Math.max(120, prev + (Math.random() * 4 - 2))));
+    // 0x593 or 0x368: TPMS Tire Pressures (FL, FR, RL, RR in PSI / 0.2 bar)
+    else if ((normId === '593' || normId === '368') && bytes.length >= 4) {
+      const fl = Math.round(bytes[0] * 0.2 * 14.5038);
+      const fr = Math.round(bytes[1] * 0.2 * 14.5038);
+      const rl = Math.round(bytes[2] * 0.2 * 14.5038);
+      const rr = Math.round(bytes[3] * 0.2 * 14.5038);
+      if (fl > 20 && fl < 55) {
+        setTpms({ fl, fr, rl, rr });
+        recordLog(idStr, 'TPMS Tire Pressures', `FL:${fl} FR:${fr} RL:${rl} RR:${rr} PSI`, hexPayload, now);
       }
-    }, 1500);
+    }
 
-    return () => clearInterval(interval);
-  }, [isSimulating, gear, isCharging, chargeLimit]);
+    // Metrics counter
+    setFramesCount(prev => prev + 1);
+    setLastRxTimestamp(now);
+  };
 
   // Turn signal hazard blinker timer
   const [blinkState, setBlinkState] = useState(false);
@@ -461,63 +613,6 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     }
     setBlinkState(false);
   }, [hazards, turnSignal]);
-
-  // Scenario Presets
-  const applyScenario = (name: 'parked' | 'charging' | 'cruising' | 'cold_weather') => {
-    if (name === 'parked') {
-      setGear('P');
-      setSpeedMph(0);
-      setIsCharging(false);
-      setChargePortOpen(false);
-      setLights('off');
-      setLocked(true);
-      setDoors({ frontLeft: false, frontRight: false, rearLeft: false, rearRight: false });
-      setHoodOpen(false);
-      setTrunkOpen(false);
-      setHvacPower(false);
-      setDriverSeat('off');
-      setPassengerSeat('off');
-      setSteeringWheelHeat('off');
-      triggerNotice('Preset: Parked & Secured');
-    } else if (name === 'charging') {
-      setGear('P');
-      setSpeedMph(0);
-      setIsCharging(true);
-      setChargeRateKw(148);
-      setChargePortOpen(true);
-      setDoors({ frontLeft: false, frontRight: false, rearLeft: false, rearRight: false });
-      setHvacPower(true);
-      setDriverTemp(70);
-      triggerNotice('Preset: 150 kW DC Fast Charging');
-    } else if (name === 'cruising') {
-      setGear('D');
-      setSpeedMph(65);
-      setIsCharging(false);
-      setChargePortOpen(false);
-      setLights('low');
-      setLocked(true);
-      setDoors({ frontLeft: false, frontRight: false, rearLeft: false, rearRight: false });
-      setHoodOpen(false);
-      setTrunkOpen(false);
-      setHvacPower(true);
-      setFanSpeed(3);
-      setAirflow('face');
-      triggerNotice('Preset: Highway Cruise at 65 mph');
-    } else if (name === 'cold_weather') {
-      setGear('P');
-      setAmbientTempC(-2.5); // 27.5°F
-      setHvacPower(true);
-      setDriverTemp(75);
-      setPassengerTemp(75);
-      setFanSpeed(6);
-      setFrontDefrost(true);
-      setRearDefrost(true);
-      setDriverSeat('heat_high');
-      setPassengerSeat('heat_high');
-      setSteeringWheelHeat('high');
-      triggerNotice('Preset: Cold Morning Pre-Conditioning');
-    }
-  };
 
   // Seat toggle helper
   const cycleSeat = (current: SeatLevel, isDriver: boolean) => {
@@ -608,35 +703,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
           </div>
         </div>
 
-        {/* Gear Selector & Live Feed Indicator */}
+        {/* Perspective Selector & Live Telemetry Badge */}
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full lg:w-auto justify-between lg:justify-end">
-          {/* Gear Shifter Buttons */}
-          <div className="flex items-center p-1 rounded-xl bg-slate-900/90 border border-slate-800/80 shadow-inner">
-            {(['P', 'R', 'N', 'D'] as GearMode[]).map((g) => {
-              const active = gear === g;
-              return (
-                <button
-                  key={g}
-                  id={`gear-btn-${g}`}
-                  type="button"
-                  onClick={() => {
-                    setGear(g);
-                    if (g === 'D') setSpeedMph(prev => (prev === 0 ? 35 : prev));
-                    if (g === 'P') setSpeedMph(0);
-                    triggerNotice(`Shifted to ${g}`);
-                  }}
-                  className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
-                    active
-                      ? 'bg-cyan-500 text-slate-950 shadow-md scale-105'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-                  }`}
-                >
-                  {g}
-                </button>
-              );
-            })}
-          </div>
-
           {/* Perspective Selector */}
           <div
             id="perspective-selector-group"
@@ -689,26 +757,24 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
             </button>
           </div>
 
-          {/* Simulator / Live HW Toggle */}
+          {/* Live CAN Telemetry Connection Badge */}
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              id="feed-source-toggle"
-              onClick={() => {
-                setIsSimulating(prev => !prev);
-                triggerNotice(!isSimulating ? 'Switched to Live Simulation Feed' : 'Switched to Physical CAN Do Feed');
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 border transition-all ${
+            <div
+              id="live-can-status-badge"
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-2 border transition-all ${
                 connectedDevice
-                  ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'
-                  : isSimulating
-                  ? 'bg-indigo-950/80 text-indigo-300 border-indigo-700/60'
+                  ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60 shadow-sm'
                   : 'bg-slate-900 text-slate-400 border-slate-800'
               }`}
             >
-              <span className={`w-2 h-2 rounded-full ${connectedDevice ? 'bg-emerald-400 animate-pulse' : isSimulating ? 'bg-indigo-400' : 'bg-slate-500'}`} />
-              <span>{connectedDevice ? 'CAN Do Online' : isSimulating ? 'Live Simulator' : 'HW Standby'}</span>
-            </button>
+              <span className={`w-2 h-2 rounded-full ${connectedDevice ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500'}`} />
+              <span>{connectedDevice ? 'Vehicle CAN Online' : 'Awaiting CAN Traffic'}</span>
+              {framesCount > 0 && (
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-900/80 text-emerald-200 border border-emerald-700/50">
+                  {framesCount.toLocaleString()} frames
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -721,410 +787,102 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         </div>
       )}
 
-      {/* 2. Main 3-Column Cockpit Grid */}
+      {/* 2. Main Cockpit Grid: Unified Vehicle Overview & Outlines + Climate & CAN Logs */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         
-        {/* Left Column (3 cols): Powertrain, Battery & Closures Quick Toggles */}
-        <div className="lg:col-span-3 space-y-4">
-          
-          {/* HV Battery Status Card */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--border-color)] space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BatteryCharging className={`w-4 h-4 ${isCharging ? 'text-emerald-400 animate-pulse' : 'text-cyan-400'}`} />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Traction Battery</h3>
-              </div>
-              <span className="text-xs font-mono font-bold text-white">{soc.toFixed(1)}%</span>
-            </div>
-
-            {/* Battery Progress Meter */}
-            <div className="space-y-1.5">
-              <div className="h-3.5 w-full rounded-full bg-slate-950/80 p-0.5 border border-slate-800/80 relative overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-500 ${
-                    soc > 20 ? 'bg-gradient-to-r from-cyan-500 to-emerald-400' : 'bg-red-500'
-                  }`}
-                  style={{ width: `${soc}%` }}
-                />
-              </div>
-              <div className="flex justify-between text-[11px] text-slate-400 font-mono">
-                <span>0%</span>
-                <span className="text-cyan-300 font-medium">Est. {estimatedRangeMiles} mi Range</span>
-                <span>Limit: {chargeLimit}%</span>
-              </div>
-            </div>
-
-            {/* Charging & Power Stats */}
-            <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
-              <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60">
-                <span className="text-[10px] uppercase text-slate-400 block font-semibold">Charge Status</span>
-                <span className={`font-mono font-bold ${isCharging ? 'text-emerald-400' : 'text-slate-300'}`}>
-                  {isCharging ? `${chargeRateKw} kW DC` : 'Standby'}
-                </span>
-              </div>
-              <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60">
-                <span className="text-[10px] uppercase text-slate-400 block font-semibold">12V Aux Battery</span>
-                <span className="font-mono font-bold text-slate-300">{aux12V.toFixed(1)} V (OK)</span>
-              </div>
-              <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60">
-                <span className="text-[10px] uppercase text-slate-400 block font-semibold">Pack Min Temp</span>
-                <span className="font-mono font-bold text-slate-300">{batteryMinTempC}°C</span>
-              </div>
-              <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60">
-                <span className="text-[10px] uppercase text-slate-400 block font-semibold">Pack Max Temp</span>
-                <span className="font-mono font-bold text-slate-300">{batteryMaxTempC}°C</span>
-              </div>
-            </div>
-
-            {/* Charge Port Quick Toggle */}
-            <div className="pt-2 flex items-center justify-between border-t border-slate-800/60">
-              <span className="text-xs text-slate-400">Charge Port Door</span>
-              <button
-                type="button"
-                id="charge-port-toggle-btn"
-                onClick={() => {
-                  setChargePortOpen(prev => !prev);
-                  if (!chargePortOpen) setIsCharging(true);
-                  else setIsCharging(false);
-                  triggerNotice(chargePortOpen ? 'Charge Port Closed' : 'Charge Port Opened');
-                }}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                  chargePortOpen
-                    ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'
-                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-                }`}
-              >
-                {chargePortOpen ? 'Open / Plugged' : 'Closed'}
-              </button>
-            </div>
-          </div>
-
-          {/* Closures & Security Card */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--border-color)] space-y-3.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-indigo-400" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Closures & Security</h3>
-              </div>
-              <button
-                type="button"
-                id="lock-all-btn"
-                onClick={() => {
-                  const next = !locked;
-                  setLocked(next);
-                  if (next) {
-                    setDoors({ frontLeft: false, frontRight: false, rearLeft: false, rearRight: false });
-                    setHoodOpen(false);
-                    setTrunkOpen(false);
-                  }
-                  triggerNotice(next ? 'All Doors Locked & Secured' : 'Vehicle Unlocked');
-                }}
-                className={`p-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1 border transition-colors ${
-                  locked
-                    ? 'bg-slate-900 text-emerald-400 border-slate-800'
-                    : 'bg-amber-950/60 text-amber-300 border-amber-800/60'
-                }`}
-              >
-                {locked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-                <span>{locked ? 'Locked' : 'Unlocked'}</span>
-              </button>
-            </div>
-
-            {/* Doors & Latches Matrix */}
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                id="toggle-fl-door"
-                onClick={() => toggleDoor('frontLeft')}
-                className={`p-2 rounded-xl text-left border transition-all ${
-                  doors.frontLeft
-                    ? 'bg-amber-950/60 text-amber-300 border-amber-700/70 shadow-sm'
-                    : 'bg-slate-900/60 text-slate-400 border-slate-800/60 hover:text-slate-200'
-                }`}
-              >
-                <span className="text-[10px] block opacity-70">Driver Door</span>
-                <span className="font-semibold">{doors.frontLeft ? 'AJAR' : 'Closed'}</span>
-              </button>
-
-              <button
-                type="button"
-                id="toggle-fr-door"
-                onClick={() => toggleDoor('frontRight')}
-                className={`p-2 rounded-xl text-left border transition-all ${
-                  doors.frontRight
-                    ? 'bg-amber-950/60 text-amber-300 border-amber-700/70 shadow-sm'
-                    : 'bg-slate-900/60 text-slate-400 border-slate-800/60 hover:text-slate-200'
-                }`}
-              >
-                <span className="text-[10px] block opacity-70">Pass. Door</span>
-                <span className="font-semibold">{doors.frontRight ? 'AJAR' : 'Closed'}</span>
-              </button>
-
-              <button
-                type="button"
-                id="toggle-rl-door"
-                onClick={() => toggleDoor('rearLeft')}
-                className={`p-2 rounded-xl text-left border transition-all ${
-                  doors.rearLeft
-                    ? 'bg-amber-950/60 text-amber-300 border-amber-700/70 shadow-sm'
-                    : 'bg-slate-900/60 text-slate-400 border-slate-800/60 hover:text-slate-200'
-                }`}
-              >
-                <span className="text-[10px] block opacity-70">Rear Left</span>
-                <span className="font-semibold">{doors.rearLeft ? 'AJAR' : 'Closed'}</span>
-              </button>
-
-              <button
-                type="button"
-                id="toggle-rr-door"
-                onClick={() => toggleDoor('rearRight')}
-                className={`p-2 rounded-xl text-left border transition-all ${
-                  doors.rearRight
-                    ? 'bg-amber-950/60 text-amber-300 border-amber-700/70 shadow-sm'
-                    : 'bg-slate-900/60 text-slate-400 border-slate-800/60 hover:text-slate-200'
-                }`}
-              >
-                <span className="text-[10px] block opacity-70">Rear Right</span>
-                <span className="font-semibold">{doors.rearRight ? 'AJAR' : 'Closed'}</span>
-              </button>
-
-              <button
-                type="button"
-                id="toggle-hood"
-                onClick={() => {
-                  setHoodOpen(prev => !prev);
-                  triggerNotice(hoodOpen ? 'Front Trunk Closed' : 'Front Trunk / Hood Unlatched');
-                }}
-                className={`p-2 rounded-xl text-left border transition-all ${
-                  hoodOpen
-                    ? 'bg-amber-950/60 text-amber-300 border-amber-700/70'
-                    : 'bg-slate-900/60 text-slate-400 border-slate-800/60 hover:text-slate-200'
-                }`}
-              >
-                <span className="text-[10px] block opacity-70">Frunk / Hood</span>
-                <span className="font-semibold">{hoodOpen ? 'OPEN' : 'Closed'}</span>
-              </button>
-
-              <button
-                type="button"
-                id="toggle-trunk"
-                onClick={() => {
-                  setTrunkOpen(prev => !prev);
-                  dispatchCommand('trunk_open_toggle', 'toggle', trunkOpen ? 'Trunk Closed' : 'Trunk Liftgate Opened');
-                }}
-                className={`p-2 rounded-xl text-left border transition-all ${
-                  trunkOpen
-                    ? 'bg-amber-950/60 text-amber-300 border-amber-700/70'
-                    : 'bg-slate-900/60 text-slate-400 border-slate-800/60 hover:text-slate-200'
-                }`}
-              >
-                <span className="text-[10px] block opacity-70">Liftgate / Trunk</span>
-                <span className="font-semibold">{trunkOpen ? 'OPEN' : 'Closed'}</span>
-              </button>
-            </div>
-
-            {/* Roof & Sunroof Controls */}
-            <div id="closures-roof-panel" className="pt-3 border-t border-slate-800/80 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-semibold text-slate-300 block">Roof Configuration</span>
-                  <span className="text-[10px] text-slate-400">
-                    {sunroof.equipped ? EGMP_MODELS[selectedModel].roofType : 'Solid Steel Stamping'}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  id="toggle-sunroof-equipped-btn"
-                  onClick={toggleSunroofEquipped}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                    sunroof.equipped
-                      ? 'bg-sky-950/80 text-sky-300 border-sky-700/80 shadow-sm'
-                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-                  }`}
-                >
-                  {sunroof.equipped ? 'Glass Equipped' : 'Solid Roof'}
-                </button>
-              </div>
-
-              {sunroof.equipped && (
-                <div className="p-2 rounded-xl bg-slate-900/70 border border-slate-800/80 space-y-1.5 text-xs">
-                  {selectedModel === 'ev6' || selectedModel === 'ioniq6' ? (
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-slate-400">Tilt / Slide Position</span>
-                      <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-950 border border-slate-800">
-                        {(['closed', 'vent', 'open'] as const).map(pos => (
-                          <button
-                            key={pos}
-                            type="button"
-                            id={`sunroof-pos-${pos}`}
-                            onClick={() => {
-                              setSunroof(prev => ({ ...prev, state: pos }));
-                              triggerNotice(`Sunroof: ${pos === 'vent' ? 'Tilt Vent' : pos === 'open' ? 'Fully Open' : 'Closed'}`);
-                            }}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-colors ${
-                              sunroof.state === pos
-                                ? 'bg-sky-600 text-white shadow-sm'
-                                : 'text-slate-400 hover:text-slate-200'
-                            }`}
-                          >
-                            {pos}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-[11px] text-slate-300 block">Vision Roof Blind</span>
-                        <span className="text-[10px] text-slate-400">
-                          {sunroof.sunshade === 'open' ? 'Glass Exposed to Cabin' : 'Fabric Shade Closed'}
-                        </span>
-                      </div>
+        {/* Main Vehicle Column: Unified Vehicle Outline Card (HV Battery, Shifter, Closures & Diagram) */}
+        <div className="lg:col-span-7 xl:col-span-8 space-y-4">
+          <div
+            id="unified-vehicle-cockpit-card"
+            className="relative p-4 sm:p-6 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--border-color)] shadow-sm space-y-5"
+          >
+            {/* Top Toolbar: Gear Selector, Lock/Unlock Security & Lighting Controls */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b border-slate-800/80">
+              {/* Transmission Gear Selector (E-GMP CAN 0x2C0) */}
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900/90 border border-slate-800 shadow-inner">
+                  {(['P', 'R', 'N', 'D'] as GearMode[]).map((g) => {
+                    const active = gear === g;
+                    return (
                       <button
+                        key={g}
+                        id={`gear-selector-${g}`}
                         type="button"
-                        id="toggle-vision-shade-btn"
-                        onClick={toggleSunshade}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
-                          sunroof.sunshade === 'open'
-                            ? 'bg-sky-950 text-sky-300 border-sky-800'
-                            : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                        onClick={() => {
+                          setGear(g);
+                          if (g === 'D') setSpeedMph(prev => (prev === 0 ? 35 : prev));
+                          if (g === 'P') setSpeedMph(0);
+                          triggerNotice(`Shifted Transmission to ${g}`);
+                        }}
+                        title={`Vehicle Transmission Gear: ${g} (E-GMP CAN 0x2C0)`}
+                        className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all ${
+                          active
+                            ? 'bg-cyan-500 text-slate-950 shadow-md ring-1 ring-cyan-300 font-extrabold scale-105'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                         }`}
                       >
-                        {sunroof.sunshade === 'open' ? 'Retracted' : 'Closed'}
+                        {g}
                       </button>
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* Test Scenarios & Presets Card */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--border-color)] space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Scenario Presets</span>
-              <span className="text-[10px] text-slate-400">1-Click Test</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                id="preset-parked"
-                onClick={() => applyScenario('parked')}
-                className="p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white transition-colors text-left"
-              >
-                <span className="font-semibold block">Parked</span>
-                <span className="text-[10px] text-slate-400">Locked & Idle</span>
-              </button>
-              <button
-                type="button"
-                id="preset-charging"
-                onClick={() => applyScenario('charging')}
-                className="p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white transition-colors text-left"
-              >
-                <span className="font-semibold block text-emerald-400">Charging</span>
-                <span className="text-[10px] text-slate-400">150 kW DC Fast</span>
-              </button>
-              <button
-                type="button"
-                id="preset-cruising"
-                onClick={() => applyScenario('cruising')}
-                className="p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white transition-colors text-left"
-              >
-                <span className="font-semibold block text-cyan-400">Cruising</span>
-                <span className="text-[10px] text-slate-400">65 mph Highway</span>
-              </button>
-              <button
-                type="button"
-                id="preset-cold"
-                onClick={() => applyScenario('cold_weather')}
-                className="p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white transition-colors text-left"
-              >
-                <span className="font-semibold block text-blue-400">Winter Defrost</span>
-                <span className="text-[10px] text-slate-400">Seats & Wheel High</span>
-              </button>
-            </div>
-          </div>
-
-        </div>
-
-        {/* Center Column (6 cols): The Refined Modern Vehicle Architectural Illustration */}
-        <div className="lg:col-span-6 space-y-4">
-          
-          {/* Model Silhouette Architecture Selector */}
-          <div id="egmp-model-selector" className="p-3 sm:p-4 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--border-color)] shadow-sm space-y-2.5">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Car className="w-4 h-4 text-cyan-400" />
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-200">E-GMP Vehicle Architecture Outlines</span>
-              </div>
-              <div className="flex items-center gap-2.5 text-[11px] text-slate-400 font-mono">
-                <span className="text-cyan-300">Drag: Cd {EGMP_MODELS[selectedModel].cd}</span>
-                <span>•</span>
-                <span>WB: {EGMP_MODELS[selectedModel].wheelbaseMm}mm</span>
-                <span>•</span>
-                <span className="text-sky-300">
-                  {sunroof.equipped ? EGMP_MODELS[selectedModel].roofType : 'Solid Steel Roof'}
-                </span>
-              </div>
-            </div>
-
-            {/* 4 Model Selection Pills: EV6, Ioniq 5, Ioniq 6, GV60 */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {(['ev6', 'ioniq5', 'ioniq6', 'gv60'] as EgmpModel[]).map((mKey) => {
-                const spec = EGMP_MODELS[mKey];
-                const isSelected = selectedModel === mKey;
-                return (
-                  <button
-                    key={mKey}
-                    id={`model-btn-${mKey}`}
-                    type="button"
-                    onClick={() => handleSelectModel(mKey)}
-                    className={`p-2.5 rounded-xl border text-left transition-all relative overflow-hidden ${
-                      isSelected
-                        ? 'bg-slate-800/95 border-cyan-500 text-white shadow-md shadow-cyan-950/50 ring-1 ring-cyan-500/50'
-                        : 'bg-slate-900/60 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:border-slate-700 hover:bg-slate-800/40'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase font-bold tracking-wider opacity-75">{spec.brand}</span>
-                      <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-cyan-400 shadow-[0_0_8px_#22d3ee]' : 'bg-slate-700'}`} />
-                    </div>
-                    <div className="text-sm font-bold tracking-tight text-white mt-1">{spec.name}</div>
-                    <div className="text-[10px] text-slate-400 truncate mt-0.5">{spec.category}</div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="relative p-4 sm:p-6 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--border-color)] overflow-hidden shadow-md flex flex-col items-center justify-center min-h-[580px]">
-            
-            {/* Top Overlay Bar inside diagram: Lighting, Hazards, Mirrors & Roof */}
-            <div className="w-full flex flex-wrap items-center justify-between gap-2.5 mb-4 z-10">
-              {/* Lighting controls */}
-              <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
-                {(['off', 'parking', 'low', 'high', 'auto'] as LightMode[]).map(mode => (
-                  <button
-                    key={mode}
-                    type="button"
-                    id={`light-btn-${mode}`}
-                    onClick={() => {
-                      setLights(mode);
-                      triggerNotice(`Headlights: ${mode.toUpperCase()}`);
-                    }}
-                    className={`px-2 py-1 rounded-md text-[11px] font-medium uppercase transition-colors ${
-                      lights === mode
-                        ? 'bg-slate-700 text-cyan-300 font-bold'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {mode}
-                  </button>
-                ))}
+                <div className="flex flex-col">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Transmission</span>
+                  <span className="text-xs font-mono font-semibold text-cyan-300">
+                    {gear === 'P' ? 'Parked' : gear === 'R' ? 'Reverse' : gear === 'N' ? 'Neutral' : 'Drive'}
+                  </span>
+                </div>
               </div>
 
-              {/* Hazards, Mirrors & Quick Sunroof Toggle */}
-              <div className="flex flex-wrap items-center gap-2 text-xs">
+              {/* Security Lock Toggle & Exterior Lighting Controls */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Vehicle Lock/Unlock Master Action */}
+                <button
+                  type="button"
+                  id="lock-all-btn"
+                  onClick={() => {
+                    const next = !locked;
+                    setLocked(next);
+                    if (next) {
+                      setDoors({ frontLeft: false, frontRight: false, rearLeft: false, rearRight: false });
+                      setHoodOpen(false);
+                      setTrunkOpen(false);
+                    }
+                    triggerNotice(next ? 'All Doors Locked & Secured' : 'Vehicle Unlocked');
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 border transition-colors ${
+                    locked
+                      ? 'bg-slate-900/90 text-emerald-400 border-slate-800 hover:bg-slate-800'
+                      : 'bg-amber-950/70 text-amber-300 border-amber-800/80 shadow-sm'
+                  }`}
+                >
+                  {locked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                  <span>{locked ? 'Vehicle Locked' : 'Unlocked'}</span>
+                </button>
+
+                {/* Headlights Mode Selector */}
+                <div className="flex items-center gap-0.5 p-0.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
+                  {(['off', 'parking', 'low', 'high', 'auto'] as LightMode[]).map(mode => (
+                    <button
+                      key={mode}
+                      type="button"
+                      id={`light-btn-${mode}`}
+                      onClick={() => {
+                        setLights(mode);
+                        triggerNotice(`Headlights: ${mode.toUpperCase()}`);
+                      }}
+                      className={`px-2 py-1 rounded-lg text-[11px] font-medium uppercase transition-colors ${
+                        lights === mode
+                          ? 'bg-slate-700 text-cyan-300 font-bold shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Hazards & Mirrors */}
                 <button
                   type="button"
                   id="hazard-btn"
@@ -1141,6 +899,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 >
                   <AlertTriangle className="w-3.5 h-3.5" />
                 </button>
+
                 <button
                   type="button"
                   id="mirror-fold-btn"
@@ -1156,45 +915,95 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 >
                   {mirrorsFolded ? 'Mirrors Folded' : 'Fold Mirrors'}
                 </button>
-
-                {/* Quick Roof Button */}
-                <button
-                  type="button"
-                  id="quick-sunroof-btn"
-                  onClick={cycleSunroofState}
-                  title={sunroof.equipped ? 'Click to toggle sunroof position or shade' : 'Click to equip glass roof'}
-                  className={`px-2.5 py-1.5 rounded-xl border transition-colors text-[11px] font-medium flex items-center gap-1.5 cursor-pointer ${
-                    sunroof.equipped
-                      ? 'bg-sky-950/90 text-sky-300 border-sky-700/80 shadow-sm hover:bg-sky-900/90'
-                      : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200'
-                  }`}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${sunroof.equipped ? 'bg-sky-400' : 'bg-slate-600'}`} />
-                  <span>
-                    {sunroof.equipped
-                      ? selectedModel === 'ev6' || selectedModel === 'ioniq6'
-                        ? `Sunroof: ${sunroof.state.toUpperCase()}`
-                        : `Vision Roof: ${sunroof.sunshade === 'open' ? 'GLASS' : 'SHADE'}`
-                      : 'Solid Roof'}
-                  </span>
-                </button>
               </div>
             </div>
 
-            {/* Front Headlight Light Beams (Cast on floor) */}
-            <div className="relative w-full flex justify-center items-center">
-              
-              {/* Headlight beam projections (visible when low or high) */}
+            {/* HV Traction Battery Info & Power Sub-Section */}
+            <div className="p-3.5 sm:p-4 rounded-xl bg-slate-900/60 border border-slate-800/70 space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <BatteryCharging className={`w-4 h-4 ${isCharging ? 'text-emerald-400 animate-pulse' : 'text-cyan-400'}`} />
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Traction Battery</span>
+                  <span className="text-xs font-mono font-bold text-white px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700/60">
+                    {soc.toFixed(1)}%
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Charge Port Quick Toggle */}
+                  <button
+                    type="button"
+                    id="charge-port-toggle-btn"
+                    onClick={() => {
+                      setChargePortOpen(prev => !prev);
+                      if (!chargePortOpen) setIsCharging(true);
+                      else setIsCharging(false);
+                      triggerNotice(chargePortOpen ? 'Charge Port Closed' : 'Charge Port Opened');
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                      chargePortOpen
+                        ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'
+                        : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                    }`}
+                  >
+                    {chargePortOpen ? 'Charge Port: Open / Plugged' : 'Charge Port: Closed'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Battery Progress Meter Bar */}
+              <div className="space-y-1">
+                <div className="h-3 w-full rounded-full bg-slate-950/90 p-0.5 border border-slate-800/80 relative overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      soc > 20 ? 'bg-gradient-to-r from-cyan-500 to-emerald-400' : 'bg-red-500'
+                    }`}
+                    style={{ width: `${soc}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[11px] text-slate-400 font-mono">
+                  <span>0%</span>
+                  <span className="text-cyan-300 font-medium">Est. {estimatedRangeMiles} {unitSystem === 'metric' ? 'km' : 'mi'} Range</span>
+                  <span>Limit: {chargeLimit}%</span>
+                </div>
+              </div>
+
+              {/* Compact Battery & Aux Telemetry Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+                <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50">
+                  <span className="text-[10px] uppercase text-slate-400 block font-semibold">Charge Status</span>
+                  <span className={`font-mono font-bold ${isCharging ? 'text-emerald-400' : 'text-slate-300'}`}>
+                    {isCharging ? `${chargeRateKw} kW DC` : 'Standby'}
+                  </span>
+                </div>
+                <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50">
+                  <span className="text-[10px] uppercase text-slate-400 block font-semibold">12V Aux Battery</span>
+                  <span className="font-mono font-bold text-slate-300">{aux12V.toFixed(1)} V (OK)</span>
+                </div>
+                <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50">
+                  <span className="text-[10px] uppercase text-slate-400 block font-semibold">Pack Min Temp</span>
+                  <span className="font-mono font-bold text-slate-300">{batteryMinTempC}°C</span>
+                </div>
+                <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50">
+                  <span className="text-[10px] uppercase text-slate-400 block font-semibold">Pack Max Temp</span>
+                  <span className="font-mono font-bold text-slate-300">{batteryMaxTempC}°C</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Central Vehicle Silhouette Visual Stage with Projections & TPMS */}
+            <div className="relative py-2 overflow-hidden flex flex-col items-center justify-center min-h-[500px]">
+              {/* Headlight beam projections (visible when low or high or auto in Drive) */}
               {(lights === 'low' || lights === 'high' || (lights === 'auto' && gear === 'D')) && (
                 <div
-                  className={`absolute -top-16 w-64 h-36 bg-gradient-to-t from-cyan-400/20 via-cyan-300/5 to-transparent pointer-events-none blur-xl transition-opacity duration-500 ${
+                  className={`absolute -top-12 w-64 h-36 bg-gradient-to-t from-cyan-400/20 via-cyan-300/5 to-transparent pointer-events-none blur-xl transition-opacity duration-500 ${
                     lights === 'high' ? 'opacity-80 scale-125' : 'opacity-40'
                   }`}
                   style={{ clipPath: 'polygon(20% 100%, 80% 100%, 100% 0%, 0% 0%)' }}
                 />
               )}
 
-              {/* Model-Specific Architectural Vector Silhouette */}
+              {/* Onboarding-Selected Vehicle Vector Silhouette */}
               <VehicleSilhouette
                 model={selectedModel}
                 perspective={perspective}
@@ -1233,49 +1042,218 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 onCycleSteeringHeat={cycleSteeringHeat}
               />
 
-              {/* TPMS Floating Badges (Anchored beside each tire) */}
-              <div className="absolute top-24 left-2 sm:left-4 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono text-center shadow-lg">
+              {/* TPMS Floating Badges Anchored Beside Tires */}
+              <div className="absolute top-16 left-2 sm:left-6 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono text-center shadow-lg">
                 <span className="text-slate-400 block text-[9px]">FL TIRE</span>
                 <span className="font-bold text-emerald-400">{tpms.fl} PSI</span>
               </div>
 
-              <div className="absolute top-24 right-2 sm:right-4 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono text-center shadow-lg">
+              <div className="absolute top-16 right-2 sm:right-6 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono text-center shadow-lg">
                 <span className="text-slate-400 block text-[9px]">FR TIRE</span>
                 <span className="font-bold text-emerald-400">{tpms.fr} PSI</span>
               </div>
 
-              <div className="absolute bottom-28 left-2 sm:left-4 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono text-center shadow-lg">
+              <div className="absolute bottom-20 left-2 sm:left-6 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono text-center shadow-lg">
                 <span className="text-slate-400 block text-[9px]">RL TIRE</span>
                 <span className="font-bold text-emerald-400">{tpms.rl} PSI</span>
               </div>
 
-              <div className="absolute bottom-28 right-2 sm:right-4 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono text-center shadow-lg">
+              <div className="absolute bottom-20 right-2 sm:right-6 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono text-center shadow-lg">
                 <span className="text-slate-400 block text-[9px]">RR TIRE</span>
                 <span className="font-bold text-emerald-400">{tpms.rr} PSI</span>
               </div>
             </div>
 
-            {/* Bottom Quick Action Hints */}
-            <div className="w-full mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-cyan-400" />
-                <span>Click doors, seats, or frunk to toggle live state</span>
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-xs text-slate-300">
+            {/* Closures, Security & Latches Grid + Roof Controls */}
+            <div className="pt-4 border-t border-slate-800/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-indigo-400" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Closures & Security</h3>
+                </div>
+                <div className="text-[11px] font-mono text-slate-400">
                   {doors.frontLeft || doors.frontRight || doors.rearLeft || doors.rearRight ? (
                     <span className="text-amber-400 font-bold">Door Ajar</span>
                   ) : (
                     <span className="text-emerald-400">All Doors Latched</span>
                   )}
+                </div>
+              </div>
+
+              {/* Doors & Latches Matrix */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+                <button
+                  type="button"
+                  id="toggle-fl-door"
+                  onClick={() => toggleDoor('frontLeft')}
+                  className={`p-2 rounded-xl text-left border transition-all ${
+                    doors.frontLeft
+                      ? 'bg-amber-950/60 text-amber-300 border-amber-700/70 shadow-sm'
+                      : 'bg-slate-900/60 text-slate-400 border-slate-800/60 hover:text-slate-200'
+                  }`}
+                >
+                  <span className="text-[10px] block opacity-70">Driver Door</span>
+                  <span className="font-semibold">{doors.frontLeft ? 'AJAR' : 'Closed'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="toggle-fr-door"
+                  onClick={() => toggleDoor('frontRight')}
+                  className={`p-2 rounded-xl text-left border transition-all ${
+                    doors.frontRight
+                      ? 'bg-amber-950/60 text-amber-300 border-amber-700/70 shadow-sm'
+                      : 'bg-slate-900/60 text-slate-400 border-slate-800/60 hover:text-slate-200'
+                  }`}
+                >
+                  <span className="text-[10px] block opacity-70">Pass. Door</span>
+                  <span className="font-semibold">{doors.frontRight ? 'AJAR' : 'Closed'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="toggle-rl-door"
+                  onClick={() => toggleDoor('rearLeft')}
+                  className={`p-2 rounded-xl text-left border transition-all ${
+                    doors.rearLeft
+                      ? 'bg-amber-950/60 text-amber-300 border-amber-700/70 shadow-sm'
+                      : 'bg-slate-900/60 text-slate-400 border-slate-800/60 hover:text-slate-200'
+                  }`}
+                >
+                  <span className="text-[10px] block opacity-70">Rear Left</span>
+                  <span className="font-semibold">{doors.rearLeft ? 'AJAR' : 'Closed'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="toggle-rr-door"
+                  onClick={() => toggleDoor('rearRight')}
+                  className={`p-2 rounded-xl text-left border transition-all ${
+                    doors.rearRight
+                      ? 'bg-amber-950/60 text-amber-300 border-amber-700/70 shadow-sm'
+                      : 'bg-slate-900/60 text-slate-400 border-slate-800/60 hover:text-slate-200'
+                  }`}
+                >
+                  <span className="text-[10px] block opacity-70">Rear Right</span>
+                  <span className="font-semibold">{doors.rearRight ? 'AJAR' : 'Closed'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="toggle-hood"
+                  onClick={() => {
+                    setHoodOpen(prev => !prev);
+                    triggerNotice(hoodOpen ? 'Front Trunk Closed' : 'Front Trunk / Hood Unlatched');
+                  }}
+                  className={`p-2 rounded-xl text-left border transition-all ${
+                    hoodOpen
+                      ? 'bg-amber-950/60 text-amber-300 border-amber-700/70'
+                      : 'bg-slate-900/60 text-slate-400 border-slate-800/60 hover:text-slate-200'
+                  }`}
+                >
+                  <span className="text-[10px] block opacity-70">Frunk / Hood</span>
+                  <span className="font-semibold">{hoodOpen ? 'OPEN' : 'Closed'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="toggle-trunk"
+                  onClick={() => {
+                    setTrunkOpen(prev => !prev);
+                    dispatchCommand('trunk_open_toggle', 'toggle', trunkOpen ? 'Trunk Closed' : 'Trunk Liftgate Opened');
+                  }}
+                  className={`p-2 rounded-xl text-left border transition-all ${
+                    trunkOpen
+                      ? 'bg-amber-950/60 text-amber-300 border-amber-700/70'
+                      : 'bg-slate-900/60 text-slate-400 border-slate-800/60 hover:text-slate-200'
+                  }`}
+                >
+                  <span className="text-[10px] block opacity-70">Liftgate / Trunk</span>
+                  <span className="font-semibold">{trunkOpen ? 'OPEN' : 'Closed'}</span>
+                </button>
+              </div>
+
+              {/* Roof Configuration Row */}
+              <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400">Roof Configuration:</span>
+                  <span className="font-medium text-slate-200">
+                    {sunroof.equipped ? EGMP_MODELS[selectedModel].roofType : 'Solid Steel Stamping'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    id="toggle-sunroof-equipped-btn"
+                    onClick={toggleSunroofEquipped}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                      sunroof.equipped
+                        ? 'bg-sky-950/80 text-sky-300 border-sky-700/80 shadow-sm'
+                        : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                    }`}
+                  >
+                    {sunroof.equipped ? 'Glass Equipped' : 'Solid Roof'}
+                  </button>
+
+                  {sunroof.equipped && (
+                    selectedModel === 'ev6' || selectedModel === 'ioniq6' ? (
+                      <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-950 border border-slate-800">
+                        {(['closed', 'vent', 'open'] as const).map(pos => (
+                          <button
+                            key={pos}
+                            type="button"
+                            id={`sunroof-pos-${pos}`}
+                            onClick={() => {
+                              setSunroof(prev => ({ ...prev, state: pos }));
+                              triggerNotice(`Sunroof: ${pos === 'vent' ? 'Tilt Vent' : pos === 'open' ? 'Fully Open' : 'Closed'}`);
+                            }}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-colors ${
+                              sunroof.state === pos
+                                ? 'bg-sky-600 text-white shadow-sm'
+                                : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            {pos}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        id="toggle-vision-shade-btn"
+                        onClick={toggleSunshade}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                          sunroof.sunshade === 'open'
+                            ? 'bg-sky-950 text-sky-300 border-sky-800'
+                            : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        {sunroof.sunshade === 'open' ? 'Vision Shade: Retracted' : 'Vision Shade: Closed'}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Status Strip */}
+            <div className="w-full pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Live CAN Telemetry: Sensor states reflect active vehicle broadcast (BCM, BMS, VMCU, FATC)</span>
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs text-slate-300">
+                  {EGMP_MODELS[selectedModel].brand} {EGMP_MODELS[selectedModel].name}
                 </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right Column (3 cols): Dual-Zone Climate & Real-Time CAN Bus Decoder */}
-        <div className="lg:col-span-3 space-y-4">
+        {/* Right Column (Cabin Climate & Real-Time CAN Bus Decoder) */}
+        <div className="lg:col-span-5 xl:col-span-4 space-y-4">
           
           {/* Dual-Zone Climate Control Suite */}
           <div className="p-4 sm:p-5 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--border-color)] space-y-4">
@@ -1530,7 +1508,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/60 text-slate-400 text-center text-xs">
                   Awaiting live CAN frames...
                   <div className="mt-1 text-[11px] text-slate-500">
-                    {isSimulating ? 'Generating simulated TWAI bus packets' : 'Listening on /ws'}
+                    {connectedDevice ? 'Monitoring live vehicle TWAI bus' : 'Listening on /ws endpoint for physical CAN packets'}
                   </div>
                 </div>
               ) : (
