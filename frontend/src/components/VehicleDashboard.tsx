@@ -149,14 +149,20 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   const [hazards, setHazards] = useState(false);
   const [turnSignal, setTurnSignal] = useState<'off' | 'left' | 'right'>('off');
 
-  // High Voltage Battery
-  const [soc, setSoc] = useState<number>(78.5);
+  // High Voltage Battery & 12V Auxiliary
+  const [soc, setSoc] = useState<number>(() => {
+    const saved = localStorage.getItem('cando_last_soc');
+    return saved ? parseFloat(saved) : 78.5;
+  });
   const [isCharging, setIsCharging] = useState(false);
   const [chargeRateKw, setChargeRateKw] = useState<number>(0);
   const [chargeLimit, setChargeLimit] = useState<number>(80);
   const [batteryMinTempC, setBatteryMinTempC] = useState<number>(23.0);
   const [batteryMaxTempC, setBatteryMaxTempC] = useState<number>(24.5);
-  const [aux12V, setAux12V] = useState<number>(13.8);
+  const [aux12V, setAux12V] = useState<number>(() => {
+    const saved = localStorage.getItem('cando_last_aux12v');
+    return saved ? parseFloat(saved) : 13.8;
+  });
 
   // Climate & Comfort
   const [hvacPower, setHvacPower] = useState(true);
@@ -251,7 +257,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       hvSocName: findCmd('cond_hv_battery_soc')?.ha_metadata?.name || 'Traction Battery SOC',
       hvTemps: getCanId('hv_battery_temperatures', '152'),
       hvTempsName: findCmd('hv_battery_temperatures')?.ha_metadata?.name || 'HV Battery Module Temps',
-      aux12v: getCanId('cond_aux_12v_battery', '152'),
+      aux12v: getCanId('cond_aux_12v_battery', '1cf'),
       aux12vName: findCmd('cond_aux_12v_battery')?.ha_metadata?.name || '12V Aux Battery Voltage',
       gear: getCanId('selected_gear', '2c0'),
       gearName: gearCmd?.ha_metadata?.name || 'Gear Selector',
@@ -414,13 +420,19 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       const match = stateStr.match(/(\d+(\.\d+)?)/);
       if (match) {
         const s = parseFloat(match[1]);
-        if (s >= 0 && s <= 100) setSoc(s);
+        if (s >= 0 && s <= 100) {
+          setSoc(s);
+          try { localStorage.setItem('cando_last_soc', String(s)); } catch {}
+        }
       }
     } else if (entity === 'cond_aux_12v_battery' || entity.includes('12v') || entity === 'aux_12v') {
       const match = stateStr.match(/(\d+(\.\d+)?)/);
       if (match) {
         const v = parseFloat(match[1]);
-        if (v >= 8 && v <= 16) setAux12V(v);
+        if (v >= 8 && v <= 16.5) {
+          setAux12V(v);
+          try { localStorage.setItem('cando_last_aux12v', String(v)); } catch {}
+        }
       }
     } else if (entity === 'hv_battery_temperatures') {
       const match = stateStr.match(/min:\s*(-?\d+(\.\d+)?).*max:\s*(-?\d+(\.\d+)?)/i);
@@ -485,6 +497,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         ws.onopen = () => {
           setConnectedDevice(true);
           triggerNotice('Connected to live CAN Do vehicle telemetry stream');
+          // Ensure device passive sniffer mode is enabled so TWAI telemetry frames are broadcast to WebSocket
+          try {
+            fetch(`${baseUrl}/api/system/control`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sniffer_mode: true }),
+            }).catch(() => {});
+          } catch {}
         };
 
         ws.onmessage = (event) => {
@@ -581,20 +601,28 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       const newSoc = Math.round(raw * 0.5 * 10) / 10;
       if (newSoc >= 0 && newSoc <= 100) {
         setSoc(newSoc);
+        try { localStorage.setItem('cando_last_soc', String(newSoc)); } catch {}
         recordLog(idFormatted, canMappings.hvSocName, `${newSoc}%`, hexPayload, now);
       }
     }
 
-    // BMS Module Min/Max Temperatures & 12V Aux Voltage (Dynamically mapped from catalog, e.g. 0x152)
-    else if ((normId === canMappings.hvTemps || normId === canMappings.aux12v || normId === '152') && bytes.length >= 2) {
+    // 12V Aux Battery Voltage (Dynamically mapped from catalog e.g. 0x1CF Byte D6 [index 5] or 0x594 Byte D5 [index 4] = factor 0.1 V)
+    else if ((normId === canMappings.aux12v || normId === '1cf' || normId === '594') && bytes.length >= 5) {
+      const vByte = bytes.length >= 6 ? bytes[5] : bytes[4];
+      const v = Math.round(vByte * 0.1 * 10) / 10;
+      if (v >= 8.0 && v <= 16.5) {
+        setAux12V(v);
+        try { localStorage.setItem('cando_last_aux12v', String(v)); } catch {}
+        recordLog(idFormatted, canMappings.aux12vName, `${v} V`, hexPayload, now);
+      }
+    }
+
+    // BMS Module Min/Max Temperatures (Dynamically mapped from catalog, e.g. 0x152)
+    else if ((normId === canMappings.hvTemps || normId === '152') && bytes.length >= 2) {
       const minT = bytes[0];
       const maxT = bytes[1];
       setBatteryMinTempC(minT);
       setBatteryMaxTempC(maxT);
-      if (bytes.length >= 4 && bytes[2] > 0) {
-        const v = Math.round(bytes[2] * 0.1 * 10) / 10;
-        setAux12V(v);
-      }
       recordLog(idFormatted, canMappings.hvTempsName, `Min: ${minT}°C / Max: ${maxT}°C`, hexPayload, now);
     }
 

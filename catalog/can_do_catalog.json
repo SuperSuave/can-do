@@ -5186,12 +5186,16 @@
       ],
       "network": {
         "bus": 0,
-        "type": "voltage"
+        "type": "can_rx",
+        "state_can_id": "0x1CF",
+        "state_byte": "D6",
+        "unit": "V",
+        "factor": 0.1
       },
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Consolidated 12V lead-acid/AGM threshold levels"
+        "notes": "Consolidated 12V lead-acid/AGM threshold levels from LDC 0x1CF D6"
       },
       "options": [
         {

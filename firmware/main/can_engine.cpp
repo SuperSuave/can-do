@@ -420,8 +420,8 @@ void can_rx_task(void* arg) {
             // Stream raw frame to connected SavvyCAN/GVRET client
             gvret_enqueue_frame(&rx_msg);
 
-            // If sniffer mode is enabled, stream live frame to WebSocket dashboard
-            if (g_sniffer_mode.load()) {
+            // If sniffer mode is enabled or frame is a monitored telemetry ID, stream to WebSocket dashboard
+            if (g_sniffer_mode.load() || mqtt_mgr_is_monitored_id(rx_msg.identifier)) {
                 broadcast_ws_can_frame(&rx_msg);
             }
 
