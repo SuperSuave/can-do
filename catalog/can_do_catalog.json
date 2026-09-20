@@ -5686,14 +5686,24 @@
   "automations": [
     {
       "id": "menu_ok_cool_driver_seat",
-      "name": "Menu OK Sets Driver Seat Medium Cool",
+      "name": "Steering Wheel OK Button -> Ventilate Driver Seat",
+      "description": "Double-clicking or holding the steering wheel Menu OK button automatically toggles the driver seat ventilation to Medium Cool with cluster OSD confirmation.",
+      "category": "Comfort & Climate",
+      "tags": ["all_egmp", "ioniq5", "ev6", "gv60"],
       "enabled": true,
       "ha_expose": true,
-      "ha_icon": "mdi:car-cog",
+      "ha_icon": "mdi:car-seat-cooler",
       "exec_mode": "one_shot",
       "cooldown_ms": 500,
+      "contributor": {
+        "name": "SuperSuave",
+        "github": "SuperSuave",
+        "notes": "Verified on 2023 Hyundai Ioniq 5"
+      },
       "triggers": [
         {
+          "id": "trig_ok_btn",
+          "source": "can",
           "type": "byte_transition",
           "can_id": "0x448",
           "bus": 0,
@@ -5706,9 +5716,216 @@
       "conditions": [],
       "actions": [
         {
+          "id": "act_cool_seat",
           "type": "entity_command",
           "entity_id": "drivers_seat_comfort",
           "command": "Medium Cool"
+        },
+        {
+          "id": "act_seat_toast",
+          "type": "track_popup",
+          "level": "info",
+          "text": "Driver Seat Ventilate"
+        }
+      ]
+    },
+    {
+      "id": "star_btn_preconditioning",
+      "name": "Steering Wheel Star Button -> Battery Preconditioning",
+      "description": "Pressing the steering wheel custom Star button immediately triggers manual High Voltage Battery Preconditioning if battery SOC is above 20%.",
+      "category": "Battery & Preconditioning",
+      "tags": ["all_egmp", "ioniq5", "ev6", "gv60"],
+      "enabled": true,
+      "ha_expose": true,
+      "ha_icon": "mdi:battery-charging",
+      "exec_mode": "one_shot",
+      "cooldown_ms": 1000,
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "SuperSuave",
+        "notes": "Native E-GMP preconditioning button protocol"
+      },
+      "triggers": [
+        {
+          "id": "trig_star_btn",
+          "source": "can",
+          "type": "byte_transition",
+          "can_id": "0x448",
+          "bus": 0,
+          "byte": "D6",
+          "mask": "0xF0",
+          "from": "0x00",
+          "to": "0x10"
+        }
+      ],
+      "conditions": [
+        {
+          "id": "cond_safe_soc",
+          "type": "param_range",
+          "can_id": "0x2FC",
+          "bus": 0,
+          "byte": "D8",
+          "operator": ">=",
+          "value": "40"
+        }
+      ],
+      "actions": [
+        {
+          "id": "act_start_precon",
+          "type": "precondition",
+          "precon_mode": "persistent",
+          "precon_action": "start"
+        },
+        {
+          "id": "act_precon_toast",
+          "type": "track_popup",
+          "level": "info",
+          "text": "Battery Precon Started"
+        }
+      ]
+    },
+    {
+      "id": "auto_fold_mirrors_on_lock",
+      "name": "Auto-Fold Power Mirrors When Vehicle Locks",
+      "description": "When vehicle door security transitions to Locked and all doors/closures are confirmed shut, automatically fold exterior power mirrors.",
+      "category": "Closures & Security",
+      "tags": ["all_egmp", "ioniq5", "ev6", "gv60"],
+      "enabled": true,
+      "ha_expose": true,
+      "ha_icon": "mdi:car-side",
+      "exec_mode": "one_shot",
+      "cooldown_ms": 1500,
+      "contributor": {
+        "name": "CAN Do Community",
+        "github": "SuperSuave"
+      },
+      "triggers": [
+        {
+          "id": "trig_lock_state",
+          "source": "can",
+          "type": "byte_transition",
+          "can_id": "0x411",
+          "bus": 0,
+          "byte": "D1",
+          "mask": "0x01",
+          "from": "0x00",
+          "to": "0x01"
+        }
+      ],
+      "conditions": [
+        {
+          "id": "cond_doors_closed",
+          "type": "can_state",
+          "can_id": "0x411",
+          "bus": 0,
+          "byte": "D2",
+          "operator": "==",
+          "value": "0x00"
+        }
+      ],
+      "actions": [
+        {
+          "id": "act_fold_mirrors",
+          "type": "entity_command",
+          "entity_id": "power_mirrors",
+          "command": "Fold"
+        }
+      ]
+    },
+    {
+      "id": "park_gear_unlock_doors",
+      "name": "Shift into Park -> Auto-Unlock All Doors",
+      "description": "Shifting the transmission into Park automatically triggers central unlocking of all vehicle closures.",
+      "category": "Convenience & Driving",
+      "tags": ["all_egmp", "ioniq5", "ev6", "gv60"],
+      "enabled": true,
+      "ha_expose": true,
+      "ha_icon": "mdi:car-door-lock-open",
+      "exec_mode": "one_shot",
+      "cooldown_ms": 1000,
+      "contributor": {
+        "name": "CAN Do Community",
+        "github": "SuperSuave"
+      },
+      "triggers": [
+        {
+          "id": "trig_gear_park",
+          "source": "can",
+          "type": "byte_transition",
+          "can_id": "0x2C0",
+          "bus": 0,
+          "byte": "D3",
+          "mask": "0x0F",
+          "from": "0x05",
+          "to": "0x00"
+        }
+      ],
+      "conditions": [],
+      "actions": [
+        {
+          "id": "act_unlock_doors",
+          "type": "entity_command",
+          "entity_id": "doors_lock_state",
+          "command": "Unlock"
+        }
+      ]
+    },
+    {
+      "id": "hazard_lights_driver_door",
+      "name": "Driver Door Open in Park -> Hazard Flashers Alert",
+      "description": "When the driver door is opened while the vehicle is stationary in Park, momentarily flashes the hazard warning lights for rear traffic visibility.",
+      "category": "Safety & Alerts",
+      "tags": ["all_egmp", "ioniq5", "ev6", "gv60"],
+      "enabled": false,
+      "ha_expose": true,
+      "ha_icon": "mdi:alert-octagon",
+      "exec_mode": "one_shot",
+      "cooldown_ms": 3000,
+      "contributor": {
+        "name": "CAN Do Community",
+        "github": "SuperSuave"
+      },
+      "triggers": [
+        {
+          "id": "trig_driver_door_open",
+          "source": "can",
+          "type": "byte_transition",
+          "can_id": "0x411",
+          "bus": 0,
+          "byte": "D2",
+          "mask": "0x01",
+          "from": "0x00",
+          "to": "0x01"
+        }
+      ],
+      "conditions": [
+        {
+          "id": "cond_in_park",
+          "type": "can_state",
+          "can_id": "0x2C0",
+          "bus": 0,
+          "byte": "D3",
+          "operator": "==",
+          "value": "0x00"
+        }
+      ],
+      "actions": [
+        {
+          "id": "act_flash_hazards",
+          "type": "entity_command",
+          "entity_id": "hazard_lights",
+          "command": "On"
+        },
+        {
+          "id": "act_hazard_delay",
+          "type": "delay",
+          "delay_ms": 3000
+        },
+        {
+          "id": "act_hazards_off",
+          "type": "entity_command",
+          "entity_id": "hazard_lights",
+          "command": "Off"
         }
       ]
     }

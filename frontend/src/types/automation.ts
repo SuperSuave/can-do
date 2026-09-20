@@ -156,6 +156,14 @@ export interface AutomationRule {
   conditions: AutomationCondition[];
   actions: AutomationAction[];
   off_actions?: AutomationAction[];
+  description?: string;
+  category?: string;
+  tags?: string[];
+  contributor?: {
+    name?: string;
+    github?: string;
+    notes?: string;
+  };
 }
 
 export interface AutomationSettings {

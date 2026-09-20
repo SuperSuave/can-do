@@ -57,9 +57,12 @@ import {
   Thermometer,
   Radio,
   Bluetooth,
-  X
+  X,
+  Share2,
+  Users
 } from 'lucide-react';
 import { AddElementModal, AddElementTarget } from './AddElementModal';
+import { CommunityAutomationsModal } from './CommunityAutomationsModal';
 
 interface AutomationBuilderProps {
   catalog: Catalog;
@@ -2152,6 +2155,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [copied, setCopied] = useState(false);
   const [addElementTarget, setAddElementTarget] = useState<AddElementTarget | null>(null);
   const [showSimulateModal, setShowSimulateModal] = useState(false);
+  const [showCommunityModal, setShowCommunityModal] = useState(false);
   const [simulationLog, setSimulationLog] = useState<string[]>([]);
   const [espIp, setEspIp] = useState<string>(() => getDefaultEspIp());
   const [syncing, setSyncing] = useState(false);
@@ -2560,6 +2564,15 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 <button
                   type="button"
+                  onClick={() => setShowCommunityModal(true)}
+                  title="Share or contribute to Community Automations"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                >
+                  <Share2 className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="hidden sm:inline">Share</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleUpdateActiveRule({ enabled: !activeRule.enabled })}
                   className={`px-2 py-1 rounded-lg text-xs font-semibold border transition ${
                     activeRule.enabled
@@ -2745,7 +2758,16 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
                   Automations ({rules.length})
                 </span>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setShowCommunityModal(true)}
+                    title="Explore Community Automations"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-gradient-to-r from-amber-500/20 to-cyan-500/20 text-amber-300 hover:from-amber-500/30 hover:to-cyan-500/30 border border-amber-500/30 transition shadow-sm"
+                  >
+                    <Sparkles className="w-3 h-3 text-amber-400" />
+                    <span>Community</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
@@ -3030,6 +3052,24 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           target={addElementTarget}
           catalog={catalog}
           onClose={() => setAddElementTarget(null)}
+        />
+      )}
+
+      {/* MODAL: Community Automations */}
+      {showCommunityModal && (
+        <CommunityAutomationsModal
+          catalog={catalog}
+          currentRules={rules}
+          activeRule={activeRule}
+          onInstallRule={(newRule) => {
+            const existing = rules.find(r => r.id === newRule.id);
+            const ruleToInstall = existing
+              ? { ...newRule, id: `rule_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}` }
+              : newRule;
+            onUpdateRules([ruleToInstall, ...rules]);
+            setSelectedRuleId(ruleToInstall.id);
+          }}
+          onClose={() => setShowCommunityModal(false)}
         />
       )}
 
