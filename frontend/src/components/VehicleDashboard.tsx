@@ -497,14 +497,6 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         ws.onopen = () => {
           setConnectedDevice(true);
           triggerNotice('Connected to live CAN Do vehicle telemetry stream');
-          // Ensure device passive sniffer mode is enabled so TWAI telemetry frames are broadcast to WebSocket
-          try {
-            fetch(`${baseUrl}/api/system/control`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ sniffer_mode: true }),
-            }).catch(() => {});
-          } catch {}
         };
 
         ws.onmessage = (event) => {
