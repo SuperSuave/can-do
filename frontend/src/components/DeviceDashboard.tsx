@@ -42,12 +42,15 @@ import {
   SignalZero,
   Lock,
   Unlock,
-  ChevronRight,
   Info,
-  Bluetooth
+  Bluetooth,
+  Sparkles,
+  Bell
 } from 'lucide-react';
 import { Catalog, Command } from '../types/catalog';
 import { AutomationRule, AutomationTrigger } from '../types/automation';
+import { UserPreferences, getUserPreferences, saveUserPreferences, DEFAULT_USER_PREFERENCES, UpdatePolicy } from '../types/settings';
+import { checkForUpdates, executeUpdateSequence, UpdateCheckResult, UpdateStage } from '../services/updateService';
 import { MdiIcon } from './MdiIcon';
 import { BluetoothManager } from './BluetoothManager';
 
@@ -125,6 +128,9 @@ export interface AutomationDiag {
 export interface DeviceDashboardProps {
   catalog?: Catalog;
   automationRules?: AutomationRule[];
+  preferences?: UserPreferences;
+  onUpdatePreferences?: (prefs: Partial<UserPreferences>) => void;
+  onRerunOnboarding?: () => void;
   onSyncAutomationsToDevice?: () => Promise<void>;
   onPullAutomationsFromDevice?: () => Promise<void>;
   onNavigateToCatalog?: (searchQuery?: string) => void;
@@ -142,6 +148,9 @@ const PRESET_ENDPOINTS = [
 export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   catalog,
   automationRules = [],
+  preferences,
+  onUpdatePreferences,
+  onRerunOnboarding,
   onSyncAutomationsToDevice,
   onPullAutomationsFromDevice,
   onNavigateToCatalog,
@@ -212,11 +221,76 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const [logFilter, setLogFilter] = useState<string>('');
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
-  // OTA state
+  // OTA & Cloud Update state
   const [otaFile, setOtaFile] = useState<File | null>(null);
   const [otaUploading, setOtaUploading] = useState<boolean>(false);
   const [otaProgress, setOtaProgress] = useState<number>(0);
   const [otaStatus, setOtaStatus] = useState<string>('');
+
+  // Staged Cloud Update state
+  const [localPrefs, setLocalPrefs] = useState<UserPreferences>(() => preferences || getUserPreferences());
+  const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState<boolean>(false);
+  const [isExecutingUpdate, setIsExecutingUpdate] = useState<boolean>(false);
+  const [updateStage, setUpdateStage] = useState<UpdateStage>('idle');
+  const [updateProgressPct, setUpdateProgressPct] = useState<number>(0);
+  const [updateMessage, setUpdateMessage] = useState<string>('');
+
+  useEffect(() => {
+    if (preferences) {
+      setLocalPrefs(preferences);
+    }
+  }, [preferences]);
+
+  const handleCheckForUpdates = async () => {
+    setIsCheckingUpdate(true);
+    try {
+      const res = await checkForUpdates(catalog?.catalog_version || '1.0', '1.0');
+      setUpdateResult(res);
+      if (res.has_update) {
+        showNotice(`Update available: ${res.release_name || res.version}`);
+      } else {
+        showNotice('All components are up to date');
+      }
+    } catch (e: any) {
+      showNotice(`Failed to check updates: ${e.message || e}`, 'error');
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
+  const handleInstallCloudUpdates = async () => {
+    if (!updateResult) return;
+    setIsExecutingUpdate(true);
+    setUpdateProgressPct(0);
+    setUpdateStage('checking');
+    try {
+      await executeUpdateSequence(
+        deviceHost,
+        localPrefs.update_components,
+        updateResult,
+        (stage, pct, msg) => {
+          setUpdateStage(stage);
+          setUpdateProgressPct(pct);
+          setUpdateMessage(msg);
+        }
+      );
+      showNotice('Updates completed successfully! Device is restarting...', 'success');
+    } catch (e: any) {
+      showNotice(`Update error: ${e.message || e}`, 'error');
+    } finally {
+      setIsExecutingUpdate(false);
+    }
+  };
+
+  const handleSavePreferences = (updated: Partial<UserPreferences>) => {
+    const next = saveUserPreferences(updated);
+    setLocalPrefs(next);
+    if (onUpdatePreferences) {
+      onUpdatePreferences(updated);
+    }
+    showNotice('Update preferences saved');
+  };
 
   // WebSocket ref
   const wsRef = useRef<WebSocket | null>(null);
@@ -1109,7 +1183,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             )}
           </button>
 
-          {/* Tab 5: Firmware OTA */}
+          {/* Tab 5: System & Updates */}
           <button
             type="button"
             onClick={() => setActiveTab('ota')}
@@ -1119,8 +1193,11 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 : 'text-[var(--text-muted)] hover:text-white'
             }`}
           >
-            <Cpu className={`w-3.5 h-3.5 ${activeTab === 'ota' ? 'text-indigo-400' : 'text-slate-500'}`} />
-            <span>Firmware OTA</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${activeTab === 'ota' ? 'text-cyan-400' : 'text-slate-500'}`} />
+            <span>System & Updates</span>
+            {updateResult?.has_update && (
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+            )}
           </button>
         </nav>
       </div>
@@ -1819,67 +1896,392 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       )}
 
       {/* =========================================================================
-          TAB 5: Firmware OTA Update
+          TAB 5: System & Software Updates
          ========================================================================= */}
       {activeTab === 'ota' && (
-        <div className="can-do-card p-4 sm:p-5 space-y-4">
-          <div>
-            <h3 className="text-sm sm:text-base font-bold text-[var(--text-heading)]">
-              Over-The-Air (OTA) Firmware Upgrade
-            </h3>
-            <p className="text-xs text-[var(--text-muted)]">
-              Flash new ESP32 firmware binary directly to the inactive LittleFS partition without requiring USB cables
-            </p>
-          </div>
-
-          <form onSubmit={handleOtaUpload} className="space-y-4 max-w-lg">
-            <div className="p-6 rounded-2xl border-2 border-dashed border-[var(--border-color)] hover:border-cyan-500/50 transition-colors text-center bg-[var(--input-bg)]">
-              <Upload className="w-8 h-8 text-cyan-400 mx-auto mb-2" />
-              <div className="text-xs font-semibold text-[var(--text-heading)]">
-                {otaFile ? otaFile.name : 'Select firmware binary (.bin)'}
-              </div>
-              {otaFile && (
-                <div className="text-[11px] text-[var(--text-muted)] font-mono mt-1">
-                  Size: {Math.round(otaFile.size / 1024)} KB
-                </div>
-              )}
-              <input
-                type="file"
-                accept=".bin"
-                onChange={(e) => setOtaFile(e.target.files?.[0] || null)}
-                className="mt-3 block w-full text-xs text-[var(--text-muted)] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-cyan-300 hover:file:bg-slate-700 cursor-pointer"
-              />
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="can-do-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-[var(--text-heading)] flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 text-cyan-400" />
+                System & Software Updates
+              </h3>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                Manage OTA firmware upgrades, vehicle message catalog sync, and web dashboard updates without requiring a PC
+              </p>
             </div>
 
-            {otaUploading && (
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs font-mono text-[var(--text-muted)]">
-                  <span>Uploading Image...</span>
-                  <span>{otaProgress}%</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCheckForUpdates}
+                disabled={isCheckingUpdate || isExecutingUpdate}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 text-white text-xs font-bold transition shadow-md shadow-cyan-600/20"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
+                <span>{isCheckingUpdate ? 'Checking...' : 'Check for Updates'}</span>
+              </button>
+
+              {onRerunOnboarding && (
+                <button
+                  type="button"
+                  onClick={onRerunOnboarding}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition"
+                  title="Re-run the initial vehicle & unit setup wizard"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Setup Wizard</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 3-Card Version Deck */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Card 1: Firmware */}
+            <div className="p-4 rounded-2xl bg-[var(--input-bg)] border border-[var(--border-color)] space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-bold text-white">
+                  <Cpu className="w-4 h-4 text-cyan-400" />
+                  <span>ESP32 Firmware</span>
                 </div>
-                <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden">
-                  <div
-                    className="bg-cyan-500 h-2.5 rounded-full transition-all duration-300"
-                    style={{ width: `${otaProgress}%` }}
-                  />
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950/60 text-cyan-300 border border-cyan-800/40">
+                  OTA A/B
+                </span>
+              </div>
+              <div className="text-xs text-[var(--text-muted)] space-y-1">
+                <div>Device ID: <span className="font-mono text-slate-200">{status?.device_id || 'ESP32-C3'}</span></div>
+                <div>TWAI Driver: <span className="font-mono text-emerald-400">{status?.twai_state || 'Active'}</span></div>
+              </div>
+            </div>
+
+            {/* Card 2: Catalog */}
+            <div className="p-4 rounded-2xl bg-[var(--input-bg)] border border-[var(--border-color)] space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-bold text-white">
+                  <HardDrive className="w-4 h-4 text-teal-400" />
+                  <span>Message Catalog</span>
+                </div>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-teal-950/60 text-teal-300 border border-teal-800/40">
+                  v{catalog?.catalog_version || '1.0'}
+                </span>
+              </div>
+              <div className="text-xs text-[var(--text-muted)] space-y-1">
+                <div>Vehicle Decoders: <span className="font-mono text-slate-200">{catalog?.commands?.length || 0} CAN Signals</span></div>
+                <div>Supported Models: <span className="font-mono text-slate-200">{catalog?.vehicles?.length || 0} Trims</span></div>
+              </div>
+            </div>
+
+            {/* Card 3: Web Dashboard */}
+            <div className="p-4 rounded-2xl bg-[var(--input-bg)] border border-[var(--border-color)] space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-bold text-white">
+                  <Globe className="w-4 h-4 text-indigo-400" />
+                  <span>Web Front-End</span>
+                </div>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-indigo-950/60 text-indigo-300 border border-indigo-800/40">
+                  LittleFS www
+                </span>
+              </div>
+              <div className="text-xs text-[var(--text-muted)] space-y-1">
+                <div>Serving Mode: <span className="font-mono text-slate-200">{isRunningOnDevice() ? 'Embedded Device' : 'Cloud / Dev'}</span></div>
+                <div>Storage Health: <span className="font-mono text-emerald-400">Optimized</span></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Staged Execution Progress Banner */}
+          {isExecutingUpdate && (
+            <div className="p-4 rounded-2xl bg-cyan-950/40 border border-cyan-800/80 space-y-3 animate-fade-in">
+              <div className="flex items-center justify-between text-xs font-bold text-white">
+                <span className="flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4 text-cyan-400 animate-spin" />
+                  <span>{updateMessage || 'Applying Updates...'}</span>
+                </span>
+                <span className="font-mono text-cyan-300">{updateProgressPct}%</span>
+              </div>
+              <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                <div
+                  className="bg-gradient-to-r from-cyan-500 to-teal-400 h-2.5 rounded-full transition-all duration-300"
+                  style={{ width: `${updateProgressPct}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[11px] text-slate-400 font-mono">
+                <span>1. Clean & Front-End</span>
+                <span>2. Message Catalog</span>
+                <span>3. Firmware Binary</span>
+              </div>
+            </div>
+          )}
+
+          {/* Available Update Notification Card */}
+          {updateResult?.has_update && !isExecutingUpdate && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-cyan-950/50 via-slate-900 to-teal-950/50 border border-cyan-500/50 space-y-3 animate-fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-bold text-white">
+                      {updateResult.release_name || updateResult.version} Available
+                    </h4>
+                    <p className="text-[11px] text-slate-300 mt-0.5">
+                      {updateResult.notes || 'Verified stability and vehicle definition enhancements.'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleInstallCloudUpdates}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-slate-950 text-xs font-bold transition shadow-lg shadow-cyan-950/50 shrink-0"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Install Updates Now</span>
+                </button>
+              </div>
+
+              <div className="flex flex-wrap gap-2 pt-1 text-[10px]">
+                <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                  Execution: Front-End &rarr; Catalog &rarr; Firmware
+                </span>
+                {updateResult.components.frontend && (
+                  <span className="px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800">
+                    Web Dashboard
+                  </span>
+                )}
+                {updateResult.components.catalog && (
+                  <span className="px-2 py-0.5 rounded-full bg-teal-950 text-teal-300 border border-teal-800">
+                    Message Catalog
+                  </span>
+                )}
+                {updateResult.components.firmware && (
+                  <span className="px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800">
+                    Firmware Binary
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Update Policy & Off-Hours Schedule Settings */}
+          <div className="can-do-card p-4 sm:p-5 space-y-4">
+            <div>
+              <h4 className="text-xs sm:text-sm font-bold text-[var(--text-heading)] flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-cyan-400" />
+                Update Preferences & Scheduling
+              </h4>
+              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                Configure whether updates install automatically, prompt you first, or run on an overnight schedule
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Option 1: Auto */}
+              <button
+                type="button"
+                onClick={() => handleSavePreferences({ update_policy: 'auto' })}
+                className={`p-3 rounded-xl border text-left transition ${
+                  localPrefs.update_policy === 'auto'
+                    ? 'bg-cyan-950/40 border-cyan-500 text-white'
+                    : 'bg-slate-800/40 border-slate-700/60 text-slate-400 hover:bg-slate-800'
+                }`}
+              >
+                <div className="flex justify-between items-center text-xs font-bold">
+                  <span>Full Auto</span>
+                  {localPrefs.update_policy === 'auto' && <Check className="w-3.5 h-3.5 text-cyan-400" />}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-1">Automatic overnight installs</div>
+              </button>
+
+              {/* Option 2: Prompt */}
+              <button
+                type="button"
+                onClick={() => handleSavePreferences({ update_policy: 'prompt' })}
+                className={`p-3 rounded-xl border text-left transition ${
+                  localPrefs.update_policy === 'prompt'
+                    ? 'bg-cyan-950/40 border-cyan-500 text-white'
+                    : 'bg-slate-800/40 border-slate-700/60 text-slate-400 hover:bg-slate-800'
+                }`}
+              >
+                <div className="flex justify-between items-center text-xs font-bold">
+                  <span>Prompt Me</span>
+                  {localPrefs.update_policy === 'prompt' && <Check className="w-3.5 h-3.5 text-cyan-400" />}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-1">Notify in dashboard before updating</div>
+              </button>
+
+              {/* Option 3: Manual */}
+              <button
+                type="button"
+                onClick={() => handleSavePreferences({ update_policy: 'manual' })}
+                className={`p-3 rounded-xl border text-left transition ${
+                  localPrefs.update_policy === 'manual'
+                    ? 'bg-cyan-950/40 border-cyan-500 text-white'
+                    : 'bg-slate-800/40 border-slate-700/60 text-slate-400 hover:bg-slate-800'
+                }`}
+              >
+                <div className="flex justify-between items-center text-xs font-bold">
+                  <span>Manual Only</span>
+                  {localPrefs.update_policy === 'manual' && <Check className="w-3.5 h-3.5 text-cyan-400" />}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-1">Never check automatically</div>
+              </button>
+            </div>
+
+            {/* Granular Component Toggles & Schedule Time */}
+            {localPrefs.update_policy !== 'manual' && (
+              <div className="pt-2 border-t border-[var(--border-color)] grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <span className="text-[11px] font-semibold text-slate-300">Active Update Components:</span>
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={localPrefs.update_components.frontend}
+                        onChange={(e) =>
+                          handleSavePreferences({
+                            update_components: { ...localPrefs.update_components, frontend: e.target.checked },
+                          })
+                        }
+                        className="rounded border-slate-700 text-cyan-500 focus:ring-0"
+                      />
+                      <span>Web Front-End</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={localPrefs.update_components.catalog}
+                        onChange={(e) =>
+                          handleSavePreferences({
+                            update_components: { ...localPrefs.update_components, catalog: e.target.checked },
+                          })
+                        }
+                        className="rounded border-slate-700 text-cyan-500 focus:ring-0"
+                      />
+                      <span>Message Catalog</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={localPrefs.update_components.firmware}
+                        onChange={(e) =>
+                          handleSavePreferences({
+                            update_components: { ...localPrefs.update_components, firmware: e.target.checked },
+                          })
+                        }
+                        className="rounded border-slate-700 text-cyan-500 focus:ring-0"
+                      />
+                      <span>Firmware Binary</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                      Off-Hours Scheduled Time:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleSavePreferences({
+                          update_schedule: { ...localPrefs.update_schedule, enabled: !localPrefs.update_schedule.enabled },
+                        })
+                      }
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        localPrefs.update_schedule.enabled ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {localPrefs.update_schedule.enabled ? 'ENABLED' : 'DISABLED'}
+                    </button>
+                  </div>
+                  {localPrefs.update_schedule.enabled && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="time"
+                        value={localPrefs.update_schedule.time}
+                        onChange={(e) =>
+                          handleSavePreferences({
+                            update_schedule: { ...localPrefs.update_schedule, time: e.target.value },
+                          })
+                        }
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white font-mono"
+                      />
+                      <span className="text-[10px] text-slate-400">(Device local time)</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
+          </div>
 
-            {otaStatus && (
-              <div className="text-xs font-mono text-cyan-300 bg-cyan-950/30 p-2.5 rounded-lg border border-cyan-800/50">
-                {otaStatus}
+          {/* Manual Binary Upload (Legacy / Custom Dev Builds) */}
+          <div className="can-do-card p-4 sm:p-5 space-y-4">
+            <div>
+              <h4 className="text-xs sm:text-sm font-bold text-[var(--text-heading)] flex items-center gap-2">
+                <Upload className="w-4 h-4 text-slate-400" />
+                Manual Firmware Binary Flash (Custom Builds)
+              </h4>
+              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                Flash a custom-compiled ESP32 binary directly without a USB cable
+              </p>
+            </div>
+
+            <form onSubmit={handleOtaUpload} className="space-y-4 max-w-lg">
+              <div className="p-4 rounded-xl border-2 border-dashed border-[var(--border-color)] hover:border-cyan-500/50 transition-colors text-center bg-[var(--input-bg)]">
+                <Upload className="w-6 h-6 text-cyan-400 mx-auto mb-1.5" />
+                <div className="text-xs font-semibold text-[var(--text-heading)]">
+                  {otaFile ? otaFile.name : 'Select firmware binary (.bin)'}
+                </div>
+                {otaFile && (
+                  <div className="text-[10px] text-[var(--text-muted)] font-mono mt-0.5">
+                    Size: {Math.round(otaFile.size / 1024)} KB
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept=".bin"
+                  onChange={(e) => setOtaFile(e.target.files?.[0] || null)}
+                  className="mt-2 block w-full text-xs text-[var(--text-muted)] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-cyan-300 hover:file:bg-slate-700 cursor-pointer"
+                />
               </div>
-            )}
 
-            <button
-              type="submit"
-              disabled={!otaFile || otaUploading}
-              className="w-full py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-xs transition shadow-lg shadow-cyan-600/20"
-            >
-              {otaUploading ? 'Flashing Firmware...' : 'Upload & Flash Firmware'}
-            </button>
-          </form>
+              {otaUploading && (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs font-mono text-[var(--text-muted)]">
+                    <span>Uploading Image...</span>
+                    <span>{otaProgress}%</span>
+                  </div>
+                  <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-cyan-500 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${otaProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {otaStatus && (
+                <div className="text-xs font-mono text-cyan-300 bg-cyan-950/30 p-2.5 rounded-lg border border-cyan-800/50">
+                  {otaStatus}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={!otaFile || otaUploading}
+                className="w-full py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-xs transition shadow-md shadow-cyan-600/20"
+              >
+                {otaUploading ? 'Flashing Firmware...' : 'Flash Firmware Binary'}
+              </button>
+            </form>
+          </div>
         </div>
       )}
     </div>

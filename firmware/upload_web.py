@@ -14,6 +14,15 @@ import time
 
 DEFAULT_IP = "192.168.107.50"
 
+def truncate_remote_file(ip, remote_path):
+    url = f"http://{ip}/api/upload"
+    req = urllib.request.Request(url, data=b"", headers={"X-File-Path": remote_path}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=5):
+            return True
+    except Exception:
+        return False
+
 def upload_file(ip, local_path, remote_path):
     url = f"http://{ip}/api/upload"
     with open(local_path, "rb") as f:
@@ -23,6 +32,17 @@ def upload_file(ip, local_path, remote_path):
     req = urllib.request.Request(url, data=data, headers={"X-File-Path": remote_path}, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
+            # Verify file was written and is not 0-bytes
+            if len(data) > 0 and remote_path.startswith("/spiffs/www/"):
+                check_uri = remote_path[len("/spiffs/www"):]
+                try:
+                    with urllib.request.urlopen(f"http://{ip}{check_uri}", timeout=5) as chk:
+                        actual_len = len(chk.read())
+                        if actual_len == 0:
+                            print(f" [FAILED: Flash storage full (0 bytes written)]")
+                            return False
+                except Exception:
+                    pass
             print(" [OK]")
             return True
     except urllib.error.HTTPError as e:
@@ -40,6 +60,42 @@ def main():
 
     print(f"Target Device: http://{ip}")
     print(f"Source Folder: {www_dir}\n")
+
+    # 0. Clean up known stale hashed assets from previous builds to prevent LittleFS exhaustion
+    historic_stale = [
+        "/spiffs/www/index-DzOlfj10.js.gz",
+        "/spiffs/www/index-uQb2UU3p.css.gz",
+        "/spiffs/www/index-BNa0XSA6.js.gz",
+        "/spiffs/www/index-BLMva-xK.js.gz",
+        "/spiffs/www/index-BgIqk_xU.js.gz",
+        "/spiffs/www/index-CgV9alWL.js.gz",
+        "/spiffs/www/index-of4sRFFA.css.gz",
+        "/spiffs/www/index-F2wQvwRQ.css.gz",
+        "/spiffs/www/catalog/can_do_catalog.json.gz",
+        "/spiffs/www/can_do_catalog.json.gz",
+        "/spiffs/www/can_do_catalog.json",
+        "/spiffs/www/test.txt",
+        "/spiffs/www/test_size.bin",
+        "/spiffs/test.txt",
+    ]
+
+    # Dynamically detect whatever hashed assets the device is currently running
+    try:
+        import re
+        with urllib.request.urlopen(f"http://{ip}/index.html", timeout=4) as r:
+            raw = r.read()
+            if r.headers.get("Content-Encoding") == "gzip":
+                raw = gzip.decompress(raw)
+            for m in re.findall(r'index-[a-zA-Z0-9_\-]+\.(?:js|css)', raw.decode("utf-8", errors="ignore")):
+                historic_stale.append(f"/spiffs/www/{m}.gz")
+                historic_stale.append(f"/spiffs/www/{m}")
+    except Exception:
+        pass
+
+    current_files = {f"/spiffs/www/{f}" for f in os.listdir(www_dir)}
+    for stale in set(historic_stale):
+        if stale not in current_files:
+            truncate_remote_file(ip, stale)
 
     # 1. Upload www assets
     for fname in sorted(os.listdir(www_dir)):

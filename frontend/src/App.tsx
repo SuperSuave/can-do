@@ -22,6 +22,9 @@ import { CanDoLogo } from './components/CanDoLogo';
 import { AutomationBuilder } from './components/AutomationBuilder';
 import { DeviceDashboard } from './components/DeviceDashboard';
 import { VehicleDashboard } from './components/VehicleDashboard';
+import { OnboardingWizardModal } from './components/OnboardingWizardModal';
+import { UserPreferences, getUserPreferences, saveUserPreferences } from './types/settings';
+import { checkForUpdates } from './services/updateService';
 import { 
   AutomationRule, 
   AutomationSettings, 
@@ -247,7 +250,9 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'grid' | 'grouped'>('grouped');
   const [expandAllSignal, setExpandAllSignal] = useState<number>(0);
   const [collapseAllSignal, setCollapseAllSignal] = useState<number>(0);
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string>('all');
+  const [userPreferences, setUserPreferences] = useState<UserPreferences>(() => getUserPreferences());
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(() => !getUserPreferences().onboarding_completed);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>(() => getUserPreferences().vehicle_id || 'all');
   const [selectedMake, setSelectedMake] = useState<string>('all');
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
   const [selectedFeature, setSelectedFeature] = useState<string>('all');
@@ -274,6 +279,44 @@ export default function App() {
     };
     fetchCatalog();
   }, []);
+
+  // Scheduled Off-Hours Update Checker
+  useEffect(() => {
+    if (!userPreferences.update_schedule?.enabled || userPreferences.update_policy === 'manual') {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const now = new Date();
+      const currentHhMm = now.toTimeString().slice(0, 5);
+      if (currentHhMm === userPreferences.update_schedule.time) {
+        checkForUpdates(catalog?.catalog_version || '1.0', '1.0').then((res) => {
+          if (res.has_update) {
+            console.log('[Scheduler] New update available:', res.release_name || res.version);
+          }
+        }).catch(() => {});
+      }
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [userPreferences.update_schedule, userPreferences.update_policy, catalog.catalog_version]);
+
+  const handleCompleteOnboarding = (prefs: UserPreferences) => {
+    const saved = saveUserPreferences(prefs);
+    setUserPreferences(saved);
+    if (prefs.vehicle_id && prefs.vehicle_id !== 'all') {
+      setSelectedVehicleId(prefs.vehicle_id);
+    }
+    setIsOnboardingOpen(false);
+  };
+
+  const handleUpdatePreferences = (prefs: Partial<UserPreferences>) => {
+    const saved = saveUserPreferences(prefs);
+    setUserPreferences(saved);
+    if (prefs.vehicle_id && prefs.vehicle_id !== 'all') {
+      setSelectedVehicleId(prefs.vehicle_id);
+    }
+  };
 
   // Sync to LocalStorage
   useEffect(() => {
@@ -1173,6 +1216,7 @@ export default function App() {
           /* Live Vehicle Cockpit Dashboard */
           <VehicleDashboard
             catalog={catalog}
+            unitSystem={userPreferences.unit_system}
             activeVehicle={
               selectedVehicleId !== 'all'
                 ? catalog.vehicles.find(v => v.id === selectedVehicleId)
@@ -1190,6 +1234,9 @@ export default function App() {
           <DeviceDashboard
             catalog={catalog}
             automationRules={automationRules}
+            preferences={userPreferences}
+            onUpdatePreferences={handleUpdatePreferences}
+            onRerunOnboarding={() => setIsOnboardingOpen(true)}
             onSyncAutomationsToDevice={handleSyncAutomationsToDevice}
             onPullAutomationsFromDevice={handlePullAutomationsFromDevice}
             onNavigateToCatalog={(searchQuery) => {
@@ -1425,6 +1472,15 @@ export default function App() {
           onClose={() => setIsExportOpen(false)}
         />
       )}
+
+      {/* First-Use Onboarding Experience */}
+      <OnboardingWizardModal
+        isOpen={isOnboardingOpen}
+        catalog={catalog}
+        initialPreferences={userPreferences}
+        onComplete={handleCompleteOnboarding}
+        onClose={() => setIsOnboardingOpen(false)}
+      />
     </div>
   );
 }

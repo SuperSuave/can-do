@@ -42,6 +42,7 @@ import {
 export interface VehicleDashboardProps {
   catalog: Catalog;
   activeVehicle?: Vehicle;
+  unitSystem?: 'imperial' | 'metric';
   onSelectVehicle?: (vehicleId: string) => void;
   onNavigateToCatalog?: (searchQuery?: string) => void;
   onNavigateToAutomations?: () => void;
@@ -83,6 +84,7 @@ function detectHasSunroof(vehicle?: Vehicle): boolean {
 export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   catalog,
   activeVehicle,
+  unitSystem = 'imperial',
   onSelectVehicle,
   onNavigateToCatalog,
   onNavigateToAutomations
@@ -111,7 +113,13 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   const [speedMph, setSpeedMph] = useState<number>(0);
   const [odometer, setOdometer] = useState<number>(18420);
   const [ambientTempC, setAmbientTempC] = useState<number>(22.0); // 71.6°F
-  const [tempUnit, setTempUnit] = useState<'F' | 'C'>('F');
+  const [tempUnit, setTempUnit] = useState<'F' | 'C'>(() => (unitSystem === 'metric' ? 'C' : 'F'));
+
+  useEffect(() => {
+    if (unitSystem) {
+      setTempUnit(unitSystem === 'metric' ? 'C' : 'F');
+    }
+  }, [unitSystem]);
 
   // Closures
   const [doors, setDoors] = useState({
