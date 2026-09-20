@@ -1,4 +1,6 @@
 dependencies:
   joltwallet/littlefs: "^1.14.0"
   espressif/mdns: "^1.3.0"
+  espressif/mqtt: "^1.1.0"
+  espressif/cjson: "*"
 

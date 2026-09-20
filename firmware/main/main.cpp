@@ -24,6 +24,7 @@
 #include "network_mgr.h"
 #include "gvret_server.h"
 #include "ble_mgr.h"
+#include "vbat_sensor.h"
 
 #include "esp_mac.h"
 #include "esp_wifi.h"
@@ -114,6 +115,7 @@ static void app_ip_event_handler(void* arg, esp_event_base_t event_base, int32_t
 extern "C" void app_main(void) {
     // 0. Initialize WiCAN board hardware (CAN Transceiver STB pin and LEDs)
     board_hardware_init();
+    vbat_sensor_init();
 
     // 1. Core Networking Subsystems (MUST be initialized before any sockets or wifi)
     ESP_ERROR_CHECK(esp_netif_init());

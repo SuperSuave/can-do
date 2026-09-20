@@ -155,20 +155,25 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                     return round(km_val * 0.621371192, 1)
                 return round(km_val, 1)
 
-        # 1H. 12V Auxiliary Battery Voltage (0x1CF: Byte D6 = factor 0.1 V)
-        if "12v" in cid or "aux" in cid or cid == "cond_aux_12v_battery" or (self.state_can_id and self.state_can_id.lower() == "0x1cf"):
+        # 1H. 12V Auxiliary Battery Voltage (MeatPi WiCAN Hardware ADC float or CAN frame fallback)
+        if "12v" in cid or "aux" in cid or cid == "cond_aux_12v_battery" or (self.state_can_id and self.state_can_id.lower() in ("vbat", "0x1cf")):
+            if isinstance(payload, (int, float)):
+                val = round(float(payload), 1)
+                if 8.0 <= val <= 16.5:
+                    return val
             state_byte = net.get("state_byte", "D6")
             idx = get_d_index(state_byte)
             factor = float(net.get("factor", 0.1))
-            if 0 <= idx < len(payload):
+            if isinstance(payload, list) and 0 <= idx < len(payload):
                 val = round(payload[idx] * factor, 1)
                 if 8.0 <= val <= 16.5:
                     return val
-            for alt_idx in (5, 4):
-                if alt_idx < len(payload):
-                    val = round(payload[alt_idx] * 0.1, 1)
-                    if 8.0 <= val <= 16.5:
-                        return val
+            if isinstance(payload, list):
+                for alt_idx in (5, 4):
+                    if alt_idx < len(payload):
+                        val = round(payload[alt_idx] * 0.1, 1)
+                        if 8.0 <= val <= 16.5:
+                            return val
 
         # 1E. Generic Linear Scale
         if self.command.get("type") == "linear_scale" or "min" in net:

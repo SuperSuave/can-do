@@ -161,6 +161,28 @@ class CanDoDataCoordinator:
             self._notify_all_listeners()
 
         hex_payload = msg.payload.strip()
+        if not hex_payload:
+            return
+
+        # Handle direct decimal float telemetry (e.g. MeatPi WiCAN 12V battery ADC: "12.6")
+        if can_id in ("vbat", "cond_aux_12v_battery") or "." in hex_payload:
+            try:
+                clean_num = hex_payload.split()[0]
+                val = float(clean_num)
+                prev_val = self.can_states.get(can_id)
+                self.can_states[can_id] = val
+                if prev_val is None or abs(prev_val - val) >= 0.05:
+                    self._notify_can_listeners(can_id)
+                    if can_id == "vbat":
+                        self.can_states["cond_aux_12v_battery"] = val
+                        self._notify_can_listeners("cond_aux_12v_battery")
+                    elif can_id == "cond_aux_12v_battery":
+                        self.can_states["vbat"] = val
+                        self._notify_can_listeners("vbat")
+                return
+            except ValueError:
+                pass
+
         if len(hex_payload) < 2:
             return
 

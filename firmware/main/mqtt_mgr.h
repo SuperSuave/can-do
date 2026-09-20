@@ -32,4 +32,5 @@ bool mqtt_mgr_is_monitored_id(uint32_t can_id);
 struct BleButtonEvent;
 void mqtt_mgr_publish_ble_event(const BleButtonEvent& event);
 void mqtt_mgr_publish_ble_status(void);
+void mqtt_mgr_publish_vbat(float vbat);
 

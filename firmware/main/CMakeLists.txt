@@ -15,24 +15,28 @@ idf_component_register(
         "gvret_server.cpp"
         "mqtt_mgr.cpp"
         "ble_mgr.cpp"
+        "vbat_sensor.cpp"
     INCLUDE_DIRS "."
     REQUIRES 
         "nvs_flash"
         "esp_http_server"
         "app_update"
         "driver"
-        "mqtt"
+        "espressif__mqtt"
         "esp_wifi"
         "esp_event"
         "esp_netif"
         "esp_timer"
         "esp_partition"
         "lwip"
-        "json"
-        "littlefs"
-        "mdns"
+        "espressif__cjson"
+        "joltwallet__littlefs"
+        "espressif__mdns"
         "bt"
+        "esp_adc"
 )
+
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-error=cpp -Wno-cpp -Wno-deprecated-declarations)
 
 # --- LittleFS 3-Tier Architecture Staging ---
 # Target the shared data folder that Vite builds into

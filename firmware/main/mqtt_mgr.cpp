@@ -518,3 +518,19 @@ void mqtt_mgr_publish_discovery(void) {
         publish_ha_ble_discovery(global_mqtt_client);
     }
 }
+
+void mqtt_mgr_publish_vbat(float vbat) {
+    if (!global_mqtt_client || !s_mqtt_connected.load()) return;
+
+    char val_str[16];
+    snprintf(val_str, sizeof(val_str), "%.1f", vbat);
+
+    // 1. Publish to dedicated hardware vbat topic (e.g. cando/{device_id}/state/vbat)
+    std::string vbat_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/vbat";
+    esp_mqtt_client_publish(global_mqtt_client, vbat_topic.c_str(), val_str, 0, 1, 1);
+
+    // 2. Also publish to entity id state topic (e.g. cando/{device_id}/state/cond_aux_12v_battery)
+    std::string entity_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/cond_aux_12v_battery";
+    esp_mqtt_client_publish(global_mqtt_client, entity_topic.c_str(), val_str, 0, 1, 1);
+}
+

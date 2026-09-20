@@ -6,6 +6,7 @@
 #include "mqtt_mgr.h"
 #include "track_popup.h"
 #include "ble_mgr.h"
+#include "vbat_sensor.h"
 #include "cJSON.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
@@ -240,10 +241,22 @@ static esp_err_t options_handler(httpd_req_t *req) {
 static esp_err_t api_states_handler(httpd_req_t *req) {
     set_cors_headers(req);
     cJSON *root = cJSON_CreateArray();
+    bool had_vbat = false;
     for (const auto& entity : global_catalog) {
         cJSON *item = cJSON_CreateObject();
         cJSON_AddStringToObject(item, "entity", entity.id.c_str());
         cJSON_AddStringToObject(item, "state", entity.current_state.empty() ? "Unknown" : entity.current_state.c_str());
+        cJSON_AddItemToArray(root, item);
+        if (entity.id == "cond_aux_12v_battery") {
+            had_vbat = true;
+        }
+    }
+
+    // Always include live hardware ADC 12V battery reading
+    if (!had_vbat) {
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "entity", "cond_aux_12v_battery");
+        cJSON_AddStringToObject(item, "state", vbat_sensor_get_last_str());
         cJSON_AddItemToArray(root, item);
     }
 

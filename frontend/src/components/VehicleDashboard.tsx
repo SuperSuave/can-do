@@ -257,7 +257,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       hvSocName: findCmd('cond_hv_battery_soc')?.ha_metadata?.name || 'Traction Battery SOC',
       hvTemps: getCanId('hv_battery_temperatures', '152'),
       hvTempsName: findCmd('hv_battery_temperatures')?.ha_metadata?.name || 'HV Battery Module Temps',
-      aux12v: getCanId('cond_aux_12v_battery', '1cf'),
+      aux12v: getCanId('cond_aux_12v_battery', 'vbat'),
       aux12vName: findCmd('cond_aux_12v_battery')?.ha_metadata?.name || '12V Aux Battery Voltage',
       gear: getCanId('selected_gear', '2c0'),
       gearName: gearCmd?.ha_metadata?.name || 'Gear Selector',

@@ -5292,15 +5292,15 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x1CF",
+        "state_can_id": "vbat",
         "state_byte": "D6",
         "unit": "V",
         "factor": 0.1
       },
       "contributor": {
-        "name": "Electroniq Buttons Community",
+        "name": "MeatPi WiCAN Community",
         "github": "",
-        "notes": "Consolidated 12V lead-acid/AGM threshold levels from LDC 0x1CF D6"
+        "notes": "Continuous 24/7 auxiliary battery monitoring via MeatPi WiCAN hardware ADC (GPIO 4)"
       },
       "options": [
         {

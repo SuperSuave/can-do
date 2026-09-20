@@ -75,6 +75,8 @@ def main():
         "/spiffs/www/index-C93d997e.js.gz",
         "/spiffs/www/index-B7bsdCst.js.gz",
         "/spiffs/www/index-B0w8EwUT.js.gz",
+        "/spiffs/www/index-E8IOPc6j.js.gz",
+        "/spiffs/www/index-E8IOPc6j.js",
         "/spiffs/www/catalog/can_do_catalog.json.gz",
         "/spiffs/www/can_do_catalog.json.gz",
         "/spiffs/www/can_do_catalog.json",
