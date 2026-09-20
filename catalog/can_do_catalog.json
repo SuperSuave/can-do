@@ -1746,7 +1746,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
       },
       "network": {
         "bus": 0,
@@ -1758,13 +1758,13 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "°F",
+        "unit": "\u00b0F",
         "raw_min": "0x06",
         "raw_max": "0x1A"
       },
       "options": [
         {
-          "label": "62°F / 17.0°C (Lo / Min)",
+          "label": "62\u00b0F / 17.0\u00b0C (Lo / Min)",
           "match": {
             "D2": "0x06"
           },
@@ -1774,7 +1774,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "63°F / 17.5°C",
+          "label": "63\u00b0F / 17.5\u00b0C",
           "match": {
             "D2": "0x07"
           },
@@ -1784,7 +1784,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "64°F / 18.0°C",
+          "label": "64\u00b0F / 18.0\u00b0C",
           "match": {
             "D2": "0x08"
           },
@@ -1794,7 +1794,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "65°F / 18.5°C",
+          "label": "65\u00b0F / 18.5\u00b0C",
           "match": {
             "D2": "0x09"
           },
@@ -1804,7 +1804,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "66°F / 19.0°C",
+          "label": "66\u00b0F / 19.0\u00b0C",
           "match": {
             "D2": "0x0A"
           },
@@ -1814,7 +1814,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "67°F / 19.5°C",
+          "label": "67\u00b0F / 19.5\u00b0C",
           "match": {
             "D2": "0x0B"
           },
@@ -1824,7 +1824,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "68°F / 20.0°C",
+          "label": "68\u00b0F / 20.0\u00b0C",
           "match": {
             "D2": "0x0C"
           },
@@ -1834,7 +1834,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "69°F / 20.5°C",
+          "label": "69\u00b0F / 20.5\u00b0C",
           "match": {
             "D2": "0x0D"
           },
@@ -1844,7 +1844,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "70°F / 21.0°C (Default Comfort)",
+          "label": "70\u00b0F / 21.0\u00b0C (Default Comfort)",
           "match": {
             "D2": "0x0E"
           },
@@ -1855,7 +1855,7 @@
           "default": true
         },
         {
-          "label": "71°F / 21.5°C",
+          "label": "71\u00b0F / 21.5\u00b0C",
           "match": {
             "D2": "0x0F"
           },
@@ -1865,7 +1865,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "72°F / 22.0°C",
+          "label": "72\u00b0F / 22.0\u00b0C",
           "match": {
             "D2": "0x10"
           },
@@ -1875,7 +1875,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "73°F / 23.0°C",
+          "label": "73\u00b0F / 23.0\u00b0C",
           "match": {
             "D2": "0x11"
           },
@@ -1885,7 +1885,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "74°F / 23.5°C",
+          "label": "74\u00b0F / 23.5\u00b0C",
           "match": {
             "D2": "0x12"
           },
@@ -1895,7 +1895,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "75°F / 24.0°C",
+          "label": "75\u00b0F / 24.0\u00b0C",
           "match": {
             "D2": "0x13"
           },
@@ -1905,7 +1905,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "76°F / 24.5°C",
+          "label": "76\u00b0F / 24.5\u00b0C",
           "match": {
             "D2": "0x14"
           },
@@ -1915,7 +1915,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "77°F / 25.0°C",
+          "label": "77\u00b0F / 25.0\u00b0C",
           "match": {
             "D2": "0x15"
           },
@@ -1925,7 +1925,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "78°F / 25.5°C",
+          "label": "78\u00b0F / 25.5\u00b0C",
           "match": {
             "D2": "0x16"
           },
@@ -1935,7 +1935,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "79°F / 26.0°C",
+          "label": "79\u00b0F / 26.0\u00b0C",
           "match": {
             "D2": "0x17"
           },
@@ -1945,7 +1945,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "80°F / 26.5°C",
+          "label": "80\u00b0F / 26.5\u00b0C",
           "match": {
             "D2": "0x18"
           },
@@ -1955,7 +1955,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "81°F / 27.0°C",
+          "label": "81\u00b0F / 27.0\u00b0C",
           "match": {
             "D2": "0x19"
           },
@@ -1965,7 +1965,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "82°F / 27.5°C (Hi / Max)",
+          "label": "82\u00b0F / 27.5\u00b0C (Hi / Max)",
           "match": {
             "D2": "0x1A"
           },
@@ -1975,7 +1975,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Warmer than 70°F (> 21°C)",
+          "label": "Warmer than 70\u00b0F (> 21\u00b0C)",
           "evaluate": {
             "byte": "D2",
             "operator": "greater_than",
@@ -1983,7 +1983,7 @@
           }
         },
         {
-          "label": "Cooler than 70°F (< 21°C)",
+          "label": "Cooler than 70\u00b0F (< 21\u00b0C)",
           "evaluate": {
             "byte": "D2",
             "operator": "less_than",
@@ -2013,7 +2013,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
       },
       "network": {
         "bus": 0,
@@ -2025,13 +2025,13 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "°F",
+        "unit": "\u00b0F",
         "raw_min": "0x06",
         "raw_max": "0x1A"
       },
       "options": [
         {
-          "label": "62°F / 17.0°C (Lo / Min)",
+          "label": "62\u00b0F / 17.0\u00b0C (Lo / Min)",
           "match": {
             "D3": "0x06"
           },
@@ -2041,7 +2041,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "63°F / 17.5°C",
+          "label": "63\u00b0F / 17.5\u00b0C",
           "match": {
             "D3": "0x07"
           },
@@ -2051,7 +2051,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "64°F / 18.0°C",
+          "label": "64\u00b0F / 18.0\u00b0C",
           "match": {
             "D3": "0x08"
           },
@@ -2061,7 +2061,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "65°F / 18.5°C",
+          "label": "65\u00b0F / 18.5\u00b0C",
           "match": {
             "D3": "0x09"
           },
@@ -2071,7 +2071,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "66°F / 19.0°C",
+          "label": "66\u00b0F / 19.0\u00b0C",
           "match": {
             "D3": "0x0A"
           },
@@ -2081,7 +2081,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "67°F / 19.5°C",
+          "label": "67\u00b0F / 19.5\u00b0C",
           "match": {
             "D3": "0x0B"
           },
@@ -2091,7 +2091,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "68°F / 20.0°C",
+          "label": "68\u00b0F / 20.0\u00b0C",
           "match": {
             "D3": "0x0C"
           },
@@ -2101,7 +2101,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "69°F / 20.5°C",
+          "label": "69\u00b0F / 20.5\u00b0C",
           "match": {
             "D3": "0x0D"
           },
@@ -2111,7 +2111,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "70°F / 21.0°C (Default Comfort)",
+          "label": "70\u00b0F / 21.0\u00b0C (Default Comfort)",
           "match": {
             "D3": "0x0E"
           },
@@ -2122,7 +2122,7 @@
           "default": true
         },
         {
-          "label": "71°F / 21.5°C",
+          "label": "71\u00b0F / 21.5\u00b0C",
           "match": {
             "D3": "0x0F"
           },
@@ -2132,7 +2132,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "72°F / 22.0°C",
+          "label": "72\u00b0F / 22.0\u00b0C",
           "match": {
             "D3": "0x10"
           },
@@ -2142,7 +2142,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "73°F / 23.0°C",
+          "label": "73\u00b0F / 23.0\u00b0C",
           "match": {
             "D3": "0x11"
           },
@@ -2152,7 +2152,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "74°F / 23.5°C",
+          "label": "74\u00b0F / 23.5\u00b0C",
           "match": {
             "D3": "0x12"
           },
@@ -2162,7 +2162,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "75°F / 24.0°C",
+          "label": "75\u00b0F / 24.0\u00b0C",
           "match": {
             "D3": "0x13"
           },
@@ -2172,7 +2172,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "76°F / 24.5°C",
+          "label": "76\u00b0F / 24.5\u00b0C",
           "match": {
             "D3": "0x14"
           },
@@ -2182,7 +2182,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "77°F / 25.0°C",
+          "label": "77\u00b0F / 25.0\u00b0C",
           "match": {
             "D3": "0x15"
           },
@@ -2192,7 +2192,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "78°F / 25.5°C",
+          "label": "78\u00b0F / 25.5\u00b0C",
           "match": {
             "D3": "0x16"
           },
@@ -2202,7 +2202,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "79°F / 26.0°C",
+          "label": "79\u00b0F / 26.0\u00b0C",
           "match": {
             "D3": "0x17"
           },
@@ -2212,7 +2212,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "80°F / 26.5°C",
+          "label": "80\u00b0F / 26.5\u00b0C",
           "match": {
             "D3": "0x18"
           },
@@ -2222,7 +2222,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "81°F / 27.0°C",
+          "label": "81\u00b0F / 27.0\u00b0C",
           "match": {
             "D3": "0x19"
           },
@@ -2232,7 +2232,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "82°F / 27.5°C (Hi / Max)",
+          "label": "82\u00b0F / 27.5\u00b0C (Hi / Max)",
           "match": {
             "D3": "0x1A"
           },
@@ -2242,7 +2242,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Warmer than 70°F (> 21°C)",
+          "label": "Warmer than 70\u00b0F (> 21\u00b0C)",
           "evaluate": {
             "byte": "D3",
             "operator": "greater_than",
@@ -2250,7 +2250,7 @@
           }
         },
         {
-          "label": "Cooler than 70°F (< 21°C)",
+          "label": "Cooler than 70\u00b0F (< 21\u00b0C)",
           "evaluate": {
             "byte": "D3",
             "operator": "less_than",
@@ -2289,7 +2289,7 @@
       },
       "options": [
         {
-          "label": "Cabin All 21.0°C / 70°F",
+          "label": "Cabin All 21.0\u00b0C / 70\u00b0F",
           "match": {
             "D2": "0x0E",
             "D3": "0x0E"
@@ -2301,7 +2301,7 @@
           "default": true
         },
         {
-          "label": "Cabin All 20.0°C / 68°F",
+          "label": "Cabin All 20.0\u00b0C / 68\u00b0F",
           "match": {
             "D2": "0x0C",
             "D3": "0x0C"
@@ -2312,7 +2312,7 @@
           }
         },
         {
-          "label": "Cabin All 22.0°C / 72°F",
+          "label": "Cabin All 22.0\u00b0C / 72\u00b0F",
           "match": {
             "D2": "0x10",
             "D3": "0x10"
@@ -2323,7 +2323,7 @@
           }
         },
         {
-          "label": "Cabin Pre-Cool 18.0°C / 64°F",
+          "label": "Cabin Pre-Cool 18.0\u00b0C / 64\u00b0F",
           "match": {
             "D2": "0x08",
             "D3": "0x08"
@@ -2334,7 +2334,7 @@
           }
         },
         {
-          "label": "Cabin Pre-Heat 24.0°C / 75°F",
+          "label": "Cabin Pre-Heat 24.0\u00b0C / 75\u00b0F",
           "match": {
             "D2": "0x14",
             "D3": "0x14"
@@ -2927,8 +2927,8 @@
         }
       ],
       "contributor": {
-        "name": "Community Contributor",
-        "github": "",
+        "name": "opendbc",
+        "github": "commaai/opendbc",
         "notes": "Decoded from 0x413: D4=0x04 Hazard engaged, D2=0x50 lamps illuminated"
       }
     },
@@ -2970,8 +2970,8 @@
         }
       ],
       "contributor": {
-        "name": "Community Contributor",
-        "github": "",
+        "name": "opendbc",
+        "github": "commaai/opendbc",
         "notes": "Decoded from 0x413 D3: 0x10 Active, 0x00 Off (mask 0x10)"
       }
     },
@@ -3013,8 +3013,8 @@
         }
       ],
       "contributor": {
-        "name": "Community Contributor",
-        "github": "",
+        "name": "opendbc",
+        "github": "commaai/opendbc",
         "notes": "Decoded from 0x413 D3: 0x40 Active, 0x00 Off (mask 0x40)"
       }
     },
@@ -3124,8 +3124,8 @@
         "condition"
       ],
       "contributor": {
-        "name": "Community Contributor",
-        "github": "",
+        "name": "opendbc",
+        "github": "commaai/opendbc",
         "notes": "Decoded from ESC/ABS 0x418 byte D6: 0x4C Pressed, 0x0C Released (bit 6 / 0x40 mask)"
       },
       "options": [
@@ -3167,8 +3167,8 @@
         "condition"
       ],
       "contributor": {
-        "name": "Community Contributor",
-        "github": "",
+        "name": "opendbc",
+        "github": "commaai/opendbc",
         "notes": "Decoded from VCU / Shift Interlock 0x435 byte D4: 0x40 Pressed, 0x50 Released"
       },
       "options": [
@@ -4031,18 +4031,18 @@
       },
       "options": [
         {
-          "label": "Info Notification (ⓘ)",
+          "label": "Info Notification (\u24d8)",
           "level": "info",
           "popup_message": "Preconditioning Active",
           "default": true
         },
         {
-          "label": "Warning Notification (⚠)",
+          "label": "Warning Notification (\u26a0)",
           "level": "warning",
           "popup_message": "Battery Cold / Limited"
         },
         {
-          "label": "Fault Notification (‼)",
+          "label": "Fault Notification (\u203c)",
           "level": "error",
           "popup_message": "Charge Interrupted"
         },
@@ -5234,12 +5234,12 @@
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x226",
-        "unit": "°C"
+        "unit": "\u00b0C"
       },
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4 ([B3]: raw - 40 °C)"
+        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4 ([B3]: raw - 40 \u00b0C)"
       },
       "options": [
         {
@@ -5721,6 +5721,51 @@
       ]
     },
     {
+      "id": "cluster_distance_unit",
+      "ha_metadata": {
+        "name": "Cluster Distance Unit",
+        "domain": "sensor",
+        "icon": "mdi:map-marker-distance"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Dashboard / Center Console",
+      "subcategory": "Cluster Settings",
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x4D8"
+      },
+      "notes": "Decoded from CLUSTER_INFO frame 1240 (0x4D8) bit 0 (0: Kilometers, 1: Miles).",
+      "contributor": {
+        "name": "opendbc",
+        "github": "commaai/opendbc",
+        "notes": "Decoded from CLUSTER_INFO 0x4D8 bit 0"
+      },
+      "options": [
+        {
+          "label": "Miles (mi)",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x01",
+          "default": true
+        },
+        {
+          "label": "Kilometers (km)",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0x01"
+        }
+      ]
+    },
+    {
       "id": "climate_fan_speed_level",
       "ha_metadata": {
         "name": "Climate Fan Speed Level",
@@ -5850,19 +5895,19 @@
           "default": true
         },
         {
-          "label": "Rear Temp 20.0°C / 68°F",
+          "label": "Rear Temp 20.0\u00b0C / 68\u00b0F",
           "match": {
             "D6": "0x0C"
           }
         },
         {
-          "label": "Rear Temp 21.0°C / 70°F",
+          "label": "Rear Temp 21.0\u00b0C / 70\u00b0F",
           "match": {
             "D6": "0x0E"
           }
         },
         {
-          "label": "Rear Temp 22.0°C / 72°F",
+          "label": "Rear Temp 22.0\u00b0C / 72\u00b0F",
           "match": {
             "D6": "0x10"
           }
@@ -5876,7 +5921,12 @@
       "name": "Steering Wheel OK Button -> Ventilate Driver Seat",
       "description": "Double-clicking or holding the steering wheel Menu OK button automatically toggles the driver seat ventilation to Medium Cool with cluster OSD confirmation.",
       "category": "Comfort & Climate",
-      "tags": ["all_egmp", "ioniq5", "ev6", "gv60"],
+      "tags": [
+        "all_egmp",
+        "ioniq5",
+        "ev6",
+        "gv60"
+      ],
       "enabled": true,
       "ha_expose": true,
       "ha_icon": "mdi:car-seat-cooler",
@@ -5921,7 +5971,12 @@
       "name": "Steering Wheel Star Button -> Battery Preconditioning",
       "description": "Pressing the steering wheel custom Star button immediately triggers manual High Voltage Battery Preconditioning if battery SOC is above 20%.",
       "category": "Battery & Preconditioning",
-      "tags": ["all_egmp", "ioniq5", "ev6", "gv60"],
+      "tags": [
+        "all_egmp",
+        "ioniq5",
+        "ev6",
+        "gv60"
+      ],
       "enabled": true,
       "ha_expose": true,
       "ha_icon": "mdi:battery-charging",
@@ -5976,7 +6031,12 @@
       "name": "Auto-Fold Power Mirrors When Vehicle Locks",
       "description": "When vehicle door security transitions to Locked and all doors/closures are confirmed shut, automatically fold exterior power mirrors.",
       "category": "Closures & Security",
-      "tags": ["all_egmp", "ioniq5", "ev6", "gv60"],
+      "tags": [
+        "all_egmp",
+        "ioniq5",
+        "ev6",
+        "gv60"
+      ],
       "enabled": true,
       "ha_expose": true,
       "ha_icon": "mdi:car-side",
@@ -6024,7 +6084,12 @@
       "name": "Shift into Park -> Auto-Unlock All Doors",
       "description": "Shifting the transmission into Park automatically triggers central unlocking of all vehicle closures.",
       "category": "Convenience & Driving",
-      "tags": ["all_egmp", "ioniq5", "ev6", "gv60"],
+      "tags": [
+        "all_egmp",
+        "ioniq5",
+        "ev6",
+        "gv60"
+      ],
       "enabled": true,
       "ha_expose": true,
       "ha_icon": "mdi:car-door-lock-open",
@@ -6062,7 +6127,12 @@
       "name": "Driver Door Open in Park -> Hazard Flashers Alert",
       "description": "When the driver door is opened while the vehicle is stationary in Park, momentarily flashes the hazard warning lights for rear traffic visibility.",
       "category": "Safety & Alerts",
-      "tags": ["all_egmp", "ioniq5", "ev6", "gv60"],
+      "tags": [
+        "all_egmp",
+        "ioniq5",
+        "ev6",
+        "gv60"
+      ],
       "enabled": false,
       "ha_expose": true,
       "ha_icon": "mdi:alert-octagon",
