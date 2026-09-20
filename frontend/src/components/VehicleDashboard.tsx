@@ -112,13 +112,22 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   // 1. Vehicle Telemetry State
   const [gear, setGear] = useState<GearMode>('P');
   const [speedMph, setSpeedMph] = useState<number>(0);
-  const [odometer, setOdometer] = useState<number>(18420);
+  const [odometer, setOdometer] = useState<number>(() => (unitSystem === 'metric' ? 87147 : 54147));
   const [ambientTempC, setAmbientTempC] = useState<number>(22.0); // 71.6°F
   const [tempUnit, setTempUnit] = useState<'F' | 'C'>(() => (unitSystem === 'metric' ? 'C' : 'F'));
 
+  const prevUnitRef = useRef(unitSystem);
   useEffect(() => {
     if (unitSystem) {
       setTempUnit(unitSystem === 'metric' ? 'C' : 'F');
+      if (prevUnitRef.current && prevUnitRef.current !== unitSystem) {
+        if (unitSystem === 'metric') {
+          setOdometer(prev => Math.round(prev * 1.609344));
+        } else {
+          setOdometer(prev => Math.round(prev * 0.621371192));
+        }
+      }
+      prevUnitRef.current = unitSystem;
     }
   }, [unitSystem]);
 
@@ -235,6 +244,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     return {
       speed: getCanId('cluster_vehicle_speed', '1ac'),
       speedName: findCmd('cluster_vehicle_speed')?.ha_metadata?.name || 'Cluster Speedometer',
+      wheelSpeeds: getCanId('wheel_speeds', '0a2'),
       ambientTemp: getCanId('cond_ambient_temperature', '226'),
       ambientTempName: findCmd('cond_ambient_temperature')?.ha_metadata?.name || 'Ambient Temperature',
       hvSoc: getCanId('cond_hv_battery_soc', '2fc'),
@@ -512,24 +522,51 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     };
   }, []);
 
+  // Smooth simulation loop when in preview/bench mode and no live vehicle CAN traffic
+  useEffect(() => {
+    if (connectedDevice && framesCount > 0) return;
+    if (gear !== 'D') return;
+
+    const interval = setInterval(() => {
+      setSpeedMph(prev => Math.min(75, Math.max(35, prev + Math.floor(Math.random() * 3 - 1))));
+      setSpeedKph(prev => Math.min(120, Math.max(56, prev + Math.floor(Math.random() * 5 - 2))));
+    }, 1200);
+
+    return () => clearInterval(interval);
+  }, [connectedDevice, framesCount, gear]);
+
   // 3. Real-Time CAN Frame Decoder (Direct from vehicle TWAI bus, completely dynamic)
   const handleIncomingCanFrame = (idStr: string, hexPayload: string) => {
     const normId = idStr.toLowerCase().replace(/^0x/, '');
     const idFormatted = `0x${normId.toUpperCase()}`;
-    const bytes = hexPayload.trim().split(/\s+/).map(h => parseInt(h, 16));
+    const hexClean = hexPayload.trim().replace(/\s+/g, '');
+    const bytes = (hexClean.match(/.{1,2}/g) || []).map(h => parseInt(h, 16));
     const now = new Date().toLocaleTimeString();
 
-    // Road Speed (Dynamically mapped from catalog, e.g. 0x1AC)
-    if (normId === canMappings.speed && bytes.length >= 1) {
+    // Road Speed (Cluster 0x1AC Byte 0 = kph, or Wheel Speeds 0x0A2 16-bit LE = factor 0.03125 kph, or 0x1A0)
+    if ((normId === canMappings.speed || normId === '1ac') && bytes.length >= 1) {
       const kph = bytes[0];
       const mph = Math.round(kph * 0.621371);
       setSpeedKph(kph);
       setSpeedMph(mph);
       recordLog(idFormatted, canMappings.speedName, `${kph} km/h (${mph} mph)`, hexPayload, now);
+    } else if ((normId === canMappings.wheelSpeeds || normId === '0a2' || normId === 'a2') && bytes.length >= 2) {
+      const rawW1 = bytes[0] | (bytes[1] << 8);
+      const kph = Math.round(rawW1 * 0.03125 * 10) / 10;
+      const mph = Math.round(kph * 0.621371);
+      setSpeedKph(kph);
+      setSpeedMph(mph);
+      recordLog(idFormatted, 'Wheel Speed Telemetry', `${kph} km/h (${mph} mph)`, hexPayload, now);
+    } else if (normId === '1a0' && bytes.length >= 2) {
+      const kph = Math.round(((bytes[0] | (bytes[1] << 8)) * 0.03125) * 10) / 10;
+      const mph = Math.round(kph * 0.621371);
+      setSpeedKph(kph);
+      setSpeedMph(mph);
+      recordLog(idFormatted, 'ESC Road Speed', `${kph} km/h (${mph} mph)`, hexPayload, now);
     }
 
     // Ambient Outdoor Temperature (Dynamically mapped from catalog, e.g. 0x226)
-    else if (normId === canMappings.ambientTemp && bytes.length >= 4) {
+    else if ((normId === canMappings.ambientTemp || normId === '226') && bytes.length >= 4) {
       const raw = bytes[3];
       if (raw > 0 && raw < 255) {
         const c = raw - 40;
@@ -539,15 +576,17 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     }
 
     // HV Traction Battery SOC (Dynamically mapped from catalog, e.g. 0x2FC)
-    else if (normId === canMappings.hvSoc && bytes.length >= 8) {
+    else if ((normId === canMappings.hvSoc || normId === '2fc') && bytes.length >= 8) {
       const raw = bytes[7];
       const newSoc = Math.round(raw * 0.5 * 10) / 10;
-      setSoc(newSoc);
-      recordLog(idFormatted, canMappings.hvSocName, `${newSoc}%`, hexPayload, now);
+      if (newSoc >= 0 && newSoc <= 100) {
+        setSoc(newSoc);
+        recordLog(idFormatted, canMappings.hvSocName, `${newSoc}%`, hexPayload, now);
+      }
     }
 
     // BMS Module Min/Max Temperatures & 12V Aux Voltage (Dynamically mapped from catalog, e.g. 0x152)
-    else if ((normId === canMappings.hvTemps || normId === canMappings.aux12v) && bytes.length >= 2) {
+    else if ((normId === canMappings.hvTemps || normId === canMappings.aux12v || normId === '152') && bytes.length >= 2) {
       const minT = bytes[0];
       const maxT = bytes[1];
       setBatteryMinTempC(minT);
@@ -597,12 +636,15 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
       const finalGear: GearMode = detectedGear || 'P';
       setGear(finalGear);
-      if (finalGear === 'P') setSpeedMph(0);
+      if (finalGear === 'P') {
+        setSpeedMph(0);
+        setSpeedKph(0);
+      }
       recordLog(idFormatted, canMappings.gearName, `Position: ${finalGear}`, hexPayload, now);
     }
 
     // Body Closures & Locks (Dynamically mapped from catalog, e.g. 0x411)
-    else if ((normId === canMappings.doors || normId === canMappings.locks || normId === canMappings.hood) && bytes.length >= 8) {
+    else if ((normId === canMappings.doors || normId === canMappings.locks || normId === canMappings.hood || normId === '411') && bytes.length >= 8) {
       const fl = Boolean(bytes[3] & 0x01); // Driver Door
       const fr = Boolean(bytes[4] & 0x04); // Passenger Door
       const hood = Boolean(bytes[5] & 0x10); // Hood / Frunk
@@ -616,33 +658,36 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     }
 
     // Tailgate / Trunk Status (Dynamically mapped from catalog, e.g. 0x414)
-    else if (normId === canMappings.trunk && bytes.length >= 4) {
+    else if ((normId === canMappings.trunk || normId === '414') && bytes.length >= 4) {
       const tr = Boolean(bytes[3] & 0x01);
       setTrunkOpen(tr);
       recordLog(idFormatted, canMappings.trunkName, tr ? 'OPEN' : 'Closed', hexPayload, now);
     }
 
     // EV Charge Port Door (Dynamically mapped from catalog, e.g. 0x3AA)
-    else if (normId === canMappings.chargePort && bytes.length >= 5) {
+    else if ((normId === canMappings.chargePort || normId === '3aa') && bytes.length >= 5) {
       const cp = Boolean(bytes[4] & 0x02);
       setChargePortOpen(cp);
       recordLog(idFormatted, canMappings.chargePortName, cp ? 'OPEN' : 'Closed', hexPayload, now);
     }
 
     // EV Charging Status & Grid Interconnect (Dynamically mapped from catalog, e.g. 0x594)
-    else if (normId === canMappings.charging && bytes.length >= 3) {
+    else if ((normId === canMappings.charging || normId === '594') && bytes.length >= 3) {
       const charging = Boolean(bytes[2] & 0x01);
       setIsCharging(charging);
       if (!charging) setChargeRateKw(0);
       recordLog(idFormatted, canMappings.chargingName, charging ? 'ACTIVE / PLUGGED IN' : 'INACTIVE', hexPayload, now);
     }
 
-    // Odometer (Dynamically mapped from catalog, e.g. 0x227)
-    else if (normId === canMappings.odometer && bytes.length >= 4) {
-      const odo = bytes[1] | (bytes[2] << 8) | (bytes[3] << 16);
-      if (odo > 0) {
-        setOdometer(odo);
-        recordLog(idFormatted, canMappings.odometerName, `${odo.toLocaleString()} km`, hexPayload, now);
+    // Odometer (Dynamically mapped from catalog, e.g. 0x227: D2-D4 24-bit LE in 0.1 km units)
+    else if ((normId === canMappings.odometer || normId === '227') && bytes.length >= 4) {
+      const rawOdo = bytes[1] | (bytes[2] << 8) | (bytes[3] << 16);
+      if (rawOdo > 0) {
+        const km = rawOdo * 0.1;
+        const mi = Math.round(km * 0.621371192);
+        const displayOdo = unitSystem === 'metric' ? Math.round(km) : mi;
+        setOdometer(displayOdo);
+        recordLog(idFormatted, canMappings.odometerName, `${displayOdo.toLocaleString()} ${unitSystem === 'metric' ? 'km' : 'mi'}`, hexPayload, now);
       }
     }
 
@@ -846,7 +891,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 </span>
               </span>
               <span>•</span>
-              <span className="font-mono text-slate-300">{speedMph} MPH</span>
+              <span className="font-mono text-slate-300">
+                {unitSystem === 'metric' ? `${speedKph} km/h` : `${speedMph} MPH`}
+              </span>
             </div>
           </div>
         </div>
@@ -958,8 +1005,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                         type="button"
                         onClick={() => {
                           setGear(g);
-                          if (g === 'D') setSpeedMph(prev => (prev === 0 ? 35 : prev));
-                          if (g === 'P') setSpeedMph(0);
+                          if (g === 'D') {
+                            setSpeedMph(prev => (prev === 0 ? 35 : prev));
+                            setSpeedKph(prev => (prev === 0 ? 56 : prev));
+                          }
+                          if (g === 'P') {
+                            setSpeedMph(0);
+                            setSpeedKph(0);
+                          }
                           dispatchCommand('selected_gear', g, `Shifted Transmission to ${g}`);
                         }}
                         title={`Vehicle Transmission Gear: ${g} (CAN 0x${canMappings.gear.toUpperCase()})`}

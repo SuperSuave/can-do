@@ -31,3 +31,7 @@ Thumbs.db
 .idea/
 *.swp
 *.bak
+
+# Derived/cached catalog copies (catalog/can_do_catalog.json is the single source of truth)
+custom_components/can_do/can_do_catalog.json
+firmware/data/catalog.json

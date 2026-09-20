@@ -11,21 +11,24 @@ _CATALOG_DATA: Optional[Dict[str, Any]] = None
 
 
 def load_catalog() -> Dict[str, Any]:
-    """Load can_do_catalog.json from integration directory or repo root."""
+    """Load can_do_catalog.json from repository or local cache."""
     global _CATALOG_DATA
     if _CATALOG_DATA is not None:
         return _CATALOG_DATA
 
     candidates = [
-        os.path.join(os.path.dirname(__file__), "can_do_catalog.json"),
-        os.path.join(
-            os.path.dirname(__file__),
-            "..",
-            "..",
-            "..",
-            "catalog",
-            "can_do_catalog.json",
+        # 1. Monorepo root canonical catalog (single source of truth in git)
+        os.path.abspath(
+            os.path.join(
+                os.path.dirname(__file__),
+                "..",
+                "..",
+                "catalog",
+                "can_do_catalog.json",
+            )
         ),
+        # 2. Local fallback / HACS cached catalog
+        os.path.join(os.path.dirname(__file__), "can_do_catalog.json"),
     ]
 
     for path in candidates:
@@ -37,6 +40,24 @@ def load_catalog() -> Dict[str, Any]:
                     return _CATALOG_DATA
             except Exception as ex:
                 _LOGGER.error("Failed to parse catalog at %s: %s", path, ex)
+
+    # 3. Dynamic fetch for standalone HACS installations without repo clone
+    online_url = "https://raw.githubusercontent.com/SuperSuave/can-do/main/catalog/can_do_catalog.json"
+    try:
+        import urllib.request
+        _LOGGER.info("Fetching canonical CAN Do catalog from GitHub: %s", online_url)
+        with urllib.request.urlopen(online_url, timeout=10) as resp:
+            data = resp.read()
+            _CATALOG_DATA = json.loads(data.decode("utf-8"))
+            local_cache = os.path.join(os.path.dirname(__file__), "can_do_catalog.json")
+            try:
+                with open(local_cache, "wb") as f:
+                    f.write(data)
+            except Exception:
+                pass
+            return _CATALOG_DATA
+    except Exception as ex:
+        _LOGGER.warning("Could not fetch remote catalog: %s", ex)
 
     _LOGGER.error("Could not locate can_do_catalog.json in candidates")
     _CATALOG_DATA = {"catalog_version": "1.0", "vehicles": [], "commands": []}

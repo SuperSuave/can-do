@@ -41,5 +41,13 @@ set(FS_DIR "${CMAKE_CURRENT_LIST_DIR}/../data")
 # Create the data directory if it doesn't exist yet
 file(MAKE_DIRECTORY "${FS_DIR}/www")
 
+# Always stage canonical catalog from catalog/can_do_catalog.json
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../catalog/can_do_catalog.json")
+    file(COPY "${CMAKE_CURRENT_LIST_DIR}/../../catalog/can_do_catalog.json" DESTINATION "${FS_DIR}")
+    if(EXISTS "${FS_DIR}/can_do_catalog.json")
+        file(RENAME "${FS_DIR}/can_do_catalog.json" "${FS_DIR}/catalog.json")
+    endif()
+endif()
+
 # Package the data folder (containing catalog.json, automations.json, and the www folder)
 littlefs_create_partition_image(storage "${FS_DIR}" FLASH_IN_PROJECT)

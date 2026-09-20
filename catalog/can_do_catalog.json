@@ -5443,9 +5443,9 @@
         "state_can_id": "0x227",
         "state_byte": "D2",
         "unit": "mi",
-        "factor": 1.0
+        "factor": 0.0621371
       },
-      "notes": "Decoded from E-GMP ODOMETER frame 551 (0x227). 24-bit unsigned integer Little Endian across bytes D2-D4 with factor 1.0. Cumulative mileage (miles on US vehicles, km on metric vehicles).",
+      "notes": "Decoded from E-GMP ODOMETER frame 551 (0x227). 24-bit unsigned integer Little Endian across bytes D2-D4 in tenths of a kilometer (0.1 km). Converted to miles (factor 0.0621371) or km (factor 0.1).",
       "contributor": {
         "name": "Tichael",
         "github": "tichael",

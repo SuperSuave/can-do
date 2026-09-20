@@ -27,9 +27,16 @@ This directory contains the custom Home Assistant integration for **CAN Do**, pr
 
 ## 🚀 Installation
 
+### Via HACS (Recommended)
+1. In Home Assistant, open **HACS** -> **Integrations**.
+2. Click the top right three dots -> **Custom repositories**.
+3. Add `https://github.com/SuperSuave/can-do` with category **Integration**.
+4. Click **Download** and restart Home Assistant.
+
+### Manual Installation
 1. Copy the `custom_components/can_do` folder to your Home Assistant's `config/custom_components/` directory:
    ```bash
-   cp -r ha-integration/custom_components/can_do /config/custom_components/
+   cp -r custom_components/can_do /config/custom_components/
    ```
 2. Restart Home Assistant.
 3. Go to **Settings -> Devices & Services -> Add Integration** and search for **CAN Do**.

@@ -495,7 +495,7 @@ export function OnboardingWizardModal({
 
                 <div className="pt-2 flex flex-col sm:flex-row gap-3">
                   <a
-                    href="https://github.com/SuperSuave/can-do/tree/main/ha-integration"
+                    href="https://github.com/SuperSuave/can-do/tree/main/custom_components/can_do"
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => setHaInterested(true)}

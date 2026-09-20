@@ -137,21 +137,23 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                 raw = payload[7]
                 return round(raw * 0.5, 1)
 
-        # 1G. Vehicle Odometer (0x227: 24-bit Little Endian across D2-D4, factor 1.0)
+        # 1G. Vehicle Odometer (0x227: 24-bit Little Endian across D2-D4 in 0.1 km units)
         if "odometer" in cid or cid == "vehicle_odometer" or self.state_can_id.lower() == "0x227":
             # In E-GMP 0x227: D1 is counter/sub-status (0x9F).
-            # Cumulative odometer is 24-bit Little Endian across D2-D4 (payload[1..3]).
-            # Starting at D1 read (0x9F | (0x77 << 8)) = 30623, whereas D2-D4 yields
-            # (0x77 | (0xD3 << 8) | (0x00 << 16)) = 54135 miles.
-            factor = float(net.get("factor", 1.0))
+            # Cumulative odometer is 24-bit Little Endian across D2-D4 (payload[1..3]) in tenths of a kilometer (0.1 km).
+            # Example: raw 871417 = 87,141.7 km = 54,147.3 miles.
             if len(payload) >= 4:
                 raw_val = payload[1] | (payload[2] << 8) | (payload[3] << 16)
-                val = raw_val * factor
-                return round(val, 1) if factor < 1.0 else int(val)
             elif len(payload) >= 3:
                 raw_val = payload[1] | (payload[2] << 8)
-                val = raw_val * factor
-                return round(val, 1) if factor < 1.0 else int(val)
+            else:
+                raw_val = 0
+
+            if raw_val > 0:
+                km_val = raw_val * 0.1
+                if self._attr_native_unit_of_measurement == UnitOfLength.MILES:
+                    return round(km_val * 0.621371192, 1)
+                return round(km_val, 1)
 
         # 1E. Generic Linear Scale
         if self.command.get("type") == "linear_scale" or "min" in net:

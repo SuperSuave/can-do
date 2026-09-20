@@ -44,7 +44,7 @@ It transforms an ESP32 into a standalone, offline controller that evaluates netw
 │   ├── package.json            # Scripts: dev, build, lint
 │   └── vite.config.ts          # Vite configuration
 │
-├── /ha-integration             # Home Assistant integration assets & docs
+├── /custom_components/can_do   # Home Assistant custom component (HACS ready)
 └── /docs                       # Architecture specifications and reference docs
 ```
 

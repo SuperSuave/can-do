@@ -69,6 +69,7 @@ def main():
         "/spiffs/www/index-BLMva-xK.js.gz",
         "/spiffs/www/index-BgIqk_xU.js.gz",
         "/spiffs/www/index-CgV9alWL.js.gz",
+        "/spiffs/www/index-xYBoX6bs.js.gz",
         "/spiffs/www/index-of4sRFFA.css.gz",
         "/spiffs/www/index-F2wQvwRQ.css.gz",
         "/spiffs/www/catalog/can_do_catalog.json.gz",
@@ -117,7 +118,9 @@ def main():
             print(f" [FAILED: {e}]")
 
     # 3. Upload catalog.json (triggers reboot)
-    cat_file = os.path.join(data_dir, "catalog.json")
+    cat_file = os.path.join(script_dir, "..", "catalog", "can_do_catalog.json")
+    if not os.path.isfile(cat_file):
+        cat_file = os.path.join(data_dir, "catalog.json")
     if os.path.isfile(cat_file):
         print("\nUploading catalog.json (device will reboot on completion)...")
         upload_file(ip, cat_file, "/spiffs/catalog.json")
