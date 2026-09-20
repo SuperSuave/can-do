@@ -171,6 +171,10 @@ class CanDoDataCoordinator:
             prev_vals = self.can_states.get(can_id)
             self.can_states[can_id] = byte_vals
 
+            # Skip duplicate identical frames
+            if prev_vals is not None and prev_vals == byte_vals:
+                return
+
             # Filter out alive counter / checksum changes (E-GMP Byte 7 / D8)
             if prev_vals is not None and len(prev_vals) == len(byte_vals) == 8:
                 if prev_vals[:7] == byte_vals[:7]:

@@ -218,9 +218,9 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
     def _handle_can_update(self) -> None:
         """Handle updated CAN state only when the decoded value changes."""
         new_val = self.native_value
-        if new_val is not None and new_val != self._last_native_val:
+        if new_val is not None:
             self._last_native_val = new_val
-            self.async_write_ha_state()
+        super()._handle_can_update()
 
     @property
     def extra_state_attributes(self) -> Dict[str, Any]:

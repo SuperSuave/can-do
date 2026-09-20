@@ -28,6 +28,8 @@ class CanDoEntity(Entity):
         net = command.get("network", {})
         self.state_can_id: Optional[str] = net.get("state_can_id")
         self._unsub_listener: Optional[Callable[[], None]] = None
+        self._last_state_snapshot: Any = object()
+        self._last_available: Optional[bool] = None
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -63,5 +65,42 @@ class CanDoEntity(Entity):
         await super().async_will_remove_from_hass()
 
     def _handle_can_update(self) -> None:
-        """Handle updated CAN state from coordinator."""
-        self.async_write_ha_state()
+        """Handle updated CAN state from coordinator with intelligent change gating."""
+        current_state = self._get_state_snapshot()
+        current_avail = self.available
+
+        # Only notify Home Assistant if the actual computed state or availability changed
+        if current_avail != self._last_available or current_state != self._last_state_snapshot:
+            self._last_available = current_avail
+            self._last_state_snapshot = current_state
+            self.async_write_ha_state()
+
+    def _get_state_snapshot(self) -> Any:
+        """Capture the current state of this entity to detect real changes."""
+        # 1. Binary sensor
+        if hasattr(self, "is_on"):
+            try:
+                return self.is_on
+            except Exception:
+                pass
+        # 2. Numeric / text sensor
+        if hasattr(self, "native_value"):
+            try:
+                return self.native_value
+            except Exception:
+                pass
+        # 3. Climate entity
+        if hasattr(self, "target_temperature"):
+            try:
+                return (
+                    getattr(self, "target_temperature", None),
+                    getattr(self, "current_temperature", None),
+                    getattr(self, "hvac_action", None),
+                    getattr(self, "hvac_mode", None),
+                )
+            except Exception:
+                pass
+        # 4. Switch entity
+        if hasattr(self, "_is_on"):
+            return getattr(self, "_is_on", None)
+        return None

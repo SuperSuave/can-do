@@ -5052,30 +5052,6 @@
       }
     },
     {
-      "id": "cond_speed_zero",
-      "ha_metadata": {
-        "name": "Vehicle Stopped / Parked (Speed == 0)",
-        "domain": "binary_sensor",
-        "icon": "mdi:speedometer"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "type": "speed_zero",
-      "category": "Vehicle State & Safety",
-      "roles": [
-        "condition"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "speed_zero"
-      },
-      "contributor": {
-        "name": "Unknown",
-        "github": ""
-      }
-    },
-    {
       "id": "selected_gear",
       "ha_metadata": {
         "name": "Selected Gear",
@@ -5127,64 +5103,6 @@
           }
         }
       ]
-    },
-    {
-      "id": "cond_doors_closed",
-      "ha_metadata": {
-        "name": "All Doors & Trunk Closed",
-        "domain": "binary_sensor",
-        "icon": "mdi:car-door"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Vehicle State & Safety",
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x540"
-      },
-      "match": {
-        "D1": "0x00",
-        "D2": "0x00",
-        "D3": "0x00",
-        "D4": "0x00"
-      },
-      "roles": [
-        "condition",
-        "trigger"
-      ],
-      "contributor": {
-        "name": "Unknown",
-        "github": ""
-      }
-    },
-    {
-      "id": "cond_climate_off",
-      "ha_metadata": {
-        "name": "Climate / HVAC is OFF",
-        "domain": "binary_sensor",
-        "icon": "mdi:car-info"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Vehicle State & Safety",
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x476"
-      },
-      "match": {
-        "D2": "0x00"
-      },
-      "roles": [
-        "condition"
-      ],
-      "contributor": {
-        "name": "Unknown",
-        "github": ""
-      }
     },
     {
       "id": "cond_charging",
@@ -5318,7 +5236,7 @@
     {
       "id": "cond_hv_battery_soc",
       "ha_metadata": {
-        "name": "High Voltage (HV) Battery SOC Thresholds",
+        "name": "High Voltage (HV) Battery SOC",
         "domain": "sensor",
         "icon": "mdi:car-battery"
       },
@@ -5395,89 +5313,6 @@
           "label": "Low (< 12.0V)",
           "voltage_val": "12.0",
           "voltage_dir": "below"
-        }
-      ]
-    },
-    {
-      "id": "cond_day_of_week",
-      "ha_metadata": {
-        "name": "Day of Week Selection",
-        "domain": "binary_sensor",
-        "icon": "mdi:car-info"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "type": "day_of_week",
-      "category": "Schedule & Calendar",
-      "roles": [
-        "condition"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "day_of_week"
-      },
-      "contributor": {
-        "name": "Electroniq Buttons Community",
-        "github": "",
-        "notes": "Consolidated calendar day filter"
-      },
-      "options": [
-        {
-          "label": "Weekdays Only (Mon - Fri)",
-          "days": [
-            "mon",
-            "tue",
-            "wed",
-            "thu",
-            "fri"
-          ],
-          "default": true
-        },
-        {
-          "label": "Weekends Only (Sat - Sun)",
-          "days": [
-            "sat",
-            "sun"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "cond_time_window",
-      "ha_metadata": {
-        "name": "Time of Day Window",
-        "domain": "binary_sensor",
-        "icon": "mdi:car-info"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "type": "time_window",
-      "category": "Schedule & Calendar",
-      "roles": [
-        "condition"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "time_window"
-      },
-      "contributor": {
-        "name": "Electroniq Buttons Community",
-        "github": "",
-        "notes": "Consolidated diurnal time window filter"
-      },
-      "options": [
-        {
-          "label": "Daytime Hours (07:00 - 19:00)",
-          "start_time": "07:00",
-          "end_time": "19:00",
-          "default": true
-        },
-        {
-          "label": "Nighttime / Overnight (19:00 - 07:00)",
-          "start_time": "19:00",
-          "end_time": "07:00"
         }
       ]
     },
@@ -5867,7 +5702,7 @@
         "icon": "mdi:thermometer"
       },
       "tags": [
-        "all_egmp"
+        "kia_ev9"
       ],
       "category": "Comfort & Climate",
       "subcategory": "Rear Cabin Climate",
@@ -6061,13 +5896,14 @@
       ],
       "conditions": [
         {
-          "id": "cond_doors_closed",
+          "id": "cond_doors_status_closed",
           "type": "can_state",
           "can_id": "0x411",
           "bus": 0,
           "byte": "D2",
           "operator": "==",
-          "value": "0x00"
+          "value": "0x00",
+          "source_command_id": "doors_status"
         }
       ],
       "actions": [
