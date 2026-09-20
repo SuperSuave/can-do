@@ -2889,7 +2889,7 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x541"
+        "state_can_id": "0x413"
       },
       "roles": [
         "trigger",
@@ -2899,22 +2899,123 @@
         {
           "label": "Turned ON / Active",
           "match": {
-            "D5": "0x20"
+            "D4": "0x04"
           },
-          "default": true,
-          "mask": "0xF0"
+          "mask": "0x04",
+          "default": true
+        },
+        {
+          "label": "Flash Pulse (Lamps Lit)",
+          "match": {
+            "D2": "0x50",
+            "D4": "0x04"
+          }
+        },
+        {
+          "label": "Flash Pulse (Lamps Dark)",
+          "match": {
+            "D2": "0x00",
+            "D4": "0x04"
+          }
         },
         {
           "label": "Turned OFF / Inactive",
           "match": {
-            "D5": "0x00"
+            "D4": "0x00"
           },
-          "mask": "0xF0"
+          "mask": "0x04"
         }
       ],
       "contributor": {
-        "name": "Unknown",
-        "github": ""
+        "name": "Community Contributor",
+        "github": "",
+        "notes": "Decoded from 0x413: D4=0x04 Hazard engaged, D2=0x50 lamps illuminated"
+      }
+    },
+    {
+      "id": "turn_signal_left",
+      "ha_metadata": {
+        "name": "Left Turn Signal",
+        "domain": "binary_sensor",
+        "icon": "mdi:arrow-left-bold"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x413"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "options": [
+        {
+          "label": "Left Signal Active / On",
+          "match": {
+            "D3": "0x10"
+          },
+          "mask": "0x10",
+          "default": true
+        },
+        {
+          "label": "Left Signal Off",
+          "match": {
+            "D3": "0x00"
+          },
+          "mask": "0x10"
+        }
+      ],
+      "contributor": {
+        "name": "Community Contributor",
+        "github": "",
+        "notes": "Decoded from 0x413 D3: 0x10 Active, 0x00 Off (mask 0x10)"
+      }
+    },
+    {
+      "id": "turn_signal_right",
+      "ha_metadata": {
+        "name": "Right Turn Signal",
+        "domain": "binary_sensor",
+        "icon": "mdi:arrow-right-bold"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x413"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "options": [
+        {
+          "label": "Right Signal Active / On",
+          "match": {
+            "D3": "0x40"
+          },
+          "mask": "0x40",
+          "default": true
+        },
+        {
+          "label": "Right Signal Off",
+          "match": {
+            "D3": "0x00"
+          },
+          "mask": "0x40"
+        }
+      ],
+      "contributor": {
+        "name": "Community Contributor",
+        "github": "",
+        "notes": "Decoded from 0x413 D3: 0x40 Active, 0x00 Off (mask 0x40)"
       }
     },
     {
@@ -2962,7 +3063,7 @@
     {
       "id": "brake_pedal_state",
       "ha_metadata": {
-        "name": "Brake Pedal Switch & Application",
+        "name": "Brake Pedal Switch (Primary)",
         "domain": "binary_sensor",
         "icon": "mdi:car-brake-alert"
       },
@@ -2982,7 +3083,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Decoded from E-GMP Brake_Pedal_Status frame 1042 (0x412) byte 6"
+        "notes": "Decoded from BCM Brake_Pedal_Status 0x412 byte D7 (0x04 Pressed, 0x00 Released)"
       },
       "options": [
         {
@@ -2990,12 +3091,98 @@
           "match": {
             "D7": "0x04"
           },
+          "mask": "0x04",
           "default": true
         },
         {
           "label": "Brake Released",
           "match": {
             "D7": "0x00"
+          },
+          "mask": "0x04"
+        }
+      ]
+    },
+    {
+      "id": "brake_pedal_esc",
+      "ha_metadata": {
+        "name": "Brake Status (ESC / Stability)",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-brake-alert"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x418"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Community Contributor",
+        "github": "",
+        "notes": "Decoded from ESC/ABS 0x418 byte D6: 0x4C Pressed, 0x0C Released (bit 6 / 0x40 mask)"
+      },
+      "options": [
+        {
+          "label": "Brake Pressed (ESC)",
+          "match": {
+            "D6": "0x40"
+          },
+          "mask": "0x40",
+          "default": true
+        },
+        {
+          "label": "Brake Released (ESC)",
+          "match": {
+            "D6": "0x00"
+          },
+          "mask": "0x40"
+        }
+      ]
+    },
+    {
+      "id": "brake_interlock_vcu",
+      "ha_metadata": {
+        "name": "Brake Interlock (Powertrain / VCU)",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-brake-alert"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Safety",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x435"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Community Contributor",
+        "github": "",
+        "notes": "Decoded from VCU / Shift Interlock 0x435 byte D4: 0x40 Pressed, 0x50 Released"
+      },
+      "options": [
+        {
+          "label": "Brake Pressed (Interlock)",
+          "match": {
+            "D4": "0x40"
+          },
+          "default": true
+        },
+        {
+          "label": "Brake Released (Interlock)",
+          "match": {
+            "D4": "0x50"
           }
         }
       ]

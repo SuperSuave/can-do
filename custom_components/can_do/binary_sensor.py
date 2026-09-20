@@ -69,7 +69,7 @@ class CanDoBinarySensorEntity(CanDoEntity, BinarySensorEntity):
         # 1. Match against options if present
         for opt in self.command.get("options", []):
             label = opt.get("label", "").lower()
-            if any(k in label for k in ["open", "active", "touched", "detected", "unlocked", "on", "yes", "true"]):
+            if any(k in label for k in ["open", "active", "touched", "detected", "unlocked", "on", "yes", "true", "pressed"]):
                 match_spec = opt.get("match") or opt.get("payload")
                 if match_spec and check_match(payload, match_spec, opt.get("mask")):
                     return True
