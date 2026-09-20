@@ -1195,17 +1195,17 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 hoodOpen={hoodOpen}
                 trunkOpen={trunkOpen}
                 chargePortOpen={chargePortOpen}
-                locked={locked}
                 mirrorsFolded={mirrorsFolded}
                 lights={lights}
+                rearDefrost={rearDefrost}
                 hazards={hazards}
                 turnSignal={turnSignal}
+                blinkState={blinkState}
                 gear={gear}
-                soc={soc}
-                batteryMinTempC={batteryMinTempC}
-                batteryMaxTempC={batteryMaxTempC}
+                speedMph={speedMph}
                 driverSeat={driverSeat}
                 passengerSeat={passengerSeat}
+                steeringWheelHeat={steeringWheelHeat}
                 onToggleDoor={toggleDoor}
                 onToggleHood={() => {
                   setHoodOpen(h => !h);
@@ -1220,7 +1220,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   triggerNotice(chargePortOpen ? 'Charge Door Closed' : 'Charge Door Opened');
                 }}
                 onToggleSunroof={cycleSunroofState}
-                onCycleSeat={(isDriver) => cycleSeat(isDriver ? driverSeat : passengerSeat, isDriver)}
+                onCycleDriverSeat={() => cycleSeat(driverSeat, true)}
+                onCyclePassengerSeat={() => cycleSeat(passengerSeat, false)}
+                onCycleSteeringHeat={cycleSteeringHeat}
               />
 
               {/* TPMS Floating Badges (Anchored beside each tire) */}
