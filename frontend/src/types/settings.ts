@@ -2,6 +2,8 @@
  * User Preferences & Update Configuration Data Structures
  */
 
+import { resolveDeviceBaseUrl } from '../utils/hostUtils';
+
 export type UpdatePolicy = 'auto' | 'prompt' | 'manual';
 
 export interface UpdateComponentSelection {
@@ -69,6 +71,55 @@ export function getUserPreferences(): UserPreferences {
   }
 }
 
+export async function fetchDevicePreferences(): Promise<UserPreferences | null> {
+  if (typeof window === 'undefined') return null;
+  try {
+    const baseUrl = resolveDeviceBaseUrl();
+    const res = await fetch(`${baseUrl}/api/preferences`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && typeof data === 'object' && Object.keys(data).length > 0) {
+        const merged: UserPreferences = {
+          ...DEFAULT_USER_PREFERENCES,
+          ...data,
+          update_components: {
+            ...DEFAULT_USER_PREFERENCES.update_components,
+            ...(data.update_components || {}),
+          },
+          update_schedule: {
+            ...DEFAULT_USER_PREFERENCES.update_schedule,
+            ...(data.update_schedule || {}),
+          },
+        };
+        try {
+          localStorage.setItem(STORAGE_KEY_USER_PREFERENCES, JSON.stringify(merged));
+        } catch {
+          // Ignore localStorage quota errors
+        }
+        return merged;
+      }
+    }
+  } catch {
+    // Offline / device not currently reachable
+  }
+  return null;
+}
+
+export async function savePreferencesToDevice(prefs: UserPreferences): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const baseUrl = resolveDeviceBaseUrl();
+    const res = await fetch(`${baseUrl}/api/preferences`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prefs),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function saveUserPreferences(prefs: Partial<UserPreferences>): UserPreferences {
   const current = getUserPreferences();
   const updated: UserPreferences = {
@@ -89,6 +140,9 @@ export function saveUserPreferences(prefs: Partial<UserPreferences>): UserPrefer
   } catch (e) {
     console.error('Failed to save user preferences to localStorage', e);
   }
+
+  // Push directly to CAN Do hardware device flash/spiffs storage asynchronously
+  savePreferencesToDevice(updated).catch(() => {});
 
   return updated;
 }

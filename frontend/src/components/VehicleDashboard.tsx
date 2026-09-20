@@ -197,13 +197,87 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     return { label: 'Comfortable', color: 'text-emerald-400 bg-emerald-950/60 border-emerald-800/60' };
   }, [ambientTempC]);
 
-  // Estimated driving range based on SOC (approx 310 mi / 500 km EPA for 100%)
+  // Estimated driving range dynamically calculated based on active vehicle's battery pack & SOC
   const estimatedRangeMiles = useMemo(() => {
+    const baseRangeMiles = activeVehicle?.epa_range_mi || (activeVehicle?.model?.includes('6') ? 342 : activeVehicle?.model?.includes('EV9') ? 304 : 303);
+    const baseRangeKm = activeVehicle?.wltp_range_km || Math.round(baseRangeMiles * 1.60934);
     if (unitSystem === 'metric') {
-      return Math.round((soc / 100) * 500);
+      return Math.round((soc / 100) * baseRangeKm);
     }
-    return Math.round((soc / 100) * 310);
-  }, [soc, unitSystem]);
+    return Math.round((soc / 100) * baseRangeMiles);
+  }, [soc, unitSystem, activeVehicle]);
+
+  // Dynamically resolve equipped vehicle features from active onboard vehicle
+  const equippedFeatures = useMemo(() => {
+    if (activeVehicle && Array.isArray(activeVehicle.features)) {
+      return new Set(activeVehicle.features);
+    }
+    return new Set(['heated_seats', 'ventilated_seats', 'heated_wheel', 'power_tailgate', 'camera_360', 'sunroof', 'preconditioning']);
+  }, [activeVehicle]);
+
+  // Dynamically resolve CAN message IDs, payload schemas, and entity names from active catalog definitions
+  const canMappings = useMemo(() => {
+    const list = (catalog?.commands || (catalog as any)?.features || []) as Command[];
+    const findCmd = (id: string) => list.find(c => c.id === id);
+
+    const getCanId = (id: string, fallbackHex: string): string => {
+      const item = findCmd(id);
+      const raw = item?.network?.state_can_id || item?.network?.action_can_id || item?.network?.trigger_frame_can_id;
+      if (raw) {
+        return raw.toLowerCase().replace(/^0x/, '');
+      }
+      return fallbackHex.toLowerCase().replace(/^0x/, '');
+    };
+
+    const gearCmd = findCmd('selected_gear');
+    const gearOptions = gearCmd?.options || [];
+
+    return {
+      speed: getCanId('cluster_vehicle_speed', '1ac'),
+      speedName: findCmd('cluster_vehicle_speed')?.ha_metadata?.name || 'Cluster Speedometer',
+      ambientTemp: getCanId('cond_ambient_temperature', '226'),
+      ambientTempName: findCmd('cond_ambient_temperature')?.ha_metadata?.name || 'Ambient Temperature',
+      hvSoc: getCanId('cond_hv_battery_soc', '2fc'),
+      hvSocName: findCmd('cond_hv_battery_soc')?.ha_metadata?.name || 'Traction Battery SOC',
+      hvTemps: getCanId('hv_battery_temperatures', '152'),
+      hvTempsName: findCmd('hv_battery_temperatures')?.ha_metadata?.name || 'HV Battery Module Temps',
+      aux12v: getCanId('cond_aux_12v_battery', '152'),
+      aux12vName: findCmd('cond_aux_12v_battery')?.ha_metadata?.name || '12V Aux Battery Voltage',
+      gear: getCanId('selected_gear', '2c0'),
+      gearName: gearCmd?.ha_metadata?.name || 'Gear Selector',
+      gearOptions,
+      doors: getCanId('doors_status', '411'),
+      doorsName: findCmd('doors_status')?.ha_metadata?.name || 'Body Closures & Doors',
+      locks: getCanId('doors_lock_state', '411'),
+      locksName: findCmd('doors_lock_state')?.ha_metadata?.name || 'Door Locks & Security',
+      trunk: getCanId('trunk', '414'),
+      trunkName: findCmd('trunk')?.ha_metadata?.name || 'Power Liftgate / Trunk',
+      hood: getCanId('hood', '411'),
+      hoodName: findCmd('hood')?.ha_metadata?.name || 'Frunk / Hood Latch',
+      chargePort: getCanId('charge_port', '3aa'),
+      chargePortName: findCmd('charge_port')?.ha_metadata?.name || 'Charge Port Door',
+      charging: getCanId('cond_charging', '594'),
+      chargingName: findCmd('cond_charging')?.ha_metadata?.name || 'EV Charging Status',
+      odometer: getCanId('vehicle_odometer', '227'),
+      odometerName: findCmd('vehicle_odometer')?.ha_metadata?.name || 'Odometer',
+      climateTarget: getCanId('climate_dual_cabin_temp', '380'),
+      climateTargetName: findCmd('climate_dual_cabin_temp')?.ha_metadata?.name || 'Cabin Target Temp',
+      defrost: getCanId('climate_rear_defog', '541'),
+      defrostName: findCmd('climate_rear_defog')?.ha_metadata?.name || 'Rear Defroster',
+      hazards: getCanId('hazard_lights', '541'),
+      hazardsName: findCmd('hazard_lights')?.ha_metadata?.name || 'Hazard Flashers',
+      steeringHeat: getCanId('heated_steering_wheel_toggle', '418'),
+      steeringHeatName: findCmd('heated_steering_wheel_toggle')?.ha_metadata?.name || 'Steering Wheel Heat',
+      driverSeat: getCanId('drivers_seat_comfort', '496'),
+      driverSeatName: findCmd('drivers_seat_comfort')?.ha_metadata?.name || 'Driver Seat Comfort',
+      passengerSeat: getCanId('passengers_seat_comfort', '475'),
+      passengerSeatName: findCmd('passengers_seat_comfort')?.ha_metadata?.name || 'Passenger Seat Comfort',
+      fanBlower: getCanId('climate_fan_speed_level', '31b'),
+      fanBlowerName: findCmd('climate_fan_speed_level')?.ha_metadata?.name || 'HVAC Blower / Vents',
+      tpms: getCanId('wheel_speeds', '593'),
+      tpmsName: findCmd('wheel_speeds')?.ha_metadata?.name || 'TPMS Tire Pressures',
+    };
+  }, [catalog]);
 
   // Temporary feedback toast
   const triggerNotice = (msg: string) => {
@@ -326,6 +400,34 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       setHazards(normState.includes('active') || normState.includes('on'));
     } else if (entity === 'climate_rear_defog') {
       setRearDefrost(normState.includes('active') || normState.includes('on'));
+    } else if (entity === 'cond_hv_battery_soc' || entity.includes('battery_soc')) {
+      const match = stateStr.match(/(\d+(\.\d+)?)/);
+      if (match) {
+        const s = parseFloat(match[1]);
+        if (s >= 0 && s <= 100) setSoc(s);
+      }
+    } else if (entity === 'cond_aux_12v_battery' || entity.includes('12v') || entity === 'aux_12v') {
+      const match = stateStr.match(/(\d+(\.\d+)?)/);
+      if (match) {
+        const v = parseFloat(match[1]);
+        if (v >= 8 && v <= 16) setAux12V(v);
+      }
+    } else if (entity === 'hv_battery_temperatures') {
+      const match = stateStr.match(/min:\s*(-?\d+(\.\d+)?).*max:\s*(-?\d+(\.\d+)?)/i);
+      if (match) {
+        setBatteryMinTempC(parseFloat(match[1]));
+        setBatteryMaxTempC(parseFloat(match[3]));
+      }
+    } else if (entity === 'cluster_vehicle_speed' || entity === 'vehicle_speed') {
+      const match = stateStr.match(/(\d+(\.\d+)?)/);
+      if (match) {
+        const spd = parseFloat(match[1]);
+        setSpeedKph(spd);
+        setSpeedMph(Math.round(spd * 0.621371));
+      }
+    } else if (entity === 'vehicle_odometer') {
+      const match = stateStr.match(/(\d+)/);
+      if (match) setOdometer(parseInt(match[1], 10));
     }
   };
 
@@ -410,41 +512,42 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     };
   }, []);
 
-  // 3. Real-Time CAN Frame Decoder (Direct from vehicle TWAI bus)
+  // 3. Real-Time CAN Frame Decoder (Direct from vehicle TWAI bus, completely dynamic)
   const handleIncomingCanFrame = (idStr: string, hexPayload: string) => {
     const normId = idStr.toLowerCase().replace(/^0x/, '');
+    const idFormatted = `0x${normId.toUpperCase()}`;
     const bytes = hexPayload.trim().split(/\s+/).map(h => parseInt(h, 16));
     const now = new Date().toLocaleTimeString();
 
-    // 0x1AC: Vehicle Road Speed (D1 = km/h, E-GMP CLUSTER_INFO frame 428)
-    if (normId === '1ac' && bytes.length >= 1) {
+    // Road Speed (Dynamically mapped from catalog, e.g. 0x1AC)
+    if (normId === canMappings.speed && bytes.length >= 1) {
       const kph = bytes[0];
       const mph = Math.round(kph * 0.621371);
       setSpeedKph(kph);
       setSpeedMph(mph);
-      recordLog('0x1AC', 'Cluster Speedometer', `${kph} km/h (${mph} mph)`, hexPayload, now);
+      recordLog(idFormatted, canMappings.speedName, `${kph} km/h (${mph} mph)`, hexPayload, now);
     }
 
-    // 0x226: Ambient Outdoor Temperature ([B3] / D4 = raw - 40 deg C)
-    else if (normId === '226' && bytes.length >= 4) {
+    // Ambient Outdoor Temperature (Dynamically mapped from catalog, e.g. 0x226)
+    else if (normId === canMappings.ambientTemp && bytes.length >= 4) {
       const raw = bytes[3];
       if (raw > 0 && raw < 255) {
         const c = raw - 40;
         setAmbientTempC(c);
-        recordLog('0x226', 'Ambient Temp', `${c}°C (${Math.round(c * 1.8 + 32)}°F)`, hexPayload, now);
+        recordLog(idFormatted, canMappings.ambientTempName, `${c}°C (${Math.round(c * 1.8 + 32)}°F)`, hexPayload, now);
       }
     }
 
-    // 0x2FC: HV Traction Battery SOC ([B7] / D8 * 0.5%)
-    else if (normId === '2fc' && bytes.length >= 8) {
+    // HV Traction Battery SOC (Dynamically mapped from catalog, e.g. 0x2FC)
+    else if (normId === canMappings.hvSoc && bytes.length >= 8) {
       const raw = bytes[7];
       const newSoc = Math.round(raw * 0.5 * 10) / 10;
       setSoc(newSoc);
-      recordLog('0x2FC', 'Traction Battery SOC', `${newSoc}%`, hexPayload, now);
+      recordLog(idFormatted, canMappings.hvSocName, `${newSoc}%`, hexPayload, now);
     }
 
-    // 0x152: BMS Module Min/Max Temperatures & 12V Aux Voltage
-    else if (normId === '152' && bytes.length >= 2) {
+    // BMS Module Min/Max Temperatures & 12V Aux Voltage (Dynamically mapped from catalog, e.g. 0x152)
+    else if ((normId === canMappings.hvTemps || normId === canMappings.aux12v) && bytes.length >= 2) {
       const minT = bytes[0];
       const maxT = bytes[1];
       setBatteryMinTempC(minT);
@@ -453,68 +556,98 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         const v = Math.round(bytes[2] * 0.1 * 10) / 10;
         setAux12V(v);
       }
-      recordLog('0x152', 'HV Battery Module Temps', `Min: ${minT}°C / Max: ${maxT}°C`, hexPayload, now);
+      recordLog(idFormatted, canMappings.hvTempsName, `Min: ${minT}°C / Max: ${maxT}°C`, hexPayload, now);
     }
 
-    // 0x2C0: Selected Gear (D3: 0x00=P, 0x07=R, 0x06=N, 0x05=D)
-    else if (normId === '2c0' && bytes.length >= 3) {
-      const gVal = bytes[2];
-      let newGear: GearMode = 'P';
-      if (gVal === 0x07) newGear = 'R';
-      else if (gVal === 0x06) newGear = 'N';
-      else if (gVal === 0x05) newGear = 'D';
-      setGear(newGear);
-      if (newGear === 'P') setSpeedMph(0);
-      recordLog('0x2C0', 'Gear Selector', `Position: ${newGear}`, hexPayload, now);
+    // Transmission Gear Selection (Dynamically mapped from catalog, e.g. 0x2C0 with dynamic option matches)
+    else if (normId === canMappings.gear && bytes.length >= 1) {
+      let detectedGear: GearMode | null = null;
+      if (canMappings.gearOptions && canMappings.gearOptions.length > 0) {
+        for (const opt of canMappings.gearOptions) {
+          const lbl = (opt.label || '').toLowerCase();
+          let targetGear: GearMode | null = null;
+          if (lbl.includes('(p)') || lbl.includes('park')) targetGear = 'P';
+          else if (lbl.includes('(r)') || lbl.includes('reverse')) targetGear = 'R';
+          else if (lbl.includes('(n)') || lbl.includes('neutral')) targetGear = 'N';
+          else if (lbl.includes('(d)') || lbl.includes('drive')) targetGear = 'D';
+
+          if (targetGear && opt.match && typeof opt.match === 'object') {
+            const matched = Object.entries(opt.match).every(([byteKey, hexVal]) => {
+              const m = byteKey.match(/\d+/);
+              if (!m) return false;
+              const idx = parseInt(m[0], 10) - (byteKey.toUpperCase().startsWith('D') ? 1 : 0);
+              const exp = parseInt(hexVal as string, 16);
+              return bytes[idx] === exp;
+            });
+            if (matched) {
+              detectedGear = targetGear;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!detectedGear && bytes.length >= 3) {
+        const gVal = bytes[2];
+        if (gVal === 0x07) detectedGear = 'R';
+        else if (gVal === 0x06) detectedGear = 'N';
+        else if (gVal === 0x05) detectedGear = 'D';
+        else detectedGear = 'P';
+      }
+
+      const finalGear: GearMode = detectedGear || 'P';
+      setGear(finalGear);
+      if (finalGear === 'P') setSpeedMph(0);
+      recordLog(idFormatted, canMappings.gearName, `Position: ${finalGear}`, hexPayload, now);
     }
 
-    // 0x411: Body Closures & Locks (E-GMP Body_Status frame 1041)
-    else if (normId === '411' && bytes.length >= 8) {
-      const fl = Boolean(bytes[3] & 0x01); // D4 bit 0: Driver Door
-      const fr = Boolean(bytes[4] & 0x04); // D5 bit 2: Passenger Door
-      const hood = Boolean(bytes[5] & 0x10); // D6 bit 4: Hood / Frunk
-      const rl = Boolean(bytes[6] & 0x10); // D7 bit 4: Rear Left Door
-      const rr = Boolean(bytes[7] & 0x01); // D8 bit 0: Rear Right Door
-      const isLocked = (bytes[2] & 0x40) === 0; // D3 bit 6: Unlocked (0x40) vs Locked (0x00)
+    // Body Closures & Locks (Dynamically mapped from catalog, e.g. 0x411)
+    else if ((normId === canMappings.doors || normId === canMappings.locks || normId === canMappings.hood) && bytes.length >= 8) {
+      const fl = Boolean(bytes[3] & 0x01); // Driver Door
+      const fr = Boolean(bytes[4] & 0x04); // Passenger Door
+      const hood = Boolean(bytes[5] & 0x10); // Hood / Frunk
+      const rl = Boolean(bytes[6] & 0x10); // Rear Left Door
+      const rr = Boolean(bytes[7] & 0x01); // Rear Right Door
+      const isLocked = (bytes[2] & 0x40) === 0;
       setDoors({ frontLeft: fl, frontRight: fr, rearLeft: rl, rearRight: rr });
       setHoodOpen(hood);
       setLocked(isLocked);
-      recordLog('0x411', 'Body Closures & Security', `Doors: ${fl || fr || rl || rr ? 'Ajar' : 'Latched'}, Frunk: ${hood ? 'Open' : 'Closed'}`, hexPayload, now);
+      recordLog(idFormatted, canMappings.doorsName, `Doors: ${fl || fr || rl || rr ? 'Ajar' : 'Latched'}, Frunk: ${hood ? 'Open' : 'Closed'}`, hexPayload, now);
     }
 
-    // 0x414: Tailgate / Trunk Status (D4 bit 0)
-    else if (normId === '414' && bytes.length >= 4) {
+    // Tailgate / Trunk Status (Dynamically mapped from catalog, e.g. 0x414)
+    else if (normId === canMappings.trunk && bytes.length >= 4) {
       const tr = Boolean(bytes[3] & 0x01);
       setTrunkOpen(tr);
-      recordLog('0x414', 'Power Liftgate / Trunk', tr ? 'OPEN' : 'Closed', hexPayload, now);
+      recordLog(idFormatted, canMappings.trunkName, tr ? 'OPEN' : 'Closed', hexPayload, now);
     }
 
-    // 0x3AA: EV Charge Port Door (D5 bit 1)
-    else if (normId === '3aa' && bytes.length >= 5) {
+    // EV Charge Port Door (Dynamically mapped from catalog, e.g. 0x3AA)
+    else if (normId === canMappings.chargePort && bytes.length >= 5) {
       const cp = Boolean(bytes[4] & 0x02);
       setChargePortOpen(cp);
-      recordLog('0x3AA', 'Charge Port Door', cp ? 'OPEN' : 'Closed', hexPayload, now);
+      recordLog(idFormatted, canMappings.chargePortName, cp ? 'OPEN' : 'Closed', hexPayload, now);
     }
 
-    // 0x594: Vehicle Plugged In / EV Charging (D3 bit 0)
-    else if (normId === '594' && bytes.length >= 3) {
+    // EV Charging Status & Grid Interconnect (Dynamically mapped from catalog, e.g. 0x594)
+    else if (normId === canMappings.charging && bytes.length >= 3) {
       const charging = Boolean(bytes[2] & 0x01);
       setIsCharging(charging);
       if (!charging) setChargeRateKw(0);
-      recordLog('0x594', 'EV Charging Status', charging ? 'ACTIVE / PLUGGED IN' : 'INACTIVE', hexPayload, now);
+      recordLog(idFormatted, canMappings.chargingName, charging ? 'ACTIVE / PLUGGED IN' : 'INACTIVE', hexPayload, now);
     }
 
-    // 0x227: Odometer (Bytes D2-D4, 24-bit LE)
-    else if (normId === '227' && bytes.length >= 4) {
+    // Odometer (Dynamically mapped from catalog, e.g. 0x227)
+    else if (normId === canMappings.odometer && bytes.length >= 4) {
       const odo = bytes[1] | (bytes[2] << 8) | (bytes[3] << 16);
       if (odo > 0) {
         setOdometer(odo);
-        recordLog('0x227', 'Odometer', `${odo.toLocaleString()} km`, hexPayload, now);
+        recordLog(idFormatted, canMappings.odometerName, `${odo.toLocaleString()} km`, hexPayload, now);
       }
     }
 
-    // 0x380: Cabin Target Temperatures (D2 Driver, D3 Passenger)
-    else if (normId === '380' && bytes.length >= 3) {
+    // Cabin Target Temperatures (Dynamically mapped from catalog, e.g. 0x380)
+    else if (normId === canMappings.climateTarget && bytes.length >= 3) {
       const rawD = bytes[1];
       const rawP = bytes[2];
       if (rawD >= 0x06 && rawD <= 0x1A) {
@@ -525,31 +658,31 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         const pF = 62 + (rawP - 0x06);
         setPassengerTemp(pF);
       }
-      recordLog('0x380', 'Cabin Target Temp', `Driver: ${bytes[1]} / Pass: ${bytes[2]}`, hexPayload, now);
+      recordLog(idFormatted, canMappings.climateTargetName, `Driver: ${bytes[1]} / Pass: ${bytes[2]}`, hexPayload, now);
     }
 
-    // 0x541: Rear Defroster (D1 bit 0) & Hazards (D5 bit 5)
-    else if (normId === '541' && bytes.length >= 1) {
+    // Rear Defroster & Hazards (Dynamically mapped from catalog, e.g. 0x541)
+    else if ((normId === canMappings.defrost || normId === canMappings.hazards) && bytes.length >= 1) {
       const def = Boolean(bytes[0] & 0x01);
       setRearDefrost(def);
       if (bytes.length >= 5) {
         const haz = Boolean(bytes[4] & 0x20);
         setHazards(haz);
       }
-      recordLog('0x541', 'Rear Defroster & Lights', def ? 'DEFROST ON' : 'DEFROST OFF', hexPayload, now);
+      recordLog(idFormatted, canMappings.defrostName, def ? 'DEFROST ON' : 'DEFROST OFF', hexPayload, now);
     }
 
-    // 0x418: Heated Steering Wheel (D1 bit 0..1)
-    else if (normId === '418' && bytes.length >= 1) {
+    // Heated Steering Wheel (Dynamically mapped from catalog, e.g. 0x418)
+    else if (normId === canMappings.steeringHeat && bytes.length >= 1) {
       const val = bytes[0] & 0x03;
       const levels: SteeringHeatLevel[] = ['off', 'low', 'high'];
       const lvl = levels[val] || 'off';
       setSteeringWheelHeat(lvl);
-      recordLog('0x418', 'Steering Wheel Heat', lvl.toUpperCase(), hexPayload, now);
+      recordLog(idFormatted, canMappings.steeringHeatName, lvl.toUpperCase(), hexPayload, now);
     }
 
-    // 0x496: Driver Seat Comfort (D1)
-    else if (normId === '496' && bytes.length >= 1) {
+    // Driver Seat Comfort (Dynamically mapped from catalog, e.g. 0x496)
+    else if (normId === canMappings.driverSeat && bytes.length >= 1) {
       const b = bytes[0];
       let lvl: SeatLevel = 'off';
       if (b === 0x0E) lvl = 'heat_low';
@@ -559,11 +692,11 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       else if (b === 0x12) lvl = 'cool_med';
       else if (b === 0x10) lvl = 'cool_high';
       setDriverSeat(lvl);
-      recordLog('0x496', 'Driver Seat Comfort', lvl, hexPayload, now);
+      recordLog(idFormatted, canMappings.driverSeatName, lvl, hexPayload, now);
     }
 
-    // 0x475: Passenger Seat Comfort (D1)
-    else if (normId === '475' && bytes.length >= 1) {
+    // Passenger Seat Comfort (Dynamically mapped from catalog, e.g. 0x475)
+    else if (normId === canMappings.passengerSeat && bytes.length >= 1) {
       const b = bytes[0];
       let lvl: SeatLevel = 'off';
       if (b === 0x0E) lvl = 'heat_low';
@@ -573,29 +706,29 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       else if (b === 0x12) lvl = 'cool_med';
       else if (b === 0x10) lvl = 'cool_high';
       setPassengerSeat(lvl);
-      recordLog('0x475', 'Passenger Seat Comfort', lvl, hexPayload, now);
+      recordLog(idFormatted, canMappings.passengerSeatName, lvl, hexPayload, now);
     }
 
-    // 0x31B: Blower Fan Speed & Airflow (D4)
-    else if (normId === '31b' && bytes.length >= 4) {
+    // HVAC Blower Fan Speed & Airflow (Dynamically mapped from catalog, e.g. 0x31B)
+    else if (normId === canMappings.fanBlower && bytes.length >= 4) {
       const fanRaw = bytes[3] & 0x0F;
       const speed = fanRaw >= 2 && fanRaw <= 9 ? fanRaw - 1 : 0;
       setFanSpeed(speed);
       if (bytes.length >= 5) {
         setRecirc(Boolean(bytes[4] & 0x40));
       }
-      recordLog('0x31B', 'HVAC Blower / Vents', `Fan ${speed}`, hexPayload, now);
+      recordLog(idFormatted, canMappings.fanBlowerName, `Fan ${speed}`, hexPayload, now);
     }
 
-    // 0x593 or 0x368: TPMS Tire Pressures (FL, FR, RL, RR in PSI / 0.2 bar)
-    else if ((normId === '593' || normId === '368') && bytes.length >= 4) {
+    // TPMS Tire Pressures (Dynamically mapped from catalog, e.g. 0x593 or 0x368)
+    else if ((normId === canMappings.tpms || normId === '593' || normId === '368') && bytes.length >= 4) {
       const fl = Math.round(bytes[0] * 0.2 * 14.5038);
       const fr = Math.round(bytes[1] * 0.2 * 14.5038);
       const rl = Math.round(bytes[2] * 0.2 * 14.5038);
       const rr = Math.round(bytes[3] * 0.2 * 14.5038);
       if (fl > 20 && fl < 55) {
         setTpms({ fl, fr, rl, rr });
-        recordLog(idStr, 'TPMS Tire Pressures', `FL:${fl} FR:${fr} RL:${rl} RR:${rr} PSI`, hexPayload, now);
+        recordLog(idFormatted, canMappings.tpmsName, `FL:${fl} FR:${fr} RL:${rl} RR:${rr} PSI`, hexPayload, now);
       }
     }
 
@@ -614,9 +747,20 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     setBlinkState(false);
   }, [hazards, turnSignal]);
 
-  // Seat toggle helper
+  // Seat toggle helper - dynamically respects vehicle features (heated and/or ventilated seats)
   const cycleSeat = (current: SeatLevel, isDriver: boolean) => {
-    const cycle: SeatLevel[] = ['off', 'heat_low', 'heat_med', 'heat_high', 'cool_low', 'cool_med', 'cool_high'];
+    const hasHeat = equippedFeatures.has('heated_seats');
+    const hasCool = equippedFeatures.has('ventilated_seats');
+
+    if (!hasHeat && !hasCool) {
+      triggerNotice('Seat heating / ventilation is not equipped on this trim');
+      return;
+    }
+
+    let cycle: SeatLevel[] = ['off'];
+    if (hasHeat) cycle = cycle.concat(['heat_low', 'heat_med', 'heat_high']);
+    if (hasCool) cycle = cycle.concat(['cool_low', 'cool_med', 'cool_high']);
+
     const nextIdx = (cycle.indexOf(current) + 1) % cycle.length;
     const next = cycle[nextIdx];
     if (isDriver) {
@@ -624,11 +768,15 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       dispatchCommand('driver_seat_comfort', next, `Driver Seat: ${next.replace('_', ' ').toUpperCase()}`);
     } else {
       setPassengerSeat(next);
-      triggerNotice(`Passenger Seat: ${next.replace('_', ' ').toUpperCase()}`);
+      dispatchCommand('passengers_seat_comfort', next, `Passenger Seat: ${next.replace('_', ' ').toUpperCase()}`);
     }
   };
 
   const cycleSteeringHeat = () => {
+    if (!equippedFeatures.has('heated_wheel')) {
+      triggerNotice('Heated steering wheel is not equipped on this trim');
+      return;
+    }
     const next: SteeringHeatLevel = steeringWheelHeat === 'off' ? 'low' : steeringWheelHeat === 'low' ? 'high' : 'off';
     setSteeringWheelHeat(next);
     dispatchCommand('heated_steering_wheel', next, `Heated Steering Wheel: ${next.toUpperCase()}`);
@@ -656,7 +804,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
   return (
     <div id="vehicle-live-dashboard" className="space-y-5 select-none animate-fadeIn">
-      {/* 1. Header Toolbar: Vehicle ID, Gear Selector, Simulation Banner */}
+      {/* 1. Header Toolbar: Vehicle ID, Specs, Telemetry Status */}
       <header className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--border-color)] shadow-sm">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-xl bg-slate-800/90 border border-slate-700/80 flex items-center justify-center text-cyan-400 shrink-0 shadow-inner">
@@ -665,10 +813,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                {EGMP_MODELS[selectedModel].brand} {EGMP_MODELS[selectedModel].name}
+                {activeVehicle ? `${activeVehicle.make} ${activeVehicle.model} ${activeVehicle.trim || ''}`.trim() : `${EGMP_MODELS[selectedModel].brand} ${EGMP_MODELS[selectedModel].name}`}
               </h1>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium tracking-wide text-cyan-300 bg-cyan-950/80 border border-cyan-800/60">
-                {EGMP_MODELS[selectedModel].badge}
+                {activeVehicle?.region ? activeVehicle.region.toUpperCase() : EGMP_MODELS[selectedModel].badge}
               </span>
               <button
                 type="button"
@@ -688,7 +836,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
               </button>
             </div>
             <div className="flex flex-wrap items-center gap-2.5 mt-0.5 text-xs text-slate-400">
-              <span className="font-mono">{odometer.toLocaleString()} mi</span>
+              <span className="font-mono">{odometer.toLocaleString()} {unitSystem === 'metric' ? 'km' : 'mi'}</span>
               <span>•</span>
               <span className="inline-flex items-center gap-1">
                 <Thermometer className="w-3 h-3 text-slate-400" />
@@ -798,7 +946,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
           >
             {/* Top Toolbar: Gear Selector, Lock/Unlock Security & Lighting Controls */}
             <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b border-slate-800/80">
-              {/* Transmission Gear Selector (E-GMP CAN 0x2C0) */}
+              {/* Transmission Gear Selector */}
               <div className="flex items-center gap-2.5">
                 <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900/90 border border-slate-800 shadow-inner">
                   {(['P', 'R', 'N', 'D'] as GearMode[]).map((g) => {
@@ -812,9 +960,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                           setGear(g);
                           if (g === 'D') setSpeedMph(prev => (prev === 0 ? 35 : prev));
                           if (g === 'P') setSpeedMph(0);
-                          triggerNotice(`Shifted Transmission to ${g}`);
+                          dispatchCommand('selected_gear', g, `Shifted Transmission to ${g}`);
                         }}
-                        title={`Vehicle Transmission Gear: ${g} (E-GMP CAN 0x2C0)`}
+                        title={`Vehicle Transmission Gear: ${g} (CAN 0x${canMappings.gear.toUpperCase()})`}
                         className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all ${
                           active
                             ? 'bg-cyan-500 text-slate-950 shadow-md ring-1 ring-cyan-300 font-extrabold scale-105'
@@ -924,9 +1072,17 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 <div className="flex items-center gap-2">
                   <BatteryCharging className={`w-4 h-4 ${isCharging ? 'text-emerald-400 animate-pulse' : 'text-cyan-400'}`} />
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Traction Battery</span>
-                  <span className="text-xs font-mono font-bold text-white px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700/60">
+                  <span
+                    title={`Dynamically resolved CAN ID: 0x${canMappings.hvSoc.toUpperCase()}`}
+                    className="text-xs font-mono font-bold text-white px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700/60"
+                  >
                     {soc.toFixed(1)}%
                   </span>
+                  {activeVehicle?.battery_kwh && (
+                    <span className="text-[10px] font-mono text-slate-400">
+                      ({activeVehicle.battery_kwh} kWh pack)
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -935,11 +1091,13 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                     type="button"
                     id="charge-port-toggle-btn"
                     onClick={() => {
-                      setChargePortOpen(prev => !prev);
-                      if (!chargePortOpen) setIsCharging(true);
+                      const next = !chargePortOpen;
+                      setChargePortOpen(next);
+                      if (next) setIsCharging(true);
                       else setIsCharging(false);
-                      triggerNotice(chargePortOpen ? 'Charge Port Closed' : 'Charge Port Opened');
+                      dispatchCommand('charge_port', next ? 'open' : 'close', next ? 'Charge Port Opened' : 'Charge Port Closed');
                     }}
+                    title={`Dynamically resolved CAN ID: 0x${canMappings.chargePort.toUpperCase()}`}
                     className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
                       chargePortOpen
                         ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'
@@ -970,21 +1128,33 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
               {/* Compact Battery & Aux Telemetry Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
-                <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50">
+                <div
+                  title={`Dynamically resolved CAN ID: 0x${canMappings.charging.toUpperCase()}`}
+                  className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50"
+                >
                   <span className="text-[10px] uppercase text-slate-400 block font-semibold">Charge Status</span>
                   <span className={`font-mono font-bold ${isCharging ? 'text-emerald-400' : 'text-slate-300'}`}>
                     {isCharging ? `${chargeRateKw} kW DC` : 'Standby'}
                   </span>
                 </div>
-                <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50">
+                <div
+                  title={`Dynamically resolved CAN ID: 0x${canMappings.aux12v.toUpperCase()}`}
+                  className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50"
+                >
                   <span className="text-[10px] uppercase text-slate-400 block font-semibold">12V Aux Battery</span>
                   <span className="font-mono font-bold text-slate-300">{aux12V.toFixed(1)} V (OK)</span>
                 </div>
-                <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50">
+                <div
+                  title={`Dynamically resolved CAN ID: 0x${canMappings.hvTemps.toUpperCase()}`}
+                  className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50"
+                >
                   <span className="text-[10px] uppercase text-slate-400 block font-semibold">Pack Min Temp</span>
                   <span className="font-mono font-bold text-slate-300">{batteryMinTempC}°C</span>
                 </div>
-                <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50">
+                <div
+                  title={`Dynamically resolved CAN ID: 0x${canMappings.hvTemps.toUpperCase()}`}
+                  className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50"
+                >
                   <span className="text-[10px] uppercase text-slate-400 block font-semibold">Pack Max Temp</span>
                   <span className="font-mono font-bold text-slate-300">{batteryMaxTempC}°C</span>
                 </div>

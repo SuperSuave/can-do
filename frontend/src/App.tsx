@@ -23,7 +23,7 @@ import { AutomationBuilder } from './components/AutomationBuilder';
 import { DeviceDashboard } from './components/DeviceDashboard';
 import { VehicleDashboard } from './components/VehicleDashboard';
 import { OnboardingWizardModal } from './components/OnboardingWizardModal';
-import { UserPreferences, getUserPreferences, saveUserPreferences } from './types/settings';
+import { UserPreferences, getUserPreferences, saveUserPreferences, fetchDevicePreferences } from './types/settings';
 import { checkForUpdates } from './services/updateService';
 import { 
   AutomationRule, 
@@ -278,6 +278,31 @@ export default function App() {
       }
     };
     fetchCatalog();
+  }, []);
+
+  // Synchronize User Preferences directly from CAN Do device storage (resolves cross-device & force-refresh loss)
+  useEffect(() => {
+    let cancelled = false;
+    const syncFromDevice = async () => {
+      try {
+        const devicePrefs = await fetchDevicePreferences();
+        if (!cancelled && devicePrefs) {
+          setUserPreferences(devicePrefs);
+          if (devicePrefs.onboarding_completed) {
+            setIsOnboardingOpen(false);
+          }
+          if (devicePrefs.vehicle_id && devicePrefs.vehicle_id !== 'all') {
+            setSelectedVehicleId(devicePrefs.vehicle_id);
+          }
+        }
+      } catch {
+        // Device offline or unreachable
+      }
+    };
+    syncFromDevice();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Scheduled Off-Hours Update Checker

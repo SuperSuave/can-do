@@ -32,6 +32,8 @@ export default defineConfig(() => {
         configureServer(server) {
           server.middlewares.use((req, res, next) => {
             const cleanUrl = (req.url || '').split('?')[0];
+            const method = req.method || 'GET';
+
             if (
               cleanUrl === '/catalog' ||
               cleanUrl === '/catalog/' ||
@@ -40,7 +42,8 @@ export default defineConfig(() => {
               cleanUrl === '/can-do/catalog/can_do_catalog.json' ||
               cleanUrl === '/CAN-Do-Message-Catalog/catalog' ||
               cleanUrl === '/CAN-Do-Message-Catalog/catalog/can_do_catalog.json' ||
-              cleanUrl === '/catalog.json'
+              cleanUrl === '/catalog.json' ||
+              cleanUrl === '/api/catalog'
             ) {
               const catalogFile = path.resolve(__dirname, '../catalog/can_do_catalog.json');
               if (fs.existsSync(catalogFile)) {
@@ -50,6 +53,58 @@ export default defineConfig(() => {
                 return res.end(fs.readFileSync(catalogFile, 'utf-8'));
               }
             }
+
+            // Local development support for /api/preferences
+            if (cleanUrl === '/api/preferences') {
+              const prefFile = path.resolve(__dirname, '../firmware/data/preferences.json');
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+
+              if (method === 'GET') {
+                if (fs.existsSync(prefFile)) {
+                  return res.end(fs.readFileSync(prefFile, 'utf-8'));
+                }
+                return res.end(JSON.stringify({ onboarding_completed: false }));
+              }
+
+              if (method === 'POST') {
+                let body = '';
+                req.on('data', chunk => {
+                  body += chunk;
+                });
+                req.on('end', () => {
+                  try {
+                    const parsed = JSON.parse(body || '{}');
+                    const dir = path.dirname(prefFile);
+                    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+                    fs.writeFileSync(prefFile, JSON.stringify(parsed, null, 2), 'utf-8');
+                    res.statusCode = 200;
+                    return res.end(JSON.stringify({ status: 'ok' }));
+                  } catch (err: any) {
+                    res.statusCode = 400;
+                    return res.end(JSON.stringify({ error: err.message || 'Invalid JSON' }));
+                  }
+                });
+                return;
+              }
+            }
+
+            // Local development mock for /api/command
+            if (cleanUrl === '/api/command') {
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.statusCode = 200;
+              return res.end(JSON.stringify({ status: 'ok' }));
+            }
+
+            // Local development mock for /api/states
+            if (cleanUrl === '/api/states') {
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.statusCode = 200;
+              return res.end(JSON.stringify({}));
+            }
+
             next();
           });
         },
@@ -87,6 +142,12 @@ export default defineConfig(() => {
           const repoAuto = path.resolve(__dirname, '../firmware/automations.json');
           if (fs.existsSync(repoAuto)) {
             fs.copyFileSync(repoAuto, path.join(dataDir, 'automations.json'));
+          }
+
+          // Ensure default preferences.json exists for LittleFS filesystem
+          const prefFile = path.join(dataDir, 'preferences.json');
+          if (!fs.existsSync(prefFile)) {
+            fs.writeFileSync(prefFile, JSON.stringify({ onboarding_completed: false }, null, 2), 'utf-8');
           }
 
           if (!fs.existsSync(distDir)) return;

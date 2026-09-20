@@ -718,6 +718,84 @@ static esp_err_t api_post_automations_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static esp_err_t api_get_preferences_handler(httpd_req_t *req) {
+    set_cors_headers(req);
+    const char *filepath = "/spiffs/preferences.json";
+    FILE *fd = fopen(filepath, "r");
+    if (!fd) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{}");
+        return ESP_OK;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    char chunk[1024];
+    size_t chunksize;
+    do {
+        chunksize = fread(chunk, 1, sizeof(chunk), fd);
+        if (chunksize > 0) {
+            if (httpd_resp_send_chunk(req, chunk, chunksize) != ESP_OK) {
+                fclose(fd);
+                return ESP_FAIL;
+            }
+        }
+    } while (chunksize != 0);
+
+    fclose(fd);
+    httpd_resp_send_chunk(req, nullptr, 0);
+    return ESP_OK;
+}
+
+static esp_err_t api_post_preferences_handler(httpd_req_t *req) {
+    set_cors_headers(req);
+    if (req->content_len <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty payload");
+        return ESP_FAIL;
+    }
+
+    const char *temp_filepath = "/spiffs/preferences.json.tmp";
+    const char *target_filepath = "/spiffs/preferences.json";
+
+    FILE *fd = fopen(temp_filepath, "w");
+    if (!fd) {
+        fd = fopen(target_filepath, "w");
+        if (!fd) {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open preferences file for write");
+            return ESP_FAIL;
+        }
+        temp_filepath = target_filepath;
+    }
+
+    char buf[1024];
+    int remaining = req->content_len;
+    while (remaining > 0) {
+        int recv_len = httpd_req_recv(req, buf, std::min(remaining, static_cast<int>(sizeof(buf))));
+        if (recv_len <= 0) {
+            fclose(fd);
+            if (temp_filepath != target_filepath) remove(temp_filepath);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed receiving preferences payload");
+            return ESP_FAIL;
+        }
+        fwrite(buf, 1, recv_len, fd);
+        remaining -= recv_len;
+    }
+    fclose(fd);
+
+    if (temp_filepath != target_filepath) {
+        remove(target_filepath);
+        if (rename(temp_filepath, target_filepath) != 0) {
+            ESP_LOGE(TAG, "Failed to rename temp preferences file");
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed committing preferences file");
+            return ESP_FAIL;
+        }
+    }
+
+    ESP_LOGI(TAG, "User preferences saved to device (%d bytes)", req->content_len);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"Preferences saved to device.\"}");
+    return ESP_OK;
+}
+
 static esp_err_t api_system_status_handler(httpd_req_t *req) {
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "device_id", DEVICE_ID.c_str());
@@ -1245,6 +1323,8 @@ httpd_handle_t start_webserver(void) {
         reg_uri("/api/automations/diagnostics", HTTP_GET, api_automations_diagnostics_handler);
         reg_uri("/api/automations", HTTP_GET, api_get_automations_handler);
         reg_uri("/api/automations", HTTP_POST, api_post_automations_handler);
+        reg_uri("/api/preferences", HTTP_GET, api_get_preferences_handler);
+        reg_uri("/api/preferences", HTTP_POST, api_post_preferences_handler);
         reg_uri("/api/system/status", HTTP_GET, api_system_status_handler);
         reg_uri("/api/system/control", HTTP_POST, api_system_control_handler);
         reg_uri("/api/wifi/status", HTTP_GET, api_wifi_status_handler);
