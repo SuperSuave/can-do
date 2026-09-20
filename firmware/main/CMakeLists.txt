@@ -17,6 +17,7 @@ idf_component_register(
         "ble_mgr.cpp"
         "vbat_sensor.cpp"
         "uds_engine.cpp"
+        "power_mgr.cpp"
     INCLUDE_DIRS "."
     REQUIRES 
         "nvs_flash"

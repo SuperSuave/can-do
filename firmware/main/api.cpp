@@ -7,6 +7,7 @@
 #include "track_popup.h"
 #include "ble_mgr.h"
 #include "vbat_sensor.h"
+#include "uds_engine.h"
 #include "cJSON.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
@@ -804,6 +805,7 @@ static esp_err_t api_post_preferences_handler(httpd_req_t *req) {
     }
 
     ESP_LOGI(TAG, "User preferences saved to device (%d bytes)", req->content_len);
+    uds_engine_load_preferences();
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"Preferences saved to device.\"}");
     return ESP_OK;

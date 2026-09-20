@@ -26,6 +26,7 @@
 #include "ble_mgr.h"
 #include "vbat_sensor.h"
 #include "uds_engine.h"
+#include "power_mgr.h"
 
 #include "esp_mac.h"
 #include "esp_wifi.h"
@@ -167,6 +168,7 @@ extern "C" void app_main(void) {
     // 9. Command Queues and Tasks
     init_can_engine();
     uds_engine_init();
+    power_mgr_init();
     xTaskCreate(can_rx_task, "CAN_RX", 4096, nullptr, 5, nullptr);
     xTaskCreate(can_tx_task, "CAN_TX", 4096, nullptr, 4, nullptr);
     xTaskCreate(time_scheduler_task, "TIME_SCHED", 3072, nullptr, 3, nullptr);

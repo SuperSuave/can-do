@@ -1,5 +1,12 @@
 {
   "onboarding_completed": false,
   "vehicle_id": "hi5_limited",
-  "unit_system": "imperial"
+  "unit_system": "imperial",
+  "uds_enabled": true,
+  "uds_awake_interval_sec": 15,
+  "uds_sleep_delay_sec": 10,
+  "min_12v_gate_voltage": 12.2,
+  "quiet_hours_enabled": false,
+  "quiet_hours_start": "22:00",
+  "quiet_hours_end": "07:00"
 }

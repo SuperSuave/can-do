@@ -34,6 +34,9 @@ void uds_engine_on_can_rx(const twai_message_t* msg);
 bool uds_engine_is_vehicle_awake(void);
 bool uds_engine_is_gate_open(void);
 bms_live_data_t uds_engine_get_bms_data(void);
+uds_config_t uds_engine_get_config(void);
+void uds_engine_set_config(const uds_config_t* cfg);
+void uds_engine_load_preferences(void);
 
 #ifdef __cplusplus
 }
