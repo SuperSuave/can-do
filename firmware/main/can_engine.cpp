@@ -15,6 +15,7 @@
 #include "can.h"
 #include "mqtt_mgr.h"
 #include "ble_mgr.h"
+#include "uds_engine.h"
 
 #if defined(_WIN32) && !defined(__GNUC__)
 #define strcasecmp _stricmp
@@ -416,6 +417,7 @@ void can_rx_task(void* arg) {
             board_led_can_activity();
             precondition_can_rx_hook(&rx_msg, CAN_BUS_0);
             track_popup_rx(&rx_msg, CAN_BUS_0);
+            uds_engine_on_can_rx(&rx_msg);
 
             // Stream raw frame to connected SavvyCAN/GVRET client
             gvret_enqueue_frame(&rx_msg);
