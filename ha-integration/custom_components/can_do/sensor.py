@@ -65,7 +65,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
         elif "odometer" in cid or unit in ("km", "mi"):
             self._attr_device_class = SensorDeviceClass.DISTANCE
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
-            self._attr_native_unit_of_measurement = UnitOfLength.MILES if "mi" in unit.lower() else UnitOfLength.KILOMETERS
+            self._attr_native_unit_of_measurement = UnitOfLength.KILOMETERS if "km" in unit.lower() else UnitOfLength.MILES
         elif "soc" in cid or unit == "%":
             self._attr_device_class = SensorDeviceClass.BATTERY
             self._attr_state_class = SensorStateClass.MEASUREMENT
@@ -112,14 +112,15 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                         return 62 + (raw - 0x06)
                     return round(17.0 + (raw - 0x06) * 0.5, 1)
 
-        # 1D. Outdoor Ambient Temperature (0x226: Byte D3 = deg C + 40)
+        # 1D. Outdoor Ambient Temperature (0x226: Byte D4 = deg C + 40, [B3])
         if "ambient_temp" in cid or cid == "cond_ambient_temperature" or (self.state_can_id.lower() == "0x226" and "temp" in cid):
-            if len(payload) >= 3:
-                raw = payload[2]
-                temp_c = float(raw - 40)
-                if self._attr_native_unit_of_measurement == UnitOfTemperature.FAHRENHEIT:
-                    return round(temp_c * 1.8 + 32, 1)
-                return temp_c
+            if len(payload) >= 4:
+                raw = payload[3]
+                if 0 < raw < 255:
+                    temp_c = float(raw - 40)
+                    if self._attr_native_unit_of_measurement == UnitOfTemperature.FAHRENHEIT:
+                        return round(temp_c * 1.8 + 32, 1)
+                    return round(temp_c, 1)
 
         # 1E. HV Battery Module Temperatures (0x152: Byte D1=Min, D2=Max signed deg C)
         if "battery_temp" in cid or cid == "hv_battery_temperatures" or (self.state_can_id.lower() == "0x152" and "temp" in cid):
@@ -130,19 +131,27 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                     return round(temp_c * 1.8 + 32, 1)
                 return temp_c
 
-        # 1F. High Voltage Battery SOC (0x2FC: Byte D7 = factor 0.5 %)
+        # 1F. High Voltage Battery SOC (0x2FC: Byte D8 = factor 0.5 %, [B7])
         if "soc" in cid or cid == "cond_hv_battery_soc" or (self.state_can_id.lower() == "0x2fc" and "soc" in cid):
-            if len(payload) >= 7:
-                raw = payload[6]
+            if len(payload) >= 8:
+                raw = payload[7]
                 return round(raw * 0.5, 1)
 
-        # 1G. Vehicle Odometer (0x227: 24-bit LE across D1-D3, factor 0.1 km)
+        # 1G. Vehicle Odometer (0x227: 24-bit Little Endian across D2-D4, factor 1.0)
         if "odometer" in cid or cid == "vehicle_odometer" or self.state_can_id.lower() == "0x227":
-            if len(payload) >= 3:
-                raw_km = (payload[0] | (payload[1] << 8) | (payload[2] << 16)) * 0.1
-                if self._attr_native_unit_of_measurement == UnitOfLength.MILES:
-                    return round(raw_km * 0.621371, 1)
-                return round(raw_km, 1)
+            # In E-GMP 0x227: D1 is counter/sub-status (0x9F).
+            # Cumulative odometer is 24-bit Little Endian across D2-D4 (payload[1..3]).
+            # Starting at D1 read (0x9F | (0x77 << 8)) = 30623, whereas D2-D4 yields
+            # (0x77 | (0xD3 << 8) | (0x00 << 16)) = 54135 miles.
+            factor = float(net.get("factor", 1.0))
+            if len(payload) >= 4:
+                raw_val = payload[1] | (payload[2] << 8) | (payload[3] << 16)
+                val = raw_val * factor
+                return round(val, 1) if factor < 1.0 else int(val)
+            elif len(payload) >= 3:
+                raw_val = payload[1] | (payload[2] << 8)
+                val = raw_val * factor
+                return round(val, 1) if factor < 1.0 else int(val)
 
         # 1E. Generic Linear Scale
         if self.command.get("type") == "linear_scale" or "min" in net:
@@ -198,7 +207,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> Dict[str, Any]:
-        """Return raw CAN telemetry bytes as state attributes for debugging."""
+        """Return raw CAN telemetry bytes and decoded thresholds as state attributes."""
         attrs: Dict[str, Any] = {}
         if self.state_can_id:
             payload = self.coordinator.get_can_payload(self.state_can_id)
@@ -206,4 +215,16 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                 attrs["raw_hex"] = "".join(f"{b:02X}" for b in payload)
                 for i, b in enumerate(payload):
                     attrs[f"D{i+1}"] = f"0x{b:02X}"
+
+                # Add human-friendly thresholds for ambient temperature
+                if self.state_can_id.lower() == "0x226" and len(payload) >= 4:
+                    raw = payload[3]
+                    if raw <= 40:
+                        attrs["threshold"] = "Freezing (<= 0°C / 32°F)"
+                    elif raw < 55:
+                        attrs["threshold"] = "Cold (< 15°C / 59°F)"
+                    elif raw > 65:
+                        attrs["threshold"] = "Warm (> 25°C / 77°F)"
+                    else:
+                        attrs["threshold"] = "Comfortable (15-25°C / 59-77°F)"
         return attrs

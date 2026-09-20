@@ -28,8 +28,8 @@ interface NavbarProps {
   onResetCatalog: () => void;
   onOpenExportModal?: (format?: ExportFormat) => void;
   onOpenDbcExport?: () => void;
-  activeMainTab: 'catalog' | 'vehicles' | 'automations' | 'device';
-  onChangeMainTab: (tab: 'catalog' | 'vehicles' | 'automations' | 'device') => void;
+  activeMainTab: 'catalog' | 'vehicles' | 'automations' | 'device' | 'dashboard';
+  onChangeMainTab: (tab: 'catalog' | 'vehicles' | 'automations' | 'device' | 'dashboard') => void;
   repoConfig: GitHubRepoConfig;
   rulesCount?: number;
 }

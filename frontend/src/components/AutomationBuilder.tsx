@@ -16,8 +16,10 @@ import {
   commandToAction,
   compileToByteMap,
   resolveCatalogCommandForTrigger,
+  resolveCatalogCommandForCondition,
   resolveCatalogCommandForAction,
   applyOptionToTrigger,
+  applyOptionToCondition,
   applyOptionToAction
 } from '../utils/automationConverters';
 import { getDefaultEspIp, resolveDeviceBaseUrl, isRunningOnDevice } from '../utils/hostUtils';
@@ -73,12 +75,139 @@ interface AutomationBuilderProps {
   onClearPulledCommands?: () => void;
 }
 
+interface OptionGridGroup {
+  key?: string;
+  items: {
+    opt: CommandOption;
+    origIndex: number;
+  }[];
+}
+
+/**
+ * Groups command options into rows/grids based on common words (e.g. "Heat", "Cool", "Vent", "Front", "Rear").
+ * Ensures groups like Low Heat, Medium Heat, High Heat are displayed horizontally in a single row.
+ */
+function groupOptionsIntoGridRows(options?: CommandOption[]): OptionGridGroup[] {
+  if (!options || options.length === 0) return [];
+  if (options.length <= 1) {
+    return [{ items: options.map((opt, origIndex) => ({ opt, origIndex })) }];
+  }
+
+  // Parse labels into words and components
+  const parsed = options.map((opt, origIndex) => {
+    const rawLabel = opt.label || '';
+    // Strip parenthesized text for classification e.g. "Released (Idle)" -> "Released"
+    const cleaned = rawLabel.replace(/\([^)]*\)/g, '').trim();
+    const words = cleaned.split(/[\s\-_/]+/).filter(Boolean);
+    const firstWord = words.length > 0 ? words[0].toLowerCase() : '';
+    const lastWord = words.length > 1 ? words[words.length - 1].toLowerCase() : '';
+    return {
+      opt,
+      origIndex,
+      words,
+      firstWord,
+      lastWord,
+      isSingleWord: words.length <= 1
+    };
+  });
+
+  // Count suffix frequencies (e.g., "Heat", "Cool", "Vent", "Click", "Press", "Speed")
+  const suffixCounts = new Map<string, number>();
+  parsed.forEach(p => {
+    if (p.lastWord) {
+      suffixCounts.set(p.lastWord, (suffixCounts.get(p.lastWord) || 0) + 1);
+    }
+  });
+
+  // Count prefix frequencies (e.g., "Front", "Rear", "Driver", "Passenger", "Stage", "Level")
+  const prefixCounts = new Map<string, number>();
+  parsed.forEach(p => {
+    if (p.firstWord && !p.isSingleWord) {
+      prefixCounts.set(p.firstWord, (prefixCounts.get(p.firstWord) || 0) + 1);
+    }
+  });
+
+  let maxSuffixCount = 0;
+  for (const count of suffixCounts.values()) {
+    if (count > maxSuffixCount) maxSuffixCount = count;
+  }
+
+  let maxPrefixCount = 0;
+  for (const count of prefixCounts.values()) {
+    if (count > maxPrefixCount) maxPrefixCount = count;
+  }
+
+  // Suffix is preferred if at least 2 items and >= prefix count (e.g. Low Heat, Med Heat, High Heat)
+  const useSuffix = maxSuffixCount >= 2 && maxSuffixCount >= maxPrefixCount;
+  const usePrefix = !useSuffix && maxPrefixCount >= 2;
+
+  if (useSuffix || usePrefix) {
+    const keyMap = new Map<string, { opt: CommandOption; origIndex: number }[]>();
+    const ungrouped: { opt: CommandOption; origIndex: number }[] = [];
+
+    parsed.forEach(p => {
+      const k = useSuffix ? p.lastWord : p.firstWord;
+      const count = useSuffix ? (suffixCounts.get(p.lastWord) || 0) : (prefixCounts.get(p.firstWord) || 0);
+
+      if (k && count >= 2) {
+        if (!keyMap.has(k)) {
+          keyMap.set(k, []);
+        }
+        keyMap.get(k)!.push({ opt: p.opt, origIndex: p.origIndex });
+      } else {
+        ungrouped.push({ opt: p.opt, origIndex: p.origIndex });
+      }
+    });
+
+    const isOffLike = (lbl: string) => /^(off|none|idle|auto|normal|cancel|stop|released)/i.test(lbl.trim());
+    const offLike = ungrouped.filter(u => isOffLike(u.opt.label || ''));
+    const nonOffUngrouped = ungrouped.filter(u => !isOffLike(u.opt.label || ''));
+
+    const result: OptionGridGroup[] = [];
+
+    // Off/Neutral options in row 1
+    if (offLike.length > 0) {
+      result.push({ key: 'off', items: offLike });
+    }
+
+    // Matched groups (e.g. Low Heat, Medium Heat, High Heat)
+    for (const [key, items] of keyMap.entries()) {
+      result.push({ key, items });
+    }
+
+    // Any remaining items
+    if (nonOffUngrouped.length > 0) {
+      result.push({ items: nonOffUngrouped });
+    }
+
+    if (result.length > 0) {
+      return result;
+    }
+  }
+
+  // If between 2 and 4 options total, display in a single row
+  if (options.length <= 4) {
+    return [{ items: options.map((opt, origIndex) => ({ opt, origIndex })) }];
+  }
+
+  // Fallback for > 4 items: chunk into rows of 3 or 4
+  const chunked: OptionGridGroup[] = [];
+  const chunkSize = options.length === 6 ? 3 : options.length <= 8 ? 4 : 3;
+  for (let i = 0; i < options.length; i += chunkSize) {
+    chunked.push({
+      items: options.slice(i, i + chunkSize).map((opt, idx) => ({ opt, origIndex: i + idx }))
+    });
+  }
+  return chunked;
+}
+
 interface ConditionNodeEditorProps {
   key?: React.Key;
   cond: AutomationCondition;
   index: number;
   depth?: number;
   availableTriggers?: AutomationTrigger[];
+  catalog?: Catalog;
   onUpdate: (updated: AutomationCondition) => void;
   onDelete: () => void;
   onOpenAddConditionDialog?: (onAdd: (cond: AutomationCondition) => void) => void;
@@ -90,6 +219,7 @@ interface ConditionListEditorProps {
   label?: string;
   emptyText?: string;
   availableTriggers?: AutomationTrigger[];
+  catalog?: Catalog;
   onUpdate: (conditions: AutomationCondition[]) => void;
   onOpenAddConditionDialog?: (onAdd: (cond: AutomationCondition) => void) => void;
 }
@@ -180,10 +310,12 @@ function ConditionNodeEditor({
   index,
   depth = 0,
   availableTriggers,
+  catalog,
   onUpdate,
   onDelete,
   onOpenAddConditionDialog
 }: ConditionNodeEditorProps) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const isGroup =
     cond.logic === 'and' ||
     cond.logic === 'or' ||
@@ -261,6 +393,7 @@ function ConditionNodeEditor({
               conditions={cond.conditions || []}
               depth={depth + 1}
               availableTriggers={availableTriggers}
+              catalog={catalog}
               emptyText="Empty group. Add conditions below."
               onUpdate={updatedSubs => onUpdate({ ...cond, conditions: updatedSubs })}
               onOpenAddConditionDialog={onOpenAddConditionDialog}
@@ -401,123 +534,205 @@ function ConditionNodeEditor({
     );
   }
 
-  // Leaf CAN condition
+  // Leaf CAN / Catalog condition
+  const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForCondition(cond, catalog) : {};
+  const hasOptions = !!(catalogCmd?.options && catalogCmd.options.length > 0);
+  const conditionName =
+    catalogCmd?.ha_metadata?.name ||
+    catalogCmd?.name ||
+    cond.source_command_name ||
+    (cond.can_id ? `CAN Condition ${cond.can_id}` : `Condition ${index + 1}`);
+
   const dKey = cond.byte ?? cond.evaluate?.byte ?? (cond.match && Object.keys(cond.match).length > 0 ? Object.keys(cond.match)[0] : '') ?? '';
   const maskVal = cond.mask ?? cond.evaluate?.mask ?? '';
   const opVal = cond.operator || cond.evaluate?.operator || (cond.invert ? 'not_equal' : 'equal');
   const targetVal = cond.value ?? cond.evaluate?.value ?? (cond.match && dKey ? cond.match[dKey] : '') ?? '';
 
   return (
-    <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/90 space-y-2 text-xs">
+    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 hover:border-slate-700/80 space-y-2.5 text-xs transition-all shadow-sm">
+      {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="w-5 h-5 rounded-full bg-purple-950 text-purple-300 font-bold text-[10px] flex items-center justify-center border border-purple-800">
+          <span className="w-5 h-5 rounded-full bg-purple-950 text-purple-300 font-bold text-[10px] flex items-center justify-center border border-purple-800 shrink-0">
             C{index + 1}
           </span>
-          {cond.source_command_name ? (
-            <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-white">{cond.source_command_name}</span>
-              {cond.option_label && (
-                <span className="px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 text-[10px] border border-purple-800/60">
-                  {cond.option_label}
-                </span>
-              )}
-            </div>
-          ) : (
-            <span className="font-semibold text-slate-300 font-mono">
-              CAN {cond.can_id || 'unassigned'} Bus {cond.bus ?? 0}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-white text-sm tracking-tight">{conditionName}</span>
+            {catalogCmd?.category && (
+              <span className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 text-[10px] border border-slate-800">
+                {catalogCmd.category}
+              </span>
+            )}
+            <span className="px-1.5 py-0.5 rounded bg-purple-950/60 text-purple-300/90 text-[10px] font-mono border border-purple-800/50">
+              {cond.can_id ? `CAN ${cond.can_id}` : 'CAN'} • Bus {cond.bus ?? 0}
             </span>
-          )}
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="p-1 text-slate-500 hover:text-rose-400 transition"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+
+        <div className="flex items-center gap-1.5">
+          {hasOptions && (
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
+                showAdvanced
+                  ? 'bg-purple-950/60 text-purple-300 border-purple-800/80 shadow'
+                  : 'bg-slate-900 text-slate-300 hover:text-white border-slate-800 hover:bg-slate-850'
+              }`}
+              title="Toggle configuration details"
+            >
+              <Sliders className="w-3.5 h-3.5 text-purple-400" />
+              <span>{showAdvanced ? 'Simple View' : 'Edit Details'}</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onDelete}
+            className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition"
+            title="Delete condition"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-5 gap-2 font-mono text-[11px]">
-        <div className="col-span-1">
-          <label className="block text-[10px] font-sans text-slate-500">CAN ID</label>
-          <input
-            type="text"
-            value={cond.can_id || ''}
-            onChange={e => onUpdate({ ...cond, can_id: e.target.value })}
-            placeholder="0x120"
-            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
-          />
+      {/* Option Selector Big Pills in Smart Grid Rows */}
+      {hasOptions && (
+        <div className="space-y-1.5 pt-0.5">
+          {groupOptionsIntoGridRows(catalogCmd.options).map((group, gIdx) => {
+            const itemCount = group.items.length;
+            const gridClass =
+              itemCount === 1
+                ? 'flex'
+                : itemCount === 2
+                ? 'grid grid-cols-2 gap-1.5'
+                : itemCount === 3
+                ? 'grid grid-cols-3 gap-1.5'
+                : itemCount === 4
+                ? 'grid grid-cols-4 gap-1.5'
+                : 'grid grid-cols-2 sm:grid-cols-3 gap-1.5';
+
+            return (
+              <div key={group.key || gIdx} className={gridClass}>
+                {group.items.map(({ opt, origIndex }) => {
+                  const isSelected =
+                    (cond.option_label && opt.label.toLowerCase() === cond.option_label.toLowerCase()) ||
+                    (matchedOption && opt.label.toLowerCase() === matchedOption.label.toLowerCase()) ||
+                    (!cond.option_label && !matchedOption && origIndex === 0);
+
+                  return (
+                    <button
+                      key={opt.label || origIndex}
+                      type="button"
+                      onClick={() => {
+                        const updated = applyOptionToCondition(cond, catalogCmd, opt);
+                        onUpdate(updated);
+                      }}
+                      className={`${
+                        itemCount === 1 ? 'px-4 min-w-[90px]' : 'w-full px-2'
+                      } py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 border cursor-pointer text-center ${
+                        isSelected
+                          ? 'bg-purple-500/20 text-purple-200 border-purple-500/80 font-semibold shadow-sm ring-1 ring-purple-500/40'
+                          : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border-slate-800'
+                      }`}
+                    >
+                      <span className="truncate">{opt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
-        <div className="col-span-1">
-          <label className="block text-[10px] font-sans text-slate-500">Byte</label>
-          <input
-            type="text"
-            value={dKey}
-            onChange={e => {
-              const val = e.target.value.toUpperCase();
-              onUpdate({
-                ...cond,
-                byte: val,
-                evaluate: { ...(cond.evaluate || { operator: opVal, value: targetVal }), byte: val }
-              });
-            }}
-            placeholder="D1"
-            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-purple-300 font-bold text-center"
-          />
+      )}
+
+      {/* Advanced Details View */}
+      {(!hasOptions || showAdvanced) && (
+        <div className={`space-y-3 ${hasOptions ? 'pt-2.5 border-t border-slate-850' : ''}`}>
+          <div className="grid grid-cols-5 gap-2 font-mono text-[11px]">
+            <div className="col-span-1">
+              <label className="block text-[10px] font-sans text-slate-500">CAN ID</label>
+              <input
+                type="text"
+                value={cond.can_id || ''}
+                onChange={e => onUpdate({ ...cond, can_id: e.target.value })}
+                placeholder="0x120"
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+              />
+            </div>
+            <div className="col-span-1">
+              <label className="block text-[10px] font-sans text-slate-500">Byte</label>
+              <input
+                type="text"
+                value={dKey}
+                onChange={e => {
+                  const val = e.target.value.toUpperCase();
+                  onUpdate({
+                    ...cond,
+                    byte: val,
+                    evaluate: { ...(cond.evaluate || { operator: opVal, value: targetVal }), byte: val }
+                  });
+                }}
+                placeholder="D1"
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-purple-300 font-bold text-center"
+              />
+            </div>
+            <div className="col-span-1">
+              <label className="block text-[10px] font-sans text-slate-500">Mask</label>
+              <input
+                type="text"
+                value={maskVal}
+                onChange={e => {
+                  onUpdate({
+                    ...cond,
+                    mask: e.target.value,
+                    evaluate: { ...(cond.evaluate || { byte: dKey, operator: opVal, value: targetVal }), mask: e.target.value }
+                  });
+                }}
+                placeholder="0xFF"
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-yellow-300 font-bold text-center"
+              />
+            </div>
+            <div className="col-span-1">
+              <label className="block text-[10px] font-sans text-slate-500">Operator</label>
+              <select
+                value={opVal}
+                onChange={e => {
+                  onUpdate({
+                    ...cond,
+                    operator: e.target.value,
+                    evaluate: { ...(cond.evaluate || { byte: dKey, mask: maskVal, value: targetVal }), operator: e.target.value }
+                  });
+                }}
+                className="w-full bg-slate-900 border border-slate-800 rounded px-1 py-1 text-slate-200 font-sans"
+              >
+                <option value="equal">== (Equal)</option>
+                <option value="not_equal">!= (Not Equal)</option>
+                <option value="less_than">&lt; (Less Than)</option>
+                <option value="greater_than">&gt; (Greater Than)</option>
+              </select>
+            </div>
+            <div className="col-span-1">
+              <label className="block text-[10px] font-sans text-slate-500">Target Value</label>
+              <input
+                type="text"
+                value={targetVal}
+                onChange={e => {
+                  const val = e.target.value;
+                  onUpdate({
+                    ...cond,
+                    value: val,
+                    match: dKey ? { [dKey]: val } : cond.match,
+                    evaluate: { ...(cond.evaluate || { byte: dKey, mask: maskVal, operator: opVal }), value: val }
+                  });
+                }}
+                placeholder="0x01"
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-purple-300 font-bold text-center"
+              />
+            </div>
+          </div>
         </div>
-        <div className="col-span-1">
-          <label className="block text-[10px] font-sans text-slate-500">Mask</label>
-          <input
-            type="text"
-            value={maskVal}
-            onChange={e => {
-              onUpdate({
-                ...cond,
-                mask: e.target.value,
-                evaluate: { ...(cond.evaluate || { byte: dKey, operator: opVal, value: targetVal }), mask: e.target.value }
-              });
-            }}
-            placeholder="0xFF"
-            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-yellow-300 font-bold text-center"
-          />
-        </div>
-        <div className="col-span-1">
-          <label className="block text-[10px] font-sans text-slate-500">Operator</label>
-          <select
-            value={opVal}
-            onChange={e => {
-              onUpdate({
-                ...cond,
-                operator: e.target.value,
-                evaluate: { ...(cond.evaluate || { byte: dKey, mask: maskVal, value: targetVal }), operator: e.target.value }
-              });
-            }}
-            className="w-full bg-slate-900 border border-slate-800 rounded px-1 py-1 text-slate-200 font-sans"
-          >
-            <option value="equal">== (Equal)</option>
-            <option value="not_equal">!= (Not Equal)</option>
-            <option value="less_than">&lt; (Less Than)</option>
-            <option value="greater_than">&gt; (Greater Than)</option>
-          </select>
-        </div>
-        <div className="col-span-1">
-          <label className="block text-[10px] font-sans text-slate-500">Target Value</label>
-          <input
-            type="text"
-            value={targetVal}
-            onChange={e => {
-              onUpdate({
-                ...cond,
-                value: e.target.value,
-                evaluate: { ...(cond.evaluate || { byte: dKey, mask: maskVal, operator: opVal }), value: e.target.value }
-              });
-            }}
-            placeholder="0x01"
-            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-purple-300 font-bold text-center"
-          />
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -528,6 +743,7 @@ function ConditionListEditor({
   label,
   emptyText = 'No conditions set.',
   availableTriggers,
+  catalog,
   onUpdate,
   onOpenAddConditionDialog
 }: ConditionListEditorProps) {
@@ -569,6 +785,7 @@ function ConditionListEditor({
               index={idx}
               depth={depth}
               availableTriggers={availableTriggers}
+              catalog={catalog}
               onUpdate={updated => {
                 const next = [...conditions];
                 next[idx] = updated;
@@ -600,132 +817,6 @@ function ConditionListEditor({
       </button>
     </div>
   );
-}
-
-interface OptionGridGroup {
-  key?: string;
-  items: {
-    opt: CommandOption;
-    origIndex: number;
-  }[];
-}
-
-/**
- * Groups command options into rows/grids based on common words (e.g. "Heat", "Cool", "Vent", "Front", "Rear").
- * Ensures groups like Low Heat, Medium Heat, High Heat are displayed horizontally in a single row.
- */
-function groupOptionsIntoGridRows(options?: CommandOption[]): OptionGridGroup[] {
-  if (!options || options.length === 0) return [];
-  if (options.length <= 1) {
-    return [{ items: options.map((opt, origIndex) => ({ opt, origIndex })) }];
-  }
-
-  // Parse labels into words and components
-  const parsed = options.map((opt, origIndex) => {
-    const rawLabel = opt.label || '';
-    // Strip parenthesized text for classification e.g. "Released (Idle)" -> "Released"
-    const cleaned = rawLabel.replace(/\([^)]*\)/g, '').trim();
-    const words = cleaned.split(/[\s\-_/]+/).filter(Boolean);
-    const firstWord = words.length > 0 ? words[0].toLowerCase() : '';
-    const lastWord = words.length > 1 ? words[words.length - 1].toLowerCase() : '';
-    return {
-      opt,
-      origIndex,
-      words,
-      firstWord,
-      lastWord,
-      isSingleWord: words.length <= 1
-    };
-  });
-
-  // Count suffix frequencies (e.g., "Heat", "Cool", "Vent", "Click", "Press", "Speed")
-  const suffixCounts = new Map<string, number>();
-  parsed.forEach(p => {
-    if (p.lastWord) {
-      suffixCounts.set(p.lastWord, (suffixCounts.get(p.lastWord) || 0) + 1);
-    }
-  });
-
-  // Count prefix frequencies (e.g., "Front", "Rear", "Driver", "Passenger", "Stage", "Level")
-  const prefixCounts = new Map<string, number>();
-  parsed.forEach(p => {
-    if (p.firstWord && !p.isSingleWord) {
-      prefixCounts.set(p.firstWord, (prefixCounts.get(p.firstWord) || 0) + 1);
-    }
-  });
-
-  let maxSuffixCount = 0;
-  for (const count of suffixCounts.values()) {
-    if (count > maxSuffixCount) maxSuffixCount = count;
-  }
-
-  let maxPrefixCount = 0;
-  for (const count of prefixCounts.values()) {
-    if (count > maxPrefixCount) maxPrefixCount = count;
-  }
-
-  // Suffix is preferred if at least 2 items and >= prefix count (e.g. Low Heat, Med Heat, High Heat)
-  const useSuffix = maxSuffixCount >= 2 && maxSuffixCount >= maxPrefixCount;
-  const usePrefix = !useSuffix && maxPrefixCount >= 2;
-
-  if (useSuffix || usePrefix) {
-    const keyMap = new Map<string, { opt: CommandOption; origIndex: number }[]>();
-    const ungrouped: { opt: CommandOption; origIndex: number }[] = [];
-
-    parsed.forEach(p => {
-      const k = useSuffix ? p.lastWord : p.firstWord;
-      const count = useSuffix ? (suffixCounts.get(p.lastWord) || 0) : (prefixCounts.get(p.firstWord) || 0);
-
-      if (k && count >= 2) {
-        if (!keyMap.has(k)) {
-          keyMap.set(k, []);
-        }
-        keyMap.get(k)!.push({ opt: p.opt, origIndex: p.origIndex });
-      } else {
-        ungrouped.push({ opt: p.opt, origIndex: p.origIndex });
-      }
-    });
-
-    const isOffLike = (lbl: string) => /^(off|none|idle|auto|normal|cancel|stop|released)/i.test(lbl.trim());
-    const offLike = ungrouped.filter(u => isOffLike(u.opt.label || ''));
-    const nonOffUngrouped = ungrouped.filter(u => !isOffLike(u.opt.label || ''));
-
-    const result: OptionGridGroup[] = [];
-
-    // Off/Neutral options in row 1
-    if (offLike.length > 0) {
-      result.push({ key: 'off', items: offLike });
-    }
-
-    // Matched groups (e.g. Low Heat, Medium Heat, High Heat)
-    for (const [key, items] of keyMap.entries()) {
-      result.push({ key, items });
-    }
-
-    // Any remaining items
-    if (nonOffUngrouped.length > 0) {
-      result.push({ items: nonOffUngrouped });
-    }
-
-    if (result.length > 0) {
-      return result;
-    }
-  }
-
-  // If between 2 and 4 options total, display in a single row
-  if (options.length <= 4) {
-    return [{ items: options.map((opt, origIndex) => ({ opt, origIndex })) }];
-  }
-
-  // Fallback for > 4 items: chunk into rows of 3 or 4
-  const chunked: OptionGridGroup[] = [];
-  const chunkSize = options.length === 6 ? 3 : options.length <= 8 ? 4 : 3;
-  for (let i = 0; i < options.length; i += chunkSize) {
-    chunked.push({
-      items: options.slice(i, i + chunkSize).map((opt, idx) => ({ opt, origIndex: i + idx }))
-    });
-  }
-  return chunked;
 }
 
 interface TriggerNodeEditorProps {
@@ -1219,6 +1310,7 @@ function ActionNodeEditor({
                 label="IF (Conditions)"
                 emptyText="No conditions in this IF block."
                 availableTriggers={availableTriggers}
+                catalog={catalog}
                 onUpdate={updatedConds => onUpdate({ ...act, conditions: updatedConds })}
                 onOpenAddConditionDialog={onOpenAddConditionDialog}
               />
@@ -1332,6 +1424,7 @@ function ActionNodeEditor({
                       label="Branch Conditions"
                       emptyText="No conditions in this branch."
                       availableTriggers={availableTriggers}
+                      catalog={catalog}
                       onUpdate={updatedConds => {
                         const choices = [...(act.choices || [])];
                         choices[chIdx].conditions = updatedConds;
@@ -2572,6 +2665,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 conditions={activeRule.conditions}
                 depth={0}
                 availableTriggers={activeRule.triggers}
+                catalog={catalog}
                 emptyText="No conditions set. Rule will always execute when triggers match."
                 onUpdate={conds => handleUpdateActiveRule({ conditions: conds })}
                 onOpenAddConditionDialog={openAddConditionDialog}

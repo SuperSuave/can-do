@@ -29,8 +29,8 @@ interface VehiclesTabProps {
   draftModifiedVehicleIds?: string[];
   allDiscoveredFeatures?: string[];
   onRegisterDiscoveredFeature?: (featureName: string) => void;
-  activeMainTab?: 'catalog' | 'vehicles' | 'automations';
-  onChangeMainTab?: (tab: 'catalog' | 'vehicles' | 'automations') => void;
+  activeMainTab?: 'catalog' | 'vehicles' | 'automations' | 'device' | 'dashboard';
+  onChangeMainTab?: (tab: 'catalog' | 'vehicles' | 'automations' | 'device' | 'dashboard') => void;
 }
 
 export const VehiclesTab: React.FC<VehiclesTabProps> = ({

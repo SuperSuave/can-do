@@ -478,15 +478,16 @@ export function commandToTrigger(cmd: Command, opt?: CommandOption): AutomationT
  * Convert a Catalog Command into an Automation Condition
  */
 export function commandToCondition(cmd: Command, opt?: CommandOption): AutomationCondition {
+  const chosenOpt = opt || (cmd.options && cmd.options.length > 0 ? (cmd.options.find(o => o.default) || cmd.options[0]) : undefined);
   const condId = `cond_${cmd.id}_${Date.now().toString(36).slice(-4)}`;
   const canId = cmd.network?.state_can_id || cmd.state_can_id || cmd.network?.action_can_id || cmd.action_can_id || '0x000';
-  const match = compileToByteMap(opt?.match || cmd.match || opt?.payload || cmd.payload);
+  const match = compileToByteMap(chosenOpt?.match || cmd.match || chosenOpt?.payload || cmd.payload);
   const cleanMatch = Object.keys(match).length > 0 ? match : { D1: '0x01' };
   const dKey = Object.keys(cleanMatch)[0] || 'D1';
   const targetVal = cleanMatch[dKey] || '0x01';
   const byteIdx = parseInt(dKey.replace(/\D/g, ''), 10) - 1;
 
-  const rawMask = opt?.mask || cmd.mask;
+  const rawMask = chosenOpt?.mask || cmd.mask;
   let targetMask = '0xFF';
   if (typeof rawMask === 'string') {
     targetMask = rawMask;
@@ -502,6 +503,8 @@ export function commandToCondition(cmd: Command, opt?: CommandOption): Automatio
     match: cleanMatch,
     byte: dKey,
     mask: targetMask,
+    operator: 'equal',
+    value: targetVal,
     evaluate: {
       byte: dKey,
       byte_index: isNaN(byteIdx) ? 0 : byteIdx,
@@ -511,8 +514,8 @@ export function commandToCondition(cmd: Command, opt?: CommandOption): Automatio
     },
     invert: false,
     source_command_id: cmd.id,
-    source_command_name: cmd.name || cmd.ha_metadata?.name || cmd.id,
-    option_label: opt?.label
+    source_command_name: cmd.ha_metadata?.name || cmd.name || cmd.id,
+    option_label: chosenOpt?.label
   };
 }
 
@@ -520,9 +523,10 @@ export function commandToCondition(cmd: Command, opt?: CommandOption): Automatio
  * Convert a Catalog Command into an Automation Action
  */
 export function commandToAction(cmd: Command, opt?: CommandOption): AutomationAction {
+  const chosenOpt = opt || (cmd.options && cmd.options.length > 0 ? (cmd.options.find(o => o.default) || cmd.options[0]) : undefined);
   const actId = `act_${cmd.id}_${Date.now().toString(36).slice(-4)}`;
   const canId = cmd.network?.action_can_id || cmd.action_can_id || cmd.network?.state_can_id || cmd.state_can_id || '0x000';
-  const cmdDisplayName = cmd.name || cmd.ha_metadata?.name || cmd.id;
+  const cmdDisplayName = cmd.ha_metadata?.name || cmd.name || cmd.id;
 
   if (cmd.type === 'climate_target') {
     return {
@@ -541,40 +545,41 @@ export function commandToAction(cmd: Command, opt?: CommandOption): AutomationAc
     return {
       id: actId,
       type: 'precondition',
-      precon_mode: (opt as any)?.precon_mode || 'persistent',
-      precon_action: (opt as any)?.precon_mode === 'cancel' ? 'stop' : 'start',
+      precon_mode: (chosenOpt as any)?.precon_mode || 'persistent',
+      precon_action: (chosenOpt as any)?.precon_mode === 'cancel' ? 'stop' : 'start',
       source_command_id: cmd.id,
       source_command_name: cmdDisplayName,
-      option_label: opt?.label
+      option_label: chosenOpt?.label
     };
   }
 
-  if ((cmd.options && cmd.options.length > 0) || opt?.label) {
+  if ((cmd.options && cmd.options.length > 0) || chosenOpt?.label) {
     return {
       id: actId,
       type: 'entity_command',
       entity_id: cmd.id,
-      command: opt?.label || 'Medium Cool',
+      command: chosenOpt?.label || 'Toggle',
       can_id: canId,
       bus: cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? 0,
-      popup_message: opt?.popup || `${cmdDisplayName} - ${opt?.label || 'Medium Cool'}`,
+      popup_message: chosenOpt?.popup || `${cmdDisplayName} - ${chosenOpt?.label || 'Toggle'}`,
       source_command_id: cmd.id,
       source_command_name: cmdDisplayName,
-      option_label: opt?.label
+      option_label: chosenOpt?.label
     };
   }
 
-  const payload = compileToByteMap(opt?.payload || cmd.payload || (cmd.steps && cmd.steps[0]?.payload));
+  const payload = compileToByteMap(chosenOpt?.payload || cmd.payload || (cmd.steps && cmd.steps[0]?.payload));
   return {
     id: actId,
     type: 'can_tx',
     can_id: canId,
     bus: cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? 0,
     payload: Object.keys(payload).length > 0 ? payload : { D1: '0x01' },
-    repeat: opt?.repeat || 1,
+    repeat: chosenOpt?.repeat || 1,
     delay_ms: 50,
     source_command_id: cmd.id,
-    source_command_name: cmdDisplayName
+    source_command_name: cmdDisplayName,
+    option_label: chosenOpt?.label
   };
 }
 
@@ -729,6 +734,96 @@ function findMatchingOptionForAction(cmd: Command, act: AutomationAction): Comma
     const byLabel = cmd.options.find(o => o.label.toLowerCase() === labelToMatch.toLowerCase());
     if (byLabel) return byLabel;
   }
+  if (act.payload && typeof act.payload === 'object') {
+    for (const opt of cmd.options) {
+      const optMap = compileToByteMap(opt.payload || opt.match);
+      const optKeys = Object.keys(optMap);
+      if (optKeys.length > 0 && optKeys.every(k => (act.payload as any)[k] === optMap[k])) {
+        return opt;
+      }
+    }
+  }
+  return cmd.options.find(o => o.default) || cmd.options[0];
+}
+
+/**
+ * Resolves the catalog command and matched option for a condition.
+ * Handles explicit source_command_id, ID hints, and CAN ID/byte matching.
+ */
+export function resolveCatalogCommandForCondition(
+  cond: AutomationCondition,
+  catalog: Catalog
+): { command?: Command; matchedOption?: CommandOption } {
+  if (!catalog?.commands) return {};
+
+  // 1. Direct ID match
+  if (cond.source_command_id) {
+    const cmd = catalog.commands.find(c => c.id === cond.source_command_id);
+    if (cmd) {
+      const opt = findMatchingOptionForCondition(cmd, cond);
+      return { command: cmd, matchedOption: opt };
+    }
+  }
+
+  // 2. ID name hint match (e.g. cond_gear_drive -> gear_selector)
+  if (cond.id) {
+    const lowerId = cond.id.toLowerCase();
+    for (const c of catalog.commands) {
+      if (lowerId.includes(c.id.toLowerCase())) {
+        const opt = findMatchingOptionForCondition(c, cond);
+        return { command: c, matchedOption: opt };
+      }
+    }
+  }
+
+  // 3. Match by CAN ID
+  if (cond.can_id) {
+    const normCanId = cond.can_id.toLowerCase();
+    const candidateCmds = catalog.commands.filter(c => {
+      const stateId = (c.network?.state_can_id || c.state_can_id || '').toLowerCase();
+      const actionId = (c.network?.action_can_id || c.action_can_id || '').toLowerCase();
+      return stateId === normCanId || actionId === normCanId;
+    });
+
+    if (candidateCmds.length === 1) {
+      const cmd = candidateCmds[0];
+      const opt = findMatchingOptionForCondition(cmd, cond);
+      return { command: cmd, matchedOption: opt };
+    }
+
+    if (candidateCmds.length > 1) {
+      for (const cmd of candidateCmds) {
+        const opt = findMatchingOptionForCondition(cmd, cond);
+        if (opt) return { command: cmd, matchedOption: opt };
+      }
+      return { command: candidateCmds[0], matchedOption: candidateCmds[0].options?.[0] };
+    }
+  }
+
+  return {};
+}
+
+function findMatchingOptionForCondition(cmd: Command, cond: AutomationCondition): CommandOption | undefined {
+  if (!cmd.options || cmd.options.length === 0) return undefined;
+  if (cond.option_label) {
+    const byLabel = cmd.options.find(o => o.label.toLowerCase() === cond.option_label?.toLowerCase());
+    if (byLabel) return byLabel;
+  }
+  const byteKey = cond.byte || cond.evaluate?.byte || (cond.match ? Object.keys(cond.match)[0] : undefined);
+  const targetVal = cond.value || cond.evaluate?.value || (byteKey && cond.match ? cond.match[byteKey] : undefined);
+  const targetHex = targetVal
+    ? (targetVal.startsWith('0x') || targetVal.startsWith('0X') ? targetVal : `0x${targetVal}`).toLowerCase()
+    : undefined;
+
+  if (byteKey && targetHex) {
+    for (const opt of cmd.options) {
+      const match = compileToByteMap(opt.match || opt.payload);
+      if (match[byteKey] && match[byteKey].toLowerCase() === targetHex) {
+        return opt;
+      }
+    }
+  }
+
   return cmd.options.find(o => o.default) || cmd.options[0];
 }
 
@@ -802,5 +897,52 @@ export function applyOptionToAction(act: AutomationAction, cmd: Command, opt: Co
     bus: cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? act.bus ?? 0,
     payload: Object.keys(payload).length > 0 ? payload : act.payload,
     popup_message: opt.popup || act.popup_message
+  };
+}
+
+/**
+ * Apply a selected catalog option to a condition
+ */
+export function applyOptionToCondition(
+  cond: AutomationCondition,
+  cmd: Command,
+  opt: CommandOption
+): AutomationCondition {
+  const cleanMatch = compileToByteMap(opt.match || opt.payload || cmd.match || cmd.payload);
+  const dKey = Object.keys(cleanMatch)[0] || cond.byte || 'D1';
+  const targetVal = cleanMatch[dKey] || '0x01';
+  const byteNum = parseInt(dKey.replace(/\D/g, ''), 10);
+  const byteIdx = isNaN(byteNum) ? 0 : byteNum - 1;
+
+  const rawMask = opt.mask || cmd.mask;
+  let targetMask = '0xFF';
+  if (typeof rawMask === 'string') {
+    targetMask = rawMask;
+  } else if (rawMask && typeof rawMask === 'object') {
+    targetMask = (rawMask as ByteMap)[dKey] || '0xFF';
+  }
+
+  const friendlyName = cmd.ha_metadata?.name || cmd.name || cmd.id;
+
+  return {
+    ...cond,
+    source_command_id: cmd.id,
+    source_command_name: friendlyName,
+    option_label: opt.label,
+    can_id: cmd.network?.state_can_id || cmd.state_can_id || cmd.network?.action_can_id || cmd.action_can_id || cond.can_id || '0x000',
+    bus: cmd.network?.bus ?? cmd.bus ?? cond.bus ?? 0,
+    byte: dKey,
+    mask: targetMask,
+    match: cleanMatch,
+    operator: 'equal',
+    value: targetVal,
+    evaluate: {
+      byte: dKey,
+      byte_index: byteIdx,
+      operator: 'equal',
+      value: targetVal,
+      mask: targetMask
+    },
+    invert: false
   };
 }

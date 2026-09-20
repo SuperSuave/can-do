@@ -21,6 +21,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { CanDoLogo } from './components/CanDoLogo';
 import { AutomationBuilder } from './components/AutomationBuilder';
 import { DeviceDashboard } from './components/DeviceDashboard';
+import { VehicleDashboard } from './components/VehicleDashboard';
 import { 
   AutomationRule, 
   AutomationSettings, 
@@ -48,6 +49,7 @@ import {
   Car,
   Layers,
   Radio,
+  Gauge,
   X
 } from 'lucide-react';
 
@@ -131,7 +133,7 @@ export default function App() {
   const [repoConfig, setRepoConfig] = useState<GitHubRepoConfig>(() => getSavedRepoConfig());
 
   // 4. Navigation & Modals state
-  const [activeMainTab, setActiveMainTab] = useState<'catalog' | 'vehicles' | 'automations' | 'device'>('catalog');
+  const [activeMainTab, setActiveMainTab] = useState<'dashboard' | 'catalog' | 'vehicles' | 'automations' | 'device'>('dashboard');
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
   const [editingCommand, setEditingCommand] = useState<Command | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -897,6 +899,30 @@ export default function App() {
               />
 
               <button
+                id="main-tab-dashboard"
+                ref={el => { tabRefs.current['dashboard'] = el; }}
+                type="button"
+                onClick={() => setActiveMainTab('dashboard')}
+                className={`relative z-10 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
+                  activeMainTab === 'dashboard'
+                    ? 'text-white font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Gauge className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'dashboard' ? 'text-sky-400' : 'text-slate-500'}`} />
+                <span>Live Cockpit</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono transition-colors ${
+                    activeMainTab === 'dashboard'
+                      ? 'bg-slate-900/90 text-sky-300 border border-slate-700/70'
+                      : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
+                  }`}
+                >
+                  LIVE
+                </span>
+              </button>
+
+              <button
                 id="main-tab-messages"
                 ref={el => { tabRefs.current['catalog'] = el; }}
                 type="button"
@@ -1142,6 +1168,22 @@ export default function App() {
             onUpdateSettings={setAutomationSettings}
             initialSelectedCommandIds={Array.from(selectedForAutomation)}
             onNavigateToCatalog={() => setActiveMainTab('catalog')}
+          />
+        ) : activeMainTab === 'dashboard' ? (
+          /* Live Vehicle Cockpit Dashboard */
+          <VehicleDashboard
+            catalog={catalog}
+            activeVehicle={
+              selectedVehicleId !== 'all'
+                ? catalog.vehicles.find(v => v.id === selectedVehicleId)
+                : catalog.vehicles[0]
+            }
+            onSelectVehicle={vId => setSelectedVehicleId(vId)}
+            onNavigateToCatalog={(searchQuery) => {
+              if (searchQuery) setSearch(searchQuery);
+              setActiveMainTab('catalog');
+            }}
+            onNavigateToAutomations={() => setActiveMainTab('automations')}
           />
         ) : (
           /* Device Console Tab */

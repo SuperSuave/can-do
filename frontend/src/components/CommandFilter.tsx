@@ -45,8 +45,8 @@ interface CommandFilterProps {
   onNavigateToVehicles?: () => void;
   filteredCount: number;
   totalCount: number;
-  activeMainTab?: 'catalog' | 'vehicles' | 'automations';
-  onChangeMainTab?: (tab: 'catalog' | 'vehicles' | 'automations') => void;
+  activeMainTab?: 'catalog' | 'vehicles' | 'automations' | 'device' | 'dashboard';
+  onChangeMainTab?: (tab: 'catalog' | 'vehicles' | 'automations' | 'device' | 'dashboard') => void;
   onExpandAll?: () => void;
   onCollapseAll?: () => void;
 }
