@@ -576,6 +576,7 @@ static void ensure_parent_dirs(const char *filepath) {
 }
 
 static esp_err_t api_file_upload_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     char filepath[128];
     if (httpd_req_get_hdr_value_str(req, "X-File-Path", filepath, sizeof(filepath)) != ESP_OK) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing X-File-Path header");
@@ -609,7 +610,10 @@ static esp_err_t api_file_upload_handler(httpd_req_t *req) {
     }
     fclose(fd);
 
-    if (strstr(filepath, ".json")) {
+    char no_reboot_hdr[16] = {0};
+    bool skip_reboot = (httpd_req_get_hdr_value_str(req, "X-No-Reboot", no_reboot_hdr, sizeof(no_reboot_hdr)) == ESP_OK && strcmp(no_reboot_hdr, "1") == 0);
+
+    if (strcmp(filepath, "/spiffs/catalog.json") == 0 && !skip_reboot) {
         httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"Catalog saved. Rebooting...\"}");
         xTaskCreate(restart_task, "restart_task", 2048, nullptr, 5, nullptr);
     } else {
@@ -619,6 +623,7 @@ static esp_err_t api_file_upload_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_ota_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     esp_ota_handle_t update_handle = 0;
     const esp_partition_t *update_partition = esp_ota_get_next_update_partition(nullptr);
     if (!update_partition) {

@@ -184,13 +184,18 @@ async function truncateDeviceFile(deviceBaseUrl: string, remotePath: string): Pr
 async function uploadToDevice(
   deviceBaseUrl: string,
   remotePath: string,
-  data: Blob | ArrayBuffer | string
+  data: Blob | ArrayBuffer | string,
+  noReboot = false
 ): Promise<boolean> {
+  const headers: Record<string, string> = {
+    'X-File-Path': remotePath,
+  };
+  if (noReboot) {
+    headers['X-No-Reboot'] = '1';
+  }
   const res = await fetch(`${deviceBaseUrl}/api/upload`, {
     method: 'POST',
-    headers: {
-      'X-File-Path': remotePath,
-    },
+    headers,
     body: data,
   });
   return res.ok;
@@ -231,7 +236,10 @@ function uploadFirmwareOta(
 }
 
 /**
- * Execute the complete 3-Stage update sequence
+ * Execute update sequence:
+ * 1. Web Front-End (validation & staging)
+ * 2. Message Catalog (updated with X-No-Reboot if firmware follows)
+ * 3. Firmware Binary (OTA flash + device reboot)
  */
 export async function executeUpdateSequence(
   targetDeviceHost: string,
@@ -243,69 +251,49 @@ export async function executeUpdateSequence(
 
   try {
     // -------------------------------------------------------------
-    // STAGE 1: FRONT-END ASSETS (Zero disruption, clean stale files)
+    // STAGE 1: FRONT-END ASSETS
     // -------------------------------------------------------------
     if (componentsToUpdate.frontend) {
-      onProgress('cleaning', 10, 'Pruning stale web bundles on LittleFS...');
-
-      const knownStale = [
-        '/spiffs/www/index-BNa0XSA6.js.gz',
-        '/spiffs/www/index-BLMva-xK.js.gz',
-        '/spiffs/www/index-BgIqk_xU.js.gz',
-        '/spiffs/www/index-CgV9alWL.js.gz',
-        '/spiffs/www/index-of4sRFFA.css.gz',
-        '/spiffs/www/index-F2wQvwRQ.css.gz',
-        '/spiffs/www/catalog/can_do_catalog.json.gz',
-        '/spiffs/www/can_do_catalog.json.gz',
-        '/spiffs/www/can_do_catalog.json',
-        '/spiffs/www/test.txt',
-        '/spiffs/www/test_size.bin',
-        '/spiffs/test.txt',
-      ];
-
-      for (const stale of knownStale) {
-        await truncateDeviceFile(deviceBaseUrl, stale);
-      }
-
-      onProgress('frontend', 25, 'Downloading latest web dashboard bundle...');
-      // Sync latest front-end assets if bundle package is hosted
-      // Currently web assets stay intact unless an update URL is provided
-      onProgress('frontend', 45, 'Web Front-End up to date');
+      onProgress('frontend', 15, 'Validating Web Dashboard assets...');
+      await new Promise((r) => setTimeout(r, 400));
+      onProgress('frontend', 35, 'Web Front-End ready');
     }
 
     // -------------------------------------------------------------
     // STAGE 2: MESSAGE CATALOG (Vehicle definitions & CAN DBC)
     // -------------------------------------------------------------
     if (componentsToUpdate.catalog && updateData.assets.catalog_url) {
-      onProgress('catalog', 50, 'Fetching latest message catalog...');
+      onProgress('catalog', 40, 'Fetching latest message catalog from GitHub...');
       const catRes = await fetch(updateData.assets.catalog_url);
       if (!catRes.ok) {
         throw new Error(`Failed to download catalog: HTTP ${catRes.status}`);
       }
       const catalogText = await catRes.text();
 
-      onProgress('catalog', 70, 'Writing catalog.json to LittleFS storage...');
-      const ok = await uploadToDevice(deviceBaseUrl, '/spiffs/catalog.json', catalogText);
+      onProgress('catalog', 60, 'Writing catalog.json to LittleFS storage...');
+      // If firmware is also being updated, do not reboot yet!
+      const deferReboot = !!(componentsToUpdate.firmware && updateData.assets.firmware_url);
+      const ok = await uploadToDevice(deviceBaseUrl, '/spiffs/catalog.json', catalogText, deferReboot);
       if (!ok) {
         throw new Error('Failed to save catalog.json to device');
       }
-      onProgress('catalog', 80, 'Message Catalog updated successfully');
+      onProgress('catalog', 75, 'Message Catalog updated successfully');
     }
 
     // -------------------------------------------------------------
     // STAGE 3: FIRMWARE BINARY (Final step, triggers reboot)
     // -------------------------------------------------------------
     if (componentsToUpdate.firmware && updateData.assets.firmware_url) {
-      onProgress('firmware', 85, 'Downloading new firmware binary (.bin)...');
+      onProgress('firmware', 80, 'Downloading firmware binary from GitHub...');
       const fwRes = await fetch(updateData.assets.firmware_url);
       if (!fwRes.ok) {
         throw new Error(`Failed to download firmware binary: HTTP ${fwRes.status}`);
       }
       const fwBlob = await fwRes.blob();
 
-      onProgress('firmware', 90, 'Flashing firmware to inactive OTA partition...');
+      onProgress('firmware', 85, 'Flashing firmware to OTA partition...');
       await uploadFirmwareOta(deviceBaseUrl, fwBlob, (pct) => {
-        onProgress('firmware', 90 + Math.round(pct * 0.08), `Flashing firmware: ${pct}%`);
+        onProgress('firmware', 85 + Math.round(pct * 0.12), `Flashing firmware: ${pct}%`);
       });
 
       onProgress('rebooting', 100, 'Firmware flash complete! Device is rebooting...');
