@@ -26,6 +26,12 @@ export interface UserPreferences {
   update_schedule: UpdateScheduleConfig;
   ha_prompt_dismissed: boolean;
   last_update_check?: string;
+  min_12v_gate_voltage?: number;
+  quiet_hours_enabled?: boolean;
+  quiet_hours_start?: string;
+  quiet_hours_end?: string;
+  uds_sleep_delay_sec?: number;
+  uds_awake_interval_sec?: number;
 }
 
 export const STORAGE_KEY_USER_PREFERENCES = 'can_do_user_preferences';
@@ -45,6 +51,12 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
     time: '03:00',
   },
   ha_prompt_dismissed: false,
+  min_12v_gate_voltage: 12.2,
+  quiet_hours_enabled: false,
+  quiet_hours_start: '22:00',
+  quiet_hours_end: '07:00',
+  uds_sleep_delay_sec: 10,
+  uds_awake_interval_sec: 15,
 };
 
 export function getUserPreferences(): UserPreferences {

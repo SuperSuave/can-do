@@ -11,8 +11,10 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     PERCENTAGE,
+    UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfLength,
+    UnitOfPower,
     UnitOfSpeed,
     UnitOfTemperature,
 )
@@ -66,7 +68,19 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
             self._attr_device_class = SensorDeviceClass.DISTANCE
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
             self._attr_native_unit_of_measurement = UnitOfLength.KILOMETERS if "km" in unit.lower() else UnitOfLength.MILES
-        elif "soc" in cid or unit == "%":
+        elif "power" in cid or unit.lower() in ("kw", "w"):
+            self._attr_device_class = SensorDeviceClass.POWER
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+            self._attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
+        elif "current" in cid or unit.lower() == "a":
+            self._attr_device_class = SensorDeviceClass.CURRENT
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+            self._attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
+        elif "delta" in cid or unit.lower() == "mv":
+            self._attr_device_class = SensorDeviceClass.VOLTAGE
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+            self._attr_native_unit_of_measurement = UnitOfElectricPotential.MILLIVOLT
+        elif "soc" in cid or "v2l" in cid or unit == "%":
             self._attr_device_class = SensorDeviceClass.BATTERY
             self._attr_state_class = SensorStateClass.MEASUREMENT
             self._attr_native_unit_of_measurement = PERCENTAGE
@@ -88,8 +102,21 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
         net = self.command.get("network", {})
         cid = self.entity_id_str.lower()
 
+        # 0. Direct numeric float or int payload (UDS telemetry or hardware ADC)
+        if isinstance(payload, (int, float)):
+            return round(float(payload), 2)
+
         # 1. Specialized Numeric Decoders
-        # 1A. Cluster Vehicle Road Speed (0x1AC Byte D1 = kph)
+        # 1A. V2L Minimum Discharge Limit (0x151 Byte D7: factor 0.5 %)
+        if "v2l" in cid or self.state_can_id.lower() == "0x151":
+            if isinstance(payload, list):
+                for idx in (6, 7):
+                    if idx < len(payload):
+                        raw = payload[idx]
+                        if 0x20 <= raw <= 0xB0:
+                            return int(round(raw * 0.5))
+
+        # 1B. Cluster Vehicle Road Speed (0x1AC Byte D1 = kph)
         if "cluster_vehicle_speed" in cid or (self.state_can_id.lower() == "0x1ac" and "speed" in cid):
             if len(payload) >= 1:
                 return int(payload[0])

@@ -18,7 +18,8 @@
         "sunroof",
         "touch_bar",
         "asd",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -36,7 +37,8 @@
         "power_tailgate",
         "camera_360",
         "sunroof",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -51,7 +53,8 @@
         "heated_seats",
         "heated_wheel",
         "power_tailgate",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -64,7 +67,8 @@
       "family": "hyundai_ioniq5",
       "features": [
         "heated_seats",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -82,7 +86,8 @@
         "power_tailgate",
         "camera_360",
         "asd",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -100,7 +105,8 @@
         "power_tailgate",
         "camera_360",
         "sunroof",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -115,7 +121,8 @@
         "heated_seats",
         "heated_wheel",
         "power_tailgate",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -128,7 +135,8 @@
       "family": "hyundai_ioniq5",
       "features": [
         "heated_seats",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -148,7 +156,8 @@
         "sunroof",
         "touch_bar",
         "asd",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -166,7 +175,8 @@
         "power_tailgate",
         "touch_bar",
         "asd",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -185,7 +195,8 @@
         "sunroof",
         "touch_bar",
         "asd",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -199,7 +210,8 @@
       "features": [
         "heated_seats",
         "touch_bar",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -219,7 +231,8 @@
         "sunroof",
         "touch_bar",
         "asd",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -234,7 +247,8 @@
         "heated_seats",
         "heated_wheel",
         "touch_bar",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -253,7 +267,8 @@
         "camera_360",
         "sunroof",
         "asd",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -268,7 +283,8 @@
         "heated_seats",
         "power_tailgate",
         "asd",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -282,7 +298,8 @@
       "features": [
         "heated_seats",
         "power_tailgate",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -301,7 +318,8 @@
         "camera_360",
         "sunroof",
         "asd",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -317,7 +335,8 @@
         "heated_wheel",
         "power_tailgate",
         "asd",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -336,7 +355,8 @@
         "camera_360",
         "sunroof",
         "asd",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -355,7 +375,8 @@
         "camera_360",
         "sunroof",
         "asd",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -371,7 +392,8 @@
         "ventilated_seats",
         "heated_wheel",
         "power_tailgate",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -390,7 +412,8 @@
         "camera_360",
         "sunroof",
         "asd",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     },
     {
@@ -409,7 +432,8 @@
         "camera_360",
         "sunroof",
         "asd",
-        "preconditioning"
+        "preconditioning",
+        "v2l"
       ]
     }
   ],
@@ -5748,6 +5772,340 @@
           }
         }
       ]
+    },
+    {
+      "id": "v2l_minimum_charge_limit",
+      "ha_metadata": {
+        "name": "V2L Minimum Charge Limit",
+        "domain": "select",
+        "icon": "mdi:power-plug-battery"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx_tx",
+        "state_can_id": "0x151",
+        "action_can_id": "0x0C7",
+        "delay_ms": 20
+      },
+      "category": "High Voltage Battery & Charging",
+      "roles": [
+        "action",
+        "condition"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "V2L minimum discharge limit % (frame 0x0C7 D2 command with FF pulse, frame 0x151 D7 state)"
+      },
+      "options": [
+        {
+          "label": "20%",
+          "popup": "V2L Limit: 20%",
+          "match": {
+            "D7": "0x28"
+          },
+          "default": true,
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x28"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "30%",
+          "popup": "V2L Limit: 30%",
+          "match": {
+            "D7": "0x3C"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x3C"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "40%",
+          "popup": "V2L Limit: 40%",
+          "match": {
+            "D7": "0x50"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x50"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "50%",
+          "popup": "V2L Limit: 50%",
+          "match": {
+            "D7": "0x64"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x64"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "60%",
+          "popup": "V2L Limit: 60%",
+          "match": {
+            "D7": "0x78"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x78"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "70%",
+          "popup": "V2L Limit: 70%",
+          "match": {
+            "D7": "0x8C"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x8C"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "80%",
+          "popup": "V2L Limit: 80%",
+          "match": {
+            "D7": "0xA0"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0xA0"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "v2l_minimum_charge_state",
+      "ha_metadata": {
+        "name": "V2L Minimum Charge Limit",
+        "domain": "sensor",
+        "icon": "mdi:power-plug-battery"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x151",
+        "unit": "%"
+      },
+      "category": "High Voltage Battery & Charging",
+      "roles": [
+        "condition"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "V2L minimum charge threshold state"
+      }
+    },
+    {
+      "id": "bms_hv_power_kw",
+      "ha_metadata": {
+        "name": "High Voltage Net Power",
+        "domain": "sensor",
+        "icon": "mdi:flash"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "bms_hv_kw",
+        "unit": "kW"
+      },
+      "category": "High Voltage Battery & Charging",
+      "roles": [
+        "condition"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Live BMS pack net power (positive = discharging, negative = charging / regen)"
+      }
+    },
+    {
+      "id": "bms_hv_voltage",
+      "ha_metadata": {
+        "name": "High Voltage Pack Voltage",
+        "domain": "sensor",
+        "icon": "mdi:lightning-bolt"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "bms_hv_v",
+        "unit": "V"
+      },
+      "category": "High Voltage Battery & Charging",
+      "roles": [
+        "condition"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Live BMS pack total voltage"
+      }
+    },
+    {
+      "id": "bms_hv_current",
+      "ha_metadata": {
+        "name": "High Voltage Pack Current",
+        "domain": "sensor",
+        "icon": "mdi:current-dc"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "bms_hv_a",
+        "unit": "A"
+      },
+      "category": "High Voltage Battery & Charging",
+      "roles": [
+        "condition"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Live BMS pack total current"
+      }
+    },
+    {
+      "id": "bms_cell_delta_mv",
+      "ha_metadata": {
+        "name": "HV Cell Voltage Delta",
+        "domain": "sensor",
+        "icon": "mdi:chart-bell-curve"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "bms_cell_delta_mv",
+        "unit": "mV"
+      },
+      "category": "High Voltage Battery & Charging",
+      "roles": [
+        "condition"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Difference between highest and lowest cell voltage in pack"
+      }
+    },
+    {
+      "id": "bms_display_soc",
+      "ha_metadata": {
+        "name": "BMS Real State of Charge",
+        "domain": "sensor",
+        "icon": "mdi:battery-high"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "bms_soc",
+        "unit": "%"
+      },
+      "category": "High Voltage Battery & Charging",
+      "roles": [
+        "condition"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "High precision BMS internal state of charge"
+      }
     }
   ],
   "automations": [

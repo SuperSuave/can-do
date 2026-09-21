@@ -33,4 +33,4 @@ struct BleButtonEvent;
 void mqtt_mgr_publish_ble_event(const BleButtonEvent& event);
 void mqtt_mgr_publish_ble_status(void);
 void mqtt_mgr_publish_vbat(float vbat);
-
+void mqtt_mgr_publish_bms(float kw, float soc, float v, float a, float delta_mv, int min_t, int max_t);

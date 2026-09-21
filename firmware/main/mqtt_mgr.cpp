@@ -534,3 +534,29 @@ void mqtt_mgr_publish_vbat(float vbat) {
     esp_mqtt_client_publish(global_mqtt_client, entity_topic.c_str(), val_str, 0, 1, 1);
 }
 
+void mqtt_mgr_publish_bms(float kw, float soc, float v, float a, float delta_mv, int min_t, int max_t) {
+    if (!global_mqtt_client || !s_mqtt_connected.load()) return;
+
+    char val_str[32];
+
+    snprintf(val_str, sizeof(val_str), "%.2f", kw);
+    std::string kw_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_kw";
+    esp_mqtt_client_publish(global_mqtt_client, kw_topic.c_str(), val_str, 0, 1, 1);
+
+    snprintf(val_str, sizeof(val_str), "%.1f", soc);
+    std::string soc_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_soc";
+    esp_mqtt_client_publish(global_mqtt_client, soc_topic.c_str(), val_str, 0, 1, 1);
+
+    snprintf(val_str, sizeof(val_str), "%.1f", v);
+    std::string v_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_v";
+    esp_mqtt_client_publish(global_mqtt_client, v_topic.c_str(), val_str, 0, 1, 1);
+
+    snprintf(val_str, sizeof(val_str), "%.1f", a);
+    std::string a_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_a";
+    esp_mqtt_client_publish(global_mqtt_client, a_topic.c_str(), val_str, 0, 1, 1);
+
+    snprintf(val_str, sizeof(val_str), "%.0f", delta_mv);
+    std::string delta_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_cell_delta_mv";
+    esp_mqtt_client_publish(global_mqtt_client, delta_topic.c_str(), val_str, 0, 1, 1);
+}
+

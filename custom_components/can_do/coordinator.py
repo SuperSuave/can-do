@@ -164,8 +164,8 @@ class CanDoDataCoordinator:
         if not hex_payload:
             return
 
-        # Handle direct decimal float telemetry (e.g. MeatPi WiCAN 12V battery ADC: "12.6")
-        if can_id in ("vbat", "cond_aux_12v_battery") or "." in hex_payload:
+        # Handle direct decimal float telemetry (e.g. MeatPi WiCAN 12V battery ADC: "12.6", BMS telemetry)
+        if can_id in ("vbat", "cond_aux_12v_battery") or can_id.startswith("bms_") or "." in hex_payload:
             try:
                 clean_num = hex_payload.split()[0]
                 val = float(clean_num)

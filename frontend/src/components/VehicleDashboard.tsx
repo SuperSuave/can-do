@@ -164,6 +164,12 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     return saved ? parseFloat(saved) : 13.8;
   });
 
+  // Deep BMS Telemetry (Safe UDS Engine)
+  const [hvPowerKw, setHvPowerKw] = useState<number | null>(null);
+  const [hvVoltage, setHvVoltage] = useState<number | null>(null);
+  const [hvCurrent, setHvCurrent] = useState<number | null>(null);
+  const [cellDeltaMv, setCellDeltaMv] = useState<number | null>(null);
+
   // Climate & Comfort
   const [hvacPower, setHvacPower] = useState(true);
   const [hvacAuto, setHvacAuto] = useState(true);
@@ -450,6 +456,18 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     } else if (entity === 'vehicle_odometer') {
       const match = stateStr.match(/(\d+)/);
       if (match) setOdometer(parseInt(match[1], 10));
+    } else if (entity === 'hv_power_kw' || entity === 'bms_hv_kw') {
+      const match = stateStr.match(/(-?\d+(\.\d+)?)/);
+      if (match) setHvPowerKw(parseFloat(match[1]));
+    } else if (entity === 'hv_battery_voltage' || entity === 'bms_hv_v') {
+      const match = stateStr.match(/(\d+(\.\d+)?)/);
+      if (match) setHvVoltage(parseFloat(match[1]));
+    } else if (entity === 'hv_battery_current' || entity === 'bms_hv_a') {
+      const match = stateStr.match(/(-?\d+(\.\d+)?)/);
+      if (match) setHvCurrent(parseFloat(match[1]));
+    } else if (entity === 'hv_cell_delta_mv' || entity === 'bms_cell_delta_mv') {
+      const match = stateStr.match(/(\d+(\.\d+)?)/);
+      if (match) setCellDeltaMv(parseFloat(match[1]));
     }
   };
 
@@ -1231,6 +1249,26 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   <span className="text-[10px] uppercase text-slate-400 block font-semibold">Pack Max Temp</span>
                   <span className="font-mono font-bold text-slate-300">{batteryMaxTempC}°C</span>
                 </div>
+                {hvPowerKw !== null && (
+                  <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50">
+                    <span className="text-[10px] uppercase text-slate-400 block font-semibold">Live Pack Power</span>
+                    <span className={`font-mono font-bold ${hvPowerKw < 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {hvPowerKw > 0 ? `+${hvPowerKw.toFixed(1)}` : hvPowerKw.toFixed(1)} kW
+                    </span>
+                  </div>
+                )}
+                {cellDeltaMv !== null && (
+                  <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50">
+                    <span className="text-[10px] uppercase text-slate-400 block font-semibold">Cell Delta</span>
+                    <span className="font-mono font-bold text-cyan-300">{cellDeltaMv.toFixed(0)} mV</span>
+                  </div>
+                )}
+                {hvVoltage !== null && (
+                  <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50">
+                    <span className="text-[10px] uppercase text-slate-400 block font-semibold">HV Bus Voltage</span>
+                    <span className="font-mono font-bold text-slate-300">{hvVoltage.toFixed(0)} V {hvCurrent !== null ? `(${hvCurrent.toFixed(1)} A)` : ''}</span>
+                  </div>
+                )}
               </div>
             </div>
 

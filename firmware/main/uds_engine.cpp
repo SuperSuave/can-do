@@ -161,6 +161,9 @@ static void decode_bms_payload(const uint8_t* payload, size_t len) {
 
     snprintf(buf, sizeof(buf), "{\"type\":\"state\",\"entity\":\"hv_cell_delta_mv\",\"state\":\"%.0f mV\"}", cell_delta_mv);
     broadcast_ws_raw(buf);
+
+    // Publish to MQTT
+    mqtt_mgr_publish_bms(power_kw, soc, voltage_v, current_a, cell_delta_mv, temp_min, temp_max);
 }
 
 void uds_engine_on_can_rx(const twai_message_t* msg) {

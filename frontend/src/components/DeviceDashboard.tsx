@@ -45,7 +45,9 @@ import {
   Info,
   Bluetooth,
   Sparkles,
-  Bell
+  Bell,
+  Battery,
+  Moon
 } from 'lucide-react';
 import { Catalog, Command } from '../types/catalog';
 import { AutomationRule, AutomationTrigger } from '../types/automation';
@@ -2219,6 +2221,145 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Smart Low-Power & 12V Battery Gate */}
+          <div className="can-do-card p-4 sm:p-5 space-y-4">
+            <div>
+              <h4 className="text-xs sm:text-sm font-bold text-[var(--text-heading)] flex items-center gap-2">
+                <Battery className="w-4 h-4 text-emerald-400" />
+                Power Management & 12V Protection Gate
+              </h4>
+              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                Protect your 12V auxiliary battery, throttle Wi-Fi power when vehicle is silent, and configure quiet hours
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* 12V Battery Cutoff Gate */}
+              <div className="p-3.5 rounded-xl border border-slate-700/60 bg-slate-800/30 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-semibold text-white">12V Cutoff Gate</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-amber-400">
+                    {(localPrefs.min_12v_gate_voltage ?? 12.2).toFixed(1)} V
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-relaxed">
+                  Halts all active UDS diagnostic requests and suspends wake cycles if 12V drops below this voltage.
+                </p>
+                <div className="flex items-center gap-3 pt-1">
+                  <input
+                    type="range"
+                    min="11.5"
+                    max="12.8"
+                    step="0.1"
+                    value={localPrefs.min_12v_gate_voltage ?? 12.2}
+                    onChange={(e) =>
+                      handleSavePreferences({ min_12v_gate_voltage: parseFloat(e.target.value) })
+                    }
+                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-700 rounded-lg"
+                  />
+                </div>
+              </div>
+
+              {/* Quiet / Offline Hours */}
+              <div className="p-3.5 rounded-xl border border-slate-700/60 bg-slate-800/30 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Moon className="w-4 h-4 text-indigo-400" />
+                    <span className="text-xs font-semibold text-white">Quiet / Offline Hours</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleSavePreferences({ quiet_hours_enabled: !localPrefs.quiet_hours_enabled })
+                    }
+                    className={`text-[10px] px-2 py-0.5 rounded font-bold transition ${
+                      localPrefs.quiet_hours_enabled
+                        ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
+                        : 'bg-slate-700/50 text-slate-400 border border-slate-600'
+                    }`}
+                  >
+                    {localPrefs.quiet_hours_enabled ? 'ENABLED' : 'DISABLED'}
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-relaxed">
+                  Suspends all active vehicle polling overnight and optimizes low-power modem sleep.
+                </p>
+                {localPrefs.quiet_hours_enabled && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="time"
+                      value={localPrefs.quiet_hours_start || '22:00'}
+                      onChange={(e) => handleSavePreferences({ quiet_hours_start: e.target.value })}
+                      className="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-xs text-white font-mono"
+                    />
+                    <span className="text-xs text-slate-400">to</span>
+                    <input
+                      type="time"
+                      value={localPrefs.quiet_hours_end || '07:00'}
+                      onChange={(e) => handleSavePreferences({ quiet_hours_end: e.target.value })}
+                      className="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-xs text-white font-mono"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Inactivity Sleep Delay */}
+              <div className="p-3.5 rounded-xl border border-slate-700/60 bg-slate-800/30 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-white">Car-Off Sleep Timeout</span>
+                  <span className="text-xs font-mono font-bold text-cyan-400">
+                    {localPrefs.uds_sleep_delay_sec ?? 10}s
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-relaxed">
+                  Delay after CAN traffic stops before halting UDS and entering modem sleep.
+                </p>
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="range"
+                    min="5"
+                    max="60"
+                    step="5"
+                    value={localPrefs.uds_sleep_delay_sec ?? 10}
+                    onChange={(e) =>
+                      handleSavePreferences({ uds_sleep_delay_sec: parseInt(e.target.value, 10) })
+                    }
+                    className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-slate-700 rounded-lg"
+                  />
+                </div>
+              </div>
+
+              {/* Awake Polling Interval */}
+              <div className="p-3.5 rounded-xl border border-slate-700/60 bg-slate-800/30 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-white">Awake Polling Interval</span>
+                  <span className="text-xs font-mono font-bold text-cyan-400">
+                    {localPrefs.uds_awake_interval_sec ?? 15}s
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-relaxed">
+                  Frequency of high-voltage BMS queries while driving or charging.
+                </p>
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="range"
+                    min="5"
+                    max="60"
+                    step="5"
+                    value={localPrefs.uds_awake_interval_sec ?? 15}
+                    onChange={(e) =>
+                      handleSavePreferences({ uds_awake_interval_sec: parseInt(e.target.value, 10) })
+                    }
+                    className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-slate-700 rounded-lg"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Manual Binary Upload (Legacy / Custom Dev Builds) */}
