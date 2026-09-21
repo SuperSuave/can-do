@@ -5316,7 +5316,7 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "vbat",
+        "state_can_id": "0x1CF",
         "state_byte": "D6",
         "unit": "V",
         "factor": 0.1
@@ -5990,7 +5990,7 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "bms_hv_kw",
+        "state_can_id": "0x7EC",
         "unit": "kW"
       },
       "category": "High Voltage Battery & Charging",
@@ -6016,7 +6016,7 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "bms_hv_v",
+        "state_can_id": "0x7EC",
         "unit": "V"
       },
       "category": "High Voltage Battery & Charging",
@@ -6042,7 +6042,7 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "bms_hv_a",
+        "state_can_id": "0x7EC",
         "unit": "A"
       },
       "category": "High Voltage Battery & Charging",
@@ -6068,7 +6068,7 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "bms_cell_delta_mv",
+        "state_can_id": "0x7EC",
         "unit": "mV"
       },
       "category": "High Voltage Battery & Charging",
@@ -6094,7 +6094,7 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "bms_soc",
+        "state_can_id": "0x7EC",
         "unit": "%"
       },
       "category": "High Voltage Battery & Charging",
