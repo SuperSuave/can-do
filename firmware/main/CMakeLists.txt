@@ -1,3 +1,11 @@
+if(IDF_VERSION_MAJOR GREATER_EQUAL 6)
+    set(MQTT_COMPONENT "espressif__mqtt")
+    set(CJSON_COMPONENT "espressif__cjson")
+else()
+    set(MQTT_COMPONENT "mqtt")
+    set(CJSON_COMPONENT "json")
+endif()
+
 idf_component_register(
     SRCS 
         "main.cpp"
@@ -24,14 +32,14 @@ idf_component_register(
         "esp_http_server"
         "app_update"
         "driver"
-        "espressif__mqtt"
+        ${MQTT_COMPONENT}
         "esp_wifi"
         "esp_event"
         "esp_netif"
         "esp_timer"
         "esp_partition"
         "lwip"
-        "espressif__cjson"
+        ${CJSON_COMPONENT}
         "joltwallet__littlefs"
         "espressif__mdns"
         "bt"
