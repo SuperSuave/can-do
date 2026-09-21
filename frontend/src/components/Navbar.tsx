@@ -76,7 +76,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="text-base font-bold text-white tracking-tight">CAN Do</span>
                   <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-cyan-300 font-mono border border-slate-700">
-                    v{catalog.catalog_version}
+                    {catalog.catalog_version}
                   </span>
                 </div>
                 <div className="text-[11px] text-slate-400 font-medium">

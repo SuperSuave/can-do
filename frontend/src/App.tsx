@@ -882,7 +882,7 @@ export default function App() {
             </h1>
             <div className="mt-2 flex items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-[var(--input-bg)] text-cyan-400 border border-[var(--border-color)] shadow-sm">
-                v{catalog.catalog_version}
+                {catalog.catalog_version}
               </span>
               <span className="text-xs text-[var(--text-muted)]">
                 Community Contribution Hub
@@ -1343,7 +1343,7 @@ export default function App() {
             <div className="flex flex-col sm:flex-row items-center gap-1.5 sm:gap-2 text-slate-300 font-medium">
               <span className="font-semibold text-white tracking-wide">CAN Do Automations</span>
               <span className="hidden sm:inline text-slate-600">•</span>
-              <span className="text-[var(--text-muted)] font-mono text-[11px]">v{catalog.catalog_version}</span>
+              <span className="text-[var(--text-muted)] font-mono text-[11px]">{catalog.catalog_version}</span>
               <span className="hidden sm:inline text-slate-600">•</span>
               <span className="text-[var(--text-muted)]">Community Message Catalog</span>
             </div>

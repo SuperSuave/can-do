@@ -255,7 +255,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       if (res.has_update) {
         showNotice(`Update available: ${res.release_name || res.version}`);
       } else {
-        showNotice(`All components are up to date (v${currentFw})`);
+        showNotice(`All components are up to date (${currentFw})`);
       }
     } catch (e: any) {
       showNotice(`Failed to check updates: ${e.message || e}`, 'error');
@@ -1952,7 +1952,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   <span>ESP32 Firmware</span>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950/60 text-cyan-300 border border-cyan-800/40">
-                  v{status?.firmware_version || '2026.9.1'}
+                  {status?.firmware_version || '2026.9.1'}
                 </span>
               </div>
               <div className="text-xs text-[var(--text-muted)] space-y-1">
@@ -1969,7 +1969,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   <span>Message Catalog</span>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-teal-950/60 text-teal-300 border border-teal-800/40">
-                  v{catalog?.catalog_version || '2026.9.1'}
+                  {catalog?.catalog_version || '2026.9.1'}
                 </span>
               </div>
               <div className="text-xs text-[var(--text-muted)] space-y-1">
@@ -1986,7 +1986,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   <span>Web Front-End</span>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-indigo-950/60 text-indigo-300 border border-indigo-800/40">
-                  v2026.9.1
+                  2026.9.1
                 </span>
               </div>
               <div className="text-xs text-[var(--text-muted)] space-y-1">

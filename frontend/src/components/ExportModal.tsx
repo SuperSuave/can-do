@@ -180,7 +180,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-white">Export CAN Catalog</h3>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-300 font-mono border border-cyan-800/80">
-                  v{catalog.catalog_version}
+                  {catalog.catalog_version}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
