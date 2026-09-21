@@ -77,7 +77,9 @@ export async function checkForUpdates(
 
     const release = await res.json();
     const tag = release.tag_name || '2026.9.1';
-    const isNewer = isVersionNewer(tag, currentFirmwareVersion);
+    const isFwNewer = isVersionNewer(tag, currentFirmwareVersion);
+    const isCatNewer = isVersionNewer(tag, currentCatalogVersion);
+    const hasAnyUpdate = isFwNewer || isCatNewer;
 
     // Locate assets if attached to GitHub release
     let firmwareUrl: string | undefined;
@@ -86,7 +88,8 @@ export async function checkForUpdates(
     if (Array.isArray(release.assets)) {
       for (const asset of release.assets) {
         const name = (asset.name || '').toLowerCase();
-        if (name.endsWith('.bin') && !name.includes('bootloader') && !name.includes('partition')) {
+        // Match only app binary (not merged image or storage partition)
+        if ((name === 'can-do.bin' || name === 'can-do-esp32c3.bin') && !firmwareUrl) {
           firmwareUrl = asset.browser_download_url;
         } else if (name.includes('catalog') && name.endsWith('.json')) {
           catalogUrl = asset.browser_download_url;
@@ -94,21 +97,21 @@ export async function checkForUpdates(
       }
     }
 
-    // Default fallback to main branch raw urls if assets aren't individually attached to release
+    // Default fallback to main branch raw urls if catalog isn't individually attached
     if (!catalogUrl) {
       catalogUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/catalog/can_do_catalog.json`;
     }
 
     return {
-      has_update: isNewer,
+      has_update: hasAnyUpdate,
       version: tag,
       release_name: release.name || tag,
       published_at: release.published_at,
       notes: release.body || 'New vehicle definitions and performance updates.',
       components: {
-        frontend: isNewer,
-        catalog: true,
-        firmware: !!firmwareUrl && isNewer,
+        frontend: isFwNewer,
+        catalog: isCatNewer,
+        firmware: !!firmwareUrl && isFwNewer,
       },
       assets: {
         firmware_url: firmwareUrl,
@@ -284,19 +287,30 @@ export async function executeUpdateSequence(
     // STAGE 3: FIRMWARE BINARY (Final step, triggers reboot)
     // -------------------------------------------------------------
     if (componentsToUpdate.firmware && updateData.assets.firmware_url) {
-      onProgress('firmware', 80, 'Downloading firmware binary from GitHub...');
-      const fwRes = await fetch(updateData.assets.firmware_url);
-      if (!fwRes.ok) {
-        throw new Error(`Failed to download firmware binary: HTTP ${fwRes.status}`);
+      onProgress('firmware', 80, 'Downloading firmware binary...');
+      let fwBlob: Blob | null = null;
+      try {
+        const fwRes = await fetch(updateData.assets.firmware_url);
+        if (fwRes.ok) {
+          fwBlob = await fwRes.blob();
+        }
+      } catch (err) {
+        console.warn('Direct binary download blocked by browser CORS policy.', err);
       }
-      const fwBlob = await fwRes.blob();
 
-      onProgress('firmware', 85, 'Flashing firmware to OTA partition...');
-      await uploadFirmwareOta(deviceBaseUrl, fwBlob, (pct) => {
-        onProgress('firmware', 85 + Math.round(pct * 0.12), `Flashing firmware: ${pct}%`);
-      });
-
-      onProgress('rebooting', 100, 'Firmware flash complete! Device is rebooting...');
+      if (fwBlob) {
+        onProgress('firmware', 85, 'Flashing firmware to OTA partition...');
+        await uploadFirmwareOta(deviceBaseUrl, fwBlob, (pct) => {
+          onProgress('firmware', 85 + Math.round(pct * 0.12), `Flashing firmware: ${pct}%`);
+        });
+        onProgress('rebooting', 100, 'Firmware flash complete! Device is rebooting...');
+      } else {
+        onProgress(
+          'complete',
+          100,
+          'Catalog and Web assets updated! For firmware binary, download can-do.bin and upload via the OTA panel below.'
+        );
+      }
     } else {
       onProgress('complete', 100, 'Updates applied successfully!');
     }

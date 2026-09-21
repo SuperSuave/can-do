@@ -248,12 +248,14 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const handleCheckForUpdates = async () => {
     setIsCheckingUpdate(true);
     try {
-      const res = await checkForUpdates(catalog?.catalog_version || '1.0', '1.0');
+      const currentFw = status?.firmware_version || '2026.9.1';
+      const currentCat = catalog?.catalog_version || '2026.9.1';
+      const res = await checkForUpdates(currentCat, currentFw);
       setUpdateResult(res);
       if (res.has_update) {
         showNotice(`Update available: ${res.release_name || res.version}`);
       } else {
-        showNotice('All components are up to date');
+        showNotice(`All components are up to date (v${currentFw})`);
       }
     } catch (e: any) {
       showNotice(`Failed to check updates: ${e.message || e}`, 'error');
@@ -2036,14 +2038,27 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleInstallCloudUpdates}
-                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-slate-950 text-xs font-bold transition shadow-lg shadow-cyan-950/50 shrink-0"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Install Updates Now</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  {updateResult.assets.firmware_url && (
+                    <a
+                      href={updateResult.assets.firmware_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/60 text-xs font-bold transition shrink-0"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download .bin</span>
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleInstallCloudUpdates}
+                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-slate-950 text-xs font-bold transition shadow-lg shadow-cyan-950/50 shrink-0"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Install Updates Now</span>
+                  </button>
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-2 pt-1 text-[10px]">

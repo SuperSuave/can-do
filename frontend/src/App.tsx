@@ -315,7 +315,7 @@ export default function App() {
       const now = new Date();
       const currentHhMm = now.toTimeString().slice(0, 5);
       if (currentHhMm === userPreferences.update_schedule.time) {
-        checkForUpdates(catalog?.catalog_version || '1.0', '1.0').then((res) => {
+        checkForUpdates(catalog?.catalog_version || '2026.9.1', '2026.9.1').then((res) => {
           if (res.has_update) {
             console.log('[Scheduler] New update available:', res.release_name || res.version);
           }
