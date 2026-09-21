@@ -37,7 +37,7 @@ export function OnboardingWizardModal({
   onClose,
 }: OnboardingWizardModalProps) {
   const [step, setStep] = useState<number>(1);
-  const [vehicleId, setVehicleId] = useState<string>(initialPreferences.vehicle_id || 'hi5_limited');
+  const [vehicleId, setVehicleId] = useState<string>(initialPreferences.vehicle_id || 'ev6_gtline');
   const [unitSystem, setUnitSystem] = useState<'imperial' | 'metric'>(initialPreferences.unit_system || 'imperial');
   
   // Wi-Fi inputs

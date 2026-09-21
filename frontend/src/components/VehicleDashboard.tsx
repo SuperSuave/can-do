@@ -1087,7 +1087,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                       setHoodOpen(false);
                       setTrunkOpen(false);
                     }
-                    triggerNotice(next ? 'All Doors Locked & Secured' : 'Vehicle Unlocked');
+                    dispatchCommand('doors_lock_state', next ? 'lock' : 'unlock', next ? 'All Doors Locked & Secured' : 'Vehicle Unlocked');
                   }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 border transition-colors ${
                     locked
@@ -1108,7 +1108,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                       id={`light-btn-${mode}`}
                       onClick={() => {
                         setLights(mode);
-                        triggerNotice(`Headlights: ${mode.toUpperCase()}`);
+                        dispatchCommand('headlight_mode', mode, `Headlights: ${mode.toUpperCase()}`);
                       }}
                       className={`px-2 py-1 rounded-lg text-[11px] font-medium uppercase transition-colors ${
                         lights === mode
@@ -1126,8 +1126,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   type="button"
                   id="hazard-btn"
                   onClick={() => {
-                    setHazards(h => !h);
-                    triggerNotice(hazards ? 'Hazard Lights Deactivated' : 'Hazard Lights Blinking');
+                    const nextHaz = !hazards;
+                    setHazards(nextHaz);
+                    dispatchCommand('hazard_lights', nextHaz ? 'on' : 'off', nextHaz ? 'Hazard Lights Blinking' : 'Hazard Lights Deactivated');
                   }}
                   className={`p-2 rounded-xl border transition-colors ${
                     hazards
@@ -1143,8 +1144,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   type="button"
                   id="mirror-fold-btn"
                   onClick={() => {
-                    setMirrorsFolded(m => !m);
-                    triggerNotice(mirrorsFolded ? 'Mirrors Extended' : 'Mirrors Folded');
+                    const nextMirrors = !mirrorsFolded;
+                    setMirrorsFolded(nextMirrors);
+                    dispatchCommand('mirrors', nextMirrors ? 'fold' : 'extend', nextMirrors ? 'Mirrors Folded' : 'Mirrors Extended');
                   }}
                   className={`px-2.5 py-1.5 rounded-xl border transition-colors text-[11px] font-medium ${
                     mirrorsFolded
@@ -1240,14 +1242,18 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50"
                 >
                   <span className="text-[10px] uppercase text-slate-400 block font-semibold">Pack Min Temp</span>
-                  <span className="font-mono font-bold text-slate-300">{batteryMinTempC}°C</span>
+                  <span className="font-mono font-bold text-slate-300">
+                    {tempUnit === 'F' ? `${Math.round(batteryMinTempC * 1.8 + 32)}°F` : `${batteryMinTempC}°C`}
+                  </span>
                 </div>
                 <div
                   title={`Dynamically resolved CAN ID: 0x${canMappings.hvTemps.toUpperCase()}`}
                   className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50"
                 >
                   <span className="text-[10px] uppercase text-slate-400 block font-semibold">Pack Max Temp</span>
-                  <span className="font-mono font-bold text-slate-300">{batteryMaxTempC}°C</span>
+                  <span className="font-mono font-bold text-slate-300">
+                    {tempUnit === 'F' ? `${Math.round(batteryMaxTempC * 1.8 + 32)}°F` : `${batteryMaxTempC}°C`}
+                  </span>
                 </div>
                 {hvPowerKw !== null && (
                   <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50">
@@ -1550,7 +1556,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   onClick={() => {
                     const next = !hvacPower;
                     setHvacPower(next);
-                    triggerNotice(next ? 'Cabin Climate Activated' : 'Cabin Climate Turned OFF');
+                    dispatchCommand('remote_climate_start____seats___wheel_', next ? 'start' : 'off', next ? 'Cabin Climate Activated' : 'Cabin Climate Turned OFF');
                   }}
                   className={`px-2 py-0.5 rounded-md text-xs font-bold transition-colors ${
                     hvacPower
@@ -1649,7 +1655,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                     type="button"
                     onClick={() => {
                       setFanSpeed(step);
-                      triggerNotice(`Fan Speed: Level ${step}`);
+                      dispatchCommand('climate_fan_speed_level', String(step), `Fan Speed: Level ${step}`);
                     }}
                     className={`h-6 rounded text-[10px] font-mono font-bold transition-colors ${
                       fanSpeed >= step && hvacPower
@@ -1672,7 +1678,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   id={`airflow-btn-${mode}`}
                   onClick={() => {
                     setAirflow(mode);
-                    triggerNotice(`Airflow Mode: ${mode.replace('_', ' ').toUpperCase()}`);
+                    dispatchCommand('climate_airflow_direction', mode, `Airflow Mode: ${mode === 'face_feet' ? 'Face / Feet' : mode.replace('_', ' ').toUpperCase()}`);
                   }}
                   className={`py-1.5 rounded-lg text-[10px] font-medium uppercase border transition-colors ${
                     airflow === mode
@@ -1680,7 +1686,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                       : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200'
                   }`}
                 >
-                  {mode.replace('_', ' ')}
+                  {mode === 'face_feet' ? 'Face / Feet' : mode}
                 </button>
               ))}
             </div>
@@ -1691,8 +1697,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 type="button"
                 id="front-defrost-btn"
                 onClick={() => {
-                  setFrontDefrost(f => !f);
-                  triggerNotice(frontDefrost ? 'Front Defrost Off' : 'Front Defrost MAX Active');
+                  const nextF = !frontDefrost;
+                  setFrontDefrost(nextF);
+                  dispatchCommand('front_defrost', nextF ? 'on' : 'off', nextF ? 'Front Defrost MAX Active' : 'Front Defrost Off');
                 }}
                 className={`p-2 rounded-xl border text-center transition-colors ${
                   frontDefrost

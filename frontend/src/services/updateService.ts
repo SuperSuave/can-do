@@ -129,6 +129,7 @@ async function checkFallbackCatalogUpdate(currentCatalogVersion: string): Promis
       cache: 'no-cache',
     });
     if (res.ok) {
+      const data = await res.json();
       const remoteVersion = data.catalog_version || '2026.9.1';
       const hasCatalogUpdate = isVersionNewer(remoteVersion, currentCatalogVersion);
 
