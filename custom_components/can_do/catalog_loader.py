@@ -60,7 +60,7 @@ def load_catalog() -> Dict[str, Any]:
         _LOGGER.warning("Could not fetch remote catalog: %s", ex)
 
     _LOGGER.error("Could not locate can_do_catalog.json in candidates")
-    _CATALOG_DATA = {"catalog_version": "1.0", "vehicles": [], "commands": []}
+    _CATALOG_DATA = {"catalog_version": "2026.9.1", "vehicles": [], "commands": []}
     return _CATALOG_DATA
 
 

@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import DOMAIN, VERSION
 from .coordinator import CanDoDataCoordinator
 from .entity import CanDoEntity
 
@@ -95,7 +95,7 @@ class CanDoClusterMasterNotifyEntity(NotifyEntity):
             name=f"CAN Do ({self.coordinator.device_id})",
             manufacturer="CAN Do",
             model=self.coordinator.vehicle_id,
-            sw_version="1.0.0",
+            sw_version=VERSION,
         )
 
     @property

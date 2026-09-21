@@ -36,11 +36,32 @@ export interface UpdateProgressCallback {
 const GITHUB_REPO = 'SuperSuave/can-do';
 
 /**
+ * Compare two version strings (CalVer e.g. 2026.9.1 or SemVer 1.0.0)
+ */
+export function isVersionNewer(remote: string, current: string): boolean {
+  const cleanRemote = remote.replace(/^v/, '').replace(/^catalog-v/, '').trim();
+  const cleanCurrent = current.replace(/^v/, '').replace(/^catalog-v/, '').trim();
+  if (cleanRemote === cleanCurrent) return false;
+
+  const rParts = cleanRemote.split('.').map(n => parseInt(n, 10) || 0);
+  const cParts = cleanCurrent.split('.').map(n => parseInt(n, 10) || 0);
+
+  const maxLen = Math.max(rParts.length, cParts.length);
+  for (let i = 0; i < maxLen; i++) {
+    const r = rParts[i] || 0;
+    const c = cParts[i] || 0;
+    if (r > c) return true;
+    if (r < c) return false;
+  }
+  return false;
+}
+
+/**
  * Checks GitHub Releases and raw repository files for available updates.
  */
 export async function checkForUpdates(
-  currentCatalogVersion = '1.0',
-  currentFirmwareVersion = '1.0'
+  currentCatalogVersion = '2026.9.1',
+  currentFirmwareVersion = '2026.9.1'
 ): Promise<UpdateCheckResult> {
   try {
     const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
@@ -55,8 +76,8 @@ export async function checkForUpdates(
     }
 
     const release = await res.json();
-    const tag = release.tag_name || 'v1.0.0';
-    const isNewer = tag.replace(/^v/, '') !== currentFirmwareVersion.replace(/^v/, '');
+    const tag = release.tag_name || '2026.9.1';
+    const isNewer = isVersionNewer(tag, currentFirmwareVersion);
 
     // Locate assets if attached to GitHub release
     let firmwareUrl: string | undefined;
@@ -105,9 +126,8 @@ async function checkFallbackCatalogUpdate(currentCatalogVersion: string): Promis
       cache: 'no-cache',
     });
     if (res.ok) {
-      const data = await res.json();
-      const remoteVersion = data.catalog_version || '1.0';
-      const hasCatalogUpdate = remoteVersion !== currentCatalogVersion;
+      const remoteVersion = data.catalog_version || '2026.9.1';
+      const hasCatalogUpdate = isVersionNewer(remoteVersion, currentCatalogVersion);
 
       return {
         has_update: hasCatalogUpdate,

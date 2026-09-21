@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, Optional
 
 from homeassistant.helpers.entity import DeviceInfo, Entity
 
-from .const import DOMAIN
+from .const import DOMAIN, VERSION
 from .coordinator import CanDoDataCoordinator
 
 
@@ -39,7 +39,7 @@ class CanDoEntity(Entity):
             name=f"CAN Do ({self.coordinator.device_id})",
             manufacturer="CAN Do",
             model=self.coordinator.vehicle_id,
-            sw_version="1.0.0",
+            sw_version=VERSION,
         )
 
     @property
