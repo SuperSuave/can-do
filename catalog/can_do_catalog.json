@@ -1789,230 +1789,30 @@
       "options": [
         {
           "label": "62\u00b0F / 17.0\u00b0C (Lo / Min)",
-          "match": {
-            "D2": "0x06"
-          },
-          "payload": {
-            "D2": "0x06"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "63\u00b0F / 17.5\u00b0C",
-          "match": {
-            "D2": "0x07"
-          },
-          "payload": {
-            "D2": "0x07"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "64\u00b0F / 18.0\u00b0C",
-          "match": {
-            "D2": "0x08"
-          },
-          "payload": {
-            "D2": "0x08"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "65\u00b0F / 18.5\u00b0C",
-          "match": {
-            "D2": "0x09"
-          },
-          "payload": {
-            "D2": "0x09"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "66\u00b0F / 19.0\u00b0C",
-          "match": {
-            "D2": "0x0A"
-          },
-          "payload": {
-            "D2": "0x0A"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "67\u00b0F / 19.5\u00b0C",
-          "match": {
-            "D2": "0x0B"
-          },
-          "payload": {
-            "D2": "0x0B"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "68\u00b0F / 20.0\u00b0C",
-          "match": {
-            "D2": "0x0C"
-          },
-          "payload": {
-            "D2": "0x0C"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "69\u00b0F / 20.5\u00b0C",
-          "match": {
-            "D2": "0x0D"
-          },
-          "payload": {
-            "D2": "0x0D"
-          },
+          "match": { "D2": "0x06" },
+          "payload": { "D2": "0x06" },
           "mask": "0xFF"
         },
         {
           "label": "70\u00b0F / 21.0\u00b0C (Default Comfort)",
-          "match": {
-            "D2": "0x0E"
-          },
-          "payload": {
-            "D2": "0x0E"
-          },
+          "match": { "D2": "0x0E" },
+          "payload": { "D2": "0x0E" },
           "mask": "0xFF",
           "default": true
         },
         {
-          "label": "71\u00b0F / 21.5\u00b0C",
-          "match": {
-            "D2": "0x0F"
-          },
-          "payload": {
-            "D2": "0x0F"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "72\u00b0F / 22.0\u00b0C",
-          "match": {
-            "D2": "0x10"
-          },
-          "payload": {
-            "D2": "0x10"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "73\u00b0F / 23.0\u00b0C",
-          "match": {
-            "D2": "0x11"
-          },
-          "payload": {
-            "D2": "0x11"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "74\u00b0F / 23.5\u00b0C",
-          "match": {
-            "D2": "0x12"
-          },
-          "payload": {
-            "D2": "0x12"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "75\u00b0F / 24.0\u00b0C",
-          "match": {
-            "D2": "0x13"
-          },
-          "payload": {
-            "D2": "0x13"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "76\u00b0F / 24.5\u00b0C",
-          "match": {
-            "D2": "0x14"
-          },
-          "payload": {
-            "D2": "0x14"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "77\u00b0F / 25.0\u00b0C",
-          "match": {
-            "D2": "0x15"
-          },
-          "payload": {
-            "D2": "0x15"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "78\u00b0F / 25.5\u00b0C",
-          "match": {
-            "D2": "0x16"
-          },
-          "payload": {
-            "D2": "0x16"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "79\u00b0F / 26.0\u00b0C",
-          "match": {
-            "D2": "0x17"
-          },
-          "payload": {
-            "D2": "0x17"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "80\u00b0F / 26.5\u00b0C",
-          "match": {
-            "D2": "0x18"
-          },
-          "payload": {
-            "D2": "0x18"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "81\u00b0F / 27.0\u00b0C",
-          "match": {
-            "D2": "0x19"
-          },
-          "payload": {
-            "D2": "0x19"
-          },
-          "mask": "0xFF"
-        },
-        {
           "label": "82\u00b0F / 27.5\u00b0C (Hi / Max)",
-          "match": {
-            "D2": "0x1A"
-          },
-          "payload": {
-            "D2": "0x1A"
-          },
+          "match": { "D2": "0x1A" },
+          "payload": { "D2": "0x1A" },
           "mask": "0xFF"
         },
         {
           "label": "Warmer than 70\u00b0F (> 21\u00b0C)",
-          "evaluate": {
-            "byte": "D2",
-            "operator": "greater_than",
-            "value": "0x0E"
-          }
+          "evaluate": { "byte": "D2", "operator": "greater_than", "value": "0x0E" }
         },
         {
           "label": "Cooler than 70\u00b0F (< 21\u00b0C)",
-          "evaluate": {
-            "byte": "D2",
-            "operator": "less_than",
-            "value": "0x0E"
-          }
+          "evaluate": { "byte": "D2", "operator": "less_than", "value": "0x0E" }
         }
       ]
     },
@@ -2056,230 +1856,30 @@
       "options": [
         {
           "label": "62\u00b0F / 17.0\u00b0C (Lo / Min)",
-          "match": {
-            "D3": "0x06"
-          },
-          "payload": {
-            "D8": "0x06"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "63\u00b0F / 17.5\u00b0C",
-          "match": {
-            "D3": "0x07"
-          },
-          "payload": {
-            "D8": "0x07"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "64\u00b0F / 18.0\u00b0C",
-          "match": {
-            "D3": "0x08"
-          },
-          "payload": {
-            "D8": "0x08"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "65\u00b0F / 18.5\u00b0C",
-          "match": {
-            "D3": "0x09"
-          },
-          "payload": {
-            "D8": "0x09"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "66\u00b0F / 19.0\u00b0C",
-          "match": {
-            "D3": "0x0A"
-          },
-          "payload": {
-            "D8": "0x0A"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "67\u00b0F / 19.5\u00b0C",
-          "match": {
-            "D3": "0x0B"
-          },
-          "payload": {
-            "D8": "0x0B"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "68\u00b0F / 20.0\u00b0C",
-          "match": {
-            "D3": "0x0C"
-          },
-          "payload": {
-            "D8": "0x0C"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "69\u00b0F / 20.5\u00b0C",
-          "match": {
-            "D3": "0x0D"
-          },
-          "payload": {
-            "D8": "0x0D"
-          },
+          "match": { "D3": "0x06" },
+          "payload": { "D8": "0x06" },
           "mask": "0xFF"
         },
         {
           "label": "70\u00b0F / 21.0\u00b0C (Default Comfort)",
-          "match": {
-            "D3": "0x0E"
-          },
-          "payload": {
-            "D8": "0x0E"
-          },
+          "match": { "D3": "0x0E" },
+          "payload": { "D8": "0x0E" },
           "mask": "0xFF",
           "default": true
         },
         {
-          "label": "71\u00b0F / 21.5\u00b0C",
-          "match": {
-            "D3": "0x0F"
-          },
-          "payload": {
-            "D8": "0x0F"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "72\u00b0F / 22.0\u00b0C",
-          "match": {
-            "D3": "0x10"
-          },
-          "payload": {
-            "D8": "0x10"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "73\u00b0F / 23.0\u00b0C",
-          "match": {
-            "D3": "0x11"
-          },
-          "payload": {
-            "D8": "0x11"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "74\u00b0F / 23.5\u00b0C",
-          "match": {
-            "D3": "0x12"
-          },
-          "payload": {
-            "D8": "0x12"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "75\u00b0F / 24.0\u00b0C",
-          "match": {
-            "D3": "0x13"
-          },
-          "payload": {
-            "D8": "0x13"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "76\u00b0F / 24.5\u00b0C",
-          "match": {
-            "D3": "0x14"
-          },
-          "payload": {
-            "D8": "0x14"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "77\u00b0F / 25.0\u00b0C",
-          "match": {
-            "D3": "0x15"
-          },
-          "payload": {
-            "D8": "0x15"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "78\u00b0F / 25.5\u00b0C",
-          "match": {
-            "D3": "0x16"
-          },
-          "payload": {
-            "D8": "0x16"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "79\u00b0F / 26.0\u00b0C",
-          "match": {
-            "D3": "0x17"
-          },
-          "payload": {
-            "D8": "0x17"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "80\u00b0F / 26.5\u00b0C",
-          "match": {
-            "D3": "0x18"
-          },
-          "payload": {
-            "D8": "0x18"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "81\u00b0F / 27.0\u00b0C",
-          "match": {
-            "D3": "0x19"
-          },
-          "payload": {
-            "D8": "0x19"
-          },
-          "mask": "0xFF"
-        },
-        {
           "label": "82\u00b0F / 27.5\u00b0C (Hi / Max)",
-          "match": {
-            "D3": "0x1A"
-          },
-          "payload": {
-            "D8": "0x1A"
-          },
+          "match": { "D3": "0x1A" },
+          "payload": { "D8": "0x1A" },
           "mask": "0xFF"
         },
         {
           "label": "Warmer than 70\u00b0F (> 21\u00b0C)",
-          "evaluate": {
-            "byte": "D3",
-            "operator": "greater_than",
-            "value": "0x0E"
-          }
+          "evaluate": { "byte": "D3", "operator": "greater_than", "value": "0x0E" }
         },
         {
           "label": "Cooler than 70\u00b0F (< 21\u00b0C)",
-          "evaluate": {
-            "byte": "D3",
-            "operator": "less_than",
-            "value": "0x0E"
-          }
+          "evaluate": { "byte": "D3", "operator": "less_than", "value": "0x0E" }
         }
       ]
     },
@@ -4179,9 +3779,9 @@
       ]
     },
     {
-      "id": "ev_charge_limits",
+      "id": "max_charging_limit",
       "ha_metadata": {
-        "name": "EV Max Charge Limit",
+        "name": "Max. Charging Limit",
         "domain": "select",
         "icon": "mdi:ev-station"
       },
@@ -4195,17 +3795,26 @@
         "action_can_id": "0x4C5",
         "delay_ms": 20
       },
-      "category": "EV Charging Limits",
+      "category": "High Voltage Battery & Charging",
       "roles": [
         "trigger",
         "condition",
         "action"
       ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "AC (D5) and DC (D6) charge limit control targeting 0x4C5 with reset pulse (State feedback on 0x1F9: DC=D4, AC=D7)"
-      },
+      "contributors": [
+        {
+          "name": "SuaveEV",
+          "github": "supersuave",
+          "tested_vehicle": "Kia EV6 GT-Line (US)",
+          "role": "Command"
+        },
+        {
+          "name": "Tyler Harvey",
+          "github": "tylerharvey",
+          "tested_vehicle": "Hyundai Ioniq 5 SEL (US)",
+          "role": "State"
+        }
+      ],
       "options": [
         {
           "label": "AC 50%",
@@ -4464,6 +4073,7 @@
           "label": "Both 50% (AC & DC)",
           "popup": "Charge Limit: 50%",
           "match": {
+            "D1": "0x78",
             "D4": "0x64",
             "D7": "0x78"
           },
@@ -4488,6 +4098,7 @@
           "label": "Both 60% (AC & DC)",
           "popup": "Charge Limit: 60%",
           "match": {
+            "D1": "0xA0",
             "D4": "0x78",
             "D7": "0xA0"
           },
@@ -4512,6 +4123,7 @@
           "label": "Both 70% (AC & DC)",
           "popup": "Charge Limit: 70%",
           "match": {
+            "D1": "0xC8",
             "D4": "0x8C",
             "D7": "0xC8"
           },
@@ -4536,6 +4148,7 @@
           "label": "Both 80% (AC & DC)",
           "popup": "Charge Limit: 80%",
           "match": {
+            "D1": "0xF5",
             "D4": "0xA0",
             "D7": "0xF5"
           },
@@ -4552,7 +4165,8 @@
                 "D5": "0xFF",
                 "D6": "0xFF"
               },
-              "repeat": 3
+              "repeat": 3,
+              "default": true
             }
           ]
         },
@@ -4560,6 +4174,7 @@
           "label": "Both 90% (AC & DC)",
           "popup": "Charge Limit: 90%",
           "match": {
+            "D1": "0x1D",
             "D4": "0xB4",
             "D7": "0x1D"
           },
@@ -4584,6 +4199,7 @@
           "label": "Both 100% (AC & DC)",
           "popup": "Charge Limit: 100%",
           "match": {
+            "D1": "0x4A",
             "D4": "0xC8",
             "D7": "0x4A"
           },
@@ -4607,7 +4223,7 @@
       ]
     },
     {
-      "id": "remote_climate_start____seats___wheel_",
+      "id": "remote_climate_start_seats_wheel",
       "ha_metadata": {
         "name": "Remote Climate Start (+ Seats & Wheel)",
         "domain": "button",
@@ -4738,40 +4354,7 @@
       }
     },
     {
-      "id": "set_target_cabin_temp",
-      "ha_metadata": {
-        "name": "Set Target Cabin Temp",
-        "domain": "climate",
-        "icon": "mdi:thermostat"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "type": "climate_target",
-      "climate_zone": "driver",
-      "target_temp_c": 21,
-      "target_temp_f": 70,
-      "pass_temp_c": 21,
-      "pass_temp_f": 70,
-      "climate_sync_on": true,
-      "climate_driver_only": false,
-      "popup_message": "Climate: 21C",
-      "popup_message_imperial": "Climate: 70F",
-      "category": "Cabin Climate Control",
-      "roles": [
-        "action"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "climate_target"
-      },
-      "contributor": {
-        "name": "Unknown",
-        "github": ""
-      }
-    },
-    {
-      "id": "active_sound_design__asd__profile",
+      "id": "active_sound_design_asd_profile",
       "ha_metadata": {
         "name": "Active Sound Design (ASD) Profile",
         "domain": "select",
@@ -4890,7 +4473,7 @@
       }
     },
     {
-      "id": "keepalive___wakeup_ping",
+      "id": "keepalive_wakeup_ping",
       "ha_metadata": {
         "name": "Keepalive / Wakeup Ping",
         "domain": "button",
@@ -4912,44 +4495,6 @@
             "D1": "0x02",
             "D2": "0x01"
           },
-          "repeat": 3
-        }
-      ],
-      "category": "Vehicle Actuators & Features",
-      "roles": [
-        "action"
-      ],
-      "contributor": {
-        "name": "Unknown",
-        "github": ""
-      }
-    },
-    {
-      "id": "multi_frame_burst_sequence__x3_",
-      "ha_metadata": {
-        "name": "Multi-Frame Burst Sequence (x3)",
-        "domain": "button",
-        "icon": "mdi:car-info"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_tx",
-        "action_can_id": "0x652",
-        "delay_ms": 20
-      },
-      "popup_message": "",
-      "steps": [
-        {
-          "payload": {
-            "D3": "0x01"
-          },
-          "repeat": 3
-        },
-        {
-          "payload": {},
           "repeat": 3
         }
       ],
@@ -5134,14 +4679,14 @@
         "trigger"
       ],
       "contributor": {
-        "name": "Unknown",
-        "github": ""
+        "name": "Liz",
+        "github": "L1Z3"
       }
     },
     {
-      "id": "selected_gear",
+      "id": "vehicle_gear_state",
       "ha_metadata": {
-        "name": "Selected Gear",
+        "name": "Gear Shift State",
         "domain": "sensor",
         "icon": "mdi:car-shift-pattern"
       },
@@ -5149,45 +4694,95 @@
         "all_egmp"
       ],
       "category": "Vehicle State & Safety",
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x2C0"
-      },
       "roles": [
+        "trigger",
         "condition",
-        "trigger"
+        "state"
       ],
-      "contributor": {
-        "name": "Electroniq Buttons Community",
-        "github": "",
-        "notes": "Consolidated PRND gear selector positions"
-      },
-      "options": [
+      "variants": [
         {
-          "label": "Park (P)",
-          "match": {
-            "D3": "0x00"
+          "targets": [
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x45"
           },
-          "default": true
+          "options": [
+            {
+              "label": "P",
+              "match": {
+                "D6": "0x00"
+              },
+              "mask": "0x70",
+              "default": true
+            },
+            {
+              "label": "D",
+              "match": {
+                "D6": "0x50"
+              },
+              "mask": "0x70"
+            },
+            {
+              "label": "N",
+              "match": {
+                "D6": "0x60"
+              },
+              "mask": "0x70"
+            },
+            {
+              "label": "R",
+              "match": {
+                "D6": "0x70"
+              },
+              "mask": "0x70"
+            }
+          ]
         },
         {
-          "label": "Reverse (R)",
-          "match": {
-            "D3": "0x07"
-          }
-        },
-        {
-          "label": "Neutral (N)",
-          "match": {
-            "D3": "0x06"
-          }
-        },
-        {
-          "label": "Drive (D)",
-          "match": {
-            "D3": "0x05"
-          }
+          "targets": [
+            "hyundai_ioniq5",
+            "hyundai_ioniq6"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x70"
+          },
+          "options": [
+            {
+              "label": "P",
+              "match": {
+                "D8": "0x00"
+              },
+              "mask": "0x70",
+              "default": true
+            },
+            {
+              "label": "D",
+              "match": {
+                "D8": "0x50"
+              },
+              "mask": "0x70"
+            },
+            {
+              "label": "N",
+              "match": {
+                "D8": "0x60"
+              },
+              "mask": "0x70"
+            },
+            {
+              "label": "R",
+              "match": {
+                "D8": "0x70"
+              },
+              "mask": "0x70"
+            }
+          ]
         }
       ]
     },
@@ -5694,6 +5289,7 @@
         "domain": "select",
         "icon": "mdi:fan"
       },
+      "type": "linear_scale",
       "tags": [
         "all_egmp"
       ],
@@ -5706,9 +5302,15 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x31B"
+        "state_can_id": "0x31B",
+        "state_byte": "D4",
+        "mask": "0x0F",
+        "min": 0,
+        "max": 8,
+        "step": 1,
+        "unit": ""
       },
-      "notes": "Decoded from E-GMP CLIMATE_STATUS frame 795 (0x31B) Start Bit 24, Length 4 (bits 24-27 = low nibble of Byte D4, mask 0x0F). Values: 0: Off, 2-9: Speeds 1 to 8.",
+      "notes": "Decoded from E-GMP CLIMATE_STATUS frame 795 (0x31B) Start Bit 24, Length 4 (bits 24-27 = low nibble of Byte D4, mask 0x0F). Values: 0: Off, 2-9: Speeds 1 to 8. Raw values are non-contiguous (0=Off, 2-9=Speed 1-8); all steps are listed explicitly.",
       "contributor": {
         "name": "Tichael",
         "github": "tichael",
@@ -5843,6 +5445,7 @@
         "domain": "select",
         "icon": "mdi:power-plug-battery"
       },
+      "type": "linear_scale",
       "tags": [
         "all_egmp"
       ],
@@ -5851,6 +5454,12 @@
         "type": "can_rx_tx",
         "state_can_id": "0x151",
         "action_can_id": "0x0C7",
+        "state_byte": "D7",
+        "action_byte": "D2",
+        "min": 20,
+        "max": 80,
+        "step": 10,
+        "unit": "%",
         "delay_ms": 20
       },
       "category": "High Voltage Battery & Charging",
@@ -5861,7 +5470,7 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "V2L minimum discharge limit % (frame 0x0C7 D2 command with FF pulse, frame 0x151 D7 state)"
+        "notes": "V2L minimum discharge limit % (frame 0x0C7 D2 command with FF pulse, frame 0x151 D7 state). Raw byte = percentage value directly (0x28=20%, 0x50=40%, 0x64=100%)."
       },
       "options": [
         {

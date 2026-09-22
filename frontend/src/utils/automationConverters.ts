@@ -8,8 +8,9 @@ import {
   AutomationCondition,
   AutomationAction
 } from '../types/automation';
-import { Command, CommandOption, Catalog, ByteMap } from '../types/catalog';
+import { Command, CommandOption, Catalog, ByteMap, Vehicle } from '../types/catalog';
 import { DEFAULT_CATALOG } from '../data/defaultCatalog';
+import { resolveVariant } from './catalogUtils';
 
 /**
  * Cleanly compiles any payload or glob into a strict 1-based ByteMap ({ D1: "0x.." })
@@ -375,16 +376,35 @@ export function exportToCandoJson(
 }
 
 /**
- * Generate full can_do_catalog.json with embedded automations array ready for ESP32 LittleFS
+ * Generate full can_do_catalog.json with embedded automations array ready for ESP32 LittleFS.
+ *
+ * When `vehicle` is provided, commands with `variants` are resolved to that
+ * vehicle's family before serialization — the `variants` key is stripped from
+ * the output so the firmware parser never sees it and needs no changes.
+ * When `vehicle` is omitted the first variant is used as a best-guess fallback
+ * (same behaviour as resolveVariant).
  */
 export function exportToFullCatalogJson(
   catalog: Catalog,
-  rules: AutomationRule[]
+  rules: AutomationRule[],
+  vehicle?: Vehicle | null
 ): string {
   const cleanAutomations = rules.map(r => compileAutomationRule(r, catalog));
 
+  // Flatten variants for each command so the ESP32 gets a clean, vehicle-specific catalog
+  const resolvedCommands = catalog.commands.map(cmd => {
+    const resolved = resolveVariant(cmd, vehicle ?? null);
+    // Strip the variants key — the firmware has no use for it
+    if (resolved.variants) {
+      const { variants: _stripped, ...clean } = resolved;
+      return clean as Command;
+    }
+    return resolved;
+  });
+
   return JSON.stringify({
     ...catalog,
+    commands: resolvedCommands,
     automations: cleanAutomations
   }, null, 2);
 }

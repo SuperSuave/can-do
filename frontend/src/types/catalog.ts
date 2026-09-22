@@ -28,6 +28,17 @@ export interface CommandNetwork {
   transports?: Record<string, { tx_id: string; flow_control_id: string }>;
 }
 
+/**
+ * A vehicle-family-specific override for a command's network config and options.
+ * Matched by vehicle.family or vehicle.id against the `targets` array.
+ */
+export interface CommandVariant {
+  /** Family IDs (e.g. 'kia_ev6', 'hyundai_ioniq5') this variant applies to. */
+  targets: string[];
+  network?: CommandNetwork;
+  options?: CommandOption[];
+}
+
 export interface CommandHaMetadata {
   name?: string;
   domain?: string;
@@ -159,6 +170,11 @@ export interface Command {
   tested_vehicle?: string;
   contributor?: ContributorInfo;
   contributors?: ContributorInfo[];
+  /**
+   * Vehicle-family-specific network/options overrides.
+   * Consumers should call resolveVariant() before reading network or options.
+   */
+  variants?: CommandVariant[];
   // Home Assistant & MDI Icon metadata
   ha_domain?: string;
   icon?: string;

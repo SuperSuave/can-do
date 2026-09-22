@@ -7,6 +7,10 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 _LOGGER = logging.getLogger(__name__)
 
+# Track which (command_id, vehicle_id) pairs have already emitted a variant
+# fallback warning so we don't spam the log on every CAN frame.
+_warned_variants: Set[Tuple[str, str]] = set()
+
 _CATALOG_DATA: Optional[Dict[str, Any]] = None
 
 
@@ -103,8 +107,55 @@ def get_vehicle_definition(vehicle_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def resolve_variant(command: Dict[str, Any], vehicle_id: str) -> Dict[str, Any]:
+    """Return a copy of *command* with network/options resolved for *vehicle_id*.
+
+    If the command has no ``variants`` key it is returned unchanged (zero-copy).
+    When a matching variant is found its ``network`` and ``options`` are merged
+    over the base command dict.  When *no* variant matches the selected vehicle
+    or its family, a one-time warning is logged and the first variant is used as
+    a best-guess fallback.
+    """
+    variants = command.get("variants")
+    if not variants:
+        return command
+
+    vehicle = get_vehicle_definition(vehicle_id)
+    family = vehicle.get("family", "") if vehicle else ""
+
+    for variant in variants:
+        targets = variant.get("targets", [])
+        if vehicle_id in targets or (family and family in targets):
+            resolved = dict(command)
+            if "network" in variant:
+                resolved["network"] = variant["network"]
+            if "options" in variant:
+                resolved["options"] = variant["options"]
+            return resolved
+
+    # No matching variant — warn once per (command, vehicle) pair, use first as fallback
+    warn_key = (command.get("id", ""), vehicle_id)
+    if warn_key not in _warned_variants:
+        _warned_variants.add(warn_key)
+        _LOGGER.warning(
+            "CAN Do catalog: command '%s' has variants but none match vehicle '%s' "
+            "(family: '%s'). Falling back to first variant as best-guess.",
+            command.get("id", "<unknown>"),
+            vehicle_id,
+            family or "<none>",
+        )
+
+    fallback = variants[0]
+    resolved = dict(command)
+    if "network" in fallback:
+        resolved["network"] = fallback["network"]
+    if "options" in fallback:
+        resolved["options"] = fallback["options"]
+    return resolved
+
+
 def get_vehicle_commands(vehicle_id: str) -> List[Dict[str, Any]]:
-    """Filter commands applicable to the selected vehicle."""
+    """Filter commands applicable to the selected vehicle, resolving variants."""
     catalog = load_catalog()
     vehicle = get_vehicle_definition(vehicle_id)
     family = vehicle.get("family", "") if vehicle else ""
@@ -113,7 +164,7 @@ def get_vehicle_commands(vehicle_id: str) -> List[Dict[str, Any]]:
     for c in catalog.get("commands", []):
         tags = c.get("tags", [])
         if "all_egmp" in tags or vehicle_id in tags or (family and family in tags):
-            matched.append(c)
+            matched.append(resolve_variant(c, vehicle_id))
     return matched
 
 
