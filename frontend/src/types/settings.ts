@@ -38,7 +38,7 @@ export const STORAGE_KEY_USER_PREFERENCES = 'can_do_user_preferences';
 
 export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   onboarding_completed: false,
-  vehicle_id: 'hi5_limited',
+  vehicle_id: 'ev6_gtline',
   unit_system: 'imperial',
   update_policy: 'prompt', // Prompt user when updates are detected by default
   update_components: {
