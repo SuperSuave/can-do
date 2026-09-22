@@ -4191,22 +4191,28 @@
       "network": {
         "bus": 0,
         "type": "can_tx",
+        "state_can_id": "0x1F9",
         "action_can_id": "0x4C5",
         "delay_ms": 20
       },
       "category": "EV Charging Limits",
       "roles": [
+        "trigger",
+        "condition",
         "action"
       ],
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "AC (D5) and DC (D6) charge limit control targeting 0x4C5 with reset pulse"
+        "notes": "AC (D5) and DC (D6) charge limit control targeting 0x4C5 with reset pulse (State feedback on 0x1F9: DC=D4, AC=D7)"
       },
       "options": [
         {
           "label": "AC 50%",
           "popup": "AC Limit: 50%",
+          "match": {
+            "D7": "0x78"
+          },
           "steps": [
             {
               "payload": {
@@ -4225,6 +4231,9 @@
         {
           "label": "AC 60%",
           "popup": "AC Limit: 60%",
+          "match": {
+            "D7": "0xA0"
+          },
           "steps": [
             {
               "payload": {
@@ -4243,6 +4252,9 @@
         {
           "label": "AC 70%",
           "popup": "AC Limit: 70%",
+          "match": {
+            "D7": "0xC8"
+          },
           "steps": [
             {
               "payload": {
@@ -4261,6 +4273,9 @@
         {
           "label": "AC 80%",
           "popup": "AC Limit: 80%",
+          "match": {
+            "D7": "0xF5"
+          },
           "default": true,
           "steps": [
             {
@@ -4280,6 +4295,9 @@
         {
           "label": "AC 90%",
           "popup": "AC Limit: 90%",
+          "match": {
+            "D7": "0x1D"
+          },
           "steps": [
             {
               "payload": {
@@ -4298,6 +4316,9 @@
         {
           "label": "AC 100%",
           "popup": "AC Limit: 100%",
+          "match": {
+            "D7": "0x4A"
+          },
           "steps": [
             {
               "payload": {
@@ -4316,6 +4337,9 @@
         {
           "label": "DC 50%",
           "popup": "DC Limit: 50%",
+          "match": {
+            "D4": "0x64"
+          },
           "steps": [
             {
               "payload": {
@@ -4334,6 +4358,9 @@
         {
           "label": "DC 60%",
           "popup": "DC Limit: 60%",
+          "match": {
+            "D4": "0x78"
+          },
           "steps": [
             {
               "payload": {
@@ -4352,6 +4379,9 @@
         {
           "label": "DC 70%",
           "popup": "DC Limit: 70%",
+          "match": {
+            "D4": "0x8C"
+          },
           "steps": [
             {
               "payload": {
@@ -4370,6 +4400,9 @@
         {
           "label": "DC 80%",
           "popup": "DC Limit: 80%",
+          "match": {
+            "D4": "0xA0"
+          },
           "steps": [
             {
               "payload": {
@@ -4388,6 +4421,9 @@
         {
           "label": "DC 90%",
           "popup": "DC Limit: 90%",
+          "match": {
+            "D4": "0xB4"
+          },
           "steps": [
             {
               "payload": {
@@ -4406,6 +4442,9 @@
         {
           "label": "DC 100%",
           "popup": "DC Limit: 100%",
+          "match": {
+            "D4": "0xC8"
+          },
           "steps": [
             {
               "payload": {
@@ -4424,6 +4463,10 @@
         {
           "label": "Both 50% (AC & DC)",
           "popup": "Charge Limit: 50%",
+          "match": {
+            "D4": "0x64",
+            "D7": "0x78"
+          },
           "steps": [
             {
               "payload": {
@@ -4444,6 +4487,10 @@
         {
           "label": "Both 60% (AC & DC)",
           "popup": "Charge Limit: 60%",
+          "match": {
+            "D4": "0x78",
+            "D7": "0xA0"
+          },
           "steps": [
             {
               "payload": {
@@ -4464,6 +4511,10 @@
         {
           "label": "Both 70% (AC & DC)",
           "popup": "Charge Limit: 70%",
+          "match": {
+            "D4": "0x8C",
+            "D7": "0xC8"
+          },
           "steps": [
             {
               "payload": {
@@ -4484,6 +4535,10 @@
         {
           "label": "Both 80% (AC & DC)",
           "popup": "Charge Limit: 80%",
+          "match": {
+            "D4": "0xA0",
+            "D7": "0xF5"
+          },
           "steps": [
             {
               "payload": {
@@ -4504,6 +4559,10 @@
         {
           "label": "Both 90% (AC & DC)",
           "popup": "Charge Limit: 90%",
+          "match": {
+            "D4": "0xB4",
+            "D7": "0x1D"
+          },
           "steps": [
             {
               "payload": {
@@ -4524,6 +4583,10 @@
         {
           "label": "Both 100% (AC & DC)",
           "popup": "Charge Limit: 100%",
+          "match": {
+            "D4": "0xC8",
+            "D7": "0x4A"
+          },
           "steps": [
             {
               "payload": {

@@ -846,12 +846,22 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
     const nextIdx = (cycle.indexOf(current) + 1) % cycle.length;
     const next = cycle[nextIdx];
+    const seatOptionMap: Record<SeatLevel, string> = {
+      off: 'Off',
+      heat_low: 'Low Heat',
+      heat_med: 'Medium Heat',
+      heat_high: 'High Heat',
+      cool_low: 'Low Cool',
+      cool_med: 'Medium Cool',
+      cool_high: 'High Cool',
+    };
+    const optionCmd = seatOptionMap[next] || next;
     if (isDriver) {
       setDriverSeat(next);
-      dispatchCommand('driver_seat_comfort', next, `Driver Seat: ${next.replace('_', ' ').toUpperCase()}`);
+      dispatchCommand('drivers_seat_comfort', optionCmd, `Driver Seat: ${next.replace('_', ' ').toUpperCase()}`);
     } else {
       setPassengerSeat(next);
-      dispatchCommand('passengers_seat_comfort', next, `Passenger Seat: ${next.replace('_', ' ').toUpperCase()}`);
+      dispatchCommand('passengers_seat_comfort', optionCmd, `Passenger Seat: ${next.replace('_', ' ').toUpperCase()}`);
     }
   };
 
@@ -862,7 +872,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     }
     const next: SteeringHeatLevel = steeringWheelHeat === 'off' ? 'low' : steeringWheelHeat === 'low' ? 'high' : 'off';
     setSteeringWheelHeat(next);
-    dispatchCommand('heated_steering_wheel', next, `Heated Steering Wheel: ${next.toUpperCase()}`);
+    dispatchCommand('heated_steering_wheel_toggle', next === 'off' ? 'Off' : 'Toggle', `Heated Steering Wheel: ${next.toUpperCase()}`);
   };
 
   const adjustTemp = (isDriver: boolean, delta: number) => {
@@ -1311,7 +1321,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 }}
                 onToggleTrunk={() => {
                   setTrunkOpen(t => !t);
-                  dispatchCommand('trunk_open_toggle', 'toggle', trunkOpen ? 'Trunk Closed' : 'Liftgate Opened');
+                  dispatchCommand('trunk', 'toggle', trunkOpen ? 'Trunk Closed' : 'Liftgate Opened');
                 }}
                 onToggleChargePort={() => {
                   setChargePortOpen(c => !c);
@@ -1441,7 +1451,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   id="toggle-trunk"
                   onClick={() => {
                     setTrunkOpen(prev => !prev);
-                    dispatchCommand('trunk_open_toggle', 'toggle', trunkOpen ? 'Trunk Closed' : 'Trunk Liftgate Opened');
+                    dispatchCommand('trunk', 'toggle', trunkOpen ? 'Trunk Closed' : 'Trunk Liftgate Opened');
                   }}
                   className={`p-2 rounded-xl text-left border transition-all ${
                     trunkOpen
@@ -1710,7 +1720,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 onClick={() => {
                   const next = !rearDefrost;
                   setRearDefrost(next);
-                  dispatchCommand('rear_defroster', next ? 'on' : 'off', next ? 'Rear Defrost Activated' : 'Rear Defrost Deactivated');
+                  dispatchCommand('climate_rear_defog', next ? 'on' : 'off', next ? 'Rear Defrost Activated' : 'Rear Defrost Deactivated');
                 }}
                 className={`p-2 rounded-xl border text-center transition-colors ${
                   rearDefrost
