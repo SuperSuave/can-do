@@ -42,6 +42,10 @@ extern void broadcast_ws_raw(const std::string& json_str);
 extern void can_engine_trigger_ble_event(const BleButtonEvent& event);
 extern void mqtt_mgr_publish_ble_event(const BleButtonEvent& event);
 
+// Forward declarations for HID parsers
+void ble_mgr_handle_consumer_report(const uint8_t* data, size_t len, const std::string& addr, const std::string& name);
+void ble_mgr_handle_keyboard_report(const uint8_t* data, size_t len, const std::string& addr, const std::string& name);
+
 const char* ble_hid_consumer_code_to_name(uint16_t usage_code) {
     switch (usage_code) {
         case 0x00E9: return "volume_up";

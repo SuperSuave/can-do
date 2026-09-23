@@ -1243,6 +1243,7 @@ static esp_err_t api_ble_pair_handler(httpd_req_t *req) {
         return ESP_FAIL;
     }
     cJSON *addr = cJSON_GetObjectItem(root, "address");
+    if (!addr) addr = cJSON_GetObjectItem(root, "mac");
     std::string address = (addr && cJSON_IsString(addr)) ? addr->valuestring : "";
     cJSON_Delete(root);
 
@@ -1271,6 +1272,7 @@ static esp_err_t api_ble_unpair_handler(httpd_req_t *req) {
         cJSON *root = cJSON_Parse(buf);
         if (root) {
             cJSON *addr = cJSON_GetObjectItem(root, "address");
+            if (!addr) addr = cJSON_GetObjectItem(root, "mac");
             if (addr && cJSON_IsString(addr)) address = addr->valuestring;
             cJSON_Delete(root);
         }
