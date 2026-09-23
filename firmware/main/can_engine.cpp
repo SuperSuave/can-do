@@ -337,7 +337,12 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
     for (const auto& entity : global_catalog) {
         if (entity.id == entity_id) {
             for (const auto& option : entity.options) {
-                if (option.label == command_label || (entity.options.size() == 1 && command_label.empty())) {
+                std::string opt_lower = option.label;
+                std::transform(opt_lower.begin(), opt_lower.end(), opt_lower.begin(), ::tolower);
+                std::string cmd_lower = command_label;
+                std::transform(cmd_lower.begin(), cmd_lower.end(), cmd_lower.begin(), ::tolower);
+
+                if (opt_lower == cmd_lower || opt_lower.find(cmd_lower) != std::string::npos || cmd_lower.find(opt_lower) != std::string::npos || (entity.options.size() == 1 && command_label.empty())) {
                     CanBurstCmd* cmd = new CanBurstCmd();
                     cmd->can_id = entity.action_can_id;
                     cmd->delay_ms = entity.delay_ms;
@@ -348,6 +353,17 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
                     }
                     return true;
                 }
+            }
+            // Fallback: if no exact option matched, try first option
+            if (!entity.options.empty()) {
+                CanBurstCmd* cmd = new CanBurstCmd();
+                cmd->can_id = entity.action_can_id;
+                cmd->delay_ms = entity.delay_ms;
+                cmd->steps = &entity.options[0].steps;
+                if (xQueueSend(tx_command_queue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+                    return true;
+                }
+                delete cmd;
             }
             ESP_LOGW(TAG, "Option '%s' not found for entity '%s'", command_label.c_str(), entity_id.c_str());
             return false;

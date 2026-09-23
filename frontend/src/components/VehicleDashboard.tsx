@@ -298,6 +298,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       fanBlowerName: findCmd('climate_fan_speed_level')?.ha_metadata?.name || 'HVAC Blower / Vents',
       tpms: getCanId('wheel_speeds', '593'),
       tpmsName: findCmd('wheel_speeds')?.ha_metadata?.name || 'TPMS Tire Pressures',
+      sunroof: getCanId('sunroof_extended', '442'),
+      sunroofName: findCmd('sunroof_extended')?.ha_metadata?.name || 'Sunroof Glass & Cover',
     };
   }, [catalog]);
 
@@ -344,7 +346,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   const toggleSunshade = () => {
     setSunroof(prev => {
       const nextShade = prev.sunshade === 'open' ? 'closed' : 'open';
-      triggerNotice(`Power Sunshade: ${nextShade === 'open' ? 'Retracted' : 'Closed'}`);
+      dispatchCommand('sunroof_extended', nextShade, `Power Sunshade: ${nextShade === 'open' ? 'Retracted' : 'Closed'}`);
       return { ...prev, sunshade: nextShade };
     });
   };
@@ -420,6 +422,16 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       else setSteeringWheelHeat('off');
     } else if (entity === 'hazard_lights') {
       setHazards(normState.includes('active') || normState.includes('on'));
+    } else if (entity === 'headlight_mode' || entity === 'lights') {
+      if (normState.includes('off')) setLights('off');
+      else if (normState.includes('parking') || normState.includes('park')) setLights('parking');
+      else if (normState.includes('high')) setLights('high');
+      else if (normState.includes('low')) setLights('low');
+      else if (normState.includes('auto')) setLights('auto');
+    } else if (entity === 'turn_signal') {
+      if (normState.includes('left')) setTurnSignal('left');
+      else if (normState.includes('right')) setTurnSignal('right');
+      else setTurnSignal('off');
     } else if (entity === 'climate_rear_defog') {
       setRearDefrost(normState.includes('active') || normState.includes('on'));
     } else if (entity === 'cond_hv_battery_soc' || entity.includes('battery_soc')) {
@@ -636,8 +648,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       recordLog(idFormatted, canMappings.hvTempsName, `Min: ${minT}°C / Max: ${maxT}°C`, hexPayload, now);
     }
 
-    // Transmission Gear Selection (Dynamically mapped from catalog, e.g. 0x2C0 with dynamic option matches)
-    else if (normId === canMappings.gear && bytes.length >= 1) {
+    // Transmission Gear Selection (Dynamically mapped from catalog, e.g. 0x2C0, 0x220, 0x316, 0x321)
+    else if ((normId === canMappings.gear || normId === '2c0' || normId === '220' || normId === '316' || normId === '321') && bytes.length >= 1) {
       let detectedGear: GearMode | null = null;
       if (canMappings.gearOptions && canMappings.gearOptions.length > 0) {
         for (const opt of canMappings.gearOptions) {
@@ -664,12 +676,16 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         }
       }
 
-      if (!detectedGear && bytes.length >= 3) {
-        const gVal = bytes[2];
-        if (gVal === 0x07) detectedGear = 'R';
-        else if (gVal === 0x06) detectedGear = 'N';
-        else if (gVal === 0x05) detectedGear = 'D';
-        else detectedGear = 'P';
+      if (!detectedGear) {
+        for (const idx of [2, 1, 3, 0]) {
+          if (bytes.length > idx) {
+            const val = bytes[idx];
+            if (val === 0x07 || val === 0x02) { detectedGear = 'R'; break; }
+            if (val === 0x06 || val === 0x03) { detectedGear = 'N'; break; }
+            if (val === 0x05 || val === 0x01 || val === 0x04) { detectedGear = 'D'; break; }
+            if (val === 0x00 || val === 0x10 || val === 0x50) { detectedGear = 'P'; break; }
+          }
+        }
       }
 
       const finalGear: GearMode = detectedGear || 'P';
@@ -688,11 +704,11 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       const hood = Boolean(bytes[5] & 0x10); // Hood / Frunk
       const rl = Boolean(bytes[6] & 0x10); // Rear Left Door
       const rr = Boolean(bytes[7] & 0x01); // Rear Right Door
-      const isLocked = (bytes[2] & 0x40) === 0;
+      const isLocked = bytes.length >= 3 ? (bytes[2] === 0x00 || (bytes[2] & 0x40) === 0) : true;
       setDoors({ frontLeft: fl, frontRight: fr, rearLeft: rl, rearRight: rr });
       setHoodOpen(hood);
       setLocked(isLocked);
-      recordLog(idFormatted, canMappings.doorsName, `Doors: ${fl || fr || rl || rr ? 'Ajar' : 'Latched'}, Frunk: ${hood ? 'Open' : 'Closed'}`, hexPayload, now);
+      recordLog(idFormatted, canMappings.doorsName, `Doors: ${fl || fr || rl || rr ? 'Ajar' : 'Latched'}, Locks: ${isLocked ? 'Locked' : 'Unlocked'}`, hexPayload, now);
     }
 
     // Tailgate / Trunk Status (Dynamically mapped from catalog, e.g. 0x414)
@@ -744,15 +760,18 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       recordLog(idFormatted, canMappings.climateTargetName, `Driver: ${bytes[1]} / Pass: ${bytes[2]}`, hexPayload, now);
     }
 
-    // Rear Defroster & Hazards (Dynamically mapped from catalog, e.g. 0x541)
-    else if ((normId === canMappings.defrost || normId === canMappings.hazards) && bytes.length >= 1) {
-      const def = Boolean(bytes[0] & 0x01);
+    // Rear Defroster (Dynamically mapped from catalog, e.g. 0x541 with D5 match 0x10 mask 0xF0)
+    else if (normId === canMappings.defrost && bytes.length >= 5) {
+      const def = (bytes[4] & 0xF0) === 0x10;
       setRearDefrost(def);
-      if (bytes.length >= 5) {
-        const haz = Boolean(bytes[4] & 0x20);
-        setHazards(haz);
-      }
       recordLog(idFormatted, canMappings.defrostName, def ? 'DEFROST ON' : 'DEFROST OFF', hexPayload, now);
+    }
+
+    // Hazard Flashers
+    else if (normId === canMappings.hazards && bytes.length >= 5) {
+      const haz = Boolean(bytes[4] & 0x20);
+      setHazards(haz);
+      recordLog(idFormatted, canMappings.hazardsName, haz ? 'HAZARDS ON' : 'HAZARDS OFF', hexPayload, now);
     }
 
     // Heated Steering Wheel (Dynamically mapped from catalog, e.g. 0x418)
@@ -762,6 +781,28 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       const lvl = levels[val] || 'off';
       setSteeringWheelHeat(lvl);
       recordLog(idFormatted, canMappings.steeringHeatName, lvl.toUpperCase(), hexPayload, now);
+    }
+
+    // Sunroof Glass & Cover (Dynamically mapped from catalog, e.g. 0x442)
+    else if ((normId === canMappings.sunroof || normId === '442') && bytes.length >= 8) {
+      const d7 = bytes[6];
+      let sState: 'closed' | 'vent' | 'open' = 'closed';
+      if (d7 === 0x60 || d7 === 0x20) sState = 'open';
+      else if (d7 === 0x00) sState = 'vent';
+      else if (d7 === 0x10) sState = 'closed';
+      setSunroof(prev => ({ ...prev, equipped: true, state: sState }));
+      recordLog(idFormatted, canMappings.sunroofName, `Sunroof State: ${sState.toUpperCase()}`, hexPayload, now);
+    }
+
+    // Headlight & Turn Signal Stalk (Dynamically mapped from catalog, e.g. 0x3C1)
+    else if ((normId === '3c1' || normId === 'turn_signal') && bytes.length >= 1) {
+      const b0 = bytes[0];
+      const leftBlink = Boolean(b0 & 0x01);
+      const rightBlink = Boolean(b0 & 0x02);
+      if (leftBlink && !rightBlink) setTurnSignal('left');
+      else if (rightBlink && !leftBlink) setTurnSignal('right');
+      else setTurnSignal('off');
+      recordLog(idFormatted, 'Turn Signal & Light Stalk', `Turn Signal: ${leftBlink ? 'Left' : rightBlink ? 'Right' : 'Off'}`, hexPayload, now);
     }
 
     // Driver Seat Comfort (Dynamically mapped from catalog, e.g. 0x496)
@@ -876,13 +917,15 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   };
 
   const adjustTemp = (isDriver: boolean, delta: number) => {
+    const minT = tempUnit === 'C' ? 17 : 62;
+    const maxT = tempUnit === 'C' ? 32 : 86;
     if (isDriver) {
-      const next = Math.max(62, Math.min(82, driverTemp + delta));
+      const next = Math.max(minT, Math.min(maxT, driverTemp + delta));
       setDriverTemp(next);
       if (climateSync) setPassengerTemp(next);
       dispatchCommand('climate_driver_temp', `${next}`, `Driver Target Temp: ${next}°${tempUnit}`);
     } else {
-      const next = Math.max(62, Math.min(82, passengerTemp + delta));
+      const next = Math.max(minT, Math.min(maxT, passengerTemp + delta));
       setPassengerTemp(next);
       setClimateSync(false);
       dispatchCommand('climate_passenger_temp', `${next}`, `Passenger Target Temp: ${next}°${tempUnit}`);
@@ -1503,7 +1546,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                             id={`sunroof-pos-${pos}`}
                             onClick={() => {
                               setSunroof(prev => ({ ...prev, state: pos }));
-                              triggerNotice(`Sunroof: ${pos === 'vent' ? 'Tilt Vent' : pos === 'open' ? 'Fully Open' : 'Closed'}`);
+                              dispatchCommand('sunroof_extended', pos, `Sunroof: ${pos === 'vent' ? 'Tilt Vent' : pos === 'open' ? 'Fully Open' : 'Closed'}`);
                             }}
                             className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-colors ${
                               sunroof.state === pos
