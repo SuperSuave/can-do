@@ -35,7 +35,7 @@
 
 #define TRACK_POPUP_ISOTP_FLOW_CONTROL_TIMEOUT_US 1000000U
 #define TRACK_POPUP_ISOTP_MAX_WAIT_FRAMES 3U
-#define TRACK_POPUP_ISOTP_TASK_STACK_SIZE (3U * 1024U)
+#define TRACK_POPUP_ISOTP_TASK_STACK_SIZE (2U * 1024U)
 #define TRACK_POPUP_ISOTP_TASK_PRIORITY 6U
 
 // ********************* state machine storage *********************
@@ -541,7 +541,10 @@ void track_popup_init(void) {
     };
     popup.queue = xQueueCreate(TRACK_POPUP_QUEUE_DEPTH,
                                sizeof(track_popup_request_t));
-    configASSERT(popup.queue != NULL);
+    if (popup.queue == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate track_popup queue (out of memory)");
+        return;
+    }
 
     const isotp_tx_config_t config = {
         .bus = TRACK_POPUP_TARGET_BUS,
@@ -556,8 +559,11 @@ void track_popup_init(void) {
     bool worker_started = isotp_tx_start_worker(
         &popup.isotp, "track_popup_isotp",
         TRACK_POPUP_ISOTP_TASK_STACK_SIZE, TRACK_POPUP_ISOTP_TASK_PRIORITY);
-    configASSERT(worker_started);
-    sm_init(&popup.sm, "track-popup", &S_IDLE, NULL);
+    if (!worker_started) {
+        ESP_LOGE(TAG, "Failed to start track_popup_isotp worker (out of memory)");
+    } else {
+        sm_init(&popup.sm, "track-popup", &S_IDLE, NULL);
+    }
 }
 
 void track_popup_tick(void) {

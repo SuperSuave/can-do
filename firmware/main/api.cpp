@@ -1334,7 +1334,7 @@ static esp_err_t ws_handler(httpd_req_t *req) {
 httpd_handle_t start_webserver(void) {
     httpd_handle_t server = nullptr;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.stack_size = 8192;
+    config.stack_size = 5120;
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.max_uri_handlers = 40;
     config.lru_purge_enable = true;

@@ -17,8 +17,13 @@ CONFIG_HTTPD_WS_SUPPORT=y
 # FreeRTOS configuration
 CONFIG_FREERTOS_HZ=1000
 
-# Sockets: ensure HTTP, WebSocket, MQTT, and GVRET can operate concurrently
-CONFIG_LWIP_MAX_SOCKETS=16
+# Sockets: balanced for HTTP, WebSocket, MQTT, and GVRET on ESP32-C3
+CONFIG_LWIP_MAX_SOCKETS=10
+
+# Wi-Fi buffer tuning to reclaim ~25KB internal SRAM for ESP32-C3
+CONFIG_ESP32_WIFI_DYNAMIC_RX_BUFFER_NUM=16
+CONFIG_ESP32_WIFI_DYNAMIC_TX_BUFFER_NUM=16
+CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM=6
 
 # Main boot task stack headroom for catalog parsing
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
