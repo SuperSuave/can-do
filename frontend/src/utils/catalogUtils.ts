@@ -8,7 +8,7 @@
  *   // resolved.network and resolved.options now reflect the correct variant.
  */
 
-import { Command, Vehicle } from '../types/catalog';
+import { Command, CommandOption, Vehicle } from '../types/catalog';
 
 /**
  * Resolve a command's `variants` for the given vehicle, returning a new
@@ -127,11 +127,11 @@ export function expandLinearScaleOptions(cmd: Command): CommandOption[] {
       continue;
     }
     const matchHex = named.match
-      ? Object.values(named.match)[0]?.toLowerCase()
+      ? (Object.values(named.match)[0] as string)?.toLowerCase()
       : undefined;
     const idx = matchHex !== undefined
       ? generated.findIndex(g =>
-          Object.values(g.match ?? {})[0]?.toLowerCase() === matchHex)
+          (Object.values(g.match ?? {})[0] as string)?.toLowerCase() === matchHex)
       : -1;
 
     if (idx >= 0) {

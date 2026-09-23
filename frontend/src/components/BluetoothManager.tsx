@@ -359,7 +359,7 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
                   <div className="min-w-0 pr-2">
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-bold text-white truncate">
-                        {device.name || 'Wireless Controller'}
+                        {device.name || `BLE Device [${device.address.slice(-8)}]`}
                       </span>
                       {getSignalIcon(device.rssi)}
                     </div>

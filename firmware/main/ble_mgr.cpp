@@ -266,8 +266,16 @@ static void parse_adv_data(const uint8_t *data, uint8_t length, std::string &nam
         uint8_t field_len = data[index];
         if (field_len == 0 || index + 1 + field_len > length) break;
         uint8_t field_type = data[index + 1];
-        if (field_type == BLE_HS_ADV_TYPE_COMP_NAME || field_type == BLE_HS_ADV_TYPE_INCOMP_NAME) {
-            name.assign((const char *)&data[index + 2], field_len - 1);
+        if (field_type == 0x08 || field_type == 0x09 || field_type == BLE_HS_ADV_TYPE_COMP_NAME || field_type == BLE_HS_ADV_TYPE_INCOMP_NAME) {
+            if (field_len > 1) {
+                name.assign((const char *)&data[index + 2], field_len - 1);
+                size_t end = name.find_last_not_of("\0 \n\r\t");
+                if (end != std::string::npos) {
+                    name = name.substr(0, end + 1);
+                } else {
+                    name.clear();
+                }
+            }
         }
         index += field_len + 1;
     }
@@ -502,7 +510,11 @@ static int ble_mgr_gap_event(struct ble_gap_event *event, void *arg) {
             if (!found && s_discovered_devices.size() < 40) {
                 BleDeviceInfo dev;
                 dev.address = addr_str;
-                dev.name = name;
+                if (name.empty()) {
+                    dev.name = std::string("BLE Device [") + addr_str.substr(9) + "]";
+                } else {
+                    dev.name = name;
+                }
                 dev.rssi = event->disc.rssi;
                 dev.addr_type = event->disc.addr.type;
                 s_discovered_devices.push_back(dev);

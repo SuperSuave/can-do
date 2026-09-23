@@ -367,10 +367,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   };
 
   const recordLog = (id: string, name: string, decoded: string, raw: string, timestamp: string) => {
-    setRecentCanLogs(prev => [
-      { id, name, decoded, raw, timestamp },
-      ...prev.slice(0, 19)
-    ]);
+    // Telemetry stream disabled
   };
 
   // Parser for high-level catalog entity states (broadcast via WebSocket or fetched via /api/states)
@@ -1833,56 +1830,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
             </div>
           </div>
 
-          {/* Live CAN Telemetry Inspector Stream */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--border-color)] space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Radio className="w-3.5 h-3.5 text-emerald-400" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Live CAN Telemetry</h3>
-              </div>
-              <span className="text-[10px] font-mono text-slate-400">E-GMP Bus 0</span>
-            </div>
 
-            {/* Decoded CAN Stream */}
-            <div className="h-56 overflow-y-auto space-y-2 pr-1 font-mono text-xs">
-              {recentCanLogs.length === 0 ? (
-                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/60 text-slate-400 text-center text-xs">
-                  Awaiting live CAN frames...
-                  <div className="mt-1 text-[11px] text-slate-500">
-                    {connectedDevice ? 'Monitoring live vehicle TWAI bus' : 'Listening on /ws endpoint for physical CAN packets'}
-                  </div>
-                </div>
-              ) : (
-                recentCanLogs.map((log, idx) => (
-                  <div
-                    key={idx}
-                    className="p-2 rounded-xl bg-slate-900/70 border border-slate-800/80 text-[11px] space-y-1 hover:border-slate-700 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-cyan-300">{log.id}</span>
-                      <span className="text-[10px] text-slate-400">{log.name}</span>
-                    </div>
-                    <div className="text-slate-200 font-sans font-medium">{log.decoded}</div>
-                    <div className="text-[10px] text-slate-400 truncate">
-                      Hex: <span className="text-slate-300">{log.raw}</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Quick Catalog Link */}
-            {onNavigateToCatalog && (
-              <button
-                type="button"
-                onClick={() => onNavigateToCatalog('climate')}
-                className="w-full py-2 px-3 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-xs font-medium text-slate-300 flex items-center justify-center gap-1.5 transition-colors"
-              >
-                <span>Browse CAN Messages in Catalog</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
 
         </div>
 

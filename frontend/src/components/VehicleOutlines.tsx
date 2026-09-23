@@ -669,7 +669,7 @@ export const VehicleSilhouette: React.FC<VehicleOutlineProps> = ({
         id="door-fl"
         className="cursor-pointer"
         onClick={() => onToggleDoor('frontLeft')}
-        transform={doors.frontLeft ? 'translate(-12, -4) rotate(-8 82 200)' : 'none'}
+        transform={doors.frontLeft ? 'translate(-50, 2) rotate(24 84 310)' : 'none'}
         style={{ transition: 'transform 0.3s ease-out' }}
       >
         <path d="M 84 195 C 80 230, 80 270, 82 310 L 98 310 L 98 195 Z" fill={doors.frontLeft ? '#b45309' : '#1e293b'} stroke={doors.frontLeft ? '#f59e0b' : '#475569'} strokeWidth="1.5" />
@@ -680,7 +680,7 @@ export const VehicleSilhouette: React.FC<VehicleOutlineProps> = ({
         id="door-fr"
         className="cursor-pointer"
         onClick={() => onToggleDoor('frontRight')}
-        transform={doors.frontRight ? 'translate(12, -4) rotate(8 298 200)' : 'none'}
+        transform={doors.frontRight ? 'translate(14, 2) rotate(-14 296 310)' : 'none'}
         style={{ transition: 'transform 0.3s ease-out' }}
       >
         <path d="M 296 195 C 300 230, 300 270, 298 310 L 282 310 L 282 195 Z" fill={doors.frontRight ? '#b45309' : '#1e293b'} stroke={doors.frontRight ? '#f59e0b' : '#475569'} strokeWidth="1.5" />
@@ -691,7 +691,7 @@ export const VehicleSilhouette: React.FC<VehicleOutlineProps> = ({
         id="door-rl"
         className="cursor-pointer"
         onClick={() => onToggleDoor('rearLeft')}
-        transform={doors.rearLeft ? 'translate(-12, 4) rotate(-8 82 430)' : 'none'}
+        transform={doors.rearLeft ? 'translate(-14, -2) rotate(-14 82 320)' : 'none'}
         style={{ transition: 'transform 0.3s ease-out' }}
       >
         <path d="M 82 320 C 80 360, 80 400, 84 445 L 98 445 L 98 320 Z" fill={doors.rearLeft ? '#b45309' : '#1e293b'} stroke={doors.rearLeft ? '#f59e0b' : '#475569'} strokeWidth="1.5" />
@@ -702,7 +702,7 @@ export const VehicleSilhouette: React.FC<VehicleOutlineProps> = ({
         id="door-rr"
         className="cursor-pointer"
         onClick={() => onToggleDoor('rearRight')}
-        transform={doors.rearRight ? 'translate(12, 4) rotate(8 298 430)' : 'none'}
+        transform={doors.rearRight ? 'translate(14, -2) rotate(14 298 320)' : 'none'}
         style={{ transition: 'transform 0.3s ease-out' }}
       >
         <path d="M 298 320 C 300 360, 300 400, 296 445 L 282 445 L 282 320 Z" fill={doors.rearRight ? '#b45309' : '#1e293b'} stroke={doors.rearRight ? '#f59e0b' : '#475569'} strokeWidth="1.5" />
