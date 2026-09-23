@@ -511,7 +511,7 @@ static int ble_mgr_gap_event(struct ble_gap_event *event, void *arg) {
                 BleDeviceInfo dev;
                 dev.address = addr_str;
                 if (name.empty()) {
-                    dev.name = std::string("BLE Device [") + addr_str.substr(9) + "]";
+                    dev.name = std::string("BLE Device [") + (addr_str + 9) + "]";
                 } else {
                     dev.name = name;
                 }
