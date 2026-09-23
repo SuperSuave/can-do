@@ -9,6 +9,16 @@
 #include <algorithm>
 #include <sys/stat.h>
 
+#include "nimble/nimble_port.h"
+#include "nimble/nimble_port_freertos.h"
+#include "host/ble_hs.h"
+#include "host/util/util.h"
+#include "services/gap/ble_svc_gap.h"
+#include "services/gatt/ble_svc_gatt.h"
+#include "host/ble_uuid.h"
+#include "host/ble_gap.h"
+#include "host/ble_gatt.h"
+
 static const char* TAG = "BLE_MGR";
 static const char* BLE_CONFIG_FILE = "/spiffs/ble_config.json";
 
@@ -180,12 +190,45 @@ static void dispatch_button_event(const BleButtonEvent& evt) {
     broadcast_ws_raw(ws_buf);
 }
 
+static void ble_mgr_on_reset(int reason) {
+    ESP_LOGE(TAG, "NimBLE host reset, reason: %d", reason);
+}
+
+static void ble_mgr_on_sync(void) {
+    ESP_LOGI(TAG, "NimBLE host synced");
+}
+
+static void ble_mgr_host_task(void *param) {
+    ESP_LOGI(TAG, "NimBLE host task started");
+    nimble_port_run();
+    nimble_port_freertos_deinit();
+}
+
 esp_err_t ble_mgr_init(void) {
     std::lock_guard<std::mutex> lock(s_ble_mutex);
     if (s_ble_enabled) return ESP_OK;
 
     ESP_LOGI(TAG, "Initializing Native BLE HID Controller...");
     load_paired_devices_from_fs();
+
+    esp_err_t ret = nimble_port_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize NimBLE port: %d", ret);
+        return ret;
+    }
+
+    ble_hs_cfg.reset_cb = ble_mgr_on_reset;
+    ble_hs_cfg.sync_cb = ble_mgr_on_sync;
+    ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
+
+    ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_NO_IO;
+    ble_hs_cfg.sm_bonding = 1;
+    ble_hs_cfg.sm_mitm = 0;
+    ble_hs_cfg.sm_sc = 0;
+    ble_hs_cfg.sm_our_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
+    ble_hs_cfg.sm_their_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
+
+    nimble_port_freertos_init(ble_mgr_host_task);
 
     s_ble_enabled = true;
     ESP_LOGI(TAG, "BLE HID Controller initialized successfully");
@@ -205,6 +248,21 @@ bool ble_mgr_is_scanning(void) {
     return s_ble_scanning;
 }
 
+static int ble_mgr_gap_event(struct ble_gap_event *event, void *arg);
+
+static void parse_adv_data(const uint8_t *data, uint8_t length, std::string &name) {
+    uint8_t index = 0;
+    while (index < length) {
+        uint8_t field_len = data[index];
+        if (field_len == 0 || index + 1 + field_len > length) break;
+        uint8_t field_type = data[index + 1];
+        if (field_type == BLE_HS_ADV_TYPE_COMP_NAME || field_type == BLE_HS_ADV_TYPE_INCOMP_NAME) {
+            name.assign((const char *)&data[index + 2], field_len - 1);
+        }
+        index += field_len + 1;
+    }
+}
+
 esp_err_t ble_mgr_start_scan(uint32_t duration_sec) {
     std::lock_guard<std::mutex> lock(s_ble_mutex);
     if (!s_ble_enabled) return ESP_ERR_INVALID_STATE;
@@ -214,98 +272,280 @@ esp_err_t ble_mgr_start_scan(uint32_t duration_sec) {
     s_scan_start_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
     s_scan_duration_ms = duration_sec * 1000;
 
+    struct ble_gap_disc_params disc_params;
+    memset(&disc_params, 0, sizeof(disc_params));
+    disc_params.filter_duplicates = 1;
+    disc_params.passive = 0; // Active scan to get scan responses (device names)
+    disc_params.itvl = 0;
+    disc_params.window = 0;
+    disc_params.filter_policy = 0;
+    disc_params.limited = 0;
+
+    uint8_t own_addr_type;
+    ble_hs_id_infer_auto(0, &own_addr_type);
+
+    int rc = ble_gap_disc(own_addr_type, duration_sec * 1000, &disc_params, ble_mgr_gap_event, nullptr);
+    if (rc != 0) {
+        ESP_LOGE(TAG, "Error initiating GAP discovery procedure; rc=%d", rc);
+        s_ble_scanning = false;
+        return ESP_FAIL;
+    }
+
     ESP_LOGI(TAG, "Started BLE HID discovery scan (timeout: %lu sec)", (unsigned long)duration_sec);
     return ESP_OK;
 }
 
 esp_err_t ble_mgr_stop_scan(void) {
     std::lock_guard<std::mutex> lock(s_ble_mutex);
-    s_ble_scanning = false;
-    ESP_LOGI(TAG, "Stopped BLE HID discovery scan");
+    if (s_ble_scanning) {
+        ble_gap_disc_cancel();
+        s_ble_scanning = false;
+        ESP_LOGI(TAG, "Stopped BLE HID discovery scan");
+    }
     return ESP_OK;
+}
+
+static uint16_t s_conn_handle = 0;
+
+static int parse_mac_address(const std::string& address, uint8_t* addr_val) {
+    int v[6];
+    if (sscanf(address.c_str(), "%x:%x:%x:%x:%x:%x",
+               &v[5], &v[4], &v[3], &v[2], &v[1], &v[0]) == 6) {
+        for (int i = 0; i < 6; i++) {
+            addr_val[i] = (uint8_t)v[i];
+        }
+        return 0;
+    }
+    return -1;
 }
 
 esp_err_t ble_mgr_connect(const std::string& address) {
     std::lock_guard<std::mutex> lock(s_ble_mutex);
     if (!s_ble_enabled) return ESP_ERR_INVALID_STATE;
 
+    ble_addr_t peer_addr;
+    peer_addr.type = BLE_ADDR_RANDOM; // Default to random as it is most common for HID devices
+
     std::string dev_name = "BLE Controller";
 
-    // Check discovered devices
+    // Check discovered devices for the correct address type
     for (auto& dev : s_discovered_devices) {
         if (dev.address == address) {
-            dev.connected = true;
-            dev.bonded = true;
             dev_name = dev.name;
+            peer_addr.type = dev.addr_type;
             break;
         }
     }
 
-    // Set connected device
+    if (parse_mac_address(address, peer_addr.val) != 0) {
+        ESP_LOGE(TAG, "Invalid MAC address format: %s", address.c_str());
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    uint8_t own_addr_type;
+    ble_hs_id_infer_auto(0, &own_addr_type);
+
+    int rc = ble_gap_connect(own_addr_type, &peer_addr, 30000, nullptr, ble_mgr_gap_event, nullptr);
+    if (rc != 0) {
+        ESP_LOGE(TAG, "Error initiating GAP connect procedure; rc=%d", rc);
+        return ESP_FAIL;
+    }
+
     s_connected_device.address = address;
     s_connected_device.name = dev_name;
-    s_connected_device.connected = true;
-    s_connected_device.bonded = true;
-    s_connected_device.rssi = -60;
-    s_connected_device.battery_pct = 95;
-    s_has_connected_device = true;
 
-    // Check if in paired list
-    bool already_paired = false;
-    for (auto& dev : s_paired_devices) {
-        if (dev.address == address) {
-            dev.connected = true;
-            already_paired = true;
+    ESP_LOGI(TAG, "Initiated connection to BLE Device '%s' [%s]", dev_name.c_str(), address.c_str());
+    return ESP_OK;
+}
+
+static int ble_mgr_on_dsc_disc(uint16_t conn_handle, const struct ble_gatt_error *error,
+                               uint16_t chr_val_handle, const struct ble_gatt_dsc *dsc, void *arg) {
+    if (error->status == 0 && dsc) {
+        if (ble_uuid_u16(&dsc->uuid.u) == 0x2902) { // CCCD UUID
+            ESP_LOGI(TAG, "Found CCCD descriptor at handle %d for char %d", dsc->handle, chr_val_handle);
+            uint8_t value[2] = {1, 0}; // Enable notifications
+            ble_gattc_write_flat(conn_handle, dsc->handle, value, sizeof(value), nullptr, nullptr);
+        }
+    }
+    return 0;
+}
+
+static int ble_mgr_on_chr_disc(uint16_t conn_handle, const struct ble_gatt_error *error,
+                               const struct ble_gatt_chr *chr, void *arg) {
+    if (error->status == 0 && chr) {
+        if (ble_uuid_u16(&chr->uuid.u) == 0x2A4D) { // HID Report UUID
+            ESP_LOGI(TAG, "Found HID Report Characteristic at handle %d", chr->val_handle);
+            ble_gattc_disc_all_dscs(conn_handle, chr->val_handle, 0xFFFF, ble_mgr_on_dsc_disc, nullptr);
+        }
+    }
+    return 0;
+}
+
+static int ble_mgr_on_svc_disc(uint16_t conn_handle, const struct ble_gatt_error *error,
+                               const struct ble_gatt_svc *service, void *arg) {
+    if (error->status == 0 && service) {
+        if (ble_uuid_u16(&service->uuid.u) == 0x1812) { // HID Service UUID
+            ESP_LOGI(TAG, "Found HID Service from %d to %d", service->start_handle, service->end_handle);
+            ble_gattc_disc_all_chrs(conn_handle, service->start_handle, service->end_handle, ble_mgr_on_chr_disc, nullptr);
+        }
+    }
+    return 0;
+}
+
+static int ble_mgr_gap_event(struct ble_gap_event *event, void *arg) {
+    std::lock_guard<std::mutex> lock(s_ble_mutex);
+
+    switch (event->type) {
+        case BLE_GAP_EVENT_DISC: {
+            char addr_str[18];
+            sprintf(addr_str, "%02X:%02X:%02X:%02X:%02X:%02X",
+                    event->disc.addr.val[5], event->disc.addr.val[4], event->disc.addr.val[3],
+                    event->disc.addr.val[2], event->disc.addr.val[1], event->disc.addr.val[0]);
+
+            std::string name;
+            parse_adv_data(event->disc.data, event->disc.length_data, name);
+
+            // Try to update existing
+            bool found = false;
+            for (auto& dev : s_discovered_devices) {
+                if (dev.address == addr_str) {
+                    dev.rssi = event->disc.rssi;
+                    if (!name.empty() && dev.name.empty()) {
+                        dev.name = name;
+                    }
+                    found = true;
+                    break;
+                }
+            }
+
+            // Add new device
+            if (!found) {
+                BleDeviceInfo dev;
+                dev.address = addr_str;
+                dev.name = name;
+                dev.rssi = event->disc.rssi;
+                dev.addr_type = event->disc.addr.type;
+                s_discovered_devices.push_back(dev);
+            }
+            break;
+        }
+        case BLE_GAP_EVENT_DISC_COMPLETE:
+            s_ble_scanning = false;
+            ESP_LOGI(TAG, "Discovery complete");
+            break;
+
+        case BLE_GAP_EVENT_CONNECT: {
+            if (event->connect.status == 0) {
+                ESP_LOGI(TAG, "Connection established");
+                s_conn_handle = event->connect.conn_handle;
+
+                s_connected_device.connected = true;
+                s_connected_device.bonded = true;
+                s_connected_device.rssi = -60;
+                s_connected_device.battery_pct = 95;
+                s_has_connected_device = true;
+
+                bool already_paired = false;
+                for (auto& dev : s_paired_devices) {
+                    if (dev.address == s_connected_device.address) {
+                        dev.connected = true;
+                        already_paired = true;
+                        break;
+                    }
+                }
+                if (!already_paired) {
+                    s_paired_devices.push_back(s_connected_device);
+                }
+                save_paired_devices_to_fs();
+
+                char ws_buf[256];
+                snprintf(ws_buf, sizeof(ws_buf),
+                         "{\"type\":\"ble_status\",\"connected\":true,\"device\":\"%s\",\"address\":\"%s\",\"rssi\":-60,\"battery\":95}",
+                         s_connected_device.name.c_str(), s_connected_device.address.c_str());
+                broadcast_ws_raw(ws_buf);
+
+                // Initiate security. GATT discovery must wait until the link is encrypted.
+                ble_gap_security_initiate(event->connect.conn_handle);
+            } else {
+                ESP_LOGE(TAG, "Connection failed; status=%d", event->connect.status);
+                s_has_connected_device = false;
+            }
+            break;
+        }
+
+        case BLE_GAP_EVENT_ENC_CHANGE: {
+            if (event->enc_change.status == 0) {
+                ESP_LOGI(TAG, "Connection encrypted, initiating GATT service discovery");
+                ble_gattc_disc_all_svcs(s_conn_handle, ble_mgr_on_svc_disc, nullptr);
+            } else {
+                ESP_LOGE(TAG, "Encryption failed; status=%d", event->enc_change.status);
+            }
+            break;
+        }
+
+        case BLE_GAP_EVENT_DISCONNECT: {
+            ESP_LOGI(TAG, "Disconnect; reason=%d", event->disconnect.reason);
+            s_conn_handle = 0;
+            if (s_has_connected_device) {
+                std::string disc_addr = s_connected_device.address;
+                std::string disc_name = s_connected_device.name;
+
+                s_connected_device.connected = false;
+                s_has_connected_device = false;
+
+                for (auto& dev : s_paired_devices) {
+                    if (dev.address == disc_addr) {
+                        dev.connected = false;
+                    }
+                }
+
+                char ws_buf[256];
+                snprintf(ws_buf, sizeof(ws_buf),
+                         "{\"type\":\"ble_status\",\"connected\":false,\"device\":\"%s\",\"address\":\"%s\"}",
+                         disc_name.c_str(), disc_addr.c_str());
+                broadcast_ws_raw(ws_buf);
+            }
+            break;
+        }
+
+        case BLE_GAP_EVENT_NOTIFY_RX: {
+            struct os_mbuf *om = event->notify_rx.om;
+            uint8_t data[64];
+            uint16_t len = OS_MBUF_PKTLEN(om);
+            if (len > sizeof(data)) len = sizeof(data);
+            os_mbuf_copydata(om, 0, len, data);
+
+            // Heuristic to route between Keyboard Boot Report (usually 8 bytes) and Consumer Report
+            if (len >= 8) {
+                ble_mgr_handle_keyboard_report(data, len, s_connected_device.address, s_connected_device.name);
+            } else if (len >= 2) {
+                ble_mgr_handle_consumer_report(data, len, s_connected_device.address, s_connected_device.name);
+            }
             break;
         }
     }
-    if (!already_paired) {
-        s_paired_devices.push_back(s_connected_device);
-    }
-    save_paired_devices_to_fs();
-
-    ESP_LOGI(TAG, "Connected to BLE Device '%s' [%s]", dev_name.c_str(), address.c_str());
-
-    // Broadcast connection status over WebSocket
-    char ws_buf[256];
-    snprintf(ws_buf, sizeof(ws_buf),
-             "{\"type\":\"ble_status\",\"connected\":true,\"device\":\"%s\",\"address\":\"%s\",\"rssi\":-60,\"battery\":95}",
-             dev_name.c_str(), address.c_str());
-    broadcast_ws_raw(ws_buf);
-
-    return ESP_OK;
+    return 0;
 }
 
 esp_err_t ble_mgr_disconnect(const std::string& address) {
     std::lock_guard<std::mutex> lock(s_ble_mutex);
-    if (!s_has_connected_device) return ESP_OK;
+    if (!s_has_connected_device || s_conn_handle == 0) return ESP_OK;
 
-    std::string disc_addr = s_connected_device.address;
-    std::string disc_name = s_connected_device.name;
-
-    s_connected_device.connected = false;
-    s_has_connected_device = false;
-
-    for (auto& dev : s_paired_devices) {
-        if (dev.address == disc_addr) {
-            dev.connected = false;
-        }
+    int rc = ble_gap_terminate(s_conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+    if (rc != 0) {
+        ESP_LOGE(TAG, "Failed to terminate connection; rc=%d", rc);
+        return ESP_FAIL;
     }
 
-    ESP_LOGI(TAG, "Disconnected BLE Device '%s' [%s]", disc_name.c_str(), disc_addr.c_str());
-
-    char ws_buf[256];
-    snprintf(ws_buf, sizeof(ws_buf),
-             "{\"type\":\"ble_status\",\"connected\":false,\"device\":\"%s\",\"address\":\"%s\"}",
-             disc_name.c_str(), disc_addr.c_str());
-    broadcast_ws_raw(ws_buf);
-
+    // UI state updates will happen in BLE_GAP_EVENT_DISCONNECT
+    ESP_LOGI(TAG, "Disconnect requested for BLE Device [%s]", address.c_str());
     return ESP_OK;
 }
 
 esp_err_t ble_mgr_unpair(const std::string& address) {
-    std::lock_guard<std::mutex> lock(s_ble_mutex);
+    // Cannot lock mutex here because ble_mgr_disconnect locks it as well.
     ble_mgr_disconnect(address);
+    std::lock_guard<std::mutex> lock(s_ble_mutex);
 
     auto it = std::remove_if(s_paired_devices.begin(), s_paired_devices.end(),
                              [&](const BleDeviceInfo& d) {

@@ -9,6 +9,7 @@
 struct BleDeviceInfo {
     std::string name;
     std::string address;     // e.g. "AA:BB:CC:DD:EE:FF"
+    uint8_t addr_type = 0;
     int rssi = 0;
     bool connected = false;
     bool bonded = false;
