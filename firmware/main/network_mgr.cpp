@@ -229,34 +229,9 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
             }
         } else if (event_id == WIFI_EVENT_SCAN_DONE) {
-            uint16_t ap_count = 0;
-            esp_wifi_scan_get_ap_num(&ap_count);
-            std::vector<wifi_ap_record_t> ap_records(ap_count);
-            if (ap_count > 0) {
-                esp_wifi_scan_get_ap_records(&ap_count, ap_records.data());
-            }
-
-            {
-                std::lock_guard<std::mutex> lock(s_net_mutex);
-                s_scan_results.clear();
-                for (const auto& ap : ap_records) {
-                    std::string ssid(reinterpret_cast<const char*>(ap.ssid));
-                    if (ssid.empty()) continue;
-
-                    bool in_known = false;
-                    for (const auto& kn : s_known_networks) {
-                        if (kn.ssid == ssid) {
-                            in_known = true;
-                            break;
-                        }
-                    }
-                    s_scan_results.push_back({ssid, ap.rssi, static_cast<uint8_t>(ap.authmode), in_known});
-                }
-            }
-
             s_is_scanning = false;
             xEventGroupSetBits(s_wifi_event_group, WIFI_SCAN_DONE_BIT);
-            ESP_LOGI(TAG, "Non-blocking Wi-Fi scan completed: found %d APs", ap_count);
+            ESP_LOGI(TAG, "Wi-Fi scan completed");
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         auto* event = static_cast<ip_event_got_ip_t*>(event_data);
@@ -308,6 +283,31 @@ static void network_roam_task(void* pvParameters) {
                 if (scan_err == ESP_OK) {
                     EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group, WIFI_SCAN_DONE_BIT, pdTRUE, pdFALSE, pdMS_TO_TICKS(5000));
                     if (bits & WIFI_SCAN_DONE_BIT) {
+                        uint16_t ap_count = 0;
+                        esp_wifi_scan_get_ap_num(&ap_count);
+                        if (ap_count > 16) ap_count = 16;
+                        wifi_ap_record_t ap_records[16];
+                        if (ap_count > 0 && esp_wifi_scan_get_ap_records(&ap_count, ap_records) == ESP_OK) {
+                            std::lock_guard<std::mutex> lock(s_net_mutex);
+                            s_scan_results.clear();
+                            for (uint16_t i = 0; i < ap_count; i++) {
+                                char clean_ssid[33] = {0};
+                                memcpy(clean_ssid, ap_records[i].ssid, 32);
+                                clean_ssid[32] = '\0';
+                                if (clean_ssid[0] == '\0') continue;
+
+                                std::string ssid(clean_ssid);
+                                bool in_known = false;
+                                for (const auto& kn : targets) {
+                                    if (kn.ssid == ssid) {
+                                        in_known = true;
+                                        break;
+                                    }
+                                }
+                                s_scan_results.push_back({ssid, ap_records[i].rssi, static_cast<uint8_t>(ap_records[i].authmode), in_known});
+                            }
+                        }
+
                         // 2. Rank candidate networks
                         std::vector<std::pair<KnownNetwork, int8_t>> candidates;
                         {

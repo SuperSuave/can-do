@@ -61,10 +61,11 @@ static void power_mgr_task(void* arg) {
         bool awake = uds_engine_is_vehicle_awake();
         float vbat = vbat_sensor_get_last();
 
-        if (awake) {
+        // Stay in Active tier if vehicle is awake OR if device is powered via USB bench power (vbat < 5.0V)
+        if (awake || vbat < 5.0f) {
             power_mgr_set_tier(POWER_TIER_ACTIVE);
         } else {
-            // Vehicle bus is silent
+            // Vehicle bus is silent and running on 12V vehicle battery
             power_mgr_set_tier(POWER_TIER_STANDBY);
 
             // Check if extreme power save (Tier 3 Deep Sleep) is warranted:
