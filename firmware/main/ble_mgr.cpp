@@ -1,6 +1,7 @@
 #include "ble_mgr.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"
 #include "cJSON.h"
 #include <cstdio>
 #include <cstring>
@@ -216,7 +217,8 @@ esp_err_t ble_mgr_init(void) {
     std::lock_guard<std::mutex> lock(s_ble_mutex);
     if (s_ble_enabled) return ESP_OK;
 
-    ESP_LOGI(TAG, "Initializing Native BLE HID Controller...");
+    ESP_LOGI(TAG, "Initializing Native BLE HID Controller... (free heap: %lu bytes)",
+             (unsigned long)esp_get_free_heap_size());
     load_paired_devices_from_fs();
 
     esp_err_t ret = nimble_port_init();
@@ -274,6 +276,15 @@ static void parse_adv_data(const uint8_t *data, uint8_t length, std::string &nam
 esp_err_t ble_mgr_start_scan(uint32_t duration_sec) {
     std::lock_guard<std::mutex> lock(s_ble_mutex);
     if (!s_ble_enabled) return ESP_ERR_INVALID_STATE;
+
+    // Guard against scanning when heap is critically low — BLE scan itself allocates
+    // internal buffers and a busy RF environment can add dozens of discovered entries.
+    uint32_t free_heap = esp_get_free_heap_size();
+    ESP_LOGI(TAG, "BLE scan requested — free heap: %lu bytes", (unsigned long)free_heap);
+    if (free_heap < 20000) {
+        ESP_LOGW(TAG, "Low heap (%lu bytes) — refusing BLE scan to prevent crash", (unsigned long)free_heap);
+        return ESP_ERR_NO_MEM;
+    }
 
     s_discovered_devices.clear();
     s_ble_scanning = true;
@@ -487,8 +498,8 @@ static int ble_mgr_gap_event(struct ble_gap_event *event, void *arg) {
                 }
             }
 
-            // Add new device
-            if (!found) {
+            // Add new device (cap at 40 to prevent heap exhaustion in busy RF environments)
+            if (!found && s_discovered_devices.size() < 40) {
                 BleDeviceInfo dev;
                 dev.address = addr_str;
                 dev.name = name;
