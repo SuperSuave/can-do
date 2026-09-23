@@ -1348,8 +1348,8 @@ httpd_handle_t start_webserver(void) {
     config.lru_purge_enable = true;
     config.keep_alive_enable = true;
     config.keep_alive_idle = 10;
-    config.send_timeout = 25; // 25s send timeout for large asset streaming
-    config.recv_timeout = 15;
+    config.send_wait_timeout = 25; // 25s send wait timeout for large asset streaming
+    config.recv_wait_timeout = 15;
     config.max_open_sockets = 4; // limit open sockets to conserve lwIP buffers on ESP32-C3
 
     esp_err_t err = httpd_start(&server, &config);
