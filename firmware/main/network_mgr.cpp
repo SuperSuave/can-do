@@ -214,7 +214,10 @@ static void stop_softap(void) {
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     if (event_base == WIFI_EVENT) {
         if (event_id == WIFI_EVENT_STA_START) {
-            ESP_LOGI(TAG, "Wi-Fi STA started");
+            esp_wifi_set_ps(WIFI_PS_NONE);
+            ESP_LOGI(TAG, "Wi-Fi STA started (modem sleep disabled)");
+        } else if (event_id == WIFI_EVENT_STA_CONNECTED) {
+            esp_wifi_set_ps(WIFI_PS_NONE);
         } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
             s_sta_connected = false;
             s_cur_sta_ip = "0.0.0.0";
@@ -234,6 +237,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
             ESP_LOGI(TAG, "Wi-Fi scan completed");
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        esp_wifi_set_ps(WIFI_PS_NONE);
         auto* event = static_cast<ip_event_got_ip_t*>(event_data);
         char ip_str[16], gw_str[16], mask_str[16];
         esp_ip4addr_ntoa(&event->ip_info.ip, ip_str, sizeof(ip_str));
@@ -252,7 +256,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
             s_cur_sta_rssi = ap_info.rssi;
         }
 
-        ESP_LOGI(TAG, "Associated with '%s'. Got IP: %s (GW: %s)", s_cur_sta_ssid.c_str(), ip_str, gw_str);
+        ESP_LOGI(TAG, "Associated with '%s'. Got IP: %s (GW: %s, power-save: NONE)", s_cur_sta_ssid.c_str(), ip_str, gw_str);
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
 
         if (s_ap_mode == AP_MODE_AUTO) {
@@ -426,7 +430,8 @@ esp_err_t network_mgr_init(void) {
     }
 
     ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_LOGI(TAG, "Wi-Fi started. SoftAP '%s' ready.", s_ap_ssid.c_str());
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    ESP_LOGI(TAG, "Wi-Fi started. SoftAP '%s' ready (modem sleep disabled).", s_ap_ssid.c_str());
 
     xTaskCreate(network_roam_task, "net_roam", 4096, nullptr, 3, nullptr);
 

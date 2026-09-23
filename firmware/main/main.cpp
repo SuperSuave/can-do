@@ -121,7 +121,7 @@ static void app_ip_event_handler(void* arg, esp_event_base_t event_base, int32_t
     if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         auto event = static_cast<ip_event_got_ip_t*>(event_data);
         ESP_LOGI(TAG, "Network ready. IP: " IPSTR, IP2STR(&event->ip_info.ip));
-        xTaskCreate(network_ready_task, "net_ready", 4096, nullptr, 3, nullptr);
+        xTaskCreate(network_ready_task, "net_ready", 2560, nullptr, 3, nullptr);
     }
 }
 

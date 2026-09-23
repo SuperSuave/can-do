@@ -213,13 +213,11 @@ static void ble_mgr_host_task(void *param) {
     nimble_port_freertos_deinit();
 }
 
-esp_err_t ble_mgr_init(void) {
-    std::lock_guard<std::mutex> lock(s_ble_mutex);
+static esp_err_t ble_mgr_start_stack(void) {
     if (s_ble_enabled) return ESP_OK;
 
-    ESP_LOGI(TAG, "Initializing Native BLE HID Controller... (free heap: %lu bytes)",
+    ESP_LOGI(TAG, "Starting Native BLE HID Controller stack... (free heap: %lu bytes)",
              (unsigned long)esp_get_free_heap_size());
-    load_paired_devices_from_fs();
 
     esp_err_t ret = nimble_port_init();
     if (ret != ESP_OK) {
@@ -243,6 +241,20 @@ esp_err_t ble_mgr_init(void) {
     s_ble_enabled = true;
     ESP_LOGI(TAG, "BLE HID Controller initialized successfully");
     return ESP_OK;
+}
+
+esp_err_t ble_mgr_init(void) {
+    std::lock_guard<std::mutex> lock(s_ble_mutex);
+    if (s_ble_enabled) return ESP_OK;
+
+    load_paired_devices_from_fs();
+    if (s_paired_devices.empty()) {
+        ESP_LOGI(TAG, "No paired BLE devices configured. Keeping BLE stack dormant to reclaim ~70KB RAM for Web & Wi-Fi.");
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "Found %d paired BLE device(s). Initializing BLE stack...", (int)s_paired_devices.size());
+    return ble_mgr_start_stack();
 }
 
 bool ble_mgr_is_enabled(void) {
@@ -283,7 +295,10 @@ static void parse_adv_data(const uint8_t *data, uint8_t length, std::string &nam
 
 esp_err_t ble_mgr_start_scan(uint32_t duration_sec) {
     std::lock_guard<std::mutex> lock(s_ble_mutex);
-    if (!s_ble_enabled) return ESP_ERR_INVALID_STATE;
+    if (!s_ble_enabled) {
+        esp_err_t start_ret = ble_mgr_start_stack();
+        if (start_ret != ESP_OK) return start_ret;
+    }
 
     // Guard against scanning when heap is critically low — BLE scan itself allocates
     // internal buffers and a busy RF environment can add dozens of discovered entries.
@@ -353,7 +368,10 @@ static int parse_mac_address(const std::string& address, uint8_t* addr_val) {
 
 esp_err_t ble_mgr_connect(const std::string& address) {
     std::lock_guard<std::mutex> lock(s_ble_mutex);
-    if (!s_ble_enabled) return ESP_ERR_INVALID_STATE;
+    if (!s_ble_enabled) {
+        esp_err_t start_ret = ble_mgr_start_stack();
+        if (start_ret != ESP_OK) return start_ret;
+    }
 
     ble_addr_t peer_addr;
     peer_addr.type = BLE_ADDR_RANDOM; // Default to random as it is most common for HID devices
