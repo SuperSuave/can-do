@@ -85,32 +85,43 @@ static esp_err_t init_twai(void) {
     return twai_start();
 }
 
+static bool s_sntp_initialized = false;
 static void init_sntp(void) {
+    if (s_sntp_initialized) return;
+    s_sntp_initialized = true;
     ESP_LOGI(TAG, "Initializing SNTP time synchronization (pool.ntp.org)...");
     esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
     esp_sntp_setservername(0, "pool.ntp.org");
     esp_sntp_init();
 }
 
+static bool s_mdns_initialized = false;
 static void init_mdns(void) {
+    if (s_mdns_initialized) return;
     esp_err_t err = mdns_init();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "mDNS init failed: %s", esp_err_to_name(err));
         return;
     }
+    s_mdns_initialized = true;
     mdns_hostname_set(g_device_id.c_str());
     mdns_instance_name_set("CAN Do Vehicle Interface");
     mdns_service_add(nullptr, "_http", "_tcp", 80, nullptr, 0);
     ESP_LOGI(TAG, "mDNS responder started: http://%s.local", g_device_id.c_str());
 }
 
+static void network_ready_task(void* pvParameters) {
+    init_sntp();
+    init_mdns();
+    mqtt_mgr_start();
+    vTaskDelete(nullptr);
+}
+
 static void app_ip_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         auto event = static_cast<ip_event_got_ip_t*>(event_data);
         ESP_LOGI(TAG, "Network ready. IP: " IPSTR, IP2STR(&event->ip_info.ip));
-        init_sntp();
-        init_mdns();
-        mqtt_mgr_start();
+        xTaskCreate(network_ready_task, "net_ready", 4096, nullptr, 3, nullptr);
     }
 }
 

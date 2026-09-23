@@ -361,8 +361,20 @@ void mqtt_mgr_start(void) {
 
     global_mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
     if (global_mqtt_client) {
-        esp_mqtt_client_register_event(global_mqtt_client, MQTT_EVENT_ANY, mqtt_event_handler, nullptr);
-        esp_mqtt_client_start(global_mqtt_client);
+        esp_err_t reg_err = esp_mqtt_client_register_event(global_mqtt_client, MQTT_EVENT_ANY, mqtt_event_handler, nullptr);
+        if (reg_err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed registering MQTT event handler: %s", esp_err_to_name(reg_err));
+            esp_mqtt_client_destroy(global_mqtt_client);
+            global_mqtt_client = nullptr;
+            return;
+        }
+        esp_err_t start_err = esp_mqtt_client_start(global_mqtt_client);
+        if (start_err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to start MQTT client: %s", esp_err_to_name(start_err));
+            esp_mqtt_client_destroy(global_mqtt_client);
+            global_mqtt_client = nullptr;
+            return;
+        }
         ESP_LOGI(TAG, "MQTT client started for broker: %s", s_mqtt_cfg.broker_url.c_str());
     } else {
         ESP_LOGE(TAG, "Failed initializing esp_mqtt_client");

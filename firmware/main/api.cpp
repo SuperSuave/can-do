@@ -1341,7 +1341,8 @@ httpd_handle_t start_webserver(void) {
     config.keep_alive_enable = true;
     config.keep_alive_idle = 5;
 
-    if (httpd_start(&server, &config) == ESP_OK) {
+    esp_err_t err = httpd_start(&server, &config);
+    if (err == ESP_OK) {
         auto reg_uri = [&](const char* uri, httpd_method_t method, esp_err_t (*handler)(httpd_req_t*), bool is_ws = false) {
             httpd_uri_t u = {};
             u.uri = uri;
@@ -1385,8 +1386,9 @@ httpd_handle_t start_webserver(void) {
         reg_uri("/*", HTTP_GET, static_file_handler);
 
         global_web_server = server;
-        // Do not redirect vprintf to websocket logger by default to avoid recursive heap allocations
-        // original_log_vprintf = esp_log_set_vprintf(custom_websocket_logger);
+        ESP_LOGI(TAG, "Embedded Web Server started successfully on port %d", config.server_port);
+    } else {
+        ESP_LOGE(TAG, "Failed starting HTTP web server: %s", esp_err_to_name(err));
     }
     return server;
 }

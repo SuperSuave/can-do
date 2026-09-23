@@ -28,6 +28,9 @@ CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM=6
 # Main boot task stack headroom for catalog parsing
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
 
+# System event task stack size
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=3584
+
 # Compiler optimization for code size
 CONFIG_COMPILER_OPTIMIZATION_SIZE=y
 
