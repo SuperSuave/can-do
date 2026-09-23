@@ -1218,15 +1218,21 @@ static esp_err_t api_ble_scan_handler(httpd_req_t *req) {
         }
     }
 
+    esp_err_t err = ESP_OK;
     if (start) {
-        ble_mgr_start_scan(duration);
+        err = ble_mgr_start_scan(duration);
     } else {
-        ble_mgr_stop_scan();
+        err = ble_mgr_stop_scan();
     }
 
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_sendstr(req, start ? "{\"status\":\"ok\",\"scanning\":true}" : "{\"status\":\"ok\",\"scanning\":false}");
-    return ESP_OK;
+    if (err == ESP_OK) {
+        httpd_resp_sendstr(req, start ? "{\"status\":\"ok\",\"scanning\":true}" : "{\"status\":\"ok\",\"scanning\":false}");
+        return ESP_OK;
+    } else {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Scan operation failed");
+        return ESP_FAIL;
+    }
 }
 
 static esp_err_t api_ble_pair_handler(httpd_req_t *req) {
@@ -1255,7 +1261,7 @@ static esp_err_t api_ble_pair_handler(httpd_req_t *req) {
     esp_err_t err = ble_mgr_connect(address);
     httpd_resp_set_type(req, "application/json");
     if (err == ESP_OK) {
-        httpd_resp_sendstr(req, "{\"status\":\"ok\",\"connected\":true}");
+        httpd_resp_sendstr(req, "{\"status\":\"ok\",\"connected\":false}");
         return ESP_OK;
     } else {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Pairing failed");
