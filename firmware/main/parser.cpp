@@ -7,7 +7,17 @@
 static const char* TAG = "CATALOG_PARSER";
 
 std::vector<CanEntity> global_catalog;
+std::unordered_map<uint32_t, std::vector<CanEntity*>> catalog_by_can_id;
 std::vector<AutomationRule> global_automations;
+
+void rebuild_catalog_can_id_index(void) {
+    catalog_by_can_id.clear();
+    for (auto& entity : global_catalog) {
+        if (entity.state_can_id != 0) {
+            catalog_by_can_id[entity.state_can_id].push_back(&entity);
+        }
+    }
+}
 
 int get_d_index(const char* key) {
     if (key != nullptr && key[0] == 'D' && strlen(key) >= 2) {
@@ -590,6 +600,111 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
     return true;
 }
 
+template<typename Handler>
+static bool stream_parse_array_from_file(FILE* f, const char* target_key, Handler handler) {
+    if (!f || !target_key) return false;
+
+    // 1. Scan for target key in quotes
+    int c;
+    bool in_quote = false;
+    bool escape = false;
+    std::string key_buf;
+    bool found_key = false;
+
+    while ((c = fgetc(f)) != EOF) {
+        if (escape) {
+            escape = false;
+            continue;
+        }
+        if (c == '\\' && in_quote) {
+            escape = true;
+            continue;
+        }
+        if (c == '"') {
+            if (!in_quote) {
+                in_quote = true;
+                key_buf.clear();
+            } else {
+                in_quote = false;
+                if (key_buf == target_key) {
+                    found_key = true;
+                    break;
+                }
+            }
+        } else if (in_quote) {
+            key_buf += static_cast<char>(c);
+        }
+    }
+
+    if (!found_key) return false;
+
+    // 2. Find '['
+    bool found_bracket = false;
+    while ((c = fgetc(f)) != EOF) {
+        if (c == '[') {
+            found_bracket = true;
+            break;
+        } else if (c == ']' || c == '}') {
+            return false;
+        }
+    }
+    if (!found_bracket) return false;
+
+    // 3. Extract each '{ ... }' object
+    std::string obj_buf;
+    obj_buf.reserve(2048);
+    int parsed_count = 0;
+
+    while ((c = fgetc(f)) != EOF) {
+        // Skip whitespace, commas, newlines until '{' or ']'
+        while (c != EOF && c != '{' && c != ']') {
+            c = fgetc(f);
+        }
+        if (c == EOF || c == ']') {
+            break; // End of array
+        }
+
+        // c is '{'
+        obj_buf.clear();
+        obj_buf += '{';
+        int depth = 1;
+        bool in_str = false;
+        escape = false;
+
+        while ((c = fgetc(f)) != EOF) {
+            obj_buf += static_cast<char>(c);
+            if (escape) {
+                escape = false;
+            } else if (c == '\\' && in_str) {
+                escape = true;
+            } else if (c == '"') {
+                in_str = !in_str;
+            } else if (!in_str) {
+                if (c == '{') {
+                    depth++;
+                } else if (c == '}') {
+                    depth--;
+                    if (depth == 0) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (depth == 0) {
+            cJSON* item_json = cJSON_Parse(obj_buf.c_str());
+            if (item_json) {
+                handler(item_json);
+                cJSON_Delete(item_json);
+                parsed_count++;
+            }
+            obj_buf.clear();
+        }
+    }
+
+    return parsed_count > 0;
+}
+
 bool load_catalog_from_fs(const char* filepath) {
     ESP_LOGI(TAG, "Loading catalog from %s", filepath);
     FILE* f = fopen(filepath, "r");
@@ -602,6 +717,49 @@ bool load_catalog_from_fs(const char* filepath) {
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
 
+    global_catalog.clear();
+    global_automations.clear();
+    catalog_by_can_id.clear();
+
+    // For large catalog files (> 16KB), use low-RAM streaming parser
+    if (size > 16384) {
+        ESP_LOGI(TAG, "Using low-memory streaming parser for large catalog (%ld bytes)", size);
+
+        // 1. Parse "commands" (fallback to "entities")
+        rewind(f);
+        bool ok = stream_parse_array_from_file(f, "commands", [](cJSON* cmd_json) {
+            CanEntity entity;
+            if (parse_entity(cmd_json, entity)) {
+                global_catalog.push_back(entity);
+            }
+        });
+        if (!ok) {
+            rewind(f);
+            stream_parse_array_from_file(f, "entities", [](cJSON* cmd_json) {
+                CanEntity entity;
+                if (parse_entity(cmd_json, entity)) {
+                    global_catalog.push_back(entity);
+                }
+            });
+        }
+
+        // 2. Parse "automations" if present
+        rewind(f);
+        stream_parse_array_from_file(f, "automations", [](cJSON* auto_json) {
+            AutomationRule rule;
+            if (parse_automation(auto_json, rule)) {
+                global_automations.push_back(rule);
+            }
+        });
+
+        fclose(f);
+        rebuild_catalog_can_id_index();
+        ESP_LOGI(TAG, "Catalog loaded: %zu entities, %zu automations, %zu indexed CAN IDs", 
+                 global_catalog.size(), global_automations.size(), catalog_by_can_id.size());
+        return !global_catalog.empty();
+    }
+
+    // Standard fallback parser for smaller files
     char* buffer = static_cast<char*>(malloc(size + 1));
     if (!buffer) {
         fclose(f);
@@ -620,9 +778,6 @@ bool load_catalog_from_fs(const char* filepath) {
         ESP_LOGE(TAG, "Failed to parse catalog JSON");
         return false;
     }
-
-    global_catalog.clear();
-    global_automations.clear();
 
     // Check "commands" first, fall back to "entities"
     cJSON* cmds_array = cJSON_GetObjectItem(root, "commands");
@@ -651,8 +806,9 @@ bool load_catalog_from_fs(const char* filepath) {
     }
 
     cJSON_Delete(root);
-    ESP_LOGI(TAG, "Catalog loaded: %zu entities, %zu automations", 
-             global_catalog.size(), global_automations.size());
+    rebuild_catalog_can_id_index();
+    ESP_LOGI(TAG, "Catalog loaded: %zu entities, %zu automations, %zu indexed CAN IDs", 
+             global_catalog.size(), global_automations.size(), catalog_by_can_id.size());
     return true;
 }
 

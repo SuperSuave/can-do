@@ -3,9 +3,13 @@
 #include "types.h"
 #include "cJSON.h"
 #include <vector>
+#include <unordered_map>
 
 extern std::vector<CanEntity> global_catalog;
+extern std::unordered_map<uint32_t, std::vector<CanEntity*>> catalog_by_can_id;
 extern std::vector<AutomationRule> global_automations;
+
+void rebuild_catalog_can_id_index(void);
 
 int get_d_index(const char* key);
 uint8_t parse_hex_string(const char* hex_str, bool* is_inverted = nullptr);

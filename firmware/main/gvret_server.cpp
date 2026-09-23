@@ -391,6 +391,6 @@ esp_err_t gvret_server_init(uint16_t port) {
         if (!s_gvret_queue) return ESP_ERR_NO_MEM;
     }
 
-    BaseType_t res = xTaskCreate(gvret_server_task, "gvret_srv", 4096, (void*)(uintptr_t)port, 4, nullptr);
+    BaseType_t res = xTaskCreate(gvret_server_task, "gvret_srv", 3072, (void*)(uintptr_t)port, 4, nullptr);
     return res == pdPASS ? ESP_OK : ESP_FAIL;
 }

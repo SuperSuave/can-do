@@ -428,7 +428,7 @@ esp_err_t network_mgr_init(void) {
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_LOGI(TAG, "Wi-Fi started. SoftAP '%s' ready.", s_ap_ssid.c_str());
 
-    xTaskCreate(network_roam_task, "net_roam", 4096, nullptr, 3, nullptr);
+    xTaskCreate(network_roam_task, "net_roam", 3072, nullptr, 3, nullptr);
 
     return ESP_OK;
 }

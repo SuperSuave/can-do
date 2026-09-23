@@ -47,6 +47,21 @@ static void ws_async_send(void *arg) {
     delete msg;
 }
 
+bool has_active_websocket_clients(void) {
+    if (!global_web_server) return false;
+    size_t max_clients = 8;
+    int client_fds[8];
+    size_t clients = max_clients;
+    if (httpd_get_client_list(global_web_server, &clients, client_fds) == ESP_OK) {
+        for (size_t i = 0; i < clients; ++i) {
+            if (httpd_ws_get_fd_info(global_web_server, client_fds[i]) == HTTPD_WS_CLIENT_WEBSOCKET) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void broadcast_ws_raw(const std::string& json_str) {
     if (!global_web_server) return;
     size_t max_clients = 8;
@@ -66,12 +81,13 @@ void broadcast_ws_raw(const std::string& json_str) {
 }
 
 void broadcast_ws_state(const std::string& entity_id, const std::string& state) {
+    if (!has_active_websocket_clients()) return;
     std::string json = "{\"type\":\"state\",\"entity\":\"" + entity_id + "\",\"state\":\"" + state + "\"}";
     broadcast_ws_raw(json);
 }
 
 void broadcast_ws_can_frame(const twai_message_t* msg) {
-    if (!msg || !global_web_server) return;
+    if (!msg || !has_active_websocket_clients()) return;
     char hex_data[17] = {0};
     uint8_t dlc = msg->data_length_code > 8 ? 8 : msg->data_length_code;
     for (int i = 0; i < dlc; i++) {
@@ -88,6 +104,7 @@ void broadcast_ws_can_frame(const twai_message_t* msg) {
 }
 
 void broadcast_ws_automation_event(const std::string& id, const std::string& name) {
+    if (!has_active_websocket_clients()) return;
     char buf[256];
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
     snprintf(buf, sizeof(buf),
@@ -202,24 +219,16 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
         httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
     }
 
-    // 4. Stream file out in 2KB chunks to minimize RAM usage
-    char *chunk = (char *)malloc(2048);
-    if (!chunk) {
-        close(fd);
-        httpd_resp_send_500(req);
-        return ESP_FAIL;
-    }
-
+    // 4. Stream file out in 1KB chunks without dynamic heap allocation
+    static char s_file_chunk[1024];
     ssize_t read_bytes;
-    while ((read_bytes = read(fd, chunk, 2048)) > 0) {
-        if (httpd_resp_send_chunk(req, chunk, read_bytes) != ESP_OK) {
-            free(chunk);
+    while ((read_bytes = read(fd, s_file_chunk, sizeof(s_file_chunk))) > 0) {
+        if (httpd_resp_send_chunk(req, s_file_chunk, read_bytes) != ESP_OK) {
             close(fd);
             return ESP_FAIL;
         }
     }
 
-    free(chunk);
     close(fd);
     httpd_resp_send_chunk(req, nullptr, 0); // Terminate chunked response
     return ESP_OK;
@@ -1325,7 +1334,7 @@ static esp_err_t ws_handler(httpd_req_t *req) {
 httpd_handle_t start_webserver(void) {
     httpd_handle_t server = nullptr;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.stack_size = 8192;
+    config.stack_size = 4096;
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.max_uri_handlers = 40;
     config.lru_purge_enable = true;
@@ -1376,7 +1385,8 @@ httpd_handle_t start_webserver(void) {
         reg_uri("/*", HTTP_GET, static_file_handler);
 
         global_web_server = server;
-        original_log_vprintf = esp_log_set_vprintf(custom_websocket_logger);
+        // Do not redirect vprintf to websocket logger by default to avoid recursive heap allocations
+        // original_log_vprintf = esp_log_set_vprintf(custom_websocket_logger);
     }
     return server;
 }

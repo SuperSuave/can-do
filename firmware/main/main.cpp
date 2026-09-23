@@ -74,7 +74,7 @@ static esp_err_t init_fs(void) {
 
 static esp_err_t init_twai(void) {
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, TWAI_MODE_NORMAL);
-    g_config.rx_queue_len = 64;
+    g_config.rx_queue_len = 128;
     g_config.tx_queue_len = 32;
     g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR | TWAI_ALERT_RX_QUEUE_FULL;
     twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
@@ -170,8 +170,8 @@ extern "C" void app_main(void) {
     uds_engine_init();
     power_mgr_init();
     xTaskCreate(can_rx_task, "CAN_RX", 4096, nullptr, 5, nullptr);
-    xTaskCreate(can_tx_task, "CAN_TX", 4096, nullptr, 4, nullptr);
-    xTaskCreate(time_scheduler_task, "TIME_SCHED", 3072, nullptr, 3, nullptr);
+    xTaskCreate(can_tx_task, "CAN_TX", 3072, nullptr, 4, nullptr);
+    xTaskCreate(time_scheduler_task, "TIME_SCHED", 2048, nullptr, 3, nullptr);
 
     ESP_LOGI(TAG, "Initialization complete. Ready.");
 }

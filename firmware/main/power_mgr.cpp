@@ -79,6 +79,6 @@ static void power_mgr_task(void* arg) {
 }
 
 void power_mgr_init(void) {
-    xTaskCreate(power_mgr_task, "PWR_MGR", 3072, nullptr, 1, nullptr);
+    xTaskCreate(power_mgr_task, "PWR_MGR", 2048, nullptr, 1, nullptr);
     ESP_LOGI(TAG, "Multi-Tier Smart Power Manager initialized");
 }

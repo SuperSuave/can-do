@@ -115,7 +115,7 @@ void vbat_sensor_init(void) {
     ESP_LOGI(TAG, "MeatPi WiCAN 12V Battery ADC initialized on GPIO 4 (ADC1_CH4)");
 
     // Spawn 24/7 background voltage monitor task
-    xTaskCreate(vbat_monitor_task, "VBAT_MON", 3072, nullptr, 2, nullptr);
+    xTaskCreate(vbat_monitor_task, "VBAT_MON", 2048, nullptr, 2, nullptr);
 }
 
 float vbat_sensor_read(void) {

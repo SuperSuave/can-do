@@ -57,16 +57,15 @@ void set_sniffer_mode(bool enabled, bool hardware_listen_only) {
     ESP_LOGI(TAG, "Sniffer mode: %s (HW listen-only=%d)", enabled ? "ACTIVE" : "OFF", hardware_listen_only ? 1 : 0);
 }
 
-static portMUX_TYPE s_cache_mux = portMUX_INITIALIZER_UNLOCKED;
+static std::mutex s_cache_mutex;
 
 bool get_cached_can_frame(uint32_t can_id, uint8_t out_data[8]) {
-    portENTER_CRITICAL(&s_cache_mux);
+    std::lock_guard<std::mutex> lock(s_cache_mutex);
     auto it = can_state_cache.find(can_id);
     bool found = (it != can_state_cache.end());
     if (found && out_data) {
         memcpy(out_data, it->second.data(), 8);
     }
-    portEXIT_CRITICAL(&s_cache_mux);
     return found;
 }
 
@@ -88,9 +87,8 @@ void init_can_engine(void) {
 void update_state_cache(uint32_t can_id, const uint8_t* data) {
     std::array<uint8_t, 8> payload;
     memcpy(payload.data(), data, 8);
-    portENTER_CRITICAL(&s_cache_mux);
+    std::lock_guard<std::mutex> lock(s_cache_mutex);
     can_state_cache[can_id] = payload;
-    portEXIT_CRITICAL(&s_cache_mux);
 }
 
 bool evaluate_condition(const AutomationCondition& cond) {
@@ -438,9 +436,15 @@ void can_rx_task(void* arg) {
             // Stream raw frame to connected SavvyCAN/GVRET client
             gvret_enqueue_frame(&rx_msg);
 
-            // If sniffer mode is enabled or frame is a monitored telemetry ID, stream to WebSocket dashboard
-            if (g_sniffer_mode.load() || mqtt_mgr_is_monitored_id(rx_msg.identifier)) {
-                broadcast_ws_can_frame(&rx_msg);
+            // Stream raw CAN frame to WebSocket dashboard ONLY if sniffer mode is actively enabled
+            if (g_sniffer_mode.load()) {
+                static uint32_t s_last_ws_sniffer_ms = 0;
+                uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+                // Throttle sniffer WebSocket updates to max ~30Hz (33ms) to prevent Wi-Fi buffer exhaustion
+                if (now_ms - s_last_ws_sniffer_ms >= 33) {
+                    s_last_ws_sniffer_ms = now_ms;
+                    broadcast_ws_can_frame(&rx_msg);
+                }
             }
 
             if (rx_msg.rtr) continue;
@@ -546,9 +550,12 @@ void can_rx_task(void* arg) {
                 }
             }
 
-            // 3. Match against catalog entities for state updates
-            for (auto& entity : global_catalog) {
-                if (entity.state_can_id == rx_msg.identifier) {
+            // 3. Match against catalog entities for state updates (O(1) indexed lookup)
+            auto cat_it = catalog_by_can_id.find(rx_msg.identifier);
+            if (cat_it != catalog_by_can_id.end()) {
+                for (auto* entity_ptr : cat_it->second) {
+                    if (!entity_ptr) continue;
+                    auto& entity = *entity_ptr;
                     for (const auto& opt : entity.options) {
                         if (is_match(rx_msg.data, opt)) {
                             if (entity.current_state != opt.label) {

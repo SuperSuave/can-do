@@ -295,7 +295,7 @@ void uds_engine_load_preferences(void) {
 
 void uds_engine_init(void) {
     uds_engine_load_preferences();
-    xTaskCreate(uds_worker_task, "UDS_WORKER", 3072, nullptr, 3, nullptr);
+    xTaskCreate(uds_worker_task, "UDS_WORKER", 2048, nullptr, 3, nullptr);
     ESP_LOGI(TAG, "UDS BMS Engine initialized (Triple-Gate Protected)");
 }
 
