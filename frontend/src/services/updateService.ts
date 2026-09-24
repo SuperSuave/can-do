@@ -101,9 +101,16 @@ export async function checkForUpdates(
 
     if (Array.isArray(release.assets)) {
       for (const asset of release.assets) {
-        const name = (asset.name || '').toLowerCase();
-        // Match only app binary (not merged image or storage partition)
-        if ((name === 'can-do.bin' || name === 'can-do-esp32c3.bin') && !firmwareUrl) {
+        // Match app binary (flexible matching supporting versioned names, excluding merged or storage)
+        const isAppBinary =
+          (name.startsWith('can-do') || name.startsWith('firmware')) &&
+          name.endsWith('.bin') &&
+          !name.includes('merged') &&
+          !name.includes('storage') &&
+          !name.includes('bootloader') &&
+          !name.includes('partition');
+
+        if (isAppBinary && !firmwareUrl) {
           firmwareUrl = asset.browser_download_url;
         } else if (name.includes('catalog') && name.endsWith('.json')) {
           catalogUrl = asset.browser_download_url;
@@ -124,10 +131,9 @@ export async function checkForUpdates(
 
     const hasAnyUpdate = isFwNewer || isCatNewer || isRebuild;
 
-    // Default fallback to main branch raw urls if catalog isn't individually attached
-    if (!catalogUrl) {
-      catalogUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/catalog/can_do_catalog.json`;
-    }
+    // Always use raw.githubusercontent.com for catalog download in browser
+    // because GitHub Release download assets redirect to S3 without CORS headers
+    catalogUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/${tag}/catalog/can_do_catalog.json`;
 
     return {
       has_update: hasAnyUpdate,
@@ -294,20 +300,40 @@ export async function executeUpdateSequence(
     // -------------------------------------------------------------
     // STAGE 2: MESSAGE CATALOG (Vehicle definitions & CAN DBC)
     // -------------------------------------------------------------
-    if (componentsToUpdate.catalog && updateData.assets.catalog_url) {
+    if (componentsToUpdate.catalog) {
       onProgress('catalog', 40, 'Fetching latest message catalog from GitHub...');
-      const catRes = await fetch(updateData.assets.catalog_url);
-      if (!catRes.ok) {
-        throw new Error(`Failed to download catalog: HTTP ${catRes.status}`);
+      let catalogText: string | null = null;
+      
+      const candidateUrls = [
+        `https://raw.githubusercontent.com/${GITHUB_REPO}/${updateData.version}/catalog/can_do_catalog.json`,
+        `https://raw.githubusercontent.com/${GITHUB_REPO}/main/catalog/can_do_catalog.json`,
+      ];
+      if (updateData.assets.catalog_url && !candidateUrls.includes(updateData.assets.catalog_url)) {
+        candidateUrls.push(updateData.assets.catalog_url);
       }
-      const catalogText = await catRes.text();
+
+      for (const url of candidateUrls) {
+        try {
+          const catRes = await fetch(url, { cache: 'no-cache' });
+          if (catRes.ok) {
+            catalogText = await catRes.text();
+            break;
+          }
+        } catch (e) {
+          console.warn(`Failed to fetch catalog from ${url}:`, e);
+        }
+      }
+
+      if (!catalogText) {
+        throw new Error('Unable to download message catalog from GitHub. Check internet connection or CORS restrictions.');
+      }
 
       onProgress('catalog', 60, 'Writing catalog.json to LittleFS storage...');
       // If firmware is also being updated, do not reboot yet!
       const deferReboot = !!(componentsToUpdate.firmware && updateData.assets.firmware_url);
       const ok = await uploadToDevice(deviceBaseUrl, '/spiffs/catalog.json', catalogText, deferReboot);
       if (!ok) {
-        throw new Error('Failed to save catalog.json to device');
+        throw new Error('Failed to save catalog.json to device LittleFS storage.');
       }
       onProgress('catalog', 75, 'Message Catalog updated successfully');
     }

@@ -269,8 +269,8 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const handleCheckForUpdates = async () => {
     setIsCheckingUpdate(true);
     try {
-      const currentFw = status?.firmware_version || '2026.9.1';
-      const currentCat = catalog?.catalog_version || '2026.9.1';
+      const currentFw = status?.firmware_version || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.2');
+      const currentCat = catalog?.catalog_version || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.2');
       const res = await checkForUpdates(currentCat, currentFw);
       setUpdateResult(res);
       if (res.has_update) {
@@ -285,11 +285,23 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     }
   };
 
+  // Automatically check updates once when entering the Updates tab
+  useEffect(() => {
+    if (activeTab === 'ota' && !updateResult && !isCheckingUpdate) {
+      handleCheckForUpdates();
+    }
+  }, [activeTab]);
+
   const handleInstallCloudUpdates = async () => {
-    if (!updateResult) return;
+    if (!updateResult) {
+      showNotice('No update metadata loaded. Please click "Check for Updates" first.', 'info');
+      return;
+    }
     setIsExecutingUpdate(true);
-    setUpdateProgressPct(0);
+    setUpdateProgressPct(10);
     setUpdateStage('checking');
+    setUpdateMessage('Initiating update sequence...');
+
     try {
       await executeUpdateSequence(
         deviceHost,
@@ -301,9 +313,17 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           setUpdateMessage(msg);
         }
       );
-      showNotice('Updates completed successfully! Device is restarting...', 'success');
+      setUpdateStage('complete');
+      setUpdateProgressPct(100);
+      setUpdateMessage('Updates completed successfully! Rebooting device...');
+      showNotice('Updates applied successfully! Device is restarting...', 'success');
+      // Keep completion card visible for 5 seconds so the user clearly sees the result
+      await new Promise((r) => setTimeout(r, 5000));
     } catch (e: any) {
+      setUpdateStage('error');
+      setUpdateMessage(`Update failed: ${e.message || e}`);
       showNotice(`Update error: ${e.message || e}`, 'error');
+      await new Promise((r) => setTimeout(r, 4000));
     } finally {
       setIsExecutingUpdate(false);
     }
@@ -2226,7 +2246,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   <span>Web Front-End</span>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-indigo-950/60 text-indigo-300 border border-indigo-800/40">
-                  2026.9.1
+                  {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.2'}
                 </span>
               </div>
               <div className="text-xs text-[var(--text-muted)] space-y-1">
