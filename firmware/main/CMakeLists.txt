@@ -32,18 +32,18 @@ idf_component_register(
         "esp_http_server"
         "app_update"
         "driver"
-        ${MQTT_COMPONENT}
+        "espressif__mqtt"
         "esp_wifi"
         "esp_event"
         "esp_netif"
         "esp_timer"
         "esp_partition"
         "lwip"
-        ${CJSON_COMPONENT}
+        "espressif__cjson"
         "joltwallet__littlefs"
         "espressif__mdns"
-        "bt"
         "esp_adc"
+        "esp_driver_gpio"
 )
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-error=cpp -Wno-cpp -Wno-deprecated-declarations)
