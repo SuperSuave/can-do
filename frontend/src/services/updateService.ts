@@ -11,6 +11,7 @@ import { resolveDeviceBaseUrl } from '../utils/hostUtils';
 
 export interface UpdateCheckResult {
   has_update: boolean;
+  is_rebuild?: boolean;
   version: string;
   release_name?: string;
   published_at?: string;
@@ -56,9 +57,23 @@ export function isVersionNewer(remote: string, current: string): boolean {
   return false;
 }
 
-/**
- * Checks GitHub Releases and raw repository files for available updates.
- */
+const STORAGE_KEY_LAST_UPDATE_TIME = 'cando_last_update_installed_at';
+
+export function recordUpdateInstalledTime(timestamp?: string): void {
+  try {
+    const ts = timestamp || new Date().toISOString();
+    localStorage.setItem(STORAGE_KEY_LAST_UPDATE_TIME, ts);
+  } catch {}
+}
+
+export function getLastUpdateInstalledTime(): string | null {
+  try {
+    return localStorage.getItem(STORAGE_KEY_LAST_UPDATE_TIME);
+  } catch {
+    return null;
+  }
+}
+
 export async function checkForUpdates(
   currentCatalogVersion = '2026.9.1',
   currentFirmwareVersion = '2026.9.1'
@@ -79,7 +94,6 @@ export async function checkForUpdates(
     const tag = release.tag_name || '2026.9.1';
     const isFwNewer = isVersionNewer(tag, currentFirmwareVersion);
     const isCatNewer = isVersionNewer(tag, currentCatalogVersion);
-    const hasAnyUpdate = isFwNewer || isCatNewer;
 
     // Locate assets if attached to GitHub release
     let firmwareUrl: string | undefined;
@@ -97,6 +111,19 @@ export async function checkForUpdates(
       }
     }
 
+    // Check if the release was rebuilt/re-published after last install even if same version tag
+    const lastInstalledTs = getLastUpdateInstalledTime();
+    let isRebuild = false;
+    if (!isFwNewer && !isCatNewer && release.published_at && lastInstalledTs) {
+      const releaseTime = new Date(release.published_at).getTime();
+      const installedTime = new Date(lastInstalledTs).getTime();
+      if (releaseTime > installedTime + 60000) { // 1 min buffer
+        isRebuild = true;
+      }
+    }
+
+    const hasAnyUpdate = isFwNewer || isCatNewer || isRebuild;
+
     // Default fallback to main branch raw urls if catalog isn't individually attached
     if (!catalogUrl) {
       catalogUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/catalog/can_do_catalog.json`;
@@ -104,14 +131,15 @@ export async function checkForUpdates(
 
     return {
       has_update: hasAnyUpdate,
+      is_rebuild: isRebuild,
       version: tag,
       release_name: release.name || tag,
       published_at: release.published_at,
       notes: release.body || 'New vehicle definitions and performance updates.',
       components: {
-        frontend: isFwNewer,
-        catalog: isCatNewer,
-        firmware: !!firmwareUrl && isFwNewer,
+        frontend: isFwNewer || isRebuild,
+        catalog: isCatNewer || isRebuild,
+        firmware: !!firmwareUrl && (isFwNewer || isRebuild),
       },
       assets: {
         firmware_url: firmwareUrl,
@@ -304,8 +332,10 @@ export async function executeUpdateSequence(
         await uploadFirmwareOta(deviceBaseUrl, fwBlob, (pct) => {
           onProgress('firmware', 85 + Math.round(pct * 0.12), `Flashing firmware: ${pct}%`);
         });
+        recordUpdateInstalledTime(updateData.published_at || new Date().toISOString());
         onProgress('rebooting', 100, 'Firmware flash complete! Device is rebooting...');
       } else {
+        recordUpdateInstalledTime(updateData.published_at || new Date().toISOString());
         onProgress(
           'complete',
           100,
@@ -313,6 +343,7 @@ export async function executeUpdateSequence(
         );
       }
     } else {
+      recordUpdateInstalledTime(updateData.published_at || new Date().toISOString());
       onProgress('complete', 100, 'Updates applied successfully!');
     }
   } catch (err: any) {

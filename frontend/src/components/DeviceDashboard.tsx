@@ -2269,11 +2269,18 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                     <Sparkles className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-xs sm:text-sm font-bold text-white">
-                      {updateResult.release_name || updateResult.version} Available
+                    <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                      <span>{updateResult.release_name || updateResult.version}</span>
+                      {updateResult.is_rebuild && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          Rebuilt Build Available
+                        </span>
+                      )}
                     </h4>
                     <p className="text-[11px] text-slate-300 mt-0.5">
-                      {updateResult.notes || 'Verified stability and vehicle definition enhancements.'}
+                      {updateResult.is_rebuild
+                        ? 'A newer build was published under the current release tag.'
+                        : (updateResult.notes || 'Verified stability and vehicle definition enhancements.')}
                     </p>
                   </div>
                 </div>
@@ -2296,7 +2303,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                     className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-slate-950 text-xs font-bold transition shadow-lg shadow-cyan-950/50 shrink-0"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Install Updates Now</span>
+                    <span>{updateResult.is_rebuild ? 'Re-sync & Update Now' : 'Install Updates Now'}</span>
                   </button>
                 </div>
               </div>
@@ -2321,6 +2328,30 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   </span>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Up to date state with manual re-sync button */}
+          {updateResult && !updateResult.has_update && !isExecutingUpdate && (
+            <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2.5 text-xs text-slate-300">
+                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Device is up to date on version <strong className="text-white font-mono">{updateResult.version}</strong></span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setUpdateResult({
+                    ...updateResult,
+                    has_update: true,
+                    is_rebuild: true,
+                    components: { frontend: true, catalog: true, firmware: !!updateResult.assets.firmware_url }
+                  });
+                }}
+                className="text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 underline underline-offset-2 shrink-0 transition"
+              >
+                Force Re-sync Current Version
+              </button>
             </div>
           )}
 
