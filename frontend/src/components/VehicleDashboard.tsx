@@ -26,9 +26,7 @@ import {
   Moon,
   Compass,
   ArrowUpRight,
-  Radio,
   CheckCircle2,
-  ChevronRight,
   Info,
   Maximize2,
   Activity
@@ -56,14 +54,6 @@ export type GearMode = 'P' | 'R' | 'N' | 'D';
 export type LightMode = 'off' | 'parking' | 'low' | 'high' | 'auto';
 export type AirflowMode = 'auto' | 'face' | 'face_feet' | 'feet' | 'defog';
 export type ViewPerspective = 'exterior' | 'interior' | 'powertrain';
-
-interface DecodedCanMessage {
-  id: string;
-  name: string;
-  decoded: string;
-  raw: string;
-  timestamp: string;
-}
 
 function detectEgmpModel(vehicle?: Vehicle): EgmpModel {
   if (!vehicle) return 'ev6';
@@ -195,10 +185,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
   // UI / Perspective State
   const [perspective, setPerspective] = useState<ViewPerspective>('exterior');
-  const [framesCount, setFramesCount] = useState<number>(0);
-  const [lastRxTimestamp, setLastRxTimestamp] = useState<string | null>(null);
+  const [hasReceivedFrames, setHasReceivedFrames] = useState<boolean>(false);
   const [speedKph, setSpeedKph] = useState<number>(0);
-  const [recentCanLogs, setRecentCanLogs] = useState<DecodedCanMessage[]>([]);
   const [connectedDevice, setConnectedDevice] = useState<boolean>(false);
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
 
@@ -364,12 +352,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     }
   };
 
-  const recordLog = (id: string, name: string, decoded: string, raw: string, timestamp: string) => {
-    setRecentCanLogs(prev => [
-      { id, name, decoded, raw, timestamp },
-      ...prev.slice(0, 19)
-    ]);
-  };
+  const recordLog = (_id: string, _name: string, _decoded: string, _raw: string, _timestamp: string) => {};
 
   // Parser for high-level catalog entity states (broadcast via WebSocket or fetched via /api/states)
   const handleIncomingEntityState = (entity: string, stateStr: string) => {
@@ -554,7 +537,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
   // Smooth simulation loop when in preview/bench mode and no live vehicle CAN traffic
   useEffect(() => {
-    if (connectedDevice && framesCount > 0) return;
+    if (connectedDevice && hasReceivedFrames) return;
     if (gear !== 'D') return;
 
     const interval = setInterval(() => {
@@ -563,7 +546,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     }, 1200);
 
     return () => clearInterval(interval);
-  }, [connectedDevice, framesCount, gear]);
+  }, [connectedDevice, hasReceivedFrames, gear]);
 
   // 3. Real-Time CAN Frame Decoder (Direct from vehicle TWAI bus, completely dynamic)
   const handleIncomingCanFrame = (idStr: string, hexPayload: string) => {
@@ -815,9 +798,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       }
     }
 
-    // Metrics counter
-    setFramesCount(prev => prev + 1);
-    setLastRxTimestamp(now);
+    // Metrics tracking
+    if (!hasReceivedFrames) {
+      setHasReceivedFrames(true);
+    }
   };
 
   // Turn signal hazard blinker timer
@@ -1012,11 +996,6 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
             >
               <span className={`w-2 h-2 rounded-full ${connectedDevice ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500'}`} />
               <span>{connectedDevice ? 'Vehicle CAN Online' : 'Awaiting CAN Traffic'}</span>
-              {framesCount > 0 && (
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-900/80 text-emerald-200 border border-emerald-700/50">
-                  {framesCount.toLocaleString()} frames
-                </span>
-              )}
             </div>
           </div>
         </div>
@@ -1216,11 +1195,15 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
               <div className="space-y-1">
                 <div className="h-3 w-full rounded-full bg-slate-950/90 p-0.5 border border-slate-800/80 relative overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${
+                    className={`h-full rounded-full transition-all duration-500 relative overflow-hidden ${
                       soc > 20 ? 'bg-gradient-to-r from-cyan-500 to-emerald-400' : 'bg-red-500'
                     }`}
                     style={{ width: `${soc}%` }}
-                  />
+                  >
+                    {isCharging && (
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse" />
+                    )}
+                  </div>
                 </div>
                 <div className="flex justify-between text-[11px] text-slate-400 font-mono">
                   <span>0%</span>
@@ -1309,6 +1292,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 hoodOpen={hoodOpen}
                 trunkOpen={trunkOpen}
                 chargePortOpen={chargePortOpen}
+                isCharging={isCharging}
                 mirrorsFolded={mirrorsFolded}
                 lights={lights}
                 rearDefrost={rearDefrost}
@@ -1330,8 +1314,11 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   dispatchCommand('trunk', 'toggle', trunkOpen ? 'Trunk Closed' : 'Liftgate Opened');
                 }}
                 onToggleChargePort={() => {
-                  setChargePortOpen(c => !c);
-                  triggerNotice(chargePortOpen ? 'Charge Door Closed' : 'Charge Door Opened');
+                  const next = !chargePortOpen;
+                  setChargePortOpen(next);
+                  setIsCharging(next);
+                  dispatchCommand('charge_port', next ? 'open' : 'close', next ? 'Charge Port Opened' : 'Charge Port Closed');
+                  triggerNotice(next ? 'Charge Door Opened (Charging Active)' : 'Charge Door Closed');
                 }}
                 onToggleSunroof={cycleSunroofState}
                 onCycleDriverSeat={() => cycleSeat(driverSeat, true)}
@@ -1788,57 +1775,6 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 <span className="font-bold font-mono">{passengerSeat.replace('_', ' ').toUpperCase()}</span>
               </button>
             </div>
-          </div>
-
-          {/* Live CAN Telemetry Inspector Stream */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--border-color)] space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Radio className="w-3.5 h-3.5 text-emerald-400" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Live CAN Telemetry</h3>
-              </div>
-              <span className="text-[10px] font-mono text-slate-400">E-GMP Bus 0</span>
-            </div>
-
-            {/* Decoded CAN Stream */}
-            <div className="h-56 overflow-y-auto space-y-2 pr-1 font-mono text-xs">
-              {recentCanLogs.length === 0 ? (
-                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/60 text-slate-400 text-center text-xs">
-                  Awaiting live CAN frames...
-                  <div className="mt-1 text-[11px] text-slate-500">
-                    {connectedDevice ? 'Monitoring live vehicle TWAI bus' : 'Listening on /ws endpoint for physical CAN packets'}
-                  </div>
-                </div>
-              ) : (
-                recentCanLogs.map((log, idx) => (
-                  <div
-                    key={idx}
-                    className="p-2 rounded-xl bg-slate-900/70 border border-slate-800/80 text-[11px] space-y-1 hover:border-slate-700 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-cyan-300">{log.id}</span>
-                      <span className="text-[10px] text-slate-400">{log.name}</span>
-                    </div>
-                    <div className="text-slate-200 font-sans font-medium">{log.decoded}</div>
-                    <div className="text-[10px] text-slate-400 truncate">
-                      Hex: <span className="text-slate-300">{log.raw}</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Quick Catalog Link */}
-            {onNavigateToCatalog && (
-              <button
-                type="button"
-                onClick={() => onNavigateToCatalog('climate')}
-                className="w-full py-2 px-3 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-xs font-medium text-slate-300 flex items-center justify-center gap-1.5 transition-colors"
-              >
-                <span>Browse CAN Messages in Catalog</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            )}
           </div>
 
         </div>

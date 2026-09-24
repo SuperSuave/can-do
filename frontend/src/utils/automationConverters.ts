@@ -10,7 +10,7 @@ import {
 } from '../types/automation';
 import { Command, CommandOption, Catalog, ByteMap, Vehicle } from '../types/catalog';
 import { DEFAULT_CATALOG } from '../data/defaultCatalog';
-import { resolveVariant } from './catalogUtils';
+import { resolveVariant, getEffectiveOptions } from './catalogUtils';
 
 /**
  * Cleanly compiles any payload or glob into a strict 1-based ByteMap ({ D1: "0x.." })
@@ -157,7 +157,8 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
   if (act.type === 'entity_command' || act.entity_id || act.source_command_id) {
     const entityId = act.entity_id || act.source_command_id;
     const commandLabel = act.command || act.option_label;
-    const cmd = (catalog?.commands || []).find(c => c.id === entityId);
+    const rawCmd = (catalog?.commands || []).find(c => c.id === entityId);
+    const cmd = rawCmd ? resolveVariant(rawCmd, null) : undefined;
 
     if (cmd) {
       if (cmd.type === 'climate_target') {
@@ -183,10 +184,8 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
         };
       }
 
-      // Match designated option
-      const opt = (cmd.options || []).find(
-        o => o.label === commandLabel || (commandLabel && o.label?.toLowerCase() === commandLabel.toLowerCase())
-      ) || (cmd.options || []).find(o => o.default) || (cmd.options || [])[0];
+      // Match designated option using robust matcher
+      const opt = findMatchingOptionForAction(cmd, act);
 
       const canId = cmd.network?.action_can_id || cmd.action_can_id || cmd.network?.state_can_id || cmd.state_can_id || act.can_id || '0x000';
       const bus = cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? act.bus ?? 0;
@@ -460,14 +459,16 @@ export function exportToEsp32FirmwareJson(
 /**
  * Convert a Catalog Command into an Automation Trigger
  */
-export function commandToTrigger(cmd: Command, opt?: CommandOption): AutomationTrigger {
+export function commandToTrigger(rawCmd: Command, opt?: CommandOption): AutomationTrigger {
+  const cmd = resolveVariant(rawCmd, null);
   const trigId = `trig_${cmd.id}_${Date.now().toString(36).slice(-4)}`;
   const canId = cmd.network?.state_can_id || cmd.state_can_id || cmd.network?.action_can_id || cmd.action_can_id || '0x448';
-  const match = compileToByteMap(opt?.match || cmd.match || opt?.payload || cmd.payload);
+  const chosenOpt = opt || (cmd.options && cmd.options.length > 0 ? (cmd.options.find(o => o.default) || cmd.options[0]) : undefined);
+  const match = compileToByteMap(chosenOpt?.match || cmd.match || chosenOpt?.payload || cmd.payload);
   const targetByte = Object.keys(match)[0] || 'D7';
   const targetTo = match[targetByte] || '0x10';
 
-  const rawMask = opt?.mask || cmd.mask;
+  const rawMask = chosenOpt?.mask || cmd.mask;
   let targetMask = '0xFF';
   if (typeof rawMask === 'string') {
     targetMask = rawMask;
@@ -490,14 +491,15 @@ export function commandToTrigger(cmd: Command, opt?: CommandOption): AutomationT
     for_ms: 0,
     source_command_id: cmd.id,
     source_command_name: cmd.name || cmd.ha_metadata?.name || cmd.id,
-    option_label: opt?.label
+    option_label: chosenOpt?.label
   };
 }
 
 /**
  * Convert a Catalog Command into an Automation Condition
  */
-export function commandToCondition(cmd: Command, opt?: CommandOption): AutomationCondition {
+export function commandToCondition(rawCmd: Command, opt?: CommandOption): AutomationCondition {
+  const cmd = resolveVariant(rawCmd, null);
   const chosenOpt = opt || (cmd.options && cmd.options.length > 0 ? (cmd.options.find(o => o.default) || cmd.options[0]) : undefined);
   const condId = `cond_${cmd.id}_${Date.now().toString(36).slice(-4)}`;
   const canId = cmd.network?.state_can_id || cmd.state_can_id || cmd.network?.action_can_id || cmd.action_can_id || '0x000';
@@ -542,7 +544,8 @@ export function commandToCondition(cmd: Command, opt?: CommandOption): Automatio
 /**
  * Convert a Catalog Command into an Automation Action
  */
-export function commandToAction(cmd: Command, opt?: CommandOption): AutomationAction {
+export function commandToAction(rawCmd: Command, opt?: CommandOption): AutomationAction {
+  const cmd = resolveVariant(rawCmd, null);
   const chosenOpt = opt || (cmd.options && cmd.options.length > 0 ? (cmd.options.find(o => o.default) || cmd.options[0]) : undefined);
   const actId = `act_${cmd.id}_${Date.now().toString(36).slice(-4)}`;
   const canId = cmd.network?.action_can_id || cmd.action_can_id || cmd.network?.state_can_id || cmd.state_can_id || '0x000';
@@ -574,6 +577,7 @@ export function commandToAction(cmd: Command, opt?: CommandOption): AutomationAc
   }
 
   if ((cmd.options && cmd.options.length > 0) || chosenOpt?.label) {
+    const payload = compileToByteMap(chosenOpt?.payload || (chosenOpt?.steps && chosenOpt?.steps[0]?.payload) || cmd.payload);
     return {
       id: actId,
       type: 'entity_command',
@@ -581,6 +585,7 @@ export function commandToAction(cmd: Command, opt?: CommandOption): AutomationAc
       command: chosenOpt?.label || 'Toggle',
       can_id: canId,
       bus: cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? 0,
+      payload: Object.keys(payload).length > 0 ? payload : undefined,
       popup_message: chosenOpt?.popup || `${cmdDisplayName} - ${chosenOpt?.label || 'Toggle'}`,
       source_command_id: cmd.id,
       source_command_name: cmdDisplayName,
@@ -616,8 +621,9 @@ export function resolveCatalogCommandForTrigger(
 
   // 1. Direct ID match
   if (trig.source_command_id) {
-    const cmd = catalog.commands.find(c => c.id === trig.source_command_id);
-    if (cmd) {
+    const rawCmd = catalog.commands.find(c => c.id === trig.source_command_id);
+    if (rawCmd) {
+      const cmd = resolveVariant(rawCmd, null);
       const opt = findMatchingOptionForTrigger(cmd, trig);
       return { command: cmd, matchedOption: opt };
     }
@@ -629,8 +635,9 @@ export function resolveCatalogCommandForTrigger(
     if (lowerId.includes('menu') || lowerId.includes('ok')) {
       const swMenu = catalog.commands.find(c => c.id === 'sw_menu');
       if (swMenu) {
-        const opt = findMatchingOptionForTrigger(swMenu, trig);
-        return { command: swMenu, matchedOption: opt };
+        const cmd = resolveVariant(swMenu, null);
+        const opt = findMatchingOptionForTrigger(cmd, trig);
+        return { command: cmd, matchedOption: opt };
       }
     }
   }
@@ -645,26 +652,29 @@ export function resolveCatalogCommandForTrigger(
     });
 
     if (candidateCmds.length === 1) {
-      const cmd = candidateCmds[0];
+      const cmd = resolveVariant(candidateCmds[0], null);
       const opt = findMatchingOptionForTrigger(cmd, trig);
       return { command: cmd, matchedOption: opt };
     }
 
     if (candidateCmds.length > 1) {
       // Find candidate whose options match byte/value
-      for (const cmd of candidateCmds) {
+      for (const raw of candidateCmds) {
+        const cmd = resolveVariant(raw, null);
         const opt = findMatchingOptionForTrigger(cmd, trig);
         if (opt) {
           return { command: cmd, matchedOption: opt };
         }
       }
       // Check command-level match
-      for (const cmd of candidateCmds) {
+      for (const raw of candidateCmds) {
+        const cmd = resolveVariant(raw, null);
         if (cmd.match && trig.byte && cmd.match[trig.byte]) {
           return { command: cmd, matchedOption: cmd.options?.[0] };
         }
       }
-      return { command: candidateCmds[0], matchedOption: candidateCmds[0].options?.[0] };
+      const cmd = resolveVariant(candidateCmds[0], null);
+      return { command: cmd, matchedOption: cmd.options?.[0] };
     }
   }
 
@@ -674,8 +684,14 @@ export function resolveCatalogCommandForTrigger(
 function findMatchingOptionForTrigger(cmd: Command, trig: AutomationTrigger): CommandOption | undefined {
   if (!cmd.options || cmd.options.length === 0) return undefined;
   if (trig.option_label) {
-    const byLabel = cmd.options.find(o => o.label.toLowerCase() === trig.option_label?.toLowerCase());
+    const target = trig.option_label.toLowerCase().trim();
+    const byLabel = cmd.options.find(o => o.label.toLowerCase().trim() === target);
     if (byLabel) return byLabel;
+    const byPartial = cmd.options.find(o => {
+      const l = o.label.toLowerCase().trim();
+      return l.includes(target) || target.includes(l);
+    });
+    if (byPartial) return byPartial;
   }
   const byteKey = trig.byte || (trig.byte_index !== undefined ? `D${trig.byte_index + 1}` : undefined);
   const trigValHex = trig.to
@@ -714,8 +730,9 @@ export function resolveCatalogCommandForAction(
 
   const targetId = act.source_command_id || act.entity_id;
   if (targetId) {
-    const cmd = catalog.commands.find(c => c.id === targetId);
-    if (cmd) {
+    const rawCmd = catalog.commands.find(c => c.id === targetId);
+    if (rawCmd) {
+      const cmd = resolveVariant(rawCmd, null);
       const opt = findMatchingOptionForAction(cmd, act);
       return { command: cmd, matchedOption: opt };
     }
@@ -730,17 +747,19 @@ export function resolveCatalogCommandForAction(
     });
 
     if (candidateCmds.length === 1) {
-      const cmd = candidateCmds[0];
+      const cmd = resolveVariant(candidateCmds[0], null);
       const opt = findMatchingOptionForAction(cmd, act);
       return { command: cmd, matchedOption: opt };
     }
 
     if (candidateCmds.length > 1) {
-      for (const cmd of candidateCmds) {
+      for (const raw of candidateCmds) {
+        const cmd = resolveVariant(raw, null);
         const opt = findMatchingOptionForAction(cmd, act);
         if (opt) return { command: cmd, matchedOption: opt };
       }
-      return { command: candidateCmds[0], matchedOption: candidateCmds[0].options?.[0] };
+      const cmd = resolveVariant(candidateCmds[0], null);
+      return { command: cmd, matchedOption: cmd.options?.[0] };
     }
   }
 
@@ -751,8 +770,14 @@ function findMatchingOptionForAction(cmd: Command, act: AutomationAction): Comma
   if (!cmd.options || cmd.options.length === 0) return undefined;
   const labelToMatch = act.option_label || act.command;
   if (labelToMatch) {
-    const byLabel = cmd.options.find(o => o.label.toLowerCase() === labelToMatch.toLowerCase());
-    if (byLabel) return byLabel;
+    const target = labelToMatch.toLowerCase().trim();
+    const byExact = cmd.options.find(o => o.label.toLowerCase().trim() === target);
+    if (byExact) return byExact;
+    const byPartial = cmd.options.find(o => {
+      const l = o.label.toLowerCase().trim();
+      return l.includes(target) || target.includes(l);
+    });
+    if (byPartial) return byPartial;
   }
   if (act.payload && typeof act.payload === 'object') {
     for (const opt of cmd.options) {
@@ -778,8 +803,9 @@ export function resolveCatalogCommandForCondition(
 
   // 1. Direct ID match
   if (cond.source_command_id) {
-    const cmd = catalog.commands.find(c => c.id === cond.source_command_id);
-    if (cmd) {
+    const rawCmd = catalog.commands.find(c => c.id === cond.source_command_id);
+    if (rawCmd) {
+      const cmd = resolveVariant(rawCmd, null);
       const opt = findMatchingOptionForCondition(cmd, cond);
       return { command: cmd, matchedOption: opt };
     }
@@ -790,8 +816,9 @@ export function resolveCatalogCommandForCondition(
     const lowerId = cond.id.toLowerCase();
     for (const c of catalog.commands) {
       if (lowerId.includes(c.id.toLowerCase())) {
-        const opt = findMatchingOptionForCondition(c, cond);
-        return { command: c, matchedOption: opt };
+        const cmd = resolveVariant(c, null);
+        const opt = findMatchingOptionForCondition(cmd, cond);
+        return { command: cmd, matchedOption: opt };
       }
     }
   }
@@ -806,17 +833,19 @@ export function resolveCatalogCommandForCondition(
     });
 
     if (candidateCmds.length === 1) {
-      const cmd = candidateCmds[0];
+      const cmd = resolveVariant(candidateCmds[0], null);
       const opt = findMatchingOptionForCondition(cmd, cond);
       return { command: cmd, matchedOption: opt };
     }
 
     if (candidateCmds.length > 1) {
-      for (const cmd of candidateCmds) {
+      for (const raw of candidateCmds) {
+        const cmd = resolveVariant(raw, null);
         const opt = findMatchingOptionForCondition(cmd, cond);
         if (opt) return { command: cmd, matchedOption: opt };
       }
-      return { command: candidateCmds[0], matchedOption: candidateCmds[0].options?.[0] };
+      const cmd = resolveVariant(candidateCmds[0], null);
+      return { command: cmd, matchedOption: cmd.options?.[0] };
     }
   }
 
@@ -826,8 +855,14 @@ export function resolveCatalogCommandForCondition(
 function findMatchingOptionForCondition(cmd: Command, cond: AutomationCondition): CommandOption | undefined {
   if (!cmd.options || cmd.options.length === 0) return undefined;
   if (cond.option_label) {
-    const byLabel = cmd.options.find(o => o.label.toLowerCase() === cond.option_label?.toLowerCase());
+    const target = cond.option_label.toLowerCase().trim();
+    const byLabel = cmd.options.find(o => o.label.toLowerCase().trim() === target);
     if (byLabel) return byLabel;
+    const byPartial = cmd.options.find(o => {
+      const l = o.label.toLowerCase().trim();
+      return l.includes(target) || target.includes(l);
+    });
+    if (byPartial) return byPartial;
   }
   const byteKey = cond.byte || cond.evaluate?.byte || (cond.match ? Object.keys(cond.match)[0] : undefined);
   const targetVal = cond.value || cond.evaluate?.value || (byteKey && cond.match ? cond.match[byteKey] : undefined);
@@ -850,7 +885,8 @@ function findMatchingOptionForCondition(cmd: Command, cond: AutomationCondition)
 /**
  * Apply a selected catalog option to a trigger
  */
-export function applyOptionToTrigger(trig: AutomationTrigger, cmd: Command, opt: CommandOption): AutomationTrigger {
+export function applyOptionToTrigger(trig: AutomationTrigger, rawCmd: Command, opt: CommandOption): AutomationTrigger {
+  const cmd = resolveVariant(rawCmd, null);
   const cleanMatch = compileToByteMap(opt.match || opt.payload || cmd.match || cmd.payload);
   const dKey = Object.keys(cleanMatch)[0] || 'D7';
   const targetTo = cleanMatch[dKey] || '0x10';
@@ -888,9 +924,11 @@ export function applyOptionToTrigger(trig: AutomationTrigger, cmd: Command, opt:
 /**
  * Apply a selected catalog option to an action
  */
-export function applyOptionToAction(act: AutomationAction, cmd: Command, opt: CommandOption): AutomationAction {
+export function applyOptionToAction(act: AutomationAction, rawCmd: Command, opt: CommandOption): AutomationAction {
+  const cmd = resolveVariant(rawCmd, null);
   const canId = cmd.network?.action_can_id || cmd.action_can_id || cmd.network?.state_can_id || cmd.state_can_id || act.can_id || '0x000';
   const cmdDisplayName = cmd.ha_metadata?.name || cmd.name || cmd.id;
+  const payload = compileToByteMap(opt.payload || (opt.steps && opt.steps[0]?.payload) || cmd.payload);
 
   if (act.type === 'entity_command' || (cmd.options && cmd.options.length > 0)) {
     return {
@@ -902,11 +940,11 @@ export function applyOptionToAction(act: AutomationAction, cmd: Command, opt: Co
       option_label: opt.label,
       can_id: canId,
       bus: cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? act.bus ?? 0,
+      payload: Object.keys(payload).length > 0 ? payload : act.payload,
       popup_message: opt.popup || `${cmdDisplayName} - ${opt.label}`
     };
   }
 
-  const payload = compileToByteMap(opt.payload || cmd.payload || (opt.steps && opt.steps[0]?.payload));
   return {
     ...act,
     source_command_id: cmd.id,
@@ -925,9 +963,10 @@ export function applyOptionToAction(act: AutomationAction, cmd: Command, opt: Co
  */
 export function applyOptionToCondition(
   cond: AutomationCondition,
-  cmd: Command,
+  rawCmd: Command,
   opt: CommandOption
 ): AutomationCondition {
+  const cmd = resolveVariant(rawCmd, null);
   const cleanMatch = compileToByteMap(opt.match || opt.payload || cmd.match || cmd.payload);
   const dKey = Object.keys(cleanMatch)[0] || cond.byte || 'D1';
   const targetVal = cleanMatch[dKey] || '0x01';

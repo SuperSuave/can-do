@@ -8,7 +8,7 @@
  *   // resolved.network and resolved.options now reflect the correct variant.
  */
 
-import { Command, Vehicle } from '../types/catalog';
+import { Command, CommandOption, Vehicle, ByteMap } from '../types/catalog';
 
 /**
  * Resolve a command's `variants` for the given vehicle, returning a new
@@ -127,11 +127,11 @@ export function expandLinearScaleOptions(cmd: Command): CommandOption[] {
       continue;
     }
     const matchHex = named.match
-      ? Object.values(named.match)[0]?.toLowerCase()
+      ? String(Object.values(named.match)[0] ?? '').toLowerCase()
       : undefined;
     const idx = matchHex !== undefined
       ? generated.findIndex(g =>
-          Object.values(g.match ?? {})[0]?.toLowerCase() === matchHex)
+          String(Object.values(g.match ?? {})[0] ?? '').toLowerCase() === matchHex)
       : -1;
 
     if (idx >= 0) {
@@ -155,4 +155,225 @@ export function getEffectiveOptions(cmd: Command): CommandOption[] {
   return cmd.type === 'linear_scale'
     ? expandLinearScaleOptions(cmd)
     : (cmd.options ?? []);
+}
+
+/**
+  * Safely converts any space-separated or ByteMap payload into a strict D1..D8 ByteMap.
+  */
+export function cleanToByteMap(input: string | ByteMap | undefined): ByteMap {
+  if (!input) return {};
+  if (typeof input === 'object') {
+    const cleanMap: ByteMap = {};
+    for (const [k, v] of Object.entries(input)) {
+      if (v && typeof v === 'string' && !v.includes('*') && v !== '?') {
+        cleanMap[k] = v.startsWith('0x') || v.startsWith('0X') ? v : `0x${v.toUpperCase()}`;
+      }
+    }
+    return cleanMap;
+  }
+
+  const parts = input.trim().split(/\s+/);
+  const result: ByteMap = {};
+
+  parts.forEach((part, idx) => {
+    if (idx >= 8) return;
+    const dKey = `D${idx + 1}`;
+    const clean = part.trim();
+    if (!clean || clean === '*' || clean === '**' || clean === '??') return;
+
+    const hexClean = clean.replace(/\*/g, '0');
+    if (hexClean) {
+      const val = hexClean.startsWith('0x') || hexClean.startsWith('0X') ? hexClean : `0x${hexClean.toUpperCase()}`;
+      result[dKey] = val;
+    }
+  });
+
+  return result;
+}
+
+/**
+ * Cleanly formats a Command into the standard production catalog schema (can_do_catalog.json).
+ *
+ * Ensures:
+ * - Proper nested `network` configuration with bus, type, state_can_id, action_can_id
+ * - Proper nested `ha_metadata` configuration (name, domain, icon)
+ * - Strict 1-based ByteMap representation ({ "D1": "0x.." }) for all match and payload fields
+ * - Completely strips deprecated legacy fields: from_payload, to_payload, match_payload, wildcard strings
+ * - Cleans option definitions and steps to native ByteMaps
+ */
+export function formatCommandForCatalog(cmd: Command): Command {
+  const name = cmd.ha_metadata?.name || cmd.name || cmd.id;
+  const isAction = cmd.roles.includes('action') && !cmd.roles.includes('trigger');
+  const defaultDomain = isAction ? 'button' : 'sensor';
+  const domain = cmd.ha_metadata?.domain || cmd.ha_domain || defaultDomain;
+  const iconRaw = cmd.ha_metadata?.icon || cmd.icon || cmd.mdi || 'mdi:car-info';
+  const icon = iconRaw.startsWith('mdi:') ? iconRaw : `mdi:${iconRaw}`;
+
+  const ha_metadata = {
+    name,
+    domain,
+    icon
+  };
+
+  const bus = cmd.network?.bus ?? cmd.bus ?? 0;
+  const stateCanId = cmd.network?.state_can_id || cmd.state_can_id;
+  const actionCanId = cmd.network?.action_can_id || cmd.action_can_id;
+  const delayMs = cmd.network?.delay_ms ?? cmd.delay_ms;
+  const netType = cmd.network?.type || (actionCanId && !stateCanId ? 'can_tx' : 'can_rx');
+
+  const network: any = {
+    bus,
+    type: netType,
+    ...(stateCanId ? { state_can_id: stateCanId } : {}),
+    ...(actionCanId ? { action_can_id: actionCanId } : {}),
+    ...(delayMs !== undefined ? { delay_ms: delayMs } : {})
+  };
+
+  // Convert root match from match or match_payload / to_payload
+  let cleanMatch: ByteMap | undefined = undefined;
+  if (cmd.match && typeof cmd.match === 'object') {
+    cleanMatch = cleanToByteMap(cmd.match);
+  }
+  if (!cleanMatch || Object.keys(cleanMatch).length === 0) {
+    if (cmd.match_payload || cmd.to_payload) {
+      cleanMatch = cleanToByteMap(cmd.match_payload || cmd.to_payload);
+    }
+  }
+  if (cleanMatch && Object.keys(cleanMatch).length === 0) {
+    cleanMatch = undefined;
+  }
+
+  // Convert root payload from payload or to_payload
+  let cleanPayload: ByteMap | undefined = undefined;
+  if (cmd.payload && typeof cmd.payload === 'object') {
+    cleanPayload = cleanToByteMap(cmd.payload);
+  } else if (cmd.to_payload) {
+    cleanPayload = cleanToByteMap(cmd.to_payload);
+  }
+  if (cleanPayload && Object.keys(cleanPayload).length === 0) {
+    cleanPayload = undefined;
+  }
+
+  // Convert root steps
+  let cleanSteps: any[] | undefined = undefined;
+  if (cmd.steps && cmd.steps.length > 0) {
+    cleanSteps = cmd.steps.map(st => ({
+      payload: cleanToByteMap(st.payload),
+      ...(st.repeat && st.repeat > 1 ? { repeat: st.repeat } : {}),
+      ...((st as any).can_id ? { can_id: (st as any).can_id } : {}),
+      ...((st as any).bus !== undefined ? { bus: (st as any).bus } : {})
+    }));
+  }
+
+  // Derive mask
+  let mask = cmd.mask;
+  if (!mask && cmd.from_payload && cmd.to_payload) {
+    const toTokens = cmd.to_payload.trim().split(/\s+/);
+    for (const t of toTokens) {
+      if (t.endsWith('*')) mask = '0xF0';
+      else if (t.startsWith('*') && t.length === 2) mask = '0x0F';
+    }
+    if (!mask) mask = '0xFF';
+  } else if (!mask && cleanMatch) {
+    mask = '0xFF';
+  }
+
+  // Format options
+  let formattedOptions: CommandOption[] | undefined = undefined;
+  if (cmd.options && cmd.options.length > 0) {
+    formattedOptions = cmd.options.map(opt => {
+      const optClean: CommandOption = {
+        label: opt.label
+      };
+      if (opt.popup || opt.popup_message) {
+        optClean.popup = opt.popup || opt.popup_message;
+      }
+      if (opt.requires_feature) {
+        optClean.requires_feature = opt.requires_feature;
+      }
+
+      // Option match
+      let optMatch: ByteMap | undefined = undefined;
+      if (opt.match && typeof opt.match === 'object') {
+        optMatch = cleanToByteMap(opt.match);
+      } else if (opt.match_payload) {
+        optMatch = cleanToByteMap(opt.match_payload);
+      }
+      if (optMatch && Object.keys(optMatch).length > 0) {
+        optClean.match = optMatch;
+      }
+
+      // Option payload / steps
+      if (opt.steps && opt.steps.length > 0) {
+        optClean.steps = opt.steps.map(st => ({
+          payload: cleanToByteMap(st.payload),
+          ...(st.repeat && st.repeat > 1 ? { repeat: st.repeat } : {})
+        }));
+      } else {
+        let optPayload: ByteMap | undefined = undefined;
+        if (opt.payload) {
+          optPayload = cleanToByteMap(opt.payload);
+        } else if (opt.to_payload) {
+          optPayload = cleanToByteMap(opt.to_payload);
+        }
+        if (optPayload && Object.keys(optPayload).length > 0) {
+          optClean.payload = optPayload;
+        }
+      }
+
+      if (opt.mask) {
+        optClean.mask = opt.mask;
+      }
+      if (opt.default) {
+        optClean.default = true;
+      }
+
+      return optClean;
+    });
+  }
+
+  // Format variants
+  let formattedVariants: any[] | undefined = undefined;
+  if (cmd.variants && cmd.variants.length > 0) {
+    formattedVariants = cmd.variants.map(v => ({
+      targets: v.targets,
+      ...(v.network ? { network: v.network } : {}),
+      ...(v.options ? {
+        options: v.options.map(opt => {
+          const optClean: any = { label: opt.label };
+          if (opt.match) optClean.match = cleanToByteMap(opt.match);
+          if (opt.payload) optClean.payload = cleanToByteMap(opt.payload);
+          if (opt.mask) optClean.mask = opt.mask;
+          if (opt.default) optClean.default = true;
+          if (opt.steps) {
+            optClean.steps = opt.steps.map(s => ({
+              payload: cleanToByteMap(s.payload),
+              ...(s.repeat && s.repeat > 1 ? { repeat: s.repeat } : {})
+            }));
+          }
+          return optClean;
+        })
+      } : {})
+    }));
+  }
+
+  const result: any = {
+    id: cmd.id,
+    ha_metadata,
+    tags: cmd.tags && cmd.tags.length > 0 ? cmd.tags : ['all_egmp'],
+    category: cmd.category,
+    ...(cmd.subcategory ? { subcategory: cmd.subcategory } : {}),
+    roles: cmd.roles,
+    network,
+    ...(cleanMatch ? { match: cleanMatch } : {}),
+    ...(cleanPayload ? { payload: cleanPayload } : {}),
+    ...(cleanSteps ? { steps: cleanSteps } : {}),
+    ...(cmd.repeat && cmd.repeat > 1 ? { repeat: cmd.repeat } : {}),
+    ...(mask ? { mask } : {}),
+    ...(formattedOptions ? { options: formattedOptions } : {}),
+    ...(formattedVariants ? { variants: formattedVariants } : {}),
+    contributor: cmd.contributor || (cmd.contributors && cmd.contributors[0]) || { name: 'Community', github: '' }
+  };
+
+  return result as Command;
 }

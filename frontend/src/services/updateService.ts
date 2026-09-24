@@ -101,6 +101,7 @@ export async function checkForUpdates(
 
     if (Array.isArray(release.assets)) {
       for (const asset of release.assets) {
+        const name = (asset.name || '').toLowerCase();
         // Match app binary (flexible matching supporting versioned names, excluding merged or storage)
         const isAppBinary =
           (name.startsWith('can-do') || name.startsWith('firmware')) &&

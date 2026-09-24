@@ -781,26 +781,29 @@ function ConditionListEditor({
         </div>
       ) : (
         <div className="space-y-2">
-          {conditions.map((c, idx) => (
-            <ConditionNodeEditor
-              key={c.id || idx}
-              cond={c}
-              index={idx}
-              depth={depth}
-              availableTriggers={availableTriggers}
-              catalog={catalog}
-              onUpdate={updated => {
-                const next = [...conditions];
-                next[idx] = updated;
-                onUpdate(next);
-              }}
-              onDelete={() => {
-                const next = conditions.filter((_, i) => i !== idx);
-                onUpdate(next);
-              }}
-              onOpenAddConditionDialog={onOpenAddConditionDialog}
-            />
-          ))}
+                  {conditions.map((c, idx) => {
+                    const stableKey = c._clientId || (c._clientId = `cond_client_${idx}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`);
+                    return (
+                      <ConditionNodeEditor
+                        key={stableKey}
+                        cond={c}
+                        index={idx}
+                        depth={depth}
+                        availableTriggers={availableTriggers}
+                        catalog={catalog}
+                        onUpdate={updated => {
+                          const next = [...conditions];
+                          next[idx] = { ...updated, _clientId: stableKey };
+                          onUpdate(next);
+                        }}
+                        onDelete={() => {
+                          const next = conditions.filter((_, i) => i !== idx);
+                          onUpdate(next);
+                        }}
+                        onOpenAddConditionDialog={onOpenAddConditionDialog}
+                      />
+                    );
+                  })}
         </div>
       )}
 
@@ -837,13 +840,18 @@ function TriggerNodeEditor({
   onUpdate,
   onDelete,
 }: TriggerNodeEditorProps) {
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(Boolean((trig as any)._showAdvanced));
+
+  const toggleAdvanced = () => {
+    const nextVal = !showAdvanced;
+    setShowAdvanced(nextVal);
+    (trig as any)._showAdvanced = nextVal;
+  };
 
   // Time-based schedule trigger
   if (trig.type === 'time_schedule' || trig.source === 'time') {
     return (
       <div
-        key={trig.id || tIdx}
         className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 space-y-2.5 text-xs"
       >
         <div className="flex items-center justify-between gap-2">
@@ -902,7 +910,6 @@ function TriggerNodeEditor({
   if (trig.type === 'ble_button' || trig.type === 'ble_key' || trig.source === 'ble') {
     return (
       <div
-        key={trig.id || tIdx}
         className="p-3.5 rounded-xl bg-slate-950 border border-blue-800/80 space-y-2.5 text-xs shadow-sm"
       >
         <div className="flex items-center justify-between gap-2">
@@ -1034,7 +1041,7 @@ function TriggerNodeEditor({
           {hasOptions && (
             <button
               type="button"
-              onClick={() => setShowAdvanced(!showAdvanced)}
+              onClick={toggleAdvanced}
               className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
                 showAdvanced
                   ? 'bg-amber-950/60 text-amber-300 border-amber-800/80 shadow'
@@ -1887,27 +1894,30 @@ function ActionListEditor({
         </div>
       ) : (
         <div className="space-y-2">
-          {actions.map((act, idx) => (
-            <ActionNodeEditor
-              key={act.id || idx}
-              act={act}
-              index={idx}
-              depth={depth}
-              availableTriggers={availableTriggers}
-              catalog={catalog}
-              onUpdate={updated => {
-                const next = [...actions];
-                next[idx] = updated;
-                onUpdate(next);
-              }}
-              onDelete={() => {
-                const next = actions.filter((_, i) => i !== idx);
-                onUpdate(next);
-              }}
-              onOpenAddConditionDialog={onOpenAddConditionDialog}
-              onOpenAddActionDialog={onOpenAddActionDialog}
-            />
-          ))}
+                  {actions.map((act, idx) => {
+                    const stableKey = act._clientId || (act._clientId = `act_client_${idx}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`);
+                    return (
+                      <ActionNodeEditor
+                        key={stableKey}
+                        act={act}
+                        index={idx}
+                        depth={depth}
+                        availableTriggers={availableTriggers}
+                        catalog={catalog}
+                        onUpdate={updated => {
+                          const next = [...actions];
+                          next[idx] = { ...updated, _clientId: stableKey };
+                          onUpdate(next);
+                        }}
+                        onDelete={() => {
+                          const next = actions.filter((_, i) => i !== idx);
+                          onUpdate(next);
+                        }}
+                        onOpenAddConditionDialog={onOpenAddConditionDialog}
+                        onOpenAddActionDialog={onOpenAddActionDialog}
+                      />
+                    );
+                  })}
         </div>
       )}
 
@@ -2624,23 +2634,26 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 </div>
               ) : (
                 <div className="space-y-2.5">
-                  {activeRule.triggers.map((trig, tIdx) => (
-                    <TriggerNodeEditor
-                      key={trig.id || tIdx}
-                      trig={trig}
-                      tIdx={tIdx}
-                      catalog={catalog}
-                      onUpdate={updated => {
-                        const next = [...activeRule.triggers];
-                        next[tIdx] = updated;
-                        handleUpdateActiveRule({ triggers: next });
-                      }}
-                      onDelete={() => {
-                        const next = activeRule.triggers.filter((_, i) => i !== tIdx);
-                        handleUpdateActiveRule({ triggers: next });
-                      }}
-                    />
-                  ))}
+                  {activeRule.triggers.map((trig, tIdx) => {
+                    const stableKey = trig._clientId || (trig._clientId = `trig_client_${tIdx}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`);
+                    return (
+                      <TriggerNodeEditor
+                        key={stableKey}
+                        trig={trig}
+                        tIdx={tIdx}
+                        catalog={catalog}
+                        onUpdate={updated => {
+                          const next = [...activeRule.triggers];
+                          next[tIdx] = { ...updated, _clientId: stableKey };
+                          handleUpdateActiveRule({ triggers: next });
+                        }}
+                        onDelete={() => {
+                          const next = activeRule.triggers.filter((_, i) => i !== tIdx);
+                          handleUpdateActiveRule({ triggers: next });
+                        }}
+                      />
+                    );
+                  })}
                 </div>
               )}
 

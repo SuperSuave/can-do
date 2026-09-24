@@ -1,5 +1,6 @@
 import { Command, Catalog, GitHubRepoConfig, Vehicle, getCommandContributors } from '../types/catalog';
 import { validateCommand } from './canValidator';
+import { formatCommandForCatalog } from './catalogUtils';
 
 export const DEFAULT_REPO_CONFIG: GitHubRepoConfig = {
   owner: 'SuperSuave',
@@ -150,9 +151,10 @@ export function generateIssueMarkdown(
   }
 
   if (allCommands.length > 0) {
+    const formattedCommands = allCommands.map(formatCommandForCatalog);
     markdown += `### 📦 Updated Commands JSON Snippet\n`;
     markdown += `\`\`\`json\n`;
-    markdown += JSON.stringify(allCommands, null, 2);
+    markdown += JSON.stringify(formattedCommands, null, 2);
     markdown += `\n\`\`\`\n\n`;
   }
 
