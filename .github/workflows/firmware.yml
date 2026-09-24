@@ -82,7 +82,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: "npm"
           cache-dependency-path: |
             package-lock.json
             frontend/package-lock.json
@@ -120,19 +120,26 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') || inputs.create_release == true
         run: |
           mkdir -p release_assets
-          cp firmware/build/can-do.bin release_assets/can-do-${{ inputs.target || 'esp32c3' }}.bin
+          TAG="${{ inputs.release_tag != '' && inputs.release_tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || '2026.9.1' }}"
+          TARGET="${{ inputs.target || 'esp32c3' }}"
+
+          # Standard names (required by on-device OTA update service)
           cp firmware/build/can-do.bin release_assets/can-do.bin
-          cp firmware/build/can-do-*-merged.bin release_assets/ 2>/dev/null || true
           cp firmware/build/storage.bin release_assets/storage.bin
           cp catalog/can_do_catalog.json release_assets/can_do_catalog.json
+
+          # Versioned names (for direct downloads from GitHub Releases page)
+          cp firmware/build/can-do.bin "release_assets/can-do-${TARGET}-${TAG}.bin"
+          cp firmware/build/can-do-*-merged.bin "release_assets/can-do-${TARGET}-${TAG}-merged.bin" 2>/dev/null || true
+          cp firmware/build/storage.bin "release_assets/storage-${TARGET}-${TAG}.bin"
+          cp catalog/can_do_catalog.json "release_assets/can_do_catalog-${TAG}.json"
 
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/') || inputs.create_release == true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.release_tag != '' && inputs.release_tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || '2026.9.1' }}
-          name: CAN-Do Release ${{ inputs.release_tag != '' && inputs.release_tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || '2026.9.1' }}
+          name: ${{ inputs.release_tag != '' && inputs.release_tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || '2026.9.1' }}
           generate_release_notes: true
           files: |
             release_assets/*
-
