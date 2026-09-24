@@ -51,11 +51,6 @@ export function resolveDeviceBaseUrl(target?: string | null): string {
     return isRunningOnDevice() ? window.location.origin : 'http://192.168.4.1';
   }
 
-  // Disregard old stale test IP if passed
-  if (host === 'http://192.168.107.50' || host === '192.168.107.50') {
-    return isRunningOnDevice() ? window.location.origin : 'http://192.168.4.1';
-  }
-
   const clean = host.replace(/\/+$/, '');
   return clean.startsWith('http://') || clean.startsWith('https://') ? clean : `http://${clean}`;
 }

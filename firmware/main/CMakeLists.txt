@@ -45,6 +45,7 @@ idf_component_register(
         "joltwallet__littlefs"
         "espressif__mdns"
         "esp_adc"
+        "esp_http_client"
         ${EXTRA_COMPONENTS}
 )
 
