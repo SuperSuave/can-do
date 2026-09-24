@@ -382,6 +382,17 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
         fetchStatus();
       };
 
+      let pendingFrameUpdate = false;
+      const scheduleFrameFlush = () => {
+        if (!pendingFrameUpdate) {
+          pendingFrameUpdate = true;
+          requestAnimationFrame(() => {
+            setSnifferFrames(new Map(framesRef.current));
+            pendingFrameUpdate = false;
+          });
+        }
+      };
+
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
@@ -406,7 +417,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               };
 
               framesRef.current.set(idKey, updated);
-              setSnifferFrames(new Map(framesRef.current));
+              scheduleFrameFlush();
             }
           } else if (data.type === 'automation_fired') {
             showNotice(`Rule Fired: ${data.rule_id || data.id || 'Automation'}`, 'info');
@@ -569,6 +580,13 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   }, [connectWs]);
 
   useEffect(() => {
+    // Notify device whether to stream live WebSocket CAN frames
+    fetch(getApiUrl('/api/system/control'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sniffer_stream: activeTab === 'sniffer' })
+    }).catch(() => {});
+
     if (activeTab === 'automations') fetchAutomationsDiag();
     if (activeTab === 'mqtt') fetchMqtt();
     if (activeTab === 'wifi') {

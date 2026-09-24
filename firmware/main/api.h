@@ -13,4 +13,8 @@ void broadcast_ws_can_frame(const twai_message_t* msg);
 void broadcast_ws_automation_event(const std::string& id, const std::string& name);
 int custom_websocket_logger(const char *fmt, va_list args);
 
+void set_ws_sniffer_client_active(bool active);
+bool is_ws_sniffer_client_active(void);
+
 httpd_handle_t start_webserver(void);
+

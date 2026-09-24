@@ -81,6 +81,17 @@ void broadcast_ws_raw(const std::string& json_str, bool force_send) {
     }
 }
 
+static std::atomic<bool> s_ws_sniffer_subscribed{false};
+
+void set_ws_sniffer_client_active(bool active) {
+    s_ws_sniffer_subscribed.store(active);
+    ESP_LOGI(TAG, "WebSocket CAN Sniffer streaming %s", active ? "ACTIVATED" : "PAUSED (tab inactive)");
+}
+
+bool is_ws_sniffer_client_active(void) {
+    return s_ws_sniffer_subscribed.load();
+}
+
 void broadcast_ws_state(const std::string& entity_id, const std::string& state) {
     if (!has_active_websocket_clients()) return;
     std::string json = "{\"type\":\"state\",\"entity\":\"" + entity_id + "\",\"state\":\"" + state + "\"}";
@@ -88,7 +99,8 @@ void broadcast_ws_state(const std::string& entity_id, const std::string& state) 
 }
 
 void broadcast_ws_can_frame(const twai_message_t* msg) {
-    if (!msg || !has_active_websocket_clients()) return;
+    // Only broadcast frame if both WebSocket clients exist AND a client has subscribed to the sniffer tab
+    if (!msg || !s_ws_sniffer_subscribed.load() || !has_active_websocket_clients()) return;
     char hex_data[17] = {0};
     uint8_t dlc = msg->data_length_code > 8 ? 8 : msg->data_length_code;
     for (int i = 0; i < dlc; i++) {
@@ -898,6 +910,11 @@ static esp_err_t api_system_control_handler(httpd_req_t *req) {
         set_sniffer_mode(cJSON_IsTrue(sniff_item), hw_listen);
     } else if (cJSON_IsBool(hw_item)) {
         set_sniffer_mode(g_sniffer_mode.load(), cJSON_IsTrue(hw_item));
+    }
+
+    cJSON *stream_item = cJSON_GetObjectItem(root, "sniffer_stream");
+    if (cJSON_IsBool(stream_item)) {
+        set_ws_sniffer_client_active(cJSON_IsTrue(stream_item));
     }
 
     cJSON_Delete(root);

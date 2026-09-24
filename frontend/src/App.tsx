@@ -257,18 +257,33 @@ export default function App() {
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
   const [selectedFeature, setSelectedFeature] = useState<string>('all');
 
-  // Pull latest catalog strictly from /catalog/can_do_catalog.json
+  // Pull latest catalog strictly from /catalog/can_do_catalog.json with smart client-side caching
   useEffect(() => {
     const fetchCatalog = async () => {
       const hasDrafts = (localStorage.getItem(STORAGE_KEY_DRAFT_ADDED) || '[]') !== '[]' ||
                         (localStorage.getItem(STORAGE_KEY_DRAFT_MODIFIED) || '[]') !== '[]';
       if (!hasDrafts) {
+        // If we already have a valid cached catalog in localStorage, skip network request
+        const cached = localStorage.getItem(STORAGE_KEY_CATALOG);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (parsed && parsed.commands && parsed.vehicles) {
+              setCatalog(normalizeCatalog(parsed));
+              return;
+            }
+          } catch {}
+        }
+
         try {
           const res = await fetch(`${import.meta.env.BASE_URL}catalog/can_do_catalog.json`);
           if (res.ok) {
             const data = await res.json();
             if (data && data.commands && data.vehicles) {
               setCatalog(normalizeCatalog(data));
+              try {
+                localStorage.setItem(STORAGE_KEY_CATALOG, JSON.stringify(data));
+              } catch {}
               return;
             }
           }
