@@ -245,8 +245,8 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
         httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
     }
 
-    // 4. Stream file out in 2KB chunks without dynamic heap allocation
-    static char s_file_chunk[2048];
+    // 4. Stream file out in 4KB chunks without dynamic heap allocation (cuts SPI flash calls in half)
+    static char s_file_chunk[4096];
     ssize_t read_bytes;
     while ((read_bytes = read(fd, s_file_chunk, sizeof(s_file_chunk))) > 0) {
         if (httpd_resp_send_chunk(req, s_file_chunk, read_bytes) != ESP_OK) {
@@ -1371,9 +1371,9 @@ httpd_handle_t start_webserver(void) {
     config.max_uri_handlers = 40;
     config.lru_purge_enable = true;
     config.keep_alive_enable = true;
-    config.keep_alive_idle = 10;
-    config.send_wait_timeout = 25; // 25s send wait timeout for large asset streaming
-    config.recv_wait_timeout = 15;
+    config.keep_alive_idle = 4;    // Drop idle keep-alive connections faster to free socket handles
+    config.send_wait_timeout = 10; // 10s send wait timeout
+    config.recv_wait_timeout = 10;
     config.max_open_sockets = 7; // limit open sockets to conserve lwIP buffers on ESP32-C3
 
     esp_err_t err = httpd_start(&server, &config);

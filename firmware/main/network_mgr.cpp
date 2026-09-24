@@ -412,11 +412,15 @@ esp_err_t network_mgr_init(void) {
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, nullptr, nullptr));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, nullptr, nullptr));
 
-    // Default mode: APSTA so both interfaces are ready
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
-
-    // Set AP config before starting Wi-Fi
-    if (s_ap_mode != AP_MODE_DISABLED) {
+    // Clean startup: If known networks exist, start in pure Station mode
+    // SoftAP only starts if connection fails, preventing RF frequency hopping
+    bool has_known_networks = !s_known_networks.empty();
+    if (has_known_networks && s_ap_mode == AP_MODE_AUTO) {
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+        s_ap_active = false;
+        ESP_LOGI(TAG, "Starting in Station mode (SoftAP will activate if connection fails)");
+    } else if (s_ap_mode != AP_MODE_DISABLED) {
+        ESP_ERROR_CHECK(esp_wifi_set_mode(has_known_networks ? WIFI_MODE_APSTA : WIFI_MODE_AP));
         wifi_config_t ap_config = {};
         strncpy(reinterpret_cast<char*>(ap_config.ap.ssid), s_ap_ssid.c_str(), sizeof(ap_config.ap.ssid));
         strncpy(reinterpret_cast<char*>(ap_config.ap.password), s_ap_pass.c_str(), sizeof(ap_config.ap.password));
@@ -431,7 +435,7 @@ esp_err_t network_mgr_init(void) {
 
     ESP_ERROR_CHECK(esp_wifi_start());
     esp_wifi_set_ps(WIFI_PS_NONE);
-    ESP_LOGI(TAG, "Wi-Fi started. SoftAP '%s' ready (modem sleep disabled).", s_ap_ssid.c_str());
+    ESP_LOGI(TAG, "Wi-Fi started (modem sleep disabled).");
 
     xTaskCreate(network_roam_task, "net_roam", 4096, nullptr, 3, nullptr);
 
