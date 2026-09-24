@@ -9,6 +9,9 @@
 #include <unordered_map>
 #include <algorithm>
 #include <sys/stat.h>
+#include "sdkconfig.h"
+
+#ifdef CONFIG_BT_ENABLED
 
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
@@ -848,3 +851,4 @@ void ble_mgr_handle_keyboard_report(const uint8_t* data, size_t len, const std::
         dispatch_button_event(evt);
     }
 }
+#endif // CONFIG_BT_ENABLED

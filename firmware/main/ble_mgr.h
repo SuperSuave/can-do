@@ -29,6 +29,10 @@ struct BleButtonEvent {
 
 using BleButtonCallback = std::function<void(const BleButtonEvent&)>;
 
+#include "sdkconfig.h"
+
+#ifdef CONFIG_BT_ENABLED
+
 // Initialization and state
 esp_err_t ble_mgr_init(void);
 bool ble_mgr_is_enabled(void);
@@ -57,3 +61,23 @@ const char* ble_hid_consumer_code_to_name(uint16_t usage_code);
 
 // Helper: Convert standard HID Keyboard Usage code to button name
 const char* ble_hid_keyboard_code_to_name(uint8_t keycode);
+
+#else
+
+inline esp_err_t ble_mgr_init(void) { return ESP_ERR_NOT_SUPPORTED; }
+inline bool ble_mgr_is_enabled(void) { return false; }
+inline bool ble_mgr_is_scanning(void) { return false; }
+inline esp_err_t ble_mgr_start_scan(uint32_t duration_sec = 15) { return ESP_ERR_NOT_SUPPORTED; }
+inline esp_err_t ble_mgr_stop_scan(void) { return ESP_ERR_NOT_SUPPORTED; }
+inline esp_err_t ble_mgr_connect(const std::string& address) { return ESP_ERR_NOT_SUPPORTED; }
+inline esp_err_t ble_mgr_disconnect(const std::string& address = "") { return ESP_ERR_NOT_SUPPORTED; }
+inline esp_err_t ble_mgr_unpair(const std::string& address = "") { return ESP_ERR_NOT_SUPPORTED; }
+inline std::vector<BleDeviceInfo> ble_mgr_get_discovered_devices(void) { return {}; }
+inline std::vector<BleDeviceInfo> ble_mgr_get_paired_devices(void) { return {}; }
+inline bool ble_mgr_get_connected_device(BleDeviceInfo* out_dev) { return false; }
+inline void ble_mgr_register_event_cb(BleButtonCallback cb) {}
+inline void ble_mgr_test_inject_event(const std::string& button_name, const std::string& action, uint8_t key_code = 0) {}
+inline const char* ble_hid_consumer_code_to_name(uint16_t usage_code) { return "unknown"; }
+inline const char* ble_hid_keyboard_code_to_name(uint8_t keycode) { return "unknown"; }
+
+#endif

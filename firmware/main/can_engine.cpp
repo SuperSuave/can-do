@@ -5,6 +5,7 @@
 #include <cstring>
 #include <ctime>
 #include <cmath>
+#include <algorithm>
 #include <sys/time.h>
 #include "esp_log.h"
 #include "mqtt_client.h"
