@@ -9,6 +9,12 @@
 #include <cstring>
 #include <mutex>
 #include <unordered_set>
+#include "esp_system.h"
+#include "esp_timer.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <sys/unistd.h>
+#include <sys/stat.h>
 
 static const char* TAG = "MQTT_MGR";
 static const char* MQTT_CONFIG_FILE = "/spiffs/mqtt.json";
@@ -23,6 +29,15 @@ static std::mutex s_mqtt_mutex;
 static MqttConfig s_mqtt_cfg;
 static std::atomic<bool> s_mqtt_connected{false};
 static std::string s_lwt_topic;
+
+static FILE* s_automations_tmp_file = nullptr;
+static bool s_receiving_automations = false;
+
+static void mqtt_delayed_restart_task(void *arg) {
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    esp_restart();
+    vTaskDelete(NULL);
+}
 
 // Default monitored CAN IDs (Gen5W / E-GMP vehicle telemetry)
 static std::unordered_set<uint32_t> s_monitored_ids = {
@@ -120,6 +135,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             std::string sub_ids_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/subscribe_ids";
             esp_mqtt_client_subscribe(global_mqtt_client, sub_ids_topic.c_str(), 1);
 
+            std::string config_set_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/set";
+            esp_mqtt_client_subscribe(global_mqtt_client, config_set_topic.c_str(), 1);
+            
+            std::string config_get_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/get";
+            esp_mqtt_client_subscribe(global_mqtt_client, config_get_topic.c_str(), 1);
+
             esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/set/#").c_str(), 1);
 
             // 3. Publish initial state of all currently cached monitored IDs
@@ -137,6 +158,31 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             for (const auto& entity : global_catalog) {
                 publish_ha_discovery(global_mqtt_client, entity);
             }
+
+            // 5. Publish automations state
+            {
+                std::string state_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/state";
+                FILE* state_f = fopen("/spiffs/automations.json", "r");
+                if (state_f) {
+                    fseek(state_f, 0, SEEK_END);
+                    long slen = ftell(state_f);
+                    fseek(state_f, 0, SEEK_SET);
+                    if (slen == 0) {
+                        esp_mqtt_client_publish(global_mqtt_client, state_topic.c_str(), "[]", 2, 1, 1);
+                    } else {
+                        char* sbuf = (char*)malloc(slen + 1);
+                        if (sbuf) {
+                            fread(sbuf, 1, slen, state_f);
+                            sbuf[slen] = '\0';
+                            esp_mqtt_client_publish(global_mqtt_client, state_topic.c_str(), sbuf, slen, 1, 1);
+                            free(sbuf);
+                        }
+                    }
+                    fclose(state_f);
+                } else {
+                    esp_mqtt_client_publish(global_mqtt_client, state_topic.c_str(), "[]", 2, 1, 1);
+                }
+            }
             break;
         }
 
@@ -146,8 +192,102 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             break;
 
         case MQTT_EVENT_DATA: {
+            std::string config_set_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/set";
+            std::string config_get_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/get";
+            std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/status";
+            std::string state_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/state";
+
+            // Handle chunked incoming data for config/automations/set
+            if (event->current_data_offset == 0 && event->topic_len == config_set_topic.length() && 
+                strncmp(event->topic, config_set_topic.c_str(), event->topic_len) == 0) {
+                
+                s_receiving_automations = true;
+                s_automations_tmp_file = fopen("/spiffs/automations.json.tmp", "w");
+                if (!s_automations_tmp_file) {
+                    ESP_LOGE(TAG, "Failed to open automations.json.tmp for writing");
+                    s_receiving_automations = false;
+                }
+            }
+
+            if (s_receiving_automations) {
+                if (s_automations_tmp_file && event->data_len > 0) {
+                    fwrite(event->data, 1, event->data_len, s_automations_tmp_file);
+                }
+
+                bool is_final_chunk = (event->current_data_offset + event->data_len >= event->total_data_len);
+                if (is_final_chunk) {
+                    if (s_automations_tmp_file) {
+                        fclose(s_automations_tmp_file);
+                        s_automations_tmp_file = nullptr;
+                    }
+                    s_receiving_automations = false;
+                    
+                    // Validate JSON
+                    bool valid = true;
+                    cJSON* root = nullptr;
+                    FILE* f = fopen("/spiffs/automations.json.tmp", "r");
+                    if (f) {
+                        fseek(f, 0, SEEK_END);
+                        long len = ftell(f);
+                        fseek(f, 0, SEEK_SET);
+                        if (len > 0) {
+                            char* buf = (char*)malloc(len + 1);
+                            if (buf) {
+                                fread(buf, 1, len, f);
+                                buf[len] = '\0';
+                                root = cJSON_Parse(buf);
+                                if (!root) valid = false;
+                                else cJSON_Delete(root);
+                                free(buf);
+                            }
+                        }
+                        fclose(f);
+                    }
+                    
+                    if (valid) {
+                        rename("/spiffs/automations.json.tmp", "/spiffs/automations.json");
+                        esp_mqtt_client_publish(global_mqtt_client, status_topic.c_str(), "{\"status\":\"ok\"}", 0, 1, 0);
+                        
+                        // Soft reset to apply
+                        xTaskCreate(mqtt_delayed_restart_task, "mqtt_restart", 2048, nullptr, 5, nullptr);
+                    } else {
+                        unlink("/spiffs/automations.json.tmp");
+                        esp_mqtt_client_publish(global_mqtt_client, status_topic.c_str(), "{\"status\":\"error\",\"message\":\"Invalid JSON syntax\"}", 0, 1, 0);
+                    }
+                }
+                return; // Do not process this chunked payload in standard string matcher
+            }
+
+            // Normal topics (require topic to be present)
+            if (event->topic_len == 0) return;
             std::string topic(event->topic, event->topic_len);
             std::string payload(event->data, event->data_len);
+
+            if (topic == config_get_topic) {
+                FILE* state_f = fopen("/spiffs/automations.json", "r");
+                if (state_f) {
+                    fseek(state_f, 0, SEEK_END);
+                    long slen = ftell(state_f);
+                    fseek(state_f, 0, SEEK_SET);
+                    if (slen == 0) {
+                        esp_mqtt_client_publish(global_mqtt_client, state_topic.c_str(), "[]", 2, 1, 1);
+                    } else {
+                        char* sbuf = (char*)malloc(slen + 1);
+                        if (sbuf) {
+                            fread(sbuf, 1, slen, state_f);
+                            sbuf[slen] = '\0';
+                            esp_mqtt_client_publish(global_mqtt_client, state_topic.c_str(), sbuf, slen, 1, 1);
+                            free(sbuf);
+                        } else {
+                            ESP_LOGE(TAG, "OOM reading automations.json for mqtt publish");
+                        }
+                    }
+                    fclose(state_f);
+                } else {
+                    esp_mqtt_client_publish(global_mqtt_client, state_topic.c_str(), "[]", 2, 1, 1);
+                }
+                return;
+            }
 
             std::string tx_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/tx";
             std::string notify_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/notify";

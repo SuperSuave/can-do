@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import mqtt from 'mqtt';
 import {
   AutomationRule,
   AutomationSettings,
@@ -2170,6 +2171,26 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [espIp, setEspIp] = useState<string>(() => getDefaultEspIp());
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
+
+  const [useMqttSync, setUseMqttSync] = useState<boolean>(!isRunningOnDevice());
+  const [mqttRemoteConfig, setMqttRemoteConfig] = useState(() => {
+    const saved = localStorage.getItem('cando_mqtt_remote');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return {
+      wsUrl: 'wss://homeassistant.local:9001',
+      user: '',
+      pass: '',
+      deviceId: 'device_id'
+    };
+  });
+
+  const updateMqttConfig = (updates: any) => {
+    const next = { ...mqttRemoteConfig, ...updates };
+    setMqttRemoteConfig(next);
+    localStorage.setItem('cando_mqtt_remote', JSON.stringify(next));
+  };
   const [customJsonSchema, setCustomJsonSchema] = useState<string>(
     JSON.stringify(
       {
@@ -2392,6 +2413,63 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const handlePushToEsp = async () => {
     setSyncing(true);
     setSyncStatus('Pushing automations.json to ESP32...');
+
+    if (useMqttSync) {
+      const payload = exportToCandoJson(rules, settings, catalog);
+      const { wsUrl, user, pass, deviceId } = mqttRemoteConfig;
+      
+      try {
+        const client = mqtt.connect(wsUrl, {
+          username: user || undefined,
+          password: pass || undefined,
+          protocolVersion: 4,
+          reconnectPeriod: 0
+        });
+        
+        client.on('connect', () => {
+          client.subscribe(`cando/${deviceId}/config/automations/status`, (err) => {
+            if (!err) {
+              client.publish(`cando/${deviceId}/config/automations/set`, payload, { qos: 1 }, (err2) => {
+                if (err2) {
+                  setSyncStatus(`Push failed: ${err2.message}`);
+                  setSyncing(false);
+                  client.end();
+                }
+              });
+            }
+          });
+        });
+
+        client.on('message', (topic, message) => {
+          if (topic === `cando/${deviceId}/config/automations/status`) {
+            try {
+              const data = JSON.parse(message.toString());
+              if (data.status === 'ok') {
+                setSyncStatus('Success: Saved via MQTT. Rebooting ESP32...');
+              } else {
+                setSyncStatus(`MQTT Error: ${data.message}`);
+              }
+            } catch(e: any) {
+              setSyncStatus(`Push failed: ${e.message}`);
+            }
+            setSyncing(false);
+            client.end();
+            setTimeout(() => setSyncStatus(null), 6000);
+          }
+        });
+
+        client.on('error', (err) => {
+          setSyncStatus(`MQTT Connection Error: ${err.message}`);
+          setSyncing(false);
+          client.end();
+        });
+      } catch (err: any) {
+        setSyncStatus(`MQTT Init Error: ${err.message}`);
+        setSyncing(false);
+      }
+      return;
+    }
+
     try {
       const payload = exportToCandoJson(rules, settings, catalog);
       const base = resolveDeviceBaseUrl(espIp);
@@ -2415,6 +2493,62 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const handlePullFromEsp = async () => {
     setSyncing(true);
     setSyncStatus('Pulling automations.json from ESP32...');
+
+    if (useMqttSync) {
+      const { wsUrl, user, pass, deviceId } = mqttRemoteConfig;
+      try {
+        const client = mqtt.connect(wsUrl, {
+          username: user || undefined,
+          password: pass || undefined,
+          protocolVersion: 4,
+          reconnectPeriod: 0
+        });
+
+        client.on('connect', () => {
+          client.subscribe(`cando/${deviceId}/config/automations/state`, (err) => {
+            if (!err) {
+              client.publish(`cando/${deviceId}/config/automations/get`, '', { qos: 1 });
+            }
+          });
+        });
+
+        client.on('message', (topic, message) => {
+          if (topic === `cando/${deviceId}/config/automations/state`) {
+            try {
+              const data = JSON.parse(message.toString());
+              if (data.rules && Array.isArray(data.rules)) {
+                onUpdateRules(data.rules);
+                if (data.settings) onUpdateSettings(data.settings);
+                if (data.rules[0]?.id) setSelectedRuleId(data.rules[0].id);
+                setSyncStatus(`Imported ${data.rules.length} rule(s) via MQTT!`);
+              } else if (Array.isArray(data)) {
+                onUpdateRules(data);
+                if (data[0]?.id) setSelectedRuleId(data[0].id);
+                setSyncStatus(`Imported ${data.length} rule(s) via MQTT!`);
+              } else {
+                setSyncStatus('No rules array found in device response.');
+              }
+            } catch(e: any) {
+              setSyncStatus(`Pull failed: ${e.message}`);
+            }
+            setSyncing(false);
+            client.end();
+            setTimeout(() => setSyncStatus(null), 6000);
+          }
+        });
+
+        client.on('error', (err) => {
+          setSyncStatus(`MQTT Connection Error: ${err.message}`);
+          setSyncing(false);
+          client.end();
+        });
+      } catch (err: any) {
+        setSyncStatus(`MQTT Init Error: ${err.message}`);
+        setSyncing(false);
+      }
+      return;
+    }
+
     try {
       const base = resolveDeviceBaseUrl(espIp);
       const url = `${base}/api/automations`;
@@ -2995,36 +3129,84 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
             {/* Quick Export & ESP32 Direct Sync Footer */}
             <div className="pt-2 border-t border-slate-800 space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-1.5 p-2 rounded-lg bg-slate-950/70 border border-slate-800/80">
-                <div className="flex items-center gap-1.5 flex-1 min-w-[150px]">
-                  <span className="text-[10px] font-semibold text-slate-400 whitespace-nowrap">ESP IP:</span>
-                  <input
-                    type="text"
-                    value={espIp}
-                    onChange={e => setEspIp(e.target.value)}
-                    placeholder={getDefaultEspIp()}
-                    title="Device IP address or hostname"
-                    className="flex-1 px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                  />
+              <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-semibold text-slate-400">Sync Target:</span>
+                    <select
+                      value={useMqttSync ? 'mqtt' : 'rest'}
+                      onChange={e => setUseMqttSync(e.target.value === 'mqtt')}
+                      className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none"
+                    >
+                      <option value="rest">Local Network (REST API)</option>
+                      <option value="mqtt">Remote Broker (MQTT WSS)</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={syncing}
+                      onClick={handlePullFromEsp}
+                      className="px-2 py-1 text-[11px] font-semibold rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition disabled:opacity-50"
+                    >
+                      Pull
+                    </button>
+                    <button
+                      type="button"
+                      disabled={syncing}
+                      onClick={handlePushToEsp}
+                      className="px-2.5 py-1 text-[11px] font-semibold rounded bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold transition disabled:opacity-50"
+                    >
+                      Push
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    disabled={syncing}
-                    onClick={handlePullFromEsp}
-                    className="px-2 py-1 text-[11px] font-semibold rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition disabled:opacity-50"
-                  >
-                    Pull
-                  </button>
-                  <button
-                    type="button"
-                    disabled={syncing}
-                    onClick={handlePushToEsp}
-                    className="px-2.5 py-1 text-[11px] font-semibold rounded bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold transition disabled:opacity-50"
-                  >
-                    Push
-                  </button>
-                </div>
+
+                {!useMqttSync ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-semibold text-slate-400 whitespace-nowrap">ESP IP:</span>
+                    <input
+                      type="text"
+                      value={espIp}
+                      onChange={e => setEspIp(e.target.value)}
+                      placeholder={getDefaultEspIp()}
+                      title="Device IP address or hostname"
+                      className="flex-1 px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <input
+                      type="text"
+                      value={mqttRemoteConfig.wsUrl}
+                      onChange={e => updateMqttConfig({ wsUrl: e.target.value })}
+                      placeholder="wss://broker:port"
+                      className="px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      title="Broker WS URL (Must be wss:// if on HTTPS domain)"
+                    />
+                    <input
+                      type="text"
+                      value={mqttRemoteConfig.deviceId}
+                      onChange={e => updateMqttConfig({ deviceId: e.target.value })}
+                      placeholder="Device ID (e.g. my_device)"
+                      className="px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    />
+                    <input
+                      type="text"
+                      value={mqttRemoteConfig.user}
+                      onChange={e => updateMqttConfig({ user: e.target.value })}
+                      placeholder="Username (optional)"
+                      className="px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    />
+                    <input
+                      type="password"
+                      value={mqttRemoteConfig.pass}
+                      onChange={e => updateMqttConfig({ pass: e.target.value })}
+                      placeholder="Password (optional)"
+                      className="px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    />
+                  </div>
+                )}
               </div>
 
               {syncStatus && (
