@@ -84,7 +84,7 @@ jobs:
       - name: Build Embedded React Frontend for LittleFS
         run: |
           cd frontend
-          npm ci
+          npm ci || npm install
           VITE_APP_VERSION="${{ env.RELEASE_TAG }}" npm run build
 
       - name: Build with ESP-IDF

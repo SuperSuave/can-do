@@ -808,9 +808,9 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
   // Export sniffer frames to CSV
   const handleExportSnifferCsv = () => {
-    const frames = Array.from(snifferFrames.values());
+    const frames: CanFrame[] = Array.from(snifferFrames.values());
     let csv = 'CAN_ID,DLC,DATA_HEX,COUNT,INTERVAL_MS,LAST_SEEN,CATALOG_MATCH\n';
-    frames.forEach(f => {
+    frames.forEach((f: CanFrame) => {
       const match = catalogCommandMap.get(f.id);
       csv += `"${f.id}",${f.dlc},"${f.data}",${f.count},${f.lastIntervalMs ?? ''},"${f.timestamp}","${match?.name || ''}"\n`;
     });
@@ -825,7 +825,8 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
   // Filtered sniffer frames
   const filteredFrames = useMemo(() => {
-    return Array.from(snifferFrames.values()).filter((f) => {
+    const frames: CanFrame[] = Array.from(snifferFrames.values());
+    return frames.filter((f: CanFrame) => {
       const match = catalogCommandMap.get(f.id);
       if (onlyCatalogMatches && !match) return false;
 

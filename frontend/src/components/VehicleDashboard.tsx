@@ -918,7 +918,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
   const toggleDoor = (key: keyof typeof doors) => {
     setDoors(prev => ({ ...prev, [key]: !prev[key] }));
-    const label = key.replace(/([A-Z])/g, ' $1').toLowerCase();
+    const label = String(key).replace(/([A-Z])/g, ' $1').toLowerCase();
     triggerNotice(`${label} ${!doors[key] ? 'Opened' : 'Closed'}`);
   };
 

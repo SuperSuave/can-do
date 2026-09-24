@@ -827,6 +827,7 @@ function ConditionListEditor({
 }
 
 interface TriggerNodeEditorProps {
+  key?: React.Key;
   trig: AutomationTrigger;
   tIdx: number;
   catalog?: Catalog;
