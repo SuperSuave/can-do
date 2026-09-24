@@ -336,9 +336,7 @@ static void gvret_server_task(void* pvParameters) {
 
             // 2. Dequeue outbound CAN frames
             twai_message_t frame;
-            bool got_frame = false;
             if (xQueueReceive(s_gvret_queue, &frame, pdMS_TO_TICKS(2)) == pdTRUE) {
-                got_frame = true;
                 uint32_t now_us = (uint32_t)esp_timer_get_time();
                 pack_can_frame(batch_buf, batch_len, &frame, now_us);
             }
