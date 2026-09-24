@@ -62,9 +62,9 @@ bool has_active_websocket_clients(void) {
     return false;
 }
 
-void broadcast_ws_raw(const std::string& json_str) {
+void broadcast_ws_raw(const std::string& json_str, bool force_send) {
     if (!global_web_server) return;
-    if (esp_get_free_heap_size() < 40000) return;
+    if (!force_send && esp_get_free_heap_size() < 40000) return;
     size_t max_clients = 8;
     int client_fds[8];
     size_t clients = max_clients;
@@ -111,7 +111,7 @@ void broadcast_ws_automation_event(const std::string& id, const std::string& nam
     snprintf(buf, sizeof(buf),
              "{\"type\":\"automation_fired\",\"id\":\"%s\",\"name\":\"%s\",\"ts\":%lu}",
              id.c_str(), name.c_str(), (unsigned long)now_ms);
-    broadcast_ws_raw(buf);
+    broadcast_ws_raw(buf, true);
 }
 
 int custom_websocket_logger(const char *fmt, va_list args) {
