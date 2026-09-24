@@ -14,7 +14,6 @@
 #include "board_pins.h"
 #include "can.h"
 #include "mqtt_mgr.h"
-#include "ble_mgr.h"
 #include "uds_engine.h"
 
 #if defined(_WIN32) && !defined(__GNUC__)
@@ -579,62 +578,6 @@ void can_rx_task(void* arg) {
         }
         precondition_tick();
         track_popup_tick();
-    }
-}
-
-void can_engine_trigger_ble_event(const BleButtonEvent& event) {
-    if (!g_automations_enabled.load()) return;
-
-    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-
-    for (auto& rule : global_automations) {
-        if (!rule.enabled) continue;
-
-        for (const auto& trig : rule.triggers) {
-            if (trig.type == "ble_button" || trig.type == "ble_key") {
-                bool button_match = false;
-                if (trig.ble_button.empty() || strcasecmp(trig.ble_button.c_str(), event.button_name.c_str()) == 0) {
-                    button_match = true;
-                }
-
-                bool action_match = false;
-                if (trig.ble_action.empty() || trig.ble_action == "any" || strcasecmp(trig.ble_action.c_str(), event.action.c_str()) == 0) {
-                    action_match = true;
-                }
-
-                bool device_match = true;
-                if (!trig.ble_device.empty()) {
-                    if (strcasecmp(trig.ble_device.c_str(), event.device_address.c_str()) != 0 &&
-                        strcasecmp(trig.ble_device.c_str(), event.device_name.c_str()) != 0) {
-                        device_match = false;
-                    }
-                }
-
-                if (button_match && action_match && device_match) {
-                    // Check cooldown
-                    if (rule.last_exec_time_ms != 0 && (now_ms - rule.last_exec_time_ms < rule.cooldown_ms)) {
-                        continue;
-                    }
-
-                    // Check conditions
-                    bool passed = true;
-                    for (const auto& cond : rule.conditions) {
-                        if (!evaluate_condition(cond)) {
-                            passed = false;
-                            break;
-                        }
-                    }
-
-                    if (passed) {
-                        ESP_LOGI(TAG, "BLE Automation fired: '%s' by button '%s' (%s)",
-                                 rule.name.c_str(), event.button_name.c_str(), event.action.c_str());
-                        rule.last_exec_time_ms = now_ms;
-                        broadcast_ws_automation_event(rule.id, rule.name);
-                        queue_action_steps(0, 20, rule.actions);
-                    }
-                }
-            }
-        }
     }
 }
 

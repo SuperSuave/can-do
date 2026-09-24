@@ -24,7 +24,6 @@ idf_component_register(
         "network_mgr.cpp"
         "gvret_server.cpp"
         "mqtt_mgr.cpp"
-        "ble_mgr.cpp"
         "vbat_sensor.cpp"
         "uds_engine.cpp"
         "power_mgr.cpp"

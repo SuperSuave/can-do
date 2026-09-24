@@ -5,7 +5,6 @@
 #include "gvret_server.h"
 #include "mqtt_mgr.h"
 #include "track_popup.h"
-#include "ble_mgr.h"
 #include "vbat_sensor.h"
 #include "uds_engine.h"
 #include "cJSON.h"
@@ -1363,173 +1362,10 @@ static esp_err_t api_notify_handler(httpd_req_t *req) {
     }
 }
 
-static esp_err_t api_ble_status_handler(httpd_req_t *req) {
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddBoolToObject(root, "enabled", ble_mgr_is_enabled());
-    cJSON_AddBoolToObject(root, "scanning", ble_mgr_is_scanning());
 
-    BleDeviceInfo conn_dev;
-    bool has_conn = ble_mgr_get_connected_device(&conn_dev);
-    if (has_conn) {
-        cJSON *cd = cJSON_AddObjectToObject(root, "connected_device");
-        cJSON_AddStringToObject(cd, "name", conn_dev.name.c_str());
-        cJSON_AddStringToObject(cd, "address", conn_dev.address.c_str());
-        cJSON_AddNumberToObject(cd, "rssi", conn_dev.rssi);
-        cJSON_AddBoolToObject(cd, "connected", true);
-        cJSON_AddBoolToObject(cd, "bonded", conn_dev.bonded);
-        cJSON_AddNumberToObject(cd, "battery_pct", conn_dev.battery_pct);
-    } else {
-        cJSON_AddNullToObject(root, "connected_device");
-    }
 
-    cJSON *paired_arr = cJSON_AddArrayToObject(root, "paired_devices");
-    auto paired = ble_mgr_get_paired_devices();
-    for (const auto& dev : paired) {
-        cJSON *item = cJSON_CreateObject();
-        cJSON_AddStringToObject(item, "name", dev.name.c_str());
-        cJSON_AddStringToObject(item, "address", dev.address.c_str());
-        cJSON_AddBoolToObject(item, "connected", dev.connected);
-        cJSON_AddBoolToObject(item, "bonded", dev.bonded);
-        cJSON_AddItemToArray(paired_arr, item);
-    }
 
-    cJSON *disc_arr = cJSON_AddArrayToObject(root, "discovered_devices");
-    auto disc = ble_mgr_get_discovered_devices();
-    for (const auto& dev : disc) {
-        cJSON *item = cJSON_CreateObject();
-        cJSON_AddStringToObject(item, "name", dev.name.c_str());
-        cJSON_AddStringToObject(item, "address", dev.address.c_str());
-        cJSON_AddNumberToObject(item, "rssi", dev.rssi);
-        cJSON_AddItemToArray(disc_arr, item);
-    }
 
-    char *out = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
-
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_sendstr(req, out);
-    free(out);
-    return ESP_OK;
-}
-
-static esp_err_t api_ble_scan_handler(httpd_req_t *req) {
-    char buf[128];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
-    bool start = true;
-    uint32_t duration = 15;
-    if (ret > 0) {
-        buf[ret] = '\0';
-        cJSON *root = cJSON_Parse(buf);
-        if (root) {
-            cJSON *action = cJSON_GetObjectItem(root, "action");
-            if (action && cJSON_IsString(action) && strcmp(action->valuestring, "stop") == 0) {
-                start = false;
-            }
-            cJSON *dur = cJSON_GetObjectItem(root, "duration");
-            if (dur && cJSON_IsNumber(dur)) duration = dur->valueint;
-            cJSON_Delete(root);
-        }
-    }
-
-    esp_err_t err = ESP_OK;
-    if (start) {
-        err = ble_mgr_start_scan(duration);
-    } else {
-        err = ble_mgr_stop_scan();
-    }
-
-    httpd_resp_set_type(req, "application/json");
-    if (err == ESP_OK) {
-        httpd_resp_sendstr(req, start ? "{\"status\":\"ok\",\"scanning\":true}" : "{\"status\":\"ok\",\"scanning\":false}");
-        return ESP_OK;
-    } else {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Scan operation failed");
-        return ESP_FAIL;
-    }
-}
-
-static esp_err_t api_ble_pair_handler(httpd_req_t *req) {
-    char buf[128];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
-    if (ret <= 0) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty request");
-        return ESP_FAIL;
-    }
-    buf[ret] = '\0';
-    cJSON *root = cJSON_Parse(buf);
-    if (!root) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-        return ESP_FAIL;
-    }
-    cJSON *addr = cJSON_GetObjectItem(root, "address");
-    if (!addr) addr = cJSON_GetObjectItem(root, "mac");
-    std::string address = (addr && cJSON_IsString(addr)) ? addr->valuestring : "";
-    cJSON_Delete(root);
-
-    if (address.empty()) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing address");
-        return ESP_FAIL;
-    }
-
-    esp_err_t err = ble_mgr_connect(address);
-    httpd_resp_set_type(req, "application/json");
-    if (err == ESP_OK) {
-        httpd_resp_sendstr(req, "{\"status\":\"ok\",\"connected\":false}");
-        return ESP_OK;
-    } else {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Pairing failed");
-        return ESP_FAIL;
-    }
-}
-
-static esp_err_t api_ble_unpair_handler(httpd_req_t *req) {
-    char buf[128];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
-    std::string address = "";
-    if (ret > 0) {
-        buf[ret] = '\0';
-        cJSON *root = cJSON_Parse(buf);
-        if (root) {
-            cJSON *addr = cJSON_GetObjectItem(root, "address");
-            if (!addr) addr = cJSON_GetObjectItem(root, "mac");
-            if (addr && cJSON_IsString(addr)) address = addr->valuestring;
-            cJSON_Delete(root);
-        }
-    }
-
-    ble_mgr_unpair(address);
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_sendstr(req, "{\"status\":\"ok\",\"unpaired\":true}");
-    return ESP_OK;
-}
-
-static esp_err_t api_ble_test_event_handler(httpd_req_t *req) {
-    char buf[256];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
-    if (ret <= 0) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty request");
-        return ESP_FAIL;
-    }
-    buf[ret] = '\0';
-    cJSON *root = cJSON_Parse(buf);
-    if (!root) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-        return ESP_FAIL;
-    }
-    cJSON *btn = cJSON_GetObjectItem(root, "button");
-    std::string button_name = (btn && cJSON_IsString(btn)) ? btn->valuestring : "volume_up";
-    cJSON *act = cJSON_GetObjectItem(root, "action");
-    std::string action = (act && cJSON_IsString(act)) ? act->valuestring : "press";
-    cJSON *key = cJSON_GetObjectItem(root, "keycode");
-    uint8_t keycode = (key && cJSON_IsNumber(key)) ? (uint8_t)key->valueint : 0;
-    cJSON_Delete(root);
-
-    ble_mgr_test_inject_event(button_name, action, keycode);
-
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_sendstr(req, "{\"status\":\"ok\",\"injected\":true}");
-    return ESP_OK;
-}
 
 static esp_err_t ws_handler(httpd_req_t *req) {
     return ESP_OK;
@@ -1581,11 +1417,6 @@ httpd_handle_t start_webserver(void) {
         reg_uri("/api/wifi/settings", HTTP_POST, api_wifi_settings_handler);
         reg_uri("/api/mqtt", HTTP_GET, api_mqtt_get_handler);
         reg_uri("/api/mqtt", HTTP_POST, api_mqtt_post_handler);
-        reg_uri("/api/ble/status", HTTP_GET, api_ble_status_handler);
-        reg_uri("/api/ble/scan", HTTP_POST, api_ble_scan_handler);
-        reg_uri("/api/ble/pair", HTTP_POST, api_ble_pair_handler);
-        reg_uri("/api/ble/unpair", HTTP_POST, api_ble_unpair_handler);
-        reg_uri("/api/ble/test_event", HTTP_POST, api_ble_test_event_handler);
         reg_uri("/api/upload", HTTP_POST, api_file_upload_handler);
         reg_uri("/api/ota", HTTP_POST, api_ota_handler);
         reg_uri("/api/ota/cloud_pull", HTTP_POST, api_ota_cloud_pull_handler);

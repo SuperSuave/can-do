@@ -136,9 +136,6 @@ struct AutomationTrigger {
     uint8_t weekdays_mask = 0x7F;   // bitmask (bits 0..6: Sun..Sat)
 
     // For BLE button / keyboard triggers
-    std::string ble_button;         // e.g. "volume_up", "volume_down", "play_pause", "key_1", etc.
-    std::string ble_action = "press"; // "press", "release", "any"
-    std::string ble_device;         // optional device address/name filter
 };
 
 struct AutomationRule {

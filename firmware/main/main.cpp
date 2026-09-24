@@ -23,7 +23,6 @@
 #include "mqtt_mgr.h"
 #include "network_mgr.h"
 #include "gvret_server.h"
-#include "ble_mgr.h"
 #include "vbat_sensor.h"
 #include "uds_engine.h"
 #include "power_mgr.h"
@@ -159,7 +158,6 @@ extern "C" void app_main(void) {
     mqtt_mgr_init();
 
     // 3.5. Init Bluetooth Low Energy (BLE HID Controller)
-    ble_mgr_init();
 
     // 4. Network connectivity (Multi-SSID Roaming, Auto-AP Fallback, 192.168.4.1)
     network_mgr_init();
