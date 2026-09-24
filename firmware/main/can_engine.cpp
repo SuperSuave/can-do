@@ -80,7 +80,7 @@ bool can_state_cache_get(uint32_t can_id, uint8_t byte_index, uint32_t* out_val)
 
 void init_can_engine(void) {
     if (!tx_command_queue) {
-        tx_command_queue = xQueueCreate(16, sizeof(CanBurstCmd*));
+        tx_command_queue = xQueueCreate(32, sizeof(CanBurstCmd*));
     }
 }
 

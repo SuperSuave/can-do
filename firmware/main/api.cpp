@@ -62,8 +62,9 @@ bool has_active_websocket_clients(void) {
     return false;
 }
 
-void broadcast_ws_raw(const std::string& json_str) {
+void broadcast_ws_raw(const std::string& json_str, bool force_send) {
     if (!global_web_server) return;
+    if (!force_send && esp_get_free_heap_size() < 40000) return;
     size_t max_clients = 8;
     int client_fds[8];
     size_t clients = max_clients;
@@ -110,10 +111,16 @@ void broadcast_ws_automation_event(const std::string& id, const std::string& nam
     snprintf(buf, sizeof(buf),
              "{\"type\":\"automation_fired\",\"id\":\"%s\",\"name\":\"%s\",\"ts\":%lu}",
              id.c_str(), name.c_str(), (unsigned long)now_ms);
-    broadcast_ws_raw(buf);
+    broadcast_ws_raw(buf, true);
 }
 
 int custom_websocket_logger(const char *fmt, va_list args) {
+    if (esp_get_free_heap_size() < 40000) {
+        if (original_log_vprintf) {
+            return original_log_vprintf(fmt, args);
+        }
+        return 0;
+    }
     char log_buffer[256];
     va_list args_copy;
     va_copy(args_copy, args);
@@ -1350,7 +1357,7 @@ httpd_handle_t start_webserver(void) {
     config.keep_alive_idle = 10;
     config.send_wait_timeout = 25; // 25s send wait timeout for large asset streaming
     config.recv_wait_timeout = 15;
-    config.max_open_sockets = 4; // limit open sockets to conserve lwIP buffers on ESP32-C3
+    config.max_open_sockets = 7; // limit open sockets to conserve lwIP buffers on ESP32-C3
 
     esp_err_t err = httpd_start(&server, &config);
     if (err == ESP_OK) {

@@ -40,7 +40,7 @@ static uint16_t s_last_consumer_code = 0;
 static uint8_t s_last_keycode = 0;
 
 // Forward declarations for external integrations
-extern void broadcast_ws_raw(const std::string& json_str);
+#include "api.h"
 extern void can_engine_trigger_ble_event(const BleButtonEvent& event);
 extern void mqtt_mgr_publish_ble_event(const BleButtonEvent& event);
 
