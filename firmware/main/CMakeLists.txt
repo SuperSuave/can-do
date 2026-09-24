@@ -1,9 +1,11 @@
 if(IDF_VERSION_MAJOR GREATER_EQUAL 6)
     set(MQTT_COMPONENT "espressif__mqtt")
     set(CJSON_COMPONENT "espressif__cjson")
+    set(EXTRA_COMPONENTS "esp_driver_gpio")
 else()
     set(MQTT_COMPONENT "mqtt")
     set(CJSON_COMPONENT "json")
+    set(EXTRA_COMPONENTS "")
 endif()
 
 idf_component_register(
@@ -42,8 +44,9 @@ idf_component_register(
         ${CJSON_COMPONENT}
         "joltwallet__littlefs"
         "espressif__mdns"
-        "bt"
         "esp_adc"
+        "esp_http_client"
+        ${EXTRA_COMPONENTS}
 )
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-error=cpp -Wno-cpp -Wno-deprecated-declarations)

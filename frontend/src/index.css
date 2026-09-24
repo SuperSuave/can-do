@@ -279,6 +279,47 @@
   }
 }
 
+/* EV Charging Flow Animation - Slower, inward-flowing green dots */
+@keyframes charge-dots-flow-inward {
+  0% {
+    stroke-dashoffset: 54;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes charge-pulse-slow {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes charge-port-pulse-slow {
+  0% {
+    r: 6px;
+    opacity: 0.9;
+  }
+  100% {
+    r: 16px;
+    opacity: 0;
+  }
+}
+
+.charge-dot-stream {
+  stroke-dasharray: 4 14;
+  animation: charge-dots-flow-inward 10.5s linear infinite !important;
+}
+
+.charge-port-ripple {
+  animation: charge-port-pulse-slow 2.8s ease-out infinite !important;
+}
+
 /* Floating Action Buttons Stack */
 .ha-fab-stack {
   position: fixed !important;

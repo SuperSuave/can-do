@@ -11,6 +11,7 @@ export type TriggerCombineMode = 'any' | 'all' | 'sequence';
 
 export interface AutomationTrigger {
   id: string;
+  _clientId?: string;
   source: 'preset' | 'can' | 'time' | 'voltage' | 'mqtt' | 'ble';
   type?: 'byte_transition' | 'time_schedule' | 'can_rx' | 'mqtt' | 'ble_button' | 'ble_key' | string;
   can_id?: string;
@@ -48,6 +49,7 @@ export interface AutomationTrigger {
 
 export interface AutomationCondition {
   id: string;
+  _clientId?: string;
   type?: 'can_state' | 'byte_value' | 'time_condition' | 'time' | 'param_range' | 'voltage' | 'and' | 'or' | 'not' | 'and_group' | 'or_group' | 'not_group' | 'triggered_by' | 'trigger';
   logic?: 'and' | 'or' | 'not' | 'leaf';
   trigger_id?: string;
@@ -99,6 +101,7 @@ export type PopupLevel = 'info' | 'warning' | 'error';
 
 export interface AutomationAction {
   id: string;
+  _clientId?: string;
   type: 'can_tx' | 'transmit' | 'entity_command' | 'delay' | 'precondition' | 'climate_target' | 'webhook' | 'choose' | 'if_then' | 'track_popup' | 'popup';
   level?: PopupLevel;
   text?: string;

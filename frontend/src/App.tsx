@@ -3,6 +3,7 @@ import { Catalog, Command, CommandRole, CommandOption, GitHubRepoConfig, Vehicle
 import { DEFAULT_CATALOG, normalizeCatalog } from './data/defaultCatalog';
 import { validateCatalog } from './utils/canValidator';
 import { commandToAction, commandToTrigger } from './utils/automationConverters';
+import { resolveVariant, formatCommandForCatalog } from './utils/catalogUtils';
 import { getSavedRepoConfig, saveRepoConfig } from './utils/githubHelper';
 import { isRunningOnDevice, resolveDeviceBaseUrl } from './utils/hostUtils';
 import { CommandFilter } from './components/CommandFilter';
@@ -157,10 +158,11 @@ export default function App() {
           return parsed.map((rule: AutomationRule) => ({
             ...rule,
             triggers: (rule.triggers || []).map(trig => {
-              if (trig.id === 'trig_menu_ok' || (!trig.source_command_id && trig.can_id === '0x448')) {
+              const srcId = trig.source_command_id;
+              if (trig.id === 'trig_menu_ok' || (!srcId && trig.can_id === '0x448')) {
                 return {
                   ...trig,
-                  source_command_id: trig.source_command_id || 'sw_menu',
+                  source_command_id: srcId || 'sw_menu',
                   source_command_name: trig.source_command_name || 'Menu / OK Button',
                   option_label: trig.option_label || 'Menu OK / Press'
                 };
@@ -168,12 +170,15 @@ export default function App() {
               return trig;
             }),
             actions: (rule.actions || []).map(act => {
-              if (act.id === 'act_cool_driver_seat' || act.entity_id === 'drivers_seat_comfort') {
+              const srcId = act.source_command_id || act.entity_id;
+              const optLabel = act.option_label || act.command;
+              if (act.id === 'act_cool_driver_seat' || act.entity_id === 'drivers_seat_comfort' || srcId) {
                 return {
                   ...act,
-                  source_command_id: act.source_command_id || 'drivers_seat_comfort',
-                  source_command_name: act.source_command_name || 'Driver Seat Comfort',
-                  option_label: act.option_label || act.command || 'Medium Cool'
+                  source_command_id: srcId || act.source_command_id,
+                  entity_id: act.entity_id || srcId,
+                  command: act.command || optLabel,
+                  option_label: optLabel || act.option_label
                 };
               }
               return act;
@@ -256,6 +261,10 @@ export default function App() {
   const [selectedMake, setSelectedMake] = useState<string>('all');
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
   const [selectedFeature, setSelectedFeature] = useState<string>('all');
+
+  const selectedVehicle = useMemo(() => {
+    return selectedVehicleId !== 'all' ? catalog.vehicles.find(v => v.id === selectedVehicleId) || null : null;
+  }, [selectedVehicleId, catalog.vehicles]);
 
   // Pull latest catalog strictly from /catalog/can_do_catalog.json
   useEffect(() => {
@@ -528,29 +537,30 @@ export default function App() {
 
   // Command handlers
   const handleSaveCommand = (cmd: Command, isNew: boolean, originalId?: string) => {
-    const targetId = originalId || cmd.id;
+    const formatted = formatCommandForCatalog(cmd);
+    const targetId = originalId || formatted.id;
     if (isNew) {
       setCatalog(prev => ({
         ...prev,
-        commands: [cmd, ...prev.commands]
+        commands: [formatted, ...prev.commands]
       }));
-      setDraftAddedIds(prev => Array.from(new Set([...prev, cmd.id])));
+      setDraftAddedIds(prev => Array.from(new Set([...prev, formatted.id])));
     } else {
       setCatalog(prev => ({
         ...prev,
-        commands: prev.commands.map(c => (c.id === targetId ? cmd : c))
+        commands: prev.commands.map(c => (c.id === targetId ? formatted : c))
       }));
       // If the command ID was changed during edit, update draft tracking
-      if (originalId && originalId !== cmd.id) {
+      if (originalId && originalId !== formatted.id) {
         setDraftAddedIds(prev =>
-          prev.map(id => (id === originalId ? cmd.id : id))
+          prev.map(id => (id === originalId ? formatted.id : id))
         );
         setDraftModifiedIds(prev => {
           const filtered = prev.filter(id => id !== originalId);
-          return Array.from(new Set([...filtered, cmd.id]));
+          return Array.from(new Set([...filtered, formatted.id]));
         });
-      } else if (!draftAddedIds.includes(cmd.id)) {
-        setDraftModifiedIds(prev => Array.from(new Set([...prev, cmd.id])));
+      } else if (!draftAddedIds.includes(formatted.id)) {
+        setDraftModifiedIds(prev => Array.from(new Set([...prev, formatted.id])));
       }
     }
   };
@@ -734,7 +744,8 @@ export default function App() {
   }, []);
 
   const handleAddToAutomation = (command: Command, role?: CommandRole, option?: CommandOption) => {
-    const isAction = role === 'action' || (!role && command.roles?.includes('action') && !command.roles?.includes('trigger'));
+    const resolvedCmd = resolveVariant(command, selectedVehicle);
+    const isAction = role === 'action' || (!role && resolvedCmd.roles?.includes('action') && !resolvedCmd.roles?.includes('trigger'));
 
     setAutomationRules(prev => {
       const nextRules = [...prev];
@@ -743,10 +754,10 @@ export default function App() {
       if (!activeRule) {
         activeRule = {
           id: `rule_${Date.now()}`,
-          name: `Automate: ${command.name}${option?.label ? ` (${option.label})` : ''}`,
+          name: `Automate: ${resolvedCmd.name}${option?.label ? ` (${option.label})` : ''}`,
           enabled: true,
           ha_expose: true,
-          ha_icon: command.icon || command.mdi || 'mdi:car-cog',
+          ha_icon: resolvedCmd.icon || resolvedCmd.mdi || 'mdi:car-cog',
           exec_mode: 'one_shot',
           trigger_mode: 'any',
           cooldown_ms: 500,
@@ -767,9 +778,9 @@ export default function App() {
       }
 
       if (isAction) {
-        activeRule.actions.push(commandToAction(command, option));
+        activeRule.actions.push(commandToAction(resolvedCmd, option));
       } else {
-        activeRule.triggers.push(commandToTrigger(command, option));
+        activeRule.triggers.push(commandToTrigger(resolvedCmd, option));
       }
 
       return nextRules;
@@ -809,31 +820,17 @@ export default function App() {
       actions: []
     };
 
-    selectedCmds.forEach(cmd => {
+    selectedCmds.forEach(rawCmd => {
+      const cmd = resolveVariant(rawCmd, selectedVehicle);
       const isAction = cmd.roles?.includes('action') && !cmd.roles?.includes('trigger');
+      const defaultOpt = cmd.options && cmd.options.length > 0
+        ? (cmd.options.find(o => o.default) || cmd.options[0])
+        : undefined;
+
       if (isAction) {
-        newRule.actions.push({
-          id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          type: 'can_tx',
-          source_command_id: cmd.id,
-          source_command_name: cmd.name,
-          bus: cmd.action_bus ?? cmd.bus ?? 0,
-          can_id: cmd.action_can_id || cmd.state_can_id || '0x000',
-          payload: cmd.options?.[0]?.payload || cmd.from_payload || cmd.match_payload || '00 00 00 00 00 00 00 00',
-          repeat: 1,
-          delay_ms: 0
-        });
+        newRule.actions.push(commandToAction(cmd, defaultOpt));
       } else {
-        newRule.triggers.push({
-          id: `trig_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          source: 'can',
-          source_command_id: cmd.id,
-          source_command_name: cmd.name,
-          bus: cmd.bus ?? 0,
-          can_id: cmd.state_can_id || cmd.action_can_id || '0x000',
-          match_payload: cmd.options?.[0]?.payload || cmd.match_payload || cmd.from_payload || '00 00 00 00 00 00 00 00',
-          click_count: 1
-        });
+        newRule.triggers.push(commandToTrigger(cmd, defaultOpt));
       }
     });
 

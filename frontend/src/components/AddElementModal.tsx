@@ -5,6 +5,7 @@ import {
   AutomationAction
 } from '../types/automation';
 import { Catalog, Command, CommandOption } from '../types/catalog';
+import { resolveVariant } from '../utils/catalogUtils';
 import {
   commandToTrigger,
   commandToCondition,
@@ -604,7 +605,8 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {filteredCatalog.map(cmd => {
+                  {filteredCatalog.map(rawCmd => {
+                    const cmd = resolveVariant(rawCmd, null);
                     const hasOptions = cmd.options && cmd.options.length > 0;
                     return (
                       <div

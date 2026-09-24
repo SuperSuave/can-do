@@ -111,6 +111,14 @@ export interface CanFrame {
   lastSeen: number;
 }
 
+export interface MqttConfig {
+  enabled: boolean;
+  broker_url: string;
+  username: string;
+  has_password?: boolean;
+  connected?: boolean;
+}
+
 export interface AutomationDiag {
   id: string;
   name: string;
@@ -190,7 +198,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const [lastPingMs, setLastPingMs] = useState<number | null>(null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [wifi, setWifi] = useState<WifiStatus | null>(null);
-  const [activeTab, setActiveTab] = useState<'sniffer' | 'automations' | 'bluetooth' | 'wifi' | 'console' | 'ota'>('sniffer');
+  const [activeTab, setActiveTab] = useState<'sniffer' | 'automations' | 'mqtt' | 'wifi' | 'console' | 'ota'>('sniffer');
 
   // Sniffer state
   const [snifferFrames, setSnifferFrames] = useState<Map<string, CanFrame>>(new Map());
@@ -209,6 +217,19 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const [actionNotice, setActionNotice] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [isDeployingRules, setIsDeployingRules] = useState<boolean>(false);
   const [isPullingRules, setIsPullingRules] = useState<boolean>(false);
+
+  // MQTT state
+  const [mqttConfig, setMqttConfig] = useState<MqttConfig>({
+    enabled: true,
+    broker_url: 'mqtt://homeassistant.local:1883',
+    username: '',
+    has_password: false,
+    connected: false
+  });
+  const [mqttLoading, setMqttLoading] = useState<boolean>(false);
+  const [mqttSaving, setMqttSaving] = useState<boolean>(false);
+  const [mqttPasswordInput, setMqttPasswordInput] = useState<string>('');
+  const [mqttSaveStatus, setMqttSaveStatus] = useState<string>('');
 
   // Wi-Fi manager state
   const [networks, setNetworks] = useState<KnownNetwork[]>([]);
@@ -248,8 +269,8 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const handleCheckForUpdates = async () => {
     setIsCheckingUpdate(true);
     try {
-      const currentFw = status?.firmware_version || '2026.9.1';
-      const currentCat = catalog?.catalog_version || '2026.9.1';
+      const currentFw = status?.firmware_version || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.2');
+      const currentCat = catalog?.catalog_version || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.2');
       const res = await checkForUpdates(currentCat, currentFw);
       setUpdateResult(res);
       if (res.has_update) {
@@ -264,11 +285,23 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     }
   };
 
+  // Automatically check updates once when entering the Updates tab
+  useEffect(() => {
+    if (activeTab === 'ota' && !updateResult && !isCheckingUpdate) {
+      handleCheckForUpdates();
+    }
+  }, [activeTab]);
+
   const handleInstallCloudUpdates = async () => {
-    if (!updateResult) return;
+    if (!updateResult) {
+      showNotice('No update metadata loaded. Please click "Check for Updates" first.', 'info');
+      return;
+    }
     setIsExecutingUpdate(true);
-    setUpdateProgressPct(0);
+    setUpdateProgressPct(10);
     setUpdateStage('checking');
+    setUpdateMessage('Initiating update sequence...');
+
     try {
       await executeUpdateSequence(
         deviceHost,
@@ -280,9 +313,17 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           setUpdateMessage(msg);
         }
       );
-      showNotice('Updates completed successfully! Device is restarting...', 'success');
+      setUpdateStage('complete');
+      setUpdateProgressPct(100);
+      setUpdateMessage('Updates completed successfully! Rebooting device...');
+      showNotice('Updates applied successfully! Device is restarting...', 'success');
+      // Keep completion card visible for 5 seconds so the user clearly sees the result
+      await new Promise((r) => setTimeout(r, 5000));
     } catch (e: any) {
+      setUpdateStage('error');
+      setUpdateMessage(`Update failed: ${e.message || e}`);
       showNotice(`Update error: ${e.message || e}`, 'error');
+      await new Promise((r) => setTimeout(r, 4000));
     } finally {
       setIsExecutingUpdate(false);
     }
@@ -469,6 +510,70 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     }
   };
 
+  // REST: Fetch MQTT config & connection status
+  const fetchMqtt = async () => {
+    setMqttLoading(true);
+    try {
+      const res = await fetch(getApiUrl('/api/mqtt'));
+      if (res.ok) {
+        const data = await res.json();
+        setMqttConfig({
+          enabled: data.enabled !== false,
+          broker_url: data.broker_url || 'mqtt://homeassistant.local:1883',
+          username: data.username || '',
+          has_password: !!data.has_password,
+          connected: !!data.connected
+        });
+      }
+    } catch {
+      // keep current state
+    } finally {
+      setMqttLoading(false);
+    }
+  };
+
+  // REST: Save MQTT settings
+  const handleSaveMqtt = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setMqttSaving(true);
+    setMqttSaveStatus('Saving...');
+    try {
+      const payload: any = {
+        enabled: mqttConfig.enabled,
+        broker_url: mqttConfig.broker_url.trim(),
+        username: mqttConfig.username.trim()
+      };
+      if (mqttPasswordInput) {
+        payload.password = mqttPasswordInput;
+      } else if (mqttConfig.has_password) {
+        payload.keep_password = true;
+      }
+
+      const res = await fetch(getApiUrl('/api/mqtt'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        setMqttPasswordInput('');
+        setMqttSaveStatus('Saved successfully');
+        showNotice('MQTT / Home Assistant settings saved', 'success');
+        setTimeout(() => {
+          fetchMqtt();
+          setMqttSaveStatus('');
+        }, 1500);
+      } else {
+        setMqttSaveStatus('Failed to save');
+        showNotice('Failed to save MQTT settings', 'error');
+      }
+    } catch (err: any) {
+      setMqttSaveStatus(`Error: ${err.message}`);
+      showNotice(`Failed to save MQTT: ${err.message}`, 'error');
+    } finally {
+      setMqttSaving(false);
+    }
+  };
+
   useEffect(() => {
     connectWs();
     fetchStatus();
@@ -485,6 +590,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
   useEffect(() => {
     if (activeTab === 'automations') fetchAutomationsDiag();
+    if (activeTab === 'mqtt') fetchMqtt();
     if (activeTab === 'wifi') {
       fetchWifi();
       fetchNetworks();
@@ -1141,18 +1247,26 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             </span>
           </button>
 
-          {/* Tab 3: Bluetooth Remote Controller */}
+          {/* Tab 3: Home Assistant & MQTT */}
           <button
             type="button"
-            onClick={() => setActiveTab('bluetooth')}
+            onClick={() => setActiveTab('mqtt')}
             className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors shrink-0 ${
-              activeTab === 'bluetooth'
+              activeTab === 'mqtt'
                 ? 'bg-slate-800 text-white font-semibold shadow-sm'
                 : 'text-[var(--text-muted)] hover:text-white'
             }`}
           >
-            <Bluetooth className={`w-3.5 h-3.5 ${activeTab === 'bluetooth' ? 'text-blue-400' : 'text-slate-500'}`} />
-            <span>Bluetooth Remote</span>
+            <Radio className={`w-3.5 h-3.5 ${activeTab === 'mqtt' ? 'text-amber-400' : 'text-slate-500'}`} />
+            <span>Home Assistant & MQTT</span>
+            {mqttConfig.enabled && (
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  mqttConfig.connected ? 'bg-emerald-400' : 'bg-amber-400/80 animate-pulse'
+                }`}
+                title={mqttConfig.connected ? 'MQTT Connected' : 'Connecting / Disconnected'}
+              />
+            )}
           </button>
 
           {/* Tab 4: Wi-Fi & SoftAP */}
@@ -1607,20 +1721,166 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       )}
 
       {/* =========================================================================
-          TAB: Bluetooth Remote & Button Controller
+          TAB: Home Assistant & MQTT Integration
          ========================================================================= */}
-      {activeTab === 'bluetooth' && (
-        <BluetoothManager
-          deviceHost={deviceHost}
-          onSelectTriggerForAutomation={(trigger) => {
-            if (onCreateAutomationWithTrigger) {
-              onCreateAutomationWithTrigger(trigger);
-            }
-            if (onNavigateToAutomations) {
-              onNavigateToAutomations();
-            }
-          }}
-        />
+      {activeTab === 'mqtt' && (
+        <div className="can-do-card p-4 sm:p-5 space-y-6">
+          {/* Header & Status */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[var(--border-color)]">
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-[var(--text-heading)] flex items-center gap-2">
+                <Radio className="w-4 h-4 text-amber-400" />
+                Home Assistant & MQTT Integration
+              </h3>
+              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                Integrates CAN Do directly into Home Assistant using MQTT Auto-Discovery. Vehicle entities appear automatically.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                  mqttConfig.connected
+                    ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80'
+                    : mqttConfig.enabled
+                    ? 'bg-amber-950/60 text-amber-300 border-amber-800/80'
+                    : 'bg-slate-800 text-slate-400 border-slate-700/60'
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    mqttConfig.connected
+                      ? 'bg-emerald-400'
+                      : mqttConfig.enabled
+                      ? 'bg-amber-400 animate-pulse'
+                      : 'bg-slate-500'
+                  }`}
+                />
+                {mqttConfig.connected
+                  ? 'Connected to Broker'
+                  : mqttConfig.enabled
+                  ? 'Disconnected / Connecting'
+                  : 'Disabled'}
+              </span>
+
+              <button
+                type="button"
+                onClick={fetchMqtt}
+                disabled={mqttLoading}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+                title="Refresh MQTT Status"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${mqttLoading ? 'animate-spin text-cyan-400' : ''}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Configuration Form */}
+          <form onSubmit={handleSaveMqtt} className="space-y-5 max-w-2xl">
+            {/* Toggle Enable */}
+            <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)]">
+              <div>
+                <label className="text-xs font-bold text-[var(--text-heading)] block cursor-pointer" htmlFor="chk-mqtt-en">
+                  Enable MQTT Client
+                </label>
+                <span className="text-[11px] text-[var(--text-muted)]">
+                  Connect to MQTT broker and broadcast Home Assistant discovery payloads
+                </span>
+              </div>
+              <input
+                id="chk-mqtt-en"
+                type="checkbox"
+                checked={mqttConfig.enabled}
+                onChange={(e) => setMqttConfig((prev) => ({ ...prev, enabled: e.target.checked }))}
+                className="w-4 h-4 rounded text-cyan-500 focus:ring-cyan-500/30 bg-slate-800 border-slate-700 cursor-pointer"
+              />
+            </div>
+
+            {/* Broker Fields */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[var(--text-heading)] mb-1">
+                  Broker URL (URI)
+                </label>
+                <input
+                  type="text"
+                  value={mqttConfig.broker_url}
+                  onChange={(e) => setMqttConfig((prev) => ({ ...prev, broker_url: e.target.value }))}
+                  placeholder="mqtt://homeassistant.local:1883 or mqtt://192.168.1.100:1883"
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-cyan-500/80 font-mono"
+                  required
+                />
+                <span className="text-[10px] text-[var(--text-muted)] mt-1 block">
+                  Supported formats: <code className="text-cyan-400">mqtt://host:1883</code> or <code className="text-cyan-400">mqtts://host:8883</code>
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[var(--text-heading)] mb-1">
+                    Username <span className="text-[10px] font-normal text-[var(--text-muted)]">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={mqttConfig.username}
+                    onChange={(e) => setMqttConfig((prev) => ({ ...prev, username: e.target.value }))}
+                    placeholder="homeassistant"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-cyan-500/80 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[var(--text-heading)] mb-1">
+                    Password {mqttConfig.has_password && <span className="text-emerald-400 text-[10px] font-normal">(Password set)</span>}
+                  </label>
+                  <input
+                    type="password"
+                    value={mqttPasswordInput}
+                    onChange={(e) => setMqttPasswordInput(e.target.value)}
+                    placeholder={mqttConfig.has_password ? '•••••••• (leave blank to keep)' : 'Enter broker password'}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-cyan-500/80 font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Info Callout */}
+            <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 text-[11px] text-[var(--text-muted)] space-y-1.5">
+              <div className="flex items-center gap-1.5 font-bold text-slate-200">
+                <Info className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Home Assistant MQTT Auto-Discovery</span>
+              </div>
+              <p>
+                When enabled and connected, CAN Do publishes telemetry and discovery topics under <code className="text-cyan-300 font-mono">homeassistant/sensor/cando/...</code> and commands to <code className="text-cyan-300 font-mono">cando/set/...</code>.
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-between pt-2">
+              <span className={`text-xs font-medium ${mqttSaveStatus.includes('Error') || mqttSaveStatus.includes('Failed') ? 'text-rose-400' : 'text-emerald-400'}`}>
+                {mqttSaveStatus}
+              </span>
+
+              <button
+                type="submit"
+                disabled={mqttSaving}
+                className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-xs transition shadow-md shadow-cyan-600/20 inline-flex items-center gap-2"
+              >
+                {mqttSaving ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Save & Connect</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
       {/* =========================================================================
@@ -1986,7 +2246,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   <span>Web Front-End</span>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-indigo-950/60 text-indigo-300 border border-indigo-800/40">
-                  2026.9.1
+                  {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.2'}
                 </span>
               </div>
               <div className="text-xs text-[var(--text-muted)] space-y-1">
@@ -2029,11 +2289,18 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                     <Sparkles className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-xs sm:text-sm font-bold text-white">
-                      {updateResult.release_name || updateResult.version} Available
+                    <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                      <span>{updateResult.release_name || updateResult.version}</span>
+                      {updateResult.is_rebuild && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          Rebuilt Build Available
+                        </span>
+                      )}
                     </h4>
                     <p className="text-[11px] text-slate-300 mt-0.5">
-                      {updateResult.notes || 'Verified stability and vehicle definition enhancements.'}
+                      {updateResult.is_rebuild
+                        ? 'A newer build was published under the current release tag.'
+                        : (updateResult.notes || 'Verified stability and vehicle definition enhancements.')}
                     </p>
                   </div>
                 </div>
@@ -2056,7 +2323,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                     className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-slate-950 text-xs font-bold transition shadow-lg shadow-cyan-950/50 shrink-0"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Install Updates Now</span>
+                    <span>{updateResult.is_rebuild ? 'Re-sync & Update Now' : 'Install Updates Now'}</span>
                   </button>
                 </div>
               </div>
@@ -2081,6 +2348,30 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   </span>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Up to date state with manual re-sync button */}
+          {updateResult && !updateResult.has_update && !isExecutingUpdate && (
+            <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2.5 text-xs text-slate-300">
+                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Device is up to date on version <strong className="text-white font-mono">{updateResult.version}</strong></span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setUpdateResult({
+                    ...updateResult,
+                    has_update: true,
+                    is_rebuild: true,
+                    components: { frontend: true, catalog: true, firmware: !!updateResult.assets.firmware_url }
+                  });
+                }}
+                className="text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 underline underline-offset-2 shrink-0 transition"
+              >
+                Force Re-sync Current Version
+              </button>
             </div>
           )}
 

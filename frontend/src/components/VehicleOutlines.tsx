@@ -92,6 +92,7 @@ export interface VehicleOutlineProps {
   hoodOpen: boolean;
   trunkOpen: boolean;
   chargePortOpen: boolean;
+  isCharging?: boolean;
   mirrorsFolded: boolean;
   lights: 'off' | 'parking' | 'low' | 'high' | 'auto';
   rearDefrost: boolean;
@@ -123,6 +124,7 @@ export const VehicleSilhouette: React.FC<VehicleOutlineProps> = ({
   hoodOpen,
   trunkOpen,
   chargePortOpen,
+  isCharging,
   mirrorsFolded,
   lights,
   rearDefrost,
@@ -144,6 +146,7 @@ export const VehicleSilhouette: React.FC<VehicleOutlineProps> = ({
   onCycleSteeringHeat
 }) => {
   const isLightsActive = lights !== 'off';
+  const chargingActive = Boolean(isCharging || chargePortOpen);
 
   return (
     <svg
@@ -209,6 +212,52 @@ export const VehicleSilhouette: React.FC<VehicleOutlineProps> = ({
           <rect width="2" height="2" fill="#38bdf8" fillOpacity="0.8" />
           <rect x="2" y="2" width="2" height="2" fill="#0284c7" fillOpacity="0.6" />
         </pattern>
+
+        {/* EV Charging Soft Aura Glow Filter */}
+        <filter id="chargingAuraGlow" x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation="4" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+
+        <style>
+          {`
+            @keyframes charge-dots-flow-inward {
+              0% {
+                stroke-dashoffset: 54;
+              }
+              100% {
+                stroke-dashoffset: 0;
+              }
+            }
+            @keyframes charge-pulse-slow {
+              0%, 100% {
+                opacity: 0.4;
+                transform: scale(0.96);
+              }
+              50% {
+                opacity: 0.95;
+                transform: scale(1.04);
+              }
+            }
+            @keyframes charge-port-pulse-slow {
+              0% {
+                r: 6px;
+                opacity: 0.9;
+              }
+              100% {
+                r: 16px;
+                opacity: 0;
+              }
+            }
+            .charge-dot-stream {
+              stroke-dasharray: 4 14;
+              animation: charge-dots-flow-inward 10.5s linear infinite !important;
+            }
+            .charge-port-ripple {
+              animation: charge-port-pulse-slow 2.8s ease-out infinite !important;
+            }
+          `}
+        </style>
       </defs>
 
       {/* 1. Ground Shadow (Matched to vehicle footprint) */}
@@ -717,14 +766,90 @@ export const VehicleSilhouette: React.FC<VehicleOutlineProps> = ({
           width="9"
           height="20"
           rx="2"
-          fill={chargePortOpen ? '#10b981' : '#334155'}
-          stroke={chargePortOpen ? '#34d399' : '#475569'}
+          fill={chargingActive ? '#10b981' : '#334155'}
+          stroke={chargingActive ? '#34d399' : '#475569'}
           strokeWidth="1.5"
         />
-        {chargePortOpen && (
-          <circle cx="296" cy="510" r="6" fill="#10b981" opacity="0.85" className="animate-ping" />
+        {chargingActive && (
+          <>
+            <circle cx="296" cy="510" r="5" fill="#10b981" opacity="0.9" />
+            <circle
+              cx="296"
+              cy="510"
+              r="6"
+              fill="none"
+              stroke="#34d399"
+              strokeWidth="1.5"
+              className="charge-port-ripple"
+            />
+          </>
         )}
       </g>
+
+      {/* 11b. EV High-Voltage Charging Energy Flow (Slow Inward Green Dots) */}
+      {chargingActive && (
+        <g id="charging-energy-flow" className="pointer-events-none">
+          {/* Subtle Ambient Charging Aura along Conduit Track */}
+          <path
+            d="M 296 510 C 270 510, 240 485, 218 455 C 200 428, 190 395, 190 340"
+            stroke="#10b981"
+            strokeWidth="10"
+            strokeLinecap="round"
+            fill="none"
+            opacity="0.18"
+            filter="url(#chargingAuraGlow)"
+          />
+
+          {/* High Voltage Charging Conduit Base Guide Line */}
+          <path
+            d="M 296 510 C 270 510, 240 485, 218 455 C 200 428, 190 395, 190 340"
+            stroke="#065f46"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            fill="none"
+            opacity="0.65"
+          />
+
+          {/* Animated Green Dots Flowing Inward into the Battery Pack (Slow Speed) */}
+          <path
+            d="M 296 510 C 270 510, 240 485, 218 455 C 200 428, 190 395, 190 340"
+            stroke="#34d399"
+            strokeWidth="4.5"
+            strokeLinecap="round"
+            fill="none"
+            className="charge-dot-stream"
+          />
+
+          {/* Central Battery Pack Spine Distribution Track */}
+          <path
+            d="M 190 340 L 190 260"
+            stroke="#34d399"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+            fill="none"
+            className="charge-dot-stream"
+          />
+
+          {/* Soft Pulsing Energy Beacon at Battery Core */}
+          <circle
+            cx="190"
+            cy="340"
+            r="6"
+            fill="#10b981"
+            style={{ animation: 'charge-pulse-slow 2.6s ease-in-out infinite' }}
+          />
+          <circle
+            cx="190"
+            cy="340"
+            r="13"
+            fill="none"
+            stroke="#34d399"
+            strokeWidth="1.5"
+            opacity="0.5"
+            style={{ animation: 'charge-pulse-slow 2.6s ease-in-out infinite' }}
+          />
+        </g>
+      )}
 
       {/* 12. Side Mirrors */}
       <g id="mirrors" transform={mirrorsFolded ? 'scale(0.85 1)' : 'none'} style={{ transition: 'transform 0.3s' }}>
@@ -949,6 +1074,32 @@ export const VehicleSilhouette: React.FC<VehicleOutlineProps> = ({
           </text>
           {/* 800V High Voltage Bus Rails */}
           <line x1="190" y1="196" x2="190" y2="520" stroke="#f59e0b" strokeWidth="3" strokeDasharray="6 3" />
+
+          {/* Active High-Voltage Charging Stream into 800V Pack */}
+          {chargingActive && (
+            <g id="powertrain-charging-stream">
+              <path
+                d="M 296 510 C 270 510, 240 495, 215 480 L 190 470 L 190 235"
+                stroke="#34d399"
+                strokeWidth="4"
+                strokeLinecap="round"
+                fill="none"
+                className="charge-dot-stream"
+              />
+              <rect
+                x="105"
+                y="230"
+                width="170"
+                height="260"
+                rx="14"
+                fill="none"
+                stroke="#10b981"
+                strokeWidth="2"
+                opacity="0.85"
+                filter="url(#chargingAuraGlow)"
+              />
+            </g>
+          )}
           {/* Battery Cell Modules Grid */}
           <g opacity="0.85">
             {[0, 1, 2, 3].map(row => (

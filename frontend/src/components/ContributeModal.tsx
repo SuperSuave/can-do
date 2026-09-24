@@ -5,6 +5,7 @@ import {
   getGitHubWebEditUrl,
   ContributionSummary
 } from '../utils/githubHelper';
+import { formatCommandForCatalog } from '../utils/catalogUtils';
 import { CanDoLogo } from './CanDoLogo';
 import {
   X,
@@ -101,14 +102,19 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const getCleanCatalog = () => ({
+    ...catalog,
+    commands: catalog.commands.map(formatCommandForCatalog)
+  });
+
   const handleCopyFullCatalog = () => {
-    navigator.clipboard.writeText(JSON.stringify(catalog, null, 2));
+    navigator.clipboard.writeText(JSON.stringify(getCleanCatalog(), null, 2));
     setCopiedCatalog(true);
     setTimeout(() => setCopiedCatalog(false), 2000);
   };
 
   const handleDownloadCatalog = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(catalog, null, 2));
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(getCleanCatalog(), null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute('href', dataStr);
     downloadAnchor.setAttribute('download', 'catalog.json');
@@ -174,7 +180,7 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
       }
 
       // 4. Commit updated catalog.json
-      const contentBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(catalog, null, 2))));
+      const contentBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(getCleanCatalog(), null, 2))));
       const commitRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`, {
         method: 'PUT',
         headers,
