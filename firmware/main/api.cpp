@@ -11,6 +11,7 @@
 #include "cJSON.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
+#include "esp_app_desc.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "esp_http_client.h"
@@ -852,7 +853,11 @@ static esp_err_t api_get_automations_handler(httpd_req_t *req) {
     FILE *fd = fopen(filepath, "r");
     if (!fd) {
         httpd_resp_set_type(req, "application/json");
-        httpd_resp_sendstr(req, "{\"settings\":{\"vehicle_model\":\"all_egmp\",\"unit_system\":\"imperial\",\"firmware_version\":\"2026.9.1\"},\"rules\":[]}");
+        const esp_app_desc_t *app_desc = esp_app_get_description();
+        const char* fw_ver = (app_desc && app_desc->version[0] != '\0') ? app_desc->version : "2026.9.2";
+        char def_resp[192];
+        snprintf(def_resp, sizeof(def_resp), "{\"settings\":{\"vehicle_model\":\"all_egmp\",\"unit_system\":\"imperial\",\"firmware_version\":\"%s\"},\"rules\":[]}", fw_ver);
+        httpd_resp_sendstr(req, def_resp);
         return ESP_OK;
     }
 
@@ -1012,8 +1017,9 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
     cJSON_AddBoolToObject(root, "automations_enabled", g_automations_enabled.load());
     cJSON_AddBoolToObject(root, "sniffer_mode", g_sniffer_mode.load());
     cJSON_AddBoolToObject(root, "hardware_listen_only", g_hardware_listen_only.load());
-    cJSON_AddNumberToObject(root, "gvret_clients", gvret_get_client_count());
-    cJSON_AddStringToObject(root, "firmware_version", "2026.9.1");
+    const esp_app_desc_t *app_desc = esp_app_get_description();
+    const char* fw_ver = (app_desc && app_desc->version[0] != '\0') ? app_desc->version : "2026.9.2";
+    cJSON_AddStringToObject(root, "firmware_version", fw_ver);
 
     twai_status_info_t twai_st;
     if (twai_get_status_info(&twai_st) == ESP_OK) {
