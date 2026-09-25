@@ -222,9 +222,9 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
         if (step.type == ActionType::ENTITY_COMMAND) {
             bool executed_inline = false;
             for (const auto& entity : global_catalog) {
-                if (entity.id == step.entity_id) {
+                if (strcasecmp(entity.id.c_str(), step.entity_id.c_str()) == 0) {
                     for (const auto& option : entity.options) {
-                        if (option.label == step.command || (entity.options.size() == 1 && step.command.empty())) {
+                        if (strcasecmp(option.label.c_str(), step.command.c_str()) == 0 || (entity.options.size() == 1 && step.command.empty())) {
                             execute_can_burst(entity.action_can_id, option.steps, entity.delay_ms);
                             executed_inline = true;
                             break;

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Catalog, Command, CommandRole, CommandOption, GitHubRepoConfig, Vehicle, getCommandContributors } from './types/catalog';
 import { DEFAULT_CATALOG, normalizeCatalog } from './data/defaultCatalog';
 import { validateCatalog } from './utils/canValidator';
-import { commandToAction, commandToTrigger } from './utils/automationConverters';
+import { commandToAction, commandToTrigger, exportToCandoJson } from './utils/automationConverters';
 import { resolveVariant, formatCommandForCatalog } from './utils/catalogUtils';
 import { getSavedRepoConfig, saveRepoConfig } from './utils/githubHelper';
 import { isRunningOnDevice, resolveDeviceBaseUrl } from './utils/hostUtils';
@@ -171,14 +171,14 @@ export default function App() {
             }),
             actions: (rule.actions || []).map(act => {
               const srcId = act.source_command_id || act.entity_id;
-              const optLabel = act.option_label || act.command;
+              const chosenCommand = act.command || act.option_label;
               if (act.id === 'act_cool_driver_seat' || act.entity_id === 'drivers_seat_comfort' || srcId) {
                 return {
                   ...act,
                   source_command_id: srcId || act.source_command_id,
                   entity_id: act.entity_id || srcId,
-                  command: act.command || optLabel,
-                  option_label: optLabel || act.option_label
+                  command: chosenCommand,
+                  option_label: act.option_label || chosenCommand
                 };
               }
               return act;
@@ -718,15 +718,11 @@ export default function App() {
   const handleSyncAutomationsToDevice = async () => {
     try {
       const base = resolveDeviceBaseUrl(localStorage.getItem('cando_device_host'));
-      const payload = {
-        version: "1.0",
-        settings: automationSettings,
-        rules: automationRules
-      };
+      const payloadStr = exportToCandoJson(automationRules, automationSettings, catalog);
       const res = await fetch(`${base}/api/automations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: payloadStr
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     } catch (err: any) {

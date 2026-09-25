@@ -775,13 +775,13 @@ function findMatchingOptionForAction(cmd: Command, act: AutomationAction): Comma
     if (byExact) return byExact;
     const byPartial = cmd.options.find(o => {
       const l = o.label.toLowerCase().trim();
-      return l.includes(target) || target.includes(l);
+      return l === target || l.startsWith(target) || target.startsWith(l);
     });
     if (byPartial) return byPartial;
   }
   if (act.payload && typeof act.payload === 'object') {
     for (const opt of cmd.options) {
-      const optMap = compileToByteMap(opt.payload || opt.match);
+      const optMap = compileToByteMap(opt.payload || (opt.steps && opt.steps[0]?.payload) || opt.match);
       const optKeys = Object.keys(optMap);
       if (optKeys.length > 0 && optKeys.every(k => (act.payload as any)[k] === optMap[k])) {
         return opt;
