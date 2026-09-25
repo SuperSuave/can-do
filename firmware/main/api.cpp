@@ -14,6 +14,7 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "esp_http_client.h"
+#include "esp_crt_bundle.h"
 #include "driver/twai.h"
 #include <cstdio>
 #include <cstring>
@@ -690,6 +691,7 @@ static void cloud_ota_task(void *pvParameter) {
     config.url = download_url.c_str();
     config.cert_pem = nullptr; // Skip verification for github redirect assets
     config.skip_cert_common_name_check = true;
+    config.crt_bundle_attach = esp_crt_bundle_attach;
     config.timeout_ms = 15000;
     config.buffer_size = 2048;
     config.buffer_size_tx = 1024;
@@ -718,6 +720,7 @@ static void cloud_ota_task(void *pvParameter) {
     // Follow redirect if GitHub redirects to S3/objects
     if (status_code == 301 || status_code == 302 || status_code == 307) {
         esp_http_client_set_redirection(client);
+        esp_http_client_close(client);
         err = esp_http_client_open(client, 0);
         if (err == ESP_OK) {
             content_length = esp_http_client_fetch_headers(client);
