@@ -153,10 +153,16 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 }
             }
 
-            // 4. Publish HA discovery if any global catalog entities exist
-            for (const auto& entity : global_catalog) {
-                publish_ha_discovery(global_mqtt_client, entity);
-            }
+            // 4. Publish HA discovery in a throttled background task so we don't exhaust the outbox queue
+            xTaskCreate([](void* arg) {
+                vTaskDelay(pdMS_TO_TICKS(1500));
+                for (const auto& entity : global_catalog) {
+                    if (!global_mqtt_client || !s_mqtt_connected.load()) break;
+                    publish_ha_discovery(global_mqtt_client, entity);
+                    vTaskDelay(pdMS_TO_TICKS(40));
+                }
+                vTaskDelete(NULL);
+            }, "ha_disco", 3072, nullptr, 1, nullptr);
 
             // 5. Publish automations state
             {
@@ -498,6 +504,8 @@ void mqtt_mgr_start(void) {
     mqtt_cfg.session.last_will.msg_len = 7;
     mqtt_cfg.session.last_will.qos = 1;
     mqtt_cfg.session.last_will.retain = 1;
+    mqtt_cfg.network.reconnect_timeout_ms = 5000;
+    mqtt_cfg.buffer.size = 2048;
 
     global_mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
     if (global_mqtt_client) {
