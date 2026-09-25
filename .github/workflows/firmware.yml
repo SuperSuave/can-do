@@ -75,11 +75,13 @@ jobs:
 
       - name: Determine Dynamic Release Version
         run: |
-          TAG="${{ inputs.release_tag != '' && inputs.release_tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || '2026.9.2' }}"
+          TAG="${{ inputs.release_tag != '' && inputs.release_tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || '2026.9.4' }}"
           echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
           echo "$TAG" > firmware/version.txt
           # Dynamically stamp catalog_version
-          node -e "const fs = require('fs'); const p = 'catalog/can_do_catalog.json'; const c = JSON.parse(fs.readFileSync(p)); c.catalog_version = '$TAG'; fs.writeFileSync(p, JSON.stringify(c, null, 2));"
+          node -e "const fs = require('fs'); const p = 'catalog/can_do_catalog.json'; const c = JSON.parse(fs.readFileSync(p)); c.catalog_version = '$TAG'; fs.writeFileSync(p, JSON.stringify(c, null, 2) + '\n');"
+          # Dynamically stamp frontend package.json version
+          node -e "const fs = require('fs'); const p = 'frontend/package.json'; const pkg = JSON.parse(fs.readFileSync(p)); pkg.version = '$TAG'; fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');"
 
       - name: Build Embedded React Frontend for LittleFS
         run: |
@@ -114,7 +116,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') || inputs.create_release == true
         run: |
           mkdir -p release_assets
-          TAG="${{ env.RELEASE_TAG || inputs.release_tag != '' && inputs.release_tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || '2026.9.2' }}"
+          TAG="${{ env.RELEASE_TAG }}"
           TARGET="${{ inputs.target || 'esp32c3' }}"
 
           # Clean versioned release assets
@@ -126,8 +128,27 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') || inputs.create_release == true
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.RELEASE_TAG || inputs.release_tag != '' && inputs.release_tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || '2026.9.2' }}
-          name: ${{ env.RELEASE_TAG || inputs.release_tag != '' && inputs.release_tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || '2026.9.2' }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
           generate_release_notes: true
           files: |
             release_assets/*
+
+      - name: Sync Version Changes Back to Main Branch
+        if: startsWith(github.ref, 'refs/tags/') || inputs.create_release == true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          # Re-apply version stamp on main in case tag was detached
+          node -e "const fs = require('fs'); const p = 'catalog/can_do_catalog.json'; const c = JSON.parse(fs.readFileSync(p)); c.catalog_version = '${{ env.RELEASE_TAG }}'; fs.writeFileSync(p, JSON.stringify(c, null, 2) + '\n');"
+          node -e "const fs = require('fs'); const p = 'frontend/package.json'; const pkg = JSON.parse(fs.readFileSync(p)); pkg.version = '${{ env.RELEASE_TAG }}'; fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');"
+          echo "${{ env.RELEASE_TAG }}" > firmware/version.txt
+          git add catalog/can_do_catalog.json frontend/package.json firmware/version.txt
+          if git diff --staged --quiet; then
+            echo "Main branch is already up to date with version ${{ env.RELEASE_TAG }}."
+          else
+            git commit -m "chore(release): sync version ${{ env.RELEASE_TAG }} to catalog, frontend, and firmware [skip ci]"
+            git push origin main
+          fi

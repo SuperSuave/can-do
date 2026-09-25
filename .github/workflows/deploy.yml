@@ -51,7 +51,10 @@ jobs:
 
       - name: Build
         working-directory: frontend
-        run: npm run build
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || node -e "try { console.log(JSON.parse(require('fs').readFileSync('../catalog/can_do_catalog.json')).catalog_version); } catch(e){ console.log('2026.9.4'); }")
+          echo "Building frontend with VITE_APP_VERSION=$LATEST_TAG"
+          VITE_APP_VERSION="$LATEST_TAG" npm run build
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
