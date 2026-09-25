@@ -211,7 +211,8 @@ export function validateCommand(
   }
 
   // Name validation
-  if (!command.name || command.name.trim() === '') {
+  const effectiveName = command.name || command.ha_metadata?.name;
+  if (!effectiveName || effectiveName.trim() === '') {
     issues.push({ type: 'error', field: 'name', message: 'Command name is required.', commandId: command.id });
   }
 

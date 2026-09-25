@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Catalog, Command, Vehicle } from '../types/catalog';
 import { validateCatalog, validateCommand } from '../utils/canValidator';
+import { normalizeCatalog } from '../data/defaultCatalog';
 import { parseDbc, DbcParseStats } from '../utils/dbcConverter';
 import {
   X,
@@ -150,6 +151,8 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           'Unrecognized JSON structure. Expected a CAN Do catalog object with "catalog_version" & "commands", or an array of command objects.'
         );
       }
+
+      catalogCandidate = normalizeCatalog(catalogCandidate);
 
       // Basic validation
       const report = validateCatalog(catalogCandidate);
