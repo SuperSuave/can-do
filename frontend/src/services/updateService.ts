@@ -343,51 +343,42 @@ export async function executeUpdateSequence(
     // STAGE 3: FIRMWARE BINARY (Final step, triggers reboot)
     // -------------------------------------------------------------
     if (componentsToUpdate.firmware && updateData.assets.firmware_url) {
-      onProgress('firmware', 80, 'Requesting device-side Cloud OTA download from GitHub...');
-      let deviceOtaStarted = false;
-
+      // First attempt direct browser-assisted stream to /api/ota for guaranteed reliability across all networks
+      let browserStreamSuccess = false;
+      onProgress('firmware', 80, 'Downloading firmware binary from GitHub release...');
       try {
-        const cloudPullRes = await fetch(`${deviceBaseUrl}/api/ota/cloud_pull`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: updateData.assets.firmware_url }),
-        });
-        if (cloudPullRes.ok) {
-          deviceOtaStarted = true;
-          onProgress('firmware', 85, 'Device is downloading and flashing firmware directly from GitHub...');
-          recordUpdateInstalledTime(updateData.published_at || new Date().toISOString());
-          onProgress('rebooting', 100, 'Firmware flash initiated! Device will reboot upon completion.');
-        }
-      } catch (e) {
-        console.warn('Device-side OTA pull failed or endpoint unavailable, falling back to browser download', e);
-      }
-
-      if (!deviceOtaStarted) {
-        onProgress('firmware', 82, 'Downloading firmware binary through browser...');
-        let fwBlob: Blob | null = null;
-        try {
-          const fwRes = await fetch(updateData.assets.firmware_url);
-          if (fwRes.ok) {
-            fwBlob = await fwRes.blob();
-          }
-        } catch (err) {
-          console.warn('Direct binary download blocked by browser CORS policy.', err);
-        }
-
-        if (fwBlob) {
-          onProgress('firmware', 85, 'Flashing firmware to OTA partition...');
+        const fwRes = await fetch(updateData.assets.firmware_url, { cache: 'no-cache' });
+        if (fwRes.ok) {
+          const fwBlob = await fwRes.blob();
+          onProgress('firmware', 85, 'Flashing firmware to device OTA partition...');
           await uploadFirmwareOta(deviceBaseUrl, fwBlob, (pct) => {
             onProgress('firmware', 85 + Math.round(pct * 0.12), `Flashing firmware: ${pct}%`);
           });
+          browserStreamSuccess = true;
           recordUpdateInstalledTime(updateData.published_at || new Date().toISOString());
           onProgress('rebooting', 100, 'Firmware flash complete! Device is rebooting...');
-        } else {
-          recordUpdateInstalledTime(updateData.published_at || new Date().toISOString());
-          onProgress(
-            'complete',
-            100,
-            'Catalog updated! For firmware binary, download can-do.bin using the button above and select it in the upload box below.'
-          );
+        }
+      } catch (e) {
+        console.warn('Browser direct fetch encountered CORS or network error, falling back to device-side pull', e);
+      }
+
+      // If browser fetch was blocked by CORS, fallback to device-side cloud_pull
+      if (!browserStreamSuccess) {
+        onProgress('firmware', 82, 'Requesting device-side Cloud OTA pull...');
+        try {
+          const cloudPullRes = await fetch(`${deviceBaseUrl}/api/ota/cloud_pull`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: updateData.assets.firmware_url }),
+          });
+          if (cloudPullRes.ok) {
+            recordUpdateInstalledTime(updateData.published_at || new Date().toISOString());
+            onProgress('rebooting', 100, 'Cloud flash initiated on device! Rebooting upon completion...');
+          } else {
+            throw new Error(`Device cloud pull returned HTTP ${cloudPullRes.status}`);
+          }
+        } catch (err: any) {
+          throw new Error(`Firmware update failed: ${err.message || err}`);
         }
       }
     } else {
