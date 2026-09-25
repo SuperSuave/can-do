@@ -483,6 +483,7 @@ void mqtt_mgr_start(void) {
 
     esp_mqtt_client_config_t mqtt_cfg = {};
     mqtt_cfg.broker.address.uri = s_mqtt_cfg.broker_url.c_str();
+    mqtt_cfg.credentials.client_id = DEVICE_ID.c_str();
     if (!s_mqtt_cfg.username.empty()) {
         mqtt_cfg.credentials.username = s_mqtt_cfg.username.c_str();
     }
