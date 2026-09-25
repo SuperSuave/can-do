@@ -324,7 +324,7 @@ export default function App() {
       const now = new Date();
       const currentHhMm = now.toTimeString().slice(0, 5);
       if (currentHhMm === userPreferences.update_schedule.time) {
-        const currentFront = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.4';
+        const currentFront = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.5';
         const currentCat = catalog?.catalog_version || currentFront;
         checkForUpdates(currentCat, currentCat, currentFront).then(async (res) => {
           if (res.has_update) {

@@ -269,7 +269,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const handleCheckForUpdates = async () => {
     setIsCheckingUpdate(true);
     try {
-      const currentFront = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.4';
+      const currentFront = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.5';
       const currentFw = status?.firmware_version || currentFront;
       const currentCat = catalog?.catalog_version || currentFront;
       const res = await checkForUpdates(currentCat, currentFw, currentFront);
@@ -1707,6 +1707,9 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                       Triggers: <strong className="text-amber-300">{rule.triggers?.length || 0}</strong>
                     </div>
                     <div>
+                      Actions: <strong className="text-amber-300">{rule.actions?.length || 0}</strong>
+                    </div>
+                    <div>
                       Last Fired:{' '}
                       <strong className="text-[var(--text-heading)]">
                         {rule.last_exec_sec_ago !== undefined && rule.last_exec_sec_ago >= 0
@@ -2214,7 +2217,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   <span>ESP32 Firmware</span>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950/60 text-cyan-300 border border-cyan-800/40">
-                  {status?.firmware_version || '2026.9.1'}
+                  {status?.firmware_version || '2026.9.5'}
                 </span>
               </div>
               <div className="text-xs text-[var(--text-muted)] space-y-1">
@@ -2231,7 +2234,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   <span>Message Catalog</span>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-teal-950/60 text-teal-300 border border-teal-800/40">
-                  {catalog?.catalog_version || '2026.9.1'}
+                  {catalog?.catalog_version || '2026.9.5'}
                 </span>
               </div>
               <div className="text-xs text-[var(--text-muted)] space-y-1">
@@ -2248,7 +2251,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   <span>Web Front-End</span>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-indigo-950/60 text-indigo-300 border border-indigo-800/40">
-                  {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.4'}
+                  {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.5'}
                 </span>
               </div>
               <div className="text-xs text-[var(--text-muted)] space-y-1">

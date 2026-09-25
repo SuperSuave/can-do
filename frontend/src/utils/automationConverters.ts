@@ -364,7 +364,7 @@ export function exportToCandoJson(
     settings: {
       vehicle_model: settings.vehicle_model || 'all_egmp',
       unit_system: settings.unit_system || 'imperial',
-      firmware_version: settings.firmware_version || '2026.9.1',
+      firmware_version: settings.firmware_version || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.5'),
       ntp_server: settings.ntp_server || 'pool.ntp.org',
       timezone: settings.timezone || 'UTC'
     },
@@ -783,10 +783,17 @@ function findMatchingOptionForAction(cmd: Command, act: AutomationAction): Comma
     for (const opt of cmd.options) {
       const optMap = compileToByteMap(opt.payload || (opt.steps && opt.steps[0]?.payload) || opt.match);
       const optKeys = Object.keys(optMap);
-      if (optKeys.length > 0 && optKeys.every(k => (act.payload as any)[k] === optMap[k])) {
+      if (optKeys.length > 0 && optKeys.every(k => {
+        const aVal = String((act.payload as any)[k] || '').toLowerCase();
+        const oVal = String(optMap[k] || '').toLowerCase();
+        return aVal === oVal;
+      })) {
         return opt;
       }
     }
+    // If we tried to match a payload and none matched perfectly, don't guess the default option.
+    // This prevents trailing sequence steps (like D5: 0xFF) from falsely rendering as "Off".
+    return undefined;
   }
   return cmd.options.find(o => o.default) || cmd.options[0];
 }

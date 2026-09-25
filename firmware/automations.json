@@ -2,7 +2,7 @@
   "settings": {
     "vehicle_model": "all_egmp",
     "unit_system": "imperial",
-    "firmware_version": "2026.9.1"
+    "firmware_version": "2026.9.5"
   },
   "rules": [
     {

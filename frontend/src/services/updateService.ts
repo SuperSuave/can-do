@@ -75,9 +75,9 @@ export function getLastUpdateInstalledTime(): string | null {
 }
 
 export async function checkForUpdates(
-  currentCatalogVersion = '2026.9.4',
-  currentFirmwareVersion = '2026.9.4',
-  currentFrontendVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.4'
+  currentCatalogVersion = '2026.9.5',
+  currentFirmwareVersion = '2026.9.5',
+  currentFrontendVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.5'
 ): Promise<UpdateCheckResult> {
   try {
     const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
@@ -92,7 +92,7 @@ export async function checkForUpdates(
     }
 
     const release = await res.json();
-    const tag = release.tag_name || '2026.9.4';
+    const tag = release.tag_name || '2026.9.5';
     const isFwNewer = isVersionNewer(tag, currentFirmwareVersion);
     const isCatNewer = isVersionNewer(tag, currentCatalogVersion);
     const isFrontNewer = isVersionNewer(tag, currentFrontendVersion);

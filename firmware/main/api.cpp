@@ -870,7 +870,7 @@ static esp_err_t api_get_automations_handler(httpd_req_t *req) {
     if (!fd) {
         httpd_resp_set_type(req, "application/json");
         const esp_app_desc_t *app_desc = esp_app_get_description();
-        const char* fw_ver = (app_desc && app_desc->version[0] != '\0') ? app_desc->version : "2026.9.2";
+        const char* fw_ver = (app_desc && app_desc->version[0] != '\0') ? app_desc->version : "2026.9.5";
         char def_resp[192];
         snprintf(def_resp, sizeof(def_resp), "{\"settings\":{\"vehicle_model\":\"all_egmp\",\"unit_system\":\"imperial\",\"firmware_version\":\"%s\"},\"rules\":[]}", fw_ver);
         httpd_resp_sendstr(req, def_resp);
@@ -1034,7 +1034,7 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
     cJSON_AddBoolToObject(root, "sniffer_mode", g_sniffer_mode.load());
     cJSON_AddBoolToObject(root, "hardware_listen_only", g_hardware_listen_only.load());
     const esp_app_desc_t *app_desc = esp_app_get_description();
-    const char* fw_ver = (app_desc && app_desc->version[0] != '\0') ? app_desc->version : "2026.9.2";
+    const char* fw_ver = (app_desc && app_desc->version[0] != '\0') ? app_desc->version : "2026.9.5";
     cJSON_AddStringToObject(root, "firmware_version", fw_ver);
 
     twai_status_info_t twai_st;

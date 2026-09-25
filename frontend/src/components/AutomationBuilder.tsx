@@ -411,6 +411,12 @@ function ConditionNodeEditor({
   // Triggered by condition
   if (cond.type === 'triggered_by' || cond.type === 'trigger' || cond.trigger_id !== undefined) {
     const matchedTrig = (availableTriggers || []).find(t => t.id === cond.trigger_id);
+    let matchedName = cond.trigger_id;
+    if (matchedTrig) {
+      const { command: tCmd, matchedOption: tOpt } = catalog ? resolveCatalogCommandForTrigger(matchedTrig, catalog) : {};
+      matchedName = tCmd?.ha_metadata?.name || tCmd?.name || matchedTrig.source_command_name || matchedTrig.can_id || `Trigger`;
+      if (tOpt) matchedName += ` (${tOpt.label})`;
+    }
     return (
       <div className="p-3 rounded-xl bg-slate-950 border border-amber-900/60 space-y-2 text-xs">
         <div className="flex items-center justify-between gap-2">
@@ -422,8 +428,8 @@ function ConditionNodeEditor({
               <Radio className="w-3.5 h-3.5 text-amber-400" />
               <span className="font-semibold text-white">Triggered By</span>
               {cond.trigger_id && (
-                <span className="px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 text-[10px] border border-amber-800/60 font-mono">
-                  {cond.trigger_id}
+                <span className="px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 text-[10px] border border-amber-800/60 font-medium">
+                  {matchedName}
                 </span>
               )}
             </div>
@@ -447,11 +453,16 @@ function ConditionNodeEditor({
               className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-amber-300 font-mono text-xs focus:outline-none focus:border-amber-500"
             >
               <option value="">-- Choose Rule Trigger --</option>
-              {(availableTriggers || []).map((t, tIdx) => (
-                <option key={t.id || tIdx} value={t.id}>
-                  {t.id} ({t.source_command_name || t.can_id || `Trigger ${tIdx + 1}`})
-                </option>
-              ))}
+              {(availableTriggers || []).map((t, tIdx) => {
+                const { command: tCmd, matchedOption: tOpt } = catalog ? resolveCatalogCommandForTrigger(t, catalog) : {};
+                let tName = tCmd?.ha_metadata?.name || tCmd?.name || t.source_command_name || t.can_id || `Trigger ${tIdx + 1}`;
+                if (tOpt) tName += ` (${tOpt.label})`;
+                return (
+                  <option key={t.id || tIdx} value={t.id}>
+                    {tName}
+                  </option>
+                );
+              })}
             </select>
           </div>
           <div>
@@ -1384,21 +1395,6 @@ function ActionNodeEditor({
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => {
-                const choices = [...(act.choices || [])];
-                choices.push({
-                  conditions: [],
-                  sequence: []
-                });
-                onUpdate({ ...act, choices });
-              }}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-blue-900 hover:bg-blue-800 text-white font-semibold transition"
-            >
-              <Plus className="w-3 h-3" />
-              <span>Add Choice Branch</span>
-            </button>
-            <button
-              type="button"
               onClick={onDelete}
               className="p-1 text-slate-500 hover:text-rose-400 transition"
               title="Delete block"
@@ -1467,6 +1463,22 @@ function ActionNodeEditor({
                 </div>
               ))}
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const choices = [...(act.choices || [])];
+                choices.push({
+                  conditions: [],
+                  sequence: []
+                });
+                onUpdate({ ...act, choices });
+              }}
+              className="ha-section-add-btn accent-act mt-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Choice Branch</span>
+            </button>
 
             {/* DEFAULT SEQUENCE */}
             <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
