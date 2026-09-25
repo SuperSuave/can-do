@@ -1770,7 +1770,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
+        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
       },
       "network": {
         "bus": 0,
@@ -1782,37 +1782,57 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "\u00b0F",
+        "unit": "°F",
         "raw_min": "0x06",
         "raw_max": "0x1A"
       },
       "options": [
         {
-          "label": "62\u00b0F / 17.0\u00b0C (Lo / Min)",
-          "match": { "D2": "0x06" },
-          "payload": { "D2": "0x06" },
+          "label": "62°F / 17.0°C (Lo / Min)",
+          "match": {
+            "D2": "0x06"
+          },
+          "payload": {
+            "D2": "0x06"
+          },
           "mask": "0xFF"
         },
         {
-          "label": "70\u00b0F / 21.0\u00b0C (Default Comfort)",
-          "match": { "D2": "0x0E" },
-          "payload": { "D2": "0x0E" },
+          "label": "70°F / 21.0°C (Default Comfort)",
+          "match": {
+            "D2": "0x0E"
+          },
+          "payload": {
+            "D2": "0x0E"
+          },
           "mask": "0xFF",
           "default": true
         },
         {
-          "label": "82\u00b0F / 27.5\u00b0C (Hi / Max)",
-          "match": { "D2": "0x1A" },
-          "payload": { "D2": "0x1A" },
+          "label": "82°F / 27.5°C (Hi / Max)",
+          "match": {
+            "D2": "0x1A"
+          },
+          "payload": {
+            "D2": "0x1A"
+          },
           "mask": "0xFF"
         },
         {
-          "label": "Warmer than 70\u00b0F (> 21\u00b0C)",
-          "evaluate": { "byte": "D2", "operator": "greater_than", "value": "0x0E" }
+          "label": "Warmer than 70°F (> 21°C)",
+          "evaluate": {
+            "byte": "D2",
+            "operator": "greater_than",
+            "value": "0x0E"
+          }
         },
         {
-          "label": "Cooler than 70\u00b0F (< 21\u00b0C)",
-          "evaluate": { "byte": "D2", "operator": "less_than", "value": "0x0E" }
+          "label": "Cooler than 70°F (< 21°C)",
+          "evaluate": {
+            "byte": "D2",
+            "operator": "less_than",
+            "value": "0x0E"
+          }
         }
       ]
     },
@@ -1837,7 +1857,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
+        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
       },
       "network": {
         "bus": 0,
@@ -1849,37 +1869,57 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "\u00b0F",
+        "unit": "°F",
         "raw_min": "0x06",
         "raw_max": "0x1A"
       },
       "options": [
         {
-          "label": "62\u00b0F / 17.0\u00b0C (Lo / Min)",
-          "match": { "D3": "0x06" },
-          "payload": { "D8": "0x06" },
+          "label": "62°F / 17.0°C (Lo / Min)",
+          "match": {
+            "D3": "0x06"
+          },
+          "payload": {
+            "D8": "0x06"
+          },
           "mask": "0xFF"
         },
         {
-          "label": "70\u00b0F / 21.0\u00b0C (Default Comfort)",
-          "match": { "D3": "0x0E" },
-          "payload": { "D8": "0x0E" },
+          "label": "70°F / 21.0°C (Default Comfort)",
+          "match": {
+            "D3": "0x0E"
+          },
+          "payload": {
+            "D8": "0x0E"
+          },
           "mask": "0xFF",
           "default": true
         },
         {
-          "label": "82\u00b0F / 27.5\u00b0C (Hi / Max)",
-          "match": { "D3": "0x1A" },
-          "payload": { "D8": "0x1A" },
+          "label": "82°F / 27.5°C (Hi / Max)",
+          "match": {
+            "D3": "0x1A"
+          },
+          "payload": {
+            "D8": "0x1A"
+          },
           "mask": "0xFF"
         },
         {
-          "label": "Warmer than 70\u00b0F (> 21\u00b0C)",
-          "evaluate": { "byte": "D3", "operator": "greater_than", "value": "0x0E" }
+          "label": "Warmer than 70°F (> 21°C)",
+          "evaluate": {
+            "byte": "D3",
+            "operator": "greater_than",
+            "value": "0x0E"
+          }
         },
         {
-          "label": "Cooler than 70\u00b0F (< 21\u00b0C)",
-          "evaluate": { "byte": "D3", "operator": "less_than", "value": "0x0E" }
+          "label": "Cooler than 70°F (< 21°C)",
+          "evaluate": {
+            "byte": "D3",
+            "operator": "less_than",
+            "value": "0x0E"
+          }
         }
       ]
     },
@@ -1913,7 +1953,7 @@
       },
       "options": [
         {
-          "label": "Cabin All 21.0\u00b0C / 70\u00b0F",
+          "label": "Cabin All 21.0°C / 70°F",
           "match": {
             "D2": "0x0E",
             "D3": "0x0E"
@@ -1925,7 +1965,7 @@
           "default": true
         },
         {
-          "label": "Cabin All 20.0\u00b0C / 68\u00b0F",
+          "label": "Cabin All 20.0°C / 68°F",
           "match": {
             "D2": "0x0C",
             "D3": "0x0C"
@@ -1936,7 +1976,7 @@
           }
         },
         {
-          "label": "Cabin All 22.0\u00b0C / 72\u00b0F",
+          "label": "Cabin All 22.0°C / 72°F",
           "match": {
             "D2": "0x10",
             "D3": "0x10"
@@ -1947,7 +1987,7 @@
           }
         },
         {
-          "label": "Cabin Pre-Cool 18.0\u00b0C / 64\u00b0F",
+          "label": "Cabin Pre-Cool 18.0°C / 64°F",
           "match": {
             "D2": "0x08",
             "D3": "0x08"
@@ -1958,7 +1998,7 @@
           }
         },
         {
-          "label": "Cabin Pre-Heat 24.0\u00b0C / 75\u00b0F",
+          "label": "Cabin Pre-Heat 24.0°C / 75°F",
           "match": {
             "D2": "0x14",
             "D3": "0x14"
@@ -3655,18 +3695,18 @@
       },
       "options": [
         {
-          "label": "Info Notification (\u24d8)",
+          "label": "Info Notification (ⓘ)",
           "level": "info",
           "popup_message": "Preconditioning Active",
           "default": true
         },
         {
-          "label": "Warning Notification (\u26a0)",
+          "label": "Warning Notification (⚠)",
           "level": "warning",
           "popup_message": "Battery Cold / Limited"
         },
         {
-          "label": "Fault Notification (\u203c)",
+          "label": "Fault Notification (‼)",
           "level": "error",
           "popup_message": "Charge Interrupted"
         },
@@ -4834,12 +4874,12 @@
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x226",
-        "unit": "\u00b0C"
+        "unit": "°C"
       },
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4 ([B3]: raw - 40 \u00b0C)"
+        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4 ([B3]: raw - 40 °C)"
       },
       "options": [
         {
@@ -5084,7 +5124,7 @@
         "state_can_id": "0x1AC",
         "state_byte": "D1",
         "unit": "km/h",
-        "factor": 1.0
+        "factor": 1
       },
       "notes": "Decoded from E-GMP CLUSTER_INFO frame 428 (0x1AC) Byte 0 (Speed in kph, factor 1.0, range 0-255 kph).",
       "contributor": {
@@ -5419,19 +5459,19 @@
           "default": true
         },
         {
-          "label": "Rear Temp 20.0\u00b0C / 68\u00b0F",
+          "label": "Rear Temp 20.0°C / 68°F",
           "match": {
             "D6": "0x0C"
           }
         },
         {
-          "label": "Rear Temp 21.0\u00b0C / 70\u00b0F",
+          "label": "Rear Temp 21.0°C / 70°F",
           "match": {
             "D6": "0x0E"
           }
         },
         {
-          "label": "Rear Temp 22.0\u00b0C / 72\u00b0F",
+          "label": "Rear Temp 22.0°C / 72°F",
           "match": {
             "D6": "0x10"
           }
