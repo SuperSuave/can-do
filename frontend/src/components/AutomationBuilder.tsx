@@ -2497,24 +2497,40 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
     if (useMqttSync) {
       const { wsUrl, user, pass, deviceId } = mqttRemoteConfig;
+      let timeoutTimer: any = null;
       try {
         const client = mqtt.connect(wsUrl, {
           username: user || undefined,
           password: pass || undefined,
           protocolVersion: 4,
-          reconnectPeriod: 0
+          reconnectPeriod: 0,
+          connectTimeout: 8000
         });
 
+        timeoutTimer = setTimeout(() => {
+          setSyncStatus(`Timeout: No response from '${deviceId}' via MQTT broker. Verify ESP32 is online and connected to ${wsUrl}`);
+          setSyncing(false);
+          try { client.end(true); } catch {}
+          setTimeout(() => setSyncStatus(null), 8000);
+        }, 10000);
+
         client.on('connect', () => {
+          setSyncStatus(`Connected to broker. Requesting automations from ${deviceId}...`);
           client.subscribe(`cando/${deviceId}/config/automations/state`, (err) => {
             if (!err) {
               client.publish(`cando/${deviceId}/config/automations/get`, '', { qos: 1 });
+            } else {
+              if (timeoutTimer) clearTimeout(timeoutTimer);
+              setSyncStatus(`Subscribe Error: ${err.message}`);
+              setSyncing(false);
+              client.end();
             }
           });
         });
 
         client.on('message', (topic, message) => {
           if (topic === `cando/${deviceId}/config/automations/state`) {
+            if (timeoutTimer) clearTimeout(timeoutTimer);
             try {
               const data = JSON.parse(message.toString());
               if (data.rules && Array.isArray(data.rules)) {
@@ -2539,11 +2555,17 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         });
 
         client.on('error', (err) => {
+          if (timeoutTimer) clearTimeout(timeoutTimer);
           setSyncStatus(`MQTT Connection Error: ${err.message}`);
           setSyncing(false);
           client.end();
         });
+
+        client.on('close', () => {
+          // If closed before response received and not already handled
+        });
       } catch (err: any) {
+        if (timeoutTimer) clearTimeout(timeoutTimer);
         setSyncStatus(`MQTT Init Error: ${err.message}`);
         setSyncing(false);
       }
