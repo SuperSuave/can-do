@@ -6,7 +6,7 @@ import zlib from 'zlib';
 import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
-  const appVersion = process.env.VITE_APP_VERSION || process.env.npm_package_version || '2026.9.2';
+  const appVersion = process.env.VITE_APP_VERSION || process.env.npm_package_version || '2026.9.4';
 
   return {
     define: {

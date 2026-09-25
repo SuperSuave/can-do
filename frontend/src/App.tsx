@@ -25,7 +25,7 @@ import { DeviceDashboard } from './components/DeviceDashboard';
 import { VehicleDashboard } from './components/VehicleDashboard';
 import { OnboardingWizardModal } from './components/OnboardingWizardModal';
 import { UserPreferences, getUserPreferences, saveUserPreferences, fetchDevicePreferences } from './types/settings';
-import { checkForUpdates } from './services/updateService';
+import { checkForUpdates, executeUpdateSequence } from './services/updateService';
 import { 
   AutomationRule, 
   AutomationSettings, 
@@ -324,16 +324,37 @@ export default function App() {
       const now = new Date();
       const currentHhMm = now.toTimeString().slice(0, 5);
       if (currentHhMm === userPreferences.update_schedule.time) {
-        checkForUpdates(catalog?.catalog_version || '2026.9.1', '2026.9.1').then((res) => {
+        const currentFront = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.4';
+        const currentCat = catalog?.catalog_version || currentFront;
+        checkForUpdates(currentCat, currentCat, currentFront).then(async (res) => {
           if (res.has_update) {
             console.log('[Scheduler] New update available:', res.release_name || res.version);
+            if (userPreferences.update_policy === 'auto') {
+              console.log('[Scheduler] Executing auto-update sequence...');
+              try {
+                const targetHost = resolveDeviceBaseUrl();
+                await executeUpdateSequence(
+                  targetHost,
+                  userPreferences.update_components,
+                  res,
+                  (stage, pct, msg) => {
+                    console.log(`[Scheduler] Update progress: [${stage}] ${pct}% - ${msg}`);
+                  }
+                );
+                console.log('[Scheduler] Auto-update completed successfully.');
+              } catch (err) {
+                console.error('[Scheduler] Auto-update execution failed:', err);
+              }
+            }
           }
-        }).catch(() => {});
+        }).catch((e) => {
+          console.warn('[Scheduler] Update check error:', e);
+        });
       }
     }, 60000);
 
     return () => clearInterval(interval);
-  }, [userPreferences.update_schedule, userPreferences.update_policy, catalog.catalog_version]);
+  }, [userPreferences.update_schedule, userPreferences.update_policy, userPreferences.update_components, catalog.catalog_version]);
 
   const handleCompleteOnboarding = (prefs: UserPreferences) => {
     const saved = saveUserPreferences(prefs);

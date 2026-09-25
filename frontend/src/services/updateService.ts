@@ -75,8 +75,9 @@ export function getLastUpdateInstalledTime(): string | null {
 }
 
 export async function checkForUpdates(
-  currentCatalogVersion = '2026.9.1',
-  currentFirmwareVersion = '2026.9.1'
+  currentCatalogVersion = '2026.9.4',
+  currentFirmwareVersion = '2026.9.4',
+  currentFrontendVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.4'
 ): Promise<UpdateCheckResult> {
   try {
     const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
@@ -91,9 +92,10 @@ export async function checkForUpdates(
     }
 
     const release = await res.json();
-    const tag = release.tag_name || '2026.9.1';
+    const tag = release.tag_name || '2026.9.4';
     const isFwNewer = isVersionNewer(tag, currentFirmwareVersion);
     const isCatNewer = isVersionNewer(tag, currentCatalogVersion);
+    const isFrontNewer = isVersionNewer(tag, currentFrontendVersion);
 
     // Locate assets if attached to GitHub release
     let firmwareUrl: string | undefined;
@@ -122,7 +124,7 @@ export async function checkForUpdates(
     // Check if the release was rebuilt/re-published after last install even if same version tag
     const lastInstalledTs = getLastUpdateInstalledTime();
     let isRebuild = false;
-    if (!isFwNewer && !isCatNewer && release.published_at && lastInstalledTs) {
+    if (!isFwNewer && !isCatNewer && !isFrontNewer && release.published_at && lastInstalledTs) {
       const releaseTime = new Date(release.published_at).getTime();
       const installedTime = new Date(lastInstalledTs).getTime();
       if (releaseTime > installedTime + 60000) { // 1 min buffer
@@ -130,7 +132,7 @@ export async function checkForUpdates(
       }
     }
 
-    const hasAnyUpdate = isFwNewer || isCatNewer || isRebuild;
+    const hasAnyUpdate = isFwNewer || isCatNewer || isFrontNewer || isRebuild;
 
     // Always use raw.githubusercontent.com for catalog download in browser
     // because GitHub Release download assets redirect to S3 without CORS headers
@@ -144,7 +146,7 @@ export async function checkForUpdates(
       published_at: release.published_at,
       notes: release.body || 'New vehicle definitions and performance updates.',
       components: {
-        frontend: isFwNewer || isRebuild,
+        frontend: isFrontNewer || isRebuild,
         catalog: isCatNewer || isRebuild,
         firmware: !!firmwareUrl && (isFwNewer || isRebuild),
       },
