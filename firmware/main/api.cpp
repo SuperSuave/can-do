@@ -382,7 +382,10 @@ static esp_err_t api_automations_diagnostics_handler(httpd_req_t *req) {
         cJSON_AddStringToObject(rule_obj, "id", rule.id.c_str());
         cJSON_AddStringToObject(rule_obj, "name", rule.name.c_str());
         cJSON_AddBoolToObject(rule_obj, "enabled", rule.enabled);
+        cJSON_AddBoolToObject(rule_obj, "ha_expose", rule.ha_expose);
+        cJSON_AddStringToObject(rule_obj, "ha_icon", rule.ha_icon.c_str());
         cJSON_AddStringToObject(rule_obj, "exec_mode", rule.exec_mode.c_str());
+        cJSON_AddStringToObject(rule_obj, "trigger_mode", rule.trigger_mode.c_str());
         cJSON_AddNumberToObject(rule_obj, "cooldown_ms", rule.cooldown_ms);
         cJSON_AddNumberToObject(rule_obj, "last_exec_ms", rule.last_exec_time_ms);
         if (rule.last_exec_time_ms > 0 && now_ms >= rule.last_exec_time_ms) {

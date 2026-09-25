@@ -42,6 +42,8 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
+  ArrowUp,
+  ArrowDown,
   Search,
   ExternalLink,
   Code,
@@ -214,6 +216,11 @@ interface ConditionNodeEditorProps {
   catalog?: Catalog;
   onUpdate: (updated: AutomationCondition) => void;
   onDelete: () => void;
+  onDuplicate?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  isFirst?: boolean;
+  isLast?: boolean;
   onOpenAddConditionDialog?: (onAdd: (cond: AutomationCondition) => void) => void;
 }
 
@@ -317,6 +324,11 @@ function ConditionNodeEditor({
   catalog,
   onUpdate,
   onDelete,
+  onDuplicate,
+  onMoveUp,
+  onMoveDown,
+  isFirst,
+  isLast,
   onOpenAddConditionDialog
 }: ConditionNodeEditorProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -332,6 +344,51 @@ function ConditionNodeEditor({
     (cond.type === 'and_group' ? 'and' : cond.type === 'or_group' ? 'or' : cond.type === 'not_group' ? 'not' : 'and');
 
   const [collapsed, setCollapsed] = useState(false);
+
+  const actionButtons = (
+    <div className="flex items-center gap-1">
+      {onMoveUp && (
+        <button
+          type="button"
+          onClick={onMoveUp}
+          disabled={isFirst}
+          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition"
+          title="Move up"
+        >
+          <ArrowUp className="w-3.5 h-3.5" />
+        </button>
+      )}
+      {onMoveDown && (
+        <button
+          type="button"
+          onClick={onMoveDown}
+          disabled={isLast}
+          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition"
+          title="Move down"
+        >
+          <ArrowDown className="w-3.5 h-3.5" />
+        </button>
+      )}
+      {onDuplicate && (
+        <button
+          type="button"
+          onClick={onDuplicate}
+          className="p-1 text-slate-500 hover:text-cyan-400 transition"
+          title="Duplicate condition"
+        >
+          <Copy className="w-3.5 h-3.5" />
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onDelete}
+        className="p-1 text-slate-500 hover:text-rose-400 transition"
+        title="Delete condition"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
 
   if (isGroup) {
     const borderCls =
@@ -380,14 +437,7 @@ function ConditionNodeEditor({
               <option value="or">OR Logic</option>
               <option value="not">NOT Logic</option>
             </select>
-            <button
-              type="button"
-              onClick={onDelete}
-              className="p-1 text-slate-500 hover:text-rose-400 transition"
-              title="Delete group"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            {actionButtons}
           </div>
         </div>
 
@@ -411,81 +461,64 @@ function ConditionNodeEditor({
   // Triggered by condition
   if (cond.type === 'triggered_by' || cond.type === 'trigger' || cond.trigger_id !== undefined) {
     const matchedTrig = (availableTriggers || []).find(t => t.id === cond.trigger_id);
-    let matchedName = cond.trigger_id;
-    if (matchedTrig) {
-      const { command: tCmd, matchedOption: tOpt } = catalog ? resolveCatalogCommandForTrigger(matchedTrig, catalog) : {};
-      matchedName = tCmd?.ha_metadata?.name || tCmd?.name || matchedTrig.source_command_name || matchedTrig.can_id || `Trigger`;
-      if (tOpt) matchedName += ` (${tOpt.label})`;
-    }
     return (
       <div className="p-3 rounded-xl bg-slate-950 border border-amber-900/60 space-y-2 text-xs">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              className="text-slate-400 hover:text-white transition p-0.5"
+            >
+              {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+            </button>
             <span className="w-5 h-5 rounded-full bg-amber-950 text-amber-300 font-bold text-[10px] flex items-center justify-center border border-amber-800">
               C{index + 1}
             </span>
             <div className="flex items-center gap-1.5">
               <Radio className="w-3.5 h-3.5 text-amber-400" />
               <span className="font-semibold text-white">Triggered By</span>
-              {cond.trigger_id && (
-                <span className="px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 text-[10px] border border-amber-800/60 font-medium">
-                  {matchedName}
-                </span>
-              )}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="p-1 text-slate-500 hover:text-rose-400 transition"
-            title="Delete condition"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {actionButtons}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[11px]">
-          <div>
-            <label className="block text-[10px] font-sans text-slate-400 mb-1">Select Trigger</label>
-            <select
-              value={cond.trigger_id || ''}
-              onChange={e => onUpdate({ ...cond, type: 'triggered_by', trigger_id: e.target.value })}
-              className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-amber-300 font-mono text-xs focus:outline-none focus:border-amber-500"
-            >
-              <option value="">-- Choose Rule Trigger --</option>
-              {(availableTriggers || []).map((t, tIdx) => {
-                const { command: tCmd, matchedOption: tOpt } = catalog ? resolveCatalogCommandForTrigger(t, catalog) : {};
-                let tName = tCmd?.ha_metadata?.name || tCmd?.name || t.source_command_name || t.can_id || `Trigger ${tIdx + 1}`;
-                if (tOpt) tName += ` (${tOpt.label})`;
-                return (
-                  <option key={t.id || tIdx} value={t.id}>
-                    {tName}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-          <div>
-            <label className="block text-[10px] font-sans text-slate-400 mb-1">Trigger ID (Exact Match)</label>
-            <input
-              type="text"
-              value={cond.trigger_id || ''}
-              onChange={e => onUpdate({ ...cond, type: 'triggered_by', trigger_id: e.target.value })}
-              placeholder="trig_xxx"
-              className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-amber-300 font-mono text-xs focus:outline-none focus:border-amber-500"
-            />
-          </div>
-        </div>
-        {matchedTrig && (
-          <div className="text-[11px] text-slate-400 font-sans flex items-center gap-1.5 pt-0.5">
-            <span className="text-slate-500">Source:</span>
-            <span className="text-slate-300 font-semibold">{matchedTrig.source_command_name || matchedTrig.can_id}</span>
-            {matchedTrig.option_label && (
-              <span className="px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 text-[10px]">
-                {matchedTrig.option_label}
-              </span>
+        {!collapsed && (
+          <>
+            <div className="font-mono text-[11px]">
+              <div>
+                <label className="block text-[10px] font-sans text-slate-400 mb-1">Select Trigger</label>
+                <select
+                  value={cond.trigger_id || ''}
+                  onChange={e => onUpdate({ ...cond, type: 'triggered_by', trigger_id: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-amber-300 font-mono text-xs focus:outline-none focus:border-amber-500"
+                >
+                  <option value="">-- Choose Rule Trigger --</option>
+                  {(availableTriggers || []).map((t, tIdx) => {
+                    const { command: tCmd, matchedOption: tOpt } = catalog ? resolveCatalogCommandForTrigger(t, catalog) : {};
+                    let tName = tCmd?.ha_metadata?.name || tCmd?.name || t.source_command_name || t.can_id || `Trigger ${tIdx + 1}`;
+                    if (tOpt) tName += ` (${tOpt.label})`;
+                    return (
+                      <option key={t.id || tIdx} value={t.id}>
+                        {tName} {t.id ? `[${t.id}]` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            </div>
+            {matchedTrig && (
+              <div className="text-[11px] text-slate-400 font-sans flex items-center gap-1.5 pt-0.5">
+                <span className="text-slate-500">Source:</span>
+                <span className="text-slate-300 font-semibold">{matchedTrig.source_command_name || matchedTrig.can_id}</span>
+                {matchedTrig.option_label && (
+                  <span className="px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 text-[10px]">
+                    {matchedTrig.option_label}
+                  </span>
+                )}
+              </div>
             )}
-          </div>
+          </>
         )}
       </div>
     );
@@ -497,6 +530,13 @@ function ConditionNodeEditor({
       <div className="p-3 rounded-xl bg-slate-950 border border-cyan-900/60 space-y-2 text-xs">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              className="text-slate-400 hover:text-white transition p-0.5"
+            >
+              {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+            </button>
             <span className="w-5 h-5 rounded-full bg-cyan-950 text-cyan-300 font-bold text-[10px] flex items-center justify-center border border-cyan-800">
               C{index + 1}
             </span>
@@ -510,41 +550,38 @@ function ConditionNodeEditor({
               )}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="p-1 text-slate-500 hover:text-rose-400 transition"
-            title="Delete condition"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {actionButtons}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-[10px] font-sans text-slate-400 mb-1">Start Time (24h)</label>
-            <input
-              type="time"
-              value={cond.start_time || ''}
-              onChange={e => onUpdate({ ...cond, start_time: e.target.value })}
-              className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] font-sans text-slate-400 mb-1">End Time (24h)</label>
-            <input
-              type="time"
-              value={cond.end_time || ''}
-              onChange={e => onUpdate({ ...cond, end_time: e.target.value })}
-              className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
-            />
-          </div>
-        </div>
+        {!collapsed && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-sans text-slate-400 mb-1">Start Time (24h)</label>
+                <input
+                  type="time"
+                  value={cond.start_time || ''}
+                  onChange={e => onUpdate({ ...cond, start_time: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-sans text-slate-400 mb-1">End Time (24h)</label>
+                <input
+                  type="time"
+                  value={cond.end_time || ''}
+                  onChange={e => onUpdate({ ...cond, end_time: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+            </div>
 
-        <DayOfWeekPicker
-          selectedDays={cond.days}
-          onChange={days => onUpdate({ ...cond, days })}
-        />
+            <DayOfWeekPicker
+              selectedDays={cond.days}
+              onChange={days => onUpdate({ ...cond, days })}
+            />
+          </>
+        )}
       </div>
     );
   }
@@ -568,6 +605,13 @@ function ConditionNodeEditor({
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCollapsed(!collapsed)}
+            className="text-slate-400 hover:text-white transition p-0.5"
+          >
+            {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+          </button>
           <span className="w-5 h-5 rounded-full bg-purple-950 text-purple-300 font-bold text-[10px] flex items-center justify-center border border-purple-800 shrink-0">
             C{index + 1}
           </span>
@@ -585,7 +629,7 @@ function ConditionNodeEditor({
         </div>
 
         <div className="flex items-center gap-1.5">
-          {hasOptions && (
+          {hasOptions && !collapsed && (
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
@@ -600,66 +644,61 @@ function ConditionNodeEditor({
               <span>{showAdvanced ? 'Simple View' : 'Edit Details'}</span>
             </button>
           )}
-          <button
-            type="button"
-            onClick={onDelete}
-            className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition"
-            title="Delete condition"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {actionButtons}
         </div>
       </div>
 
-      {/* Option Selector Big Pills in Smart Grid Rows */}
-      {hasOptions && (
-        <div className="space-y-1.5 pt-0.5">
-          {groupOptionsIntoGridRows(catalogCmd.options).map((group, gIdx) => {
-            const itemCount = group.items.length;
-            const gridClass =
-              itemCount === 1
-                ? 'flex'
-                : itemCount === 2
-                ? 'grid grid-cols-2 gap-1.5'
-                : itemCount === 3
-                ? 'grid grid-cols-3 gap-1.5'
-                : itemCount === 4
-                ? 'grid grid-cols-4 gap-1.5'
-                : 'grid grid-cols-2 sm:grid-cols-3 gap-1.5';
+      {!collapsed && (
+        <>
+          {/* Option Selector Big Pills in Smart Grid Rows */}
+          {hasOptions && (
+            <div className="space-y-1.5 pt-0.5">
+              {groupOptionsIntoGridRows(catalogCmd.options).map((group, gIdx) => {
+                const itemCount = group.items.length;
+                const gridClass =
+                  itemCount === 1
+                    ? 'flex'
+                    : itemCount === 2
+                    ? 'grid grid-cols-2 gap-1.5'
+                    : itemCount === 3
+                    ? 'grid grid-cols-3 gap-1.5'
+                    : itemCount === 4
+                    ? 'grid grid-cols-4 gap-1.5'
+                    : 'grid grid-cols-2 sm:grid-cols-3 gap-1.5';
 
-            return (
-              <div key={group.key || gIdx} className={gridClass}>
-                {group.items.map(({ opt, origIndex }) => {
-                  const isSelected =
-                    (cond.option_label && opt.label.toLowerCase() === cond.option_label.toLowerCase()) ||
-                    (matchedOption && opt.label.toLowerCase() === matchedOption.label.toLowerCase()) ||
-                    (!cond.option_label && !matchedOption && origIndex === 0);
+                return (
+                  <div key={group.key || gIdx} className={gridClass}>
+                    {group.items.map(({ opt, origIndex }) => {
+                      const isSelected =
+                        (cond.option_label && opt.label.toLowerCase() === cond.option_label.toLowerCase()) ||
+                        (matchedOption && opt.label.toLowerCase() === matchedOption.label.toLowerCase()) ||
+                        (!cond.option_label && !matchedOption && origIndex === 0);
 
-                  return (
-                    <button
-                      key={opt.label || origIndex}
-                      type="button"
-                      onClick={() => {
-                        const updated = applyOptionToCondition(cond, catalogCmd, opt);
-                        onUpdate(updated);
-                      }}
-                      className={`${
-                        itemCount === 1 ? 'px-4 min-w-[90px]' : 'w-full px-2'
-                      } py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 border cursor-pointer text-center ${
-                        isSelected
-                          ? 'bg-purple-500/20 text-purple-200 border-purple-500/80 font-semibold shadow-sm ring-1 ring-purple-500/40'
-                          : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border-slate-800'
-                      }`}
-                    >
-                      <span className="truncate">{opt.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
-      )}
+                      return (
+                        <button
+                          key={opt.label || origIndex}
+                          type="button"
+                          onClick={() => {
+                            const updated = applyOptionToCondition(cond, catalogCmd, opt);
+                            onUpdate(updated);
+                          }}
+                          className={`${
+                            itemCount === 1 ? 'px-4 min-w-[90px]' : 'w-full px-2'
+                          } py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 border cursor-pointer text-center ${
+                            isSelected
+                              ? 'bg-purple-500/20 text-purple-200 border-purple-500/80 font-semibold shadow-sm ring-1 ring-purple-500/40'
+                              : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border-slate-800'
+                          }`}
+                        >
+                          <span className="truncate">{opt.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
       {/* Advanced Details View */}
       {(!hasOptions || showAdvanced) && (
@@ -748,6 +787,8 @@ function ConditionNodeEditor({
           </div>
         </div>
       )}
+        </>
+      )}
     </div>
   );
 }
@@ -812,6 +853,30 @@ function ConditionListEditor({
                           const next = conditions.filter((_, i) => i !== idx);
                           onUpdate(next);
                         }}
+                        onDuplicate={() => {
+                          const dup: AutomationCondition = JSON.parse(JSON.stringify(c));
+                          dup.id = `cond_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+                          delete dup._clientId;
+                          const next = [...conditions];
+                          next.splice(idx + 1, 0, dup);
+                          onUpdate(next);
+                        }}
+                        onMoveUp={idx > 0 ? () => {
+                          const next = [...conditions];
+                          const temp = next[idx];
+                          next[idx] = next[idx - 1];
+                          next[idx - 1] = temp;
+                          onUpdate(next);
+                        } : undefined}
+                        onMoveDown={idx < conditions.length - 1 ? () => {
+                          const next = [...conditions];
+                          const temp = next[idx];
+                          next[idx] = next[idx + 1];
+                          next[idx + 1] = temp;
+                          onUpdate(next);
+                        } : undefined}
+                        isFirst={idx === 0}
+                        isLast={idx === conditions.length - 1}
                         onOpenAddConditionDialog={onOpenAddConditionDialog}
                       />
                     );
@@ -844,6 +909,11 @@ interface TriggerNodeEditorProps {
   catalog?: Catalog;
   onUpdate: (updated: AutomationTrigger) => void;
   onDelete: () => void;
+  onDuplicate?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  isFirst?: boolean;
+  isLast?: boolean;
 }
 
 function TriggerNodeEditor({
@@ -852,14 +922,65 @@ function TriggerNodeEditor({
   catalog,
   onUpdate,
   onDelete,
+  onDuplicate,
+  onMoveUp,
+  onMoveDown,
+  isFirst,
+  isLast,
 }: TriggerNodeEditorProps) {
   const [showAdvanced, setShowAdvanced] = useState(Boolean((trig as any)._showAdvanced));
+  const [collapsed, setCollapsed] = useState(false);
 
   const toggleAdvanced = () => {
     const nextVal = !showAdvanced;
     setShowAdvanced(nextVal);
     (trig as any)._showAdvanced = nextVal;
   };
+
+  const actionButtons = (
+    <div className="flex items-center gap-1">
+      {onMoveUp && (
+        <button
+          type="button"
+          onClick={onMoveUp}
+          disabled={isFirst}
+          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition"
+          title="Move up"
+        >
+          <ArrowUp className="w-3.5 h-3.5" />
+        </button>
+      )}
+      {onMoveDown && (
+        <button
+          type="button"
+          onClick={onMoveDown}
+          disabled={isLast}
+          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition"
+          title="Move down"
+        >
+          <ArrowDown className="w-3.5 h-3.5" />
+        </button>
+      )}
+      {onDuplicate && (
+        <button
+          type="button"
+          onClick={onDuplicate}
+          className="p-1 text-slate-500 hover:text-cyan-400 transition"
+          title="Duplicate trigger"
+        >
+          <Copy className="w-3.5 h-3.5" />
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onDelete}
+        className="p-1 text-slate-500 hover:text-rose-400 transition"
+        title="Delete trigger"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
 
   // Time-based schedule trigger
   if (trig.type === 'time_schedule' || trig.source === 'time') {
@@ -869,6 +990,13 @@ function TriggerNodeEditor({
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              className="text-slate-400 hover:text-white transition p-0.5"
+            >
+              {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+            </button>
             <span className="w-5 h-5 rounded-full bg-cyan-950 text-cyan-300 font-bold text-[10px] flex items-center justify-center border border-cyan-800 shrink-0">
               T{tIdx + 1}
             </span>
@@ -892,29 +1020,27 @@ function TriggerNodeEditor({
               )}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {actionButtons}
         </div>
 
-        <div>
-          <label className="block text-[10px] font-sans text-slate-400 mb-1">Target Time (24h)</label>
-          <input
-            type="time"
-            value={trig.time || ''}
-            onChange={e => onUpdate({ ...trig, time: e.target.value })}
-            className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
-          />
-        </div>
+        {!collapsed && (
+          <>
+            <div>
+              <label className="block text-[10px] font-sans text-slate-400 mb-1">Target Time (24h)</label>
+              <input
+                type="time"
+                value={trig.time || ''}
+                onChange={e => onUpdate({ ...trig, time: e.target.value })}
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
+              />
+            </div>
 
-        <DayOfWeekPicker
-          selectedDays={trig.days}
-          onChange={days => onUpdate({ ...trig, days })}
-        />
+            <DayOfWeekPicker
+              selectedDays={trig.days}
+              onChange={days => onUpdate({ ...trig, days })}
+            />
+          </>
+        )}
       </div>
     );
   }
@@ -927,6 +1053,13 @@ function TriggerNodeEditor({
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              className="text-slate-400 hover:text-white transition p-0.5"
+            >
+              {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+            </button>
             <span className="w-5 h-5 rounded-full bg-blue-950 text-blue-300 font-bold text-[10px] flex items-center justify-center border border-blue-800 shrink-0">
               T{tIdx + 1}
             </span>
@@ -940,77 +1073,72 @@ function TriggerNodeEditor({
               </span>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition"
-            title="Delete trigger"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {actionButtons}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px]">
-          <div>
-            <label className="block text-[10px] font-sans text-slate-400 mb-1">Button / Macro Key</label>
-            <select
-              value={trig.ble_button || 'volume_up'}
-              onChange={e => onUpdate({ ...trig, ble_button: e.target.value })}
-              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-blue-300 font-sans"
-            >
-              <optgroup label="Media & Volume (Phone / Remote / Shutter)">
-                <option value="volume_up">Volume Up (+)</option>
-                <option value="volume_down">Volume Down (-)</option>
-                <option value="play_pause">Play / Pause</option>
-                <option value="next_track">Next Track (&gt;&gt;)</option>
-                <option value="prev_track">Previous Track (&lt;&lt;)</option>
-                <option value="mute">Mute</option>
-                <option value="shutter">Camera Shutter (Enter)</option>
-              </optgroup>
-              <optgroup label="Macro Keypad (1 - 9)">
-                <option value="key_1">Key 1</option>
-                <option value="key_2">Key 2</option>
-                <option value="key_3">Key 3</option>
-                <option value="key_4">Key 4</option>
-                <option value="key_5">Key 5</option>
-                <option value="key_6">Key 6</option>
-                <option value="key_7">Key 7</option>
-                <option value="key_8">Key 8</option>
-                <option value="key_9">Key 9</option>
-              </optgroup>
-              <optgroup label="Navigation Keys">
-                <option value="key_space">Spacebar</option>
-                <option value="key_enter">Enter</option>
-                <option value="key_escape">Escape</option>
-                <option value="key_tab">Tab</option>
-              </optgroup>
-            </select>
-          </div>
+        {!collapsed && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px]">
+            <div>
+              <label className="block text-[10px] font-sans text-slate-400 mb-1">Button / Macro Key</label>
+              <select
+                value={trig.ble_button || 'volume_up'}
+                onChange={e => onUpdate({ ...trig, ble_button: e.target.value })}
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-blue-300 font-sans"
+              >
+                <optgroup label="Media & Volume (Phone / Remote / Shutter)">
+                  <option value="volume_up">Volume Up (+)</option>
+                  <option value="volume_down">Volume Down (-)</option>
+                  <option value="play_pause">Play / Pause</option>
+                  <option value="next_track">Next Track (&gt;&gt;)</option>
+                  <option value="prev_track">Previous Track (&lt;&lt;)</option>
+                  <option value="mute">Mute</option>
+                  <option value="shutter">Camera Shutter (Enter)</option>
+                </optgroup>
+                <optgroup label="Macro Keypad (1 - 9)">
+                  <option value="key_1">Key 1</option>
+                  <option value="key_2">Key 2</option>
+                  <option value="key_3">Key 3</option>
+                  <option value="key_4">Key 4</option>
+                  <option value="key_5">Key 5</option>
+                  <option value="key_6">Key 6</option>
+                  <option value="key_7">Key 7</option>
+                  <option value="key_8">Key 8</option>
+                  <option value="key_9">Key 9</option>
+                </optgroup>
+                <optgroup label="Navigation Keys">
+                  <option value="key_space">Spacebar</option>
+                  <option value="key_enter">Enter</option>
+                  <option value="key_escape">Escape</option>
+                  <option value="key_tab">Tab</option>
+                </optgroup>
+              </select>
+            </div>
 
-          <div>
-            <label className="block text-[10px] font-sans text-slate-400 mb-1">Action Event</label>
-            <select
-              value={trig.ble_action || 'press'}
-              onChange={e => onUpdate({ ...trig, ble_action: e.target.value as any })}
-              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
-            >
-              <option value="press">Button Pressed</option>
-              <option value="release">Button Released</option>
-              <option value="any">Any (Press or Release)</option>
-            </select>
-          </div>
+            <div>
+              <label className="block text-[10px] font-sans text-slate-400 mb-1">Action Event</label>
+              <select
+                value={trig.ble_action || 'press'}
+                onChange={e => onUpdate({ ...trig, ble_action: e.target.value as any })}
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+              >
+                <option value="press">Button Pressed</option>
+                <option value="release">Button Released</option>
+                <option value="any">Any (Press or Release)</option>
+              </select>
+            </div>
 
-          <div>
-            <label className="block text-[10px] font-sans text-slate-400 mb-1">Device Filter (Optional)</label>
-            <input
-              type="text"
-              value={trig.ble_device || ''}
-              onChange={e => onUpdate({ ...trig, ble_device: e.target.value })}
-              placeholder="Leave blank for any device"
-              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
-            />
+            <div>
+              <label className="block text-[10px] font-sans text-slate-400 mb-1">Device Filter (Optional)</label>
+              <input
+                type="text"
+                value={trig.ble_device || ''}
+                onChange={e => onUpdate({ ...trig, ble_device: e.target.value })}
+                placeholder="Leave blank for any device"
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+              />
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -1029,6 +1157,13 @@ function TriggerNodeEditor({
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCollapsed(!collapsed)}
+            className="text-slate-400 hover:text-white transition p-0.5"
+          >
+            {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+          </button>
           <span className="w-5 h-5 rounded-full bg-amber-950 text-amber-300 font-bold text-[10px] flex items-center justify-center border border-amber-800 shrink-0">
             T{tIdx + 1}
           </span>
@@ -1051,7 +1186,7 @@ function TriggerNodeEditor({
         </div>
 
         <div className="flex items-center gap-1.5">
-          {hasOptions && (
+          {hasOptions && !collapsed && (
             <button
               type="button"
               onClick={toggleAdvanced}
@@ -1066,16 +1201,12 @@ function TriggerNodeEditor({
               <span>{showAdvanced ? 'Simple View' : 'Edit Details'}</span>
             </button>
           )}
-          <button
-            type="button"
-            onClick={onDelete}
-            className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition"
-            title="Delete trigger"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {actionButtons}
         </div>
       </div>
+
+      {!collapsed && (
+        <>
 
       {/* Option Selector Big Pills in Smart Grid Rows */}
       {hasOptions && (
@@ -1251,6 +1382,8 @@ function TriggerNodeEditor({
           </div>
         </div>
       )}
+        </>
+      )}
     </div>
   );
 }
@@ -1264,6 +1397,11 @@ interface ActionNodeEditorProps {
   catalog?: Catalog;
   onUpdate: (updated: AutomationAction) => void;
   onDelete: () => void;
+  onDuplicate?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  isFirst?: boolean;
+  isLast?: boolean;
   onOpenAddConditionDialog?: (onAdd: (cond: AutomationCondition) => void) => void;
   onOpenAddActionDialog?: (onAdd: (act: AutomationAction) => void) => void;
 }
@@ -1289,11 +1427,61 @@ function ActionNodeEditor({
   catalog,
   onUpdate,
   onDelete,
+  onDuplicate,
+  onMoveUp,
+  onMoveDown,
+  isFirst,
+  isLast,
   onOpenAddConditionDialog,
   onOpenAddActionDialog
 }: ActionNodeEditorProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const actionButtons = (
+    <div className="flex items-center gap-1">
+      {onMoveUp && (
+        <button
+          type="button"
+          onClick={onMoveUp}
+          disabled={isFirst}
+          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition"
+          title="Move up"
+        >
+          <ArrowUp className="w-3.5 h-3.5" />
+        </button>
+      )}
+      {onMoveDown && (
+        <button
+          type="button"
+          onClick={onMoveDown}
+          disabled={isLast}
+          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition"
+          title="Move down"
+        >
+          <ArrowDown className="w-3.5 h-3.5" />
+        </button>
+      )}
+      {onDuplicate && (
+        <button
+          type="button"
+          onClick={onDuplicate}
+          className="p-1 text-slate-500 hover:text-cyan-400 transition"
+          title="Duplicate action"
+        >
+          <Copy className="w-3.5 h-3.5" />
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onDelete}
+        className="p-1 text-slate-500 hover:text-rose-400 transition"
+        title="Delete action"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
 
   // If IF_THEN:
   if (act.type === 'if_then') {
@@ -1313,14 +1501,7 @@ function ActionNodeEditor({
               IF - THEN - ELSE {depth > 0 && `(Level ${depth + 1})`}
             </span>
           </div>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="p-1 text-slate-500 hover:text-rose-400 transition"
-            title="Delete block"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {actionButtons}
         </div>
 
         {!collapsed && (
@@ -1392,16 +1573,7 @@ function ActionNodeEditor({
               CHOOSE (Sequential Branching) {depth > 0 && `(Level ${depth + 1})`}
             </span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={onDelete}
-              className="p-1 text-slate-500 hover:text-rose-400 transition"
-              title="Delete block"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          {actionButtons}
         </div>
 
         {!collapsed && (
@@ -1524,6 +1696,13 @@ function ActionNodeEditor({
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCollapsed(!collapsed)}
+            className="text-slate-400 hover:text-white transition p-0.5"
+          >
+            {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+          </button>
           <span className="w-5 h-5 rounded-full bg-emerald-950 text-emerald-300 font-bold text-[10px] flex items-center justify-center border border-emerald-800 shrink-0">
             A{index + 1}
           </span>
@@ -1541,7 +1720,7 @@ function ActionNodeEditor({
         </div>
 
         <div className="flex items-center gap-1.5">
-          {hasOptions && (
+          {hasOptions && !collapsed && (
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
@@ -1556,16 +1735,12 @@ function ActionNodeEditor({
               <span>{showAdvanced ? 'Simple View' : 'Edit Details'}</span>
             </button>
           )}
-          <button
-            type="button"
-            onClick={onDelete}
-            className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition"
-            title="Delete action"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {actionButtons}
         </div>
       </div>
+
+      {!collapsed && (
+        <>
 
       {/* Option Selector Big Pills in Smart Grid Rows */}
       {hasOptions && (
@@ -1770,21 +1945,72 @@ function ActionNodeEditor({
               </>
             )}
 
-            {act.type === 'delay' && (
-              <div className="col-span-2">
-                <label className="block text-[10px] font-sans text-slate-500">Delay Duration (ms)</label>
-                <input
-                  type="number"
-                  value={act.delay_ms !== undefined && act.delay_ms !== null ? act.delay_ms : (act.ms !== undefined && act.ms !== null ? act.ms : '')}
-                  onChange={e => {
-                    const val = e.target.value === '' ? 0 : parseInt(e.target.value) || 0;
-                    onUpdate({ ...act, delay_ms: val, ms: val });
-                  }}
-                  placeholder="0"
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
-                />
-              </div>
-            )}
+            {act.type === 'delay' && (() => {
+              const currentTotalMs = act.delay_ms !== undefined && act.delay_ms !== null ? act.delay_ms : (act.ms !== undefined && act.ms !== null ? act.ms : 0);
+              // Choose friendliest display unit
+              let defaultUnit: 'ms' | 's' | 'mins' | 'hrs' = 'ms';
+              let displayVal = currentTotalMs;
+              if (currentTotalMs > 0) {
+                if (currentTotalMs % 3600000 === 0) {
+                  defaultUnit = 'hrs';
+                  displayVal = currentTotalMs / 3600000;
+                } else if (currentTotalMs % 60000 === 0) {
+                  defaultUnit = 'mins';
+                  displayVal = currentTotalMs / 60000;
+                } else if (currentTotalMs % 1000 === 0) {
+                  defaultUnit = 's';
+                  displayVal = currentTotalMs / 1000;
+                }
+              }
+              const multipliers: Record<string, number> = {
+                ms: 1,
+                s: 1000,
+                mins: 60000,
+                hrs: 3600000
+              };
+
+              return (
+                <div className="col-span-2">
+                  <label className="block text-[10px] font-sans text-slate-500 mb-1">Delay Duration</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={displayVal || ''}
+                      onChange={e => {
+                        const raw = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0;
+                        const factor = multipliers[defaultUnit] || 1;
+                        const total = Math.round(raw * factor);
+                        onUpdate({ ...act, delay_ms: total, ms: total });
+                      }}
+                      placeholder="0"
+                      className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-slate-200 font-mono text-xs focus:outline-none focus:border-emerald-500"
+                    />
+                    <select
+                      value={defaultUnit}
+                      onChange={e => {
+                        const newUnit = e.target.value;
+                        const newFactor = multipliers[newUnit] || 1;
+                        const total = Math.round(displayVal * newFactor);
+                        onUpdate({ ...act, delay_ms: total, ms: total });
+                      }}
+                      className="bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-emerald-400 font-sans text-xs focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="ms">Milliseconds (ms)</option>
+                      <option value="s">Seconds (s)</option>
+                      <option value="mins">Minutes (mins)</option>
+                      <option value="hrs">Hours (hrs)</option>
+                    </select>
+                  </div>
+                  {currentTotalMs > 0 && (
+                    <div className="text-[10px] text-slate-500 mt-1 font-mono">
+                      = {currentTotalMs.toLocaleString()} ms ({currentTotalMs >= 1000 ? `${(currentTotalMs / 1000).toFixed(1)}s` : `${currentTotalMs}ms`})
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {act.type === 'can_tx' && (
               <>
@@ -1863,6 +2089,8 @@ function ActionNodeEditor({
           )}
         </div>
       )}
+        </>
+      )}
     </div>
   );
 }
@@ -1927,6 +2155,30 @@ function ActionListEditor({
                           const next = actions.filter((_, i) => i !== idx);
                           onUpdate(next);
                         }}
+                        onDuplicate={() => {
+                          const dup: AutomationAction = JSON.parse(JSON.stringify(act));
+                          dup.id = `act_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+                          delete dup._clientId;
+                          const next = [...actions];
+                          next.splice(idx + 1, 0, dup);
+                          onUpdate(next);
+                        }}
+                        onMoveUp={idx > 0 ? () => {
+                          const next = [...actions];
+                          const temp = next[idx];
+                          next[idx] = next[idx - 1];
+                          next[idx - 1] = temp;
+                          onUpdate(next);
+                        } : undefined}
+                        onMoveDown={idx < actions.length - 1 ? () => {
+                          const next = [...actions];
+                          const temp = next[idx];
+                          next[idx] = next[idx + 1];
+                          next[idx + 1] = temp;
+                          onUpdate(next);
+                        } : undefined}
+                        isFirst={idx === 0}
+                        isLast={idx === actions.length - 1}
                         onOpenAddConditionDialog={onOpenAddConditionDialog}
                         onOpenAddActionDialog={onOpenAddActionDialog}
                       />
@@ -2184,6 +2436,12 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [espIp, setEspIp] = useState<string>(() => getDefaultEspIp());
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
+
+  // Section collapse states
+  const [collapsedTriggers, setCollapsedTriggers] = useState(false);
+  const [collapsedConditions, setCollapsedConditions] = useState(false);
+  const [collapsedActions, setCollapsedActions] = useState(false);
+  const [collapsedOffActions, setCollapsedOffActions] = useState(false);
 
   const [useMqttSync, setUseMqttSync] = useState<boolean>(!isRunningOnDevice());
   const [mqttRemoteConfig, setMqttRemoteConfig] = useState(() => {
@@ -2743,60 +3001,116 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         {/* Left Column: Active Rule Editor (8 cols = ~2/3 of area) */}
         {activeRule ? (
           <div className="lg:col-span-8 space-y-4">
-            {/* Active Rule Action Strip */}
-            <div className="flex items-center justify-between gap-2.5 p-3 rounded-xl bg-slate-900 border border-slate-800 shadow-sm">
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <span
-                  className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                    activeRule.enabled ? 'bg-emerald-400' : 'bg-slate-600'
-                  }`}
-                />
-                <input
-                  type="text"
-                  value={activeRule.name}
-                  onChange={e => handleUpdateActiveRule({ name: e.target.value })}
-                  placeholder="Automation Name"
-                  className="bg-transparent text-sm font-bold text-white focus:outline-none focus:ring-1 focus:ring-cyan-500/50 rounded px-1.5 py-0.5 w-full min-w-0 truncate"
-                />
+            {/* Active Rule Action Strip & Properties */}
+            <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 shadow-sm space-y-3">
+              <div className="flex items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                      activeRule.enabled ? 'bg-emerald-400' : 'bg-slate-600'
+                    }`}
+                  />
+                  <input
+                    type="text"
+                    value={activeRule.name}
+                    onChange={e => handleUpdateActiveRule({ name: e.target.value })}
+                    placeholder="Automation Name"
+                    className="bg-transparent text-sm font-bold text-white focus:outline-none focus:ring-1 focus:ring-cyan-500/50 rounded px-1.5 py-0.5 w-full min-w-0 truncate"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowCommunityModal(true)}
+                    title="Share or contribute to Community Automations"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                  >
+                    <Share2 className="w-3.5 h-3.5 text-cyan-400" />
+                    <span className="hidden sm:inline">Share</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateActiveRule({ enabled: !activeRule.enabled })}
+                    className={`px-2 py-1 rounded-lg text-xs font-semibold border transition ${
+                      activeRule.enabled
+                        ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    {activeRule.enabled ? 'Enabled' : 'Disabled'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDuplicateRule(activeRule)}
+                    title="Duplicate active rule"
+                    className="p-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-cyan-400" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteRule(activeRule.id)}
+                    title="Delete active rule"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition active:scale-95"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                    <span className="hidden sm:inline">Delete</span>
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowCommunityModal(true)}
-                  title="Share or contribute to Community Automations"
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
-                >
-                  <Share2 className="w-3.5 h-3.5 text-cyan-400" />
-                  <span className="hidden sm:inline">Share</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleUpdateActiveRule({ enabled: !activeRule.enabled })}
-                  className={`px-2 py-1 rounded-lg text-xs font-semibold border transition ${
-                    activeRule.enabled
-                      ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
-                      : 'bg-slate-800 text-slate-400 border-slate-700'
-                  }`}
-                >
-                  {activeRule.enabled ? 'Enabled' : 'Disabled'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDuplicateRule(activeRule)}
-                  title="Duplicate active rule"
-                  className="p-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
-                >
-                  <Copy className="w-3.5 h-3.5 text-cyan-400" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteRule(activeRule.id)}
-                  title="Delete active rule"
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition active:scale-95"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                  <span className="hidden sm:inline">Delete</span>
-                </button>
+
+              {/* Automation Properties Bar */}
+              <div className="pt-2 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-400 mb-1">Execution Mode</label>
+                  <select
+                    value={activeRule.exec_mode || 'one_shot'}
+                    onChange={e => handleUpdateActiveRule({ exec_mode: e.target.value as any })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="one_shot">one_shot</option>
+                    <option value="toggle">toggle</option>
+                    <option value="continuous_hold">continuous_hold</option>
+                    <option value="on_change">on_change</option>
+                    <option value="poll_verify">poll_verify</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-400 mb-1">Cooldown (ms)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="50"
+                    value={activeRule.cooldown_ms !== undefined ? activeRule.cooldown_ms : 0}
+                    onChange={e => handleUpdateActiveRule({ cooldown_ms: parseInt(e.target.value) || 0 })}
+                    placeholder="0"
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-400 mb-1">Home Assistant Icon</label>
+                  <input
+                    type="text"
+                    value={activeRule.ha_icon || ''}
+                    onChange={e => handleUpdateActiveRule({ ha_icon: e.target.value })}
+                    placeholder="mdi:car-cog"
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+
+                <div className="flex flex-col justify-end">
+                  <label className="flex items-center gap-2 p-1.5 rounded-lg bg-slate-950 border border-slate-800/90 cursor-pointer hover:border-slate-700 transition">
+                    <input
+                      type="checkbox"
+                      checked={activeRule.ha_expose ?? true}
+                      onChange={e => handleUpdateActiveRule({ ha_expose: e.target.checked })}
+                      className="rounded bg-slate-900 border-slate-700 text-cyan-500 focus:ring-0 w-3.5 h-3.5"
+                    />
+                    <span className="text-[11px] font-medium text-slate-300">Expose to HA</span>
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -2804,65 +3118,138 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             <div className="can-do-section-box trig-section space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCollapsedTriggers(!collapsedTriggers)}
+                    className="text-slate-400 hover:text-white transition p-0.5"
+                    title={collapsedTriggers ? "Expand triggers" : "Collapse triggers"}
+                  >
+                    {collapsedTriggers ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                  </button>
                   <span className="p-1 rounded-lg bg-amber-500/20 text-amber-400">
                     <Zap className="w-3.5 h-3.5" />
                   </span>
                   <span className="text-xs font-bold uppercase tracking-wider text-white">
                     Triggers
                   </span>
+
+                  {/* Trigger Combination Mode Pills (Any / All / Sequence) */}
+                  <div className="flex items-center gap-1 ml-2 p-0.5 rounded-lg bg-slate-950 border border-slate-800">
+                    {(['any', 'all', 'sequence'] as const).map(mode => {
+                      const currentMode = activeRule.trigger_mode || 'any';
+                      const isSelected = currentMode === mode;
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => handleUpdateActiveRule({ trigger_mode: mode })}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition ${
+                            isSelected
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-sm'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                          title={
+                            mode === 'any'
+                              ? 'Fires when ANY trigger matches (OR logic)'
+                              : mode === 'all'
+                              ? 'Fires when ALL triggers match concurrently (AND logic)'
+                              : 'Fires when triggers match in EXACT sequential order'
+                          }
+                        >
+                          {mode}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <span className="text-[11px] font-mono text-amber-400 font-semibold">
                   {activeRule.triggers.length} {activeRule.triggers.length === 1 ? 'Trigger' : 'Triggers'}
                 </span>
               </div>
 
-              {activeRule.triggers.length === 0 ? (
-                <div className="p-3 rounded-xl bg-slate-950/40 border border-dashed border-slate-800 text-center text-xs text-slate-500 italic">
-                  No triggers defined. Automation will never fire.
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {activeRule.triggers.map((trig, tIdx) => {
-                    const stableKey = trig._clientId || (trig._clientId = `trig_client_${tIdx}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`);
-                    return (
-                      <TriggerNodeEditor
-                        key={stableKey}
-                        trig={trig}
-                        tIdx={tIdx}
-                        catalog={catalog}
-                        onUpdate={updated => {
-                          const next = [...activeRule.triggers];
-                          next[tIdx] = { ...updated, _clientId: stableKey };
-                          handleUpdateActiveRule({ triggers: next });
-                        }}
-                        onDelete={() => {
-                          const next = activeRule.triggers.filter((_, i) => i !== tIdx);
-                          handleUpdateActiveRule({ triggers: next });
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-              )}
+              {!collapsedTriggers && (
+                <>
+                  {activeRule.triggers.length === 0 ? (
+                    <div className="p-3 rounded-xl bg-slate-950/40 border border-dashed border-slate-800 text-center text-xs text-slate-500 italic">
+                      No triggers defined. Automation will never fire.
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {activeRule.triggers.map((trig, tIdx) => {
+                        const stableKey = trig._clientId || (trig._clientId = `trig_client_${tIdx}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`);
+                        return (
+                          <TriggerNodeEditor
+                            key={stableKey}
+                            trig={trig}
+                            tIdx={tIdx}
+                            catalog={catalog}
+                            onUpdate={updated => {
+                              const next = [...activeRule.triggers];
+                              next[tIdx] = { ...updated, _clientId: stableKey };
+                              handleUpdateActiveRule({ triggers: next });
+                            }}
+                            onDelete={() => {
+                              const next = activeRule.triggers.filter((_, i) => i !== tIdx);
+                              handleUpdateActiveRule({ triggers: next });
+                            }}
+                            onDuplicate={() => {
+                              const dup: AutomationTrigger = JSON.parse(JSON.stringify(trig));
+                              dup.id = `trig_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+                              delete dup._clientId;
+                              const next = [...activeRule.triggers];
+                              next.splice(tIdx + 1, 0, dup);
+                              handleUpdateActiveRule({ triggers: next });
+                            }}
+                            onMoveUp={tIdx > 0 ? () => {
+                              const next = [...activeRule.triggers];
+                              const temp = next[tIdx];
+                              next[tIdx] = next[tIdx - 1];
+                              next[tIdx - 1] = temp;
+                              handleUpdateActiveRule({ triggers: next });
+                            } : undefined}
+                            onMoveDown={tIdx < activeRule.triggers.length - 1 ? () => {
+                              const next = [...activeRule.triggers];
+                              const temp = next[tIdx];
+                              next[tIdx] = next[tIdx + 1];
+                              next[tIdx + 1] = temp;
+                              handleUpdateActiveRule({ triggers: next });
+                            } : undefined}
+                            isFirst={tIdx === 0}
+                            isLast={tIdx === activeRule.triggers.length - 1}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
 
-              <button
-                type="button"
-                onClick={() =>
-                  openAddTriggerDialog(newTrig =>
-                    handleUpdateActiveRule({ triggers: [...activeRule.triggers, newTrig] })
-                  )
-                }
-                className="ha-section-add-btn accent-trig"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Trigger</span>
-              </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openAddTriggerDialog(newTrig =>
+                        handleUpdateActiveRule({ triggers: [...activeRule.triggers, newTrig] })
+                      )
+                    }
+                    className="ha-section-add-btn accent-trig"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add Trigger</span>
+                  </button>
+                </>
+              )}
             </div>
 
             {/* SECTION 2: CONDITIONS */}
             <div className="can-do-section-box cond-section space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCollapsedConditions(!collapsedConditions)}
+                    className="text-slate-400 hover:text-white transition p-0.5"
+                    title={collapsedConditions ? "Expand conditions" : "Collapse conditions"}
+                  >
+                    {collapsedConditions ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                  </button>
                   <span className="p-1 rounded-lg bg-sky-500/20 text-sky-400">
                     <Shield className="w-3.5 h-3.5" />
                   </span>
@@ -2875,21 +3262,31 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 </span>
               </div>
 
-              <ConditionListEditor
-                conditions={activeRule.conditions}
-                depth={0}
-                availableTriggers={activeRule.triggers}
-                catalog={catalog}
-                emptyText="No conditions set. Rule will always execute when triggers match."
-                onUpdate={conds => handleUpdateActiveRule({ conditions: conds })}
-                onOpenAddConditionDialog={openAddConditionDialog}
-              />
+              {!collapsedConditions && (
+                <ConditionListEditor
+                  conditions={activeRule.conditions}
+                  depth={0}
+                  availableTriggers={activeRule.triggers}
+                  catalog={catalog}
+                  emptyText="No conditions set. Rule will always execute when triggers match."
+                  onUpdate={conds => handleUpdateActiveRule({ conditions: conds })}
+                  onOpenAddConditionDialog={openAddConditionDialog}
+                />
+              )}
             </div>
 
             {/* SECTION 3: ACTIONS */}
             <div className="can-do-section-box act-section space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCollapsedActions(!collapsedActions)}
+                    className="text-slate-400 hover:text-white transition p-0.5"
+                    title={collapsedActions ? "Expand actions" : "Collapse actions"}
+                  >
+                    {collapsedActions ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                  </button>
                   <span className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400">
                     <Send className="w-3.5 h-3.5" />
                   </span>
@@ -2902,16 +3299,18 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 </span>
               </div>
 
-              <ActionListEditor
-                actions={activeRule.actions}
-                depth={0}
-                availableTriggers={activeRule.triggers}
-                catalog={catalog}
-                emptyText="No actions defined."
-                onUpdate={acts => handleUpdateActiveRule({ actions: acts })}
-                onOpenAddConditionDialog={openAddConditionDialog}
-                onOpenAddActionDialog={openAddActionDialog}
-              />
+              {!collapsedActions && (
+                <ActionListEditor
+                  actions={activeRule.actions}
+                  depth={0}
+                  availableTriggers={activeRule.triggers}
+                  catalog={catalog}
+                  emptyText="No actions defined."
+                  onUpdate={acts => handleUpdateActiveRule({ actions: acts })}
+                  onOpenAddConditionDialog={openAddConditionDialog}
+                  onOpenAddActionDialog={openAddActionDialog}
+                />
+              )}
             </div>
 
             {/* SECTION 4: OFF-ACTIONS (Visible only in Toggle mode) */}
@@ -2919,6 +3318,14 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               <div className="can-do-section-box off-act-section space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCollapsedOffActions(!collapsedOffActions)}
+                      className="text-slate-400 hover:text-white transition p-0.5"
+                      title={collapsedOffActions ? "Expand off-actions" : "Collapse off-actions"}
+                    >
+                      {collapsedOffActions ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                    </button>
                     <span className="p-1 rounded-lg bg-rose-500/20 text-rose-400">
                       <RotateCw className="w-3.5 h-3.5" />
                     </span>
@@ -2931,16 +3338,18 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   </span>
                 </div>
 
-                <ActionListEditor
-                  actions={activeRule.off_actions || []}
-                  depth={0}
-                  availableTriggers={activeRule.triggers}
-                  catalog={catalog}
-                  emptyText="No off-actions defined. Specify actions to run when toggled off."
-                  onUpdate={acts => handleUpdateActiveRule({ off_actions: acts })}
-                  onOpenAddConditionDialog={openAddConditionDialog}
-                  onOpenAddActionDialog={openAddActionDialog}
-                />
+                {!collapsedOffActions && (
+                  <ActionListEditor
+                    actions={activeRule.off_actions || []}
+                    depth={0}
+                    availableTriggers={activeRule.triggers}
+                    catalog={catalog}
+                    emptyText="No off-actions defined. Specify actions to run when toggled off."
+                    onUpdate={acts => handleUpdateActiveRule({ off_actions: acts })}
+                    onOpenAddConditionDialog={openAddConditionDialog}
+                    onOpenAddActionDialog={openAddActionDialog}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -3280,17 +3689,6 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 </button>
               </div>
             </div>
-          </div>
-
-          {/* Card 3: Quick Info & ESP32 Firmware Notes */}
-          <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 text-xs text-slate-400 space-y-1.5">
-            <div className="flex items-center gap-1.5 font-semibold text-slate-300">
-              <Info className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Firmware Redesign Note</span>
-            </div>
-            <p className="text-[11px] leading-relaxed text-slate-400">
-              As you rewrite the ESP32 firmware, this interface serves as the primary logic orchestrator. The ESP32 simply ingests and executes the generated JSON.
-            </p>
           </div>
         </div>
       </div>

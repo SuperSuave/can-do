@@ -142,8 +142,11 @@ struct AutomationRule {
     std::string id;
     std::string name;
     bool enabled = true;
+    bool ha_expose = true;
+    std::string ha_icon = "mdi:car-cog";
     uint32_t cooldown_ms = 0;
     std::string exec_mode = "one_shot"; // "one_shot", "toggle", "continuous_hold", etc.
+    std::string trigger_mode = "any";   // "any", "all", "sequence"
     uint32_t last_exec_time_ms = 0;
     std::vector<AutomationTrigger> triggers;
     std::vector<AutomationCondition> conditions;

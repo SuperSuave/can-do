@@ -322,6 +322,7 @@ export function compileAutomationRule(
     ha_expose: rule.ha_expose ?? true,
     ha_icon: rule.ha_icon || 'mdi:car-cog',
     exec_mode: rule.exec_mode || 'one_shot',
+    trigger_mode: rule.trigger_mode || 'any',
     cooldown_ms: rule.cooldown_ms ?? 500,
     triggers: (rule.triggers || []).map(trig => {
       if (trig.type === 'time_schedule' || trig.source === 'time' || trig.time) {

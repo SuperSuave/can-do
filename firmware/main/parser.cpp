@@ -502,6 +502,15 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
     cJSON* mode = cJSON_GetObjectItem(auto_json, "exec_mode");
     if (cJSON_IsString(mode)) out_rule.exec_mode = mode->valuestring;
 
+    cJSON* ha_exp = cJSON_GetObjectItem(auto_json, "ha_expose");
+    if (cJSON_IsBool(ha_exp)) out_rule.ha_expose = cJSON_IsTrue(ha_exp);
+
+    cJSON* ha_ic = cJSON_GetObjectItem(auto_json, "ha_icon");
+    if (cJSON_IsString(ha_ic)) out_rule.ha_icon = ha_ic->valuestring;
+
+    cJSON* trig_m = cJSON_GetObjectItem(auto_json, "trigger_mode");
+    if (cJSON_IsString(trig_m)) out_rule.trigger_mode = trig_m->valuestring;
+
     // Triggers
     cJSON* trigs = cJSON_GetObjectItem(auto_json, "triggers");
     if (cJSON_IsArray(trigs)) {
