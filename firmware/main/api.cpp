@@ -170,12 +170,18 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
     // Determine candidate file path
     if (strcmp(req->uri, "/") == 0) {
         snprintf(filepath, sizeof(filepath), "/spiffs/www/index.html");
-    } else if (strncmp(req->uri, "/catalog.json", 13) == 0) {
-        snprintf(filepath, sizeof(filepath), "/spiffs/catalog.json");
+    } else if (strncmp(req->uri, "/catalog.json", 13) == 0 || strstr(req->uri, "can_do_catalog.json")) {
+        // Look for catalog in root first (/spiffs/catalog.json), then under /spiffs/www/
+        struct stat st_test;
+        if (stat("/spiffs/catalog.json", &st_test) == 0 || stat("/spiffs/catalog.json.gz", &st_test) == 0) {
+            snprintf(filepath, sizeof(filepath), "/spiffs/catalog.json");
+        } else if (stat("/spiffs/can_do_catalog.json", &st_test) == 0) {
+            snprintf(filepath, sizeof(filepath), "/spiffs/can_do_catalog.json");
+        } else {
+            snprintf(filepath, sizeof(filepath), "/spiffs/www%s", req->uri);
+        }
     } else if (strncmp(req->uri, "/automations.json", 17) == 0) {
         snprintf(filepath, sizeof(filepath), "/spiffs/automations.json");
-    } else if (strstr(req->uri, "can_do_catalog.json")) {
-        snprintf(filepath, sizeof(filepath), "/spiffs/catalog.json");
     } else {
         snprintf(filepath, sizeof(filepath), "/spiffs/www%s", req->uri);
     }

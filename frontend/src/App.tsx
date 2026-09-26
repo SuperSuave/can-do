@@ -70,12 +70,10 @@ export default function App() {
   // 1. Core catalog state (Strictly from /catalog/can_do_catalog.json)
   const [catalog, setCatalog] = useState<Catalog>(() => {
     try {
-      const hasDrafts = (localStorage.getItem(STORAGE_KEY_DRAFT_ADDED) || '[]') !== '[]' ||
-                        (localStorage.getItem(STORAGE_KEY_DRAFT_MODIFIED) || '[]') !== '[]';
       const saved = localStorage.getItem(STORAGE_KEY_CATALOG);
-      if (saved && hasDrafts) {
+      if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.commands && parsed.vehicles) {
+        if (parsed && Array.isArray(parsed.commands) && Array.isArray(parsed.vehicles)) {
           return normalizeCatalog(parsed);
         }
       }
@@ -266,27 +264,52 @@ export default function App() {
     return selectedVehicleId !== 'all' ? catalog.vehicles.find(v => v.id === selectedVehicleId) || null : null;
   }, [selectedVehicleId, catalog.vehicles]);
 
-  // Pull latest catalog strictly from /catalog/can_do_catalog.json
+  // Pull latest catalog strictly from /catalog/can_do_catalog.json (with fallback paths)
   useEffect(() => {
+    let cancelled = false;
     const fetchCatalog = async () => {
       const hasDrafts = (localStorage.getItem(STORAGE_KEY_DRAFT_ADDED) || '[]') !== '[]' ||
                         (localStorage.getItem(STORAGE_KEY_DRAFT_MODIFIED) || '[]') !== '[]';
-      if (!hasDrafts) {
+      if (hasDrafts) return;
+
+      const endpoints = [
+        `${import.meta.env.BASE_URL}catalog/can_do_catalog.json`,
+        `${import.meta.env.BASE_URL}can_do_catalog.json`,
+        '/catalog.json',
+        '/catalog/can_do_catalog.json',
+      ];
+
+      for (const endpoint of endpoints) {
+        if (cancelled) return;
         try {
-          const res = await fetch(`${import.meta.env.BASE_URL}catalog/can_do_catalog.json`);
+          const res = await fetch(endpoint, { cache: 'no-cache' });
           if (res.ok) {
             const data = await res.json();
-            if (data && data.commands && data.vehicles) {
-              setCatalog(normalizeCatalog(data));
+            if (data && Array.isArray(data.commands) && Array.isArray(data.vehicles)) {
+              if (!cancelled) {
+                const normalized = normalizeCatalog(data);
+                setCatalog(normalized);
+                try {
+                  localStorage.setItem(STORAGE_KEY_CATALOG, JSON.stringify(normalized));
+                } catch {}
+              }
               return;
             }
           }
         } catch {
-          // Fallback to DEFAULT_CATALOG which is directly imported from /catalog
+          // Try next endpoint candidate
         }
+      }
+
+      // If all network endpoints fail and no catalog version set, ensure DEFAULT_CATALOG is loaded
+      if (!cancelled) {
+        setCatalog(prev => (prev?.commands?.length ? prev : DEFAULT_CATALOG));
       }
     };
     fetchCatalog();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Synchronize User Preferences directly from CAN Do device storage (resolves cross-device & force-refresh loss)
