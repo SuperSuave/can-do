@@ -146,13 +146,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       filename =
         vehicleFilter !== 'all'
           ? `can_do_${vehicleFilter}.dbc`
-          : `can_do_catalog_v${catalog.catalog_version}.dbc`;
+          : `can_do_catalog_v${catalog.can_do_version || 'unknown'}.dbc`;
       mimeType = 'text/plain;charset=utf-8';
     } else {
       filename =
         filterJsonToScope && vehicleFilter !== 'all'
           ? `can_do_${vehicleFilter}.json`
-          : `can_do_catalog_v${catalog.catalog_version}.json`;
+          : `can_do_catalog_v${catalog.can_do_version || 'unknown'}.json`;
       mimeType = 'application/json;charset=utf-8';
     }
 
@@ -180,7 +180,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-white">Export CAN Catalog</h3>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-300 font-mono border border-cyan-800/80">
-                  {catalog.catalog_version}
+                  {catalog.can_do_version || 'Loading...'}
                 </span>
               </div>
               <p className="text-xs text-slate-400">

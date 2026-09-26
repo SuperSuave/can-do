@@ -6,11 +6,17 @@ import zlib from 'zlib';
 import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
-  const appVersion = process.env.VITE_APP_VERSION || process.env.npm_package_version || '2026.9.5';
+  let pkgVersion = '';
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'));
+    pkgVersion = pkg.version || '';
+  } catch {}
+  const appVersion = process.env.VITE_APP_VERSION || pkgVersion || 'unknown';
 
   return {
     define: {
       __APP_VERSION__: JSON.stringify(appVersion),
+      __CAN_DO_VERSION__: JSON.stringify(appVersion),
     },
 
     // 1. Relative base path so it resolves cleanly when served directly by ESP32 IP or mDNS and GitHub Pages

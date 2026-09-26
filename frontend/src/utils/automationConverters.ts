@@ -411,7 +411,7 @@ export function exportToCandoJson(
     settings: {
       vehicle_model: settings.vehicle_model || 'all_egmp',
       unit_system: settings.unit_system || 'imperial',
-      firmware_version: settings.firmware_version || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.5'),
+      can_do_version: settings.can_do_version || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'unknown'),
       ntp_server: settings.ntp_server || 'pool.ntp.org',
       timezone: settings.timezone || 'UTC'
     },

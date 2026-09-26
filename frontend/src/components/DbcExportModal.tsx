@@ -74,7 +74,7 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
     const filename =
       vehicleFilter !== 'all'
         ? `can_do_${vehicleFilter}.dbc`
-        : `can_do_catalog_v${catalog.catalog_version}.dbc`;
+        : `can_do_catalog_v${catalog.can_do_version || 'unknown'}.dbc`;
 
     const blob = new Blob([dbcContent], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);

@@ -218,7 +218,7 @@ export interface Vehicle {
 }
 
 export interface Catalog {
-  catalog_version: string;
+  can_do_version: string;
   vehicles: Vehicle[];
   commands: Command[];
   automations?: any[];

@@ -3,7 +3,7 @@ import { AutomationRule, AutomationSettings } from '../types/automation';
 export const DEFAULT_AUTOMATION_SETTINGS: AutomationSettings = {
   vehicle_model: 'all_egmp',
   unit_system: 'imperial',
-  firmware_version: '2026.9.5'
+  can_do_version: '2026.9.6'
 };
 
 export const DEFAULT_AUTOMATION_RULES: AutomationRule[] = [

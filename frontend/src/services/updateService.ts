@@ -75,9 +75,9 @@ export function getLastUpdateInstalledTime(): string | null {
 }
 
 export async function checkForUpdates(
-  currentCatalogVersion = '2026.9.5',
-  currentFirmwareVersion = '2026.9.5',
-  currentFrontendVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.5'
+  currentCatalogVersion = '',
+  currentFirmwareVersion = '',
+  currentFrontendVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : ''
 ): Promise<UpdateCheckResult> {
   try {
     const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
@@ -92,10 +92,10 @@ export async function checkForUpdates(
     }
 
     const release = await res.json();
-    const tag = release.tag_name || '2026.9.5';
-    const isFwNewer = isVersionNewer(tag, currentFirmwareVersion);
-    const isCatNewer = isVersionNewer(tag, currentCatalogVersion);
-    const isFrontNewer = isVersionNewer(tag, currentFrontendVersion);
+    const tag = release.tag_name || '';
+    const isFwNewer = Boolean(tag && currentFirmwareVersion && isVersionNewer(tag, currentFirmwareVersion));
+    const isCatNewer = Boolean(tag && currentCatalogVersion && isVersionNewer(tag, currentCatalogVersion));
+    const isFrontNewer = Boolean(tag && currentFrontendVersion && isVersionNewer(tag, currentFrontendVersion));
 
     // Locate assets if attached to GitHub release
     let firmwareUrl: string | undefined;
@@ -167,12 +167,12 @@ async function checkFallbackCatalogUpdate(currentCatalogVersion: string): Promis
     });
     if (res.ok) {
       const data = await res.json();
-      const remoteVersion = data.catalog_version || '2026.9.1';
-      const hasCatalogUpdate = isVersionNewer(remoteVersion, currentCatalogVersion);
+      const remoteVersion = data.can_do_version || '';
+      const hasCatalogUpdate = Boolean(remoteVersion && currentCatalogVersion && isVersionNewer(remoteVersion, currentCatalogVersion));
 
       return {
         has_update: hasCatalogUpdate,
-        version: `catalog-v${remoteVersion}`,
+        version: `v${remoteVersion}`,
         release_name: `Message Catalog Update v${remoteVersion}`,
         notes: 'Latest community CAN bus message decoders and vehicle definitions.',
         components: {

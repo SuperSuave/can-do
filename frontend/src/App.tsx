@@ -324,8 +324,8 @@ export default function App() {
       const now = new Date();
       const currentHhMm = now.toTimeString().slice(0, 5);
       if (currentHhMm === userPreferences.update_schedule.time) {
-        const currentFront = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.5';
-        const currentCat = catalog?.catalog_version || currentFront;
+        const currentFront = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__ !== 'unknown') ? __APP_VERSION__ : (catalog?.can_do_version || '');
+        const currentCat = catalog?.can_do_version || currentFront;
         checkForUpdates(currentCat, currentCat, currentFront).then(async (res) => {
           if (res.has_update) {
             console.log('[Scheduler] New update available:', res.release_name || res.version);
@@ -354,7 +354,7 @@ export default function App() {
     }, 60000);
 
     return () => clearInterval(interval);
-  }, [userPreferences.update_schedule, userPreferences.update_policy, userPreferences.update_components, catalog.catalog_version]);
+  }, [userPreferences.update_schedule, userPreferences.update_policy, userPreferences.update_components, catalog.can_do_version]);
 
   const handleCompleteOnboarding = (prefs: UserPreferences) => {
     const saved = saveUserPreferences(prefs);
@@ -694,7 +694,7 @@ export default function App() {
           const normalized = normalizeCatalog(data);
           setCatalog(normalized);
           localStorage.setItem(STORAGE_KEY_CATALOG, JSON.stringify(normalized));
-          alert(`Successfully reloaded catalog (v${data.catalog_version || '1.0.0'}) from /catalog!`);
+          alert(`Successfully reloaded catalog (v${data.can_do_version || 'unknown'}) from /catalog!`);
           return;
         }
       }
@@ -877,7 +877,7 @@ export default function App() {
       'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(catalog, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `catalog-v${catalog.catalog_version}.json`);
+    downloadAnchor.setAttribute('download', `catalog-v${catalog.can_do_version || 'unknown'}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -896,7 +896,7 @@ export default function App() {
             </h1>
             <div className="mt-2 flex items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-[var(--input-bg)] text-cyan-400 border border-[var(--border-color)] shadow-sm">
-                {catalog.catalog_version}
+                {catalog.can_do_version || 'Loading...'}
               </span>
               <span className="text-xs text-[var(--text-muted)]">
                 Community Contribution Hub
@@ -1357,7 +1357,7 @@ export default function App() {
             <div className="flex flex-col sm:flex-row items-center gap-1.5 sm:gap-2 text-slate-300 font-medium">
               <span className="font-semibold text-white tracking-wide">CAN Do Automations</span>
               <span className="hidden sm:inline text-slate-600">•</span>
-              <span className="text-[var(--text-muted)] font-mono text-[11px]">{catalog.catalog_version}</span>
+              <span className="text-[var(--text-muted)] font-mono text-[11px]">{catalog.can_do_version || 'unknown'}</span>
               <span className="hidden sm:inline text-slate-600">•</span>
               <span className="text-[var(--text-muted)]">Community Message Catalog</span>
             </div>

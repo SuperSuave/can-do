@@ -56,7 +56,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(catalog, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `catalog-v${catalog.catalog_version}.json`);
+    downloadAnchor.setAttribute('download', `catalog-v${catalog.can_do_version || 'unknown'}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -76,7 +76,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="text-base font-bold text-white tracking-tight">CAN Do</span>
                   <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-cyan-300 font-mono border border-slate-700">
-                    {catalog.catalog_version}
+                    {catalog.can_do_version || 'Loading...'}
                   </span>
                 </div>
                 <div className="text-[11px] text-slate-400 font-medium">

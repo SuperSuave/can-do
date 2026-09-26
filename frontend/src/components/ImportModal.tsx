@@ -124,9 +124,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       let catalogCandidate: Catalog;
 
       // Handle full catalog object
-      if (parsed.catalog_version && Array.isArray(parsed.commands)) {
+      const incomingVer = parsed.can_do_version;
+      if (incomingVer && Array.isArray(parsed.commands)) {
         catalogCandidate = {
-          catalog_version: parsed.catalog_version,
+          can_do_version: incomingVer,
           vehicles: Array.isArray(parsed.vehicles) ? parsed.vehicles : currentCatalog.vehicles,
           commands: parsed.commands
         };
@@ -134,7 +135,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       // Handle array of commands
       else if (Array.isArray(parsed)) {
         catalogCandidate = {
-          catalog_version: currentCatalog.catalog_version,
+          can_do_version: currentCatalog.can_do_version,
           vehicles: currentCatalog.vehicles,
           commands: parsed
         };
@@ -142,13 +143,13 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       // Handle single command object
       else if (parsed.id && parsed.name) {
         catalogCandidate = {
-          catalog_version: currentCatalog.catalog_version,
+          can_do_version: currentCatalog.can_do_version,
           vehicles: currentCatalog.vehicles,
           commands: [parsed]
         };
       } else {
         throw new Error(
-          'Unrecognized JSON structure. Expected a CAN Do catalog object with "catalog_version" & "commands", or an array of command objects.'
+          'Unrecognized JSON structure. Expected a CAN Do catalog object with "can_do_version" & "commands", or an array of command objects.'
         );
       }
 
@@ -212,7 +213,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       parsedData.vehicles.forEach(v => vehicleMap.set(v.id, v));
 
       const merged: Catalog = {
-        catalog_version: parsedData.catalog_version || currentCatalog.catalog_version,
+        can_do_version: parsedData.can_do_version || currentCatalog.can_do_version,
         vehicles: Array.from(vehicleMap.values()),
         commands: Array.from(cmdMap.values())
       };

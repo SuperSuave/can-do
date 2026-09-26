@@ -68,7 +68,7 @@ export function generateIssueMarkdown(
     markdown += `**Contributor:** ${contribution.contributorName}\n`;
   }
   markdown += `**Target Repository:** \`${config.owner}/${config.repo}\` (\`${config.filePath}\`)\n`;
-  markdown += `**Catalog Version:** \`${catalog.catalog_version}\`\n\n`;
+  markdown += `**CAN Do Version:** \`${catalog.can_do_version}\`\n\n`;
 
   if (contribution.notes) {
     markdown += `### 📝 Description & Research Notes\n${contribution.notes}\n\n`;

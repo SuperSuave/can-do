@@ -172,7 +172,7 @@ export interface AutomationRule {
 export interface AutomationSettings {
   vehicle_model?: string;
   unit_system?: 'imperial' | 'metric';
-  firmware_version?: string;
+  can_do_version?: string;
   capture_mode?: 'auto' | 'paused' | 'disabled';
   ntp_server?: string;
   timezone?: string;

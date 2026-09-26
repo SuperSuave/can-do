@@ -52,7 +52,7 @@ jobs:
       - name: Build
         working-directory: frontend
         run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || node -e "try { console.log(JSON.parse(require('fs').readFileSync('../catalog/can_do_catalog.json')).catalog_version); } catch(e){ console.log('2026.9.4'); }")
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || node -e "try { const c = JSON.parse(require('fs').readFileSync('../catalog/can_do_catalog.json')); console.log(c.can_do_version || c.catalog_version || require('./package.json').version); } catch(e){ console.log(require('./package.json').version); }")
           echo "Building frontend with VITE_APP_VERSION=$LATEST_TAG"
           VITE_APP_VERSION="$LATEST_TAG" npm run build
 

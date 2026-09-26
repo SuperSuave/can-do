@@ -654,7 +654,7 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
         {/* Modal Footer */}
         <div className="flex items-center justify-between p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)]">
           <span className="text-[11px] text-[var(--text-muted)] font-mono">
-            Catalog Version: {catalog.catalog_version} • {catalog.commands.length} Commands
+            CAN Do Version: {catalog.can_do_version || 'unknown'} • {catalog.commands.length} Commands
           </span>
           <button
             type="button"

@@ -12,7 +12,7 @@ import urllib.request
 import urllib.error
 import time
 
-DEFAULT_IP = "192.168.107.50"
+DEFAULT_IP = "192.168.86.228"
 
 def truncate_remote_file(ip, remote_path):
     url = f"http://{ip}/api/upload"
@@ -63,6 +63,7 @@ def main():
 
     # 0. Clean up known stale hashed assets from previous builds to prevent LittleFS exhaustion
     historic_stale = [
+        "/spiffs/www/index-BBflTC1q.js.gz",
         "/spiffs/www/index-DzOlfj10.js.gz",
         "/spiffs/www/index-uQb2UU3p.css.gz",
         "/spiffs/www/index-BNa0XSA6.js.gz",

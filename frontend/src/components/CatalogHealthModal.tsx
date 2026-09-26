@@ -47,7 +47,7 @@ export const CatalogHealthModal: React.FC<CatalogHealthModalProps> = ({
 
   const handleCopyReport = () => {
     const text = `CAN Do Catalog Health Audit:
-Catalog Version: ${catalog.catalog_version}
+CAN Do Version: ${catalog.can_do_version || 'unknown'}
 Status: ${report.isValid ? 'VALID' : 'HAS ERRORS'}
 Total Commands: ${report.totalCommands}
 Total Vehicles: ${catalog.vehicles.length}

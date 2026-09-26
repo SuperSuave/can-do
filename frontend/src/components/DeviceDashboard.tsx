@@ -68,7 +68,7 @@ export interface SystemStatus {
   rx_missed_count: number;
   rx_overrun_count: number;
   bus_error_count: number;
-  firmware_version?: string;
+  can_do_version?: string;
   free_heap?: number;
   uptime_sec?: number;
 }
@@ -269,15 +269,15 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const handleCheckForUpdates = async () => {
     setIsCheckingUpdate(true);
     try {
-      const currentFront = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.5';
-      const currentFw = status?.firmware_version || currentFront;
-      const currentCat = catalog?.catalog_version || currentFront;
+      const currentFront = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__ !== 'unknown') ? __APP_VERSION__ : (status?.can_do_version || catalog?.can_do_version || '');
+      const currentFw = status?.can_do_version || currentFront;
+      const currentCat = catalog?.can_do_version || currentFront;
       const res = await checkForUpdates(currentCat, currentFw, currentFront);
       setUpdateResult(res);
       if (res.has_update) {
         showNotice(`Update available: ${res.release_name || res.version}`);
       } else {
-        showNotice(`All components are up to date (${currentFw})`);
+        showNotice(`All components are up to date (${currentFw || 'Current'})`);
       }
     } catch (e: any) {
       showNotice(`Failed to check updates: ${e.message || e}`, 'error');
@@ -2217,7 +2217,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   <span>ESP32 Firmware</span>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950/60 text-cyan-300 border border-cyan-800/40">
-                  {status?.firmware_version || '2026.9.5'}
+                  {status?.can_do_version || (status ? 'unknown' : 'Loading...')}
                 </span>
               </div>
               <div className="text-xs text-[var(--text-muted)] space-y-1">
@@ -2234,7 +2234,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   <span>Message Catalog</span>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-teal-950/60 text-teal-300 border border-teal-800/40">
-                  {catalog?.catalog_version || '2026.9.5'}
+                  {catalog?.can_do_version || 'Loading...'}
                 </span>
               </div>
               <div className="text-xs text-[var(--text-muted)] space-y-1">
@@ -2251,7 +2251,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   <span>Web Front-End</span>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-indigo-950/60 text-indigo-300 border border-indigo-800/40">
-                  {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2026.9.5'}
+                  {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '—'}
                 </span>
               </div>
               <div className="text-xs text-[var(--text-muted)] space-y-1">

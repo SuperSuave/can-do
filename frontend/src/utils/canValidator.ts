@@ -560,8 +560,8 @@ export function validateCatalog(catalog: Catalog): CatalogValidationReport {
     action: 0
   };
 
-  if (!catalog.catalog_version) {
-    errors.push({ type: 'error', field: 'catalog_version', message: 'Missing catalog_version.' });
+  if (!catalog.can_do_version) {
+    errors.push({ type: 'error', field: 'can_do_version', message: 'Missing can_do_version.' });
   }
 
   if (!Array.isArray(catalog.vehicles) || catalog.vehicles.length === 0) {
