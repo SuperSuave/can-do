@@ -57,6 +57,16 @@ export function compileCondition(cond: AutomationCondition): any {
     if (cond.logic === 'not') return { not: subConds[0] || {} };
   }
 
+  if (cond.type === 'triggered_by' || cond.type === 'trigger' || cond.trigger_id !== undefined) {
+    return {
+      type: 'triggered_by',
+      trigger_id: cond.trigger_id || '',
+      ...(cond.source_command_id ? { source_command_id: cond.source_command_id } : {}),
+      ...(cond.source_command_name ? { source_command_name: cond.source_command_name } : {}),
+      ...(cond.option_label ? { option_label: cond.option_label } : {})
+    };
+  }
+
   if (cond.type === 'time_condition' || cond.type === 'time') {
     return {
       type: 'time_condition',
@@ -87,7 +97,10 @@ export function compileCondition(cond: AutomationCondition): any {
     byte: dKey,
     mask: maskVal,
     operator: op,
-    value: targetVal
+    value: targetVal,
+    ...(cond.source_command_id ? { source_command_id: cond.source_command_id } : {}),
+    ...(cond.source_command_name ? { source_command_name: cond.source_command_name } : {}),
+    ...(cond.option_label ? { option_label: cond.option_label } : {})
   };
 }
 
@@ -201,7 +214,13 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
             can_id: step.can_id || canId,
             bus: step.bus ?? bus,
             payload: Object.keys(stepPayload).length > 0 ? stepPayload : { D1: '0x01' },
-            repeat: step.repeat || 1
+            repeat: step.repeat || 1,
+            ...(idx === 0 ? {
+              source_command_id: entityId,
+              source_command_name: cmd.ha_metadata?.name || cmd.name || cmd.id,
+              option_label: opt?.label || commandLabel,
+              entity_id: entityId
+            } : {})
           });
           if (idx < opt.steps.length - 1 && delayMs > 0) {
             inlinedSteps.push({
@@ -221,7 +240,11 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
           can_id: canId,
           bus: bus,
           payload: Object.keys(p).length > 0 ? p : { D1: '0x01' },
-          repeat: opt.repeat || 1
+          repeat: opt.repeat || 1,
+          source_command_id: entityId,
+          source_command_name: cmd.ha_metadata?.name || cmd.name || cmd.id,
+          option_label: opt?.label || commandLabel,
+          entity_id: entityId
         };
       }
 
@@ -235,7 +258,13 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
             can_id: step.can_id || canId,
             bus: step.bus ?? bus,
             payload: Object.keys(stepPayload).length > 0 ? stepPayload : { D1: '0x01' },
-            repeat: step.repeat || 1
+            repeat: step.repeat || 1,
+            ...(idx === 0 ? {
+              source_command_id: entityId,
+              source_command_name: cmd.ha_metadata?.name || cmd.name || cmd.id,
+              option_label: opt?.label || commandLabel,
+              entity_id: entityId
+            } : {})
           });
           if (idx < cmd.steps.length - 1 && delayMs > 0) {
             inlinedSteps.push({
@@ -255,7 +284,11 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
           can_id: canId,
           bus: bus,
           payload: Object.keys(p).length > 0 ? p : { D1: '0x01' },
-          repeat: cmd.repeat || 1
+          repeat: cmd.repeat || 1,
+          source_command_id: entityId,
+          source_command_name: cmd.ha_metadata?.name || cmd.name || cmd.id,
+          option_label: opt?.label || commandLabel,
+          entity_id: entityId
         };
       }
     }
@@ -268,7 +301,11 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
         can_id: act.can_id,
         bus: act.bus ?? 0,
         payload: Object.keys(payload).length > 0 ? payload : { D1: '0x01' },
-        repeat: act.repeat || 1
+        repeat: act.repeat || 1,
+        ...(act.source_command_id ? { source_command_id: act.source_command_id } : {}),
+        ...(act.source_command_name ? { source_command_name: act.source_command_name } : {}),
+        ...(act.option_label ? { option_label: act.option_label } : {}),
+        ...(act.entity_id ? { entity_id: act.entity_id } : {})
       };
     }
 
@@ -325,8 +362,16 @@ export function compileAutomationRule(
     trigger_mode: rule.trigger_mode || 'any',
     cooldown_ms: rule.cooldown_ms ?? 500,
     triggers: (rule.triggers || []).map(trig => {
+      const baseTrigger = {
+        id: trig.id,
+        ...(trig.source_command_id ? { source_command_id: trig.source_command_id } : {}),
+        ...(trig.source_command_name ? { source_command_name: trig.source_command_name } : {}),
+        ...(trig.option_label ? { option_label: trig.option_label } : {})
+      };
+
       if (trig.type === 'time_schedule' || trig.source === 'time' || trig.time) {
         return {
+          ...baseTrigger,
           type: 'time_schedule',
           time: trig.time || '07:30',
           days: trig.days && trig.days.length > 0 ? trig.days : ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
@@ -339,6 +384,7 @@ export function compileAutomationRule(
       const maskHex = trig.mask || '0xF0';
 
       return {
+        ...baseTrigger,
         type: 'byte_transition',
         can_id: trig.can_id || '',
         bus: trig.bus ?? 0,

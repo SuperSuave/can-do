@@ -24,7 +24,10 @@ struct ActionStep;
 
 struct AutomationCondition {
     ConditionLogic logic = ConditionLogic::LEAF;
-    std::string type = "can_state"; // "can_state" or "time_condition"
+    std::string type = "can_state"; // "can_state", "time_condition", or "triggered_by"
+
+    // Trigger ID evaluation field (for type == "triggered_by")
+    std::string trigger_id;
 
     // Leaf CAN evaluation fields
     uint32_t can_id = 0;
@@ -119,6 +122,7 @@ struct CanEntity {
 };
 
 struct AutomationTrigger {
+    std::string id;
     std::string type = "can_rx"; // "can_rx", "byte_transition", "mqtt", or "time_schedule"
     uint32_t can_id = 0;
     uint8_t bus = 0;
@@ -156,6 +160,7 @@ struct AutomationRule {
 struct CanBurstCmd {
     uint32_t can_id = 0;
     uint32_t delay_ms = 20;
+    std::string trigger_id;
     const std::vector<ActionStep>* steps = nullptr;
     std::vector<ActionStep> inline_steps;
 };

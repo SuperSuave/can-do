@@ -29,6 +29,8 @@ extern "C" esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t
 
 static const char* TAG = "CAN_ENGINE";
 
+static std::string s_current_firing_trigger_id = "";
+
 std::unordered_map<uint32_t, std::array<uint8_t, 8>> can_state_cache;
 QueueHandle_t tx_command_queue = nullptr;
 extern esp_mqtt_client_handle_t global_mqtt_client;
@@ -116,6 +118,11 @@ bool evaluate_condition(const AutomationCondition& cond) {
         }
         case ConditionLogic::LEAF:
         default: {
+            if (cond.type == "triggered_by") {
+                if (cond.trigger_id.empty()) return true;
+                return cond.trigger_id == s_current_firing_trigger_id;
+            }
+
             if (cond.type == "time_condition") {
                 time_t now;
                 time(&now);
@@ -372,10 +379,11 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
     return false;
 }
 
-bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>& steps) {
+bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>& steps, const std::string& trigger_id) {
     CanBurstCmd* cmd = new CanBurstCmd();
     cmd->can_id = can_id;
     cmd->delay_ms = delay_ms;
+    cmd->trigger_id = trigger_id;
     cmd->inline_steps = steps;
     if (xQueueSend(tx_command_queue, &cmd, pdMS_TO_TICKS(10)) != pdTRUE) {
         delete cmd;
@@ -540,10 +548,10 @@ void can_rx_task(void* arg) {
                                 }
 
                                 if (passed) {
-                                    ESP_LOGI(TAG, "Automation fired: %s", rule.name.c_str());
+                                    ESP_LOGI(TAG, "Automation fired: %s (trigger: %s)", rule.name.c_str(), trig.id.c_str());
                                     rule.last_exec_time_ms = now_ms;
                                     broadcast_ws_automation_event(rule.id, rule.name);
-                                    queue_action_steps(0, 20, rule.actions);
+                                    queue_action_steps(0, 20, rule.actions, trig.id);
                                 }
                             }
                         }
@@ -589,11 +597,13 @@ void can_tx_task(void* arg) {
 
     while (true) {
         if (xQueueReceive(tx_command_queue, &cmd, portMAX_DELAY) == pdTRUE && cmd) {
+            s_current_firing_trigger_id = cmd->trigger_id;
             if (cmd->steps && !cmd->steps->empty()) {
                 execute_can_burst(cmd->can_id, *cmd->steps, cmd->delay_ms);
             } else if (!cmd->inline_steps.empty()) {
                 execute_can_burst(cmd->can_id, cmd->inline_steps, cmd->delay_ms);
             }
+            s_current_firing_trigger_id = "";
             delete cmd;
         }
     }
@@ -651,7 +661,7 @@ void time_scheduler_task(void* arg) {
                             ESP_LOGI(TAG, "Time schedule fired rule: %s (%02d:%02d)", rule.name.c_str(), timeinfo.tm_hour, timeinfo.tm_min);
                             rule.last_exec_time_ms = now_ms;
                             broadcast_ws_automation_event(rule.id, rule.name);
-                            queue_action_steps(0, 20, rule.actions);
+                            queue_action_steps(0, 20, rule.actions, trig.id);
                         }
                     }
                 }

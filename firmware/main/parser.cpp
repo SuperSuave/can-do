@@ -204,6 +204,17 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
         return true;
     }
 
+    // Check if this condition is a triggered_by condition
+    cJSON* trig_id_prop = cJSON_GetObjectItem(c_item, "trigger_id");
+    if ((cJSON_IsString(type_prop) && (strcmp(type_prop->valuestring, "triggered_by") == 0 || strcmp(type_prop->valuestring, "trigger") == 0)) ||
+        cJSON_IsString(trig_id_prop)) {
+        cond.type = "triggered_by";
+        if (cJSON_IsString(trig_id_prop)) {
+            cond.trigger_id = trig_id_prop->valuestring;
+        }
+        return true;
+    }
+
     cond.type = "can_state";
     cJSON* cid = cJSON_GetObjectItem(c_item, "can_id");
     if (cJSON_IsString(cid)) cond.can_id = strtol(cid->valuestring, nullptr, 16);
@@ -517,6 +528,9 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
         cJSON* t_item = nullptr;
         cJSON_ArrayForEach(t_item, trigs) {
             AutomationTrigger tr;
+            cJSON* tid = cJSON_GetObjectItem(t_item, "id");
+            if (cJSON_IsString(tid)) tr.id = tid->valuestring;
+
             cJSON* type = cJSON_GetObjectItem(t_item, "type");
             if (cJSON_IsString(type)) tr.type = type->valuestring;
 
