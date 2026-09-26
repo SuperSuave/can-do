@@ -29,6 +29,11 @@ extern std::string g_device_id;
 
 httpd_handle_t global_web_server = nullptr;
 static vprintf_like_t original_log_vprintf = nullptr;
+static std::atomic<int> s_active_static_transfers{0};
+
+bool is_serving_static_page(void) {
+    return s_active_static_transfers.load() > 0;
+}
 
 struct ws_msg_t {
     int fd;
@@ -229,18 +234,23 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
     }
 
     // 4. Stream file out in 2KB chunks without dynamic heap allocation
+    // Mark transfer as active to prevent WebSocket streaming from overloading Wi-Fi/LwIP during page load
+    s_active_static_transfers.fetch_add(1);
+
     static char s_file_chunk[2048];
     ssize_t read_bytes;
     while ((read_bytes = read(fd, s_file_chunk, sizeof(s_file_chunk))) > 0) {
         if (httpd_resp_send_chunk(req, s_file_chunk, read_bytes) != ESP_OK) {
             ESP_LOGW(TAG, "Chunk send failed for %s", filepath);
             close(fd);
+            s_active_static_transfers.fetch_sub(1);
             return ESP_FAIL;
         }
     }
 
     close(fd);
     httpd_resp_send_chunk(req, nullptr, 0); // Terminate chunked response
+    s_active_static_transfers.fetch_sub(1);
     return ESP_OK;
 }
 
@@ -1084,6 +1094,20 @@ static esp_err_t api_system_control_handler(httpd_req_t *req) {
     if (!root) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
         return ESP_FAIL;
+    }
+
+    cJSON *action_item = cJSON_GetObjectItem(root, "action");
+    if (cJSON_IsString(action_item)) {
+        const char *act = action_item->valuestring;
+        if (strcmp(act, "toggle_automations") == 0) {
+            set_automations_enabled(!g_automations_enabled.load());
+        } else if (strcmp(act, "toggle_sniffer") == 0) {
+            set_sniffer_mode(!g_sniffer_mode.load(), g_hardware_listen_only.load());
+        } else if (strcmp(act, "set_hardware_listen_only") == 0) {
+            cJSON *en = cJSON_GetObjectItem(root, "enabled");
+            bool val = cJSON_IsBool(en) ? cJSON_IsTrue(en) : !g_hardware_listen_only.load();
+            set_sniffer_mode(g_sniffer_mode.load(), val);
+        }
     }
 
     cJSON *auto_item = cJSON_GetObjectItem(root, "automations_enabled");

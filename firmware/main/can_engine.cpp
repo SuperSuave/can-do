@@ -445,11 +445,11 @@ void can_rx_task(void* arg) {
             // Stream raw frame to connected SavvyCAN/GVRET client
             gvret_enqueue_frame(&rx_msg);
 
-            // Stream raw CAN frame to WebSocket dashboard ONLY if sniffer mode is actively enabled
-            if (g_sniffer_mode.load()) {
+            // Stream raw CAN frame to WebSocket dashboard (throttled to max ~30Hz to prevent Wi-Fi buffer exhaustion)
+            // Pauses streaming only during active static web file transfers so browser asset downloads do not crash/choke
+            if (!is_serving_static_page()) {
                 static uint32_t s_last_ws_sniffer_ms = 0;
                 uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-                // Throttle sniffer WebSocket updates to max ~30Hz (33ms) to prevent Wi-Fi buffer exhaustion
                 if (now_ms - s_last_ws_sniffer_ms >= 33) {
                     s_last_ws_sniffer_ms = now_ms;
                     broadcast_ws_can_frame(&rx_msg);
