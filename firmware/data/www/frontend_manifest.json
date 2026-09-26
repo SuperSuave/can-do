@@ -1,0 +1,30 @@
+{
+  "version": "2026.9.6",
+  "files": [
+    {
+      "name": "index-CDZWBcEi.js.gz",
+      "path": "/spiffs/www/index-CDZWBcEi.js.gz",
+      "size": 348653
+    },
+    {
+      "name": "index-C_RZwNho.css.gz",
+      "path": "/spiffs/www/index-C_RZwNho.css.gz",
+      "size": 18217
+    },
+    {
+      "name": "index.html",
+      "path": "/spiffs/www/index.html",
+      "size": 1122
+    },
+    {
+      "name": "index.html.gz",
+      "path": "/spiffs/www/index.html.gz",
+      "size": 513
+    },
+    {
+      "name": "logo.svg",
+      "path": "/spiffs/www/logo.svg",
+      "size": 8217
+    }
+  ]
+}

@@ -226,6 +226,27 @@ export default defineConfig(() => {
           };
 
           copyCompactToWww(distDir, wwwDir);
+
+          // Generate frontend_manifest.json so the browser can discover all LittleFS assets to update
+          const manifestFiles: { name: string; path: string; size: number }[] = [];
+          for (const fname of fs.readdirSync(wwwDir)) {
+            if (fname.startsWith('.')) continue;
+            const fpath = path.join(wwwDir, fname);
+            const stats = fs.statSync(fpath);
+            if (stats.isFile()) {
+              manifestFiles.push({
+                name: fname,
+                path: `/spiffs/www/${fname}`,
+                size: stats.size,
+              });
+            }
+          }
+          const manifestJson = JSON.stringify({
+            version: appVersion,
+            files: manifestFiles,
+          }, null, 2);
+          fs.writeFileSync(path.join(wwwDir, 'frontend_manifest.json'), manifestJson, 'utf-8');
+          fs.writeFileSync(path.join(distDir, 'frontend_manifest.json'), manifestJson, 'utf-8');
         },
       },
     ],

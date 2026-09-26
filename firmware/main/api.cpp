@@ -612,6 +612,12 @@ static esp_err_t api_file_upload_handler(httpd_req_t *req) {
 
     ensure_parent_dirs(filepath);
 
+    if (req->content_len == 0) {
+        unlink(filepath);
+        httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"File deleted/truncated.\"}");
+        return ESP_OK;
+    }
+
     FILE *fd = fopen(filepath, "w");
     if (!fd) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open file for write");
@@ -1092,6 +1098,15 @@ static esp_err_t api_system_control_handler(httpd_req_t *req) {
         set_sniffer_mode(cJSON_IsTrue(sniff_item), hw_listen);
     } else if (cJSON_IsBool(hw_item)) {
         set_sniffer_mode(g_sniffer_mode.load(), cJSON_IsTrue(hw_item));
+    }
+
+    cJSON *reboot_item = cJSON_GetObjectItem(root, "reboot");
+    if (cJSON_IsTrue(reboot_item)) {
+        cJSON_Delete(root);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"status\":\"ok\",\"message\":\"Rebooting...\"}");
+        xTaskCreate(restart_task, "restart_task", 2048, nullptr, 5, nullptr);
+        return ESP_OK;
     }
 
     cJSON_Delete(root);

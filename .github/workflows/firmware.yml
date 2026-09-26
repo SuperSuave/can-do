@@ -129,6 +129,8 @@ jobs:
           cp firmware/build/can-do.bin "release_assets/can-do-${TARGET}-${TAG}.bin"
           cp firmware/build/can-do-*-merged.bin "release_assets/can-do-${TARGET}-${TAG}-merged.bin" 2>/dev/null || true
           cp catalog/can_do_catalog.json "release_assets/can_do_catalog-${TAG}.json"
+          cp firmware/data/www/frontend_manifest.json "release_assets/frontend_manifest.json" 2>/dev/null || true
+          (cd firmware/data/www && zip -r "../../../release_assets/can-do-web-${TAG}.zip" .)
 
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/') || inputs.create_release == true

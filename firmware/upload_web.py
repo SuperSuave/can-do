@@ -63,6 +63,7 @@ def main():
 
     # 0. Clean up known stale hashed assets from previous builds to prevent LittleFS exhaustion
     historic_stale = [
+        "/spiffs/www/index-D_i94GEM.js.gz",
         "/spiffs/www/index-BBflTC1q.js.gz",
         "/spiffs/www/index-DzOlfj10.js.gz",
         "/spiffs/www/index-uQb2UU3p.css.gz",

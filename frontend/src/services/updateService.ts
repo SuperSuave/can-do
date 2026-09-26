@@ -292,12 +292,76 @@ export async function executeUpdateSequence(
 
   try {
     // -------------------------------------------------------------
-    // STAGE 1: FRONT-END ASSETS
+    // STAGE 1: FRONT-END ASSETS (Real LittleFS OTA)
     // -------------------------------------------------------------
     if (componentsToUpdate.frontend) {
-      onProgress('frontend', 15, 'Validating Web Dashboard assets...');
-      await new Promise((r) => setTimeout(r, 400));
-      onProgress('frontend', 35, 'Web Front-End ready');
+      onProgress('frontend', 10, 'Fetching frontend release manifest...');
+
+      // Manifest sources: GitHub Pages build or release assets
+      const manifestCandidates = [
+        `https://raw.githubusercontent.com/${GITHUB_REPO}/${updateData.version}/firmware/data/www/frontend_manifest.json`,
+        `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/data/www/frontend_manifest.json`,
+        `https://${GITHUB_REPO.split('/')[0].toLowerCase()}.github.io/${GITHUB_REPO.split('/')[1]}/frontend_manifest.json`,
+      ];
+
+      let manifest: { version?: string; files: { name: string; path: string; size: number }[] } | null = null;
+      let manifestBaseUrl = '';
+
+      for (const mUrl of manifestCandidates) {
+        try {
+          const mRes = await fetch(mUrl, { cache: 'no-cache' });
+          if (mRes.ok) {
+            manifest = await mRes.json();
+            manifestBaseUrl = mUrl.substring(0, mUrl.lastIndexOf('/'));
+            break;
+          }
+        } catch {}
+      }
+
+      if (manifest && Array.isArray(manifest.files) && manifest.files.length > 0) {
+        // 1. Detect current hashed assets on device to clean up stale files
+        onProgress('frontend', 15, 'Scanning device for stale web assets...');
+        try {
+          const currentHtmlRes = await fetch(`${deviceBaseUrl}/index.html`, { cache: 'no-cache' });
+          if (currentHtmlRes.ok) {
+            const htmlText = await currentHtmlRes.text();
+            const matches = htmlText.match(/index-[a-zA-Z0-9_\-]+\.(?:js|css)/g) || [];
+            const newFileNames = new Set(manifest.files.map((f) => f.name));
+            for (const staleBase of matches) {
+              const staleGz = `${staleBase}.gz`;
+              if (!newFileNames.has(staleGz) && !newFileNames.has(staleBase)) {
+                await truncateDeviceFile(deviceBaseUrl, `/spiffs/www/${staleGz}`);
+                await truncateDeviceFile(deviceBaseUrl, `/spiffs/www/${staleBase}`);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Could not inspect current device HTML for stale cleanup:', e);
+        }
+
+        // 2. Upload new web assets sequentially
+        const totalFiles = manifest.files.length;
+        for (let i = 0; i < totalFiles; i++) {
+          const fileInfo = manifest.files[i];
+          const fileUrl = `${manifestBaseUrl}/${fileInfo.name}`;
+          const pct = 15 + Math.round(((i + 1) / totalFiles) * 20);
+          onProgress('frontend', pct, `Updating ${fileInfo.name} (${i + 1}/${totalFiles})...`);
+
+          const fileRes = await fetch(fileUrl, { cache: 'no-cache' });
+          if (!fileRes.ok) {
+            throw new Error(`Failed to download ${fileInfo.name} from ${fileUrl}`);
+          }
+          const fileBuffer = await fileRes.arrayBuffer();
+          // Always skip reboot for web assets!
+          const uploaded = await uploadToDevice(deviceBaseUrl, fileInfo.path, fileBuffer, true);
+          if (!uploaded) {
+            throw new Error(`Device failed to store ${fileInfo.name} to LittleFS`);
+          }
+        }
+        onProgress('frontend', 35, 'Web Front-End successfully updated on LittleFS');
+      } else {
+        onProgress('frontend', 35, 'Frontend manifest not found, skipping LittleFS web sync');
+      }
     }
 
     // -------------------------------------------------------------
@@ -384,6 +448,17 @@ export async function executeUpdateSequence(
         }
       }
     } else {
+      // If we updated web assets or catalog without flashing firmware, reboot the device once at the end
+      if (componentsToUpdate.frontend || componentsToUpdate.catalog) {
+        onProgress('rebooting', 95, 'Restarting device to apply new assets...');
+        try {
+          await fetch(`${deviceBaseUrl}/api/system/control`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reboot: true }),
+          });
+        } catch {}
+      }
       recordUpdateInstalledTime(updateData.published_at || new Date().toISOString());
       onProgress('complete', 100, 'Updates applied successfully!');
     }
