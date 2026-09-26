@@ -62,7 +62,9 @@ import {
   Bluetooth,
   X,
   Share2,
-  Users
+  Users,
+  HelpCircle,
+  XCircle
 } from 'lucide-react';
 import { AddElementModal, AddElementTarget } from './AddElementModal';
 import { CommunityAutomationsModal } from './CommunityAutomationsModal';
@@ -207,6 +209,287 @@ function groupOptionsIntoGridRows(options?: CommandOption[]): OptionGridGroup[] 
   return chunked;
 }
 
+export type ConditionValidityState = 'valid' | 'invalid' | 'unknown';
+
+export interface EvaluatedConditionResult {
+  state: ConditionValidityState;
+  reason?: string;
+}
+
+/**
+ * Extracts 8-byte array from space-separated or compact hex string e.g. "00 12 34" or "001234"
+ */
+export function parseHexPayload(rawHex?: string): number[] | null {
+  if (!rawHex) return null;
+  const clean = rawHex.replace(/[^0-9a-fA-F]/g, '');
+  if (!clean) return null;
+  const bytes: number[] = [];
+  for (let i = 0; i < clean.length && bytes.length < 8; i += 2) {
+    bytes.push(parseInt(clean.slice(i, i + 2), 16));
+  }
+  while (bytes.length < 8) bytes.push(0);
+  return bytes;
+}
+
+/**
+ * Evaluates whether a specific command option matches the current live CAN frame payload or entity state.
+ */
+export function isOptionCurrentlyValid(
+  opt: CommandOption,
+  canId?: string,
+  liveFrames?: Map<string, { data: string }>,
+  entityId?: string,
+  entityStates?: Map<string, string>
+): boolean {
+  if (!opt) return false;
+
+  // 1. Check live entity states if entityId provided
+  if (entityId && entityStates && entityStates.has(entityId)) {
+    const curState = (entityStates.get(entityId) || '').toLowerCase();
+    const optLabel = (opt.label || '').toLowerCase();
+    if (curState && (curState === optLabel || curState.includes(optLabel) || optLabel.includes(curState))) {
+      return true;
+    }
+  }
+
+  // 2. Check byte/payload match against live frame
+  if (!canId || !liveFrames) return false;
+  const normCanId = canId.trim().toLowerCase();
+  const frame = liveFrames.get(normCanId);
+  if (!frame || !frame.data) return false;
+
+  const bytes = parseHexPayload(frame.data);
+  if (!bytes) return false;
+
+  if (opt.match_mask && opt.match_mask > 0) {
+    for (let i = 0; i < 8; i++) {
+      if ((opt.match_mask & (1 << i)) !== 0) {
+        const mask = opt.byte_masks ? opt.byte_masks[i] : 0xFF;
+        const target = opt.match_payload ? opt.match_payload[i] : 0x00;
+        const inverted = opt.invert_mask ? (opt.invert_mask & (1 << i)) !== 0 : false;
+        const actual = bytes[i] & mask;
+        const maskedTarget = target & mask;
+        if (inverted) {
+          if (actual === maskedTarget) return false;
+        } else {
+          if (actual !== maskedTarget) return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  // Check opt.payload / match map
+  if (opt.payload && typeof opt.payload === 'object') {
+    let matchedAll = true;
+    let checkedAny = false;
+    for (const [k, v] of Object.entries(opt.payload)) {
+      const match = k.match(/D(\d+)/i);
+      if (match) {
+        checkedAny = true;
+        const bIdx = parseInt(match[1], 10) - 1;
+        if (bIdx >= 0 && bIdx < 8) {
+          const expected = parseInt(String(v), 16);
+          if (!isNaN(expected) && bytes[bIdx] !== expected) {
+            matchedAll = false;
+            break;
+          }
+        }
+      }
+    }
+    if (checkedAny && matchedAll) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Evaluates any condition node (group or leaf) against live CAN frames, entity states, system time, or triggers.
+ */
+export function evaluateConditionState(
+  cond: AutomationCondition,
+  liveFrames?: Map<string, { data: string }>,
+  entityStates?: Map<string, string>,
+  lastFiredTriggerId?: string,
+  catalog?: Catalog
+): EvaluatedConditionResult {
+  const isGroup =
+    cond.logic === 'and' ||
+    cond.logic === 'or' ||
+    cond.logic === 'not' ||
+    cond.type === 'and_group' ||
+    cond.type === 'or_group' ||
+    cond.type === 'not_group';
+
+  const groupLogic =
+    cond.logic ||
+    (cond.type === 'and_group' ? 'and' : cond.type === 'or_group' ? 'or' : cond.type === 'not_group' ? 'not' : 'leaf');
+
+  if (isGroup) {
+    const children = cond.conditions || [];
+    if (children.length === 0) {
+      return { state: 'unknown', reason: 'Empty condition group' };
+    }
+
+    const subResults = children.map(c =>
+      evaluateConditionState(c, liveFrames, entityStates, lastFiredTriggerId, catalog)
+    );
+
+    if (groupLogic === 'and') {
+      if (subResults.some(r => r.state === 'invalid')) {
+        return { state: 'invalid', reason: 'One or more nested conditions failed' };
+      }
+      if (subResults.every(r => r.state === 'valid')) {
+        return { state: 'valid', reason: 'All nested conditions passed' };
+      }
+      return { state: 'unknown', reason: 'Waiting for nested telemetry' };
+    }
+
+    if (groupLogic === 'or') {
+      if (subResults.some(r => r.state === 'valid')) {
+        return { state: 'valid', reason: 'At least one condition passed' };
+      }
+      if (subResults.every(r => r.state === 'invalid')) {
+        return { state: 'invalid', reason: 'All nested conditions failed' };
+      }
+      return { state: 'unknown', reason: 'Waiting for telemetry' };
+    }
+
+    if (groupLogic === 'not') {
+      if (subResults.some(r => r.state === 'valid')) {
+        return { state: 'invalid', reason: 'Condition matched (NOT inverted to false)' };
+      }
+      if (subResults.every(r => r.state === 'invalid')) {
+        return { state: 'valid', reason: 'Condition did not match (NOT inverted to true)' };
+      }
+      return { state: 'unknown', reason: 'Waiting for telemetry' };
+    }
+  }
+
+  // Triggered by condition
+  if (cond.type === 'triggered_by' || cond.type === 'trigger' || cond.trigger_id !== undefined) {
+    if (!cond.trigger_id) return { state: 'valid', reason: 'Any trigger' };
+    if (!lastFiredTriggerId) return { state: 'unknown', reason: 'No trigger fired yet' };
+    return cond.trigger_id === lastFiredTriggerId
+      ? { state: 'valid', reason: `Matched trigger: ${cond.trigger_id}` }
+      : { state: 'invalid', reason: `Last fired trigger (${lastFiredTriggerId}) does not match` };
+  }
+
+  // Time window condition
+  if (cond.type === 'time_condition' || cond.type === 'time') {
+    const now = new Date();
+    const curMin = now.getHours() * 60 + now.getMinutes();
+
+    // Check weekday if defined
+    if (cond.days && cond.days.length > 0) {
+      const daysOfWeek = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const curDay = daysOfWeek[now.getDay()];
+      if (!cond.days.map(d => d.toLowerCase()).includes(curDay)) {
+        return { state: 'invalid', reason: `Not active on ${curDay.toUpperCase()}` };
+      }
+    }
+
+    if (cond.start_time && cond.end_time) {
+      const [sh, sm] = cond.start_time.split(':').map(Number);
+      const [eh, em] = cond.end_time.split(':').map(Number);
+      const startMin = (sh || 0) * 60 + (sm || 0);
+      const endMin = (eh || 0) * 60 + (em || 0);
+
+      const inWindow =
+        startMin <= endMin
+          ? curMin >= startMin && curMin <= endMin
+          : curMin >= startMin || curMin <= endMin;
+
+      return inWindow
+        ? { state: 'valid', reason: `Current time is within ${cond.start_time} - ${cond.end_time}` }
+        : { state: 'invalid', reason: `Current time is outside ${cond.start_time} - ${cond.end_time}` };
+    }
+
+    return { state: 'valid', reason: 'Time window guardrail active' };
+  }
+
+  // Leaf CAN / Catalog command condition
+  const cid = (cond.can_id || '').trim().toLowerCase();
+  if (!cid) {
+    return { state: 'unknown', reason: 'No CAN ID defined' };
+  }
+
+  // Check catalog entity state if condition is linked to a command
+  const entityId = cond.source_command_id;
+  if (entityId && entityStates && entityStates.has(entityId)) {
+    const curState = (entityStates.get(entityId) || '').toLowerCase();
+    const optLabel = (cond.option_label || '').toLowerCase();
+    if (optLabel && (curState === optLabel || curState.includes(optLabel) || optLabel.includes(curState))) {
+      return { state: 'valid', reason: `Entity state matches: ${curState}` };
+    }
+  }
+
+  // Check live CAN frame
+  if (!liveFrames || !liveFrames.has(cid)) {
+    return { state: 'unknown', reason: `Waiting for CAN frame ${cid}` };
+  }
+
+  const frame = liveFrames.get(cid)!;
+  const bytes = parseHexPayload(frame.data);
+  if (!bytes) {
+    return { state: 'unknown', reason: `Invalid frame data for ${cid}` };
+  }
+
+  // Determine byte index
+  let byteIndex = cond.byte_index;
+  if (byteIndex === undefined || byteIndex < 0) {
+    const bStr = cond.byte || cond.evaluate?.byte || '';
+    const m = bStr.match(/D(\d+)/i);
+    if (m) byteIndex = parseInt(m[1], 10) - 1;
+    else byteIndex = 0;
+  }
+
+  if (byteIndex < 0 || byteIndex >= 8) {
+    return { state: 'unknown', reason: `Byte index ${byteIndex} out of bounds` };
+  }
+
+  // Parse mask
+  const maskStr = cond.mask || cond.evaluate?.mask || '0xFF';
+  const mask = parseInt(maskStr, 16) || 0xFF;
+
+  // Parse target value
+  let targetValStr = cond.value ?? cond.evaluate?.value;
+  if (targetValStr === undefined && cond.match) {
+    const dKey = Object.keys(cond.match)[0];
+    if (dKey) targetValStr = cond.match[dKey];
+  }
+  const targetVal = targetValStr !== undefined ? (parseInt(String(targetValStr), 16) || 0) : 0;
+
+  const actualByte = bytes[byteIndex];
+  const maskedActual = actualByte & mask;
+  const maskedTarget = targetVal & mask;
+
+  const op = cond.operator || cond.evaluate?.operator || (cond.invert ? 'not_equal' : 'equal');
+
+  let passed = false;
+  if (op === 'equal' || op === '==' || op === 'equals') {
+    passed = maskedActual === maskedTarget;
+  } else if (op === 'not_equal' || op === '!=' || op === 'not_equals') {
+    passed = maskedActual !== maskedTarget;
+  } else if (op === 'greater_than' || op === '>') {
+    passed = maskedActual > maskedTarget;
+  } else if (op === 'less_than' || op === '<') {
+    passed = maskedActual < maskedTarget;
+  } else if (op === 'greater_than_or_equal' || op === '>=') {
+    passed = maskedActual >= maskedTarget;
+  } else if (op === 'less_than_or_equal' || op === '<=') {
+    passed = maskedActual <= maskedTarget;
+  } else {
+    passed = maskedActual === maskedTarget;
+  }
+
+  const hexActual = '0x' + actualByte.toString(16).toUpperCase().padStart(2, '0');
+  const hexTarget = '0x' + targetVal.toString(16).toUpperCase().padStart(2, '0');
+  return passed
+    ? { state: 'valid', reason: `D${byteIndex + 1} (${hexActual} & 0x${mask.toString(16).toUpperCase()}) ${op} ${hexTarget}` }
+    : { state: 'invalid', reason: `D${byteIndex + 1} (${hexActual} & 0x${mask.toString(16).toUpperCase()}) ${op} ${hexTarget} failed` };
+}
+
 interface ConditionNodeEditorProps {
   key?: React.Key;
   cond: AutomationCondition;
@@ -214,6 +497,9 @@ interface ConditionNodeEditorProps {
   depth?: number;
   availableTriggers?: AutomationTrigger[];
   catalog?: Catalog;
+  liveFrames?: Map<string, { data: string }>;
+  entityStates?: Map<string, string>;
+  lastFiredTriggerId?: string;
   onUpdate: (updated: AutomationCondition) => void;
   onDelete: () => void;
   onDuplicate?: () => void;
@@ -231,6 +517,9 @@ interface ConditionListEditorProps {
   emptyText?: string;
   availableTriggers?: AutomationTrigger[];
   catalog?: Catalog;
+  liveFrames?: Map<string, { data: string }>;
+  entityStates?: Map<string, string>;
+  lastFiredTriggerId?: string;
   onUpdate: (conditions: AutomationCondition[]) => void;
   onOpenAddConditionDialog?: (onAdd: (cond: AutomationCondition) => void) => void;
 }
@@ -322,6 +611,9 @@ function ConditionNodeEditor({
   depth = 0,
   availableTriggers,
   catalog,
+  liveFrames,
+  entityStates,
+  lastFiredTriggerId,
   onUpdate,
   onDelete,
   onDuplicate,
@@ -345,8 +637,29 @@ function ConditionNodeEditor({
 
   const [collapsed, setCollapsed] = useState(false);
 
+  // Evaluate current condition state against live telemetry
+  const evalResult = evaluateConditionState(cond, liveFrames, entityStates, lastFiredTriggerId, catalog);
+
+  const validityBadge = (
+    <div
+      className={`inline-flex items-center justify-center w-5 h-5 rounded-full border transition shrink-0 ${
+        evalResult.state === 'valid'
+          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/70 shadow-sm shadow-emerald-500/20'
+          : evalResult.state === 'invalid'
+          ? 'bg-rose-500/20 text-rose-400 border-rose-500/70 shadow-sm shadow-rose-500/20'
+          : 'bg-slate-800 text-slate-400 border-slate-700'
+      }`}
+      title={evalResult.reason || `Status: ${evalResult.state.toUpperCase()}`}
+    >
+      {evalResult.state === 'valid' && <Check className="w-3.5 h-3.5 stroke-[2.5]" />}
+      {evalResult.state === 'invalid' && <X className="w-3.5 h-3.5 stroke-[2.5]" />}
+      {evalResult.state === 'unknown' && <HelpCircle className="w-3.5 h-3.5" />}
+    </div>
+  );
+
   const actionButtons = (
     <div className="flex items-center gap-1">
+      {validityBadge}
       {onMoveUp && (
         <button
           type="button"
@@ -448,6 +761,9 @@ function ConditionNodeEditor({
               depth={depth + 1}
               availableTriggers={availableTriggers}
               catalog={catalog}
+              liveFrames={liveFrames}
+              entityStates={entityStates}
+              lastFiredTriggerId={lastFiredTriggerId}
               emptyText="Empty group. Add conditions below."
               onUpdate={updatedSubs => onUpdate({ ...cond, conditions: updatedSubs })}
               onOpenAddConditionDialog={onOpenAddConditionDialog}
@@ -674,6 +990,23 @@ function ConditionNodeEditor({
                         (matchedOption && opt.label.toLowerCase() === matchedOption.label.toLowerCase()) ||
                         (!cond.option_label && !matchedOption && origIndex === 0);
 
+                      const isLiveValid = isOptionCurrentlyValid(
+                        opt,
+                        cond.can_id || catalogCmd.network?.state_can_id || catalogCmd.state_can_id || catalogCmd.network?.action_can_id || catalogCmd.action_can_id,
+                        liveFrames,
+                        cond.source_command_id || catalogCmd.id,
+                        entityStates
+                      );
+
+                      let pillStyle = 'bg-slate-900/90 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border-slate-800';
+                      if (isSelected && isLiveValid) {
+                        pillStyle = 'bg-purple-950/60 text-purple-200 border-emerald-400 font-semibold shadow-md shadow-emerald-950/50 ring-2 ring-emerald-500/70';
+                      } else if (isSelected) {
+                        pillStyle = 'bg-purple-500/20 text-purple-200 border-purple-500/80 font-semibold shadow-sm ring-1 ring-purple-500/40';
+                      } else if (isLiveValid) {
+                        pillStyle = 'bg-emerald-950/40 text-emerald-300 border-emerald-500/80 font-medium shadow-sm shadow-emerald-950/40 ring-1 ring-emerald-500/50';
+                      }
+
                       return (
                         <button
                           key={opt.label || origIndex}
@@ -684,13 +1017,12 @@ function ConditionNodeEditor({
                           }}
                           className={`${
                             itemCount === 1 ? 'px-4 min-w-[90px]' : 'w-full px-2'
-                          } py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 border cursor-pointer text-center ${
-                            isSelected
-                              ? 'bg-purple-500/20 text-purple-200 border-purple-500/80 font-semibold shadow-sm ring-1 ring-purple-500/40'
-                              : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border-slate-800'
-                          }`}
+                          } py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 border cursor-pointer text-center relative ${pillStyle}`}
                         >
                           <span className="truncate">{opt.label}</span>
+                          {isLiveValid && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" title="Matches current live vehicle state" />
+                          )}
                         </button>
                       );
                     })}
@@ -800,6 +1132,9 @@ function ConditionListEditor({
   emptyText = 'No conditions set.',
   availableTriggers,
   catalog,
+  liveFrames,
+  entityStates,
+  lastFiredTriggerId,
   onUpdate,
   onOpenAddConditionDialog
 }: ConditionListEditorProps) {
@@ -844,6 +1179,9 @@ function ConditionListEditor({
                         depth={depth}
                         availableTriggers={availableTriggers}
                         catalog={catalog}
+                        liveFrames={liveFrames}
+                        entityStates={entityStates}
+                        lastFiredTriggerId={lastFiredTriggerId}
                         onUpdate={updated => {
                           const next = [...conditions];
                           next[idx] = { ...updated, _clientId: stableKey };
@@ -1395,6 +1733,9 @@ interface ActionNodeEditorProps {
   depth?: number;
   availableTriggers?: AutomationTrigger[];
   catalog?: Catalog;
+  liveFrames?: Map<string, { data: string }>;
+  entityStates?: Map<string, string>;
+  lastFiredTriggerId?: string;
   onUpdate: (updated: AutomationAction) => void;
   onDelete: () => void;
   onDuplicate?: () => void;
@@ -1404,6 +1745,7 @@ interface ActionNodeEditorProps {
   isLast?: boolean;
   onOpenAddConditionDialog?: (onAdd: (cond: AutomationCondition) => void) => void;
   onOpenAddActionDialog?: (onAdd: (act: AutomationAction) => void) => void;
+  onTestSingleAction?: (act: AutomationAction) => void;
 }
 
 interface ActionListEditorProps {
@@ -1413,10 +1755,14 @@ interface ActionListEditorProps {
   emptyText?: string;
   availableTriggers?: AutomationTrigger[];
   catalog?: Catalog;
+  liveFrames?: Map<string, { data: string }>;
+  entityStates?: Map<string, string>;
+  lastFiredTriggerId?: string;
   onUpdate: (actions: AutomationAction[]) => void;
   onPullCatalog?: () => void;
   onOpenAddConditionDialog?: (onAdd: (cond: AutomationCondition) => void) => void;
   onOpenAddActionDialog?: (onAdd: (act: AutomationAction) => void) => void;
+  onTestSingleAction?: (act: AutomationAction) => void;
 }
 
 function ActionNodeEditor({
@@ -1425,6 +1771,9 @@ function ActionNodeEditor({
   depth = 0,
   availableTriggers,
   catalog,
+  liveFrames,
+  entityStates,
+  lastFiredTriggerId,
   onUpdate,
   onDelete,
   onDuplicate,
@@ -1433,13 +1782,41 @@ function ActionNodeEditor({
   isFirst,
   isLast,
   onOpenAddConditionDialog,
-  onOpenAddActionDialog
+  onOpenAddActionDialog,
+  onTestSingleAction
 }: ActionNodeEditorProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [testFiring, setTestFiring] = useState(false);
+
+  const handleTestTrigger = async () => {
+    if (!onTestSingleAction || testFiring) return;
+    setTestFiring(true);
+    try {
+      await onTestSingleAction(act);
+    } finally {
+      setTimeout(() => setTestFiring(false), 600);
+    }
+  };
 
   const actionButtons = (
     <div className="flex items-center gap-1">
+      {onTestSingleAction && (
+        <button
+          type="button"
+          onClick={handleTestTrigger}
+          disabled={testFiring}
+          className={`p-1.5 rounded-lg border transition flex items-center gap-1 ${
+            testFiring
+              ? 'bg-emerald-500 text-slate-950 border-emerald-400 animate-pulse'
+              : 'bg-emerald-950/40 text-emerald-300 hover:text-emerald-100 hover:bg-emerald-900/60 border-emerald-800/60 hover:border-emerald-500'
+          }`}
+          title="Manual Trigger: Test this individual action now"
+        >
+          <Play className={`w-3 h-3 ${testFiring ? 'fill-slate-950' : 'fill-emerald-400'}`} />
+          <span className="text-[10px] font-bold hidden sm:inline">Test</span>
+        </button>
+      )}
       {onMoveUp && (
         <button
           type="button"
@@ -1515,6 +1892,9 @@ function ActionNodeEditor({
                 emptyText="No conditions in this IF block."
                 availableTriggers={availableTriggers}
                 catalog={catalog}
+                liveFrames={liveFrames}
+                entityStates={entityStates}
+                lastFiredTriggerId={lastFiredTriggerId}
                 onUpdate={updatedConds => onUpdate({ ...act, conditions: updatedConds })}
                 onOpenAddConditionDialog={onOpenAddConditionDialog}
               />
@@ -1529,6 +1909,10 @@ function ActionNodeEditor({
                 emptyText="No actions in THEN branch."
                 availableTriggers={availableTriggers}
                 catalog={catalog}
+                liveFrames={liveFrames}
+                entityStates={entityStates}
+                lastFiredTriggerId={lastFiredTriggerId}
+                onTestSingleAction={onTestSingleAction}
                 onUpdate={updatedThen => onUpdate({ ...act, then: updatedThen })}
                 onOpenAddConditionDialog={onOpenAddConditionDialog}
                 onOpenAddActionDialog={onOpenAddActionDialog}
@@ -1544,6 +1928,10 @@ function ActionNodeEditor({
                 emptyText="No actions in ELSE branch."
                 availableTriggers={availableTriggers}
                 catalog={catalog}
+                liveFrames={liveFrames}
+                entityStates={entityStates}
+                lastFiredTriggerId={lastFiredTriggerId}
+                onTestSingleAction={onTestSingleAction}
                 onUpdate={updatedElse => onUpdate({ ...act, else: updatedElse })}
                 onOpenAddConditionDialog={onOpenAddConditionDialog}
                 onOpenAddActionDialog={onOpenAddActionDialog}
@@ -1605,6 +1993,9 @@ function ActionNodeEditor({
                       emptyText="No conditions in this branch."
                       availableTriggers={availableTriggers}
                       catalog={catalog}
+                      liveFrames={liveFrames}
+                      entityStates={entityStates}
+                      lastFiredTriggerId={lastFiredTriggerId}
                       onUpdate={updatedConds => {
                         const choices = [...(act.choices || [])];
                         choices[chIdx].conditions = updatedConds;
@@ -1623,6 +2014,10 @@ function ActionNodeEditor({
                       emptyText="No actions in branch sequence."
                       availableTriggers={availableTriggers}
                       catalog={catalog}
+                      liveFrames={liveFrames}
+                      entityStates={entityStates}
+                      lastFiredTriggerId={lastFiredTriggerId}
+                      onTestSingleAction={onTestSingleAction}
                       onUpdate={updatedSeq => {
                         const choices = [...(act.choices || [])];
                         choices[chIdx].sequence = updatedSeq;
@@ -1661,6 +2056,10 @@ function ActionNodeEditor({
                 emptyText="No actions in DEFAULT branch."
                 availableTriggers={availableTriggers}
                 catalog={catalog}
+                liveFrames={liveFrames}
+                entityStates={entityStates}
+                lastFiredTriggerId={lastFiredTriggerId}
+                onTestSingleAction={onTestSingleAction}
                 onUpdate={updatedDef => onUpdate({ ...act, default: updatedDef })}
                 onOpenAddConditionDialog={onOpenAddConditionDialog}
                 onOpenAddActionDialog={onOpenAddActionDialog}
@@ -2102,9 +2501,13 @@ function ActionListEditor({
   emptyText = 'No actions defined.',
   availableTriggers,
   catalog,
+  liveFrames,
+  entityStates,
+  lastFiredTriggerId,
   onUpdate,
   onOpenAddConditionDialog,
-  onOpenAddActionDialog
+  onOpenAddActionDialog,
+  onTestSingleAction
 }: ActionListEditorProps) {
   const addDefaultAction = () => {
     const next = [...actions];
@@ -2146,6 +2549,10 @@ function ActionListEditor({
                         depth={depth}
                         availableTriggers={availableTriggers}
                         catalog={catalog}
+                        liveFrames={liveFrames}
+                        entityStates={entityStates}
+                        lastFiredTriggerId={lastFiredTriggerId}
+                        onTestSingleAction={onTestSingleAction}
                         onUpdate={updated => {
                           const next = [...actions];
                           next[idx] = { ...updated, _clientId: stableKey };
@@ -2490,6 +2897,176 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
       2
     )
   );
+
+  // Live CAN frames & Entity states for real-time condition validity evaluation
+  const [liveFrames, setLiveFrames] = useState<Map<string, { data: string }>>(new Map());
+  const [entityStates, setEntityStates] = useState<Map<string, string>>(new Map());
+  const [lastFiredTriggerId, setLastFiredTriggerId] = useState<string | undefined>();
+  const [actionTestToast, setActionTestToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const framesRef = useRef<Map<string, { data: string }>>(new Map());
+  const entityStatesRef = useRef<Map<string, string>>(new Map());
+
+  // WebSocket connection to ESP32 for live CAN bus frames & state updates
+  React.useEffect(() => {
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: any = null;
+    let isCancelled = false;
+
+    // Fetch initial entity states via REST
+    const fetchInitialStates = async () => {
+      try {
+        const base = resolveDeviceBaseUrl(espIp);
+        const res = await fetch(`${base}/api/states`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && typeof data === 'object') {
+            for (const [k, v] of Object.entries(data)) {
+              entityStatesRef.current.set(k.toLowerCase(), String(v));
+            }
+            setEntityStates(new Map(entityStatesRef.current));
+          }
+        }
+      } catch {
+        // Device not connected or running in simulator mode
+      }
+    };
+
+    fetchInitialStates();
+
+    const connectWs = () => {
+      if (isCancelled) return;
+      let wsUrl: string;
+      try {
+        const base = resolveDeviceBaseUrl(espIp);
+        const parsed = new URL(base);
+        const wsProto = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+        wsUrl = `${wsProto}//${parsed.host}/ws`;
+      } catch {
+        wsUrl = 'ws://192.168.4.1/ws';
+      }
+
+      try {
+        ws = new WebSocket(wsUrl);
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'can_frame' && msg.id) {
+              const normId = String(msg.id).trim().toLowerCase();
+              framesRef.current.set(normId, { data: msg.data || '' });
+              setLiveFrames(new Map(framesRef.current));
+            } else if (msg.type === 'state' && msg.entity) {
+              entityStatesRef.current.set(String(msg.entity).toLowerCase(), String(msg.state || ''));
+              setEntityStates(new Map(entityStatesRef.current));
+            } else if (msg.type === 'automation_fired') {
+              if (msg.trigger_id) {
+                setLastFiredTriggerId(msg.trigger_id);
+              }
+            }
+          } catch {
+            // Non-JSON message (e.g. raw log line)
+          }
+        };
+
+        ws.onclose = () => {
+          if (!isCancelled) {
+            reconnectTimeout = setTimeout(connectWs, 4000);
+          }
+        };
+
+        ws.onerror = () => {
+          try { ws?.close(); } catch {}
+        };
+      } catch {
+        if (!isCancelled) {
+          reconnectTimeout = setTimeout(connectWs, 5000);
+        }
+      }
+    };
+
+    connectWs();
+
+    return () => {
+      isCancelled = true;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws) {
+        try { ws.close(); } catch {}
+      }
+    };
+  }, [espIp]);
+
+  // Handler for testing an individual action manually
+  const handleTestSingleAction = async (act: AutomationAction) => {
+    try {
+      const base = resolveDeviceBaseUrl(espIp);
+
+      if (act.type === 'can_tx' || (!act.type && act.can_id)) {
+        let payloadStr = '';
+        if (typeof act.payload === 'string') {
+          payloadStr = act.payload;
+        } else if (act.payload && typeof act.payload === 'object') {
+          payloadStr = Object.values(act.payload).map(v => String(v).padStart(2, '0')).join(' ');
+        }
+
+        const bodyObj: any = {
+          can_id: act.can_id,
+          payload: payloadStr,
+          repeat: act.repeat || 1,
+          delay_ms: act.delay_ms || 0
+        };
+
+        const res = await fetch(`${base}/api/command`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bodyObj)
+        });
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+
+        setActionTestToast({
+          message: `Action tested: Transmitted CAN ${act.can_id} [${payloadStr || 'empty'}]`,
+          type: 'success'
+        });
+        setTimeout(() => setActionTestToast(null), 4000);
+        return;
+      }
+
+      if (act.type === 'track_popup' || act.type === 'popup') {
+        const msg = act.text || act.popup_message || 'Test cluster notification';
+        const res = await fetch(`${base}/api/notify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg, level: act.level || 'info' })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        setActionTestToast({ message: `Triggered cluster popup: "${msg}"`, type: 'success' });
+        setTimeout(() => setActionTestToast(null), 4000);
+        return;
+      }
+
+      if (act.entity_id && act.command) {
+        const res = await fetch(`${base}/api/command`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entity: act.entity_id, command: act.command })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        setActionTestToast({ message: `Dispatched command to ${act.entity_id}: ${act.command}`, type: 'success' });
+        setTimeout(() => setActionTestToast(null), 4000);
+        return;
+      }
+
+      // Fallback: Test via /api/command or report unsupported
+      setActionTestToast({ message: `Simulated action test for type: ${act.type || 'unknown'}`, type: 'info' });
+      setTimeout(() => setActionTestToast(null), 4000);
+    } catch (err: any) {
+      setActionTestToast({ message: `Action test failed: ${err.message}`, type: 'error' });
+      setTimeout(() => setActionTestToast(null), 5000);
+    }
+  };
 
   const activeRule = rules.find(r => r.id === selectedRuleId) || rules[0];
 
@@ -3238,6 +3815,28 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               )}
             </div>
 
+            {/* Toast notification for single action tests */}
+            {actionTestToast && (
+              <div
+                className={`flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl border text-xs font-medium shadow-lg animate-in fade-in slide-in-from-top-2 duration-200 ${
+                  actionTestToast.type === 'success'
+                    ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-300 shadow-emerald-950/50'
+                    : actionTestToast.type === 'error'
+                    ? 'bg-rose-950/90 border-rose-500/40 text-rose-300 shadow-rose-950/50'
+                    : 'bg-sky-950/90 border-sky-500/40 text-sky-300 shadow-sky-950/50'
+                }`}
+              >
+                <span>{actionTestToast.message}</span>
+                <button
+                  type="button"
+                  onClick={() => setActionTestToast(null)}
+                  className="p-1 hover:bg-white/10 rounded transition text-slate-400 hover:text-white"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* SECTION 2: CONDITIONS */}
             <div className="can-do-section-box cond-section space-y-3">
               <div className="flex items-center justify-between">
@@ -3257,9 +3856,63 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     Conditions
                   </span>
                 </div>
-                <span className="text-[11px] text-slate-400">
-                  Optional gate evaluated before actions run
-                </span>
+                <div className="flex items-center gap-2">
+                  {/* Real-time Overall Gate Status Badge */}
+                  {(() => {
+                    const conds = activeRule.conditions || [];
+                    if (conds.length === 0) {
+                      return (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                          <Check className="w-3 h-3 text-emerald-400" />
+                          <span>Gate Open (Unconditional)</span>
+                        </span>
+                      );
+                    }
+                    const gateEval = evaluateConditionState(
+                      { logic: 'and', conditions: conds },
+                      liveFrames,
+                      entityStates,
+                      lastFiredTriggerId,
+                      catalog
+                    );
+                    if (gateEval.state === 'valid') {
+                      return (
+                        <span
+                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm shadow-emerald-500/20"
+                          title="All conditions currently evaluate as TRUE based on live CAN bus/entity state"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          <Check className="w-3 h-3 text-emerald-400" />
+                          <span>Gate Open: Valid</span>
+                        </span>
+                      );
+                    }
+                    if (gateEval.state === 'invalid') {
+                      return (
+                        <span
+                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm shadow-rose-500/20"
+                          title={gateEval.reason || "Conditions currently block execution"}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                          <X className="w-3 h-3 text-rose-400" />
+                          <span>Gate Closed: Blocked</span>
+                        </span>
+                      );
+                    }
+                    return (
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700"
+                        title={gateEval.reason || "Waiting for live frame or state telemetry"}
+                      >
+                        <HelpCircle className="w-3 h-3 text-slate-400" />
+                        <span>Gate State: Unknown</span>
+                      </span>
+                    );
+                  })()}
+                  <span className="text-[11px] text-slate-400 hidden sm:inline">
+                    Evaluated before actions run
+                  </span>
+                </div>
               </div>
 
               {!collapsedConditions && (
@@ -3268,6 +3921,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   depth={0}
                   availableTriggers={activeRule.triggers}
                   catalog={catalog}
+                  liveFrames={liveFrames}
+                  entityStates={entityStates}
+                  lastFiredTriggerId={lastFiredTriggerId}
                   emptyText="No conditions set. Rule will always execute when triggers match."
                   onUpdate={conds => handleUpdateActiveRule({ conditions: conds })}
                   onOpenAddConditionDialog={openAddConditionDialog}
@@ -3305,10 +3961,14 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   depth={0}
                   availableTriggers={activeRule.triggers}
                   catalog={catalog}
+                  liveFrames={liveFrames}
+                  entityStates={entityStates}
+                  lastFiredTriggerId={lastFiredTriggerId}
                   emptyText="No actions defined."
                   onUpdate={acts => handleUpdateActiveRule({ actions: acts })}
                   onOpenAddConditionDialog={openAddConditionDialog}
                   onOpenAddActionDialog={openAddActionDialog}
+                  onTestSingleAction={handleTestSingleAction}
                 />
               )}
             </div>
@@ -3344,10 +4004,14 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     depth={0}
                     availableTriggers={activeRule.triggers}
                     catalog={catalog}
+                    liveFrames={liveFrames}
+                    entityStates={entityStates}
+                    lastFiredTriggerId={lastFiredTriggerId}
                     emptyText="No off-actions defined. Specify actions to run when toggled off."
                     onUpdate={acts => handleUpdateActiveRule({ off_actions: acts })}
                     onOpenAddConditionDialog={openAddConditionDialog}
                     onOpenAddActionDialog={openAddActionDialog}
+                    onTestSingleAction={handleTestSingleAction}
                   />
                 )}
               </div>

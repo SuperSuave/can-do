@@ -2,7 +2,7 @@
   "settings": {
     "vehicle_model": "all_egmp",
     "unit_system": "imperial",
-    "can_do_version": "2026.9.7"
+    "can_do_version": "2026.9.8"
   },
   "rules": [
     {

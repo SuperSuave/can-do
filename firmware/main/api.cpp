@@ -319,10 +319,58 @@ static esp_err_t api_command_handler(httpd_req_t *req) {
 
     cJSON *target_entity = cJSON_GetObjectItem(root, "entity");
     cJSON *target_cmd = cJSON_GetObjectItem(root, "command");
+    cJSON *target_can_id = cJSON_GetObjectItem(root, "can_id");
 
     if (cJSON_IsString(target_entity)) {
         const char* cmd_str = cJSON_IsString(target_cmd) ? target_cmd->valuestring : "";
         if (queue_entity_command(target_entity->valuestring, cmd_str)) {
+            cJSON_Delete(root);
+            httpd_resp_sendstr(req, "{\"status\": \"queued\"}");
+            return ESP_OK;
+        }
+    } else if (cJSON_IsString(target_can_id) || cJSON_IsNumber(target_can_id)) {
+        uint32_t cid = 0;
+        if (cJSON_IsString(target_can_id)) {
+            cid = strtoul(target_can_id->valuestring, nullptr, 0);
+        } else {
+            cid = (uint32_t)target_can_id->valuedouble;
+        }
+
+        cJSON *payload_item = cJSON_GetObjectItem(root, "payload");
+        cJSON *repeat_item = cJSON_GetObjectItem(root, "repeat");
+        cJSON *delay_item = cJSON_GetObjectItem(root, "delay_ms");
+
+        ActionStep step = {};
+        step.type = ActionType::TRANSMIT_FRAME;
+        step.can_id = cid;
+        step.repeat = cJSON_IsNumber(repeat_item) ? (int)repeat_item->valuedouble : 1;
+        step.delay_ms = cJSON_IsNumber(delay_item) ? (uint32_t)delay_item->valuedouble : 0;
+        step.mask = 0xFF;
+
+        if (cJSON_IsString(payload_item)) {
+            // Hex string e.g. "01 02 03 04" or "01020304"
+            const char* pstr = payload_item->valuestring;
+            std::string clean = "";
+            for (size_t i = 0; pstr[i]; i++) {
+                if (isxdigit((unsigned char)pstr[i])) clean += pstr[i];
+            }
+            for (size_t i = 0; i < 8 && (i * 2 + 1) < clean.length(); i++) {
+                std::string bhex = clean.substr(i * 2, 2);
+                step.payload[i] = (uint8_t)strtoul(bhex.c_str(), nullptr, 16);
+            }
+        } else if (cJSON_IsObject(payload_item)) {
+            for (int i = 0; i < 8; i++) {
+                char k[4];
+                snprintf(k, sizeof(k), "D%d", i + 1);
+                cJSON *b = cJSON_GetObjectItem(payload_item, k);
+                if (b && cJSON_IsString(b)) {
+                    step.payload[i] = (uint8_t)strtoul(b->valuestring, nullptr, 0);
+                }
+            }
+        }
+
+        std::vector<ActionStep> steps = { step };
+        if (queue_action_steps(cid, step.delay_ms, steps)) {
             cJSON_Delete(root);
             httpd_resp_sendstr(req, "{\"status\": \"queued\"}");
             return ESP_OK;

@@ -623,7 +623,7 @@ export function parseDbc(dbcContent: string): {
   });
 
   const parsedCatalog: Catalog = {
-    can_do_version: '2026.9.7',
+    can_do_version: '2026.9.8',
     vehicles: [],
     commands: generatedCommands
   };
