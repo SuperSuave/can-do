@@ -1,13 +1,17 @@
 {
   "domain": "can_do",
   "name": "CAN Do",
-  "codeowners": ["@SuperSuave"],
+  "codeowners": [
+    "@SuperSuave"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/SuperSuave/can-do",
   "issue_tracker": "https://github.com/SuperSuave/can-do/issues",
   "integration_type": "hub",
   "iot_class": "local_push",
-  "dependencies": ["mqtt"],
+  "dependencies": [
+    "mqtt"
+  ],
   "mqtt": [
     "cando/+/status"
   ],
