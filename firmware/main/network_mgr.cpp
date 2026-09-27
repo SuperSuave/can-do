@@ -490,8 +490,12 @@ bool network_mgr_add_known_network(const std::string& ssid, const std::string& p
 
 bool network_mgr_remove_known_network(const std::string& ssid) {
     bool removed = false;
+    bool is_current = false;
     {
         std::lock_guard<std::mutex> lock(s_net_mutex);
+        if (s_sta_connected && s_cur_sta_ssid == ssid) {
+            is_current = true;
+        }
         auto it = std::remove_if(s_known_networks.begin(), s_known_networks.end(),
             [&ssid](const KnownNetwork& kn) { return kn.ssid == ssid; });
         if (it != s_known_networks.end()) {
@@ -501,6 +505,11 @@ bool network_mgr_remove_known_network(const std::string& ssid) {
     }
     if (removed) {
         save_settings_to_fs();
+        if (is_current) {
+            ESP_LOGI(TAG, "Active network '%s' removed; disconnecting STA", ssid.c_str());
+            s_retry_num = MAXIMUM_RETRY; // Prevent infinite retries to the deleted network
+            esp_wifi_disconnect();
+        }
     }
     return removed;
 }

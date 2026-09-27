@@ -1270,27 +1270,46 @@ static esp_err_t api_wifi_post_networks_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_wifi_delete_networks_handler(httpd_req_t *req) {
-    char buf[128];
-    int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
-    if (ret <= 0) return ESP_FAIL;
-    buf[ret] = '\0';
+    set_cors_headers(req);
 
-    cJSON *root = cJSON_Parse(buf);
-    if (!root) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-        return ESP_FAIL;
+    std::string target_ssid;
+
+    // 1. Try extracting SSID from query string: ?ssid=...
+    size_t query_len = httpd_req_get_url_query_len(req);
+    if (query_len > 0) {
+        char query_buf[128];
+        if (httpd_req_get_url_query_str(req, query_buf, sizeof(query_buf)) == ESP_OK) {
+            char ssid_val[64];
+            if (httpd_query_key_value(query_buf, "ssid", ssid_val, sizeof(ssid_val)) == ESP_OK) {
+                target_ssid = ssid_val;
+            }
+        }
     }
 
-    cJSON *ssid = cJSON_GetObjectItem(root, "ssid");
-    if (cJSON_IsString(ssid)) {
-        bool removed = network_mgr_remove_known_network(ssid->valuestring);
-        cJSON_Delete(root);
+    // 2. Fallback to reading JSON body: {"ssid": "..."}
+    if (target_ssid.empty() && req->content_len > 0) {
+        char buf[128];
+        int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
+        if (ret > 0) {
+            buf[ret] = '\0';
+            cJSON *root = cJSON_Parse(buf);
+            if (root) {
+                cJSON *ssid = cJSON_GetObjectItem(root, "ssid");
+                if (cJSON_IsString(ssid) && ssid->valuestring) {
+                    target_ssid = ssid->valuestring;
+                }
+                cJSON_Delete(root);
+            }
+        }
+    }
+
+    if (!target_ssid.empty()) {
+        bool removed = network_mgr_remove_known_network(target_ssid);
         httpd_resp_set_type(req, "application/json");
         httpd_resp_sendstr(req, removed ? "{\"status\":\"ok\"}" : "{\"status\":\"not_found\"}");
         return ESP_OK;
     }
 
-    cJSON_Delete(root);
     httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing SSID");
     return ESP_FAIL;
 }

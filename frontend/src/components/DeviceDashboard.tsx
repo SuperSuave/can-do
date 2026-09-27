@@ -707,11 +707,15 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const handleDeleteNetwork = async (ssid: string) => {
     try {
       const res = await fetch(getApiUrl(`/api/wifi/networks?ssid=${encodeURIComponent(ssid)}`), {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ssid })
       });
       if (res.ok) {
         fetchNetworks();
         showNotice(`Removed network '${ssid}'`);
+      } else {
+        showNotice(`Failed to remove network '${ssid}'`, 'error');
       }
     } catch (e: any) {
       showNotice(`Failed to remove network: ${e.message}`, 'error');
