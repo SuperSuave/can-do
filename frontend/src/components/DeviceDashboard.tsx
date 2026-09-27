@@ -387,7 +387,8 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
     let wsUrl: string;
     try {
-      const parsed = new URL(deviceHost);
+      const resolved = resolveDeviceBaseUrl(deviceHost);
+      const parsed = new URL(resolved);
       const wsProto = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
       wsUrl = `${wsProto}//${parsed.host}/ws`;
     } catch {
