@@ -256,8 +256,15 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       return fallbackHex.toLowerCase().replace(/^0x/, '');
     };
 
-    const gearCmd = findCmd('selected_gear');
-    const gearOptions = gearCmd?.options || [];
+    const gearCmd = findCmd('vehicle_gear_state') || findCmd('gear_shifter_dial') || findCmd('selected_gear');
+    let gearOptions = gearCmd?.options || [];
+    if (!gearOptions.length && (gearCmd as any)?.variants) {
+      for (const v of (gearCmd as any).variants) {
+        if (v.options) {
+          gearOptions = gearOptions.concat(v.options);
+        }
+      }
+    }
 
     return {
       speed: getCanId('cluster_vehicle_speed', '1ac'),
@@ -271,7 +278,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       hvTempsName: findCmd('hv_battery_temperatures')?.ha_metadata?.name || 'HV Battery Module Temps',
       aux12v: getCanId('cond_aux_12v_battery', 'vbat'),
       aux12vName: findCmd('cond_aux_12v_battery')?.ha_metadata?.name || '12V Aux Battery Voltage',
-      gear: getCanId('selected_gear', '2c0'),
+      gear: getCanId('vehicle_gear_state', getCanId('gear_shifter_dial', '045')),
       gearName: gearCmd?.ha_metadata?.name || 'Gear Selector',
       gearOptions,
       doors: getCanId('doors_status', '411'),
@@ -298,7 +305,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       climateTargetName: findCmd('climate_driver_temp')?.ha_metadata?.name || 'Cabin Target Temp',
       defrost: getCanId('climate_rear_defog', '541'),
       defrostName: findCmd('climate_rear_defog')?.ha_metadata?.name || 'Rear Defroster',
-      hazards: getCanId('hazard_lights', '541'),
+      hazards: getCanId('hazard_lights', '413'),
       hazardsName: findCmd('hazard_lights')?.ha_metadata?.name || 'Hazard Flashers',
       steeringHeat: getCanId('heated_steering_wheel_toggle', '418'),
       steeringHeatName: findCmd('heated_steering_wheel_toggle')?.ha_metadata?.name || 'Steering Wheel Heat',
@@ -432,11 +439,11 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       setHoodOpen(normState.includes('open'));
     } else if (entity === 'charge_port') {
       setChargePortOpen(normState.includes('open'));
-    } else if (entity === 'selected_gear') {
-      if (normState.includes('park') || normState === 'p') setGear('P');
-      else if (normState.includes('reverse') || normState === 'r') setGear('R');
-      else if (normState.includes('neutral') || normState === 'n') setGear('N');
-      else if (normState.includes('drive') || normState === 'd') setGear('D');
+    } else if (entity === 'vehicle_gear_state' || entity === 'gear_shifter_dial' || entity === 'selected_gear') {
+      if (normState.includes('park') || normState === 'p' || normState.includes('(p)')) setGear('P');
+      else if (normState.includes('reverse') || normState === 'r' || normState.includes('(r)')) setGear('R');
+      else if (normState.includes('neutral') || normState === 'n' || normState.includes('(n)')) setGear('N');
+      else if (normState.includes('drive') || normState === 'd' || normState.includes('(d)')) setGear('D');
     } else if (entity === 'cond_charging') {
       setIsCharging(normState.includes('true') || normState.includes('on') || normState.includes('active') || normState.includes('charging') || normState.includes('plugged'));
     } else if (entity === 'ac_charging_limit') {
@@ -498,7 +505,13 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         setSteeringWheelHeat('off');
       }
     } else if (entity === 'hazard_lights') {
-      setHazards(normState.includes('active') || normState.includes('on'));
+      setHazards(normState.includes('active') || normState.includes('on') || normState.includes('engaged'));
+    } else if (entity === 'turn_signal_left') {
+      if (normState.includes('on') || normState.includes('active') || normState.includes('true')) setTurnSignal('left');
+      else setTurnSignal(prev => prev === 'left' ? 'off' : prev);
+    } else if (entity === 'turn_signal_right') {
+      if (normState.includes('on') || normState.includes('active') || normState.includes('true')) setTurnSignal('right');
+      else setTurnSignal(prev => prev === 'right' ? 'off' : prev);
     } else if (entity === 'headlight_mode' || entity === 'lights') {
       if (normState.includes('off')) setLights('off');
       else if (normState.includes('parking') || normState.includes('park')) setLights('parking');
@@ -750,17 +763,49 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       recordLog(idFormatted, canMappings.hvTempsName, `Min: ${minT}°C / Max: ${maxT}°C`, hexPayload, now);
     }
 
-    // Transmission Gear Selection (Dynamically mapped from catalog, e.g. 0x2C0, 0x220, 0x316, 0x321)
-    else if ((normId === canMappings.gear || normId === '2c0' || normId === '220' || normId === '316' || normId === '321') && bytes.length >= 1) {
+    // Transmission Gear Selection (0x045, 0x070, 0x130, 0x035, 0x2C0, 0x220)
+    else if ((normId === canMappings.gear || normId === '045' || normId === '45' || normId === '070' || normId === '70' || normId === '130' || normId === '035' || normId === '35' || normId === '2c0' || normId === '220' || normId === '316' || normId === '321') && bytes.length >= 1) {
       let detectedGear: GearMode | null = null;
-      if (canMappings.gearOptions && canMappings.gearOptions.length > 0) {
+      if (normId === '130' && bytes.length >= 6) {
+        // Rotary dial 0x130: D5 0x10=P, D6 0x50=D, D6 0x10=R (mask 0xF0)
+        if ((bytes[4] & 0xF0) === 0x10) detectedGear = 'P';
+        else if ((bytes[5] & 0xF0) === 0x50) detectedGear = 'D';
+        else if ((bytes[5] & 0xF0) === 0x10) detectedGear = 'R';
+      } else if ((normId === '45' || normId === '045') && bytes.length >= 6) {
+        // EV6/GV60 0x045 D6 (bytes[5]): 0x00=P, 0x50=D, 0x60=N, 0x70=R (mask 0x70)
+        const d6 = bytes[5] & 0x70;
+        if (d6 === 0x00) detectedGear = 'P';
+        else if (d6 === 0x50) detectedGear = 'D';
+        else if (d6 === 0x60) detectedGear = 'N';
+        else if (d6 === 0x70) detectedGear = 'R';
+      } else if ((normId === '70' || normId === '070') && bytes.length >= 8) {
+        // Ioniq 5/6 0x070 D8 (bytes[7]): 0x00=P, 0x50=D, 0x60=N, 0x70=R (mask 0x70)
+        const d8 = bytes[7] & 0x70;
+        if (d8 === 0x00) detectedGear = 'P';
+        else if (d8 === 0x50) detectedGear = 'D';
+        else if (d8 === 0x60) detectedGear = 'N';
+        else if (d8 === 0x70) detectedGear = 'R';
+      } else if (normId === '35' || normId === '035') {
+        // CAN-FD 0x35
+        for (const idx of [5, 6, 7, 2]) {
+          if (bytes.length > idx) {
+            const val = bytes[idx] & 0x70;
+            if (val === 0x00) { detectedGear = 'P'; break; }
+            if (val === 0x50) { detectedGear = 'D'; break; }
+            if (val === 0x60) { detectedGear = 'N'; break; }
+            if (val === 0x70) { detectedGear = 'R'; break; }
+          }
+        }
+      }
+
+      if (!detectedGear && canMappings.gearOptions && canMappings.gearOptions.length > 0) {
         for (const opt of canMappings.gearOptions) {
           const lbl = (opt.label || '').toLowerCase();
           let targetGear: GearMode | null = null;
-          if (lbl.includes('(p)') || lbl.includes('park')) targetGear = 'P';
-          else if (lbl.includes('(r)') || lbl.includes('reverse')) targetGear = 'R';
-          else if (lbl.includes('(n)') || lbl.includes('neutral')) targetGear = 'N';
-          else if (lbl.includes('(d)') || lbl.includes('drive')) targetGear = 'D';
+          if (lbl.includes('(p)') || lbl.includes('park') || lbl === 'p') targetGear = 'P';
+          else if (lbl.includes('(r)') || lbl.includes('reverse') || lbl === 'r') targetGear = 'R';
+          else if (lbl.includes('(n)') || lbl.includes('neutral') || lbl === 'n') targetGear = 'N';
+          else if (lbl.includes('(d)') || lbl.includes('drive') || lbl === 'd') targetGear = 'D';
 
           if (targetGear && opt.match && typeof opt.match === 'object') {
             const matched = Object.entries(opt.match).every(([byteKey, hexVal]) => {
@@ -790,13 +835,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         }
       }
 
-      const finalGear: GearMode = detectedGear || 'P';
-      setGear(finalGear);
-      if (finalGear === 'P') {
-        setSpeedMph(0);
-        setSpeedKph(0);
+      if (detectedGear) {
+        setGear(detectedGear);
+        if (detectedGear === 'P') {
+          setSpeedMph(0);
+          setSpeedKph(0);
+        }
+        recordLog(idFormatted, canMappings.gearName, `Position: ${detectedGear}`, hexPayload, now);
       }
-      recordLog(idFormatted, canMappings.gearName, `Position: ${finalGear}`, hexPayload, now);
     }
 
     // Body Closures & Locks (Dynamically mapped from catalog, e.g. 0x411)
@@ -847,21 +893,36 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       }
     }
 
-    // Cabin Target Temperatures (Dynamically mapped from catalog, e.g. 0x380)
-    else if (normId === canMappings.climateTarget && bytes.length >= 3) {
-      const rawD = bytes[1];
-      const rawP = bytes[2];
-      if (rawD >= 0x06 && rawD <= 0x1A) {
+    // Cabin Target Temperatures (0x380: Driver on D4/D5, Passenger on D6/D7, values 0x06 to 0x1A)
+    else if ((normId === canMappings.climateTarget || normId === '380') && bytes.length >= 4) {
+      // Driver Side: D4 or D5 (bytes[3] or bytes[4])
+      let rawD: number | null = null;
+      for (const idx of [3, 4, 1]) {
+        if (bytes.length > idx && bytes[idx] >= 0x06 && bytes[idx] <= 0x1A) {
+          rawD = bytes[idx];
+          break;
+        }
+      }
+      if (rawD !== null) {
         const dF = 62 + (rawD - 0x06);
         const dFinal = tempUnit === 'C' ? Math.round((dF - 32) / 1.8 * 2) / 2 : dF;
         setDriverTemp(dFinal);
       }
-      if (rawP >= 0x06 && rawP <= 0x1A) {
+
+      // Passenger Side: D6 or D7 (bytes[5] or bytes[6])
+      let rawP: number | null = null;
+      for (const idx of [5, 6, 2]) {
+        if (bytes.length > idx && bytes[idx] >= 0x06 && bytes[idx] <= 0x1A) {
+          rawP = bytes[idx];
+          break;
+        }
+      }
+      if (rawP !== null) {
         const pF = 62 + (rawP - 0x06);
         const pFinal = tempUnit === 'C' ? Math.round((pF - 32) / 1.8 * 2) / 2 : pF;
         setPassengerTemp(pFinal);
       }
-      recordLog(idFormatted, canMappings.climateTargetName, `Driver: ${bytes[1]} / Pass: ${bytes[2]}`, hexPayload, now);
+      recordLog(idFormatted, canMappings.climateTargetName, `Driver: ${rawD !== null ? `${rawD} (0x${rawD.toString(16)})` : '--'} / Pass: ${rawP !== null ? `${rawP} (0x${rawP.toString(16)})` : '--'}`, hexPayload, now);
     }
 
     // Rear Defroster (Dynamically mapped from catalog, e.g. 0x541 with D5 match 0x10 mask 0xF0)
@@ -869,13 +930,6 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       const def = (bytes[4] & 0xF0) === 0x10;
       setRearDefrost(def);
       recordLog(idFormatted, canMappings.defrostName, def ? 'DEFROST ON' : 'DEFROST OFF', hexPayload, now);
-    }
-
-    // Hazard Flashers
-    else if (normId === canMappings.hazards && bytes.length >= 5) {
-      const haz = Boolean(bytes[4] & 0x20);
-      setHazards(haz);
-      recordLog(idFormatted, canMappings.hazardsName, haz ? 'HAZARDS ON' : 'HAZARDS OFF', hexPayload, now);
     }
 
     // Heated Steering Wheel (Dynamically mapped from catalog, e.g. 0x418)
@@ -897,34 +951,48 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       recordLog(idFormatted, canMappings.sunroofName, `Sunroof State: ${sState.toUpperCase()}`, hexPayload, now);
     }
 
-    // Headlight & Turn Signal Stalk (0x3C1, 0x413)
-    else if ((normId === '3c1' || normId === '413' || normId === 'turn_signal') && bytes.length >= 1) {
-      let activeDir: 'off' | 'left' | 'right' = 'off';
-      if (normId === '3c1') {
+    // Lighting, Turn Signals & Hazards (0x413, 0x3C1)
+    else if ((normId === '413' || normId === '3c1' || normId === canMappings.hazards || normId === 'turn_signal') && bytes.length >= 1) {
+      if (normId === '413' || normId === canMappings.hazards) {
+        // Frame 0x413: D4 (bytes[3]) bit 2 = Hazards (0x04)
+        if (bytes.length >= 4) {
+          const isHaz = Boolean(bytes[3] & 0x04);
+          setHazards(isHaz);
+          if (isHaz) recordLog(idFormatted, 'Hazard Flashers', 'HAZARDS ACTIVE', hexPayload, now);
+        }
+        // Frame 0x413: D3 (bytes[2]) bit 4 = Left (0x10), bit 6 = Right (0x40)
+        if (bytes.length >= 3) {
+          const d3 = bytes[2];
+          let dir: 'off' | 'left' | 'right' = 'off';
+          if (d3 & 0x10) dir = 'left';
+          else if (d3 & 0x40) dir = 'right';
+
+          if (dir !== 'off') {
+            setTurnSignal(dir);
+            if (turnSignalTimeoutRef.current) clearTimeout(turnSignalTimeoutRef.current);
+            turnSignalTimeoutRef.current = setTimeout(() => {
+              setTurnSignal('off');
+            }, 900);
+            recordLog(idFormatted, 'Turn Signal Telemetry (0x413)', `Active: ${dir.toUpperCase()}`, hexPayload, now);
+          }
+        }
+      } else if (normId === '3c1') {
+        // Stalk 0x3C1: D5 (bytes[4]) 0x40 = left, 0x10 = right
         if (bytes.length >= 5) {
           const d5 = bytes[4];
-          if ((d5 & 0xF0) === 0x40) activeDir = 'left';
-          else if ((d5 & 0xF0) === 0x10) activeDir = 'right';
-        }
-        if (activeDir === 'off') {
-          const b0 = bytes[0];
-          if (b0 & 0x01) activeDir = 'left';
-          else if (b0 & 0x02) activeDir = 'right';
-        }
-      } else if (normId === '413' && bytes.length >= 3) {
-        const d3 = bytes[2];
-        if (d3 & 0x10) activeDir = 'left';
-        else if (d3 & 0x40) activeDir = 'right';
-      }
+          let dir: 'off' | 'left' | 'right' = 'off';
+          if ((d5 & 0xF0) === 0x40) dir = 'left';
+          else if ((d5 & 0xF0) === 0x10) dir = 'right';
 
-      if (activeDir !== 'off') {
-        setTurnSignal(activeDir);
-        if (turnSignalTimeoutRef.current) clearTimeout(turnSignalTimeoutRef.current);
-        // Hold active direction for 900ms across blink cycles so UI remains rock steady
-        turnSignalTimeoutRef.current = setTimeout(() => {
-          setTurnSignal('off');
-        }, 900);
-        recordLog(idFormatted, 'Turn Signal Telemetry', `Active: ${activeDir.toUpperCase()}`, hexPayload, now);
+          if (dir !== 'off') {
+            setTurnSignal(dir);
+            if (turnSignalTimeoutRef.current) clearTimeout(turnSignalTimeoutRef.current);
+            turnSignalTimeoutRef.current = setTimeout(() => {
+              setTurnSignal('off');
+            }, 900);
+            recordLog(idFormatted, 'Turn Signal Stalk (0x3C1)', `Active: ${dir.toUpperCase()}`, hexPayload, now);
+          }
+        }
       }
     }
 
@@ -983,25 +1051,35 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     }
 
     // Charging Limits (Dynamically mapped from catalog, e.g. 0x1F9: AC limit Byte D7, DC limit Byte D4)
-    else if ((normId === canMappings.acLimit || normId === canMappings.dcLimit || normId === '1f9') && bytes.length >= 8) {
-      const d7 = bytes[7];
+    else if ((normId === canMappings.acLimit || normId === canMappings.dcLimit || normId === '1f9') && bytes.length >= 6) {
+      // AC Limit (catalog: D7): match 0x78=50%, 0xA0=60%, 0xC8=70%, 0xF5=80%, 0x1D=90%, 0x4A=100%
       let ac: number | null = null;
-      if (d7 === 0x78) ac = 50;
-      else if (d7 === 0xa0) ac = 60;
-      else if (d7 === 0xc8) ac = 70;
-      else if (d7 === 0xf5) ac = 80;
-      else if (d7 === 0x1d) ac = 90;
-      else if (d7 === 0x4a) ac = 100;
+      for (const idx of [6, 7]) {
+        if (bytes.length > idx) {
+          const b = bytes[idx];
+          if (b === 0x78) { ac = 50; break; }
+          else if (b === 0xa0) { ac = 60; break; }
+          else if (b === 0xc8) { ac = 70; break; }
+          else if (b === 0xf5) { ac = 80; break; }
+          else if (b === 0x1d) { ac = 90; break; }
+          else if (b === 0x4a) { ac = 100; break; }
+        }
+      }
       if (ac !== null) setAcChargeLimit(ac);
 
-      const d4 = bytes[4];
+      // DC Fast Charging Limit (catalog: D4): match 0x64=50%, 0x78=60%, 0x8C=70%, 0xA0=80%, 0xB4=90%, 0xC8=100%
       let dc: number | null = null;
-      if (d4 === 0x64) dc = 50;
-      else if (d4 === 0x78) dc = 60;
-      else if (d4 === 0x8c) dc = 70;
-      else if (d4 === 0xa0) dc = 80;
-      else if (d4 === 0xb4) dc = 90;
-      else if (d4 === 0xc8) dc = 100;
+      for (const idx of [3, 4]) {
+        if (bytes.length > idx) {
+          const b = bytes[idx];
+          if (b === 0x64) { dc = 50; break; }
+          else if (b === 0x78) { dc = 60; break; }
+          else if (b === 0x8c) { dc = 70; break; }
+          else if (b === 0xa0) { dc = 80; break; }
+          else if (b === 0xb4) { dc = 90; break; }
+          else if (b === 0xc8) { dc = 100; break; }
+        }
+      }
       if (dc !== null) setDcChargeLimit(dc);
 
       recordLog(idFormatted, 'Charge Limits (AC / DC)', `AC: ${ac !== null ? `${ac}%` : '--'} | DC: ${dc !== null ? `${dc}%` : '--'}`, hexPayload, now);
@@ -1092,13 +1170,15 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       const next = Math.max(minT, Math.min(maxT, tempUnit === 'C' ? Math.round((cur + step) * 2) / 2 : cur + step));
       setDriverTemp(next);
       if (climateSync) setPassengerTemp(next);
-      dispatchCommand('climate_driver_temp', `${next}`, `Driver Target Temp: ${next}°${tempUnit}`);
+      const targetF = tempUnit === 'C' ? Math.round(next * 1.8 + 32) : Math.round(next);
+      dispatchCommand('climate_driver_temp', `${targetF}°F`, `Driver Target Temp: ${next}°${tempUnit}`);
     } else {
       const cur = passengerTemp !== null ? passengerTemp : baseDefault;
       const next = Math.max(minT, Math.min(maxT, tempUnit === 'C' ? Math.round((cur + step) * 2) / 2 : cur + step));
       setPassengerTemp(next);
       setClimateSync(false);
-      dispatchCommand('climate_passenger_temp', `${next}`, `Passenger Target Temp: ${next}°${tempUnit}`);
+      const targetF = tempUnit === 'C' ? Math.round(next * 1.8 + 32) : Math.round(next);
+      dispatchCommand('climate_passenger_temp', `${targetF}°F`, `Passenger Target Temp: ${next}°${tempUnit}`);
     }
   };
 
@@ -1925,7 +2005,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   onClick={() => {
                     const next = hvacPower === true ? false : true;
                     setHvacPower(next);
-                    dispatchCommand('remote_climate_start____seats___wheel_', next ? 'start' : 'off', next ? 'Cabin Climate Activated' : 'Cabin Climate Turned OFF');
+                    dispatchCommand('remote_climate_start_seats_wheel', next ? 'Start (+ Seats & Wheel)' : 'Turn OFF', next ? 'Cabin Climate Activated' : 'Cabin Climate Turned OFF');
                   }}
                   className={`px-2.5 py-1 rounded-md text-xs font-bold transition-colors cursor-pointer ${
                     hvacPower === true

@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.9.9",
+  "can_do_version": "2026.9.10",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -1809,55 +1809,450 @@
         "step": 1,
         "unit": "°F",
         "raw_min": "0x06",
-        "raw_max": "0x1A"
+        "raw_max": "0x1A",
+        "delay_ms": 20
       },
       "options": [
         {
-          "label": "62°F / 17.0°C (Lo / Min)",
+          "label": "62°F",
           "match": {
-            "D2": "0x06"
+            "D4": "0x06"
           },
-          "payload": {
-            "D2": "0x06"
-          },
-          "mask": "0xFF"
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x06"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
         },
         {
-          "label": "70°F / 21.0°C (Default Comfort)",
+          "label": "63°F",
           "match": {
-            "D2": "0x0E"
+            "D4": "0x07"
           },
-          "payload": {
-            "D2": "0x0E"
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x07"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "64°F",
+          "match": {
+            "D4": "0x08"
           },
-          "mask": "0xFF",
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x08"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "65°F",
+          "match": {
+            "D4": "0x09"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x09"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "66°F",
+          "match": {
+            "D4": "0x0A"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x0A"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "67°F",
+          "match": {
+            "D4": "0x0B"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x0B"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "68°F",
+          "match": {
+            "D4": "0x0C"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x0C"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "69°F",
+          "match": {
+            "D4": "0x0D"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x0D"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "70°F",
+          "match": {
+            "D4": "0x0E"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x0E"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
           "default": true
         },
         {
-          "label": "82°F / 27.5°C (Hi / Max)",
+          "label": "71°F",
           "match": {
-            "D2": "0x1A"
+            "D4": "0x0F"
           },
-          "payload": {
-            "D2": "0x1A"
-          },
-          "mask": "0xFF"
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x0F"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
         },
         {
-          "label": "Warmer than 70°F (> 21°C)",
-          "evaluate": {
-            "byte": "D2",
-            "operator": "greater_than",
-            "value": "0x0E"
-          }
+          "label": "72°F",
+          "match": {
+            "D4": "0x10"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x10"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
         },
         {
-          "label": "Cooler than 70°F (< 21°C)",
-          "evaluate": {
-            "byte": "D2",
-            "operator": "less_than",
-            "value": "0x0E"
-          }
+          "label": "73°F",
+          "match": {
+            "D4": "0x11"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x11"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "74°F",
+          "match": {
+            "D4": "0x12"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x12"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "75°F",
+          "match": {
+            "D4": "0x13"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x13"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "76°F",
+          "match": {
+            "D4": "0x14"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x14"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "77°F",
+          "match": {
+            "D4": "0x15"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x15"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "78°F",
+          "match": {
+            "D4": "0x16"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x16"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "79°F",
+          "match": {
+            "D4": "0x17"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x17"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "80°F",
+          "match": {
+            "D4": "0x18"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x18"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "81°F",
+          "match": {
+            "D4": "0x19"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x19"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "82°F",
+          "match": {
+            "D4": "0x1A"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D2": "0x1A"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D2": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
         }
       ],
       "subcategory": "HVAC Controls"
@@ -1897,55 +2292,450 @@
         "step": 1,
         "unit": "°F",
         "raw_min": "0x06",
-        "raw_max": "0x1A"
+        "raw_max": "0x1A",
+        "delay_ms": 20
       },
       "options": [
         {
-          "label": "62°F / 17.0°C (Lo / Min)",
+          "label": "62°F",
           "match": {
-            "D3": "0x06"
+            "D6": "0x06"
           },
-          "payload": {
-            "D8": "0x06"
-          },
-          "mask": "0xFF"
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x06"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
         },
         {
-          "label": "70°F / 21.0°C (Default Comfort)",
+          "label": "63°F",
           "match": {
-            "D3": "0x0E"
+            "D6": "0x07"
           },
-          "payload": {
-            "D8": "0x0E"
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x07"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "64°F",
+          "match": {
+            "D6": "0x08"
           },
-          "mask": "0xFF",
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x08"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "65°F",
+          "match": {
+            "D6": "0x09"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x09"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "66°F",
+          "match": {
+            "D6": "0x0A"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x0A"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "67°F",
+          "match": {
+            "D6": "0x0B"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x0B"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "68°F",
+          "match": {
+            "D6": "0x0C"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x0C"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "69°F",
+          "match": {
+            "D6": "0x0D"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x0D"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "70°F",
+          "match": {
+            "D6": "0x0E"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x0E"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
           "default": true
         },
         {
-          "label": "82°F / 27.5°C (Hi / Max)",
+          "label": "71°F",
           "match": {
-            "D3": "0x1A"
+            "D6": "0x0F"
           },
-          "payload": {
-            "D8": "0x1A"
-          },
-          "mask": "0xFF"
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x0F"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
         },
         {
-          "label": "Warmer than 70°F (> 21°C)",
-          "evaluate": {
-            "byte": "D3",
-            "operator": "greater_than",
-            "value": "0x0E"
-          }
+          "label": "72°F",
+          "match": {
+            "D6": "0x10"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x10"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
         },
         {
-          "label": "Cooler than 70°F (< 21°C)",
-          "evaluate": {
-            "byte": "D3",
-            "operator": "less_than",
-            "value": "0x0E"
-          }
+          "label": "73°F",
+          "match": {
+            "D6": "0x11"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x11"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "74°F",
+          "match": {
+            "D6": "0x12"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x12"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "75°F",
+          "match": {
+            "D6": "0x13"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x13"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "76°F",
+          "match": {
+            "D6": "0x14"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x14"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "77°F",
+          "match": {
+            "D6": "0x15"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x15"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "78°F",
+          "match": {
+            "D6": "0x16"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x16"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "79°F",
+          "match": {
+            "D6": "0x17"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x17"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "80°F",
+          "match": {
+            "D6": "0x18"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x18"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "81°F",
+          "match": {
+            "D6": "0x19"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x19"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
+        },
+        {
+          "label": "82°F",
+          "match": {
+            "D6": "0x1A"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x1A"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D8": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": false
         }
       ],
       "subcategory": "HVAC Controls"
@@ -3376,12 +4166,15 @@
       "subcategory": "Seat Comfort",
       "roles": [
         "trigger",
-        "condition"
+        "condition",
+        "action"
       ],
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x438"
+        "state_can_id": "0x438",
+        "action_can_id": "0x4A2",
+        "delay_ms": 20
       },
       "tags": [
         "all_egmp"
@@ -3397,19 +4190,121 @@
           "match": {
             "D1": "0x41"
           },
+          "steps": [
+            {
+              "payload": {
+                "D6": "0x8F"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
           "default": true
         },
         {
           "label": "Rear Left Low",
           "match": {
             "D1": "0x31"
-          }
+          },
+          "steps": [
+            {
+              "payload": {
+                "D6": "0x6F"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
         },
         {
           "label": "Rear Left Off",
           "match": {
             "D1": "0x11"
-          }
+          },
+          "steps": [
+            {
+              "payload": {
+                "D6": "0x2F"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Rear Right High",
+          "match": {
+            "D1": "0x41"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D6": "0xF8"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Rear Right Low",
+          "match": {
+            "D1": "0x31"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D6": "0xF6"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Rear Right Off",
+          "match": {
+            "D1": "0x11"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D6": "0xF2"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
         }
       ]
     },
