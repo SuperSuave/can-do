@@ -92,15 +92,38 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
     @property
     def native_value(self) -> Any:
         """Return the current sensor state with human-interpreted values."""
-        if not self.state_can_id:
-            return None
+        payload = None
+        if self.state_can_id:
+            payload = self.coordinator.get_can_payload(self.state_can_id)
+        if payload is None:
+            payload = self.coordinator.get_can_payload(self.entity_id_str)
 
-        payload = self.coordinator.get_can_payload(self.state_can_id)
-        if not payload:
+        cid = self.entity_id_str.lower()
+        if payload is None and ("12v" in cid or "aux" in cid):
+            payload = (
+                self.coordinator.get_can_payload("cond_aux_12v_battery")
+                or self.coordinator.get_can_payload("vbat")
+                or self.coordinator.get_can_payload("0x1cf")
+            )
+        elif payload is None and "bms" in cid:
+            bms_aliases = {
+                "bms_display_soc": "bms_soc",
+                "bms_soc": "bms_display_soc",
+                "bms_hv_voltage": "bms_hv_v",
+                "bms_hv_v": "bms_hv_voltage",
+                "bms_hv_current": "bms_hv_a",
+                "bms_hv_a": "bms_hv_current",
+                "bms_hv_power_kw": "bms_hv_kw",
+                "bms_hv_kw": "bms_hv_power_kw",
+            }
+            alias = bms_aliases.get(cid)
+            if alias:
+                payload = self.coordinator.get_can_payload(alias)
+
+        if not payload and payload != 0:
             return self._last_native_val
 
         net = self.command.get("network", {})
-        cid = self.entity_id_str.lower()
 
         # 0. Direct numeric float or int payload (UDS telemetry or hardware ADC)
         if isinstance(payload, (int, float)):

@@ -27,7 +27,7 @@ class CanDoEntity(Entity):
 
         net = command.get("network", {})
         self.state_can_id: Optional[str] = net.get("state_can_id")
-        self._unsub_listener: Optional[Callable[[], None]] = None
+        self._unsub_listeners: list[Callable[[], None]] = []
         self._last_state_snapshot: Any = object()
         self._last_available: Optional[bool] = None
 
@@ -50,18 +50,42 @@ class CanDoEntity(Entity):
     async def async_added_to_hass(self) -> None:
         """Register CAN state listener when entity is added to Home Assistant."""
         await super().async_added_to_hass()
+        listen_ids = set()
         if self.state_can_id:
-            self._unsub_listener = self.coordinator.register_listener(
-                self.state_can_id, self._handle_can_update
-            )
-            # Perform initial update from cache
-            self._handle_can_update()
+            listen_ids.add(self.state_can_id.lower())
+        listen_ids.add(self.entity_id_str.lower())
+
+        cid = self.entity_id_str.lower()
+        if "12v" in cid or "aux" in cid:
+            listen_ids.update(["vbat", "cond_aux_12v_battery", "0x1cf"])
+
+        if "bms" in cid:
+            bms_alias_map = {
+                "bms_display_soc": ["bms_soc", "0x7ec"],
+                "bms_soc": ["bms_display_soc", "0x7ec"],
+                "bms_hv_voltage": ["bms_hv_v", "0x7ec"],
+                "bms_hv_v": ["bms_hv_voltage", "0x7ec"],
+                "bms_hv_current": ["bms_hv_a", "0x7ec"],
+                "bms_hv_a": ["bms_hv_current", "0x7ec"],
+                "bms_hv_power_kw": ["bms_hv_kw", "0x7ec"],
+                "bms_hv_kw": ["bms_hv_power_kw", "0x7ec"],
+                "bms_cell_delta_mv": ["0x7ec"],
+            }
+            if cid in bms_alias_map:
+                listen_ids.update(bms_alias_map[cid])
+
+        for target_id in listen_ids:
+            unsub = self.coordinator.register_listener(target_id, self._handle_can_update)
+            self._unsub_listeners.append(unsub)
+
+        # Perform initial update from cache
+        self._handle_can_update()
 
     async def async_will_remove_from_hass(self) -> None:
         """Unregister CAN state listener when entity is removed."""
-        if self._unsub_listener:
-            self._unsub_listener()
-            self._unsub_listener = None
+        for unsub in self._unsub_listeners:
+            unsub()
+        self._unsub_listeners.clear()
         await super().async_will_remove_from_hass()
 
     def _handle_can_update(self) -> None:

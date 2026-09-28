@@ -607,6 +607,14 @@ void mqtt_mgr_publish_vbat(float vbat) {
     // 2. Also publish to entity id state topic (e.g. cando/{device_id}/state/cond_aux_12v_battery)
     std::string entity_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/cond_aux_12v_battery";
     esp_mqtt_client_publish(global_mqtt_client, entity_topic.c_str(), val_str, 0, 1, 1);
+
+    // 3. Publish to CAN ID state topic (e.g. cando/{device_id}/state/0x1CF)
+    std::string can_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/0x1CF";
+    esp_mqtt_client_publish(global_mqtt_client, can_topic.c_str(), val_str, 0, 1, 1);
+
+    // 4. Publish to global state topic for standard HA MQTT auto-discovery
+    std::string ha_state_topic = MQTT_BASE_TOPIC + "/state/cond_aux_12v_battery";
+    esp_mqtt_client_publish(global_mqtt_client, ha_state_topic.c_str(), val_str, 0, 1, 1);
 }
 
 void mqtt_mgr_publish_bms(float kw, float soc, float v, float a, float delta_mv, int min_t, int max_t) {
@@ -617,21 +625,34 @@ void mqtt_mgr_publish_bms(float kw, float soc, float v, float a, float delta_mv,
     snprintf(val_str, sizeof(val_str), "%.2f", kw);
     std::string kw_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_kw";
     esp_mqtt_client_publish(global_mqtt_client, kw_topic.c_str(), val_str, 0, 1, 1);
+    std::string kw_full = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_power_kw";
+    esp_mqtt_client_publish(global_mqtt_client, kw_full.c_str(), val_str, 0, 1, 1);
+    esp_mqtt_client_publish(global_mqtt_client, (MQTT_BASE_TOPIC + "/state/bms_hv_power_kw").c_str(), val_str, 0, 1, 1);
 
     snprintf(val_str, sizeof(val_str), "%.1f", soc);
     std::string soc_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_soc";
     esp_mqtt_client_publish(global_mqtt_client, soc_topic.c_str(), val_str, 0, 1, 1);
+    std::string soc_full = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_display_soc";
+    esp_mqtt_client_publish(global_mqtt_client, soc_full.c_str(), val_str, 0, 1, 1);
+    esp_mqtt_client_publish(global_mqtt_client, (MQTT_BASE_TOPIC + "/state/bms_display_soc").c_str(), val_str, 0, 1, 1);
 
     snprintf(val_str, sizeof(val_str), "%.1f", v);
     std::string v_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_v";
     esp_mqtt_client_publish(global_mqtt_client, v_topic.c_str(), val_str, 0, 1, 1);
+    std::string v_full = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_voltage";
+    esp_mqtt_client_publish(global_mqtt_client, v_full.c_str(), val_str, 0, 1, 1);
+    esp_mqtt_client_publish(global_mqtt_client, (MQTT_BASE_TOPIC + "/state/bms_hv_voltage").c_str(), val_str, 0, 1, 1);
 
     snprintf(val_str, sizeof(val_str), "%.1f", a);
     std::string a_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_a";
     esp_mqtt_client_publish(global_mqtt_client, a_topic.c_str(), val_str, 0, 1, 1);
+    std::string a_full = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_current";
+    esp_mqtt_client_publish(global_mqtt_client, a_full.c_str(), val_str, 0, 1, 1);
+    esp_mqtt_client_publish(global_mqtt_client, (MQTT_BASE_TOPIC + "/state/bms_hv_current").c_str(), val_str, 0, 1, 1);
 
     snprintf(val_str, sizeof(val_str), "%.0f", delta_mv);
     std::string delta_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_cell_delta_mv";
     esp_mqtt_client_publish(global_mqtt_client, delta_topic.c_str(), val_str, 0, 1, 1);
+    esp_mqtt_client_publish(global_mqtt_client, (MQTT_BASE_TOPIC + "/state/bms_cell_delta_mv").c_str(), val_str, 0, 1, 1);
 }
 

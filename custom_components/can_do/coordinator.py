@@ -165,7 +165,7 @@ class CanDoDataCoordinator:
             return
 
         # Handle direct decimal float telemetry (e.g. MeatPi WiCAN 12V battery ADC: "12.6", BMS telemetry)
-        if can_id in ("vbat", "cond_aux_12v_battery") or can_id.startswith("bms_") or "." in hex_payload:
+        if can_id in ("vbat", "cond_aux_12v_battery", "0x1cf") or can_id.startswith("bms_") or "." in hex_payload:
             try:
                 clean_num = hex_payload.split()[0]
                 val = float(clean_num)
@@ -173,12 +173,25 @@ class CanDoDataCoordinator:
                 self.can_states[can_id] = val
                 if prev_val is None or abs(prev_val - val) >= 0.05:
                     self._notify_can_listeners(can_id)
-                    if can_id == "vbat":
-                        self.can_states["cond_aux_12v_battery"] = val
-                        self._notify_can_listeners("cond_aux_12v_battery")
-                    elif can_id == "cond_aux_12v_battery":
-                        self.can_states["vbat"] = val
-                        self._notify_can_listeners("vbat")
+                    if can_id in ("vbat", "cond_aux_12v_battery", "0x1cf"):
+                        for k in ("vbat", "cond_aux_12v_battery", "0x1cf"):
+                            self.can_states[k] = val
+                            self._notify_can_listeners(k)
+                    elif can_id.startswith("bms_"):
+                        bms_aliases = {
+                            "bms_soc": ["bms_display_soc", "cond_hv_battery_soc"],
+                            "bms_display_soc": ["bms_soc"],
+                            "bms_hv_v": ["bms_hv_voltage"],
+                            "bms_hv_voltage": ["bms_hv_v"],
+                            "bms_hv_a": ["bms_hv_current"],
+                            "bms_hv_current": ["bms_hv_a"],
+                            "bms_hv_kw": ["bms_hv_power_kw"],
+                            "bms_hv_power_kw": ["bms_hv_kw"],
+                            "bms_cell_delta_mv": ["bms_cell_delta_mv"],
+                        }
+                        for alias in bms_aliases.get(can_id, []):
+                            self.can_states[alias] = val
+                            self._notify_can_listeners(alias)
                 return
             except ValueError:
                 pass
