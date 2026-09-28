@@ -14,7 +14,7 @@ export const STATE_PRESETS: StatePreset[] = [
     id: 'gear',
     name: 'Gear Shifter (P / R / N / D)',
     icon: 'mdi:car-shift-pattern',
-    category: 'Transmission',
+    category: 'Vehicle State & Telematics',
     description: 'Standard automatic transmission gear positions (byte 3 matching E-GMP / CAN-Do standard)',
     options: [
       {
@@ -48,7 +48,7 @@ export const STATE_PRESETS: StatePreset[] = [
     id: 'doors',
     name: 'Cabin Doors (Closed / Opened)',
     icon: 'mdi:car-door',
-    category: 'Doors & Access',
+    category: 'Doors, Access & Security',
     description: 'Vehicle door latch sensor status',
     options: [
       {
@@ -70,7 +70,7 @@ export const STATE_PRESETS: StatePreset[] = [
     id: 'locks',
     name: 'Central Door Locks (Locked / Unlocked)',
     icon: 'mdi:lock',
-    category: 'Doors & Access',
+    category: 'Doors, Access & Security',
     description: 'Central vehicle locking actuator feedback',
     options: [
       {
@@ -92,7 +92,7 @@ export const STATE_PRESETS: StatePreset[] = [
     id: 'seat_heating',
     name: '3-Level Seat Heat (Off / Low / Med / High)',
     icon: 'mdi:car-seat-heater',
-    category: 'Comfort & Climate',
+    category: 'Climate & Comfort',
     description: 'Driver or passenger seat heating status (D1 byte indicator)',
     options: [
       {
@@ -130,7 +130,7 @@ export const STATE_PRESETS: StatePreset[] = [
     id: 'button_switch',
     name: 'Button Switch (Released / Pressed / Long Press)',
     icon: 'mdi:knob',
-    category: 'Switches',
+    category: 'Cockpit & Controls',
     description: 'Steering wheel or center console momentary switch',
     options: [
       {
@@ -158,7 +158,7 @@ export const STATE_PRESETS: StatePreset[] = [
     id: 'binary_state',
     name: 'Binary State (0: Inactive / 1: Active)',
     icon: 'mdi:power',
-    category: 'Sensors',
+    category: 'Vehicle State & Telematics',
     description: 'Generic active/inactive CAN bit sensor',
     options: [
       {
@@ -180,7 +180,7 @@ export const STATE_PRESETS: StatePreset[] = [
     id: 'charging_state',
     name: 'EV High-Voltage Charging Status',
     icon: 'mdi:ev-station',
-    category: 'Battery & EV',
+    category: 'High Voltage & Charging',
     description: 'EV charge port connection and power delivery state',
     options: [
       {
@@ -214,7 +214,7 @@ export const STATE_PRESETS: StatePreset[] = [
     id: 'turn_signals',
     name: 'Exterior Turn Signals & Hazard',
     icon: 'mdi:car-light-dimmed',
-    category: 'Lighting',
+    category: 'Cockpit & Controls',
     description: 'Vehicle flasher and indicator states',
     options: [
       {
@@ -248,7 +248,7 @@ export const STATE_PRESETS: StatePreset[] = [
     id: 'windows',
     name: 'Power Windows (Closed / Venting / Open)',
     icon: 'mdi:window-open',
-    category: 'Actuators',
+    category: 'Doors, Access & Security',
     description: 'Door window position status',
     options: [
       {

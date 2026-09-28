@@ -2,9 +2,9 @@
   "version": "2026.9.9",
   "files": [
     {
-      "name": "index-8s6RjVQM.js.gz",
-      "path": "/spiffs/www/index-8s6RjVQM.js.gz",
-      "size": 354999
+      "name": "index-CyCe8f7x.js.gz",
+      "path": "/spiffs/www/index-CyCe8f7x.js.gz",
+      "size": 355275
     },
     {
       "name": "index-rgBwy4SO.css.gz",
@@ -19,7 +19,7 @@
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 513
+      "size": 511
     },
     {
       "name": "logo.svg",

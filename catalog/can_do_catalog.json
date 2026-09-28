@@ -448,7 +448,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Steering Wheel",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -464,7 +464,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Steering Wheel"
     },
     {
       "id": "sw_mode",
@@ -476,7 +477,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Steering Wheel",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -492,7 +493,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Steering Wheel"
     },
     {
       "id": "sw_speak",
@@ -504,7 +506,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Steering Wheel",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -520,7 +522,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Steering Wheel"
     },
     {
       "id": "sw_call",
@@ -532,7 +535,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Steering Wheel",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -548,7 +551,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Steering Wheel"
     },
     {
       "id": "sw_volume",
@@ -560,7 +564,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Steering Wheel",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -597,7 +601,8 @@
           },
           "mask": "0x0F"
         }
-      ]
+      ],
+      "subcategory": "Steering Wheel"
     },
     {
       "id": "sw_seek",
@@ -609,7 +614,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Steering Wheel",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -639,7 +644,8 @@
           },
           "mask": "0x0F"
         }
-      ]
+      ],
+      "subcategory": "Steering Wheel"
     },
     {
       "id": "sw_menu",
@@ -651,7 +657,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Steering Wheel",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -688,7 +694,8 @@
           "default": true,
           "mask": "0xF0"
         }
-      ]
+      ],
+      "subcategory": "Steering Wheel"
     },
     {
       "id": "steering_paddles",
@@ -700,7 +707,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Steering Wheel",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -731,7 +738,8 @@
           },
           "mask": "0xF0"
         }
-      ]
+      ],
+      "subcategory": "Steering Wheel"
     },
     {
       "id": "sw_cruise_cluster",
@@ -743,7 +751,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Steering Wheel",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -794,7 +802,8 @@
           },
           "mask": "0xF0"
         }
-      ]
+      ],
+      "subcategory": "Steering Wheel"
     },
     {
       "id": "blinker_stalks",
@@ -806,7 +815,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Steering Wheel",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -851,7 +860,8 @@
           },
           "mask": "0xF0"
         }
-      ]
+      ],
+      "subcategory": "Steering Wheel"
     },
     {
       "id": "steering_wheel_touch",
@@ -863,7 +873,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Steering Wheel",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -901,7 +911,8 @@
           },
           "mask": "0xF0"
         }
-      ]
+      ],
+      "subcategory": "Steering Wheel"
     },
     {
       "id": "gear_shifter_dial",
@@ -913,7 +924,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Dashboard / Center Console",
+      "category": "Vehicle State & Telematics",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -951,7 +962,8 @@
           },
           "mask": "0xF0"
         }
-      ]
+      ],
+      "subcategory": "Transmission & Shifter"
     },
     {
       "id": "hvac_touch_buttons",
@@ -963,7 +975,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Dashboard / Center Console",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -1035,7 +1047,8 @@
           },
           "mask": "0xF0"
         }
-      ]
+      ],
+      "subcategory": "Center Console & AVN"
     },
     {
       "id": "avn_star",
@@ -1047,7 +1060,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Dashboard / Center Console",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -1063,7 +1076,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Center Console & AVN"
     },
     {
       "id": "avn_knob_buttons",
@@ -1075,7 +1089,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Dashboard / Center Console",
+      "category": "Cockpit & Controls",
       "roles": [
         "trigger"
       ],
@@ -1105,7 +1119,8 @@
           },
           "mask": "0xF0"
         }
-      ]
+      ],
+      "subcategory": "Center Console & AVN"
     },
     {
       "id": "avn_dash_media_buttons",
@@ -1117,7 +1132,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Dashboard / Center Console",
+      "category": "Cockpit & Controls",
       "roles": [
         "trigger",
         "action"
@@ -1231,7 +1246,8 @@
             }
           ]
         }
-      ]
+      ],
+      "subcategory": "Center Console & AVN"
     },
     {
       "id": "ev6_mode_strip",
@@ -1244,7 +1260,7 @@
         "kia_ev6"
       ],
       "requires_feature": "touch_bar",
-      "category": "Dashboard / Center Console",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -1260,7 +1276,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Center Console & AVN"
     },
     {
       "id": "camera_btn",
@@ -1273,7 +1290,7 @@
         "all_egmp"
       ],
       "requires_feature": "camera_360",
-      "category": "Dashboard / Center Console",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -1291,7 +1308,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Center Console & AVN"
     },
     {
       "id": "cluster_brightness",
@@ -1303,7 +1321,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Dashboard / Center Console",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -1330,7 +1348,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Instrument Cluster"
     },
     {
       "id": "head_unit_media_source",
@@ -1342,7 +1361,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Dashboard / Center Console",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -1436,7 +1455,8 @@
           },
           "mask": "0xFF"
         }
-      ]
+      ],
+      "subcategory": "Audio & Media"
     },
     {
       "id": "audio_sound_focus",
@@ -1448,7 +1468,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Dashboard / Center Console",
+      "category": "Cockpit & Controls",
       "roles": [
         "trigger",
         "condition",
@@ -1545,7 +1565,8 @@
             "D3": "0x05"
           }
         }
-      ]
+      ],
+      "subcategory": "Audio & Media"
     },
     {
       "id": "audio_speaker_balance",
@@ -1558,7 +1579,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Dashboard / Center Console",
+      "category": "Cockpit & Controls",
       "roles": [
         "trigger",
         "condition",
@@ -1618,7 +1639,8 @@
           },
           "mask": "0xFF"
         }
-      ]
+      ],
+      "subcategory": "Audio & Media"
     },
     {
       "id": "audio_speaker_fade",
@@ -1631,7 +1653,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Dashboard / Center Console",
+      "category": "Cockpit & Controls",
       "roles": [
         "trigger",
         "condition",
@@ -1691,7 +1713,8 @@
           },
           "mask": "0xFF"
         }
-      ]
+      ],
+      "subcategory": "Audio & Media"
     },
     {
       "id": "heated_wheel_btn",
@@ -1704,7 +1727,7 @@
         "all_egmp"
       ],
       "requires_feature": "heated_wheel",
-      "category": "Comfort & Climate",
+      "category": "Climate & Comfort",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -1719,7 +1742,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Steering Wheel Heat"
     },
     {
       "id": "climate_rear_defog",
@@ -1731,7 +1755,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Comfort & Climate",
+      "category": "Climate & Comfort",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -1747,7 +1771,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Defrost & Defog"
     },
     {
       "id": "climate_driver_temp",
@@ -1760,7 +1785,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Comfort & Climate",
+      "category": "Climate & Comfort",
       "roles": [
         "trigger",
         "condition",
@@ -1834,7 +1859,8 @@
             "value": "0x0E"
           }
         }
-      ]
+      ],
+      "subcategory": "HVAC Controls"
     },
     {
       "id": "climate_passenger_temp",
@@ -1847,7 +1873,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Comfort & Climate",
+      "category": "Climate & Comfort",
       "roles": [
         "trigger",
         "condition",
@@ -1921,7 +1947,8 @@
             "value": "0x0E"
           }
         }
-      ]
+      ],
+      "subcategory": "HVAC Controls"
     },
     {
       "id": "climate_dual_cabin_temp",
@@ -1933,7 +1960,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Comfort & Climate",
+      "category": "Climate & Comfort",
       "roles": [
         "trigger",
         "condition",
@@ -2008,7 +2035,8 @@
             "D8": "0x14"
           }
         }
-      ]
+      ],
+      "subcategory": "HVAC Controls"
     },
     {
       "id": "climate_sync_toggle",
@@ -2021,7 +2049,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Comfort & Climate",
+      "category": "Climate & Comfort",
       "roles": [
         "action"
       ],
@@ -2044,7 +2072,8 @@
           "mask": "0xFF",
           "default": true
         }
-      ]
+      ],
+      "subcategory": "HVAC Controls"
     },
     {
       "id": "climate_fan_active",
@@ -2056,7 +2085,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Comfort & Climate",
+      "category": "Climate & Comfort",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2072,7 +2101,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "HVAC Controls"
     },
     {
       "id": "climate_recirc_on",
@@ -2084,7 +2114,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Comfort & Climate",
+      "category": "Climate & Comfort",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2100,7 +2130,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "HVAC Controls"
     },
     {
       "id": "remote_climate_state",
@@ -2112,7 +2143,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Comfort & Climate",
+      "category": "Climate & Comfort",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2141,7 +2172,8 @@
             "D4": "0x00"
           }
         }
-      ]
+      ],
+      "subcategory": "Remote Climate"
     },
     {
       "id": "car_ready_state",
@@ -2153,7 +2185,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "Vehicle State & Telematics",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2181,7 +2213,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Powertrain State"
     },
     {
       "id": "doors_status",
@@ -2194,7 +2227,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "Doors, Access & Security",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2259,7 +2292,8 @@
             "D8": "0x00"
           }
         }
-      ]
+      ],
+      "subcategory": "Doors & Latches"
     },
     {
       "id": "doors_lock_state",
@@ -2271,7 +2305,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "Doors, Access & Security",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2300,7 +2334,8 @@
             "D3": "0x00"
           }
         }
-      ]
+      ],
+      "subcategory": "Locks & Security"
     },
     {
       "id": "seatbelts_status",
@@ -2312,7 +2347,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "Doors, Access & Security",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2353,7 +2388,8 @@
             "D5": "0x00"
           }
         }
-      ]
+      ],
+      "subcategory": "Cabin Safety"
     },
     {
       "id": "trunk",
@@ -2366,7 +2402,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "Doors, Access & Security",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2394,7 +2430,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Doors & Latches"
     },
     {
       "id": "charge_port",
@@ -2407,7 +2444,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "High Voltage & Charging",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2435,7 +2472,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Charging Status"
     },
     {
       "id": "hood",
@@ -2448,7 +2486,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "Doors, Access & Security",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2477,7 +2515,8 @@
             "D6": "0x00"
           }
         }
-      ]
+      ],
+      "subcategory": "Doors & Latches"
     },
     {
       "id": "sunroof_extended",
@@ -2490,7 +2529,7 @@
         "all_egmp"
       ],
       "requires_feature": "sunroof",
-      "category": "Vehicle State & Safety",
+      "category": "Doors, Access & Security",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2537,7 +2576,8 @@
             "D8": "0x30"
           }
         }
-      ]
+      ],
+      "subcategory": "Windows & Sunroof"
     },
     {
       "id": "hazard_lights",
@@ -2549,7 +2589,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2594,7 +2634,8 @@
         "name": "opendbc",
         "github": "commaai/opendbc",
         "notes": "Decoded from 0x413: D4=0x04 Hazard engaged, D2=0x50 lamps illuminated"
-      }
+      },
+      "subcategory": "Lighting"
     },
     {
       "id": "turn_signal_left",
@@ -2606,7 +2647,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2637,7 +2678,8 @@
         "name": "opendbc",
         "github": "commaai/opendbc",
         "notes": "Decoded from 0x413 D3: 0x10 Active, 0x00 Off (mask 0x10)"
-      }
+      },
+      "subcategory": "Lighting"
     },
     {
       "id": "turn_signal_right",
@@ -2649,7 +2691,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2680,7 +2722,8 @@
         "name": "opendbc",
         "github": "commaai/opendbc",
         "notes": "Decoded from 0x413 D3: 0x40 Active, 0x00 Off (mask 0x40)"
-      }
+      },
+      "subcategory": "Lighting"
     },
     {
       "id": "wipers",
@@ -2692,7 +2735,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2722,7 +2765,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Exterior Controls"
     },
     {
       "id": "brake_pedal_state",
@@ -2734,7 +2778,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "Vehicle State & Telematics",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2765,7 +2809,8 @@
           },
           "mask": "0x04"
         }
-      ]
+      ],
+      "subcategory": "Braking & Pedals"
     },
     {
       "id": "brake_pedal_esc",
@@ -2777,7 +2822,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "Vehicle State & Telematics",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2808,7 +2853,8 @@
           },
           "mask": "0x40"
         }
-      ]
+      ],
+      "subcategory": "Braking & Pedals"
     },
     {
       "id": "brake_interlock_vcu",
@@ -2820,7 +2866,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "Vehicle State & Telematics",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2849,7 +2895,8 @@
             "D4": "0x50"
           }
         }
-      ]
+      ],
+      "subcategory": "Braking & Pedals"
     },
     {
       "id": "power_state",
@@ -2861,7 +2908,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "Vehicle State & Telematics",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2890,7 +2937,8 @@
             "D8": "0xFF"
           }
         }
-      ]
+      ],
+      "subcategory": "Powertrain State"
     },
     {
       "id": "drive_mode_state",
@@ -2902,7 +2950,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "Vehicle State & Telematics",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -2940,7 +2988,8 @@
           },
           "mask": "0xF0"
         }
-      ]
+      ],
+      "subcategory": "Driving Dynamics"
     },
     {
       "id": "drivers_seat_comfort",
@@ -2949,7 +2998,7 @@
         "domain": "select",
         "icon": "mdi:car-seat-heater"
       },
-      "category": "Seats & Steering Wheel Comfort",
+      "category": "Climate & Comfort",
       "subcategory": "Seat Comfort",
       "roles": [
         "trigger",
@@ -3136,7 +3185,7 @@
         "domain": "select",
         "icon": "mdi:car-seat-heater"
       },
-      "category": "Seats & Steering Wheel Comfort",
+      "category": "Climate & Comfort",
       "subcategory": "Seat Comfort",
       "roles": [
         "trigger",
@@ -3323,7 +3372,7 @@
         "domain": "sensor",
         "icon": "mdi:car-seat-heater"
       },
-      "category": "Seats & Steering Wheel Comfort",
+      "category": "Climate & Comfort",
       "subcategory": "Seat Comfort",
       "roles": [
         "trigger",
@@ -3394,14 +3443,15 @@
           "repeat": 3
         }
       ],
-      "category": "Seats & Steering Wheel Comfort",
+      "category": "Climate & Comfort",
       "roles": [
         "action"
       ],
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Steering Wheel Heat"
     },
     {
       "id": "battery_preconditioning",
@@ -3414,7 +3464,7 @@
         "all_egmp"
       ],
       "type": "precondition",
-      "category": "Battery Preconditioning",
+      "category": "High Voltage & Charging",
       "roles": [
         "action"
       ],
@@ -3520,7 +3570,8 @@
         "bus": 0,
         "type": "precondition",
         "action_can_id": "0x0C7"
-      }
+      },
+      "subcategory": "Preconditioning"
     },
     {
       "id": "battery_preconditioning_state",
@@ -3532,7 +3583,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Battery Preconditioning",
+      "category": "High Voltage & Charging",
       "roles": [
         "trigger",
         "condition",
@@ -3571,7 +3622,8 @@
           },
           "mask": "0x1F"
         }
-      ]
+      ],
+      "subcategory": "Preconditioning"
     },
     {
       "id": "cluster_telemetry_popup",
@@ -3584,7 +3636,7 @@
         "all_egmp"
       ],
       "type": "popup",
-      "category": "Cluster OSD Popups",
+      "category": "Cockpit & Controls",
       "roles": [
         "action"
       ],
@@ -3622,7 +3674,8 @@
       "network": {
         "bus": 0,
         "type": "popup"
-      }
+      },
+      "subcategory": "Cluster OSD Popups"
     },
     {
       "id": "cluster_track_popup_message",
@@ -3635,7 +3688,7 @@
         "all_egmp"
       ],
       "type": "track_popup",
-      "category": "Cluster OSD Popups",
+      "category": "Cockpit & Controls",
       "roles": [
         "action"
       ],
@@ -3725,7 +3778,8 @@
           "level": "warning",
           "popup_message": "Tailgate Open"
         }
-      ]
+      ],
+      "subcategory": "Cluster OSD Popups"
     },
     {
       "id": "cluster_nav_osd_countdown",
@@ -3738,7 +3792,7 @@
         "all_egmp"
       ],
       "type": "can_tx",
-      "category": "Cluster OSD Popups",
+      "category": "Cockpit & Controls",
       "roles": [
         "action"
       ],
@@ -3773,7 +3827,8 @@
             "D7": "0x0F"
           }
         }
-      ]
+      ],
+      "subcategory": "Cluster OSD Popups"
     },
     {
       "id": "cluster_track_popup_state",
@@ -3785,7 +3840,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Cluster OSD Popups",
+      "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -3816,7 +3871,8 @@
           "mask": "0xFF",
           "default": true
         }
-      ]
+      ],
+      "subcategory": "Cluster OSD Popups"
     },
     {
       "id": "ac_charging_limit",
@@ -3835,7 +3891,7 @@
         "action_can_id": "0x4C5",
         "delay_ms": 20
       },
-      "category": "High Voltage Battery & Charging",
+      "category": "High Voltage & Charging",
       "roles": [
         "trigger",
         "condition",
@@ -3983,7 +4039,8 @@
             }
           ]
         }
-      ]
+      ],
+      "subcategory": "Limits & V2L"
     },
     {
       "id": "dc_charging_limit",
@@ -4002,7 +4059,7 @@
         "action_can_id": "0x4C5",
         "delay_ms": 20
       },
-      "category": "High Voltage Battery & Charging",
+      "category": "High Voltage & Charging",
       "roles": [
         "trigger",
         "condition",
@@ -4150,7 +4207,8 @@
             }
           ]
         }
-      ]
+      ],
+      "subcategory": "Limits & V2L"
     },
     {
       "id": "remote_climate_start_seats_wheel",
@@ -4217,14 +4275,15 @@
           "repeat": 30
         }
       ],
-      "category": "Cabin Climate Control",
+      "category": "Climate & Comfort",
       "roles": [
         "action"
       ],
       "contributor": {
         "name": "liz",
         "github": "L1Z3"
-      }
+      },
+      "subcategory": "Remote Climate"
     },
     {
       "id": "deep_sleep_network_wake_pulse",
@@ -4274,14 +4333,15 @@
           "repeat": 30
         }
       ],
-      "category": "Cabin Climate Control",
+      "category": "Doors, Access & Security",
       "roles": [
         "action"
       ],
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Access & Wakeup"
     },
     {
       "id": "active_sound_design_asd_profile",
@@ -4354,14 +4414,15 @@
           "repeat": 3
         }
       ],
-      "category": "Vehicle Actuators & Features",
+      "category": "Cockpit & Controls",
       "roles": [
         "action"
       ],
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave"
-      }
+      },
+      "subcategory": "Audio & Media"
     },
     {
       "id": "surround_view_camera",
@@ -4393,14 +4454,15 @@
           "repeat": 3
         }
       ],
-      "category": "Vehicle Actuators & Features",
+      "category": "Cockpit & Controls",
       "roles": [
         "action"
       ],
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Center Console & AVN"
     },
     {
       "id": "keepalive_wakeup_ping",
@@ -4428,14 +4490,15 @@
           "repeat": 3
         }
       ],
-      "category": "Vehicle Actuators & Features",
+      "category": "Doors, Access & Security",
       "roles": [
         "action"
       ],
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Access & Wakeup"
     },
     {
       "id": "home_assistant_webhook_event",
@@ -4449,7 +4512,7 @@
       ],
       "type": "webhook",
       "webhook_url": "http://homeassistant.local:8123/api/webhook/wican_event",
-      "category": "Home Assistant & Cloud",
+      "category": "Bridge & Automations",
       "roles": [
         "action"
       ],
@@ -4460,7 +4523,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Cloud & Webhooks"
     },
     {
       "id": "mqtt_json_event_alert",
@@ -4475,7 +4539,7 @@
       "type": "mqtt",
       "mqtt_topic": "wican/event/alert",
       "mqtt_payload": "{\"event\": \"triggered\", \"status\": \"active\"}",
-      "category": "Home Assistant & Cloud",
+      "category": "Bridge & Automations",
       "roles": [
         "action"
       ],
@@ -4486,7 +4550,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Cloud & Webhooks"
     },
     {
       "id": "ambient_mood_lighting",
@@ -4602,8 +4667,8 @@
           }
         }
       ],
-      "category": "Lighting",
-      "subcategory": "Interior Lighting",
+      "category": "Cockpit & Controls",
+      "subcategory": "Lighting",
       "roles": [
         "action",
         "trigger"
@@ -4623,7 +4688,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "Vehicle State & Telematics",
       "roles": [
         "trigger",
         "condition",
@@ -4714,7 +4779,8 @@
             }
           ]
         }
-      ]
+      ],
+      "subcategory": "Transmission & Shifter"
     },
     {
       "id": "cond_charging",
@@ -4726,7 +4792,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "High Voltage & Charging",
       "network": {
         "bus": 0,
         "type": "can_rx",
@@ -4742,7 +4808,8 @@
       "contributor": {
         "name": "Unknown",
         "github": ""
-      }
+      },
+      "subcategory": "Charging Status"
     },
     {
       "id": "cond_ambient_temperature",
@@ -4755,7 +4822,7 @@
         "all_egmp"
       ],
       "type": "param_range",
-      "category": "Environment & Weather",
+      "category": "Vehicle State & Telematics",
       "roles": [
         "condition",
         "state"
@@ -4797,7 +4864,8 @@
             "value": "0x41"
           }
         }
-      ]
+      ],
+      "subcategory": "Environment"
     },
     {
       "id": "hv_battery_temperatures",
@@ -4809,7 +4877,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Battery & Power",
+      "category": "High Voltage & Charging",
       "roles": [
         "trigger",
         "condition",
@@ -4855,7 +4923,8 @@
           },
           "mask": "0xFF"
         }
-      ]
+      ],
+      "subcategory": "BMS & Telemetry"
     },
     {
       "id": "cond_hv_battery_soc",
@@ -4868,7 +4937,7 @@
         "all_egmp"
       ],
       "type": "param_range",
-      "category": "Battery & Power",
+      "category": "High Voltage & Charging",
       "roles": [
         "condition"
       ],
@@ -4908,7 +4977,8 @@
             "value": "0x28"
           }
         }
-      ]
+      ],
+      "subcategory": "BMS & Telemetry"
     },
     {
       "id": "cond_aux_12v_battery",
@@ -4921,7 +4991,7 @@
         "all_egmp"
       ],
       "type": "voltage",
-      "category": "Battery & Power",
+      "category": "High Voltage & Charging",
       "roles": [
         "condition"
       ],
@@ -4950,7 +5020,8 @@
           "voltage_val": "12.0",
           "voltage_dir": "below"
         }
-      ]
+      ],
+      "subcategory": "12V Aux Battery"
     },
     {
       "id": "wheel_speeds",
@@ -4962,7 +5033,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Safety",
+      "category": "Vehicle State & Telematics",
       "subcategory": "Driving Dynamics",
       "roles": [
         "trigger",
@@ -5026,8 +5097,8 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Dashboard / Center Console",
-      "subcategory": "Cluster Speedometer",
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Driving Dynamics",
       "roles": [
         "trigger",
         "condition"
@@ -5093,7 +5164,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Dashboard / Center Console",
+      "category": "Vehicle State & Telematics",
       "subcategory": "Odometer & Mileage",
       "roles": [
         "condition",
@@ -5135,8 +5206,8 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Comfort & Climate",
-      "subcategory": "HVAC Airflow",
+      "category": "Climate & Comfort",
+      "subcategory": "HVAC Controls",
       "roles": [
         "trigger",
         "condition"
@@ -5201,8 +5272,8 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Dashboard / Center Console",
-      "subcategory": "Cluster Settings",
+      "category": "Cockpit & Controls",
+      "subcategory": "Instrument Cluster",
       "roles": [
         "trigger",
         "condition"
@@ -5247,8 +5318,8 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Comfort & Climate",
-      "subcategory": "HVAC Fan",
+      "category": "Climate & Comfort",
+      "subcategory": "HVAC Controls",
       "roles": [
         "trigger",
         "condition"
@@ -5347,8 +5418,8 @@
       "tags": [
         "kia_ev9"
       ],
-      "category": "Comfort & Climate",
-      "subcategory": "Rear Cabin Climate",
+      "category": "Climate & Comfort",
+      "subcategory": "HVAC Controls",
       "roles": [
         "trigger",
         "condition"
@@ -5416,7 +5487,7 @@
         "unit": "%",
         "delay_ms": 20
       },
-      "category": "High Voltage Battery & Charging",
+      "category": "High Voltage & Charging",
       "roles": [
         "action",
         "condition"
@@ -5575,7 +5646,8 @@
             }
           ]
         }
-      ]
+      ],
+      "subcategory": "Limits & V2L"
     },
     {
       "id": "v2l_minimum_charge_state",
@@ -5593,7 +5665,7 @@
         "state_can_id": "0x151",
         "unit": "%"
       },
-      "category": "High Voltage Battery & Charging",
+      "category": "High Voltage & Charging",
       "roles": [
         "condition"
       ],
@@ -5601,7 +5673,8 @@
         "name": "SuaveEV",
         "github": "supersuave",
         "notes": "V2L minimum charge threshold state"
-      }
+      },
+      "subcategory": "Limits & V2L"
     },
     {
       "id": "bms_hv_power_kw",
@@ -5619,7 +5692,7 @@
         "state_can_id": "0x7EC",
         "unit": "kW"
       },
-      "category": "High Voltage Battery & Charging",
+      "category": "High Voltage & Charging",
       "roles": [
         "condition"
       ],
@@ -5627,7 +5700,8 @@
         "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Live BMS pack net power (positive = discharging, negative = charging / regen)"
-      }
+      },
+      "subcategory": "BMS & Telemetry"
     },
     {
       "id": "bms_hv_voltage",
@@ -5645,7 +5719,7 @@
         "state_can_id": "0x7EC",
         "unit": "V"
       },
-      "category": "High Voltage Battery & Charging",
+      "category": "High Voltage & Charging",
       "roles": [
         "condition"
       ],
@@ -5653,7 +5727,8 @@
         "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Live BMS pack total voltage"
-      }
+      },
+      "subcategory": "BMS & Telemetry"
     },
     {
       "id": "bms_hv_current",
@@ -5671,7 +5746,7 @@
         "state_can_id": "0x7EC",
         "unit": "A"
       },
-      "category": "High Voltage Battery & Charging",
+      "category": "High Voltage & Charging",
       "roles": [
         "condition"
       ],
@@ -5679,7 +5754,8 @@
         "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Live BMS pack total current"
-      }
+      },
+      "subcategory": "BMS & Telemetry"
     },
     {
       "id": "bms_cell_delta_mv",
@@ -5697,7 +5773,7 @@
         "state_can_id": "0x7EC",
         "unit": "mV"
       },
-      "category": "High Voltage Battery & Charging",
+      "category": "High Voltage & Charging",
       "roles": [
         "condition"
       ],
@@ -5705,7 +5781,8 @@
         "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Difference between highest and lowest cell voltage in pack"
-      }
+      },
+      "subcategory": "BMS & Telemetry"
     },
     {
       "id": "bms_display_soc",
@@ -5723,7 +5800,7 @@
         "state_can_id": "0x7EC",
         "unit": "%"
       },
-      "category": "High Voltage Battery & Charging",
+      "category": "High Voltage & Charging",
       "roles": [
         "condition"
       ],
@@ -5731,7 +5808,8 @@
         "name": "SuaveEV",
         "github": "supersuave",
         "notes": "High precision BMS internal state of charge"
-      }
+      },
+      "subcategory": "BMS & Telemetry"
     }
   ],
   "automations": [

@@ -90,12 +90,24 @@ class CanDoClusterMasterNotifyEntity(NotifyEntity):
     def device_info(self) -> Any:
         """Return device information."""
         from homeassistant.helpers.entity import DeviceInfo
+        from .catalog_loader import get_vehicle_definition
+
+        parent_id = self.coordinator.device_id
+        v_def = get_vehicle_definition(self.coordinator.vehicle_id)
+        if v_def:
+            make = v_def.get("make", "")
+            model = v_def.get("model", "")
+            v_name = f"{make} {model}".strip() or self.coordinator.vehicle_id.upper()
+        else:
+            v_name = self.coordinator.vehicle_id.upper()
+
         return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator.device_id)},
-            name=f"CAN Do ({self.coordinator.device_id})",
+            identifiers={(DOMAIN, f"{parent_id}_cockpit_and_controls")},
+            name=f"{v_name} Cockpit & Controls",
             manufacturer="CAN Do",
             model=self.coordinator.vehicle_id,
             sw_version=VERSION,
+            via_device=(DOMAIN, parent_id),
         )
 
     @property

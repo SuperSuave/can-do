@@ -1,9 +1,9 @@
-"""Base entity class for CAN Do integration."""
-
+import re
 from typing import Any, Callable, Dict, Optional
 
 from homeassistant.helpers.entity import DeviceInfo, Entity
 
+from .catalog_loader import get_vehicle_definition
 from .const import DOMAIN, VERSION
 from .coordinator import CanDoDataCoordinator
 
@@ -33,13 +33,40 @@ class CanDoEntity(Entity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Return device information to group all entities together."""
+        """Return device information to group entities by subsystem child devices."""
+        parent_id = self.coordinator.device_id
+        category = self.command.get("category", "")
+
+        # If entity belongs to Bridge/Gateway or has no category, attach to parent Bridge device
+        if not category or category in ("Bridge & Automations", "Bridge", "Gateway"):
+            return DeviceInfo(
+                identifiers={(DOMAIN, parent_id)},
+                name=f"CAN Do Bridge ({parent_id})",
+                manufacturer="CAN Do",
+                model="ESP32 Bridge",
+                sw_version=VERSION,
+            )
+
+        # Vehicle Subsystem Child Device
+        v_def = get_vehicle_definition(self.coordinator.vehicle_id)
+        if v_def:
+            make = v_def.get("make", "")
+            model = v_def.get("model", "")
+            vehicle_name = f"{make} {model}".strip() or self.coordinator.vehicle_id.upper()
+        else:
+            vehicle_name = self.coordinator.vehicle_id.upper()
+
+        cat_slug = re.sub(
+            r"[^a-z0-9_]+", "", category.lower().replace("&", "and").replace(",", "").replace(" ", "_")
+        ).strip("_")
+
         return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator.device_id)},
-            name=f"CAN Do ({self.coordinator.device_id})",
+            identifiers={(DOMAIN, f"{parent_id}_{cat_slug}")},
+            name=f"{vehicle_name} {category}",
             manufacturer="CAN Do",
             model=self.coordinator.vehicle_id,
             sw_version=VERSION,
+            via_device=(DOMAIN, parent_id),
         )
 
     @property
