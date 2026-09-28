@@ -29,7 +29,8 @@ import {
   CheckCircle2,
   Info,
   Maximize2,
-  Activity
+  Activity,
+  Link2
 } from 'lucide-react';
 import {
   EgmpModel,
@@ -49,7 +50,7 @@ export interface VehicleDashboardProps {
 
 // Seat comfort level
 export type SeatLevel = 'off' | 'heat_low' | 'heat_med' | 'heat_high' | 'cool_low' | 'cool_med' | 'cool_high';
-export type SteeringHeatLevel = 'off' | 'low' | 'high';
+export type SteeringHeatLevel = 'off' | 'on' | 'low' | 'high';
 export type GearMode = 'P' | 'R' | 'N' | 'D';
 export type LightMode = 'off' | 'parking' | 'low' | 'high' | 'auto';
 export type AirflowMode = 'auto' | 'face' | 'face_feet' | 'feet' | 'defog';
@@ -102,19 +103,24 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   // 1. Vehicle Telemetry State
   const [gear, setGear] = useState<GearMode>('P');
   const [speedMph, setSpeedMph] = useState<number>(0);
-  const [odometer, setOdometer] = useState<number>(() => (unitSystem === 'metric' ? 87147 : 54147));
-  const [ambientTempC, setAmbientTempC] = useState<number>(22.0); // 71.6°F
+  const [odometer, setOdometer] = useState<number | null>(null);
+  const [ambientTempC, setAmbientTempC] = useState<number | null>(null);
   const [tempUnit, setTempUnit] = useState<'F' | 'C'>(() => (unitSystem === 'metric' ? 'C' : 'F'));
 
   const prevUnitRef = useRef(unitSystem);
   useEffect(() => {
     if (unitSystem) {
-      setTempUnit(unitSystem === 'metric' ? 'C' : 'F');
+      const nextUnit = unitSystem === 'metric' ? 'C' : 'F';
+      setTempUnit(nextUnit);
       if (prevUnitRef.current && prevUnitRef.current !== unitSystem) {
         if (unitSystem === 'metric') {
-          setOdometer(prev => Math.round(prev * 1.609344));
+          setOdometer(prev => prev !== null ? Math.round(prev * 1.609344) : null);
+          setDriverTemp(prev => prev !== null ? Math.round((prev - 32) / 1.8 * 2) / 2 : null);
+          setPassengerTemp(prev => prev !== null ? Math.round((prev - 32) / 1.8 * 2) / 2 : null);
         } else {
-          setOdometer(prev => Math.round(prev * 0.621371192));
+          setOdometer(prev => prev !== null ? Math.round(prev * 0.621371192) : null);
+          setDriverTemp(prev => prev !== null ? Math.round(prev * 1.8 + 32) : null);
+          setPassengerTemp(prev => prev !== null ? Math.round(prev * 1.8 + 32) : null);
         }
       }
       prevUnitRef.current = unitSystem;
@@ -140,18 +146,19 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   const [turnSignal, setTurnSignal] = useState<'off' | 'left' | 'right'>('off');
 
   // High Voltage Battery & 12V Auxiliary
-  const [soc, setSoc] = useState<number>(() => {
+  const [soc, setSoc] = useState<number | null>(() => {
     const saved = localStorage.getItem('cando_last_soc');
-    return saved ? parseFloat(saved) : 78.5;
+    return saved ? parseFloat(saved) : null;
   });
   const [isCharging, setIsCharging] = useState(false);
   const [chargeRateKw, setChargeRateKw] = useState<number>(0);
-  const [chargeLimit, setChargeLimit] = useState<number>(80);
-  const [batteryMinTempC, setBatteryMinTempC] = useState<number>(23.0);
-  const [batteryMaxTempC, setBatteryMaxTempC] = useState<number>(24.5);
-  const [aux12V, setAux12V] = useState<number>(() => {
+  const [acChargeLimit, setAcChargeLimit] = useState<number | null>(null);
+  const [dcChargeLimit, setDcChargeLimit] = useState<number | null>(null);
+  const [batteryMinTempC, setBatteryMinTempC] = useState<number | null>(null);
+  const [batteryMaxTempC, setBatteryMaxTempC] = useState<number | null>(null);
+  const [aux12V, setAux12V] = useState<number | null>(() => {
     const saved = localStorage.getItem('cando_last_aux12v');
-    return saved ? parseFloat(saved) : 13.8;
+    return saved ? parseFloat(saved) : null;
   });
 
   // Deep BMS Telemetry (Safe UDS Engine)
@@ -161,26 +168,34 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   const [cellDeltaMv, setCellDeltaMv] = useState<number | null>(null);
 
   // Climate & Comfort
-  const [hvacPower, setHvacPower] = useState(true);
-  const [hvacAuto, setHvacAuto] = useState(true);
-  const [driverTemp, setDriverTemp] = useState<number>(70); // in F or C depending on tempUnit
-  const [passengerTemp, setPassengerTemp] = useState<number>(70);
-  const [fanSpeed, setFanSpeed] = useState<number>(3); // 1-8
-  const [airflow, setAirflow] = useState<AirflowMode>('face');
-  const [recirc, setRecirc] = useState(false);
-  const [rearDefrost, setRearDefrost] = useState(false);
-  const [frontDefrost, setFrontDefrost] = useState(false);
-  const [driverSeat, setDriverSeat] = useState<SeatLevel>('off');
-  const [passengerSeat, setPassengerSeat] = useState<SeatLevel>('off');
-  const [steeringWheelHeat, setSteeringWheelHeat] = useState<SteeringHeatLevel>('off');
-  const [climateSync, setClimateSync] = useState(true);
+  const [hvacPower, setHvacPower] = useState<boolean | null>(null);
+  const [hvacAuto, setHvacAuto] = useState<boolean | null>(null);
+  const [driverTemp, setDriverTemp] = useState<number | null>(null); // in F or C depending on tempUnit
+  const [passengerTemp, setPassengerTemp] = useState<number | null>(null);
+  const [fanSpeed, setFanSpeed] = useState<number | null>(null); // 1-8
+  const [airflow, setAirflow] = useState<AirflowMode | null>(null);
+  const [recirc, setRecirc] = useState<boolean | null>(null);
+  const [rearDefrost, setRearDefrost] = useState<boolean | null>(null);
+  const [frontDefrost, setFrontDefrost] = useState<boolean | null>(null);
+  const [driverSeat, setDriverSeat] = useState<SeatLevel | null>(null);
+  const [passengerSeat, setPassengerSeat] = useState<SeatLevel | null>(null);
+  const [rearLeftSeat, setRearLeftSeat] = useState<SeatLevel | null>(null);
+  const [rearRightSeat, setRearRightSeat] = useState<SeatLevel | null>(null);
+  const [steeringWheelHeat, setSteeringWheelHeat] = useState<SteeringHeatLevel | null>(null);
+  const [climateSync, setClimateSync] = useState<boolean | null>(null);
+  const turnSignalTimeoutRef = useRef<any>(null);
 
   // TPMS (PSI)
-  const [tpms, setTpms] = useState({
-    fl: 36,
-    fr: 36,
-    rl: 35,
-    rr: 36
+  const [tpms, setTpms] = useState<{
+    fl: number | null;
+    fr: number | null;
+    rl: number | null;
+    rr: number | null;
+  }>({
+    fl: null,
+    fr: null,
+    rl: null,
+    rr: null
   });
 
   // UI / Perspective State
@@ -192,6 +207,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
   // Calculated ambient temp display
   const displayAmbient = useMemo(() => {
+    if (ambientTempC === null) return '--';
     if (tempUnit === 'F') {
       return `${Math.round(ambientTempC * 1.8 + 32)}°F`;
     }
@@ -200,6 +216,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
   // Ambient threshold assessment
   const ambientThreshold = useMemo(() => {
+    if (ambientTempC === null) return null;
     if (ambientTempC <= 0) return { label: 'Freezing', color: 'text-sky-400 bg-sky-950/60 border-sky-800/60' };
     if (ambientTempC < 15) return { label: 'Cold', color: 'text-blue-400 bg-blue-950/60 border-blue-800/60' };
     if (ambientTempC > 26) return { label: 'Warm', color: 'text-amber-400 bg-amber-950/60 border-amber-800/60' };
@@ -208,6 +225,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
   // Estimated driving range dynamically calculated based on active vehicle's battery pack & SOC
   const estimatedRangeMiles = useMemo(() => {
+    if (soc === null) return null;
     const baseRangeMiles = activeVehicle?.epa_range_mi || (activeVehicle?.model?.includes('6') ? 342 : activeVehicle?.model?.includes('EV9') ? 304 : 303);
     const baseRangeKm = activeVehicle?.wltp_range_km || Math.round(baseRangeMiles * 1.60934);
     if (unitSystem === 'metric') {
@@ -268,10 +286,16 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       chargePortName: findCmd('charge_port')?.ha_metadata?.name || 'Charge Port Door',
       charging: getCanId('cond_charging', '594'),
       chargingName: findCmd('cond_charging')?.ha_metadata?.name || 'EV Charging Status',
+      acLimit: getCanId('ac_charging_limit', '1f9'),
+      acLimitName: findCmd('ac_charging_limit')?.ha_metadata?.name || 'AC Charging Limit',
+      dcLimit: getCanId('dc_charging_limit', '1f9'),
+      dcLimitName: findCmd('dc_charging_limit')?.ha_metadata?.name || 'DC Fast Charging Limit',
+      rearSeats: getCanId('rear_seats_comfort', '438'),
+      rearSeatsName: findCmd('rear_seats_comfort')?.ha_metadata?.name || 'Rear Seats Heat',
       odometer: getCanId('vehicle_odometer', '227'),
       odometerName: findCmd('vehicle_odometer')?.ha_metadata?.name || 'Odometer',
-      climateTarget: getCanId('climate_dual_cabin_temp', '380'),
-      climateTargetName: findCmd('climate_dual_cabin_temp')?.ha_metadata?.name || 'Cabin Target Temp',
+      climateTarget: getCanId('climate_driver_temp', getCanId('climate_dual_cabin_temp', '380')),
+      climateTargetName: findCmd('climate_driver_temp')?.ha_metadata?.name || 'Cabin Target Temp',
       defrost: getCanId('climate_rear_defog', '541'),
       defrostName: findCmd('climate_rear_defog')?.ha_metadata?.name || 'Rear Defroster',
       hazards: getCanId('hazard_lights', '541'),
@@ -339,11 +363,43 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     });
   };
 
+  const cycleAcLimit = () => {
+    const limits = [50, 60, 70, 80, 90, 100];
+    const curr = acChargeLimit || 80;
+    const next = limits[(limits.indexOf(curr) + 1) % limits.length];
+    setAcChargeLimit(next);
+    dispatchCommand('ac_charging_limit', `${next}%`, `AC Limit: ${next}%`);
+  };
+
+  const cycleDcLimit = () => {
+    const limits = [50, 60, 70, 80, 90, 100];
+    const curr = dcChargeLimit || 80;
+    const next = limits[(limits.indexOf(curr) + 1) % limits.length];
+    setDcChargeLimit(next);
+    dispatchCommand('dc_charging_limit', `${next}%`, `DC Fast Charge Limit: ${next}%`);
+  };
+
+  const cycleRearSeat = (isLeft: boolean) => {
+    const current = isLeft ? rearLeftSeat : rearRightSeat;
+    const cycle: SeatLevel[] = ['off', 'heat_low', 'heat_high'];
+    const currentEffective = current || 'off';
+    const nextIdx = (cycle.indexOf(currentEffective) + 1) % cycle.length;
+    const next = cycle[nextIdx];
+    const lbl = next === 'heat_high' ? 'High' : next === 'heat_low' ? 'Low' : 'Off';
+    if (isLeft) {
+      setRearLeftSeat(next);
+      dispatchCommand('rear_seats_comfort', `Rear Left ${lbl}`, `Rear Left Seat: ${next.replace('_', ' ').toUpperCase()}`);
+    } else {
+      setRearRightSeat(next);
+      dispatchCommand('rear_seats_comfort', `Rear Right ${lbl}`, `Rear Right Seat: ${next.replace('_', ' ').toUpperCase()}`);
+    }
+  };
+
   // Hardware command dispatcher (sends to CAN Do ESP32 device if connected)
   const dispatchCommand = async (entity: string, cmd: string, fallbackDesc: string) => {
     triggerNotice(fallbackDesc);
     try {
-      const baseUrl = resolveDeviceBaseUrl();
+      const baseUrl = resolveDeviceBaseUrl(localStorage.getItem('cando_device_host'));
       await fetch(`${baseUrl}/api/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -383,6 +439,12 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       else if (normState.includes('drive') || normState === 'd') setGear('D');
     } else if (entity === 'cond_charging') {
       setIsCharging(normState.includes('true') || normState.includes('on') || normState.includes('active') || normState.includes('charging') || normState.includes('plugged'));
+    } else if (entity === 'ac_charging_limit') {
+      const match = stateStr.match(/(\d+)/);
+      if (match) setAcChargeLimit(parseInt(match[1], 10));
+    } else if (entity === 'dc_charging_limit') {
+      const match = stateStr.match(/(\d+)/);
+      if (match) setDcChargeLimit(parseInt(match[1], 10));
     } else if (entity === 'drivers_seat_comfort') {
       if (normState.includes('high heat')) setDriverSeat('heat_high');
       else if (normState.includes('medium heat')) setDriverSeat('heat_med');
@@ -398,11 +460,43 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       else if (normState.includes('high cool')) setPassengerSeat('cool_high');
       else if (normState.includes('medium cool')) setPassengerSeat('cool_med');
       else if (normState.includes('low cool')) setPassengerSeat('cool_low');
-      else setPassengerSeat('off');
+    } else if (entity.includes('rear_seats_comfort') || entity.includes('rear_left_seat') || entity.includes('rear_right_seat')) {
+      if (normState.includes('rear left') || !normState.includes('rear right')) {
+        if (normState.includes('high')) setRearLeftSeat('heat_high');
+        else if (normState.includes('low') || normState.includes('med')) setRearLeftSeat('heat_low');
+        else if (normState.includes('off')) setRearLeftSeat('off');
+      }
+      if (normState.includes('rear right')) {
+        if (normState.includes('high')) setRearRightSeat('heat_high');
+        else if (normState.includes('low') || normState.includes('med')) setRearRightSeat('heat_low');
+        else if (normState.includes('off')) setRearRightSeat('off');
+      }
+    } else if (entity === 'climate_driver_temp') {
+      const match = stateStr.match(/(\d+(\.\d+)?)/);
+      if (match) {
+        const val = parseFloat(match[1]);
+        setDriverTemp(Math.round(val));
+      }
+    } else if (entity === 'climate_passenger_temp') {
+      const match = stateStr.match(/(\d+(\.\d+)?)/);
+      if (match) {
+        const val = parseFloat(match[1]);
+        setPassengerTemp(Math.round(val));
+      }
+    } else if (entity === 'climate_dual_cabin_temp') {
+      const match = stateStr.match(/(\d+(\.\d+)?)/g);
+      if (match && match.length >= 1) {
+        setDriverTemp(Math.round(parseFloat(match[0])));
+        if (match.length >= 2) {
+          setPassengerTemp(Math.round(parseFloat(match[1])));
+        }
+      }
     } else if (entity === 'heated_steering_wheel_toggle' || entity === 'heated_wheel_btn') {
-      if (normState.includes('high')) setSteeringWheelHeat('high');
-      else if (normState.includes('low')) setSteeringWheelHeat('low');
-      else setSteeringWheelHeat('off');
+      if (normState.includes('on') || normState.includes('active') || normState.includes('true') || normState.includes('high') || normState.includes('low')) {
+        setSteeringWheelHeat('on');
+      } else {
+        setSteeringWheelHeat('off');
+      }
     } else if (entity === 'hazard_lights') {
       setHazards(normState.includes('active') || normState.includes('on'));
     } else if (entity === 'headlight_mode' || entity === 'lights') {
@@ -417,6 +511,31 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       else setTurnSignal('off');
     } else if (entity === 'climate_rear_defog') {
       setRearDefrost(normState.includes('active') || normState.includes('on'));
+    } else if (entity === 'front_defrost') {
+      setFrontDefrost(normState.includes('active') || normState.includes('on'));
+    } else if (entity === 'climate_fan_speed_level' || entity === 'fan_speed') {
+      const match = stateStr.match(/(\d+)/);
+      if (match) setFanSpeed(parseInt(match[1], 10));
+    } else if (entity === 'climate_airflow_direction' || entity === 'airflow_direction') {
+      if (normState.includes('face_feet') || normState.includes('face / feet')) setAirflow('face_feet');
+      else if (normState.includes('face')) setAirflow('face');
+      else if (normState.includes('defog')) setAirflow('defog');
+      else if (normState.includes('auto')) setAirflow('auto');
+    } else if (entity.includes('climate_start') || entity === 'climate_power') {
+      setHvacPower(normState.includes('start') || normState.includes('on') || normState.includes('active') || normState.includes('true'));
+    } else if (entity === 'cond_ambient_temperature' || entity === 'ambient_temperature') {
+      const match = stateStr.match(/(-?\d+(\.\d+)?)/);
+      if (match) setAmbientTempC(parseFloat(match[1]));
+    } else if (entity === 'wheel_speeds' || entity === 'tpms_tire_pressures' || entity === 'tpms') {
+      const match = stateStr.match(/fl:\s*(\d+).*fr:\s*(\d+).*rl:\s*(\d+).*rr:\s*(\d+)/i);
+      if (match) {
+        setTpms({
+          fl: parseInt(match[1], 10),
+          fr: parseInt(match[2], 10),
+          rl: parseInt(match[3], 10),
+          rr: parseInt(match[4], 10),
+        });
+      }
     } else if (entity === 'cond_hv_battery_soc' || entity.includes('battery_soc')) {
       const match = stateStr.match(/(\d+(\.\d+)?)/);
       if (match) {
@@ -471,7 +590,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     let cancelled = false;
     const fetchCurrentStates = async () => {
       try {
-        const baseUrl = resolveDeviceBaseUrl();
+        const baseUrl = resolveDeviceBaseUrl(localStorage.getItem('cando_device_host'));
         const res = await fetch(`${baseUrl}/api/states`);
         if (res.ok && !cancelled) {
           const states: Array<{ entity: string; state: string }> = await res.json();
@@ -500,7 +619,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
     const connect = () => {
       try {
-        const baseUrl = resolveDeviceBaseUrl();
+        const baseUrl = resolveDeviceBaseUrl(localStorage.getItem('cando_device_host'));
         const parsed = new URL(baseUrl);
         const wsProto = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${wsProto}//${parsed.host}/ws`;
@@ -734,11 +853,13 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       const rawP = bytes[2];
       if (rawD >= 0x06 && rawD <= 0x1A) {
         const dF = 62 + (rawD - 0x06);
-        setDriverTemp(dF);
+        const dFinal = tempUnit === 'C' ? Math.round((dF - 32) / 1.8 * 2) / 2 : dF;
+        setDriverTemp(dFinal);
       }
       if (rawP >= 0x06 && rawP <= 0x1A) {
         const pF = 62 + (rawP - 0x06);
-        setPassengerTemp(pF);
+        const pFinal = tempUnit === 'C' ? Math.round((pF - 32) / 1.8 * 2) / 2 : pF;
+        setPassengerTemp(pFinal);
       }
       recordLog(idFormatted, canMappings.climateTargetName, `Driver: ${bytes[1]} / Pass: ${bytes[2]}`, hexPayload, now);
     }
@@ -760,8 +881,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     // Heated Steering Wheel (Dynamically mapped from catalog, e.g. 0x418)
     else if (normId === canMappings.steeringHeat && bytes.length >= 1) {
       const val = bytes[0] & 0x03;
-      const levels: SteeringHeatLevel[] = ['off', 'low', 'high'];
-      const lvl = levels[val] || 'off';
+      const lvl: SteeringHeatLevel = val > 0 ? 'on' : 'off';
       setSteeringWheelHeat(lvl);
       recordLog(idFormatted, canMappings.steeringHeatName, lvl.toUpperCase(), hexPayload, now);
     }
@@ -777,41 +897,76 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       recordLog(idFormatted, canMappings.sunroofName, `Sunroof State: ${sState.toUpperCase()}`, hexPayload, now);
     }
 
-    // Headlight & Turn Signal Stalk (Dynamically mapped from catalog, e.g. 0x3C1)
-    else if ((normId === '3c1' || normId === 'turn_signal') && bytes.length >= 1) {
-      const b0 = bytes[0];
-      const leftBlink = Boolean(b0 & 0x01);
-      const rightBlink = Boolean(b0 & 0x02);
-      if (leftBlink && !rightBlink) setTurnSignal('left');
-      else if (rightBlink && !leftBlink) setTurnSignal('right');
-      else setTurnSignal('off');
-      recordLog(idFormatted, 'Turn Signal & Light Stalk', `Turn Signal: ${leftBlink ? 'Left' : rightBlink ? 'Right' : 'Off'}`, hexPayload, now);
+    // Headlight & Turn Signal Stalk (0x3C1, 0x413)
+    else if ((normId === '3c1' || normId === '413' || normId === 'turn_signal') && bytes.length >= 1) {
+      let activeDir: 'off' | 'left' | 'right' = 'off';
+      if (normId === '3c1') {
+        if (bytes.length >= 5) {
+          const d5 = bytes[4];
+          if ((d5 & 0xF0) === 0x40) activeDir = 'left';
+          else if ((d5 & 0xF0) === 0x10) activeDir = 'right';
+        }
+        if (activeDir === 'off') {
+          const b0 = bytes[0];
+          if (b0 & 0x01) activeDir = 'left';
+          else if (b0 & 0x02) activeDir = 'right';
+        }
+      } else if (normId === '413' && bytes.length >= 3) {
+        const d3 = bytes[2];
+        if (d3 & 0x10) activeDir = 'left';
+        else if (d3 & 0x40) activeDir = 'right';
+      }
+
+      if (activeDir !== 'off') {
+        setTurnSignal(activeDir);
+        if (turnSignalTimeoutRef.current) clearTimeout(turnSignalTimeoutRef.current);
+        // Hold active direction for 900ms across blink cycles so UI remains rock steady
+        turnSignalTimeoutRef.current = setTimeout(() => {
+          setTurnSignal('off');
+        }, 900);
+        recordLog(idFormatted, 'Turn Signal Telemetry', `Active: ${activeDir.toUpperCase()}`, hexPayload, now);
+      }
     }
 
-    // Driver Seat Comfort (Dynamically mapped from catalog, e.g. 0x496)
+    // Rear Seats Comfort (Frame 0x438 Left, 0x453 Right)
+    else if ((normId === canMappings.rearSeats || normId === '438' || normId === '453') && bytes.length >= 1) {
+      const b = bytes[0];
+      const lvl: SeatLevel = b === 0x41 ? 'heat_high' : b === 0x31 ? 'heat_low' : 'off';
+      if (normId === '438') {
+        setRearLeftSeat(lvl);
+        recordLog(idFormatted, 'Rear Left Seat Comfort', lvl, hexPayload, now);
+      } else {
+        setRearRightSeat(lvl);
+        recordLog(idFormatted, 'Rear Right Seat Comfort', lvl, hexPayload, now);
+      }
+    }
+
+    // Driver Seat Comfort (Dynamically mapped from catalog, e.g. 0x496 Byte D1)
     else if (normId === canMappings.driverSeat && bytes.length >= 1) {
       const b = bytes[0];
       let lvl: SeatLevel = 'off';
-      if (b === 0x0E) lvl = 'heat_low';
-      else if (b === 0x0A) lvl = 'heat_med';
-      else if (b === 0x02) lvl = 'heat_high';
-      else if (b === 0x14) lvl = 'cool_low';
-      else if (b === 0x12) lvl = 'cool_med';
-      else if (b === 0x10) lvl = 'cool_high';
+      if (b === 0x46 || b === 0x02) lvl = 'heat_high';
+      else if (b === 0x4E || b === 0x0A) lvl = 'heat_med';
+      else if (b === 0x36 || b === 0x0E) lvl = 'heat_low';
+      else if (b === 0x2E || b === 0x10) lvl = 'cool_high';
+      else if (b === 0x26 || b === 0x12) lvl = 'cool_med';
+      else if (b === 0x1E || b === 0x14) lvl = 'cool_low';
+      else lvl = 'off';
       setDriverSeat(lvl);
       recordLog(idFormatted, canMappings.driverSeatName, lvl, hexPayload, now);
     }
 
-    // Passenger Seat Comfort (Dynamically mapped from catalog, e.g. 0x475)
+    // Passenger Seat Comfort (Dynamically mapped from catalog, e.g. 0x475 Byte D1)
     else if (normId === canMappings.passengerSeat && bytes.length >= 1) {
       const b = bytes[0];
       let lvl: SeatLevel = 'off';
-      if (b === 0x0E) lvl = 'heat_low';
-      else if (b === 0x0A) lvl = 'heat_med';
-      else if (b === 0x02) lvl = 'heat_high';
-      else if (b === 0x14) lvl = 'cool_low';
-      else if (b === 0x12) lvl = 'cool_med';
-      else if (b === 0x10) lvl = 'cool_high';
+      if (b === 0x46 || b === 0x02) lvl = 'heat_high';
+      else if (b === 0x4E || b === 0x0A) lvl = 'heat_med';
+      else if (b === 0x36 || b === 0x0E) lvl = 'heat_low';
+      else if (b === 0x2E || b === 0x10) lvl = 'cool_high';
+      else if (b === 0x26 || b === 0x12) lvl = 'cool_med';
+      else if (b === 0x1E || b === 0x14) lvl = 'cool_low';
+      else lvl = 'off';
       setPassengerSeat(lvl);
       recordLog(idFormatted, canMappings.passengerSeatName, lvl, hexPayload, now);
     }
@@ -825,6 +980,31 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         setRecirc(Boolean(bytes[4] & 0x40));
       }
       recordLog(idFormatted, canMappings.fanBlowerName, `Fan ${speed}`, hexPayload, now);
+    }
+
+    // Charging Limits (Dynamically mapped from catalog, e.g. 0x1F9: AC limit Byte D7, DC limit Byte D4)
+    else if ((normId === canMappings.acLimit || normId === canMappings.dcLimit || normId === '1f9') && bytes.length >= 8) {
+      const d7 = bytes[7];
+      let ac: number | null = null;
+      if (d7 === 0x78) ac = 50;
+      else if (d7 === 0xa0) ac = 60;
+      else if (d7 === 0xc8) ac = 70;
+      else if (d7 === 0xf5) ac = 80;
+      else if (d7 === 0x1d) ac = 90;
+      else if (d7 === 0x4a) ac = 100;
+      if (ac !== null) setAcChargeLimit(ac);
+
+      const d4 = bytes[4];
+      let dc: number | null = null;
+      if (d4 === 0x64) dc = 50;
+      else if (d4 === 0x78) dc = 60;
+      else if (d4 === 0x8c) dc = 70;
+      else if (d4 === 0xa0) dc = 80;
+      else if (d4 === 0xb4) dc = 90;
+      else if (d4 === 0xc8) dc = 100;
+      if (dc !== null) setDcChargeLimit(dc);
+
+      recordLog(idFormatted, 'Charge Limits (AC / DC)', `AC: ${ac !== null ? `${ac}%` : '--'} | DC: ${dc !== null ? `${dc}%` : '--'}`, hexPayload, now);
     }
 
     // TPMS Tire Pressures (Dynamically mapped from catalog, e.g. 0x593 or 0x368)
@@ -856,7 +1036,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   }, [hazards, turnSignal]);
 
   // Seat toggle helper - dynamically respects vehicle features (heated and/or ventilated seats)
-  const cycleSeat = (current: SeatLevel, isDriver: boolean) => {
+  const cycleSeat = (current: SeatLevel | null, isDriver: boolean) => {
     const hasHeat = equippedFeatures.has('heated_seats');
     const hasCool = equippedFeatures.has('ventilated_seats');
 
@@ -869,7 +1049,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     if (hasHeat) cycle = cycle.concat(['heat_low', 'heat_med', 'heat_high']);
     if (hasCool) cycle = cycle.concat(['cool_low', 'cool_med', 'cool_high']);
 
-    const nextIdx = (cycle.indexOf(current) + 1) % cycle.length;
+    const currentEffective = current || 'off';
+    const nextIdx = (cycle.indexOf(currentEffective) + 1) % cycle.length;
     const next = cycle[nextIdx];
     const seatOptionMap: Record<SeatLevel, string> = {
       off: 'Off',
@@ -895,21 +1076,26 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       triggerNotice('Heated steering wheel is not equipped on this trim');
       return;
     }
-    const next: SteeringHeatLevel = steeringWheelHeat === 'off' ? 'low' : steeringWheelHeat === 'low' ? 'high' : 'off';
+    const isCurrentlyOn = steeringWheelHeat === 'on' || steeringWheelHeat === 'high' || steeringWheelHeat === 'low';
+    const next: SteeringHeatLevel = isCurrentlyOn ? 'off' : 'on';
     setSteeringWheelHeat(next);
     dispatchCommand('heated_steering_wheel_toggle', next === 'off' ? 'Off' : 'Toggle', `Heated Steering Wheel: ${next.toUpperCase()}`);
   };
 
   const adjustTemp = (isDriver: boolean, delta: number) => {
     const minT = tempUnit === 'C' ? 17 : 62;
-    const maxT = tempUnit === 'C' ? 32 : 86;
+    const maxT = tempUnit === 'C' ? 27.5 : 82;
+    const step = tempUnit === 'C' ? (delta > 0 ? 0.5 : -0.5) : delta;
+    const baseDefault = tempUnit === 'C' ? 21 : 70;
     if (isDriver) {
-      const next = Math.max(minT, Math.min(maxT, driverTemp + delta));
+      const cur = driverTemp !== null ? driverTemp : baseDefault;
+      const next = Math.max(minT, Math.min(maxT, tempUnit === 'C' ? Math.round((cur + step) * 2) / 2 : cur + step));
       setDriverTemp(next);
       if (climateSync) setPassengerTemp(next);
       dispatchCommand('climate_driver_temp', `${next}`, `Driver Target Temp: ${next}°${tempUnit}`);
     } else {
-      const next = Math.max(minT, Math.min(maxT, passengerTemp + delta));
+      const cur = passengerTemp !== null ? passengerTemp : baseDefault;
+      const next = Math.max(minT, Math.min(maxT, tempUnit === 'C' ? Math.round((cur + step) * 2) / 2 : cur + step));
       setPassengerTemp(next);
       setClimateSync(false);
       dispatchCommand('climate_passenger_temp', `${next}`, `Passenger Target Temp: ${next}°${tempUnit}`);
@@ -956,19 +1142,37 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
               </button>
             </div>
             <div className="flex flex-wrap items-center gap-2.5 mt-0.5 text-xs text-slate-400">
-              <span className="font-mono">{odometer.toLocaleString()} {unitSystem === 'metric' ? 'km' : 'mi'}</span>
+              <span className="font-mono">{odometer !== null ? `${odometer.toLocaleString()} ${unitSystem === 'metric' ? 'km' : 'mi'}` : `-- ${unitSystem === 'metric' ? 'km' : 'mi'}`}</span>
               <span>•</span>
               <span className="inline-flex items-center gap-1">
                 <Thermometer className="w-3 h-3 text-slate-400" />
                 <span>{displayAmbient}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded font-medium border ${ambientThreshold.color}`}>
-                  {ambientThreshold.label}
-                </span>
+                {ambientThreshold && (
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded font-medium border ${ambientThreshold.color}`}>
+                    {ambientThreshold.label}
+                  </span>
+                )}
               </span>
               <span>•</span>
-              <span className="font-mono text-slate-300">
-                {unitSystem === 'metric' ? `${speedKph} km/h` : `${speedMph} MPH`}
-              </span>
+              <div className="inline-flex items-center gap-2 font-mono text-slate-300">
+                <span className={`text-xs font-bold transition-all ${
+                  (turnSignal === 'left' || hazards) && blinkState
+                    ? 'text-emerald-400 opacity-100 scale-125 drop-shadow-[0_0_8px_rgba(52,211,153,0.9)]'
+                    : 'text-slate-600 opacity-25'
+                }`}>
+                  ◀
+                </span>
+                <span>
+                  {unitSystem === 'metric' ? `${speedKph} km/h` : `${speedMph} MPH`}
+                </span>
+                <span className={`text-xs font-bold transition-all ${
+                  (turnSignal === 'right' || hazards) && blinkState
+                    ? 'text-emerald-400 opacity-100 scale-125 drop-shadow-[0_0_8px_rgba(52,211,153,0.9)]'
+                    : 'text-slate-600 opacity-25'
+                }`}>
+                  ▶
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -1172,6 +1376,48 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   <AlertTriangle className="w-3.5 h-3.5" />
                 </button>
 
+                {/* Turn Signals Controls */}
+                <div className="flex items-center gap-0.5 p-0.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <button
+                    type="button"
+                    id="turn-left-btn"
+                    onClick={() => {
+                      const next = turnSignal === 'left' ? 'off' : 'left';
+                      setTurnSignal(next);
+                      dispatchCommand('turn_signal', next, `Turn Signal: ${next.toUpperCase()}`);
+                    }}
+                    title="Toggle Left Turn Signal (CAN 0x3C1 / 0x413)"
+                    className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      (turnSignal === 'left' || hazards) && blinkState
+                        ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/50 scale-105'
+                        : turnSignal === 'left'
+                        ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    ◀
+                  </button>
+                  <button
+                    type="button"
+                    id="turn-right-btn"
+                    onClick={() => {
+                      const next = turnSignal === 'right' ? 'off' : 'right';
+                      setTurnSignal(next);
+                      dispatchCommand('turn_signal', next, `Turn Signal: ${next.toUpperCase()}`);
+                    }}
+                    title="Toggle Right Turn Signal (CAN 0x3C1 / 0x413)"
+                    className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      (turnSignal === 'right' || hazards) && blinkState
+                        ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/50 scale-105'
+                        : turnSignal === 'right'
+                        ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    ▶
+                  </button>
+                </div>
+
                 <button
                   type="button"
                   id="mirror-fold-btn"
@@ -1201,7 +1447,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                     title={`Dynamically resolved CAN ID: 0x${canMappings.hvSoc.toUpperCase()}`}
                     className="text-xs font-mono font-bold text-white px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700/60"
                   >
-                    {soc.toFixed(1)}%
+                    {soc !== null ? `${soc.toFixed(1)}%` : '--'}
                   </span>
                   {activeVehicle?.battery_kwh && (
                     <span className="text-[10px] font-mono text-slate-400">
@@ -1239,24 +1485,77 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 <div className="h-3 w-full rounded-full bg-slate-950/90 p-0.5 border border-slate-800/80 relative overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-500 relative overflow-hidden ${
-                      soc > 20 ? 'bg-gradient-to-r from-cyan-500 to-emerald-400' : 'bg-red-500'
+                      soc !== null && soc > 20 ? 'bg-gradient-to-r from-cyan-500 to-emerald-400' : 'bg-red-500'
                     }`}
-                    style={{ width: `${soc}%` }}
+                    style={{ width: `${soc !== null ? soc : 0}%` }}
                   >
                     {isCharging && (
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse" />
                     )}
                   </div>
                 </div>
-                <div className="flex justify-between text-[11px] text-slate-400 font-mono">
+                <div className="flex justify-between items-center text-[11px] text-slate-400 font-mono">
                   <span>0%</span>
-                  <span className="text-cyan-300 font-medium">Est. {estimatedRangeMiles} {unitSystem === 'metric' ? 'km' : 'mi'} Range</span>
-                  <span>Limit: {chargeLimit}%</span>
+                  <span className="text-cyan-300 font-medium">
+                    {estimatedRangeMiles !== null ? `Est. ${estimatedRangeMiles} ${unitSystem === 'metric' ? 'km' : 'mi'} Range` : 'Est. -- Range'}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={cycleAcLimit}
+                      title="Click to cycle AC Charging Limit"
+                      className="px-1.5 py-0.5 rounded bg-slate-900/80 hover:bg-slate-800 border border-slate-700/60 hover:border-cyan-500/50 transition-colors cursor-pointer text-slate-300"
+                    >
+                      AC: <strong className="text-cyan-300 font-semibold">{acChargeLimit !== null ? `${acChargeLimit}%` : '--'}</strong>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cycleDcLimit}
+                      title="Click to cycle DC Fast Charging Limit"
+                      className="px-1.5 py-0.5 rounded bg-slate-900/80 hover:bg-slate-800 border border-slate-700/60 hover:border-cyan-500/50 transition-colors cursor-pointer text-slate-300"
+                    >
+                      DC: <strong className="text-cyan-300 font-semibold">{dcChargeLimit !== null ? `${dcChargeLimit}%` : '--'}</strong>
+                    </button>
+                  </div>
                 </div>
               </div>
 
               {/* Compact Battery & Aux Telemetry Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+                {/* AC Charging Limit Tile */}
+                <button
+                  type="button"
+                  id="ac-charging-limit-tile"
+                  onClick={cycleAcLimit}
+                  title={`Dynamically resolved CAN ID: 0x${canMappings.acLimit.toUpperCase()} (Byte D7). Click to cycle AC charging limit.`}
+                  className="p-2 rounded-lg bg-slate-950/50 hover:bg-slate-900 border border-slate-800/50 hover:border-cyan-500/50 text-left transition-colors cursor-pointer"
+                >
+                  <span className="text-[10px] uppercase text-slate-400 block font-semibold flex items-center justify-between">
+                    <span>AC Limit</span>
+                    <span className="text-[9px] text-cyan-400/80 font-normal">Cycle ↺</span>
+                  </span>
+                  <span className="font-mono font-bold text-cyan-300">
+                    {acChargeLimit !== null ? `${acChargeLimit}%` : '--'}
+                  </span>
+                </button>
+
+                {/* DC Fast Charging Limit Tile */}
+                <button
+                  type="button"
+                  id="dc-charging-limit-tile"
+                  onClick={cycleDcLimit}
+                  title={`Dynamically resolved CAN ID: 0x${canMappings.dcLimit.toUpperCase()} (Byte D4). Click to cycle DC fast charging limit.`}
+                  className="p-2 rounded-lg bg-slate-950/50 hover:bg-slate-900 border border-slate-800/50 hover:border-cyan-500/50 text-left transition-colors cursor-pointer"
+                >
+                  <span className="text-[10px] uppercase text-slate-400 block font-semibold flex items-center justify-between">
+                    <span>DC Fast Limit</span>
+                    <span className="text-[9px] text-cyan-400/80 font-normal">Cycle ↺</span>
+                  </span>
+                  <span className="font-mono font-bold text-cyan-300">
+                    {dcChargeLimit !== null ? `${dcChargeLimit}%` : '--'}
+                  </span>
+                </button>
+
                 <div
                   title={`Dynamically resolved CAN ID: 0x${canMappings.charging.toUpperCase()}`}
                   className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50"
@@ -1271,7 +1570,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50"
                 >
                   <span className="text-[10px] uppercase text-slate-400 block font-semibold">12V Aux Battery</span>
-                  <span className="font-mono font-bold text-slate-300">{aux12V.toFixed(1)} V (OK)</span>
+                  <span className="font-mono font-bold text-slate-300">{aux12V !== null ? `${aux12V.toFixed(1)} V (OK)` : '--'}</span>
                 </div>
                 <div
                   title={`Dynamically resolved CAN ID: 0x${canMappings.hvTemps.toUpperCase()}`}
@@ -1279,7 +1578,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 >
                   <span className="text-[10px] uppercase text-slate-400 block font-semibold">Pack Min Temp</span>
                   <span className="font-mono font-bold text-slate-300">
-                    {tempUnit === 'F' ? `${Math.round(batteryMinTempC * 1.8 + 32)}°F` : `${batteryMinTempC}°C`}
+                    {batteryMinTempC !== null ? (tempUnit === 'F' ? `${Math.round(batteryMinTempC * 1.8 + 32)}°F` : `${batteryMinTempC}°C`) : '--'}
                   </span>
                 </div>
                 <div
@@ -1288,7 +1587,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 >
                   <span className="text-[10px] uppercase text-slate-400 block font-semibold">Pack Max Temp</span>
                   <span className="font-mono font-bold text-slate-300">
-                    {tempUnit === 'F' ? `${Math.round(batteryMaxTempC * 1.8 + 32)}°F` : `${batteryMaxTempC}°C`}
+                    {batteryMaxTempC !== null ? (tempUnit === 'F' ? `${Math.round(batteryMaxTempC * 1.8 + 32)}°F` : `${batteryMaxTempC}°C`) : '--'}
                   </span>
                 </div>
                 {hvPowerKw !== null && (
@@ -1372,22 +1671,30 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
               {/* TPMS Floating Badges Anchored Beside Tires */}
               <div className="absolute top-16 left-2 sm:left-6 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono text-center shadow-lg">
                 <span className="text-slate-400 block text-[9px]">FL TIRE</span>
-                <span className="font-bold text-emerald-400">{tpms.fl} PSI</span>
+                <span className={`font-bold ${tpms.fl !== null ? 'text-emerald-400' : 'text-slate-500'}`}>
+                  {tpms.fl !== null ? `${tpms.fl} PSI` : '--'}
+                </span>
               </div>
 
               <div className="absolute top-16 right-2 sm:right-6 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono text-center shadow-lg">
                 <span className="text-slate-400 block text-[9px]">FR TIRE</span>
-                <span className="font-bold text-emerald-400">{tpms.fr} PSI</span>
+                <span className={`font-bold ${tpms.fr !== null ? 'text-emerald-400' : 'text-slate-500'}`}>
+                  {tpms.fr !== null ? `${tpms.fr} PSI` : '--'}
+                </span>
               </div>
 
               <div className="absolute bottom-20 left-2 sm:left-6 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono text-center shadow-lg">
                 <span className="text-slate-400 block text-[9px]">RL TIRE</span>
-                <span className="font-bold text-emerald-400">{tpms.rl} PSI</span>
+                <span className={`font-bold ${tpms.rl !== null ? 'text-emerald-400' : 'text-slate-500'}`}>
+                  {tpms.rl !== null ? `${tpms.rl} PSI` : '--'}
+                </span>
               </div>
 
               <div className="absolute bottom-20 right-2 sm:right-6 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono text-center shadow-lg">
                 <span className="text-slate-400 block text-[9px]">RR TIRE</span>
-                <span className="font-bold text-emerald-400">{tpms.rr} PSI</span>
+                <span className={`font-bold ${tpms.rr !== null ? 'text-emerald-400' : 'text-slate-500'}`}>
+                  {tpms.rr !== null ? `${tpms.rr} PSI` : '--'}
+                </span>
               </div>
             </div>
 
@@ -1592,19 +1899,43 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
+                  id="climate-sync-toggle-btn"
+                  onClick={() => {
+                    const next = !climateSync;
+                    setClimateSync(next);
+                    if (next && driverTemp !== null) {
+                      setPassengerTemp(driverTemp);
+                      dispatchCommand('climate_passenger_temp', String(driverTemp), `Passenger Temp Synced to ${driverTemp}°${tempUnit}`);
+                    }
+                    triggerNotice(next ? 'Dual Climate Synced' : 'Dual Climate Independent');
+                  }}
+                  title="Click to toggle Dual Climate Sync"
+                  className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                    climateSync
+                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/60 shadow-sm shadow-cyan-500/20'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                  }`}
+                >
+                  <Link2 className={`w-3.5 h-3.5 ${climateSync ? 'text-cyan-300' : 'text-slate-500'}`} />
+                  <span>SYNC</span>
+                </button>
+                <button
+                  type="button"
                   id="hvac-power-toggle"
                   onClick={() => {
-                    const next = !hvacPower;
+                    const next = hvacPower === true ? false : true;
                     setHvacPower(next);
                     dispatchCommand('remote_climate_start____seats___wheel_', next ? 'start' : 'off', next ? 'Cabin Climate Activated' : 'Cabin Climate Turned OFF');
                   }}
-                  className={`px-2 py-0.5 rounded-md text-xs font-bold transition-colors ${
-                    hvacPower
+                  className={`px-2.5 py-1 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+                    hvacPower === true
                       ? 'bg-cyan-500 text-slate-950 shadow-sm'
-                      : 'bg-slate-800 text-slate-400 hover:text-white'
+                      : hvacPower === false
+                      ? 'bg-slate-800 text-slate-400 hover:text-white'
+                      : 'bg-slate-900 text-slate-500 border border-slate-800'
                   }`}
                 >
-                  {hvacPower ? 'ON' : 'OFF'}
+                  {hvacPower === true ? 'ON' : hvacPower === false ? 'OFF' : '--'}
                 </button>
               </div>
             </div>
@@ -1615,7 +1946,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
               <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800/80 flex flex-col items-center">
                 <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Driver</span>
                 <span className="text-2xl font-bold font-mono text-white tracking-tight">
-                  {driverTemp}°{tempUnit}
+                  {driverTemp !== null ? `${driverTemp}°${tempUnit}` : '--'}
                 </span>
                 <div className="flex items-center gap-2 mt-2">
                   <button
@@ -1639,24 +1970,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
               {/* Passenger Temp */}
               <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800/80 flex flex-col items-center">
-                <div className="flex items-center justify-between w-full mb-1">
-                  <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Pass.</span>
-                  <button
-                    type="button"
-                    id="climate-sync-btn"
-                    onClick={() => {
-                      const next = !climateSync;
-                      setClimateSync(next);
-                      if (next) setPassengerTemp(driverTemp);
-                      triggerNotice(next ? 'Dual Climate Synced' : 'Dual Climate Independent');
-                    }}
-                    className={`text-[9px] px-1 rounded font-mono ${climateSync ? 'bg-cyan-900 text-cyan-200' : 'text-slate-500'}`}
-                  >
-                    SYNC
-                  </button>
-                </div>
+                <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Passenger</span>
                 <span className="text-2xl font-bold font-mono text-white tracking-tight">
-                  {passengerTemp}°{tempUnit}
+                  {passengerTemp !== null ? `${passengerTemp}°${tempUnit}` : '--'}
                 </span>
                 <div className="flex items-center gap-2 mt-2">
                   <button
@@ -1683,10 +1999,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
             <div className="space-y-1.5 pt-1">
               <div className="flex justify-between items-center text-xs">
                 <span className="text-slate-400 flex items-center gap-1">
-                  <Fan className={`w-3.5 h-3.5 ${fanSpeed > 0 && hvacPower ? 'text-cyan-400 animate-spin' : 'text-slate-500'}`} style={{ animationDuration: `${Math.max(0.4, 2.5 - fanSpeed * 0.25)}s` }} />
+                  <Fan className={`w-3.5 h-3.5 ${fanSpeed !== null && fanSpeed > 0 && hvacPower ? 'text-cyan-400 animate-spin' : 'text-slate-500'}`} style={{ animationDuration: `${Math.max(0.4, 2.5 - (fanSpeed || 0) * 0.25)}s` }} />
                   <span>Fan Speed</span>
                 </span>
-                <span className="font-mono font-bold text-slate-200">{fanSpeed === 0 ? 'Off' : `Level ${fanSpeed}`}</span>
+                <span className="font-mono font-bold text-slate-200">{fanSpeed === null ? '--' : fanSpeed === 0 ? 'Off' : `Level ${fanSpeed}`}</span>
               </div>
               <div className="grid grid-cols-8 gap-1">
                 {[1, 2, 3, 4, 5, 6, 7, 8].map(step => (
@@ -1698,7 +2014,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                       dispatchCommand('climate_fan_speed_level', String(step), `Fan Speed: Level ${step}`);
                     }}
                     className={`h-6 rounded text-[10px] font-mono font-bold transition-colors ${
-                      fanSpeed >= step && hvacPower
+                      fanSpeed !== null && fanSpeed >= step && hvacPower
                         ? 'bg-cyan-500 text-slate-950'
                         : 'bg-slate-900 text-slate-500 hover:bg-slate-800'
                     }`}
@@ -1737,36 +2053,36 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 type="button"
                 id="front-defrost-btn"
                 onClick={() => {
-                  const nextF = !frontDefrost;
+                  const nextF = frontDefrost === true ? false : true;
                   setFrontDefrost(nextF);
                   dispatchCommand('front_defrost', nextF ? 'on' : 'off', nextF ? 'Front Defrost MAX Active' : 'Front Defrost Off');
                 }}
                 className={`p-2 rounded-xl border text-center transition-colors ${
-                  frontDefrost
+                  frontDefrost === true
                     ? 'bg-cyan-950 text-cyan-300 border-cyan-700'
                     : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200'
                 }`}
               >
                 <span className="text-[10px] block font-semibold">Front Defrost</span>
-                <span className="text-[11px] font-bold">{frontDefrost ? 'ON' : 'Off'}</span>
+                <span className="text-[11px] font-bold">{frontDefrost === null ? '--' : frontDefrost ? 'ON' : 'Off'}</span>
               </button>
 
               <button
                 type="button"
                 id="rear-defrost-btn"
                 onClick={() => {
-                  const next = !rearDefrost;
+                  const next = rearDefrost === true ? false : true;
                   setRearDefrost(next);
                   dispatchCommand('climate_rear_defog', next ? 'on' : 'off', next ? 'Rear Defrost Activated' : 'Rear Defrost Deactivated');
                 }}
                 className={`p-2 rounded-xl border text-center transition-colors ${
-                  rearDefrost
+                  rearDefrost === true
                     ? 'bg-red-950 text-red-300 border-red-700'
                     : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200'
                 }`}
               >
                 <span className="text-[10px] block font-semibold">Rear Defrost</span>
-                <span className="text-[11px] font-bold">{rearDefrost ? 'ON' : 'Off'}</span>
+                <span className="text-[11px] font-bold">{rearDefrost === null ? '--' : rearDefrost ? 'ON' : 'Off'}</span>
               </button>
 
               <button
@@ -1774,13 +2090,13 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 id="steering-wheel-heat-btn"
                 onClick={cycleSteeringHeat}
                 className={`p-2 rounded-xl border text-center transition-colors ${
-                  steeringWheelHeat !== 'off'
+                  steeringWheelHeat && steeringWheelHeat !== 'off'
                     ? 'bg-amber-950 text-amber-300 border-amber-700'
                     : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200'
                 }`}
               >
                 <span className="text-[10px] block font-semibold">Heated Wheel</span>
-                <span className="text-[11px] font-bold uppercase">{steeringWheelHeat}</span>
+                <span className="text-[11px] font-bold uppercase">{steeringWheelHeat === null ? '--' : steeringWheelHeat === 'off' ? 'Off' : 'ON'}</span>
               </button>
             </div>
 
@@ -1791,15 +2107,15 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 id="driver-seat-comfort-btn"
                 onClick={() => cycleSeat(driverSeat, true)}
                 className={`p-2.5 rounded-xl border text-left transition-colors ${
-                  driverSeat.startsWith('heat')
+                  driverSeat?.startsWith('heat')
                     ? 'bg-red-950/70 text-red-300 border-red-700/80'
-                    : driverSeat.startsWith('cool')
+                    : driverSeat?.startsWith('cool')
                     ? 'bg-sky-950/70 text-sky-300 border-sky-700/80'
                     : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200'
                 }`}
               >
                 <span className="text-[10px] block font-semibold opacity-75">Driver Seat</span>
-                <span className="font-bold font-mono">{driverSeat.replace('_', ' ').toUpperCase()}</span>
+                <span className="font-bold font-mono">{driverSeat === null ? '--' : driverSeat.replace('_', ' ').toUpperCase()}</span>
               </button>
 
               <button
@@ -1807,15 +2123,50 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 id="pass-seat-comfort-btn"
                 onClick={() => cycleSeat(passengerSeat, false)}
                 className={`p-2.5 rounded-xl border text-left transition-colors ${
-                  passengerSeat.startsWith('heat')
+                  passengerSeat?.startsWith('heat')
                     ? 'bg-red-950/70 text-red-300 border-red-700/80'
-                    : passengerSeat.startsWith('cool')
+                    : passengerSeat?.startsWith('cool')
                     ? 'bg-sky-950/70 text-sky-300 border-sky-700/80'
                     : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200'
                 }`}
               >
                 <span className="text-[10px] block font-semibold opacity-75">Pass. Seat</span>
-                <span className="font-bold font-mono">{passengerSeat.replace('_', ' ').toUpperCase()}</span>
+                <span className="font-bold font-mono">{passengerSeat === null ? '--' : passengerSeat.replace('_', ' ').toUpperCase()}</span>
+              </button>
+            </div>
+
+            {/* Rear Heated Seats Steppers */}
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/60 text-xs">
+              <button
+                type="button"
+                id="rear-left-seat-comfort-btn"
+                onClick={() => cycleRearSeat(true)}
+                className={`p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                  rearLeftSeat?.startsWith('heat')
+                    ? 'bg-amber-950/70 text-amber-300 border-amber-700/80 shadow-sm shadow-amber-900/30'
+                    : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200'
+                }`}
+              >
+                <span className="text-[10px] block font-semibold opacity-75">Rear Left Seat</span>
+                <span className="font-bold font-mono">
+                  {rearLeftSeat === null ? '--' : rearLeftSeat.replace('_', ' ').toUpperCase()}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                id="rear-right-seat-comfort-btn"
+                onClick={() => cycleRearSeat(false)}
+                className={`p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                  rearRightSeat?.startsWith('heat')
+                    ? 'bg-amber-950/70 text-amber-300 border-amber-700/80 shadow-sm shadow-amber-900/30'
+                    : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200'
+                }`}
+              >
+                <span className="text-[10px] block font-semibold opacity-75">Rear Right Seat</span>
+                <span className="font-bold font-mono">
+                  {rearRightSeat === null ? '--' : rearRightSeat.replace('_', ' ').toUpperCase()}
+                </span>
               </button>
             </div>
           </div>

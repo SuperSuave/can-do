@@ -550,13 +550,16 @@ export function commandToCondition(rawCmd: Command, opt?: CommandOption): Automa
   const chosenOpt = opt || (cmd.options && cmd.options.length > 0 ? (cmd.options.find(o => o.default) || cmd.options[0]) : undefined);
   const condId = `cond_${cmd.id}_${Date.now().toString(36).slice(-4)}`;
   const canId = cmd.network?.state_can_id || cmd.state_can_id || cmd.network?.action_can_id || cmd.action_can_id || '0x000';
+  
+  const optEval = typeof chosenOpt?.evaluate === 'object' ? chosenOpt.evaluate : (typeof cmd.evaluate === 'object' ? cmd.evaluate : undefined);
   const match = compileToByteMap(chosenOpt?.match || cmd.match || chosenOpt?.payload || cmd.payload);
-  const cleanMatch = Object.keys(match).length > 0 ? match : { D1: '0x01' };
-  const dKey = Object.keys(cleanMatch)[0] || 'D1';
-  const targetVal = cleanMatch[dKey] || '0x01';
+  const dKey = optEval?.byte || chosenOpt?.byte || Object.keys(match)[0] || 'D1';
+  const targetVal = optEval?.value !== undefined ? String(optEval.value) : (chosenOpt?.value || match[dKey] || '0x01');
+  const targetOp = optEval?.operator || chosenOpt?.operator || 'equal';
+  const cleanMatch = Object.keys(match).length > 0 ? match : { [dKey]: targetVal };
   const byteIdx = parseInt(dKey.replace(/\D/g, ''), 10) - 1;
 
-  const rawMask = chosenOpt?.mask || cmd.mask;
+  const rawMask = optEval?.mask || chosenOpt?.mask || cmd.mask;
   let targetMask = '0xFF';
   if (typeof rawMask === 'string') {
     targetMask = rawMask;
@@ -572,12 +575,12 @@ export function commandToCondition(rawCmd: Command, opt?: CommandOption): Automa
     match: cleanMatch,
     byte: dKey,
     mask: targetMask,
-    operator: 'equal',
+    operator: targetOp,
     value: targetVal,
     evaluate: {
       byte: dKey,
       byte_index: isNaN(byteIdx) ? 0 : byteIdx,
-      operator: 'equal',
+      operator: targetOp,
       value: targetVal,
       mask: targetMask
     },

@@ -1,6 +1,7 @@
 """Binary sensor platform for CAN Do integration."""
 
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 from homeassistant.components.binary_sensor import (
@@ -40,6 +41,8 @@ class CanDoBinarySensorEntity(CanDoEntity, BinarySensorEntity):
         """Initialize binary sensor."""
         super().__init__(coordinator, command)
         self._attr_device_class = self._infer_device_class()
+        self._is_turn_signal: bool = "turn_signal" in self.entity_id_str.lower() or "blinker" in self.entity_id_str.lower()
+        self._last_active_time: float = 0.0
 
     def _infer_device_class(self) -> Optional[BinarySensorDeviceClass]:
         """Infer device class from icon or entity identifier."""
@@ -64,22 +67,40 @@ class CanDoBinarySensorEntity(CanDoEntity, BinarySensorEntity):
 
         payload = self.coordinator.get_can_payload(self.state_can_id)
         if not payload:
+            if self._is_turn_signal and (time.time() - self._last_active_time < 1.0):
+                return True
             return None
 
         # 1. Match against options if present
+        is_active: Optional[bool] = None
         for opt in self.command.get("options", []):
             label = opt.get("label", "").lower()
             if any(k in label for k in ["open", "active", "touched", "detected", "unlocked", "on", "yes", "true", "pressed"]):
                 match_spec = opt.get("match") or opt.get("payload")
                 if match_spec and check_match(payload, match_spec, opt.get("mask")):
-                    return True
+                    is_active = True
+                    break
             elif any(k in label for k in ["closed", "inactive", "released", "locked", "off", "no", "false"]):
                 match_spec = opt.get("match") or opt.get("payload")
                 if match_spec and check_match(payload, match_spec, opt.get("mask")):
-                    return False
+                    is_active = False
+                    break
 
         # 2. Check command-level match
-        if "match" in self.command:
-            return check_match(payload, self.command["match"], self.command.get("mask"))
+        if is_active is None and "match" in self.command:
+            is_active = check_match(payload, self.command["match"], self.command.get("mask"))
 
-        return False
+        if is_active is None:
+            is_active = False
+
+        # 3. For turn signals, apply trailing-edge 1.0s hold timer across blink cycles
+        if self._is_turn_signal:
+            now = time.time()
+            if is_active:
+                self._last_active_time = now
+                return True
+            if now - self._last_active_time < 1.0:
+                return True
+            return False
+
+        return is_active

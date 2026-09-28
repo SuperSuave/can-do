@@ -67,7 +67,7 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
         else:
             self._attr_temperature_unit = UnitOfTemperature.CELSIUS
             self._attr_min_temp = 17.0
-            self._attr_max_temp = 27.0
+            self._attr_max_temp = 27.5
             self._attr_target_temperature_step = 0.5
             self._target_temp: float = 21.0
 
@@ -147,7 +147,7 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
                 if self.temperature_unit == UnitOfTemperature.FAHRENHEIT:
                     self._target_temp = float(62 + (raw - 0x06))
                 else:
-                    self._target_temp = round(17.0 + (raw - 0x06) * 0.5, 1)
+                    self._target_temp = 27.5 if raw == 0x1A else round(17.0 + (raw - 0x06) * 0.5, 1)
 
         return self._target_temp
 
@@ -221,7 +221,7 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
         if self.temperature_unit == UnitOfTemperature.FAHRENHEIT:
             raw_val = 0x06 + int(round(temp - 62.0))
         else:
-            raw_val = 0x06 + int(round((temp - 17.0) * 2.0))
+            raw_val = 0x1A if temp >= 27.5 else 0x06 + int(round((temp - 17.0) * 2.0))
 
         raw_val = max(0x06, min(0x1A, raw_val))
 

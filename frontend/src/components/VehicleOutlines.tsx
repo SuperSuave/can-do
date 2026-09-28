@@ -99,12 +99,12 @@ export interface VehicleOutlineProps {
   hazards: boolean;
   turnSignal: 'off' | 'left' | 'right';
   blinkState: boolean;
-  gear: 'P' | 'R' | 'N' | 'D';
+  gear?: 'P' | 'R' | 'N' | 'D' | null;
   speedMph: number;
   perspective: 'exterior' | 'interior' | 'powertrain';
-  driverSeat: string;
-  passengerSeat: string;
-  steeringWheelHeat: string;
+  driverSeat?: string | null;
+  passengerSeat?: string | null;
+  steeringWheelHeat?: string | null;
   onToggleDoor: (door: 'frontLeft' | 'frontRight' | 'rearLeft' | 'rearRight') => void;
   onToggleHood: () => void;
   onToggleTrunk: () => void;
@@ -980,9 +980,9 @@ export const VehicleSilhouette: React.FC<VehicleOutlineProps> = ({
 
           {/* Steering Wheel */}
           <g id="steering-wheel" className="cursor-pointer" onClick={onCycleSteeringHeat}>
-            <circle cx="145" cy="225" r="16" stroke={steeringWheelHeat !== 'off' ? '#f59e0b' : '#64748b'} strokeWidth="3" fill="none" />
-            <line x1="130" y1="225" x2="160" y2="225" stroke={steeringWheelHeat !== 'off' ? '#f59e0b' : '#64748b'} strokeWidth="2.5" />
-            {steeringWheelHeat !== 'off' && (
+            <circle cx="145" cy="225" r="16" stroke={steeringWheelHeat && steeringWheelHeat !== 'off' ? '#f59e0b' : '#64748b'} strokeWidth="3" fill="none" />
+            <line x1="130" y1="225" x2="160" y2="225" stroke={steeringWheelHeat && steeringWheelHeat !== 'off' ? '#f59e0b' : '#64748b'} strokeWidth="2.5" />
+            {steeringWheelHeat && steeringWheelHeat !== 'off' && (
               <circle cx="145" cy="225" r="8" fill="#f59e0b" opacity="0.4" />
             )}
           </g>
@@ -996,16 +996,16 @@ export const VehicleSilhouette: React.FC<VehicleOutlineProps> = ({
               height="50"
               rx="8"
               fill={
-                driverSeat.startsWith('heat')
+                driverSeat?.startsWith('heat')
                   ? '#7f1d1d'
-                  : driverSeat.startsWith('cool')
+                  : driverSeat?.startsWith('cool')
                   ? '#0c4a6e'
                   : '#1e293b'
               }
               stroke={
-                driverSeat.startsWith('heat')
+                driverSeat?.startsWith('heat')
                   ? '#ef4444'
-                  : driverSeat.startsWith('cool')
+                  : driverSeat?.startsWith('cool')
                   ? '#38bdf8'
                   : '#334155'
               }
@@ -1023,16 +1023,16 @@ export const VehicleSilhouette: React.FC<VehicleOutlineProps> = ({
               height="50"
               rx="8"
               fill={
-                passengerSeat.startsWith('heat')
+                passengerSeat?.startsWith('heat')
                   ? '#7f1d1d'
-                  : passengerSeat.startsWith('cool')
+                  : passengerSeat?.startsWith('cool')
                   ? '#0c4a6e'
                   : '#1e293b'
               }
               stroke={
-                passengerSeat.startsWith('heat')
+                passengerSeat?.startsWith('heat')
                   ? '#ef4444'
-                  : passengerSeat.startsWith('cool')
+                  : passengerSeat?.startsWith('cool')
                   ? '#38bdf8'
                   : '#334155'
               }

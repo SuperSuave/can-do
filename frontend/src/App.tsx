@@ -135,7 +135,17 @@ export default function App() {
   const [repoConfig, setRepoConfig] = useState<GitHubRepoConfig>(() => getSavedRepoConfig());
 
   // 4. Navigation & Modals state
-  const [activeMainTab, setActiveMainTab] = useState<'dashboard' | 'catalog' | 'vehicles' | 'automations' | 'device'>('dashboard');
+  const [activeMainTab, setActiveMainTab] = useState<'dashboard' | 'automations' | 'catalog' | 'device'>('dashboard');
+  const [catalogSubTab, setCatalogSubTab] = useState<'messages' | 'vehicles'>('messages');
+
+  const handleSetMainTab = (tab: 'dashboard' | 'automations' | 'catalog' | 'device' | 'vehicles') => {
+    if (tab === 'vehicles') {
+      setActiveMainTab('catalog');
+      setCatalogSubTab('vehicles');
+    } else {
+      setActiveMainTab(tab);
+    }
+  };
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
   const [editingCommand, setEditingCommand] = useState<Command | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -1007,7 +1017,7 @@ export default function App() {
                 id="main-tab-dashboard"
                 ref={el => { tabRefs.current['dashboard'] = el; }}
                 type="button"
-                onClick={() => setActiveMainTab('dashboard')}
+                onClick={() => handleSetMainTab('dashboard')}
                 className={`relative z-10 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
                   activeMainTab === 'dashboard'
                     ? 'text-white font-semibold'
@@ -1028,58 +1038,10 @@ export default function App() {
               </button>
 
               <button
-                id="main-tab-messages"
-                ref={el => { tabRefs.current['catalog'] = el; }}
-                type="button"
-                onClick={() => setActiveMainTab('catalog')}
-                className={`relative z-10 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
-                  activeMainTab === 'catalog'
-                    ? 'text-white font-semibold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Layers className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'catalog' ? 'text-cyan-400' : 'text-slate-500'}`} />
-                <span>Messages</span>
-                <span
-                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono transition-colors ${
-                    activeMainTab === 'catalog'
-                      ? 'bg-slate-900/90 text-cyan-300 border border-slate-700/70'
-                      : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
-                  }`}
-                >
-                  {catalog.commands.length}
-                </span>
-              </button>
-
-              <button
-                id="main-tab-vehicles"
-                ref={el => { tabRefs.current['vehicles'] = el; }}
-                type="button"
-                onClick={() => setActiveMainTab('vehicles')}
-                className={`relative z-10 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
-                  activeMainTab === 'vehicles'
-                    ? 'text-white font-semibold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Car className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'vehicles' ? 'text-indigo-400' : 'text-slate-500'}`} />
-                <span>Vehicles</span>
-                <span
-                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono transition-colors ${
-                    activeMainTab === 'vehicles'
-                      ? 'bg-slate-900/90 text-indigo-300 border border-slate-700/70'
-                      : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
-                  }`}
-                >
-                  {catalog.vehicles.length}
-                </span>
-              </button>
-
-              <button
                 id="main-tab-automations"
                 ref={el => { tabRefs.current['automations'] = el; }}
                 type="button"
-                onClick={() => setActiveMainTab('automations')}
+                onClick={() => handleSetMainTab('automations')}
                 className={`relative z-10 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
                   activeMainTab === 'automations'
                     ? 'text-white font-semibold'
@@ -1100,10 +1062,34 @@ export default function App() {
               </button>
 
               <button
+                id="main-tab-catalog"
+                ref={el => { tabRefs.current['catalog'] = el; }}
+                type="button"
+                onClick={() => handleSetMainTab('catalog')}
+                className={`relative z-10 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
+                  activeMainTab === 'catalog'
+                    ? 'text-white font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Layers className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'catalog' ? 'text-cyan-400' : 'text-slate-500'}`} />
+                <span>Catalog</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono transition-colors ${
+                    activeMainTab === 'catalog'
+                      ? 'bg-slate-900/90 text-cyan-300 border border-slate-700/70'
+                      : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
+                  }`}
+                >
+                  {catalog.commands.length}
+                </span>
+              </button>
+
+              <button
                 id="main-tab-device"
                 ref={el => { tabRefs.current['device'] = el; }}
                 type="button"
-                onClick={() => setActiveMainTab('device')}
+                onClick={() => handleSetMainTab('device')}
                 className={`relative z-10 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
                   activeMainTab === 'device'
                     ? 'text-white font-semibold'
@@ -1137,8 +1123,68 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 min-w-0">
         {activeMainTab === 'catalog' ? (
           <div className="space-y-5 sm:space-y-6 min-w-0">
-            {/* Filter and Search Bar */}
-            <CommandFilter
+            {/* Catalog Sub-Tab Navigation Header (Messages vs Vehicles) */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-800/80">
+              <div className="inline-flex items-center p-1 rounded-xl bg-slate-900/90 border border-slate-800/80 shadow-inner">
+                <button
+                  type="button"
+                  id="catalog-subtab-messages"
+                  onClick={() => setCatalogSubTab('messages')}
+                  className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    catalogSubTab === 'messages'
+                      ? 'bg-slate-800 text-white shadow-sm border border-slate-700/80'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Layers className={`w-3.5 h-3.5 ${catalogSubTab === 'messages' ? 'text-cyan-400' : 'text-slate-500'}`} />
+                  <span>Messages</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
+                      catalogSubTab === 'messages'
+                        ? 'bg-slate-900 text-cyan-300 border border-slate-700/70'
+                        : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
+                    }`}
+                  >
+                    {catalog.commands.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  id="catalog-subtab-vehicles"
+                  onClick={() => setCatalogSubTab('vehicles')}
+                  className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    catalogSubTab === 'vehicles'
+                      ? 'bg-slate-800 text-white shadow-sm border border-slate-700/80'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Car className={`w-3.5 h-3.5 ${catalogSubTab === 'vehicles' ? 'text-indigo-400' : 'text-slate-500'}`} />
+                  <span>Vehicles</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
+                      catalogSubTab === 'vehicles'
+                        ? 'bg-slate-900 text-indigo-300 border border-slate-700/70'
+                        : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
+                    }`}
+                  >
+                    {catalog.vehicles.length}
+                  </span>
+                </button>
+              </div>
+
+              <div className="text-xs text-slate-400 hidden sm:block">
+                {catalogSubTab === 'messages' ? (
+                  <span>Explore, filter, and test decoded CAN bus telemetry and commands</span>
+                ) : (
+                  <span>Vehicle profiles, bus specifications, and supported feature sets</span>
+                )}
+              </div>
+            </div>
+
+            {catalogSubTab === 'messages' ? (
+              <div className="space-y-5 sm:space-y-6 min-w-0">
+                {/* Filter and Search Bar */}
+                <CommandFilter
               catalog={catalog}
               search={search}
               onSearchChange={setSearch}
@@ -1163,11 +1209,11 @@ export default function App() {
                 setIsEditorOpen(true);
               }}
               onOpenCategoryManager={() => setIsCategoryManagerOpen(true)}
-              onNavigateToVehicles={() => setActiveMainTab('vehicles')}
+              onNavigateToVehicles={() => setCatalogSubTab('vehicles')}
               filteredCount={filteredCommands.length}
               totalCount={catalog.commands.length}
               activeMainTab={activeMainTab}
-              onChangeMainTab={setActiveMainTab}
+              onChangeMainTab={handleSetMainTab}
               onExpandAll={() => setExpandAllSignal(s => s + 1)}
               onCollapseAll={() => setCollapseAllSignal(s => s + 1)}
             />
@@ -1242,8 +1288,8 @@ export default function App() {
               </div>
             )}
           </div>
-        ) : activeMainTab === 'vehicles' ? (
-          /* Vehicles Explorer Tab */
+        ) : (
+          /* Vehicles Explorer Tab inside Catalog */
           <VehiclesTab
             catalog={catalog}
             onUpdateVehicles={handleUpdateVehicles}
@@ -1254,58 +1300,63 @@ export default function App() {
                 setSelectedMake(target.make);
                 setSelectedRegion(target.region);
               }
-              setActiveMainTab('catalog');
+              setCatalogSubTab('messages');
             }}
             draftAddedVehicleIds={draftAddedVehicleIds}
             draftModifiedVehicleIds={draftModifiedVehicleIds}
             allDiscoveredFeatures={discoveredFeatures}
             onRegisterDiscoveredFeature={handleRegisterDiscoveredFeature}
-            activeMainTab={activeMainTab}
-            onChangeMainTab={setActiveMainTab}
           />
-        ) : activeMainTab === 'automations' ? (
-          /* Automation Builder Tab */
-          <AutomationBuilder
-            catalog={catalog}
-            rules={automationRules}
-            onUpdateRules={setAutomationRules}
-            settings={automationSettings}
-            onUpdateSettings={setAutomationSettings}
-            initialSelectedCommandIds={Array.from(selectedForAutomation)}
-            onNavigateToCatalog={() => setActiveMainTab('catalog')}
-          />
-        ) : activeMainTab === 'dashboard' ? (
-          /* Live Vehicle Cockpit Dashboard */
-          <VehicleDashboard
-            catalog={catalog}
-            unitSystem={userPreferences.unit_system}
-            activeVehicle={
-              selectedVehicleId !== 'all'
-                ? catalog.vehicles.find(v => v.id === selectedVehicleId)
-                : catalog.vehicles[0]
-            }
-            onSelectVehicle={vId => setSelectedVehicleId(vId)}
-            onNavigateToCatalog={(searchQuery) => {
-              if (searchQuery) setSearch(searchQuery);
-              setActiveMainTab('catalog');
-            }}
-            onNavigateToAutomations={() => setActiveMainTab('automations')}
-          />
-        ) : (
-          /* Device Console Tab */
-          <DeviceDashboard
-            catalog={catalog}
-            automationRules={automationRules}
-            preferences={userPreferences}
-            onUpdatePreferences={handleUpdatePreferences}
-            onRerunOnboarding={() => setIsOnboardingOpen(true)}
-            onSyncAutomationsToDevice={handleSyncAutomationsToDevice}
-            onPullAutomationsFromDevice={handlePullAutomationsFromDevice}
-            onNavigateToCatalog={(searchQuery) => {
-              if (searchQuery) setSearch(searchQuery);
-              setActiveMainTab('catalog');
-            }}
-            onNavigateToAutomations={() => setActiveMainTab('automations')}
+        )}
+      </div>
+    ) : activeMainTab === 'automations' ? (
+      /* Automation Builder Tab */
+      <AutomationBuilder
+        catalog={catalog}
+        rules={automationRules}
+        onUpdateRules={setAutomationRules}
+        settings={automationSettings}
+        onUpdateSettings={setAutomationSettings}
+        initialSelectedCommandIds={Array.from(selectedForAutomation)}
+        onNavigateToCatalog={() => {
+          setActiveMainTab('catalog');
+          setCatalogSubTab('messages');
+        }}
+      />
+    ) : activeMainTab === 'dashboard' ? (
+      /* Live Vehicle Cockpit Dashboard */
+      <VehicleDashboard
+        catalog={catalog}
+        unitSystem={userPreferences.unit_system}
+        activeVehicle={
+          selectedVehicleId !== 'all'
+            ? catalog.vehicles.find(v => v.id === selectedVehicleId)
+            : catalog.vehicles[0]
+        }
+        onSelectVehicle={vId => setSelectedVehicleId(vId)}
+        onNavigateToCatalog={(searchQuery) => {
+          if (searchQuery) setSearch(searchQuery);
+          setActiveMainTab('catalog');
+          setCatalogSubTab('messages');
+        }}
+        onNavigateToAutomations={() => setActiveMainTab('automations')}
+      />
+    ) : (
+      /* Device Console Tab */
+      <DeviceDashboard
+        catalog={catalog}
+        automationRules={automationRules}
+        preferences={userPreferences}
+        onUpdatePreferences={handleUpdatePreferences}
+        onRerunOnboarding={() => setIsOnboardingOpen(true)}
+        onSyncAutomationsToDevice={handleSyncAutomationsToDevice}
+        onPullAutomationsFromDevice={handlePullAutomationsFromDevice}
+        onNavigateToCatalog={(searchQuery) => {
+          if (searchQuery) setSearch(searchQuery);
+          setActiveMainTab('catalog');
+          setCatalogSubTab('messages');
+        }}
+        onNavigateToAutomations={() => setActiveMainTab('automations')}
             onCreateCommandFromCanId={(canId, sampleData) => {
               setEditingCommand({
                 id: `cmd_${canId.toLowerCase().replace(/^0x/, '')}_${Date.now().toString(36).slice(-4)}`,

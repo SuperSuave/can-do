@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.9.8",
+  "can_do_version": "2026.9.9",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -3819,9 +3819,9 @@
       ]
     },
     {
-      "id": "max_charging_limit",
+      "id": "ac_charging_limit",
       "ha_metadata": {
-        "name": "Max. Charging Limit",
+        "name": "AC Charging Limit",
         "domain": "select",
         "icon": "mdi:ev-station"
       },
@@ -3857,7 +3857,7 @@
       ],
       "options": [
         {
-          "label": "AC 50%",
+          "label": "50%",
           "popup": "AC Limit: 50%",
           "match": {
             "D7": "0x78"
@@ -3878,7 +3878,7 @@
           ]
         },
         {
-          "label": "AC 60%",
+          "label": "60%",
           "popup": "AC Limit: 60%",
           "match": {
             "D7": "0xA0"
@@ -3899,7 +3899,7 @@
           ]
         },
         {
-          "label": "AC 70%",
+          "label": "70%",
           "popup": "AC Limit: 70%",
           "match": {
             "D7": "0xC8"
@@ -3920,7 +3920,7 @@
           ]
         },
         {
-          "label": "AC 80%",
+          "label": "80%",
           "popup": "AC Limit: 80%",
           "match": {
             "D7": "0xF5"
@@ -3942,7 +3942,7 @@
           ]
         },
         {
-          "label": "AC 90%",
+          "label": "90%",
           "popup": "AC Limit: 90%",
           "match": {
             "D7": "0x1D"
@@ -3963,7 +3963,7 @@
           ]
         },
         {
-          "label": "AC 100%",
+          "label": "100%",
           "popup": "AC Limit: 100%",
           "match": {
             "D7": "0x4A"
@@ -3982,9 +3982,49 @@
               "repeat": 3
             }
           ]
+        }
+      ]
+    },
+    {
+      "id": "dc_charging_limit",
+      "ha_metadata": {
+        "name": "DC Fast Charging Limit",
+        "domain": "select",
+        "icon": "mdi:ev-station"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "state_can_id": "0x1F9",
+        "action_can_id": "0x4C5",
+        "delay_ms": 20
+      },
+      "category": "High Voltage Battery & Charging",
+      "roles": [
+        "trigger",
+        "condition",
+        "action"
+      ],
+      "contributors": [
+        {
+          "name": "SuaveEV",
+          "github": "supersuave",
+          "tested_vehicle": "Kia EV6 GT-Line (US)",
+          "role": "Command"
         },
         {
-          "label": "DC 50%",
+          "name": "Tyler Harvey",
+          "github": "tylerharvey",
+          "tested_vehicle": "Hyundai Ioniq 5 SEL (US)",
+          "role": "State"
+        }
+      ],
+      "options": [
+        {
+          "label": "50%",
           "popup": "DC Limit: 50%",
           "match": {
             "D4": "0x64"
@@ -4005,7 +4045,7 @@
           ]
         },
         {
-          "label": "DC 60%",
+          "label": "60%",
           "popup": "DC Limit: 60%",
           "match": {
             "D4": "0x78"
@@ -4026,7 +4066,7 @@
           ]
         },
         {
-          "label": "DC 70%",
+          "label": "70%",
           "popup": "DC Limit: 70%",
           "match": {
             "D4": "0x8C"
@@ -4047,7 +4087,7 @@
           ]
         },
         {
-          "label": "DC 80%",
+          "label": "80%",
           "popup": "DC Limit: 80%",
           "match": {
             "D4": "0xA0"
@@ -4065,10 +4105,11 @@
               },
               "repeat": 3
             }
-          ]
+          ],
+          "default": true
         },
         {
-          "label": "DC 90%",
+          "label": "90%",
           "popup": "DC Limit: 90%",
           "match": {
             "D4": "0xB4"
@@ -4089,7 +4130,7 @@
           ]
         },
         {
-          "label": "DC 100%",
+          "label": "100%",
           "popup": "DC Limit: 100%",
           "match": {
             "D4": "0xC8"
@@ -4103,157 +4144,6 @@
             },
             {
               "payload": {
-                "D6": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "Both 50% (AC & DC)",
-          "popup": "Charge Limit: 50%",
-          "match": {
-            "D1": "0x78",
-            "D4": "0x64",
-            "D7": "0x78"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D5": "0x64",
-                "D6": "0x64"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D5": "0xFF",
-                "D6": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "Both 60% (AC & DC)",
-          "popup": "Charge Limit: 60%",
-          "match": {
-            "D1": "0xA0",
-            "D4": "0x78",
-            "D7": "0xA0"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D5": "0x78",
-                "D6": "0x78"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D5": "0xFF",
-                "D6": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "Both 70% (AC & DC)",
-          "popup": "Charge Limit: 70%",
-          "match": {
-            "D1": "0xC8",
-            "D4": "0x8C",
-            "D7": "0xC8"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D5": "0x8C",
-                "D6": "0x8C"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D5": "0xFF",
-                "D6": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "Both 80% (AC & DC)",
-          "popup": "Charge Limit: 80%",
-          "match": {
-            "D1": "0xF5",
-            "D4": "0xA0",
-            "D7": "0xF5"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D5": "0xA0",
-                "D6": "0xA0"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D5": "0xFF",
-                "D6": "0xFF"
-              },
-              "repeat": 3,
-              "default": true
-            }
-          ]
-        },
-        {
-          "label": "Both 90% (AC & DC)",
-          "popup": "Charge Limit: 90%",
-          "match": {
-            "D1": "0x1D",
-            "D4": "0xB4",
-            "D7": "0x1D"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D5": "0xB4",
-                "D6": "0xB4"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D5": "0xFF",
-                "D6": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "Both 100% (AC & DC)",
-          "popup": "Charge Limit: 100%",
-          "match": {
-            "D1": "0x4A",
-            "D4": "0xC8",
-            "D7": "0x4A"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D5": "0xC8",
-                "D6": "0xC8"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D5": "0xFF",
                 "D6": "0xFF"
               },
               "repeat": 3
@@ -4879,21 +4769,33 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4 ([B3]: raw - 40 °C)"
+        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 °C"
       },
       "options": [
         {
-          "label": "Freezing (<= 0C / 32F)",
-          "expression": "[B3] <= 40",
+          "label": "Freezing (<= 0°C / 32°F)",
+          "evaluate": {
+            "byte": "D4",
+            "operator": "less_equal",
+            "value": "0x28"
+          },
           "default": true
         },
         {
-          "label": "Cold (< 15C / 59F)",
-          "expression": "[B3] < 55"
+          "label": "Cold (< 15°C / 59°F)",
+          "evaluate": {
+            "byte": "D4",
+            "operator": "less_than",
+            "value": "0x37"
+          }
         },
         {
-          "label": "Warm (> 25C / 77F)",
-          "expression": "[B3] > 65"
+          "label": "Warm (> 25°C / 77°F)",
+          "evaluate": {
+            "byte": "D4",
+            "operator": "greater_than",
+            "value": "0x41"
+          }
         }
       ]
     },
@@ -4982,17 +4884,29 @@
       },
       "options": [
         {
-          "label": "Safe for Preconditioning (SOC > 20%)",
-          "expression": "[B7] >= 40",
+          "label": "Safe for Preconditioning (SOC >= 20%)",
+          "evaluate": {
+            "byte": "D8",
+            "operator": "greater_equal",
+            "value": "0x28"
+          },
           "default": true
         },
         {
-          "label": "High Battery (SOC > 50%)",
-          "expression": "[B7] >= 100"
+          "label": "High Battery (SOC >= 50%)",
+          "evaluate": {
+            "byte": "D8",
+            "operator": "greater_equal",
+            "value": "0x64"
+          }
         },
         {
           "label": "Low Battery (SOC < 20%)",
-          "expression": "[B7] < 40"
+          "evaluate": {
+            "byte": "D8",
+            "operator": "less_than",
+            "value": "0x28"
+          }
         }
       ]
     },
