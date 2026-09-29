@@ -325,8 +325,6 @@ static void gvret_server_task(void* pvParameters) {
         size_t batch_len = 0;
         int64_t last_flush_us = esp_timer_get_time();
 
-        int64_t last_check_us = esp_timer_get_time();
-
         while (true) {
             // 1. Process client incoming commands/frames
             if (!handle_client_rx(client_sock)) {
@@ -355,16 +353,8 @@ static void gvret_server_task(void* pvParameters) {
                 last_flush_us = cur_us;
             }
 
-            // Periodic peer liveness check (every 500ms)
-            if (cur_us - last_check_us >= 500000) {
-                last_check_us = cur_us;
-                char probe;
-                int check = recv(client_sock, &probe, 1, MSG_PEEK | MSG_DONTWAIT);
-                if (check == 0 || (check < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
-                    ESP_LOGI(TAG, "GVRET client disconnected (connection closed)");
-                    break;
-                }
-            }
+            // Note: client connection closure & fatal socket errors are continuously
+            // detected and handled by handle_client_rx() at the top of the loop.
         }
 
         close(client_sock);

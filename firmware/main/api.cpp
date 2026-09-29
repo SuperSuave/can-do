@@ -1486,6 +1486,31 @@ static esp_err_t api_notify_handler(httpd_req_t *req) {
 
 
 static esp_err_t ws_handler(httpd_req_t *req) {
+    if (req->method == HTTP_GET) {
+        ESP_LOGI(TAG, "WebSocket client connected on fd %d", httpd_req_to_sockfd(req));
+        return ESP_OK;
+    }
+
+    httpd_ws_frame_t ws_pkt;
+    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+
+    esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    if (ws_pkt.len) {
+        uint8_t rx_buf[128];
+        ws_pkt.payload = rx_buf;
+        size_t max_read = std::min(ws_pkt.len, sizeof(rx_buf) - 1);
+        ret = httpd_ws_recv_frame(req, &ws_pkt, max_read);
+        if (ret != ESP_OK) {
+            return ret;
+        }
+        rx_buf[max_read] = '\0';
+    }
+
     return ESP_OK;
 }
 
@@ -1500,7 +1525,7 @@ httpd_handle_t start_webserver(void) {
     config.keep_alive_idle = 10;
     config.send_wait_timeout = 25; // 25s send wait timeout for large asset streaming
     config.recv_wait_timeout = 15;
-    config.max_open_sockets = 4; // limit open sockets to conserve lwIP buffers on ESP32-C3
+    config.max_open_sockets = 7; // allow sufficient sockets for parallel assets + WebSocket stream
 
     esp_err_t err = httpd_start(&server, &config);
     if (err == ESP_OK) {

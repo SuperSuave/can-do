@@ -2,14 +2,14 @@
   "version": "2026.9.11",
   "files": [
     {
-      "name": "index-B57SIXzz.js.gz",
-      "path": "/spiffs/www/index-B57SIXzz.js.gz",
-      "size": 356142
+      "name": "index-BDQ_ZeqX.js.gz",
+      "path": "/spiffs/www/index-BDQ_ZeqX.js.gz",
+      "size": 356366
     },
     {
-      "name": "index-rgBwy4SO.css.gz",
-      "path": "/spiffs/www/index-rgBwy4SO.css.gz",
-      "size": 18608
+      "name": "index-SD0ifz9t.css.gz",
+      "path": "/spiffs/www/index-SD0ifz9t.css.gz",
+      "size": 18643
     },
     {
       "name": "index.html",
@@ -19,7 +19,7 @@
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 516
+      "size": 514
     },
     {
       "name": "logo.svg",

@@ -194,7 +194,9 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   }, [onPullAutomationsFromDevice]);
 
   // Connection & Telemetry state
-  const [connected, setConnected] = useState<boolean>(false);
+  const [wsConnected, setWsConnected] = useState<boolean>(false);
+  const [restConnected, setRestConnected] = useState<boolean>(false);
+  const connected = wsConnected || restConnected;
   const [lastPingMs, setLastPingMs] = useState<number | null>(null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [wifi, setWifi] = useState<WifiStatus | null>(null);
@@ -379,28 +381,30 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     return map;
   }, [catalog]);
 
+  // Resolve active WebSocket endpoint
+  const currentWsUrl = useMemo(() => {
+    try {
+      const resolved = resolveDeviceBaseUrl(deviceHost);
+      const parsed = new URL(resolved);
+      const wsProto = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${wsProto}//${parsed.host}/ws`;
+    } catch {
+      return 'ws://192.168.4.1/ws';
+    }
+  }, [deviceHost]);
+
   // Connect WebSocket
   const connectWs = useCallback(() => {
     if (wsRef.current) {
       wsRef.current.close();
     }
 
-    let wsUrl: string;
     try {
-      const resolved = resolveDeviceBaseUrl(deviceHost);
-      const parsed = new URL(resolved);
-      const wsProto = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
-      wsUrl = `${wsProto}//${parsed.host}/ws`;
-    } catch {
-      wsUrl = 'ws://192.168.4.1/ws';
-    }
-
-    try {
-      const ws = new WebSocket(wsUrl);
+      const ws = new WebSocket(currentWsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        setConnected(true);
+        setWsConnected(true);
         fetchStatus();
       };
 
@@ -440,17 +444,18 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       };
 
       ws.onclose = () => {
-        setConnected(false);
+        setWsConnected(false);
         setTimeout(connectWs, 3500);
       };
 
       ws.onerror = () => {
+        setWsConnected(false);
         ws.close();
       };
     } catch {
-      setConnected(false);
+      setWsConnected(false);
     }
-  }, [deviceHost]);
+  }, [currentWsUrl]);
 
   // REST: Fetch system status & measure ping
   const fetchStatus = async () => {
@@ -460,13 +465,13 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
-        setConnected(true);
+        setRestConnected(true);
         setLastPingMs(Math.round(performance.now() - start));
       } else {
-        setConnected(false);
+        setRestConnected(false);
       }
     } catch {
-      setConnected(false);
+      setRestConnected(false);
       setLastPingMs(null);
     }
   };
@@ -891,8 +896,21 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 }`}
               >
                 <span className={`status-dot ${connected ? 'green' : 'red'}`} />
-                <span>{connected ? 'ONLINE' : 'OFFLINE'}</span>
+                <span>{connected ? (wsConnected ? 'ONLINE' : 'ONLINE (HTTP)') : 'OFFLINE'}</span>
               </span>
+              {connected && (
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                    wsConnected
+                      ? 'bg-cyan-950/40 text-cyan-300 border-cyan-800/80'
+                      : 'bg-amber-950/40 text-amber-300 border-amber-800/80'
+                  }`}
+                  title={wsConnected ? 'WebSocket live CAN/log stream active' : `Connecting WebSocket to ${currentWsUrl}`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-cyan-400 animate-pulse' : 'bg-amber-400 animate-ping'}`} />
+                  {wsConnected ? 'WS Stream Active' : 'WS Connecting...'}
+                </span>
+              )}
               {lastPingMs !== null && (
                 <span className="text-[11px] font-mono text-[var(--text-muted)]">
                   {lastPingMs}ms latency
@@ -2136,8 +2154,22 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           {/* Monospace Log Viewer */}
           <div className="p-4 rounded-xl bg-[var(--md-sys-color-surface-container-lowest)] font-mono text-xs text-slate-300 h-96 overflow-y-auto space-y-1 border border-[var(--border-color)]">
             {logs.length === 0 ? (
-              <div className="text-slate-600 italic">
-                Waiting for WebSocket daemon logs from ESP32...
+              <div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-2 py-10">
+                <Radio className={`w-6 h-6 ${wsConnected ? 'text-cyan-400 animate-pulse' : 'text-slate-600'}`} />
+                <p className="text-xs">
+                  {wsConnected
+                    ? 'WebSocket connected. Waiting for daemon logs from ESP32...'
+                    : `Connecting to WebSocket log stream (${currentWsUrl})...`}
+                </p>
+                {!wsConnected && (
+                  <button
+                    type="button"
+                    onClick={() => connectWs()}
+                    className="dash-outline-btn text-[11px] px-2.5 py-1 text-slate-300"
+                  >
+                    Retry WebSocket Connection
+                  </button>
+                )}
               </div>
             ) : (
               logs

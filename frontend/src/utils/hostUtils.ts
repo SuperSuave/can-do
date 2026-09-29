@@ -13,7 +13,10 @@ export function isExternalHost(): boolean {
     host.includes('aistudio') ||
     host.includes('webcontainer') ||
     host.includes('stackblitz') ||
-    port === '3000'
+    port === '3000' ||
+    port === '5173' ||
+    port === '4173' ||
+    port === '8080'
   );
 }
 
@@ -46,7 +49,12 @@ export function getDefaultEspIp(): string {
 export function resolveDeviceBaseUrl(target?: string | null): string {
   if (typeof window === 'undefined') return 'http://192.168.4.1';
 
-  const host = (target || '').trim();
+  let raw = target;
+  if (raw === undefined && typeof localStorage !== 'undefined') {
+    raw = localStorage.getItem('cando_device_host');
+  }
+
+  const host = (raw || '').trim();
   if (!host || host === 'auto' || host.toLowerCase().includes('current host')) {
     return isRunningOnDevice() ? window.location.origin : 'http://192.168.4.1';
   }
