@@ -1,10 +1,10 @@
 {
-  "version": "2026.9.10",
+  "version": "2026.9.11",
   "files": [
     {
-      "name": "index-D82ikXm7.js.gz",
-      "path": "/spiffs/www/index-D82ikXm7.js.gz",
-      "size": 356141
+      "name": "index-B57SIXzz.js.gz",
+      "path": "/spiffs/www/index-B57SIXzz.js.gz",
+      "size": 356142
     },
     {
       "name": "index-rgBwy4SO.css.gz",
@@ -19,7 +19,7 @@
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 513
+      "size": 516
     },
     {
       "name": "logo.svg",

@@ -10,7 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .catalog_loader import load_catalog
-from .const import DOMAIN, PLATFORMS
+from .const import DOMAIN, PLATFORMS, VERSION
 from .coordinator import CanDoDataCoordinator
 
 _LOGGER = logging.getLogger(__name__)
