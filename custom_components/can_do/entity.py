@@ -29,7 +29,6 @@ class CanDoEntity(Entity):
         self.state_can_id: Optional[str] = net.get("state_can_id")
         self._unsub_listeners: list[Callable[[], None]] = []
         self._last_state_snapshot: Any = object()
-        self._last_available: Optional[bool] = None
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -68,11 +67,6 @@ class CanDoEntity(Entity):
             sw_version=VERSION,
             via_device=(DOMAIN, parent_id),
         )
-
-    @property
-    def available(self) -> bool:
-        """Return True if the ESP32 edge device is online."""
-        return self.coordinator.available
 
     async def async_added_to_hass(self) -> None:
         """Register CAN state listener when entity is added to Home Assistant."""
@@ -118,11 +112,9 @@ class CanDoEntity(Entity):
     def _handle_can_update(self) -> None:
         """Handle updated CAN state from coordinator with intelligent change gating."""
         current_state = self._get_state_snapshot()
-        current_avail = self.available
-
-        # Only notify Home Assistant if the actual computed state or availability changed
-        if current_avail != self._last_available or current_state != self._last_state_snapshot:
-            self._last_available = current_avail
+        
+        # Only notify Home Assistant if the actual computed state changed
+        if current_state != self._last_state_snapshot:
             self._last_state_snapshot = current_state
             self.async_write_ha_state()
 

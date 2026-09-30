@@ -17,6 +17,7 @@
 #include "parser.h"
 #include "can_engine.h"
 #include "api.h"
+#include "beep.h"
 #include "track_popup.h"
 #include "precondition.h"
 #include "board_pins.h"
@@ -172,6 +173,7 @@ extern "C" void app_main(void) {
     ESP_ERROR_CHECK(init_twai());
 
     // 8. Init Cluster Track Selection Popup & Preconditioning Subsystems
+    beep_init();
     precondition_init();
 
     // 9. Command Queues and Tasks

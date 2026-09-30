@@ -15,6 +15,7 @@ idf_component_register(
         "can_engine.cpp"
         "api.cpp"
         "track_popup.c"
+        "beep.c"
         "isotp_tx.c"
         "hsm.c"
         "utf8_utf16_converter.c"

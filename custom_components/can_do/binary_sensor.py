@@ -67,7 +67,7 @@ class CanDoBinarySensorEntity(CanDoEntity, BinarySensorEntity):
 
         payload = self.coordinator.get_can_payload(self.state_can_id)
         if not payload:
-            if self._is_turn_signal and (time.time() - self._last_active_time < 1.0):
+            if self._is_turn_signal and (time.time() - self._last_active_time < 3.0):
                 return True
             return None
 
@@ -93,13 +93,13 @@ class CanDoBinarySensorEntity(CanDoEntity, BinarySensorEntity):
         if is_active is None:
             is_active = False
 
-        # 3. For turn signals, apply trailing-edge 1.0s hold timer across blink cycles
+        # 3. For turn signals, apply trailing-edge 3.0s hold timer across blink cycles
         if self._is_turn_signal:
             now = time.time()
             if is_active:
                 self._last_active_time = now
                 return True
-            if now - self._last_active_time < 1.0:
+            if now - self._last_active_time < 3.0:
                 return True
             return False
 

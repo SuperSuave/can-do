@@ -110,11 +110,6 @@ class CanDoClusterMasterNotifyEntity(NotifyEntity):
             via_device=(DOMAIN, parent_id),
         )
 
-    @property
-    def available(self) -> bool:
-        """Return True if device is online."""
-        return self.coordinator.available
-
     async def async_send_message(self, message: str, title: Optional[str] = None, **kwargs: Any) -> None:
         """Send a notification message to the vehicle's instrument cluster."""
         data = kwargs.get("data") or {}

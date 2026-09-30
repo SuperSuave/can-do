@@ -864,57 +864,6 @@
       "subcategory": "Steering Wheel"
     },
     {
-      "id": "steering_wheel_touch",
-      "ha_metadata": {
-        "name": "Steering Wheel Hands-On Touch (HOD)",
-        "domain": "binary_sensor",
-        "icon": "mdi:steering"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Cockpit & Controls",
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x2AF"
-      },
-      "roles": [
-        "trigger",
-        "condition"
-      ],
-      "contributor": {
-        "name": "Electroniq Buttons Community",
-        "github": "",
-        "notes": "Capacitive rim sensor decoded from CAN-FD frame 687 (0x2AF)"
-      },
-      "options": [
-        {
-          "label": "Hands Off Rim",
-          "match": {
-            "D3": "0x00"
-          },
-          "default": true,
-          "mask": "0xF0"
-        },
-        {
-          "label": "Hands Touching Rim",
-          "match": {
-            "D3": "0x10"
-          },
-          "mask": "0xF0"
-        },
-        {
-          "label": "Hands Gripping Rim",
-          "match": {
-            "D3": "0x30"
-          },
-          "mask": "0xF0"
-        }
-      ],
-      "subcategory": "Steering Wheel"
-    },
-    {
       "id": "gear_shifter_dial",
       "ha_metadata": {
         "name": "Rotary Gear Shifter Dial & Park Switch",
@@ -2741,94 +2690,6 @@
       "subcategory": "HVAC Controls"
     },
     {
-      "id": "climate_dual_cabin_temp",
-      "ha_metadata": {
-        "name": "Cabin Dual Climate Target",
-        "domain": "climate",
-        "icon": "mdi:thermostat-box"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Climate & Comfort",
-      "roles": [
-        "trigger",
-        "condition",
-        "state",
-        "action"
-      ],
-      "contributor": {
-        "name": "Electroniq Buttons Community",
-        "github": "",
-        "notes": "Simultaneous driver and passenger target cabin temperature presets across 0x380 (state D2, D3) and 0x4A0 (action D2, D8)"
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x380",
-        "action_can_id": "0x4A0"
-      },
-      "options": [
-        {
-          "label": "Cabin All 21.0°C / 70°F",
-          "match": {
-            "D2": "0x0E",
-            "D3": "0x0E"
-          },
-          "payload": {
-            "D2": "0x0E",
-            "D8": "0x0E"
-          },
-          "default": true
-        },
-        {
-          "label": "Cabin All 20.0°C / 68°F",
-          "match": {
-            "D2": "0x0C",
-            "D3": "0x0C"
-          },
-          "payload": {
-            "D2": "0x0C",
-            "D8": "0x0C"
-          }
-        },
-        {
-          "label": "Cabin All 22.0°C / 72°F",
-          "match": {
-            "D2": "0x10",
-            "D3": "0x10"
-          },
-          "payload": {
-            "D2": "0x10",
-            "D8": "0x10"
-          }
-        },
-        {
-          "label": "Cabin Pre-Cool 18.0°C / 64°F",
-          "match": {
-            "D2": "0x08",
-            "D3": "0x08"
-          },
-          "payload": {
-            "D2": "0x08",
-            "D8": "0x08"
-          }
-        },
-        {
-          "label": "Cabin Pre-Heat 24.0°C / 75°F",
-          "match": {
-            "D2": "0x14",
-            "D3": "0x14"
-          },
-          "payload": {
-            "D2": "0x14",
-            "D8": "0x14"
-          }
-        }
-      ],
-      "subcategory": "HVAC Controls"
-    },
-    {
       "id": "climate_sync_toggle",
       "ha_metadata": {
         "name": "Climate Sync Passenger Zone",
@@ -3330,9 +3191,10 @@
         "condition"
       ],
       "contributor": {
-        "name": "Electroniq Buttons Community",
-        "github": "",
-        "notes": "Decoded from E-GMP Sunroof_Status frame 1090 (0x442) bytes 6 and 7"
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "tested_vehicle": "Kia EV6 GT-Line (US)",
+        "role": "State"
       },
       "options": [
         {
@@ -3642,48 +3504,6 @@
             "D6": "0x00"
           },
           "mask": "0x40"
-        }
-      ],
-      "subcategory": "Braking & Pedals"
-    },
-    {
-      "id": "brake_interlock_vcu",
-      "ha_metadata": {
-        "name": "Brake Interlock (Powertrain / VCU)",
-        "domain": "binary_sensor",
-        "icon": "mdi:car-brake-alert"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Vehicle State & Telematics",
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x435"
-      },
-      "roles": [
-        "trigger",
-        "condition"
-      ],
-      "contributor": {
-        "name": "opendbc",
-        "github": "commaai/opendbc",
-        "notes": "Decoded from VCU / Shift Interlock 0x435 byte D4: 0x40 Pressed, 0x50 Released"
-      },
-      "options": [
-        {
-          "label": "Brake Pressed (Interlock)",
-          "match": {
-            "D4": "0x40"
-          },
-          "default": true
-        },
-        {
-          "label": "Brake Released (Interlock)",
-          "match": {
-            "D4": "0x50"
-          }
         }
       ],
       "subcategory": "Braking & Pedals"
@@ -4156,10 +3976,10 @@
       ]
     },
     {
-      "id": "rear_seats_comfort",
+      "id": "rear_left_seat_comfort",
       "ha_metadata": {
-        "name": "Rear Seats Heated State",
-        "domain": "sensor",
+        "name": "Rear Left Seat Comfort",
+        "domain": "select",
         "icon": "mdi:car-seat-heater"
       },
       "category": "Climate & Comfort",
@@ -4180,54 +4000,15 @@
         "all_egmp"
       ],
       "contributor": {
-        "name": "Electroniq Buttons Community",
-        "github": "",
-        "notes": "Decoded from E-GMP RearLeft_Seat_Heating frame 1080 (0x438) and 1107 (0x453)"
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "tested_vehicle": "Kia EV6 GT-Line (US)",
+        "role": "State/Command"
       },
       "options": [
         {
-          "label": "Rear Left High",
-          "match": {
-            "D1": "0x41"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D6": "0x8F"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D6": "0xFF"
-              },
-              "repeat": 3
-            }
-          ],
-          "default": true
-        },
-        {
-          "label": "Rear Left Low",
-          "match": {
-            "D1": "0x31"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D6": "0x6F"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D6": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "Rear Left Off",
+          "label": "Off",
+          "requires_feature": "heated_seats",
           "match": {
             "D1": "0x11"
           },
@@ -4247,14 +4028,15 @@
           ]
         },
         {
-          "label": "Rear Right High",
+          "label": "Low Heat",
+          "requires_feature": "heated_seats",
           "match": {
-            "D1": "0x41"
+            "D1": "0x31"
           },
           "steps": [
             {
               "payload": {
-                "D6": "0xF8"
+                "D6": "0x6F"
               },
               "repeat": 3
             },
@@ -4267,7 +4049,82 @@
           ]
         },
         {
-          "label": "Rear Right Low",
+          "label": "High Heat",
+          "requires_feature": "heated_seats",
+          "match": {
+            "D1": "0x41"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D6": "0x8F"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "rear_right_seat_comfort",
+      "ha_metadata": {
+        "name": "Rear Right Seat Comfort",
+        "domain": "select",
+        "icon": "mdi:car-seat-heater"
+      },
+      "category": "Climate & Comfort",
+      "subcategory": "Seat Comfort",
+      "roles": [
+        "trigger",
+        "condition",
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x453",
+        "action_can_id": "0x4A2",
+        "delay_ms": 20
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "tested_vehicle": "Kia EV6 GT-Line (US)",
+        "role": "State/Command"
+      },
+      "options": [
+        {
+          "label": "Off",
+          "match": {
+            "D1": "0x11"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D6": "0xF2"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D6": "0xFF"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Low Heat",
           "match": {
             "D1": "0x31"
           },
@@ -4287,14 +4144,14 @@
           ]
         },
         {
-          "label": "Rear Right Off",
+          "label": "High Heat",
           "match": {
-            "D1": "0x11"
+            "D1": "0x41"
           },
           "steps": [
             {
               "payload": {
-                "D6": "0xF2"
+                "D6": "0xF8"
               },
               "repeat": 3
             },
