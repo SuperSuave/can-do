@@ -15,7 +15,9 @@ import {
   Layers,
   Settings,
   Zap,
-  Radio
+  Radio,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -32,6 +34,8 @@ interface NavbarProps {
   onChangeMainTab: (tab: 'catalog' | 'vehicles' | 'automations' | 'device' | 'dashboard') => void;
   repoConfig: GitHubRepoConfig;
   rulesCount?: number;
+  theme?: 'light' | 'dark';
+  onToggleTheme?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -47,9 +51,41 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeMainTab,
   onChangeMainTab,
   repoConfig,
-  rulesCount = 0
+  rulesCount = 0,
+  theme: externalTheme,
+  onToggleTheme
 }) => {
   const [showResetConfirm, setShowResetConfirm] = React.useState(false);
+  const [internalTheme, setInternalTheme] = React.useState<'light' | 'dark'>(() => {
+    if (typeof document !== 'undefined') {
+      const current = document.documentElement.getAttribute('data-theme');
+      if (current === 'light' || current === 'dark') return current;
+    }
+    return 'dark';
+  });
+
+  const currentTheme = externalTheme || internalTheme;
+
+  const handleToggle = () => {
+    if (onToggleTheme) {
+      onToggleTheme();
+    } else {
+      const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      setInternalTheme(nextTheme);
+      document.documentElement.setAttribute('data-theme', nextTheme);
+      if (nextTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+      } else {
+        document.documentElement.classList.add('light');
+        document.documentElement.classList.remove('dark');
+      }
+      try {
+        localStorage.setItem('theme', nextTheme);
+        localStorage.setItem('can_do_theme', nextTheme);
+      } catch (e) {}
+    }
+  };
 
   const handleQuickDownload = () => {
     const dataStr =
@@ -205,6 +241,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-950 text-cyan-300 font-mono text-[10px] font-bold">
                   {pendingCount}
                 </span>
+              )}
+            </button>
+
+            {/* Theme Toggle Button */}
+            <button
+              type="button"
+              onClick={handleToggle}
+              title={`Switch to ${currentTheme === 'dark' ? 'light' : 'dark'} mode`}
+              aria-label={`Switch to ${currentTheme === 'dark' ? 'light' : 'dark'} mode`}
+              className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-900 rounded-lg transition"
+            >
+              {currentTheme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-indigo-400" />
               )}
             </button>
 

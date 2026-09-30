@@ -73,6 +73,22 @@ function detectHasSunroof(vehicle?: Vehicle): boolean {
   return true;
 }
 
+function getSeatHeatLevel(state: SeatLevel | null): number {
+  if (!state || !state.startsWith('heat_')) return 0;
+  if (state === 'heat_low') return 1;
+  if (state === 'heat_med') return 2;
+  if (state === 'heat_high') return 3;
+  return 0;
+}
+
+function getSeatCoolLevel(state: SeatLevel | null): number {
+  if (!state || !state.startsWith('cool_')) return 0;
+  if (state === 'cool_low') return 1;
+  if (state === 'cool_med') return 2;
+  if (state === 'cool_high') return 3;
+  return 0;
+}
+
 export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   catalog,
   activeVehicle,
@@ -1149,6 +1165,64 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     }
   };
 
+  const cycleSeatHeat = (current: SeatLevel | null, isDriver: boolean) => {
+    if (!equippedFeatures.has('heated_seats')) {
+      triggerNotice('Seat heating is not equipped on this trim');
+      return;
+    }
+
+    const cycle: SeatLevel[] = ['off', 'heat_low', 'heat_med', 'heat_high'];
+    const currentEffective = (current && current.startsWith('heat')) ? current : 'off';
+    const nextIdx = (cycle.indexOf(currentEffective) + 1) % cycle.length;
+    const next = cycle[nextIdx];
+    const seatOptionMap: Record<SeatLevel, string> = {
+      off: 'Off',
+      heat_low: 'Low Heat',
+      heat_med: 'Medium Heat',
+      heat_high: 'High Heat',
+      cool_low: 'Low Cool',
+      cool_med: 'Medium Cool',
+      cool_high: 'High Cool',
+    };
+    const optionCmd = seatOptionMap[next] || next;
+    if (isDriver) {
+      setDriverSeat(next);
+      dispatchCommand('drivers_seat_comfort', optionCmd, `Driver Seat Heat: ${next === 'off' ? 'OFF' : next.replace('heat_', '').toUpperCase()}`);
+    } else {
+      setPassengerSeat(next);
+      dispatchCommand('passengers_seat_comfort', optionCmd, `Passenger Seat Heat: ${next === 'off' ? 'OFF' : next.replace('heat_', '').toUpperCase()}`);
+    }
+  };
+
+  const cycleSeatCool = (current: SeatLevel | null, isDriver: boolean) => {
+    if (!equippedFeatures.has('ventilated_seats')) {
+      triggerNotice('Seat ventilation is not equipped on this trim');
+      return;
+    }
+
+    const cycle: SeatLevel[] = ['off', 'cool_low', 'cool_med', 'cool_high'];
+    const currentEffective = (current && current.startsWith('cool')) ? current : 'off';
+    const nextIdx = (cycle.indexOf(currentEffective) + 1) % cycle.length;
+    const next = cycle[nextIdx];
+    const seatOptionMap: Record<SeatLevel, string> = {
+      off: 'Off',
+      heat_low: 'Low Heat',
+      heat_med: 'Medium Heat',
+      heat_high: 'High Heat',
+      cool_low: 'Low Cool',
+      cool_med: 'Medium Cool',
+      cool_high: 'High Cool',
+    };
+    const optionCmd = seatOptionMap[next] || next;
+    if (isDriver) {
+      setDriverSeat(next);
+      dispatchCommand('drivers_seat_comfort', optionCmd, `Driver Seat Vent: ${next === 'off' ? 'OFF' : next.replace('cool_', '').toUpperCase()}`);
+    } else {
+      setPassengerSeat(next);
+      dispatchCommand('passengers_seat_comfort', optionCmd, `Passenger Seat Vent: ${next === 'off' ? 'OFF' : next.replace('cool_', '').toUpperCase()}`);
+    }
+  };
+
   const cycleSteeringHeat = () => {
     if (!equippedFeatures.has('heated_wheel')) {
       triggerNotice('Heated steering wheel is not equipped on this trim');
@@ -1257,60 +1331,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
           </div>
         </div>
 
-        {/* Perspective Selector & Live Telemetry Badge */}
+        {/* Live Telemetry Badge */}
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full lg:w-auto justify-between lg:justify-end">
-          {/* Perspective Selector */}
-          <div
-            id="perspective-selector-group"
-            className="flex items-center p-1 rounded-xl bg-slate-900/90 border border-slate-800/80 text-xs shadow-inner"
-          >
-            <button
-              type="button"
-              id="perspective-exterior"
-              onClick={() => {
-                setPerspective('exterior');
-                triggerNotice('View: Exterior Shell & Closures');
-              }}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
-                perspective === 'exterior'
-                  ? 'bg-slate-800 text-cyan-300 font-semibold shadow-sm scale-[1.02]'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Exterior
-            </button>
-            <button
-              type="button"
-              id="perspective-interior"
-              onClick={() => {
-                setPerspective('interior');
-                triggerNotice('View: Cabin Interior & Seating');
-              }}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
-                perspective === 'interior'
-                  ? 'bg-slate-800 text-cyan-300 font-semibold shadow-sm scale-[1.02]'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Cabin
-            </button>
-            <button
-              type="button"
-              id="perspective-powertrain"
-              onClick={() => {
-                setPerspective('powertrain');
-                triggerNotice('View: HV Battery & Inverter Pack');
-              }}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
-                perspective === 'powertrain'
-                  ? 'bg-slate-800 text-cyan-300 font-semibold shadow-sm scale-[1.02]'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              HV Battery
-            </button>
-          </div>
-
           {/* Live CAN Telemetry Connection Badge */}
           <div className="flex items-center gap-2">
             <div
@@ -1336,10 +1358,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         </div>
       )}
 
-      {/* 2. Main Cockpit Grid: Unified Vehicle Overview & Outlines + Climate & CAN Logs */}
+      {/* 2. Main Cockpit Grid: Unified Vehicle Overview & Outlines */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         
-        {/* Main Vehicle Column: Unified Vehicle Outline Card (HV Battery, Shifter, Closures & Diagram) */}
+        {/* Main Vehicle Column: Unified Vehicle Outline Card */}
         <div className="lg:col-span-7 xl:col-span-8 space-y-4">
           <div
             id="unified-vehicle-cockpit-card"
@@ -1517,181 +1539,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
               </div>
             </div>
 
-            {/* HV Traction Battery Info & Power Sub-Section */}
-            <div className="p-3.5 sm:p-4 rounded-xl bg-slate-900/60 border border-slate-800/70 space-y-2.5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <BatteryCharging className={`w-4 h-4 ${isCharging ? 'text-emerald-400 animate-pulse' : 'text-cyan-400'}`} />
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Traction Battery</span>
-                  <span
-                    title={`Dynamically resolved CAN ID: 0x${canMappings.hvSoc.toUpperCase()}`}
-                    className="text-xs font-mono font-bold text-white px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700/60"
-                  >
-                    {soc !== null ? `${soc.toFixed(1)}%` : '--'}
-                  </span>
-                  {activeVehicle?.battery_kwh && (
-                    <span className="text-[10px] font-mono text-slate-400">
-                      ({activeVehicle.battery_kwh} kWh pack)
-                    </span>
-                  )}
-                </div>
 
-                <div className="flex items-center gap-2">
-                  {/* Charge Port Quick Toggle */}
-                  <button
-                    type="button"
-                    id="charge-port-toggle-btn"
-                    onClick={() => {
-                      const next = !chargePortOpen;
-                      setChargePortOpen(next);
-                      if (next) setIsCharging(true);
-                      else setIsCharging(false);
-                      dispatchCommand('charge_port', next ? 'open' : 'close', next ? 'Charge Port Opened' : 'Charge Port Closed');
-                    }}
-                    title={`Dynamically resolved CAN ID: 0x${canMappings.chargePort.toUpperCase()}`}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                      chargePortOpen
-                        ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'
-                        : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-                    }`}
-                  >
-                    {chargePortOpen ? 'Charge Port: Open / Plugged' : 'Charge Port: Closed'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Battery Progress Meter Bar */}
-              <div className="space-y-1">
-                <div className="h-3 w-full rounded-full bg-slate-950/90 p-0.5 border border-slate-800/80 relative overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 relative overflow-hidden ${
-                      soc !== null && soc > 20 ? 'bg-gradient-to-r from-cyan-500 to-emerald-400' : 'bg-red-500'
-                    }`}
-                    style={{ width: `${soc !== null ? soc : 0}%` }}
-                  >
-                    {isCharging && (
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse" />
-                    )}
-                  </div>
-                </div>
-                <div className="flex justify-between items-center text-[11px] text-slate-400 font-mono">
-                  <span>0%</span>
-                  <span className="text-cyan-300 font-medium">
-                    {estimatedRangeMiles !== null ? `Est. ${estimatedRangeMiles} ${unitSystem === 'metric' ? 'km' : 'mi'} Range` : 'Est. -- Range'}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={cycleAcLimit}
-                      title="Click to cycle AC Charging Limit"
-                      className="px-1.5 py-0.5 rounded bg-slate-900/80 hover:bg-slate-800 border border-slate-700/60 hover:border-cyan-500/50 transition-colors cursor-pointer text-slate-300"
-                    >
-                      AC: <strong className="text-cyan-300 font-semibold">{acChargeLimit !== null ? `${acChargeLimit}%` : '--'}</strong>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={cycleDcLimit}
-                      title="Click to cycle DC Fast Charging Limit"
-                      className="px-1.5 py-0.5 rounded bg-slate-900/80 hover:bg-slate-800 border border-slate-700/60 hover:border-cyan-500/50 transition-colors cursor-pointer text-slate-300"
-                    >
-                      DC: <strong className="text-cyan-300 font-semibold">{dcChargeLimit !== null ? `${dcChargeLimit}%` : '--'}</strong>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Compact Battery & Aux Telemetry Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
-                {/* AC Charging Limit Tile */}
-                <button
-                  type="button"
-                  id="ac-charging-limit-tile"
-                  onClick={cycleAcLimit}
-                  title={`Dynamically resolved CAN ID: 0x${canMappings.acLimit.toUpperCase()} (Byte D7). Click to cycle AC charging limit.`}
-                  className="p-2 rounded-lg bg-slate-950/50 hover:bg-slate-900 border border-slate-800/50 hover:border-cyan-500/50 text-left transition-colors cursor-pointer"
-                >
-                  <span className="text-[10px] uppercase text-slate-400 block font-semibold flex items-center justify-between">
-                    <span>AC Limit</span>
-                    <span className="text-[9px] text-cyan-400/80 font-normal">Cycle ↺</span>
-                  </span>
-                  <span className="font-mono font-bold text-cyan-300">
-                    {acChargeLimit !== null ? `${acChargeLimit}%` : '--'}
-                  </span>
-                </button>
-
-                {/* DC Fast Charging Limit Tile */}
-                <button
-                  type="button"
-                  id="dc-charging-limit-tile"
-                  onClick={cycleDcLimit}
-                  title={`Dynamically resolved CAN ID: 0x${canMappings.dcLimit.toUpperCase()} (Byte D4). Click to cycle DC fast charging limit.`}
-                  className="p-2 rounded-lg bg-slate-950/50 hover:bg-slate-900 border border-slate-800/50 hover:border-cyan-500/50 text-left transition-colors cursor-pointer"
-                >
-                  <span className="text-[10px] uppercase text-slate-400 block font-semibold flex items-center justify-between">
-                    <span>DC Fast Limit</span>
-                    <span className="text-[9px] text-cyan-400/80 font-normal">Cycle ↺</span>
-                  </span>
-                  <span className="font-mono font-bold text-cyan-300">
-                    {dcChargeLimit !== null ? `${dcChargeLimit}%` : '--'}
-                  </span>
-                </button>
-
-                <div
-                  title={`Dynamically resolved CAN ID: 0x${canMappings.charging.toUpperCase()}`}
-                  className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50"
-                >
-                  <span className="text-[10px] uppercase text-slate-400 block font-semibold">Charge Status</span>
-                  <span className={`font-mono font-bold ${isCharging ? 'text-emerald-400' : 'text-slate-300'}`}>
-                    {isCharging ? `${chargeRateKw} kW DC` : 'Standby'}
-                  </span>
-                </div>
-                <div
-                  title={`Dynamically resolved CAN ID: 0x${canMappings.aux12v.toUpperCase()}`}
-                  className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50"
-                >
-                  <span className="text-[10px] uppercase text-slate-400 block font-semibold">12V Aux Battery</span>
-                  <span className="font-mono font-bold text-slate-300">{aux12V !== null ? `${aux12V.toFixed(1)} V (OK)` : '--'}</span>
-                </div>
-                <div
-                  title={`Dynamically resolved CAN ID: 0x${canMappings.hvTemps.toUpperCase()}`}
-                  className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50"
-                >
-                  <span className="text-[10px] uppercase text-slate-400 block font-semibold">Pack Min Temp</span>
-                  <span className="font-mono font-bold text-slate-300">
-                    {batteryMinTempC !== null ? (tempUnit === 'F' ? `${Math.round(batteryMinTempC * 1.8 + 32)}°F` : `${batteryMinTempC}°C`) : '--'}
-                  </span>
-                </div>
-                <div
-                  title={`Dynamically resolved CAN ID: 0x${canMappings.hvTemps.toUpperCase()}`}
-                  className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50"
-                >
-                  <span className="text-[10px] uppercase text-slate-400 block font-semibold">Pack Max Temp</span>
-                  <span className="font-mono font-bold text-slate-300">
-                    {batteryMaxTempC !== null ? (tempUnit === 'F' ? `${Math.round(batteryMaxTempC * 1.8 + 32)}°F` : `${batteryMaxTempC}°C`) : '--'}
-                  </span>
-                </div>
-                {hvPowerKw !== null && (
-                  <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50">
-                    <span className="text-[10px] uppercase text-slate-400 block font-semibold">Live Pack Power</span>
-                    <span className={`font-mono font-bold ${hvPowerKw < 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                      {hvPowerKw > 0 ? `+${hvPowerKw.toFixed(1)}` : hvPowerKw.toFixed(1)} kW
-                    </span>
-                  </div>
-                )}
-                {cellDeltaMv !== null && (
-                  <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50">
-                    <span className="text-[10px] uppercase text-slate-400 block font-semibold">Cell Delta</span>
-                    <span className="font-mono font-bold text-cyan-300">{cellDeltaMv.toFixed(0)} mV</span>
-                  </div>
-                )}
-                {hvVoltage !== null && (
-                  <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800/50">
-                    <span className="text-[10px] uppercase text-slate-400 block font-semibold">HV Bus Voltage</span>
-                    <span className="font-mono font-bold text-slate-300">{hvVoltage.toFixed(0)} V {hvCurrent !== null ? `(${hvCurrent.toFixed(1)} A)` : ''}</span>
-                  </div>
-                )}
-              </div>
-            </div>
 
             {/* Central Vehicle Silhouette Visual Stage with Projections & TPMS */}
             <div className="relative py-2 overflow-hidden flex flex-col items-center justify-center min-h-[500px]">
@@ -1966,7 +1814,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
           </div>
         </div>
 
-        {/* Right Column (Cabin Climate & Real-Time CAN Bus Decoder) */}
+        {/* Right Column (Cabin Climate & Comfort Suite) */}
         <div className="lg:col-span-5 xl:col-span-4 space-y-4">
           
           {/* Dual-Zone Climate Control Suite */}
@@ -2180,39 +2028,133 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
               </button>
             </div>
 
-            {/* Seat Comfort Steppers */}
-            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/60 text-xs">
-              <button
-                type="button"
-                id="driver-seat-comfort-btn"
-                onClick={() => cycleSeat(driverSeat, true)}
-                className={`p-2.5 rounded-xl border text-left transition-colors ${
-                  driverSeat?.startsWith('heat')
-                    ? 'bg-red-950/70 text-red-300 border-red-700/80'
-                    : driverSeat?.startsWith('cool')
-                    ? 'bg-sky-950/70 text-sky-300 border-sky-700/80'
-                    : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200'
-                }`}
-              >
-                <span className="text-[10px] block font-semibold opacity-75">Driver Seat</span>
-                <span className="font-bold font-mono">{driverSeat === null ? '--' : driverSeat.replace('_', ' ').toUpperCase()}</span>
-              </button>
+            {/* Seat Comfort Controls */}
+            <div className="pt-2 border-t border-slate-800/60 text-xs">
+              <div className="grid grid-cols-2 gap-4">
+                {/* Driver Seat Controls */}
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-semibold text-slate-300 block">Driver Seat</span>
+                  <div className="flex items-center gap-2">
+                    {/* Heat Button */}
+                    <button
+                      type="button"
+                      id="driver-seat-heat-btn"
+                      onClick={() => cycleSeatHeat(driverSeat, true)}
+                      title="Driver Seat Heating (Off/Low/Med/High)"
+                      style={{ width: '80.6364px', height: '52.2386px', backgroundColor: getSeatHeatLevel(driverSeat) > 0 ? undefined : '#0f172b' }}
+                      className={`rounded-xl border flex flex-col items-center justify-center transition-all duration-200 ${
+                        getSeatHeatLevel(driverSeat) > 0
+                          ? 'bg-amber-500/10 text-amber-500 border-amber-500/40 shadow-[0_0_8px_rgba(245,158,11,0.15)] scale-[1.01]'
+                          : 'text-slate-400 border-slate-800/80 hover:text-slate-200 hover:border-slate-700'
+                      }`}
+                    >
+                      <Flame className={`w-5 h-5 ${getSeatHeatLevel(driverSeat) > 0 ? 'animate-pulse text-amber-500' : 'text-slate-400'}`} />
+                      <div className="flex gap-0.5 mt-0.5">
+                        {[1, 2, 3].map(i => (
+                          <span
+                            key={i}
+                            className={`w-1 h-1 rounded-full transition-all duration-200 ${
+                              i <= getSeatHeatLevel(driverSeat)
+                                ? 'bg-amber-500 shadow-[0_0_3px_#f59e0b]'
+                                : 'bg-slate-800 border border-slate-700/50'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </button>
 
-              <button
-                type="button"
-                id="pass-seat-comfort-btn"
-                onClick={() => cycleSeat(passengerSeat, false)}
-                className={`p-2.5 rounded-xl border text-left transition-colors ${
-                  passengerSeat?.startsWith('heat')
-                    ? 'bg-red-950/70 text-red-300 border-red-700/80'
-                    : passengerSeat?.startsWith('cool')
-                    ? 'bg-sky-950/70 text-sky-300 border-sky-700/80'
-                    : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200'
-                }`}
-              >
-                <span className="text-[10px] block font-semibold opacity-75">Pass. Seat</span>
-                <span className="font-bold font-mono">{passengerSeat === null ? '--' : passengerSeat.replace('_', ' ').toUpperCase()}</span>
-              </button>
+                    {/* Cool Button */}
+                    <button
+                      type="button"
+                      id="driver-seat-cool-btn"
+                      onClick={() => cycleSeatCool(driverSeat, true)}
+                      title="Driver Seat Ventilation (Off/Low/Med/High)"
+                      style={{ width: '80.3182px', height: '52.2386px', backgroundColor: getSeatCoolLevel(driverSeat) > 0 ? undefined : '#0f172b' }}
+                      className={`rounded-xl border flex flex-col items-center justify-center transition-all duration-200 ${
+                        getSeatCoolLevel(driverSeat) > 0
+                          ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/40 shadow-[0_0_8px_rgba(34,211,238,0.15)] scale-[1.01]'
+                          : 'text-slate-400 border-slate-800/80 hover:text-slate-200 hover:border-slate-700'
+                      }`}
+                    >
+                      <Snowflake className={`w-5 h-5 ${getSeatCoolLevel(driverSeat) > 0 ? 'text-cyan-400' : 'text-slate-400'}`} />
+                      <div className="flex gap-0.5 mt-0.5">
+                        {[1, 2, 3].map(i => (
+                          <span
+                            key={i}
+                            className={`w-1 h-1 rounded-full transition-all duration-200 ${
+                              i <= getSeatCoolLevel(driverSeat)
+                                ? 'bg-cyan-400 shadow-[0_0_3px_#22d3ee]'
+                                : 'bg-slate-800 border border-slate-700/50'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Passenger Seat Controls */}
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-semibold text-slate-300 block">Passenger Seat</span>
+                  <div className="flex items-center gap-2">
+                    {/* Heat Button */}
+                    <button
+                      type="button"
+                      id="pass-seat-heat-btn"
+                      onClick={() => cycleSeatHeat(passengerSeat, false)}
+                      title="Passenger Seat Heating (Off/Low/Med/High)"
+                      style={{ width: '80.6364px', height: '52.2386px', backgroundColor: getSeatHeatLevel(passengerSeat) > 0 ? undefined : '#0f172b' }}
+                      className={`rounded-xl border flex flex-col items-center justify-center transition-all duration-200 ${
+                        getSeatHeatLevel(passengerSeat) > 0
+                          ? 'bg-amber-500/10 text-amber-500 border-amber-500/40 shadow-[0_0_8px_rgba(245,158,11,0.15)] scale-[1.01]'
+                          : 'text-slate-400 border-slate-800/80 hover:text-slate-200 hover:border-slate-700'
+                      }`}
+                    >
+                      <Flame className={`w-5 h-5 ${getSeatHeatLevel(passengerSeat) > 0 ? 'animate-pulse text-amber-500' : 'text-slate-400'}`} />
+                      <div className="flex gap-0.5 mt-0.5">
+                        {[1, 2, 3].map(i => (
+                          <span
+                            key={i}
+                            className={`w-1 h-1 rounded-full transition-all duration-200 ${
+                              i <= getSeatHeatLevel(passengerSeat)
+                                ? 'bg-amber-500 shadow-[0_0_3px_#f59e0b]'
+                                : 'bg-slate-800 border border-slate-700/50'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </button>
+
+                    {/* Cool Button */}
+                    <button
+                      type="button"
+                      id="pass-seat-cool-btn"
+                      onClick={() => cycleSeatCool(passengerSeat, false)}
+                      title="Passenger Seat Ventilation (Off/Low/Med/High)"
+                      style={{ width: '80.3182px', height: '52.2386px', backgroundColor: getSeatCoolLevel(passengerSeat) > 0 ? undefined : '#0f172b' }}
+                      className={`rounded-xl border flex flex-col items-center justify-center transition-all duration-200 ${
+                        getSeatCoolLevel(passengerSeat) > 0
+                          ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/40 shadow-[0_0_8px_rgba(34,211,238,0.15)] scale-[1.01]'
+                          : 'text-slate-400 border-slate-800/80 hover:text-slate-200 hover:border-slate-700'
+                      }`}
+                    >
+                      <Snowflake className={`w-5 h-5 ${getSeatCoolLevel(passengerSeat) > 0 ? 'text-cyan-400' : 'text-slate-400'}`} />
+                      <div className="flex gap-0.5 mt-0.5">
+                        {[1, 2, 3].map(i => (
+                          <span
+                            key={i}
+                            className={`w-1 h-1 rounded-full transition-all duration-200 ${
+                              i <= getSeatCoolLevel(passengerSeat)
+                                ? 'bg-cyan-400 shadow-[0_0_3px_#22d3ee]'
+                                : 'bg-slate-800 border border-slate-700/50'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Rear Heated Seats Steppers */}
@@ -2221,10 +2163,11 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 type="button"
                 id="rear-left-seat-comfort-btn"
                 onClick={() => cycleRearSeat(true)}
+                style={{ backgroundColor: rearLeftSeat?.startsWith('heat') ? undefined : '#0f172b' }}
                 className={`p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
                   rearLeftSeat?.startsWith('heat')
                     ? 'bg-amber-950/70 text-amber-300 border-amber-700/80 shadow-sm shadow-amber-900/30'
-                    : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200'
+                    : 'text-slate-400 border-slate-800 hover:text-slate-200'
                 }`}
               >
                 <span className="text-[10px] block font-semibold opacity-75">Rear Left Seat</span>
@@ -2250,7 +2193,6 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
               </button>
             </div>
           </div>
-
 
         </div>
 

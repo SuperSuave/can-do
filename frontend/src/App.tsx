@@ -54,7 +54,9 @@ import {
   Layers,
   Radio,
   Gauge,
-  X
+  X,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 const STORAGE_KEY_CATALOG = 'can_do_catalog_data';
@@ -65,8 +67,47 @@ const STORAGE_KEY_DRAFT_MODIFIED_VEHICLES = 'can_do_draft_modified_vehicles';
 const STORAGE_KEY_DISCOVERED_FEATURES = 'can_do_discovered_features';
 const STORAGE_KEY_AUTOMATIONS_RULES = 'can_do_automation_rules';
 const STORAGE_KEY_AUTOMATIONS_SETTINGS = 'can_do_automation_settings';
+const STORAGE_KEY_THEME = 'theme';
+const STORAGE_KEY_CAN_DO_THEME = 'can_do_theme';
 
 export default function App() {
+  // Theme state ('light' | 'dark')
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_THEME) || localStorage.getItem(STORAGE_KEY_CAN_DO_THEME);
+      if (saved === 'light' || saved === 'dark') {
+        return saved;
+      }
+      if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+        return 'light';
+      }
+    } catch (e) {
+      console.error('Failed to load theme from localStorage', e);
+    }
+    return 'dark';
+  });
+
+  useEffect(() => {
+    try {
+      document.documentElement.setAttribute('data-theme', theme);
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+      } else {
+        document.documentElement.classList.add('light');
+        document.documentElement.classList.remove('dark');
+      }
+      localStorage.setItem(STORAGE_KEY_THEME, theme);
+      localStorage.setItem(STORAGE_KEY_CAN_DO_THEME, theme);
+    } catch (e) {
+      console.error('Failed to persist theme to localStorage', e);
+    }
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
+  };
+
   // 1. Core catalog state (Strictly from /catalog/can_do_catalog.json)
   const [catalog, setCatalog] = useState<Catalog>(() => {
     try {
@@ -919,13 +960,13 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-[var(--background-color)] text-[var(--text-color)] selection:bg-cyan-500 selection:text-slate-950">
       {/* Hero Banner / Header Area */}
-      <section className="border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] px-3.5 py-4 sm:px-6 sm:py-5 lg:px-8">
+      <header className="border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] px-3.5 py-4 sm:px-6 sm:py-5 lg:px-8">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 items-center gap-4 py-1">
           {/* Left: Stacked title + Version chip underneath */}
           <div className="flex flex-col items-center md:items-start text-center md:text-left">
             <h1 className="text-xl sm:text-2xl font-bold text-[var(--text-heading)] tracking-tight leading-tight">
               <span className="block">CAN Do Automation</span>
-              <span className="block text-slate-300">Message Catalog</span>
+              <span className="block text-[var(--text-color)]">Message Catalog</span>
             </h1>
             <div className="mt-2 flex items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-[var(--input-bg)] text-cyan-400 border border-[var(--border-color)] shadow-sm">
@@ -944,6 +985,27 @@ export default function App() {
 
           {/* Right: Consolidated Action Toolbar */}
           <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 text-xs w-full">
+            {/* Theme Toggle Button */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-1.5 px-3 transition hover:border-cyan-400"
+            >
+              {theme === 'dark' ? (
+                <>
+                  <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="hidden sm:inline">Light</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                  <span className="hidden sm:inline">Dark</span>
+                </>
+              )}
+            </button>
+
             {/* Catalog Health Status */}
             <button
               type="button"
@@ -992,7 +1054,7 @@ export default function App() {
             />
           </div>
         </div>
-      </section>
+      </header>
 
       {/* Main Tab Navigation Header */}
       <div className="border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md sticky top-0 z-30">

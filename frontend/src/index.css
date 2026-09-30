@@ -3,7 +3,8 @@
 /* ==========================================================================
    CAN Do Project - Material Design 3 & Home Assistant Design System
    ========================================================================== */
-:root {
+:root,
+[data-theme="dark"] {
   --md-sys-color-primary: #009AC7;
   --md-sys-color-on-primary: #003257;
   --md-sys-color-primary-container: #00497a;
@@ -60,20 +61,27 @@
   --md-sys-color-on-error-container: #410002;
   --md-sys-color-background: #f8f9fa;
   --md-sys-color-on-background: #191c20;
-  --md-sys-color-surface: #f8f9fa;
-  --md-sys-color-on-surface: #191c20;
-  --md-sys-color-surface-variant: #e0e3e8;
-  --md-sys-color-on-surface-variant: #44474e;
-  --md-sys-color-outline: #6e7179;
-  --md-sys-color-outline-variant: #c4c7d0;
+  --md-sys-color-surface: #ffffff;
+  --md-sys-color-on-surface: #0f172a;
+  --md-sys-color-surface-variant: #e2e8f0;
+  --md-sys-color-on-surface-variant: #334155;
+  --md-sys-color-outline: #64748b;
+  --md-sys-color-outline-variant: #cbd5e1;
   --md-sys-color-surface-container-lowest: #ffffff;
-  --md-sys-color-surface-container-low: #f2f4f7;
-  --md-sys-color-surface-container: #eceef2;
-  --md-sys-color-surface-container-high: #e6e8ed;
-  --md-sys-color-surface-container-highest: #e0e3e8;
+  --md-sys-color-surface-container-low: #f1f5f9;
+  --md-sys-color-surface-container: #e2e8f0;
+  --md-sys-color-surface-container-high: #cbd5e1;
+  --md-sys-color-surface-container-highest: #94a3b8;
 
+  --primary-color: var(--md-sys-color-primary);
+  --background-color: var(--md-sys-color-background);
   --card-bg: var(--md-sys-color-surface-container-lowest);
   --input-bg: var(--md-sys-color-surface-container-lowest);
+  --text-color: var(--md-sys-color-on-surface-variant);
+  --text-heading: var(--md-sys-color-on-surface);
+  --text-muted: var(--md-sys-color-outline);
+  --border-color: var(--md-sys-color-outline-variant);
+
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1);

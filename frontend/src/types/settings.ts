@@ -18,6 +18,7 @@ export interface UpdateScheduleConfig {
 }
 
 export interface UserPreferences {
+  theme?: 'light' | 'dark';
   onboarding_completed: boolean;
   vehicle_id: string;
   unit_system: 'imperial' | 'metric';

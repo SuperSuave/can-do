@@ -262,10 +262,11 @@ export function isOptionCurrentlyValid(
   if (!bytes) return false;
 
   if (opt.match_mask && opt.match_mask > 0) {
+    const matchBytes = opt.match_payload ? parseHexPayload(opt.match_payload) : null;
     for (let i = 0; i < 8; i++) {
       if ((opt.match_mask & (1 << i)) !== 0) {
-        const mask = opt.byte_masks ? opt.byte_masks[i] : 0xFF;
-        const target = opt.match_payload ? opt.match_payload[i] : 0x00;
+        const mask = opt.byte_masks ? (opt.byte_masks as any)[i] || 0xFF : 0xFF;
+        const target = matchBytes ? (matchBytes[i] || 0x00) : 0x00;
         const inverted = opt.invert_mask ? (opt.invert_mask & (1 << i)) !== 0 : false;
         const actual = bytes[i] & mask;
         const maskedTarget = target & mask;
@@ -3869,7 +3870,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       );
                     }
                     const gateEval = evaluateConditionState(
-                      { logic: 'and', conditions: conds },
+                      { id: 'gate_root', logic: 'and', conditions: conds },
                       liveFrames,
                       entityStates,
                       lastFiredTriggerId,
