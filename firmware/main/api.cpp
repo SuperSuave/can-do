@@ -243,7 +243,7 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
     // Mark transfer as active to prevent WebSocket streaming from overloading Wi-Fi/LwIP during page load
     s_active_static_transfers.fetch_add(1);
 
-    static char s_file_chunk[2048];
+    char s_file_chunk[2048];
     ssize_t read_bytes;
     while ((read_bytes = read(fd, s_file_chunk, sizeof(s_file_chunk))) > 0) {
         if (httpd_resp_send_chunk(req, s_file_chunk, read_bytes) != ESP_OK) {
@@ -1517,7 +1517,7 @@ static esp_err_t ws_handler(httpd_req_t *req) {
 httpd_handle_t start_webserver(void) {
     httpd_handle_t server = nullptr;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.stack_size = 5120;
+    config.stack_size = 6144;
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.max_uri_handlers = 40;
     config.lru_purge_enable = true;

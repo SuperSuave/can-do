@@ -172,6 +172,13 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 }) => {
   // Device endpoint config (persisted in localStorage)
   const [deviceHost, setDeviceHost] = useState<string>(() => {
+    // When the frontend is served directly from the device, always use 'auto' so
+    // it resolves to window.location.origin — the current STA or AP IP the page
+    // was loaded from. This prevents stale IPs saved from a previous network from
+    // breaking the connection when the device gets a new DHCP address.
+    if (isRunningOnDevice()) {
+      return 'auto';
+    }
     const saved = localStorage.getItem('cando_device_host');
     if (saved && saved !== 'http://192.168.107.50' && saved !== '192.168.107.50') {
       return saved;
