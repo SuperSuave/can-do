@@ -37,22 +37,34 @@ export interface UpdateProgressCallback {
 const GITHUB_REPO = 'SuperSuave/can-do';
 
 /**
- * Compare two version strings (CalVer e.g. 2026.9.1 or SemVer 1.0.0)
+ * Compare two version strings (CalVer e.g. 2026.9.1 or SemVer 1.0.0 or CalVer with build tags e.g. 2026.10.1-b001)
  */
 export function isVersionNewer(remote: string, current: string): boolean {
   const cleanRemote = remote.replace(/^v/, '').replace(/^catalog-v/, '').trim();
   const cleanCurrent = current.replace(/^v/, '').replace(/^catalog-v/, '').trim();
-  if (cleanRemote === cleanCurrent) return false;
+  if (!cleanRemote || !cleanCurrent || cleanRemote === cleanCurrent) return false;
 
-  const rParts = cleanRemote.split('.').map(n => parseInt(n, 10) || 0);
-  const cParts = cleanCurrent.split('.').map(n => parseInt(n, 10) || 0);
+  const rTokens = cleanRemote.split(/[-.+]/);
+  const cTokens = cleanCurrent.split(/[-.+]/);
+  const maxLen = Math.max(rTokens.length, cTokens.length);
 
-  const maxLen = Math.max(rParts.length, cParts.length);
   for (let i = 0; i < maxLen; i++) {
-    const r = rParts[i] || 0;
-    const c = cParts[i] || 0;
-    if (r > c) return true;
-    if (r < c) return false;
+    const rTok = rTokens[i] || '';
+    const cTok = cTokens[i] || '';
+    const rNum = parseInt(rTok, 10);
+    const cNum = parseInt(cTok, 10);
+
+    const rIsNum = !isNaN(rNum) && String(rNum) === rTok;
+    const cIsNum = !isNaN(cNum) && String(cNum) === cTok;
+
+    if (rIsNum && cIsNum) {
+      if (rNum > cNum) return true;
+      if (rNum < cNum) return false;
+    } else {
+      const cmp = rTok.localeCompare(cTok, undefined, { numeric: true });
+      if (cmp > 0) return true;
+      if (cmp < 0) return false;
+    }
   }
   return false;
 }
@@ -93,9 +105,9 @@ export async function checkForUpdates(
 
     const release = await res.json();
     const tag = release.tag_name || '';
-    const isFwNewer = Boolean(tag && currentFirmwareVersion && isVersionNewer(tag, currentFirmwareVersion));
-    const isCatNewer = Boolean(tag && currentCatalogVersion && isVersionNewer(tag, currentCatalogVersion));
-    const isFrontNewer = Boolean(tag && currentFrontendVersion && isVersionNewer(tag, currentFrontendVersion));
+    const isFwNewer = Boolean(tag && (!currentFirmwareVersion || currentFirmwareVersion === 'unknown' || isVersionNewer(tag, currentFirmwareVersion)));
+    const isCatNewer = Boolean(tag && (!currentCatalogVersion || currentCatalogVersion === 'unknown' || isVersionNewer(tag, currentCatalogVersion)));
+    const isFrontNewer = Boolean(tag && (!currentFrontendVersion || currentFrontendVersion === 'unknown' || isVersionNewer(tag, currentFrontendVersion)));
 
     // Locate assets if attached to GitHub release
     let firmwareUrl: string | undefined;
@@ -134,9 +146,8 @@ export async function checkForUpdates(
 
     const hasAnyUpdate = isFwNewer || isCatNewer || isFrontNewer || isRebuild;
 
-    // Always use raw.githubusercontent.com for catalog download in browser
-    // because GitHub Release download assets redirect to S3 without CORS headers
-    catalogUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/${tag}/catalog/can_do_catalog.json`;
+    // Use raw main by default for the catalog as it reliably has the latest release sync
+    catalogUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/catalog/can_do_catalog.json`;
 
     return {
       has_update: hasAnyUpdate,
@@ -245,7 +256,7 @@ async function uploadToDevice(
 /**
  * Upload firmware image to /api/ota with progress tracking
  */
-function uploadFirmwareOta(
+export function uploadFirmwareOta(
   deviceBaseUrl: string,
   binaryData: Blob | ArrayBuffer,
   onProgress?: (percent: number) => void
@@ -289,6 +300,7 @@ export async function executeUpdateSequence(
   onProgress: UpdateProgressCallback
 ): Promise<void> {
   const deviceBaseUrl = resolveDeviceBaseUrl(targetDeviceHost);
+  const pagesHost = `${GITHUB_REPO.split('/')[0].toLowerCase()}.github.io/${GITHUB_REPO.split('/')[1]}`;
 
   try {
     // -------------------------------------------------------------
@@ -297,11 +309,14 @@ export async function executeUpdateSequence(
     if (componentsToUpdate.frontend) {
       onProgress('frontend', 10, 'Fetching frontend release manifest...');
 
-      // Manifest sources: GitHub Pages build or release assets
+      // Manifest sources in priority order:
+      // 1. GitHub Pages build (CORS-enabled static CDN)
+      // 2. Main branch raw repository (synced by CI)
+      // 3. Specific release tag raw repository
       const manifestCandidates = [
-        `https://raw.githubusercontent.com/${GITHUB_REPO}/${updateData.version}/firmware/data/www/frontend_manifest.json`,
+        `https://${pagesHost}/frontend_manifest.json`,
         `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/data/www/frontend_manifest.json`,
-        `https://${GITHUB_REPO.split('/')[0].toLowerCase()}.github.io/${GITHUB_REPO.split('/')[1]}/frontend_manifest.json`,
+        `https://raw.githubusercontent.com/${GITHUB_REPO}/${updateData.version}/firmware/data/www/frontend_manifest.json`,
       ];
 
       let manifest: { version?: string; files: { name: string; path: string; size: number }[] } | null = null;
@@ -311,9 +326,22 @@ export async function executeUpdateSequence(
         try {
           const mRes = await fetch(mUrl, { cache: 'no-cache' });
           if (mRes.ok) {
-            manifest = await mRes.json();
-            manifestBaseUrl = mUrl.substring(0, mUrl.lastIndexOf('/'));
-            break;
+            const candidateManifest = await mRes.json();
+            if (candidateManifest && Array.isArray(candidateManifest.files) && candidateManifest.files.length > 0) {
+              const cleanVer = (candidateManifest.version || '').replace(/^v/, '');
+              const cleanTarget = (updateData.version || '').replace(/^v/, '');
+              // If candidate matches target version, select immediately!
+              if (cleanVer === cleanTarget) {
+                manifest = candidateManifest;
+                manifestBaseUrl = mUrl.substring(0, mUrl.lastIndexOf('/'));
+                break;
+              }
+              // Otherwise keep the newest candidate manifest found
+              if (!manifest || isVersionNewer(candidateManifest.version || '', manifest.version || '')) {
+                manifest = candidateManifest;
+                manifestBaseUrl = mUrl.substring(0, mUrl.lastIndexOf('/'));
+              }
+            }
           }
         } catch {}
       }
@@ -339,19 +367,38 @@ export async function executeUpdateSequence(
           console.warn('Could not inspect current device HTML for stale cleanup:', e);
         }
 
-        // 2. Upload new web assets sequentially
+        // 2. Upload new web assets sequentially with fallback download URLs
         const totalFiles = manifest.files.length;
         for (let i = 0; i < totalFiles; i++) {
           const fileInfo = manifest.files[i];
-          const fileUrl = `${manifestBaseUrl}/${fileInfo.name}`;
           const pct = 15 + Math.round(((i + 1) / totalFiles) * 20);
           onProgress('frontend', pct, `Updating ${fileInfo.name} (${i + 1}/${totalFiles})...`);
 
-          const fileRes = await fetch(fileUrl, { cache: 'no-cache' });
-          if (!fileRes.ok) {
-            throw new Error(`Failed to download ${fileInfo.name} from ${fileUrl}`);
+          const downloadCandidates = [
+            `${manifestBaseUrl}/${fileInfo.name}`,
+            `https://${pagesHost}/${fileInfo.name}`,
+            `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/data/www/${fileInfo.name}`,
+            `https://raw.githubusercontent.com/${GITHUB_REPO}/${updateData.version}/firmware/data/www/${fileInfo.name}`,
+          ];
+
+          let fileBuffer: ArrayBuffer | null = null;
+          for (const dUrl of downloadCandidates) {
+            try {
+              const fileRes = await fetch(dUrl, { cache: 'no-cache' });
+              if (fileRes.ok) {
+                const buf = await fileRes.arrayBuffer();
+                if (buf.byteLength > 0) {
+                  fileBuffer = buf;
+                  break;
+                }
+              }
+            } catch {}
           }
-          const fileBuffer = await fileRes.arrayBuffer();
+
+          if (!fileBuffer || fileBuffer.byteLength === 0) {
+            throw new Error(`Failed to download ${fileInfo.name} from any release repository`);
+          }
+
           // Always skip reboot for web assets!
           const uploaded = await uploadToDevice(deviceBaseUrl, fileInfo.path, fileBuffer, true);
           if (!uploaded) {
@@ -370,10 +417,13 @@ export async function executeUpdateSequence(
     if (componentsToUpdate.catalog) {
       onProgress('catalog', 40, 'Fetching latest message catalog from GitHub...');
       let catalogText: string | null = null;
-      
+
+      // Candidate catalog sources prioritized by freshness and CORS compatibility
       const candidateUrls = [
-        `https://raw.githubusercontent.com/${GITHUB_REPO}/${updateData.version}/catalog/can_do_catalog.json`,
         `https://raw.githubusercontent.com/${GITHUB_REPO}/main/catalog/can_do_catalog.json`,
+        `https://${pagesHost}/catalog/can_do_catalog.json`,
+        `https://${pagesHost}/can_do_catalog.json`,
+        `https://raw.githubusercontent.com/${GITHUB_REPO}/${updateData.version}/catalog/can_do_catalog.json`,
       ];
       if (updateData.assets.catalog_url && !candidateUrls.includes(updateData.assets.catalog_url)) {
         candidateUrls.push(updateData.assets.catalog_url);
@@ -383,8 +433,22 @@ export async function executeUpdateSequence(
         try {
           const catRes = await fetch(url, { cache: 'no-cache' });
           if (catRes.ok) {
-            catalogText = await catRes.text();
-            break;
+            const text = await catRes.text();
+            try {
+              const parsed = JSON.parse(text);
+              const ver = (parsed.can_do_version || parsed.catalog_version || '').replace(/^v/, '');
+              const targetVer = (updateData.version || '').replace(/^v/, '');
+              // If catalog matches target version, select it immediately!
+              if (ver === targetVer) {
+                catalogText = text;
+                break;
+              }
+              if (!catalogText) {
+                catalogText = text;
+              }
+            } catch {
+              if (!catalogText) catalogText = text;
+            }
           }
         } catch (e) {
           console.warn(`Failed to fetch catalog from ${url}:`, e);
@@ -409,43 +473,105 @@ export async function executeUpdateSequence(
     // STAGE 3: FIRMWARE BINARY (Final step, triggers reboot)
     // -------------------------------------------------------------
     if (componentsToUpdate.firmware && updateData.assets.firmware_url) {
-      // First attempt direct browser-assisted stream to /api/ota for guaranteed reliability across all networks
       let browserStreamSuccess = false;
-      onProgress('firmware', 80, 'Downloading firmware binary from GitHub release...');
-      try {
-        const fwRes = await fetch(updateData.assets.firmware_url, { cache: 'no-cache' });
-        if (fwRes.ok) {
-          const fwBlob = await fwRes.blob();
-          onProgress('firmware', 85, 'Flashing firmware to device OTA partition...');
-          await uploadFirmwareOta(deviceBaseUrl, fwBlob, (pct) => {
-            onProgress('firmware', 85 + Math.round(pct * 0.12), `Flashing firmware: ${pct}%`);
-          });
-          browserStreamSuccess = true;
-          recordUpdateInstalledTime(updateData.published_at || new Date().toISOString());
-          onProgress('rebooting', 100, 'Firmware flash complete! Device is rebooting...');
+      onProgress('firmware', 80, 'Downloading firmware binary...');
+
+      // Priority list of binary sources:
+      // 1. GitHub Pages static binary (CORS-enabled, fast, CDN)
+      // 2. Raw GitHub on main branch
+      // 3. GitHub release download asset
+      const fwCandidates = [
+        `https://${pagesHost}/can-do-esp32c3.bin`,
+        `https://${pagesHost}/can-do.bin`,
+        `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/can-do-esp32c3.bin`,
+        `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/build/can-do.bin`,
+        updateData.assets.firmware_url,
+      ];
+
+      for (const fwUrl of fwCandidates) {
+        try {
+          const fwRes = await fetch(fwUrl, { cache: 'no-cache' });
+          if (fwRes.ok) {
+            const fwBuf = await fwRes.arrayBuffer();
+            // Validate: ESP32 application binary magic byte is 0xE9, size > 100KB
+            if (fwBuf.byteLength > 100000) {
+              const u8 = new Uint8Array(fwBuf);
+              if (u8[0] === 0xE9) {
+                onProgress('firmware', 85, 'Flashing firmware to device OTA partition...');
+                await uploadFirmwareOta(deviceBaseUrl, fwBuf, (pct) => {
+                  onProgress('firmware', 85 + Math.round(pct * 0.12), `Flashing firmware: ${pct}%`);
+                });
+                browserStreamSuccess = true;
+                recordUpdateInstalledTime(updateData.published_at || new Date().toISOString());
+                onProgress('rebooting', 100, 'Firmware flash complete! Device is rebooting...');
+                break;
+              }
+            }
+          }
+        } catch (e) {
+          // Expected for URLs with CORS restrictions or not yet deployed
         }
-      } catch (e) {
-        console.warn('Browser direct fetch encountered CORS or network error, falling back to device-side pull', e);
       }
 
-      // If browser fetch was blocked by CORS, fallback to device-side cloud_pull
+      // If browser direct download was blocked by CORS or network, fall back to device-side Cloud OTA pull
       if (!browserStreamSuccess) {
         onProgress('firmware', 82, 'Requesting device-side Cloud OTA pull...');
-        try {
-          const cloudPullRes = await fetch(`${deviceBaseUrl}/api/ota/cloud_pull`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: updateData.assets.firmware_url }),
-          });
-          if (cloudPullRes.ok) {
-            recordUpdateInstalledTime(updateData.published_at || new Date().toISOString());
-            onProgress('rebooting', 100, 'Cloud flash initiated on device! Rebooting upon completion...');
-          } else {
-            throw new Error(`Device cloud pull returned HTTP ${cloudPullRes.status}`);
-          }
-        } catch (err: any) {
-          throw new Error(`Firmware update failed: ${err.message || err}`);
+        const cloudPullRes = await fetch(`${deviceBaseUrl}/api/ota/cloud_pull`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: updateData.assets.firmware_url }),
+        });
+
+        if (!cloudPullRes.ok) {
+          throw new Error(`Device cloud pull returned HTTP ${cloudPullRes.status}`);
         }
+
+        // Actively poll /api/ota/status on the device to verify progress and real completion
+        onProgress('firmware', 84, 'Device connecting to GitHub Cloud Release...');
+        let pollCount = 0;
+        let lastReportedPct = 0;
+        let completed = false;
+
+        while (pollCount < 60) {
+          await new Promise((r) => setTimeout(r, 1000));
+          pollCount++;
+
+          try {
+            const stRes = await fetch(`${deviceBaseUrl}/api/ota/status`, { cache: 'no-cache' });
+            if (stRes.ok) {
+              const st = await stRes.json();
+              if (st.error && st.error.length > 0) {
+                throw new Error(`Device Cloud OTA failed: ${st.error}`);
+              }
+              if (st.progress !== undefined && st.progress > lastReportedPct) {
+                lastReportedPct = st.progress;
+                onProgress('firmware', 84 + Math.round(lastReportedPct * 0.14), `Device flashing: ${lastReportedPct}%`);
+              }
+              if (st.success) {
+                completed = true;
+                break;
+              }
+            }
+          } catch (pollErr: any) {
+            // If the device reboots at the end of flash, network requests will fail — this signals success!
+            if (lastReportedPct >= 80) {
+              completed = true;
+              break;
+            }
+            if (pollErr.message && pollErr.message.includes('Device Cloud OTA failed')) {
+              throw pollErr;
+            }
+          }
+        }
+
+        if (!completed && lastReportedPct < 80) {
+          throw new Error(
+            'Device could not download firmware binary from GitHub (ESP32 is offline or GitHub redirected without CORS). Please use the "Download .bin" link and manually flash via the file selector below.'
+          );
+        }
+
+        recordUpdateInstalledTime(updateData.published_at || new Date().toISOString());
+        onProgress('rebooting', 100, 'Cloud flash complete! Device is rebooting...');
       }
     } else {
       // If we updated web assets or catalog without flashing firmware, reboot the device once at the end

@@ -127,8 +127,11 @@ jobs:
 
           # Clean versioned release assets
           cp firmware/build/can-do.bin "release_assets/can-do-${TARGET}-${TAG}.bin"
+          cp firmware/build/can-do.bin "release_assets/can-do-${TARGET}.bin"
+          cp firmware/build/can-do.bin "release_assets/can-do.bin"
           cp firmware/build/can-do-*-merged.bin "release_assets/can-do-${TARGET}-${TAG}-merged.bin" 2>/dev/null || true
           cp catalog/can_do_catalog.json "release_assets/can_do_catalog-${TAG}.json"
+          cp catalog/can_do_catalog.json "release_assets/can_do_catalog.json"
           cp firmware/data/www/frontend_manifest.json "release_assets/frontend_manifest.json" 2>/dev/null || true
           (cd firmware/data/www && zip -r "../../../release_assets/can-do-web-${TAG}.zip" .)
 
@@ -155,10 +158,24 @@ jobs:
           node -e "const fs = require('fs'); const p = 'custom_components/can_do/manifest.json'; const m = JSON.parse(fs.readFileSync(p)); m.version = '${{ env.RELEASE_TAG }}'; fs.writeFileSync(p, JSON.stringify(m, null, 2) + '\n');"
           python3 -c "import re; p='custom_components/can_do/const.py'; s=open(p).read(); open(p,'w').write(re.sub(r'VERSION\s*=\s*[\"\'\'][^\"\'\']+[\"\'\']', 'VERSION = \"${{ env.RELEASE_TAG }}\"', s))"
           echo "${{ env.RELEASE_TAG }}" > firmware/version.txt
-          git add catalog/can_do_catalog.json frontend/package.json custom_components/can_do/manifest.json custom_components/can_do/const.py firmware/version.txt
+
+          # Re-bundle frontend to ensure LittleFS data/www has stamped version
+          cd frontend
+          npm ci || npm install
+          VITE_APP_VERSION="${{ env.RELEASE_TAG }}" npm run build
+          cd ..
+
+          # Copy binary to firmware directory for static raw GitHub CDN serving
+          cp firmware/build/can-do.bin "firmware/can-do-${{ inputs.target || 'esp32c3' }}.bin"
+
+          git add -f catalog/can_do_catalog.json frontend/package.json custom_components/can_do/manifest.json custom_components/can_do/const.py firmware/version.txt firmware/data/www/ firmware/can-do-${{ inputs.target || 'esp32c3' }}.bin
           if git diff --staged --quiet; then
             echo "Main branch is already up to date with version ${{ env.RELEASE_TAG }}."
           else
-            git commit -m "chore(release): sync version ${{ env.RELEASE_TAG }} to all components [skip ci]"
+            git commit -m "chore(release): sync version ${{ env.RELEASE_TAG }} and web assets to main"
             git push origin main
           fi
+
+          # Fast-forward release tag to the commit containing all stamped release assets
+          git tag -f "${{ env.RELEASE_TAG }}"
+          git push -f origin "${{ env.RELEASE_TAG }}"

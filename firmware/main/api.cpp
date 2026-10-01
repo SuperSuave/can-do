@@ -752,10 +752,25 @@ struct CloudOtaTaskArgs {
     std::string url;
 };
 
+struct OtaState {
+    std::atomic<bool> in_progress{false};
+    std::atomic<int> progress_pct{0};
+    std::atomic<int> bytes_read{0};
+    std::atomic<bool> success{false};
+    char error_msg[128] = {0};
+};
+static OtaState g_ota_state;
+
 static void cloud_ota_task(void *pvParameter) {
     CloudOtaTaskArgs *args = static_cast<CloudOtaTaskArgs*>(pvParameter);
     std::string download_url = args->url;
     delete args;
+
+    g_ota_state.in_progress = true;
+    g_ota_state.progress_pct = 0;
+    g_ota_state.bytes_read = 0;
+    g_ota_state.success = false;
+    g_ota_state.error_msg[0] = '\0';
 
     ESP_LOGI(TAG, "Starting Direct Cloud OTA Pull from: %s", download_url.c_str());
     broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] Connecting to Cloud Release Asset...\"}");
@@ -765,13 +780,17 @@ static void cloud_ota_task(void *pvParameter) {
     config.cert_pem = nullptr; // Skip verification for github redirect assets
     config.skip_cert_common_name_check = true;
     config.crt_bundle_attach = esp_crt_bundle_attach;
-    config.timeout_ms = 15000;
-    config.buffer_size = 2048;
+    config.timeout_ms = 30000;
+    config.buffer_size = 4096;
     config.buffer_size_tx = 1024;
+    config.max_redirection_count = 10;
+    config.keep_alive_enable = true;
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (!client) {
         ESP_LOGE(TAG, "Failed to initialize HTTP client for Cloud OTA");
+        snprintf(g_ota_state.error_msg, sizeof(g_ota_state.error_msg), "Failed to initialize HTTP client");
+        g_ota_state.in_progress = false;
         broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] [E] Failed to initialize HTTP client\"}");
         vTaskDelete(nullptr);
         return;
@@ -780,6 +799,8 @@ static void cloud_ota_task(void *pvParameter) {
     esp_err_t err = esp_http_client_open(client, 0);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
+        snprintf(g_ota_state.error_msg, sizeof(g_ota_state.error_msg), "Connection failed: %s", esp_err_to_name(err));
+        g_ota_state.in_progress = false;
         broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] [E] Connection to download URL failed\"}");
         esp_http_client_cleanup(client);
         vTaskDelete(nullptr);
@@ -790,20 +811,30 @@ static void cloud_ota_task(void *pvParameter) {
     int status_code = esp_http_client_get_status_code(client);
     ESP_LOGI(TAG, "Cloud OTA HTTP Status: %d, Content-Length: %d", status_code, content_length);
 
-    // Follow redirect if GitHub redirects to S3/objects
-    if (status_code == 301 || status_code == 302 || status_code == 307) {
-        esp_http_client_set_redirection(client);
+    // Follow redirect chain (GitHub releases redirect to S3/Azure Blob with long query parameters)
+    int redirect_hops = 0;
+    while ((status_code == 301 || status_code == 302 || status_code == 307 || status_code == 308) && redirect_hops < 5) {
+        redirect_hops++;
+        esp_err_t r_err = esp_http_client_set_redirection(client);
+        if (r_err != ESP_OK) {
+            ESP_LOGE(TAG, "esp_http_client_set_redirection failed: %s", esp_err_to_name(r_err));
+            break;
+        }
         esp_http_client_close(client);
         err = esp_http_client_open(client, 0);
-        if (err == ESP_OK) {
-            content_length = esp_http_client_fetch_headers(client);
-            status_code = esp_http_client_get_status_code(client);
-            ESP_LOGI(TAG, "Followed Redirect -> Status: %d, Content-Length: %d", status_code, content_length);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to re-open redirected connection: %s", esp_err_to_name(err));
+            break;
         }
+        content_length = esp_http_client_fetch_headers(client);
+        status_code = esp_http_client_get_status_code(client);
+        ESP_LOGI(TAG, "Followed Redirect #%d -> Status: %d, Content-Length: %d", redirect_hops, status_code, content_length);
     }
 
     if (status_code != 200) {
         ESP_LOGE(TAG, "Unexpected HTTP status: %d", status_code);
+        snprintf(g_ota_state.error_msg, sizeof(g_ota_state.error_msg), "HTTP error %d from server", status_code);
+        g_ota_state.in_progress = false;
         char err_msg[64];
         snprintf(err_msg, sizeof(err_msg), "{\"type\":\"log\",\"msg\":\"[OTA] [E] HTTP Error %d from cloud\"}", status_code);
         broadcast_ws_raw(err_msg);
@@ -816,6 +847,8 @@ static void cloud_ota_task(void *pvParameter) {
     const esp_partition_t *update_partition = esp_ota_get_next_update_partition(nullptr);
     if (!update_partition) {
         ESP_LOGE(TAG, "No OTA partition found");
+        snprintf(g_ota_state.error_msg, sizeof(g_ota_state.error_msg), "No OTA partition found");
+        g_ota_state.in_progress = false;
         broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] [E] No active OTA partition available\"}");
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
@@ -827,6 +860,8 @@ static void cloud_ota_task(void *pvParameter) {
     err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &update_handle);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_ota_begin failed (%s)", esp_err_to_name(err));
+        snprintf(g_ota_state.error_msg, sizeof(g_ota_state.error_msg), "OTA begin failed: %s", esp_err_to_name(err));
+        g_ota_state.in_progress = false;
         broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] [E] OTA begin failed\"}");
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
@@ -839,6 +874,8 @@ static void cloud_ota_task(void *pvParameter) {
     char *upgrade_data_buf = (char *)malloc(2048);
     if (!upgrade_data_buf) {
         esp_ota_abort(update_handle);
+        snprintf(g_ota_state.error_msg, sizeof(g_ota_state.error_msg), "Out of memory");
+        g_ota_state.in_progress = false;
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
         vTaskDelete(nullptr);
@@ -853,17 +890,21 @@ static void cloud_ota_task(void *pvParameter) {
         data_read = esp_http_client_read(client, upgrade_data_buf, 2048);
         if (data_read < 0) {
             ESP_LOGE(TAG, "Error: SSL/HTTP data read error");
+            snprintf(g_ota_state.error_msg, sizeof(g_ota_state.error_msg), "Read error during binary download");
             break;
         } else if (data_read > 0) {
             err = esp_ota_write(update_handle, (const void *)upgrade_data_buf, data_read);
             if (err != ESP_OK) {
                 ESP_LOGE(TAG, "esp_ota_write failed (%s)", esp_err_to_name(err));
+                snprintf(g_ota_state.error_msg, sizeof(g_ota_state.error_msg), "Flash write error: %s", esp_err_to_name(err));
                 break;
             }
             binary_file_length += data_read;
+            g_ota_state.bytes_read = binary_file_length;
             if (content_length > 0) {
                 int pct = (binary_file_length * 100) / content_length;
-                if (pct != last_reported_pct && pct % 10 == 0) {
+                g_ota_state.progress_pct = pct;
+                if (pct != last_reported_pct && pct % 5 == 0) {
                     last_reported_pct = pct;
                     char p_buf[96];
                     snprintf(p_buf, sizeof(p_buf), "{\"type\":\"ota_progress\",\"pct\":%d,\"bytes\":%d}", pct, binary_file_length);
@@ -886,7 +927,10 @@ static void cloud_ota_task(void *pvParameter) {
             err = esp_ota_set_boot_partition(update_partition);
             if (err == ESP_OK) {
                 ESP_LOGI(TAG, "Direct Cloud OTA Succeeded! Total bytes: %d. Rebooting...", binary_file_length);
-                broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] Cloud flash 100% complete! Rebooting device in 3s...\"}");
+                g_ota_state.progress_pct = 100;
+                g_ota_state.in_progress = false;
+                g_ota_state.success = true;
+                broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] Cloud flash 100% complete! Rebooting device in 2s...\"}");
                 vTaskDelay(pdMS_TO_TICKS(1500));
                 esp_restart();
                 vTaskDelete(nullptr);
@@ -897,6 +941,10 @@ static void cloud_ota_task(void *pvParameter) {
 
     esp_ota_abort(update_handle);
     ESP_LOGE(TAG, "Direct Cloud OTA Failed or incomplete");
+    if (g_ota_state.error_msg[0] == '\0') {
+        snprintf(g_ota_state.error_msg, sizeof(g_ota_state.error_msg), "OTA incomplete or corrupted (bytes: %d)", binary_file_length);
+    }
+    g_ota_state.in_progress = false;
     broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] [E] Cloud OTA update failed to complete\"}");
     vTaskDelete(nullptr);
 }
@@ -928,7 +976,7 @@ static esp_err_t api_ota_cloud_pull_handler(httpd_req_t *req) {
     cJSON_Delete(root);
 
     CloudOtaTaskArgs *args = new CloudOtaTaskArgs{ota_url};
-    if (xTaskCreate(cloud_ota_task, "cloud_ota_task", 8192, args, 5, nullptr) != pdPASS) {
+    if (xTaskCreate(cloud_ota_task, "cloud_ota_task", 10240, args, 5, nullptr) != pdPASS) {
         delete args;
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to spawn cloud OTA task");
         return ESP_FAIL;
@@ -936,6 +984,23 @@ static esp_err_t api_ota_cloud_pull_handler(httpd_req_t *req) {
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"status\":\"started\",\"message\":\"Cloud OTA download initiated on device\"}");
+    return ESP_OK;
+}
+
+static esp_err_t api_ota_status_handler(httpd_req_t *req) {
+    set_cors_headers(req);
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "in_progress", g_ota_state.in_progress.load());
+    cJSON_AddNumberToObject(root, "progress", g_ota_state.progress_pct.load());
+    cJSON_AddNumberToObject(root, "bytes", g_ota_state.bytes_read.load());
+    cJSON_AddBoolToObject(root, "success", g_ota_state.success.load());
+    cJSON_AddStringToObject(root, "error", g_ota_state.error_msg);
+
+    char *json_str = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json_str);
+    free(json_str);
     return ESP_OK;
 }
 
@@ -1597,6 +1662,7 @@ httpd_handle_t start_webserver(void) {
         reg_uri("/api/upload", HTTP_POST, api_file_upload_handler);
         reg_uri("/api/ota", HTTP_POST, api_ota_handler);
         reg_uri("/api/ota/cloud_pull", HTTP_POST, api_ota_cloud_pull_handler);
+        reg_uri("/api/ota/status", HTTP_GET, api_ota_status_handler);
         reg_uri("/ws", HTTP_GET, ws_handler, true);
         reg_uri("/*", HTTP_OPTIONS, options_handler);
         reg_uri("/*", HTTP_GET, static_file_handler);

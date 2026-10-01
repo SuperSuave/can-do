@@ -55,6 +55,10 @@ jobs:
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || node -e "try { const c = JSON.parse(require('fs').readFileSync('../catalog/can_do_catalog.json')); console.log(c.can_do_version || c.catalog_version || require('./package.json').version); } catch(e){ console.log(require('./package.json').version); }")
           echo "Building frontend with VITE_APP_VERSION=$LATEST_TAG"
           VITE_APP_VERSION="$LATEST_TAG" npm run build
+          if [ -f ../firmware/can-do-esp32c3.bin ]; then
+            cp ../firmware/can-do-esp32c3.bin dist/can-do-esp32c3.bin
+            cp ../firmware/can-do-esp32c3.bin dist/can-do.bin
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

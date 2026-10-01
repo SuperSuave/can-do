@@ -52,7 +52,7 @@ import {
 import { Catalog, Command } from '../types/catalog';
 import { AutomationRule, AutomationTrigger } from '../types/automation';
 import { UserPreferences, getUserPreferences, saveUserPreferences, DEFAULT_USER_PREFERENCES, UpdatePolicy } from '../types/settings';
-import { checkForUpdates, executeUpdateSequence, UpdateCheckResult, UpdateStage } from '../services/updateService';
+import { checkForUpdates, executeUpdateSequence, UpdateCheckResult, UpdateStage, uploadFirmwareOta } from '../services/updateService';
 import { MdiIcon } from './MdiIcon';
 import { BluetoothManager } from './BluetoothManager';
 
@@ -329,10 +329,53 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       showNotice('Updates applied successfully! Device is restarting...', 'success');
       // Keep completion card visible for 5 seconds so the user clearly sees the result
       await new Promise((r) => setTimeout(r, 5000));
+      fetchStatus();
+      handleCheckForUpdates();
     } catch (e: any) {
       setUpdateStage('error');
       setUpdateMessage(`Update failed: ${e.message || e}`);
       showNotice(`Update error: ${e.message || e}`, 'error');
+      await new Promise((r) => setTimeout(r, 4000));
+    } finally {
+      setIsExecutingUpdate(false);
+    }
+  };
+
+  const handleManualBinaryUpload = async (file: File) => {
+    if (!file) return;
+    setIsExecutingUpdate(true);
+    setUpdateStage('firmware');
+    setUpdateProgressPct(5);
+    setUpdateMessage(`Reading ${file.name}...`);
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      if (arrayBuffer.byteLength < 100000) {
+        throw new Error('Selected file is too small to be a valid ESP32 firmware binary.');
+      }
+      const u8 = new Uint8Array(arrayBuffer);
+      if (u8[0] !== 0xE9) {
+        throw new Error('Invalid ESP32 binary format (missing 0xE9 magic byte). Please ensure this is an application .bin file.');
+      }
+
+      setUpdateMessage('Flashing firmware binary to ESP32 OTA partition...');
+      const targetHost = resolveDeviceBaseUrl(deviceHost);
+      await uploadFirmwareOta(targetHost, arrayBuffer, (pct) => {
+        setUpdateProgressPct(pct);
+        setUpdateMessage(`Flashing firmware: ${pct}%`);
+      });
+
+      setUpdateStage('rebooting');
+      setUpdateProgressPct(100);
+      setUpdateMessage('Firmware flashed successfully! Device is restarting...');
+      showNotice('Firmware flashed successfully! Restarting...', 'success');
+      await new Promise((r) => setTimeout(r, 6000));
+      fetchStatus();
+      handleCheckForUpdates();
+    } catch (err: any) {
+      setUpdateStage('error');
+      setUpdateMessage(`Manual flash failed: ${err.message || err}`);
+      showNotice(`Flash error: ${err.message || err}`, 'error');
       await new Promise((r) => setTimeout(r, 4000));
     } finally {
       setIsExecutingUpdate(false);
@@ -2307,6 +2350,56 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               </button>
             </div>
           )}
+
+          {/* Direct Firmware Binary (.bin) Upload Card */}
+          <div className="can-do-card p-4 sm:p-5 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-[var(--text-heading)] flex items-center gap-2">
+                  <HardDrive className="w-4 h-4 text-cyan-400" />
+                  Manual Firmware Flashing (.bin)
+                </h4>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                  Flash a pre-compiled firmware image directly to the ESP32 OTA partition over local Wi-Fi without cloud reliance
+                </p>
+              </div>
+
+              {updateResult?.assets.firmware_url && (
+                <a
+                  href={updateResult.assets.firmware_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/60 text-xs font-semibold shrink-0 transition"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download Latest .bin</span>
+                </a>
+              )}
+            </div>
+
+            <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-700/80 hover:border-cyan-500/60 rounded-xl bg-slate-900/40 hover:bg-slate-900/60 cursor-pointer transition group">
+              <Upload className="w-6 h-6 text-slate-400 group-hover:text-cyan-400 transition mb-1.5" />
+              <span className="text-xs font-semibold text-slate-200 group-hover:text-white transition">
+                Select or Drop .bin Firmware File to Flash
+              </span>
+              <span className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                Accepts can-do-esp32c3-*.bin or can-do.bin (application binary)
+              </span>
+              <input
+                type="file"
+                accept=".bin"
+                disabled={isExecutingUpdate}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    handleManualBinaryUpload(file);
+                    e.target.value = '';
+                  }
+                }}
+                className="hidden"
+              />
+            </label>
+          </div>
 
           {/* Update Policy & Off-Hours Schedule Settings */}
           <div className="can-do-card p-4 sm:p-5 space-y-4">
