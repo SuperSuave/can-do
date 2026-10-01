@@ -1,7 +1,7 @@
 """Constants for the CAN Do integration."""
 
 DOMAIN = "can_do"
-VERSION = "2026.9.13"
+VERSION = "2026.10.1-b001"
 
 CONF_DEVICE_ID = "device_id"
 CONF_VEHICLE_ID = "vehicle_id"
