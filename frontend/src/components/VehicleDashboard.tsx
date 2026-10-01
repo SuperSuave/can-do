@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Catalog, Command, Vehicle } from '../types/catalog';
 import { isRunningOnDevice, resolveDeviceBaseUrl } from '../utils/hostUtils';
+import { deviceWs } from '../services/deviceWs';
 import {
   Car,
   BatteryCharging,
@@ -641,57 +642,26 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     };
   }, []);
 
-  // 2. Real-time WebSocket connection to physical CAN Do device
+  // 2. Real-time WebSocket connection to physical CAN Do device via singleton
   useEffect(() => {
-    let ws: WebSocket | null = null;
-    let reconnectTimeout: any = null;
-
-    const connect = () => {
-      try {
-        const baseUrl = resolveDeviceBaseUrl(localStorage.getItem('cando_device_host'));
-        const parsed = new URL(baseUrl);
-        const wsProto = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProto}//${parsed.host}/ws`;
-
-        ws = new WebSocket(wsUrl);
-
-        ws.onopen = () => {
-          setConnectedDevice(true);
-          triggerNotice('Connected to live CAN Do vehicle telemetry stream');
-        };
-
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.type === 'can_frame') {
-              handleIncomingCanFrame(data.id, data.data || '');
-            } else if (data.type === 'state' && data.entity && data.state) {
-              handleIncomingEntityState(data.entity, data.state);
-            }
-          } catch {
-            // Ignore non-json frames
-          }
-        };
-
-        ws.onclose = () => {
-          setConnectedDevice(false);
-          reconnectTimeout = setTimeout(connect, 5000);
-        };
-
-        ws.onerror = () => {
-          setConnectedDevice(false);
-          ws?.close();
-        };
-      } catch {
-        setConnectedDevice(false);
+    const unsubscribeConn = deviceWs.onConnectionChange((conn) => {
+      setConnectedDevice(conn);
+      if (conn) {
+        triggerNotice('Connected to live CAN Do vehicle telemetry stream');
       }
-    };
+    });
 
-    connect();
+    const unsubscribeMsgs = deviceWs.subscribe((data) => {
+      if (data.type === 'can_frame') {
+        handleIncomingCanFrame((data as any).id, (data as any).data || '');
+      } else if (data.type === 'state' && (data as any).entity && (data as any).state) {
+        handleIncomingEntityState((data as any).entity, (data as any).state);
+      }
+    });
 
     return () => {
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (ws) ws.close();
+      unsubscribeConn();
+      unsubscribeMsgs();
     };
   }, []);
 

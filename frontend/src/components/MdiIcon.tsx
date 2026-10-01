@@ -1,42 +1,28 @@
 import React from 'react';
 import {
-  mdiSteering,
-  mdiCarWindshieldOutline,
-  mdiEvPlugType2,
-  mdiRadio,
-  mdiKnob,
-  mdiMusicBoxOutline,
-  mdiSurroundSound,
-  mdiSpeaker,
-  mdiCctv,
-  mdiCarSeatHeater,
-  mdiCarShiftPattern,
-  mdiCarLightDimmed,
-  mdiCarBrakeAlert,
-  mdiCarBattery,
-  mdiCarDoor,
-  mdiCarBack,
-  mdiCarInfo,
-  mdiWiper,
-  mdiWindowOpen,
-  mdiThermostat,
-  mdiThermostatBox,
-  mdiThermometer,
-  mdiThermometerAlert,
-  mdiMessageBadge,
-  mdiMessageBadgeOutline,
-  mdiMessageText,
-  mdiTimerOutline,
-  mdiEvStation,
-  mdiSpeedometer,
-  mdiRadiator,
-  mdiPower,
-  mdiSeatbelt,
-  mdiSync,
-  mdiBellBadge
-} from '@mdi/js';
-import {
   Tag,
+  Compass,
+  Car,
+  Zap,
+  Radio,
+  Sliders,
+  Music,
+  Volume2,
+  Camera,
+  Flame,
+  Sun,
+  AlertTriangle,
+  Battery,
+  Wind,
+  Thermometer,
+  Bell,
+  MessageSquare,
+  Clock,
+  Gauge,
+  Fan,
+  Power,
+  Shield,
+  RefreshCw,
   LucideProps
 } from 'lucide-react';
 
@@ -47,63 +33,63 @@ export interface MdiIconProps extends React.SVGProps<SVGSVGElement> {
   fallback?: React.ComponentType<LucideProps>;
 }
 
-// Map of supported MDI icon names to SVG path strings
-const ICON_MAP: Record<string, string> = {
-  'steering-wheel': mdiSteering,
-  'steering': mdiSteering,
-  'car-front': mdiCarWindshieldOutline,
-  'ev-plug-type2': mdiEvPlugType2,
-  'radio': mdiRadio,
-  'knob': mdiKnob,
-  'music-box-outline': mdiMusicBoxOutline,
-  'surround-sound': mdiSurroundSound,
-  'speaker': mdiSpeaker,
-  'cctv': mdiCctv,
-  'car-seat-heater': mdiCarSeatHeater,
-  'car-shift-pattern': mdiCarShiftPattern,
-  'car-light-dimmed': mdiCarLightDimmed,
-  'car-brake-alert': mdiCarBrakeAlert,
-  'car-battery': mdiCarBattery,
-  'car-door': mdiCarDoor,
-  'car-back': mdiCarBack,
-  'car-info': mdiCarInfo,
-  'wiper': mdiWiper,
-  'window-open': mdiWindowOpen,
-  'thermostat': mdiThermostat,
-  'thermostat-box': mdiThermostatBox,
-  'thermometer': mdiThermometer,
-  'thermometer-alert': mdiThermometerAlert,
-  'message-badge': mdiMessageBadge,
-  'message-badge-outline': mdiMessageBadgeOutline,
-  'message-text': mdiMessageText,
-  'timer-outline': mdiTimerOutline,
-  'ev-station': mdiEvStation,
-  'speedometer': mdiSpeedometer,
-  'radiator': mdiRadiator,
-  'power': mdiPower,
-  'seatbelt': mdiSeatbelt,
-  'sync': mdiSync,
-  'bell-badge': mdiBellBadge
+// Map of supported Home Assistant MDI icon names to Lucide icons
+const MDI_LUCIDE_MAP: Record<string, React.ComponentType<LucideProps>> = {
+  'steering-wheel': Compass,
+  'steering': Compass,
+  'car-front': Car,
+  'ev-plug-type2': Zap,
+  'radio': Radio,
+  'knob': Sliders,
+  'music-box-outline': Music,
+  'surround-sound': Volume2,
+  'speaker': Volume2,
+  'cctv': Camera,
+  'car-seat-heater': Flame,
+  'car-shift-pattern': Sliders,
+  'car-light-dimmed': Sun,
+  'car-brake-alert': AlertTriangle,
+  'car-battery': Battery,
+  'car-door': Car,
+  'car-back': Car,
+  'car-info': Car,
+  'wiper': Wind,
+  'window-open': Wind,
+  'thermostat': Thermometer,
+  'thermostat-box': Thermometer,
+  'thermometer': Thermometer,
+  'thermometer-alert': AlertTriangle,
+  'message-badge': MessageSquare,
+  'message-badge-outline': MessageSquare,
+  'message-text': MessageSquare,
+  'timer-outline': Clock,
+  'ev-station': Zap,
+  'speedometer': Gauge,
+  'radiator': Fan,
+  'power': Power,
+  'seatbelt': Shield,
+  'sync': RefreshCw,
+  'bell-badge': Bell
 };
 
 /**
  * Resolves an MDI icon name (e.g. "mdi:steering", "mdi:car-shift-pattern")
- * to an SVG path string.
+ * to a Lucide icon component.
  */
-export function getMdiSvgPath(iconStr?: string): string | null {
+export function getMdiComponent(iconStr?: string): React.ComponentType<LucideProps> | null {
   if (!iconStr) return null;
   const clean = iconStr.trim().replace(/^mdi:/i, '').toLowerCase();
   if (!clean) return null;
 
-  if (ICON_MAP[clean]) {
-    return ICON_MAP[clean];
+  if (MDI_LUCIDE_MAP[clean]) {
+    return MDI_LUCIDE_MAP[clean];
   }
 
   // Check alias without hyphens or exact match
   const stripped = clean.replace(/[^a-z0-9]/g, '');
-  for (const [key, path] of Object.entries(ICON_MAP)) {
+  for (const [key, comp] of Object.entries(MDI_LUCIDE_MAP)) {
     if (key.replace(/[^a-z0-9]/g, '') === stripped) {
-      return path;
+      return comp;
     }
   }
 
@@ -117,26 +103,8 @@ export const MdiIcon: React.FC<MdiIconProps> = ({
   size,
   ...props
 }) => {
-  const path = getMdiSvgPath(icon);
-
-  if (path) {
-    return (
-      <svg
-        viewBox="0 0 24 24"
-        className={`inline-block shrink-0 fill-current ${className}`}
-        width={size}
-        height={size}
-        aria-hidden="true"
-        {...props}
-      >
-        <path d={path} />
-      </svg>
-    );
-  }
-
-  // Fallback if MDI path is not found
-  const FallbackComp = Fallback || Tag;
-  return <FallbackComp className={className} size={size as any} {...(props as any)} />;
+  const Component = getMdiComponent(icon) || Fallback || Tag;
+  return <Component className={className} size={size as any} {...(props as any)} />;
 };
 
 export const COMMON_HA_DOMAINS = [

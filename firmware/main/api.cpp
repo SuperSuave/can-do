@@ -1269,25 +1269,40 @@ static esp_err_t api_wifi_post_networks_handler(httpd_req_t *req) {
     return ESP_FAIL;
 }
 
+static std::string url_decode(const std::string& in) {
+    std::string out;
+    out.reserve(in.size());
+    for (size_t i = 0; i < in.size(); ++i) {
+        if (in[i] == '%' && i + 2 < in.size()) {
+            auto hex2val = [](char c) -> int {
+                if (c >= '0' && c <= '9') return c - '0';
+                if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+                if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+                return -1;
+            };
+            int v1 = hex2val(in[i + 1]);
+            int v2 = hex2val(in[i + 2]);
+            if (v1 >= 0 && v2 >= 0) {
+                out.push_back(static_cast<char>((v1 << 4) | v2));
+                i += 2;
+                continue;
+            }
+        } else if (in[i] == '+') {
+            out.push_back(' ');
+            continue;
+        }
+        out.push_back(in[i]);
+    }
+    return out;
+}
+
 static esp_err_t api_wifi_delete_networks_handler(httpd_req_t *req) {
     set_cors_headers(req);
 
     std::string target_ssid;
 
-    // 1. Try extracting SSID from query string: ?ssid=...
-    size_t query_len = httpd_req_get_url_query_len(req);
-    if (query_len > 0) {
-        char query_buf[128];
-        if (httpd_req_get_url_query_str(req, query_buf, sizeof(query_buf)) == ESP_OK) {
-            char ssid_val[64];
-            if (httpd_query_key_value(query_buf, "ssid", ssid_val, sizeof(ssid_val)) == ESP_OK) {
-                target_ssid = ssid_val;
-            }
-        }
-    }
-
-    // 2. Fallback to reading JSON body: {"ssid": "..."}
-    if (target_ssid.empty() && req->content_len > 0) {
+    // 1. Prefer reading JSON body if available: {"ssid": "..."}
+    if (req->content_len > 0) {
         char buf[128];
         int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
         if (ret > 0) {
@@ -1295,7 +1310,7 @@ static esp_err_t api_wifi_delete_networks_handler(httpd_req_t *req) {
             cJSON *root = cJSON_Parse(buf);
             if (root) {
                 cJSON *ssid = cJSON_GetObjectItem(root, "ssid");
-                if (cJSON_IsString(ssid) && ssid->valuestring) {
+                if (cJSON_IsString(ssid) && ssid->valuestring && strlen(ssid->valuestring) > 0) {
                     target_ssid = ssid->valuestring;
                 }
                 cJSON_Delete(root);
@@ -1303,10 +1318,29 @@ static esp_err_t api_wifi_delete_networks_handler(httpd_req_t *req) {
         }
     }
 
+    // 2. Fallback to extracting SSID from query string: ?ssid=...
+    if (target_ssid.empty()) {
+        size_t query_len = httpd_req_get_url_query_len(req);
+        if (query_len > 0) {
+            char query_buf[128];
+            if (httpd_req_get_url_query_str(req, query_buf, sizeof(query_buf)) == ESP_OK) {
+                char ssid_val[64];
+                if (httpd_query_key_value(query_buf, "ssid", ssid_val, sizeof(ssid_val)) == ESP_OK) {
+                    target_ssid = url_decode(ssid_val);
+                }
+            }
+        }
+    }
+
     if (!target_ssid.empty()) {
         bool removed = network_mgr_remove_known_network(target_ssid);
         httpd_resp_set_type(req, "application/json");
-        httpd_resp_sendstr(req, removed ? "{\"status\":\"ok\"}" : "{\"status\":\"not_found\"}");
+        if (removed) {
+            httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
+        } else {
+            httpd_resp_set_status(req, "404 Not Found");
+            httpd_resp_sendstr(req, "{\"status\":\"not_found\",\"message\":\"Network not found\"}");
+        }
         return ESP_OK;
     }
 

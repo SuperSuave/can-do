@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { isRunningOnDevice, getDefaultDeviceHost, resolveDeviceBaseUrl } from '../utils/hostUtils';
+import { deviceWs, DeviceWsMessage } from '../services/deviceWs';
 import {
   Cpu,
   Wifi,
   Radio,
   Activity,
-  Terminal,
   RefreshCw,
   Play,
   Pause,
@@ -207,7 +207,9 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const [lastPingMs, setLastPingMs] = useState<number | null>(null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [wifi, setWifi] = useState<WifiStatus | null>(null);
-  const [activeTab, setActiveTab] = useState<'sniffer' | 'automations' | 'mqtt' | 'wifi' | 'console' | 'ota'>('sniffer');
+  const [activeTab, setActiveTab] = useState<'sniffer' | 'automations' | 'mqtt' | 'wifi' | 'ota'>('sniffer');
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
 
   // Sniffer state
   const [snifferFrames, setSnifferFrames] = useState<Map<string, CanFrame>>(new Map());
@@ -219,6 +221,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const framesRef = useRef<Map<string, CanFrame>>(new Map());
   const isPausedRef = useRef<boolean>(false);
   isPausedRef.current = snifferPaused;
+  const snifferThrottleRef = useRef<number | null>(null);
 
   // Automations diag state
   const [automations, setAutomations] = useState<AutomationDiag[]>([]);
@@ -248,11 +251,8 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const [newPassword, setNewPassword] = useState<string>('');
   const [newPriority, setNewPriority] = useState<number>(50);
 
-  // Console terminal state
+  // Background log buffer for Download .txt functionality
   const [logs, setLogs] = useState<string[]>([]);
-  const [autoScroll, setAutoScroll] = useState<boolean>(true);
-  const [logFilter, setLogFilter] = useState<string>('');
-  const terminalEndRef = useRef<HTMLDivElement>(null);
 
   // OTA & Cloud Update state
   const [otaFile, setOtaFile] = useState<File | null>(null);
@@ -389,80 +389,12 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   }, [catalog]);
 
   // Resolve active WebSocket endpoint
-  const currentWsUrl = useMemo(() => {
-    try {
-      const resolved = resolveDeviceBaseUrl(deviceHost);
-      const parsed = new URL(resolved);
-      const wsProto = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${wsProto}//${parsed.host}/ws`;
-    } catch {
-      return 'ws://192.168.4.1/ws';
-    }
-  }, [deviceHost]);
+  const currentWsUrl = useMemo(() => deviceWs.getWsUrl(), [deviceHost]);
 
-  // Connect WebSocket
+  // Connect WebSocket via singleton service
   const connectWs = useCallback(() => {
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
-
-    try {
-      const ws = new WebSocket(currentWsUrl);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        setWsConnected(true);
-        fetchStatus();
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'log') {
-            setLogs((prev) => [...prev.slice(-400), data.msg || JSON.stringify(data)]);
-          } else if (data.type === 'can_frame') {
-            if (!isPausedRef.current) {
-              const now = Date.now();
-              const idKey = normalizeHexId(data.id || '0x000');
-              const existing = framesRef.current.get(idKey);
-              const interval = existing ? now - existing.lastSeen : undefined;
-
-              const updated: CanFrame = {
-                id: idKey,
-                dlc: data.dlc ?? 8,
-                data: (data.data || '').trim(),
-                previousData: existing?.data,
-                count: (existing?.count || 0) + 1,
-                timestamp: new Date().toLocaleTimeString(),
-                lastIntervalMs: interval,
-                lastSeen: now
-              };
-
-              framesRef.current.set(idKey, updated);
-              setSnifferFrames(new Map(framesRef.current));
-            }
-          } else if (data.type === 'automation_fired') {
-            showNotice(`Rule Fired: ${data.rule_id || data.id || 'Automation'}`, 'info');
-            fetchAutomationsDiag();
-          }
-        } catch {
-          setLogs((prev) => [...prev.slice(-400), event.data]);
-        }
-      };
-
-      ws.onclose = () => {
-        setWsConnected(false);
-        setTimeout(connectWs, 3500);
-      };
-
-      ws.onerror = () => {
-        setWsConnected(false);
-        ws.close();
-      };
-    } catch {
-      setWsConnected(false);
-    }
-  }, [currentWsUrl]);
+    deviceWs.reconnect();
+  }, []);
 
   // REST: Fetch system status & measure ping
   const fetchStatus = async () => {
@@ -589,20 +521,84 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   };
 
   useEffect(() => {
-    connectWs();
     fetchStatus();
     fetchWifi();
+
+    const unsubscribeConn = deviceWs.onConnectionChange((conn) => {
+      setWsConnected(conn);
+      if (conn) {
+        fetchStatus();
+      }
+    });
+
+    const unsubscribeMsgs = deviceWs.subscribe((data, raw) => {
+      if (data.type === 'log') {
+        const line = (data.msg || raw || '').trim();
+        if (line) {
+          const formatted = `[${new Date().toLocaleTimeString()}] ${line}`;
+          setLogs((prev) => [...prev.slice(-150), formatted]);
+        }
+      } else if (data.type === 'can_frame') {
+        if (!isPausedRef.current) {
+          const now = Date.now();
+          const idKey = normalizeHexId(data.id || '0x000');
+          const existing = framesRef.current.get(idKey);
+          const interval = existing ? now - existing.lastSeen : undefined;
+
+          const updated: CanFrame = {
+            id: idKey,
+            dlc: data.dlc ?? 8,
+            data: (data.data || '').trim(),
+            previousData: existing?.data,
+            count: (existing?.count || 0) + 1,
+            timestamp: new Date().toLocaleTimeString(),
+            lastIntervalMs: interval,
+            lastSeen: now
+          };
+
+          // Protect memory against runaway unique CAN IDs on noisy buses (max 500)
+          if (framesRef.current.size >= 500 && !framesRef.current.has(idKey)) {
+            const oldestKey = framesRef.current.keys().next().value;
+            if (oldestKey) framesRef.current.delete(oldestKey);
+          }
+
+          framesRef.current.set(idKey, updated);
+
+          // Only schedule React state update if user is currently looking at the sniffer tab
+          if (activeTabRef.current === 'sniffer' && snifferThrottleRef.current === null) {
+            snifferThrottleRef.current = window.setTimeout(() => {
+              snifferThrottleRef.current = null;
+              if (activeTabRef.current === 'sniffer') {
+                setSnifferFrames(new Map(framesRef.current));
+              }
+            }, 100); // 10 fps maximum refresh rate for live sniffer table
+          }
+        }
+      } else if (data.type === 'automation_fired') {
+        showNotice(`Rule Fired: ${data.rule_id || data.id || 'Automation'}`, 'info');
+        fetchAutomationsDiag();
+      }
+    });
+
     const interval = setInterval(() => {
       fetchStatus();
     }, 4000);
 
     return () => {
+      if (snifferThrottleRef.current !== null) {
+        clearTimeout(snifferThrottleRef.current);
+        snifferThrottleRef.current = null;
+      }
       clearInterval(interval);
-      if (wsRef.current) wsRef.current.close();
+      unsubscribeConn();
+      unsubscribeMsgs();
     };
-  }, [connectWs]);
+  }, []);
 
   useEffect(() => {
+    if (activeTab === 'sniffer') {
+      setSnifferFrames(new Map(framesRef.current));
+    }
     if (activeTab === 'automations') fetchAutomationsDiag();
     if (activeTab === 'mqtt') fetchMqtt();
     if (activeTab === 'wifi') {
@@ -610,12 +606,6 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       fetchNetworks();
     }
   }, [activeTab]);
-
-  useEffect(() => {
-    if (autoScroll && terminalEndRef.current) {
-      terminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [logs, autoScroll]);
 
   // Controls: Master Automations Toggle
   const handleToggleAutomations = async () => {
@@ -718,16 +708,18 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   // Wi-Fi: Delete Network
   const handleDeleteNetwork = async (ssid: string) => {
     try {
-      const res = await fetch(getApiUrl(`/api/wifi/networks?ssid=${encodeURIComponent(ssid)}`), {
+      const res = await fetch(getApiUrl('/api/wifi/networks'), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ssid })
       });
-      if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.status === 'ok') {
+        setNetworks((prev) => (Array.isArray(prev) ? prev.filter((net) => net.ssid !== ssid) : []));
         fetchNetworks();
         showNotice(`Removed network '${ssid}'`);
       } else {
-        showNotice(`Failed to remove network '${ssid}'`, 'error');
+        showNotice(`Failed to remove network '${ssid}': ${data.message || data.status || 'Not found'}`, 'error');
       }
     } catch (e: any) {
       showNotice(`Failed to remove network: ${e.message}`, 'error');
@@ -1028,6 +1020,28 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               <span className="hidden sm:inline">Pull</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => {
+              const content = logs.length > 0
+                ? logs.join('\n')
+                : `[${new Date().toLocaleString()}] CAN Do Device ID: ${status?.device_id || 'unknown'}\nFirmware: ${status?.can_do_version || 'unknown'}\nWi-Fi IP: ${wifi?.sta_ip || 'N/A'}\n(No active log events captured in current session)`;
+              const blob = new Blob([content], { type: 'text/plain' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `cando-logs-${Date.now()}.txt`;
+              a.click();
+              URL.revokeObjectURL(url);
+              showNotice('Logs downloaded as .txt', 'info');
+            }}
+            className="dash-outline-btn text-xs py-1.5 px-2.5 inline-flex items-center gap-1 text-[var(--text-heading)] hover:text-cyan-300"
+            title="Download device session log as .txt"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Logs .txt</span>
+          </button>
         </div>
       </div>
 
@@ -1315,24 +1329,6 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             <span>Wi-Fi & AP</span>
           </button>
 
-          {/* Tab 4: Console Log */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('console')}
-            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors shrink-0 ${
-              activeTab === 'console'
-                ? 'bg-slate-800 text-white font-semibold shadow-sm'
-                : 'text-[var(--text-muted)] hover:text-white'
-            }`}
-          >
-            <Terminal className={`w-3.5 h-3.5 ${activeTab === 'console' ? 'text-emerald-400' : 'text-slate-500'}`} />
-            <span>Logs</span>
-            {logs.length > 0 && (
-              <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-slate-900 text-slate-300 border border-slate-700/60">
-                {logs.length}
-              </span>
-            )}
-          </button>
 
           {/* Tab 5: System & Updates */}
           <button
@@ -2098,119 +2094,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       )}
 
       {/* =========================================================================
-          TAB 4: Live Console / Terminal
-         ========================================================================= */}
-      {activeTab === 'console' && (
-        <div className="can-do-card p-4 sm:p-5 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2">
-              <Terminal className="w-4 h-4 text-cyan-400" />
-              <h3 className="text-xs font-bold text-[var(--text-heading)] uppercase tracking-wider">
-                ESP32 Serial & Daemon Log Stream
-              </h3>
-            </div>
-
-            <div className="flex items-center gap-3 text-xs">
-              {/* Filter */}
-              <input
-                type="text"
-                value={logFilter}
-                onChange={(e) => setLogFilter(e.target.value)}
-                placeholder="Filter logs..."
-                className="px-2.5 py-1 rounded-lg bg-[var(--input-bg)] border border-[var(--border-color)] text-xs text-[var(--text-heading)] font-mono w-32 sm:w-44 focus:outline-none"
-              />
-
-              <label className="flex items-center gap-1.5 text-[var(--text-muted)] cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={autoScroll}
-                  onChange={(e) => setAutoScroll(e.target.checked)}
-                  className="rounded border-slate-700 bg-slate-900"
-                />
-                <span>Auto-scroll</span>
-              </label>
-
-              <button
-                type="button"
-                onClick={() => setLogs([])}
-                className="dash-outline-btn text-xs py-1 px-2.5"
-              >
-                Clear
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const blob = new Blob([logs.join('\n')], { type: 'text/plain' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `esp32-logs-${Date.now()}.txt`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                }}
-                disabled={logs.length === 0}
-                className="dash-outline-btn text-xs py-1 px-2.5 disabled:opacity-40"
-                title="Download log file"
-              >
-                Download
-              </button>
-            </div>
-          </div>
-
-          {/* Monospace Log Viewer */}
-          <div className="p-4 rounded-xl bg-[var(--md-sys-color-surface-container-lowest)] font-mono text-xs text-slate-300 h-96 overflow-y-auto space-y-1 border border-[var(--border-color)]">
-            {logs.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-2 py-10">
-                <Radio className={`w-6 h-6 ${wsConnected ? 'text-cyan-400 animate-pulse' : 'text-slate-600'}`} />
-                <p className="text-xs">
-                  {wsConnected
-                    ? 'WebSocket connected. Waiting for daemon logs from ESP32...'
-                    : `Connecting to WebSocket log stream (${currentWsUrl})...`}
-                </p>
-                {!wsConnected && (
-                  <button
-                    type="button"
-                    onClick={() => connectWs()}
-                    className="dash-outline-btn text-[11px] px-2.5 py-1 text-slate-300"
-                  >
-                    Retry WebSocket Connection
-                  </button>
-                )}
-              </div>
-            ) : (
-              logs
-                .filter(line => !logFilter || line.toLowerCase().includes(logFilter.toLowerCase()))
-                .map((line, idx) => {
-                  const isError = line.includes('[E]') || line.toLowerCase().includes('error');
-                  const isWarn = line.includes('[W]') || line.toLowerCase().includes('warn');
-                  const isInfo = line.includes('[I]');
-
-                  return (
-                    <div
-                      key={idx}
-                      className={`leading-relaxed px-1.5 py-0.5 rounded transition-colors ${
-                        isError
-                          ? 'text-rose-300 bg-rose-950/20'
-                          : isWarn
-                          ? 'text-amber-300 bg-amber-950/20'
-                          : isInfo
-                          ? 'text-cyan-200'
-                          : 'text-slate-300 hover:bg-slate-900/40'
-                      }`}
-                    >
-                      {line}
-                    </div>
-                  );
-                })
-            )}
-            <div ref={terminalEndRef} />
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          TAB 5: System & Software Updates
+          TAB 4: System & Software Updates
          ========================================================================= */}
       {activeTab === 'ota' && (
         <div className="space-y-6">

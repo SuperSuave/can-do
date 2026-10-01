@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Suspense, lazy } from 'react';
 import { Catalog, Command, CommandRole, CommandOption, GitHubRepoConfig, Vehicle, getCommandContributors } from './types/catalog';
 import { DEFAULT_CATALOG, normalizeCatalog } from './data/defaultCatalog';
 import { validateCatalog } from './utils/canValidator';
@@ -10,20 +10,23 @@ import { CommandFilter } from './components/CommandFilter';
 import { CommandCard } from './components/CommandCard';
 import { CommandDetailModal } from './components/CommandDetailModal';
 import { CommandEditorModal } from './components/CommandEditorModal';
-import { ImportModal } from './components/ImportModal';
-import { ContributeModal } from './components/ContributeModal';
-import { CatalogHealthModal } from './components/CatalogHealthModal';
-import { CategoryManagerModal } from './components/CategoryManagerModal';
-import { ExportModal, ExportFormat } from './components/ExportModal';
 import { ExportDropdown } from './components/ExportDropdown';
 import { VehiclesTab } from './components/VehiclesTab';
 import { GroupedCommandView } from './components/GroupedCommandView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { CanDoLogo } from './components/CanDoLogo';
-import { AutomationBuilder } from './components/AutomationBuilder';
-import { DeviceDashboard } from './components/DeviceDashboard';
-import { VehicleDashboard } from './components/VehicleDashboard';
-import { OnboardingWizardModal } from './components/OnboardingWizardModal';
+import type { ExportFormat } from './components/ExportModal';
+
+// Code-split dynamic imports for heavy tabs and secondary modals
+const AutomationBuilder = lazy(() => import('./components/AutomationBuilder').then(m => ({ default: m.AutomationBuilder })));
+const DeviceDashboard = lazy(() => import('./components/DeviceDashboard').then(m => ({ default: m.DeviceDashboard })));
+const VehicleDashboard = lazy(() => import('./components/VehicleDashboard').then(m => ({ default: m.VehicleDashboard })));
+const OnboardingWizardModal = lazy(() => import('./components/OnboardingWizardModal').then(m => ({ default: m.OnboardingWizardModal })));
+const CatalogHealthModal = lazy(() => import('./components/CatalogHealthModal').then(m => ({ default: m.CatalogHealthModal })));
+const CategoryManagerModal = lazy(() => import('./components/CategoryManagerModal').then(m => ({ default: m.CategoryManagerModal })));
+const ExportModal = lazy(() => import('./components/ExportModal').then(m => ({ default: m.ExportModal })));
+const ImportModal = lazy(() => import('./components/ImportModal').then(m => ({ default: m.ImportModal })));
+const ContributeModal = lazy(() => import('./components/ContributeModal').then(m => ({ default: m.ContributeModal })));
 import { UserPreferences, getUserPreferences, saveUserPreferences, fetchDevicePreferences } from './types/settings';
 import { checkForUpdates, executeUpdateSequence } from './services/updateService';
 import { 
@@ -745,7 +748,6 @@ export default function App() {
   };
 
   const handleResetCatalog = () => {
-    setCatalog(DEFAULT_CATALOG);
     setDraftAddedIds([]);
     setDraftModifiedIds([]);
     setDraftAddedVehicleIds([]);
@@ -757,6 +759,7 @@ export default function App() {
     localStorage.removeItem(STORAGE_KEY_DRAFT_ADDED_VEHICLES);
     localStorage.removeItem(STORAGE_KEY_DRAFT_MODIFIED_VEHICLES);
     localStorage.removeItem(STORAGE_KEY_DISCOVERED_FEATURES);
+    handleReloadCatalog();
   };
 
   const handleReloadCatalog = async () => {
@@ -1183,7 +1186,15 @@ export default function App() {
 
       {/* Main App Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 min-w-0">
-        {activeMainTab === 'catalog' ? (
+        <Suspense
+          fallback={
+            <div className="flex flex-col items-center justify-center p-20 space-y-3 text-slate-400">
+              <div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-mono text-[var(--text-muted)]">Loading module...</span>
+            </div>
+          }
+        >
+          {activeMainTab === 'catalog' ? (
           <div className="space-y-5 sm:space-y-6 min-w-0">
             {/* Catalog Sub-Tab Navigation Header (Messages vs Vehicles) */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-800/80">
@@ -1480,6 +1491,7 @@ export default function App() {
             }}
           />
         )}
+        </Suspense>
       </main>
 
       {/* Footer */}
@@ -1559,103 +1571,105 @@ export default function App() {
       </div>
 
       {/* Modals */}
-      {selectedCommand && (
-        <ErrorBoundary
-          fallbackTitle="Unable to load command details"
-          onReset={() => setSelectedCommand(null)}
-        >
-          <CommandDetailModal
-            command={selectedCommand}
+      <Suspense fallback={null}>
+        {selectedCommand && (
+          <ErrorBoundary
+            fallbackTitle="Unable to load command details"
+            onReset={() => setSelectedCommand(null)}
+          >
+            <CommandDetailModal
+              command={selectedCommand}
+              catalog={catalog}
+              onClose={() => setSelectedCommand(null)}
+              onDelete={handleDeleteCommand}
+              onEdit={cmd => {
+                setSelectedCommand(null);
+                setEditingCommand(cmd);
+                setIsEditorOpen(true);
+              }}
+              onAddToAutomation={(cmd, role, opt) => {
+                setSelectedCommand(null);
+                handleAddToAutomation(cmd, role, opt);
+              }}
+            />
+          </ErrorBoundary>
+        )}
+
+        {isEditorOpen && (
+          <CommandEditorModal
+            initialCommand={editingCommand}
             catalog={catalog}
-            onClose={() => setSelectedCommand(null)}
+            isOpen={isEditorOpen}
+            onClose={() => {
+              setIsEditorOpen(false);
+              setEditingCommand(null);
+            }}
+            onSave={handleSaveCommand}
             onDelete={handleDeleteCommand}
-            onEdit={cmd => {
-              setSelectedCommand(null);
-              setEditingCommand(cmd);
-              setIsEditorOpen(true);
-            }}
-            onAddToAutomation={(cmd, role, opt) => {
-              setSelectedCommand(null);
-              handleAddToAutomation(cmd, role, opt);
-            }}
           />
-        </ErrorBoundary>
-      )}
+        )}
 
-      {isEditorOpen && (
-        <CommandEditorModal
-          initialCommand={editingCommand}
+        {isImportOpen && (
+          <ImportModal
+            isOpen={isImportOpen}
+            currentCatalog={catalog}
+            onClose={() => setIsImportOpen(false)}
+            onImport={handleImport}
+          />
+        )}
+
+        {isContributeOpen && (
+          <ContributeModal
+            isOpen={isContributeOpen}
+            onClose={() => setIsContributeOpen(false)}
+            catalog={catalog}
+            pendingAdded={pendingAddedCommands}
+            pendingModified={pendingModifiedCommands}
+            pendingAddedVehicles={pendingAddedVehicles}
+            pendingModifiedVehicles={pendingModifiedVehicles}
+            repoConfig={repoConfig}
+            onUpdateRepoConfig={handleUpdateRepoConfig}
+            onClearDrafts={handleClearDrafts}
+          />
+        )}
+
+        {isHealthOpen && (
+          <CatalogHealthModal
+            isOpen={isHealthOpen}
+            onClose={() => setIsHealthOpen(false)}
+            catalog={catalog}
+          />
+        )}
+
+        {isCategoryManagerOpen && (
+          <CategoryManagerModal
+            isOpen={isCategoryManagerOpen}
+            catalog={catalog}
+            onClose={() => setIsCategoryManagerOpen(false)}
+            onBatchUpdateCategories={handleBatchUpdateCategories}
+          />
+        )}
+
+        {isExportOpen && (
+          <ExportModal
+            isOpen={isExportOpen}
+            catalog={catalog}
+            initialFormat={exportModalFormat}
+            selectedVehicleId={selectedVehicleId}
+            selectedCategory={selectedCategory}
+            onClose={() => setIsExportOpen(false)}
+          />
+        )}
+
+        {/* First-Use Onboarding Experience */}
+        <OnboardingWizardModal
+          isOpen={isOnboardingOpen}
           catalog={catalog}
-          isOpen={isEditorOpen}
-          onClose={() => {
-            setIsEditorOpen(false);
-            setEditingCommand(null);
-          }}
-          onSave={handleSaveCommand}
-          onDelete={handleDeleteCommand}
+          initialPreferences={userPreferences}
+          onComplete={handleCompleteOnboarding}
+          onClose={() => setIsOnboardingOpen(false)}
         />
-      )}
-
-      {isImportOpen && (
-        <ImportModal
-          isOpen={isImportOpen}
-          currentCatalog={catalog}
-          onClose={() => setIsImportOpen(false)}
-          onImport={handleImport}
-        />
-      )}
-
-      {isContributeOpen && (
-        <ContributeModal
-          isOpen={isContributeOpen}
-          onClose={() => setIsContributeOpen(false)}
-          catalog={catalog}
-          pendingAdded={pendingAddedCommands}
-          pendingModified={pendingModifiedCommands}
-          pendingAddedVehicles={pendingAddedVehicles}
-          pendingModifiedVehicles={pendingModifiedVehicles}
-          repoConfig={repoConfig}
-          onUpdateRepoConfig={handleUpdateRepoConfig}
-          onClearDrafts={handleClearDrafts}
-        />
-      )}
-
-      {isHealthOpen && (
-        <CatalogHealthModal
-          isOpen={isHealthOpen}
-          onClose={() => setIsHealthOpen(false)}
-          catalog={catalog}
-        />
-      )}
-
-      {isCategoryManagerOpen && (
-        <CategoryManagerModal
-          isOpen={isCategoryManagerOpen}
-          catalog={catalog}
-          onClose={() => setIsCategoryManagerOpen(false)}
-          onBatchUpdateCategories={handleBatchUpdateCategories}
-        />
-      )}
-
-      {isExportOpen && (
-        <ExportModal
-          isOpen={isExportOpen}
-          catalog={catalog}
-          initialFormat={exportModalFormat}
-          selectedVehicleId={selectedVehicleId}
-          selectedCategory={selectedCategory}
-          onClose={() => setIsExportOpen(false)}
-        />
-      )}
-
-      {/* First-Use Onboarding Experience */}
-      <OnboardingWizardModal
-        isOpen={isOnboardingOpen}
-        catalog={catalog}
-        initialPreferences={userPreferences}
-        onComplete={handleCompleteOnboarding}
-        onClose={() => setIsOnboardingOpen(false)}
-      />
+      </Suspense>
     </div>
   );
 }

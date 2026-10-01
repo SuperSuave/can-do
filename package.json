@@ -13,8 +13,5 @@
   "devDependencies": {
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0"
-  },
-  "dependencies": {
-    "@mdi/js": "^7.4.47"
   }
 }

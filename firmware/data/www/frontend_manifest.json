@@ -1,30 +1,100 @@
 {
-  "version": "2026.9.11",
+  "version": "2026.9.13",
   "files": [
     {
-      "name": "index-BDQ_ZeqX.js.gz",
-      "path": "/spiffs/www/index-BDQ_ZeqX.js.gz",
-      "size": 356366
+      "name": "AutomationBuilder-DJ3-K3qg.js.gz",
+      "path": "/spiffs/www/AutomationBuilder-DJ3-K3qg.js.gz",
+      "size": 28761
     },
     {
-      "name": "index-SD0ifz9t.css.gz",
-      "path": "/spiffs/www/index-SD0ifz9t.css.gz",
-      "size": 18643
+      "name": "CatalogHealthModal-DEnUvzaO.js.gz",
+      "path": "/spiffs/www/CatalogHealthModal-DEnUvzaO.js.gz",
+      "size": 2182
+    },
+    {
+      "name": "CategoryManagerModal-BynKxbAc.js.gz",
+      "path": "/spiffs/www/CategoryManagerModal-BynKxbAc.js.gz",
+      "size": 3829
+    },
+    {
+      "name": "ContributeModal-CNbRSagF.js.gz",
+      "path": "/spiffs/www/ContributeModal-CNbRSagF.js.gz",
+      "size": 4045
+    },
+    {
+      "name": "DeviceDashboard-CSZogh-z.js.gz",
+      "path": "/spiffs/www/DeviceDashboard-CSZogh-z.js.gz",
+      "size": 16133
+    },
+    {
+      "name": "deviceWs-Bz8W8HGz.js.gz",
+      "path": "/spiffs/www/deviceWs-Bz8W8HGz.js.gz",
+      "size": 806
+    },
+    {
+      "name": "ExportModal-_x4CVL6I.js.gz",
+      "path": "/spiffs/www/ExportModal-_x4CVL6I.js.gz",
+      "size": 3882
+    },
+    {
+      "name": "ImportModal-D2HhqPHy.js.gz",
+      "path": "/spiffs/www/ImportModal-D2HhqPHy.js.gz",
+      "size": 3316
+    },
+    {
+      "name": "index-BTOnGCvX.js.gz",
+      "path": "/spiffs/www/index-BTOnGCvX.js.gz",
+      "size": 150389
+    },
+    {
+      "name": "index-HC7WBAwF.css.gz",
+      "path": "/spiffs/www/index-HC7WBAwF.css.gz",
+      "size": 18657
     },
     {
       "name": "index.html",
       "path": "/spiffs/www/index.html",
-      "size": 1122
+      "size": 1781
     },
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 514
+      "size": 763
+    },
+    {
+      "name": "info-ChpHddXZ.js.gz",
+      "path": "/spiffs/www/info-ChpHddXZ.js.gz",
+      "size": 283
     },
     {
       "name": "logo.svg",
       "path": "/spiffs/www/logo.svg",
-      "size": 8217
+      "size": 8221
+    },
+    {
+      "name": "OnboardingWizardModal-CWzvjoAr.js.gz",
+      "path": "/spiffs/www/OnboardingWizardModal-CWzvjoAr.js.gz",
+      "size": 4524
+    },
+    {
+      "name": "send-D6uTG2Eb.js.gz",
+      "path": "/spiffs/www/send-D6uTG2Eb.js.gz",
+      "size": 337
+    },
+    {
+      "name": "shield-check-BnmO6sgx.js.gz",
+      "path": "/spiffs/www/shield-check-BnmO6sgx.js.gz",
+      "size": 355
+    },
+    {
+      "name": "VehicleDashboard-cJCe8T7S.js.gz",
+      "path": "/spiffs/www/VehicleDashboard-cJCe8T7S.js.gz",
+      "size": 20432
+    },
+    {
+      "name": "wifi-Ccaxj4M7.js.gz",
+      "path": "/spiffs/www/wifi-Ccaxj4M7.js.gz",
+      "size": 312
     }
   ]
 }

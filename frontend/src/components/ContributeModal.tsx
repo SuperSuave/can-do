@@ -9,16 +9,15 @@ import { formatCommandForCatalog } from '../utils/catalogUtils';
 import { CanDoLogo } from './CanDoLogo';
 import {
   X,
-  GitPullRequest,
   ExternalLink,
   Copy,
   Check,
   Download,
   Github,
   Settings,
-  AlertCircle,
   FileCheck,
-  Send
+  Send,
+  GitPullRequest
 } from 'lucide-react';
 
 interface ContributeModalProps {
@@ -46,18 +45,13 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
   onUpdateRepoConfig,
   onClearDrafts
 }) => {
-  const [activeTab, setActiveTab] = useState<'issue' | 'webedit' | 'download' | 'direct_pr'>('issue');
+  const [activeTab, setActiveTab] = useState<'issue' | 'webedit' | 'download'>('issue');
   const [contributorName, setContributorName] = useState('');
   const [testingNotes, setTestingNotes] = useState('');
   const [showConfig, setShowConfig] = useState(false);
   const [configState, setConfigState] = useState<GitHubRepoConfig>(repoConfig);
   const [copied, setCopied] = useState(false);
   const [copiedCatalog, setCopiedCatalog] = useState(false);
-
-  // Direct PR state
-  const [githubToken, setGithubToken] = useState('');
-  const [prLoading, setPrLoading] = useState(false);
-  const [prResult, setPrResult] = useState<{ success: boolean; url?: string; error?: string } | null>(null);
   const [confirmResetDrafts, setConfirmResetDrafts] = useState(false);
 
   useEffect(() => {
@@ -126,98 +120,6 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
   const handleSaveConfig = () => {
     onUpdateRepoConfig(configState);
     setShowConfig(false);
-  };
-
-  // Direct GitHub PR execution via GitHub REST API
-  const handleDirectPR = async () => {
-    if (!githubToken.trim()) {
-      setPrResult({ success: false, error: 'Please enter a GitHub Personal Access Token.' });
-      return;
-    }
-
-    setPrLoading(true);
-    setPrResult(null);
-
-    try {
-      const { owner, repo, branch, filePath } = configState;
-      const headers = {
-        Authorization: `token ${githubToken.trim()}`,
-        Accept: 'application/vnd.github.v3+json'
-      };
-
-      // 1. Get branch ref SHA
-      const refRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/ref/heads/${branch}`, {
-        headers
-      });
-      if (!refRes.ok) {
-        throw new Error(`Failed to fetch base branch (${branch}). Check repo permissions or token.`);
-      }
-      const refData = await refRes.json();
-      const baseSha = refData.object.sha;
-
-      // 2. Create new branch
-      const newBranchName = `contrib-can-${Date.now().toString(36)}`;
-      const branchRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/refs`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          ref: `refs/heads/${newBranchName}`,
-          sha: baseSha
-        })
-      });
-      if (!branchRes.ok) {
-        throw new Error('Failed to create contribution branch.');
-      }
-
-      // 3. Get current file SHA (to update it)
-      let currentFileSha: string | undefined;
-      const fileRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`, {
-        headers
-      });
-      if (fileRes.ok) {
-        const fileData = await fileRes.json();
-        currentFileSha = fileData.sha;
-      }
-
-      // 4. Commit updated catalog.json
-      const contentBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(getCleanCatalog(), null, 2))));
-      const commitRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({
-          message: issueTitle,
-          content: contentBase64,
-          branch: newBranchName,
-          ...(currentFileSha ? { sha: currentFileSha } : {})
-        })
-      });
-      if (!commitRes.ok) {
-        throw new Error('Failed to commit updated catalog to branch.');
-      }
-
-      // 5. Create Pull Request
-      const prRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          title: issueTitle,
-          body: issueMarkdown,
-          head: newBranchName,
-          base: branch
-        })
-      });
-      if (!prRes.ok) {
-        const prErr = await prRes.json();
-        throw new Error(prErr.message || 'Failed to open Pull Request.');
-      }
-      const prData = await prRes.json();
-
-      setPrResult({ success: true, url: prData.html_url });
-    } catch (err: any) {
-      setPrResult({ success: false, error: err.message || 'Error occurred while creating PR.' });
-    } finally {
-      setPrLoading(false);
-    }
   };
 
   return (
@@ -413,17 +315,7 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            3. Download catalog.json
-          </button>
-          <button
-            onClick={() => setActiveTab('direct_pr')}
-            className={`py-3 px-3 font-semibold border-b-2 transition ${
-              activeTab === 'direct_pr'
-                ? 'border-[var(--md-sys-color-primary)] text-white'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            4. Direct GitHub PR (Token)
+            3. Download / Export JSON
           </button>
         </div>
 
@@ -550,7 +442,7 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
             </div>
           )}
 
-          {/* Tab 3: Download catalog.json */}
+          {/* Tab 3: Download catalog.json & Patch */}
           {activeTab === 'download' && (
             <div className="space-y-4 text-xs text-slate-300">
               <div className="p-4 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] space-y-2">
@@ -559,12 +451,12 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
                   Save File Locally
                 </div>
                 <p className="text-[var(--text-muted)]">
-                  Download the complete validated <code className="text-cyan-300">catalog.json</code> containing all {catalog.vehicles.length} vehicles and {catalog.commands.length} commands.
-                  You can deploy this directly into your local CAN Do automation platform directory or commit it via git.
+                  Download the complete validated <code className="text-cyan-300">catalog.json</code> containing all {catalog.vehicles.length} vehicles and {catalog.commands.length} commands, or copy your changes.
+                  You can deploy this directly into your local CAN Do automation platform directory, submit it to GitHub, or share it with the community.
                 </p>
               </div>
 
-              <div className="flex items-center gap-3 pt-2">
+              <div className="flex flex-wrap items-center gap-3 pt-2">
                 <button
                   type="button"
                   onClick={handleDownloadCatalog}
@@ -573,78 +465,13 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
                   <Download className="w-4 h-4" />
                   Download catalog.json
                 </button>
-              </div>
-            </div>
-          )}
-
-          {/* Tab 4: Direct PR */}
-          {activeTab === 'direct_pr' && (
-            <div className="space-y-4 text-xs text-slate-300">
-              <div className="p-3.5 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] space-y-1">
-                <div className="font-semibold text-white">Automated GitHub Pull Request</div>
-                <p className="text-[var(--text-muted)]">
-                  Provide a personal access token (with <code className="text-cyan-300">repo</code> scope) to create a branch, commit the catalog, and open a Pull Request automatically. The token is never stored on any server.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1 font-medium">
-                  GitHub Personal Access Token (PAT)
-                </label>
-                <input
-                  type="password"
-                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                  value={githubToken}
-                  onChange={e => setGithubToken(e.target.value)}
-                  className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-cyan-300 focus:outline-none focus:border-[var(--md-sys-color-primary)]"
-                />
-              </div>
-
-              {prResult && (
-                <div
-                  className={`p-3 rounded-[10px] border flex items-center gap-2 ${
-                    prResult.success
-                      ? 'bg-emerald-950/40 border-emerald-800 text-emerald-300'
-                      : 'bg-rose-950/40 border-rose-800 text-rose-300'
-                  }`}
-                >
-                  {prResult.success ? (
-                    <>
-                      <Check className="w-4 h-4 shrink-0" />
-                      <span>
-                        Pull Request created successfully!{' '}
-                        <a
-                          href={prResult.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline font-bold text-white ml-1"
-                        >
-                          View PR on GitHub
-                        </a>
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      <span>{prResult.error}</span>
-                    </>
-                  )}
-                </div>
-              )}
-
-              <div className="pt-2 flex justify-end">
                 <button
                   type="button"
-                  disabled={prLoading || !githubToken}
-                  onClick={handleDirectPR}
-                  className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full font-semibold transition ${
-                    githubToken && !prLoading
-                      ? 'bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white'
-                      : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                  }`}
+                  onClick={handleCopyFullCatalog}
+                  className="dash-outline-btn inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold"
                 >
-                  <GitPullRequest className="w-4 h-4" />
-                  {prLoading ? 'Creating Branch & PR...' : 'Create Pull Request'}
+                  {copiedCatalog ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                  {copiedCatalog ? 'Copied to Clipboard' : 'Copy JSON'}
                 </button>
               </div>
             </div>

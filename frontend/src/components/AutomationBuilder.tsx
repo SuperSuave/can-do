@@ -1,5 +1,4 @@
 import React, { useState, useRef } from 'react';
-import mqtt from 'mqtt';
 import {
   AutomationRule,
   AutomationSettings,
@@ -24,6 +23,7 @@ import {
   applyOptionToAction
 } from '../utils/automationConverters';
 import { getDefaultEspIp, resolveDeviceBaseUrl, isRunningOnDevice } from '../utils/hostUtils';
+import { deviceWs } from '../services/deviceWs';
 import {
   Zap,
   Shield,
@@ -2851,25 +2851,6 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [collapsedActions, setCollapsedActions] = useState(false);
   const [collapsedOffActions, setCollapsedOffActions] = useState(false);
 
-  const [useMqttSync, setUseMqttSync] = useState<boolean>(!isRunningOnDevice());
-  const [mqttRemoteConfig, setMqttRemoteConfig] = useState(() => {
-    const saved = localStorage.getItem('cando_mqtt_remote');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
-    }
-    return {
-      wsUrl: 'wss://homeassistant.local:9001',
-      user: '',
-      pass: '',
-      deviceId: 'device_id'
-    };
-  });
-
-  const updateMqttConfig = (updates: any) => {
-    const next = { ...mqttRemoteConfig, ...updates };
-    setMqttRemoteConfig(next);
-    localStorage.setItem('cando_mqtt_remote', JSON.stringify(next));
-  };
   const [customJsonSchema, setCustomJsonSchema] = useState<string>(
     JSON.stringify(
       {
@@ -2935,65 +2916,25 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
     fetchInitialStates();
 
-    const connectWs = () => {
+    const unsubscribeMsgs = deviceWs.subscribe((msg) => {
       if (isCancelled) return;
-      let wsUrl: string;
-      try {
-        const base = resolveDeviceBaseUrl(espIp);
-        const parsed = new URL(base);
-        const wsProto = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${wsProto}//${parsed.host}/ws`;
-      } catch {
-        wsUrl = 'ws://192.168.4.1/ws';
-      }
-
-      try {
-        ws = new WebSocket(wsUrl);
-
-        ws.onmessage = (event) => {
-          try {
-            const msg = JSON.parse(event.data);
-            if (msg.type === 'can_frame' && msg.id) {
-              const normId = String(msg.id).trim().toLowerCase();
-              framesRef.current.set(normId, { data: msg.data || '' });
-              setLiveFrames(new Map(framesRef.current));
-            } else if (msg.type === 'state' && msg.entity) {
-              entityStatesRef.current.set(String(msg.entity).toLowerCase(), String(msg.state || ''));
-              setEntityStates(new Map(entityStatesRef.current));
-            } else if (msg.type === 'automation_fired') {
-              if (msg.trigger_id) {
-                setLastFiredTriggerId(msg.trigger_id);
-              }
-            }
-          } catch {
-            // Non-JSON message (e.g. raw log line)
-          }
-        };
-
-        ws.onclose = () => {
-          if (!isCancelled) {
-            reconnectTimeout = setTimeout(connectWs, 4000);
-          }
-        };
-
-        ws.onerror = () => {
-          try { ws?.close(); } catch {}
-        };
-      } catch {
-        if (!isCancelled) {
-          reconnectTimeout = setTimeout(connectWs, 5000);
+      if (msg.type === 'can_frame' && (msg as any).id) {
+        const normId = String((msg as any).id).trim().toLowerCase();
+        framesRef.current.set(normId, { data: (msg as any).data || '' });
+        setLiveFrames(new Map(framesRef.current));
+      } else if (msg.type === 'state' && (msg as any).entity) {
+        entityStatesRef.current.set(String((msg as any).entity).toLowerCase(), String((msg as any).state || ''));
+        setEntityStates(new Map(entityStatesRef.current));
+      } else if (msg.type === 'automation_fired') {
+        if ((msg as any).trigger_id) {
+          setLastFiredTriggerId((msg as any).trigger_id);
         }
       }
-    };
-
-    connectWs();
+    });
 
     return () => {
       isCancelled = true;
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (ws) {
-        try { ws.close(); } catch {}
-      }
+      unsubscribeMsgs();
     };
   }, [espIp]);
 
@@ -3263,81 +3204,6 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     setSyncing(true);
     setSyncStatus('Pushing automations.json to ESP32...');
 
-    if (useMqttSync) {
-      const payload = exportToCandoJson(rules, settings, catalog);
-      const { wsUrl, user, pass, deviceId } = mqttRemoteConfig;
-      
-      let timeoutTimer: any = null;
-      try {
-        const client = mqtt.connect(wsUrl, {
-          username: user || undefined,
-          password: pass || undefined,
-          protocolVersion: 4,
-          reconnectPeriod: 0,
-          connectTimeout: 8000
-        });
-
-        timeoutTimer = setTimeout(() => {
-          setSyncStatus(`Timeout: No confirmation from '${deviceId}' via MQTT broker. Verify ESP32 is online.`);
-          setSyncing(false);
-          try { client.end(true); } catch {}
-          setTimeout(() => setSyncStatus(null), 8000);
-        }, 10000);
-        
-        client.on('connect', () => {
-          setSyncStatus(`Connected to broker. Sending automations to ${deviceId}...`);
-          client.subscribe(`cando/${deviceId}/config/automations/status`, (err) => {
-            if (!err) {
-              client.publish(`cando/${deviceId}/config/automations/set`, payload, { qos: 1 }, (err2) => {
-                if (err2) {
-                  if (timeoutTimer) clearTimeout(timeoutTimer);
-                  setSyncStatus(`Push failed: ${err2.message}`);
-                  setSyncing(false);
-                  client.end();
-                }
-              });
-            } else {
-              if (timeoutTimer) clearTimeout(timeoutTimer);
-              setSyncStatus(`Subscribe Error: ${err.message}`);
-              setSyncing(false);
-              client.end();
-            }
-          });
-        });
-
-        client.on('message', (topic, message) => {
-          if (topic === `cando/${deviceId}/config/automations/status`) {
-            if (timeoutTimer) clearTimeout(timeoutTimer);
-            try {
-              const data = JSON.parse(message.toString());
-              if (data.status === 'ok') {
-                setSyncStatus('Success: Saved via MQTT. Rebooting ESP32...');
-              } else {
-                setSyncStatus(`MQTT Error: ${data.message}`);
-              }
-            } catch(e: any) {
-              setSyncStatus(`Push failed: ${e.message}`);
-            }
-            setSyncing(false);
-            client.end();
-            setTimeout(() => setSyncStatus(null), 6000);
-          }
-        });
-
-        client.on('error', (err) => {
-          if (timeoutTimer) clearTimeout(timeoutTimer);
-          setSyncStatus(`MQTT Connection Error: ${err.message}`);
-          setSyncing(false);
-          client.end();
-        });
-      } catch (err: any) {
-        if (timeoutTimer) clearTimeout(timeoutTimer);
-        setSyncStatus(`MQTT Init Error: ${err.message}`);
-        setSyncing(false);
-      }
-      return;
-    }
-
     try {
       const payload = exportToCandoJson(rules, settings, catalog);
       const base = resolveDeviceBaseUrl(espIp);
@@ -3362,83 +3228,6 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     setSyncing(true);
     setSyncStatus('Pulling automations.json from ESP32...');
 
-    if (useMqttSync) {
-      const { wsUrl, user, pass, deviceId } = mqttRemoteConfig;
-      let timeoutTimer: any = null;
-      try {
-        const client = mqtt.connect(wsUrl, {
-          username: user || undefined,
-          password: pass || undefined,
-          protocolVersion: 4,
-          reconnectPeriod: 0,
-          connectTimeout: 8000
-        });
-
-        timeoutTimer = setTimeout(() => {
-          setSyncStatus(`Timeout: No response from '${deviceId}' via MQTT broker. Verify ESP32 is online and connected to ${wsUrl}`);
-          setSyncing(false);
-          try { client.end(true); } catch {}
-          setTimeout(() => setSyncStatus(null), 8000);
-        }, 10000);
-
-        client.on('connect', () => {
-          setSyncStatus(`Connected to broker. Requesting automations from ${deviceId}...`);
-          client.subscribe(`cando/${deviceId}/config/automations/state`, (err) => {
-            if (!err) {
-              client.publish(`cando/${deviceId}/config/automations/get`, '', { qos: 1 });
-            } else {
-              if (timeoutTimer) clearTimeout(timeoutTimer);
-              setSyncStatus(`Subscribe Error: ${err.message}`);
-              setSyncing(false);
-              client.end();
-            }
-          });
-        });
-
-        client.on('message', (topic, message) => {
-          if (topic === `cando/${deviceId}/config/automations/state`) {
-            if (timeoutTimer) clearTimeout(timeoutTimer);
-            try {
-              const data = JSON.parse(message.toString());
-              if (data.rules && Array.isArray(data.rules)) {
-                onUpdateRules(data.rules);
-                if (data.settings) onUpdateSettings(data.settings);
-                if (data.rules[0]?.id) setSelectedRuleId(data.rules[0].id);
-                setSyncStatus(`Imported ${data.rules.length} rule(s) via MQTT!`);
-              } else if (Array.isArray(data)) {
-                onUpdateRules(data);
-                if (data[0]?.id) setSelectedRuleId(data[0].id);
-                setSyncStatus(`Imported ${data.length} rule(s) via MQTT!`);
-              } else {
-                setSyncStatus('No rules array found in device response.');
-              }
-            } catch(e: any) {
-              setSyncStatus(`Pull failed: ${e.message}`);
-            }
-            setSyncing(false);
-            client.end();
-            setTimeout(() => setSyncStatus(null), 6000);
-          }
-        });
-
-        client.on('error', (err) => {
-          if (timeoutTimer) clearTimeout(timeoutTimer);
-          setSyncStatus(`MQTT Connection Error: ${err.message}`);
-          setSyncing(false);
-          client.end();
-        });
-
-        client.on('close', () => {
-          // If closed before response received and not already handled
-        });
-      } catch (err: any) {
-        if (timeoutTimer) clearTimeout(timeoutTimer);
-        setSyncStatus(`MQTT Init Error: ${err.message}`);
-        setSyncing(false);
-      }
-      return;
-    }
-
     try {
       const base = resolveDeviceBaseUrl(espIp);
       const url = `${base}/api/automations`;
@@ -3449,11 +3238,11 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         onUpdateRules(data.rules);
         if (data.settings) onUpdateSettings(data.settings);
         if (data.rules[0]?.id) setSelectedRuleId(data.rules[0].id);
-        setSyncStatus(`Imported ${data.rules.length} rule(s) from ESP32!`);
+        setSyncStatus(`Imported ${data.rules.length} rule(s)!`);
       } else if (Array.isArray(data)) {
         onUpdateRules(data);
         if (data[0]?.id) setSelectedRuleId(data[0].id);
-        setSyncStatus(`Imported ${data.length} rule(s) from ESP32!`);
+        setSyncStatus(`Imported ${data.length} rule(s)!`);
       } else {
         setSyncStatus('No rules array found in device response.');
       }
@@ -4259,16 +4048,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             <div className="pt-2 border-t border-slate-800 space-y-2">
               <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-slate-950/70 border border-slate-800/80">
                 <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-semibold text-slate-400">Sync Target:</span>
-                    <select
-                      value={useMqttSync ? 'mqtt' : 'rest'}
-                      onChange={e => setUseMqttSync(e.target.value === 'mqtt')}
-                      className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none"
-                    >
-                      <option value="rest">Local Network (REST API)</option>
-                      <option value="mqtt">Remote Broker (MQTT WSS)</option>
-                    </select>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-semibold text-slate-400">Device Sync:</span>
+                    <span className="text-[10px] font-mono text-cyan-400">REST API</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <button
@@ -4290,51 +4072,17 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   </div>
                 </div>
 
-                {!useMqttSync ? (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-semibold text-slate-400 whitespace-nowrap">ESP IP:</span>
-                    <input
-                      type="text"
-                      value={espIp}
-                      onChange={e => setEspIp(e.target.value)}
-                      placeholder={getDefaultEspIp()}
-                      title="Device IP address or hostname"
-                      className="flex-1 px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                    />
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <input
-                      type="text"
-                      value={mqttRemoteConfig.wsUrl}
-                      onChange={e => updateMqttConfig({ wsUrl: e.target.value })}
-                      placeholder="wss://broker:port"
-                      className="px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                      title="Broker WS URL (Must be wss:// if on HTTPS domain)"
-                    />
-                    <input
-                      type="text"
-                      value={mqttRemoteConfig.deviceId}
-                      onChange={e => updateMqttConfig({ deviceId: e.target.value })}
-                      placeholder="Device ID (e.g. my_device)"
-                      className="px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                    />
-                    <input
-                      type="text"
-                      value={mqttRemoteConfig.user}
-                      onChange={e => updateMqttConfig({ user: e.target.value })}
-                      placeholder="Username (optional)"
-                      className="px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                    />
-                    <input
-                      type="password"
-                      value={mqttRemoteConfig.pass}
-                      onChange={e => updateMqttConfig({ pass: e.target.value })}
-                      placeholder="Password (optional)"
-                      className="px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                    />
-                  </div>
-                )}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-semibold text-slate-400 whitespace-nowrap">ESP IP:</span>
+                  <input
+                    type="text"
+                    value={espIp}
+                    onChange={e => setEspIp(e.target.value)}
+                    placeholder={getDefaultEspIp()}
+                    title="Device IP address or hostname"
+                    className="flex-1 px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
               </div>
 
               {syncStatus && (
