@@ -1,0 +1,208 @@
+<svg viewBox="0 0 380 720" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Exterior Body Gradient -->
+    <linearGradient id="bodyGradIoniq5" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="50%" stop-color="#172030" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+
+    <!-- Glass Tint Gradients -->
+    <linearGradient id="glassTint" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0b1320" stop-opacity="0.95" />
+      <stop offset="50%" stop-color="#070c14" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#04070c" stop-opacity="0.95" />
+    </linearGradient>
+
+    <linearGradient id="sunroofGlass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#081426" stop-opacity="0.92" />
+      <stop offset="60%" stop-color="#040b17" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#02050a" stop-opacity="0.98" />
+    </linearGradient>
+
+    <!-- EV Charging Aura Glow Filter -->
+    <filter id="chargingAuraGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <style>
+      @keyframes charge-dots-flow-inward {
+        0% { stroke-dashoffset: 54; }
+        100% { stroke-dashoffset: 0; }
+      }
+      @keyframes charge-pulse-slow {
+        0%, 100% { opacity: 0.4; transform: scale(0.96); transform-origin: 190px 340px; }
+        50% { opacity: 0.95; transform: scale(1.04); transform-origin: 190px 340px; }
+      }
+      @keyframes charge-port-pulse-slow {
+        0% { r: 6px; opacity: 0.9; }
+        100% { r: 16px; opacity: 0; }
+      }
+      .charge-dot-stream {
+        stroke-dasharray: 4 14;
+        animation: charge-dots-flow-inward 10.5s linear infinite;
+      }
+      .charge-port-ripple {
+        animation: charge-port-pulse-slow 2.8s ease-out infinite;
+      }
+      .door-open-fl {
+        transform: translate(-50px, 2px) rotate(24deg);
+        transform-origin: 84px 310px;
+        transition: transform 0.3s ease-out;
+      }
+    </style>
+  </defs>
+
+  <!-- 1. Ground Shadow -->
+  <ellipse cx="190" cy="360" rx="140" ry="300" fill="rgba(0,0,0,0.55)" filter="blur(26px)" />
+
+  <!-- 2. Wheels / Tires with Brake Calipers -->
+  <g id="wheel-fl">
+    <rect x="52" y="140" width="28" height="66" rx="8" fill="#1e293b" stroke="#0f172a" stroke-width="2" />
+    <rect x="58" y="152" width="16" height="42" rx="4" fill="#334155" />
+    <rect x="72" y="160" width="6" height="24" rx="2" fill="#0284c7" />
+  </g>
+  <g id="wheel-fr">
+    <rect x="300" y="140" width="28" height="66" rx="8" fill="#1e293b" stroke="#0f172a" stroke-width="2" />
+    <rect x="306" y="152" width="16" height="42" rx="4" fill="#334155" />
+    <rect x="302" y="160" width="6" height="24" rx="2" fill="#0284c7" />
+  </g>
+  <g id="wheel-rl">
+    <rect x="52" y="510" width="28" height="66" rx="8" fill="#1e293b" stroke="#0f172a" stroke-width="2" />
+    <rect x="58" y="522" width="16" height="42" rx="4" fill="#334155" />
+    <rect x="72" y="530" width="6" height="24" rx="2" fill="#0284c7" />
+  </g>
+  <g id="wheel-rr">
+    <rect x="300" y="510" width="28" height="66" rx="8" fill="#1e293b" stroke="#0f172a" stroke-width="2" />
+    <rect x="306" y="522" width="16" height="42" rx="4" fill="#334155" />
+    <rect x="302" y="530" width="6" height="24" rx="2" fill="#0284c7" />
+  </g>
+
+  <!-- 3. Ioniq 5 Body Shell Outline -->
+  <g id="shell-ioniq5">
+    <path
+      d="M 124 50 C 150 44, 230 44, 256 50 C 278 56, 296 82, 302 125 C 308 190, 308 260, 304 360 C 302 460, 308 535, 302 595 C 296 638, 278 666, 254 672 C 220 680, 160 680, 126 672 C 102 666, 84 638, 78 595 C 72 535, 78 460, 76 360 C 72 260, 72 190, 78 125 C 84 82, 102 56, 124 50 Z"
+      fill="url(#bodyGradIoniq5)"
+      stroke="#334155"
+      stroke-width="2.5"
+    />
+    <!-- Iconic 45° Diagonal Z-Crease across Door Panels -->
+    <path d="M 88 230 L 104 360 L 88 470" stroke="#475569" stroke-width="1.5" fill="none" opacity="0.75" />
+    <path d="M 292 230 L 276 360 L 292 470" stroke="#475569" stroke-width="1.5" fill="none" opacity="0.75" />
+    <!-- Wheel Arch Strakes -->
+    <path d="M 76 138 Q 98 125, 104 172 Q 98 215, 76 208" stroke="#475569" stroke-width="1.2" fill="none" opacity="0.4" />
+    <path d="M 304 138 Q 282 125, 276 172 Q 282 215, 304 208" stroke="#475569" stroke-width="1.2" fill="none" opacity="0.4" />
+    <path d="M 76 508 Q 98 495, 104 542 Q 98 585, 76 578" stroke="#475569" stroke-width="1.2" fill="none" opacity="0.4" />
+    <path d="M 304 508 Q 282 495, 276 542 Q 282 585, 304 578" stroke="#475569" stroke-width="1.2" fill="none" opacity="0.4" />
+  </g>
+
+  <!-- 4. Front Hood / Frunk Panel -->
+  <g id="hood-panel">
+    <path
+      d="M 120 58 C 155 52, 225 52, 260 58 C 274 95, 276 138, 272 172 L 108 172 C 104 138, 106 95, 120 58 Z"
+      fill="#1b232e"
+      stroke="#334155"
+      stroke-width="1.2"
+    />
+  </g>
+
+  <!-- 5. Windshield Glass -->
+  <path
+    d="M 110 176 L 270 176 C 264 216, 256 246, 250 262 L 130 262 C 124 246, 116 216, 110 176 Z"
+    fill="url(#glassTint)"
+    stroke="#1e293b"
+    stroke-width="1.5"
+  />
+  <line x1="135" y1="182" x2="190" y2="186" stroke="#334155" stroke-width="1.5" stroke-linecap="round" />
+  <line x1="200" y1="184" x2="255" y2="188" stroke="#334155" stroke-width="1.5" stroke-linecap="round" />
+
+  <!-- 6. Panoramic Vision Roof -->
+  <g id="ioniq5-vision-roof">
+    <rect x="122" y="266" width="136" height="214" rx="16" fill="url(#sunroofGlass)" stroke="#0284c7" stroke-width="1.5" />
+    <line x1="126" y1="373" x2="254" y2="373" stroke="#0284c7" stroke-width="1" stroke-dasharray="3 3" opacity="0.7" />
+    <line x1="136" y1="280" x2="242" y2="460" stroke="#38bdf8" stroke-width="1" opacity="0.25" />
+    <text x="190" y="380" text-anchor="middle" fill="#38bdf8" font-size="9" font-weight="bold" font-family="monospace" opacity="0.9">
+      VISION ROOF
+    </text>
+  </g>
+
+  <!-- 7. Rear Window Glass -->
+  <path
+    d="M 128 484 L 252 484 C 258 500, 264 526, 268 548 L 112 548 C 116 526, 122 500, 128 484 Z"
+    fill="url(#glassTint)"
+    stroke="#1e293b"
+    stroke-width="1.5"
+  />
+
+  <!-- 8. Dual-Vent Aero Roof Spoiler -->
+  <g id="spoiler-ioniq5">
+    <path d="M 112 546 L 268 546 C 270 568, 264 582, 256 590 L 124 590 C 116 582, 110 568, 112 546 Z" fill="#1e293b" stroke="#334155" stroke-width="1.2" />
+    <rect x="146" y="556" width="26" height="18" rx="4" fill="#090d14" stroke="#334155" stroke-width="1" />
+    <rect x="208" y="556" width="26" height="18" rx="4" fill="#090d14" stroke="#334155" stroke-width="1" />
+  </g>
+
+  <!-- 9. Rear Liftgate Panel -->
+  <path
+    d="M 112 588 L 268 588 C 264 624, 256 652, 246 664 L 134 664 C 124 652, 116 624, 112 588 Z"
+    fill="#171f2b"
+    stroke="#334155"
+    stroke-width="1.2"
+  />
+
+  <!-- 10. 4 Doors -->
+  <g id="door-fl">
+    <path d="M 84 195 C 80 230, 80 270, 82 310 L 98 310 L 98 195 Z" fill="#1e293b" stroke="#475569" stroke-width="1.5" />
+    <rect x="88" y="295" width="4" height="12" rx="1.5" fill="#94a3b8" />
+  </g>
+  <g id="door-fr">
+    <path d="M 296 195 C 300 230, 300 270, 298 310 L 282 310 L 282 195 Z" fill="#1e293b" stroke="#475569" stroke-width="1.5" />
+    <rect x="288" y="295" width="4" height="12" rx="1.5" fill="#94a3b8" />
+  </g>
+  <g id="door-rl">
+    <path d="M 82 320 C 80 360, 80 400, 84 445 L 98 445 L 98 320 Z" fill="#1e293b" stroke="#475569" stroke-width="1.5" />
+    <rect x="88" y="332" width="4" height="12" rx="1.5" fill="#94a3b8" />
+  </g>
+  <g id="door-rr">
+    <path d="M 298 320 C 300 360, 300 400, 296 445 L 282 445 L 282 320 Z" fill="#1e293b" stroke="#475569" stroke-width="1.5" />
+    <rect x="288" y="332" width="4" height="12" rx="1.5" fill="#94a3b8" />
+  </g>
+
+  <!-- 11. Charge Port & Active Charging Animation -->
+  <g id="charge-port">
+    <rect x="292" y="500" width="9" height="20" rx="2" fill="#10b981" stroke="#34d399" stroke-width="1.5" />
+    <circle cx="296" cy="510" r="5" fill="#10b981" opacity="0.9" />
+    <circle cx="296" cy="510" r="6" fill="none" stroke="#34d399" stroke-width="1.5" class="charge-port-ripple" />
+  </g>
+
+  <!-- High-Voltage Energy Flow (Inward Flowing Dots) -->
+  <g id="charging-energy-flow">
+    <path d="M 296 510 C 270 510, 240 485, 218 455 C 200 428, 190 395, 190 340" stroke="#10b981" stroke-width="10" stroke-linecap="round" fill="none" opacity="0.18" filter="url(#chargingAuraGlow)" />
+    <path d="M 296 510 C 270 510, 240 485, 218 455 C 200 428, 190 395, 190 340" stroke="#065f46" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.65" />
+    <path d="M 296 510 C 270 510, 240 485, 218 455 C 200 428, 190 395, 190 340" stroke="#34d399" stroke-width="4.5" stroke-linecap="round" fill="none" class="charge-dot-stream" />
+    <path d="M 190 340 L 190 260" stroke="#34d399" stroke-width="3.5" stroke-linecap="round" fill="none" class="charge-dot-stream" />
+    <circle cx="190" cy="340" r="6" fill="#10b981" style="animation: charge-pulse-slow 2.6s ease-in-out infinite" />
+    <circle cx="190" cy="340" r="13" fill="none" stroke="#34d399" stroke-width="1.5" opacity="0.5" style="animation: charge-pulse-slow 2.6s ease-in-out infinite" />
+  </g>
+
+  <!-- 12. Side Mirrors -->
+  <g id="mirrors">
+    <path d="M 84 175 L 56 160 C 52 165, 54 185, 62 188 L 84 182 Z" fill="#1e293b" stroke="#334155" stroke-width="1.5" />
+    <path d="M 296 175 L 324 160 C 328 165, 326 185, 318 188 L 296 182 Z" fill="#1e293b" stroke="#334155" stroke-width="1.5" />
+  </g>
+
+  <!-- 13. Ioniq 5 Parametric Pixel Headlights -->
+  <g id="lights-ioniq5">
+    <rect x="104" y="62" width="16" height="18" rx="2" fill="#38bdf8" stroke="#0284c7" stroke-width="1" />
+    <rect x="124" y="60" width="16" height="18" rx="2" fill="#38bdf8" stroke="#0284c7" stroke-width="1" />
+    <rect x="240" y="60" width="16" height="18" rx="2" fill="#38bdf8" stroke="#0284c7" stroke-width="1" />
+    <rect x="260" y="62" width="16" height="18" rx="2" fill="#38bdf8" stroke="#0284c7" stroke-width="1" />
+    <line x1="142" y1="68" x2="238" y2="68" stroke="#bae6fd" stroke-width="2.5" stroke-linecap="round" />
+  </g>
+
+  <!-- 14. Ioniq 5 Parametric Pixel Taillights -->
+  <g id="rear-ioniq5">
+    <rect x="108" y="662" width="164" height="7" rx="2" fill="#ef4444" stroke="#b91c1c" stroke-width="1" />
+    <line x1="140" y1="665" x2="240" y2="665" stroke="#fee2e2" stroke-width="2" stroke-dasharray="3 2" />
+  </g>
+</svg>

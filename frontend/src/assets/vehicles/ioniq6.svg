@@ -1,0 +1,205 @@
+<svg viewBox="0 0 380 720" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Exterior Body Gradient -->
+    <linearGradient id="bodyGradIoniq6" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e283a" />
+      <stop offset="50%" stop-color="#141c2b" />
+      <stop offset="100%" stop-color="#0d131f" />
+    </linearGradient>
+
+    <!-- Glass Tint Gradients -->
+    <linearGradient id="glassTint" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0b1320" stop-opacity="0.95" />
+      <stop offset="50%" stop-color="#070c14" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#04070c" stop-opacity="0.95" />
+    </linearGradient>
+
+    <linearGradient id="sunroofGlass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#081426" stop-opacity="0.92" />
+      <stop offset="60%" stop-color="#040b17" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#02050a" stop-opacity="0.98" />
+    </linearGradient>
+
+    <linearGradient id="solidRoofGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#243042" />
+      <stop offset="50%" stop-color="#1c2635" />
+      <stop offset="100%" stop-color="#131b26" />
+    </linearGradient>
+
+    <!-- EV Charging Aura Glow Filter -->
+    <filter id="chargingAuraGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <style>
+      @keyframes charge-dots-flow-inward {
+        0% { stroke-dashoffset: 54; }
+        100% { stroke-dashoffset: 0; }
+      }
+      @keyframes charge-pulse-slow {
+        0%, 100% { opacity: 0.4; transform: scale(0.96); transform-origin: 190px 340px; }
+        50% { opacity: 0.95; transform: scale(1.04); transform-origin: 190px 340px; }
+      }
+      @keyframes charge-port-pulse-slow {
+        0% { r: 6px; opacity: 0.9; }
+        100% { r: 16px; opacity: 0; }
+      }
+      .charge-dot-stream {
+        stroke-dasharray: 4 14;
+        animation: charge-dots-flow-inward 10.5s linear infinite;
+      }
+      .charge-port-ripple {
+        animation: charge-port-pulse-slow 2.8s ease-out infinite;
+      }
+    </style>
+  </defs>
+
+  <!-- 1. Ground Shadow (Streamliner boat-tail footprint) -->
+  <ellipse cx="190" cy="360" rx="134" ry="315" fill="rgba(0,0,0,0.55)" filter="blur(26px)" />
+
+  <!-- 2. Wheels / Tires with Deep Blue EV Calipers -->
+  <g id="wheel-fl">
+    <rect x="52" y="140" width="28" height="66" rx="8" fill="#1e293b" stroke="#0f172a" stroke-width="2" />
+    <rect x="58" y="152" width="16" height="42" rx="4" fill="#334155" />
+    <rect x="72" y="160" width="6" height="24" rx="2" fill="#0284c7" />
+  </g>
+  <g id="wheel-fr">
+    <rect x="300" y="140" width="28" height="66" rx="8" fill="#1e293b" stroke="#0f172a" stroke-width="2" />
+    <rect x="306" y="152" width="16" height="42" rx="4" fill="#334155" />
+    <rect x="302" y="160" width="6" height="24" rx="2" fill="#0284c7" />
+  </g>
+  <g id="wheel-rl">
+    <rect x="52" y="510" width="28" height="66" rx="8" fill="#1e293b" stroke="#0f172a" stroke-width="2" />
+    <rect x="58" y="522" width="16" height="42" rx="4" fill="#334155" />
+    <rect x="72" y="530" width="6" height="24" rx="2" fill="#0284c7" />
+  </g>
+  <g id="wheel-rr">
+    <rect x="300" y="510" width="28" height="66" rx="8" fill="#1e293b" stroke="#0f172a" stroke-width="2" />
+    <rect x="306" y="522" width="16" height="42" rx="4" fill="#334155" />
+    <rect x="302" y="530" width="6" height="24" rx="2" fill="#0284c7" />
+  </g>
+
+  <!-- 3. Ioniq 6 Streamliner Teardrop Silhouette -->
+  <g id="shell-ioniq6">
+    <path
+      d="M 138 46 C 168 40, 212 40, 242 46 C 268 52, 286 78, 292 128 C 298 195, 296 275, 294 360 C 292 445, 288 515, 276 585 C 264 640, 242 676, 190 682 C 138 676, 116 640, 104 585 C 92 515, 88 445, 86 360 C 84 275, 82 195, 88 128 C 94 78, 112 52, 138 46 Z"
+      fill="url(#bodyGradIoniq6)"
+      stroke="#334155"
+      stroke-width="2.5"
+    />
+    <!-- Streamliner Single-Arc Aerodynamic Boundary Contour -->
+    <path d="M 98 140 C 92 260, 92 440, 110 560" stroke="#38bdf8" stroke-width="1" fill="none" opacity="0.4" />
+    <path d="M 282 140 C 288 260, 288 440, 270 560" stroke="#38bdf8" stroke-width="1" fill="none" opacity="0.4" />
+  </g>
+
+  <!-- 4. Front Hood Panel -->
+  <g id="hood-panel">
+    <path
+      d="M 134 52 C 165 46, 215 46, 246 52 C 264 88, 266 135, 262 172 L 118 172 C 114 135, 116 88, 134 52 Z"
+      fill="#18202a"
+      stroke="#334155"
+      stroke-width="1.2"
+    />
+  </g>
+
+  <!-- 5. Windshield Glass -->
+  <path
+    d="M 110 176 L 270 176 C 264 216, 256 246, 250 262 L 130 262 C 124 246, 116 216, 110 176 Z"
+    fill="url(#glassTint)"
+    stroke="#1e293b"
+    stroke-width="1.5"
+  />
+  <line x1="135" y1="182" x2="190" y2="186" stroke="#334155" stroke-width="1.5" stroke-linecap="round" />
+  <line x1="200" y1="184" x2="255" y2="188" stroke="#334155" stroke-width="1.5" stroke-linecap="round" />
+
+  <!-- 6. Curved Power Sunroof on Streamliner Canopy -->
+  <g id="ioniq6-power-sunroof">
+    <rect x="130" y="370" width="120" height="110" rx="8" fill="url(#solidRoofGrad)" stroke="#334155" stroke-width="1" />
+    <rect x="132" y="266" width="116" height="100" rx="10" fill="url(#sunroofGlass)" stroke="#334155" stroke-width="1.5" />
+    <text x="190" y="322" text-anchor="middle" fill="#38bdf8" font-size="8" font-weight="bold" font-family="monospace">
+      GLASS SUNROOF
+    </text>
+  </g>
+
+  <!-- 7. Rear Window Glass -->
+  <path
+    d="M 128 484 L 252 484 C 258 500, 264 526, 268 548 L 112 548 C 116 526, 122 500, 128 484 Z"
+    fill="url(#glassTint)"
+    stroke="#1e293b"
+    stroke-width="1.5"
+  />
+
+  <!-- 8. Dual Elliptical Whale-Tail Spoilers -->
+  <g id="spoiler-ioniq6">
+    <path
+      d="M 124 550 C 150 538, 230 538, 256 550 C 262 568, 252 584, 190 588 C 128 584, 118 568, 124 550 Z"
+      fill="#1e293b"
+      stroke="#0284c7"
+      stroke-width="1.5"
+    />
+    <!-- Illuminated Translucent Pixel Winglet -->
+    <rect x="150" y="558" width="80" height="8" rx="3" fill="#ef4444" stroke="#f87171" stroke-width="1" />
+  </g>
+
+  <!-- 9. Rear Liftgate Panel -->
+  <path
+    d="M 112 588 L 268 588 C 264 624, 256 652, 246 664 L 134 664 C 124 652, 116 624, 112 588 Z"
+    fill="#171f2b"
+    stroke="#334155"
+    stroke-width="1.2"
+  />
+
+  <!-- 10. 4 Doors -->
+  <g id="door-fl">
+    <path d="M 84 195 C 80 230, 80 270, 82 310 L 98 310 L 98 195 Z" fill="#1e293b" stroke="#475569" stroke-width="1.5" />
+    <rect x="88" y="295" width="4" height="12" rx="1.5" fill="#94a3b8" />
+  </g>
+  <g id="door-fr">
+    <path d="M 296 195 C 300 230, 300 270, 298 310 L 282 310 L 282 195 Z" fill="#1e293b" stroke="#475569" stroke-width="1.5" />
+    <rect x="288" y="295" width="4" height="12" rx="1.5" fill="#94a3b8" />
+  </g>
+  <g id="door-rl">
+    <path d="M 82 320 C 80 360, 80 400, 84 445 L 98 445 L 98 320 Z" fill="#1e293b" stroke="#475569" stroke-width="1.5" />
+    <rect x="88" y="332" width="4" height="12" rx="1.5" fill="#94a3b8" />
+  </g>
+  <g id="door-rr">
+    <path d="M 298 320 C 300 360, 300 400, 296 445 L 282 445 L 282 320 Z" fill="#1e293b" stroke="#475569" stroke-width="1.5" />
+    <rect x="288" y="332" width="4" height="12" rx="1.5" fill="#94a3b8" />
+  </g>
+
+  <!-- 11. Charge Port & Active Energy Flow Animation -->
+  <g id="charge-port">
+    <rect x="292" y="500" width="9" height="20" rx="2" fill="#10b981" stroke="#34d399" stroke-width="1.5" />
+    <circle cx="296" cy="510" r="5" fill="#10b981" opacity="0.9" />
+    <circle cx="296" cy="510" r="6" fill="none" stroke="#34d399" stroke-width="1.5" class="charge-port-ripple" />
+  </g>
+
+  <g id="charging-energy-flow">
+    <path d="M 296 510 C 270 510, 240 485, 218 455 C 200 428, 190 395, 190 340" stroke="#10b981" stroke-width="10" stroke-linecap="round" fill="none" opacity="0.18" filter="url(#chargingAuraGlow)" />
+    <path d="M 296 510 C 270 510, 240 485, 218 455 C 200 428, 190 395, 190 340" stroke="#065f46" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.65" />
+    <path d="M 296 510 C 270 510, 240 485, 218 455 C 200 428, 190 395, 190 340" stroke="#34d399" stroke-width="4.5" stroke-linecap="round" fill="none" class="charge-dot-stream" />
+    <path d="M 190 340 L 190 260" stroke="#34d399" stroke-width="3.5" stroke-linecap="round" fill="none" class="charge-dot-stream" />
+    <circle cx="190" cy="340" r="6" fill="#10b981" style="animation: charge-pulse-slow 2.6s ease-in-out infinite" />
+    <circle cx="190" cy="340" r="13" fill="none" stroke="#34d399" stroke-width="1.5" opacity="0.5" style="animation: charge-pulse-slow 2.6s ease-in-out infinite" />
+  </g>
+
+  <!-- 12. Side Mirrors -->
+  <g id="mirrors">
+    <path d="M 84 175 L 56 160 C 52 165, 54 185, 62 188 L 84 182 Z" fill="#1e293b" stroke="#334155" stroke-width="1.5" />
+    <path d="M 296 175 L 324 160 C 328 165, 326 185, 318 188 L 296 182 Z" fill="#1e293b" stroke="#334155" stroke-width="1.5" />
+  </g>
+
+  <!-- 13. Streamliner Pixel Matrix Projectors -->
+  <g id="lights-ioniq6">
+    <rect x="106" y="62" width="32" height="14" rx="3" fill="#38bdf8" stroke="#0284c7" stroke-width="1" />
+    <rect x="242" y="62" width="32" height="14" rx="3" fill="#38bdf8" stroke="#0284c7" stroke-width="1" />
+    <line x1="140" y1="68" x2="240" y2="68" stroke="#7dd3fc" stroke-width="2" stroke-dasharray="3 2" />
+  </g>
+
+  <!-- 14. Streamliner Pixel Rear Strip -->
+  <g id="rear-ioniq6">
+    <rect x="122" y="666" width="136" height="6" rx="2" fill="#ef4444" stroke="#b91c1c" stroke-width="1" />
+    <line x1="140" y1="669" x2="240" y2="669" stroke="#fca5a5" stroke-width="1.5" stroke-dasharray="3 2" />
+  </g>
+</svg>

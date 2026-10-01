@@ -1,0 +1,219 @@
+<svg viewBox="0 0 380 720" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Exterior Body Gradient -->
+    <linearGradient id="bodyGradEV6" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1c2536" />
+      <stop offset="50%" stop-color="#151e2d" />
+      <stop offset="100%" stop-color="#0d1422" />
+    </linearGradient>
+
+    <!-- Glass Tint Gradients -->
+    <linearGradient id="glassTint" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0b1320" stop-opacity="0.95" />
+      <stop offset="50%" stop-color="#070c14" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#04070c" stop-opacity="0.95" />
+    </linearGradient>
+
+    <linearGradient id="sunroofGlass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#081426" stop-opacity="0.92" />
+      <stop offset="60%" stop-color="#040b17" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#02050a" stop-opacity="0.98" />
+    </linearGradient>
+
+    <linearGradient id="solidRoofGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#243042" />
+      <stop offset="50%" stop-color="#1c2635" />
+      <stop offset="100%" stop-color="#131b26" />
+    </linearGradient>
+
+    <!-- EV Charging Aura Glow Filter -->
+    <filter id="chargingAuraGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <style>
+      @keyframes charge-dots-flow-inward {
+        0% { stroke-dashoffset: 54; }
+        100% { stroke-dashoffset: 0; }
+      }
+      @keyframes charge-pulse-slow {
+        0%, 100% { opacity: 0.4; transform: scale(0.96); transform-origin: 190px 340px; }
+        50% { opacity: 0.95; transform: scale(1.04); transform-origin: 190px 340px; }
+      }
+      @keyframes charge-port-pulse-slow {
+        0% { r: 6px; opacity: 0.9; }
+        100% { r: 16px; opacity: 0; }
+      }
+      .charge-dot-stream {
+        stroke-dasharray: 4 14;
+        animation: charge-dots-flow-inward 10.5s linear infinite;
+      }
+      .charge-port-ripple {
+        animation: charge-port-pulse-slow 2.8s ease-out infinite;
+      }
+    </style>
+  </defs>
+
+  <!-- 1. Ground Shadow -->
+  <ellipse cx="190" cy="360" rx="142" ry="300" fill="rgba(0,0,0,0.55)" filter="blur(26px)" />
+
+  <!-- 2. 4 Wheels / Tires with Neon Lime GT Calipers -->
+  <g id="wheel-fl">
+    <rect x="52" y="140" width="28" height="66" rx="8" fill="#1e293b" stroke="#0f172a" stroke-width="2" />
+    <rect x="58" y="152" width="16" height="42" rx="4" fill="#334155" />
+    <rect x="72" y="160" width="6" height="24" rx="2" fill="#84cc16" />
+  </g>
+  <g id="wheel-fr">
+    <rect x="300" y="140" width="28" height="66" rx="8" fill="#1e293b" stroke="#0f172a" stroke-width="2" />
+    <rect x="306" y="152" width="16" height="42" rx="4" fill="#334155" />
+    <rect x="302" y="160" width="6" height="24" rx="2" fill="#84cc16" />
+  </g>
+  <g id="wheel-rl">
+    <rect x="52" y="510" width="28" height="66" rx="8" fill="#1e293b" stroke="#0f172a" stroke-width="2" />
+    <rect x="58" y="522" width="16" height="42" rx="4" fill="#334155" />
+    <rect x="72" y="530" width="6" height="24" rx="2" fill="#84cc16" />
+  </g>
+  <g id="wheel-rr">
+    <rect x="300" y="510" width="28" height="66" rx="8" fill="#1e293b" stroke="#0f172a" stroke-width="2" />
+    <rect x="306" y="522" width="16" height="42" rx="4" fill="#334155" />
+    <rect x="302" y="530" width="6" height="24" rx="2" fill="#84cc16" />
+  </g>
+
+  <!-- 3. Kia EV6 Body Shell Outline -->
+  <g id="shell-ev6">
+    <path
+      d="M 132 46 C 160 40, 220 40, 248 46 C 272 52, 288 78, 296 122 C 302 180, 298 250, 292 340 C 288 420, 304 490, 308 550 C 310 605, 298 644, 264 666 C 230 678, 150 678, 116 666 C 82 644, 70 605, 72 550 C 76 490, 92 420, 88 340 C 82 250, 78 180, 84 122 C 92 78, 108 52, 132 46 Z"
+      fill="url(#bodyGradEV6)"
+      stroke="#334155"
+      stroke-width="2.5"
+    />
+    <!-- Upward-Sweeping Rocker Character Line slicing toward rear lights -->
+    <path d="M 86 320 C 88 420, 80 500, 72 550" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="6 3" fill="none" opacity="0.6" />
+    <path d="M 294 320 C 292 420, 300 500, 308 550" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="6 3" fill="none" opacity="0.6" />
+    <!-- Muscular Front Fender Ridges -->
+    <path d="M 98 120 C 104 150, 106 185, 100 210" stroke="#475569" stroke-width="1.2" fill="none" opacity="0.5" />
+    <path d="M 282 120 C 276 150, 274 185, 280 210" stroke="#475569" stroke-width="1.2" fill="none" opacity="0.5" />
+  </g>
+
+  <!-- 4. Front Hood Panel & KIA Badge -->
+  <g id="hood-panel">
+    <path
+      d="M 130 52 C 160 46, 220 46, 250 52 C 268 88, 270 134, 266 170 L 114 170 C 110 134, 112 88, 130 52 Z"
+      fill="#1a222c"
+      stroke="#334155"
+      stroke-width="1.2"
+    />
+    <text x="190" y="82" text-anchor="middle" fill="#94a3b8" font-size="8" font-weight="bold" font-family="sans-serif" letter-spacing="2">
+      KIA
+    </text>
+  </g>
+
+  <!-- 5. Windshield Glass -->
+  <path
+    d="M 110 176 L 270 176 C 264 216, 256 246, 250 262 L 130 262 C 124 246, 116 216, 110 176 Z"
+    fill="url(#glassTint)"
+    stroke="#1e293b"
+    stroke-width="1.5"
+  />
+  <line x1="135" y1="182" x2="190" y2="186" stroke="#334155" stroke-width="1.5" stroke-linecap="round" />
+  <line x1="200" y1="184" x2="255" y2="188" stroke="#334155" stroke-width="1.5" stroke-linecap="round" />
+
+  <!-- 6. Power Tilt & Slide Sunroof -->
+  <g id="ev6-power-sunroof">
+    <rect x="126" y="375" width="128" height="105" rx="10" fill="url(#solidRoofGrad)" stroke="#334155" stroke-width="1" />
+    <rect x="130" y="268" width="120" height="102" rx="12" fill="url(#sunroofGlass)" stroke="#334155" stroke-width="1.5" />
+    <rect x="134" y="270" width="112" height="4" rx="1" fill="#475569" />
+    <text x="190" y="326" text-anchor="middle" fill="#64748b" font-size="8" font-weight="medium" font-family="monospace">
+      GLASS SUNROOF
+    </text>
+  </g>
+
+  <!-- 7. Rear Window Glass -->
+  <path
+    d="M 128 484 L 252 484 C 258 500, 264 526, 268 548 L 112 548 C 116 526, 122 500, 128 484 Z"
+    fill="url(#glassTint)"
+    stroke="#1e293b"
+    stroke-width="1.5"
+  />
+
+  <!-- 8. Double-Wing Roof Spoiler with Twin Air Vents & High Ducktail -->
+  <g id="spoiler-ev6">
+    <path d="M 116 528 C 145 538, 235 538, 264 528 C 270 550, 262 566, 254 572 L 126 572 C 118 566, 110 550, 116 528 Z" fill="#1e293b" stroke="#334155" stroke-width="1.2" />
+    <rect x="142" y="538" width="28" height="16" rx="4" fill="#090d14" />
+    <rect x="210" y="538" width="28" height="16" rx="4" fill="#090d14" />
+  </g>
+
+  <!-- 9. Rear Liftgate Panel -->
+  <path
+    d="M 112 588 L 268 588 C 264 624, 256 652, 246 664 L 134 664 C 124 652, 116 624, 112 588 Z"
+    fill="#171f2b"
+    stroke="#334155"
+    stroke-width="1.2"
+  />
+
+  <!-- 10. 4 Doors -->
+  <g id="door-fl">
+    <path d="M 84 195 C 80 230, 80 270, 82 310 L 98 310 L 98 195 Z" fill="#1e293b" stroke="#475569" stroke-width="1.5" />
+    <rect x="88" y="295" width="4" height="12" rx="1.5" fill="#94a3b8" />
+  </g>
+  <g id="door-fr">
+    <path d="M 296 195 C 300 230, 300 270, 298 310 L 282 310 L 282 195 Z" fill="#1e293b" stroke="#475569" stroke-width="1.5" />
+    <rect x="288" y="295" width="4" height="12" rx="1.5" fill="#94a3b8" />
+  </g>
+  <g id="door-rl">
+    <path d="M 82 320 C 80 360, 80 400, 84 445 L 98 445 L 98 320 Z" fill="#1e293b" stroke="#475569" stroke-width="1.5" />
+    <rect x="88" y="332" width="4" height="12" rx="1.5" fill="#94a3b8" />
+  </g>
+  <g id="door-rr">
+    <path d="M 298 320 C 300 360, 300 400, 296 445 L 282 445 L 282 320 Z" fill="#1e293b" stroke="#475569" stroke-width="1.5" />
+    <rect x="288" y="332" width="4" height="12" rx="1.5" fill="#94a3b8" />
+  </g>
+
+  <!-- 11. Charge Port & Active Energy Flow Animation -->
+  <g id="charge-port">
+    <rect x="292" y="500" width="9" height="20" rx="2" fill="#10b981" stroke="#34d399" stroke-width="1.5" />
+    <circle cx="296" cy="510" r="5" fill="#10b981" opacity="0.9" />
+    <circle cx="296" cy="510" r="6" fill="none" stroke="#34d399" stroke-width="1.5" class="charge-port-ripple" />
+  </g>
+
+  <g id="charging-energy-flow">
+    <path d="M 296 510 C 270 510, 240 485, 218 455 C 200 428, 190 395, 190 340" stroke="#10b981" stroke-width="10" stroke-linecap="round" fill="none" opacity="0.18" filter="url(#chargingAuraGlow)" />
+    <path d="M 296 510 C 270 510, 240 485, 218 455 C 200 428, 190 395, 190 340" stroke="#065f46" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.65" />
+    <path d="M 296 510 C 270 510, 240 485, 218 455 C 200 428, 190 395, 190 340" stroke="#34d399" stroke-width="4.5" stroke-linecap="round" fill="none" class="charge-dot-stream" />
+    <path d="M 190 340 L 190 260" stroke="#34d399" stroke-width="3.5" stroke-linecap="round" fill="none" class="charge-dot-stream" />
+    <circle cx="190" cy="340" r="6" fill="#10b981" style="animation: charge-pulse-slow 2.6s ease-in-out infinite" />
+    <circle cx="190" cy="340" r="13" fill="none" stroke="#34d399" stroke-width="1.5" opacity="0.5" style="animation: charge-pulse-slow 2.6s ease-in-out infinite" />
+  </g>
+
+  <!-- 12. Side Mirrors -->
+  <g id="mirrors">
+    <path d="M 84 175 L 56 160 C 52 165, 54 185, 62 188 L 84 182 Z" fill="#1e293b" stroke="#334155" stroke-width="1.5" />
+    <path d="M 296 175 L 324 160 C 328 165, 326 185, 318 188 L 296 182 Z" fill="#1e293b" stroke="#334155" stroke-width="1.5" />
+  </g>
+
+  <!-- 13. Digital Tiger Face Arrow Headlights -->
+  <g id="lights-ev6">
+    <path d="M 98 72 L 140 60 L 138 74 L 108 82 Z" fill="#bae6fd" stroke="#38bdf8" stroke-width="1.5" />
+    <path d="M 282 72 L 240 60 L 242 74 L 272 82 Z" fill="#bae6fd" stroke="#38bdf8" stroke-width="1.5" />
+    <line x1="142" y1="62" x2="238" y2="62" stroke="#e0f2fe" stroke-width="1.5" />
+  </g>
+
+  <!-- 14. Dramatic Sweeping Taillight Blade -->
+  <g id="rear-ev6">
+    <path
+      d="M 74 570 C 80 622, 115 660, 190 662 C 265 660, 300 622, 306 570"
+      stroke="#ef4444"
+      stroke-width="4.5"
+      stroke-linecap="round"
+      fill="none"
+    />
+    <path
+      d="M 76 572 C 82 622, 115 660, 190 662 C 265 660, 298 622, 304 572"
+      stroke="#fca5a5"
+      stroke-width="1.8"
+      stroke-linecap="round"
+      fill="none"
+    />
+  </g>
+</svg>
