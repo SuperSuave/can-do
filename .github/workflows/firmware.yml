@@ -151,7 +151,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin main
-          git checkout main
+          git checkout -B main origin/main
           # Re-apply version stamp on main in case tag was detached
           node -e "const fs = require('fs'); const p = 'catalog/can_do_catalog.json'; const c = JSON.parse(fs.readFileSync(p)); c.can_do_version = '${{ env.RELEASE_TAG }}'; delete c.catalog_version; fs.writeFileSync(p, JSON.stringify(c, null, 2) + '\n');"
           node -e "const fs = require('fs'); const p = 'frontend/package.json'; const pkg = JSON.parse(fs.readFileSync(p)); pkg.version = '${{ env.RELEASE_TAG }}'; fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');"
@@ -166,16 +166,15 @@ jobs:
           cd ..
 
           # Copy binary to firmware directory for static raw GitHub CDN serving
-          cp firmware/build/can-do.bin "firmware/can-do-${{ inputs.target || 'esp32c3' }}.bin"
+          if [ -f firmware/build/can-do.bin ]; then
+            cp firmware/build/can-do.bin "firmware/can-do-${{ inputs.target || 'esp32c3' }}.bin"
+          fi
 
-          git add -f catalog/can_do_catalog.json frontend/package.json custom_components/can_do/manifest.json custom_components/can_do/const.py firmware/version.txt firmware/data/www/ firmware/can-do-${{ inputs.target || 'esp32c3' }}.bin
+          git add -f catalog/can_do_catalog.json frontend/package.json custom_components/can_do/manifest.json custom_components/can_do/const.py firmware/version.txt firmware/data/www/ firmware/can-do-${{ inputs.target || 'esp32c3' }}.bin 2>/dev/null || true
           if git diff --staged --quiet; then
             echo "Main branch is already up to date with version ${{ env.RELEASE_TAG }}."
           else
-            git commit -m "chore(release): sync version ${{ env.RELEASE_TAG }} and web assets to main"
-            git push origin main
+            git commit -m "chore(release): sync version ${{ env.RELEASE_TAG }} and web assets to main [skip ci]"
+            git push origin main || echo "Sync push skipped"
           fi
 
-          # Fast-forward release tag to the commit containing all stamped release assets
-          git tag -f "${{ env.RELEASE_TAG }}"
-          git push -f origin "${{ env.RELEASE_TAG }}"
