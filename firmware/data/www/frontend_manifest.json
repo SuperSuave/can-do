@@ -1,60 +1,50 @@
 {
-  "version": "2026.10.1-b002",
+  "version": "2026.10.1-b003",
   "files": [
     {
-      "name": "AutomationBuilder-5IO66TOq.js.gz",
-      "path": "/spiffs/www/AutomationBuilder-5IO66TOq.js.gz",
-      "size": 28758
+      "name": "AutomationBuilder-DJZUMe1C.js.gz",
+      "path": "/spiffs/www/AutomationBuilder-DJZUMe1C.js.gz",
+      "size": 136209
     },
     {
-      "name": "CatalogHealthModal-DKWU6ZCA.js.gz",
-      "path": "/spiffs/www/CatalogHealthModal-DKWU6ZCA.js.gz",
+      "name": "CatalogHealthModal-BQqSY9A3.js.gz",
+      "path": "/spiffs/www/CatalogHealthModal-BQqSY9A3.js.gz",
       "size": 2182
     },
     {
-      "name": "CategoryManagerModal-CMVEovsQ.js.gz",
-      "path": "/spiffs/www/CategoryManagerModal-CMVEovsQ.js.gz",
-      "size": 3826
+      "name": "CategoryManagerModal-BmFD0hye.js.gz",
+      "path": "/spiffs/www/CategoryManagerModal-BmFD0hye.js.gz",
+      "size": 3827
     },
     {
-      "name": "ContributeModal-CKArmDfc.js.gz",
-      "path": "/spiffs/www/ContributeModal-CKArmDfc.js.gz",
-      "size": 4043
+      "name": "ContributeModal-d1Ryb-TV.js.gz",
+      "path": "/spiffs/www/ContributeModal-d1Ryb-TV.js.gz",
+      "size": 4044
     },
     {
-      "name": "DeviceDashboard-ZVgORYkm.js.gz",
-      "path": "/spiffs/www/DeviceDashboard-ZVgORYkm.js.gz",
-      "size": 16713
+      "name": "DeviceDashboard-BDunzY5e.js.gz",
+      "path": "/spiffs/www/DeviceDashboard-BDunzY5e.js.gz",
+      "size": 16715
     },
     {
-      "name": "ExportModal-DhLZ6ZsA.js.gz",
-      "path": "/spiffs/www/ExportModal-DhLZ6ZsA.js.gz",
+      "name": "deviceWs-DThPZuc4.js.gz",
+      "path": "/spiffs/www/deviceWs-DThPZuc4.js.gz",
+      "size": 806
+    },
+    {
+      "name": "ExportModal-Ne7rJDgI.js.gz",
+      "path": "/spiffs/www/ExportModal-Ne7rJDgI.js.gz",
       "size": 3882
     },
     {
-      "name": "ImportModal-Bw0_R0F3.js.gz",
-      "path": "/spiffs/www/ImportModal-Bw0_R0F3.js.gz",
-      "size": 3316
+      "name": "ImportModal-O-YFyJYu.js.gz",
+      "path": "/spiffs/www/ImportModal-O-YFyJYu.js.gz",
+      "size": 3315
     },
     {
-      "name": "OnboardingWizardModal-CYccl6xx.js.gz",
-      "path": "/spiffs/www/OnboardingWizardModal-CYccl6xx.js.gz",
-      "size": 4524
-    },
-    {
-      "name": "VehicleDashboard-BVinQmnY.js.gz",
-      "path": "/spiffs/www/VehicleDashboard-BVinQmnY.js.gz",
-      "size": 20430
-    },
-    {
-      "name": "deviceWs-CpsmlJNB.js.gz",
-      "path": "/spiffs/www/deviceWs-CpsmlJNB.js.gz",
-      "size": 805
-    },
-    {
-      "name": "index-BHn7pkdz.js.gz",
-      "path": "/spiffs/www/index-BHn7pkdz.js.gz",
-      "size": 150927
+      "name": "index-Be-jXB32.js.gz",
+      "path": "/spiffs/www/index-Be-jXB32.js.gz",
+      "size": 150928
     },
     {
       "name": "index-CaiclNVI.css.gz",
@@ -64,16 +54,16 @@
     {
       "name": "index.html",
       "path": "/spiffs/www/index.html",
-      "size": 1745
+      "size": 1781
     },
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 748
+      "size": 761
     },
     {
-      "name": "info-CHSC-5wp.js.gz",
-      "path": "/spiffs/www/info-CHSC-5wp.js.gz",
+      "name": "info-DaWeqKaN.js.gz",
+      "path": "/spiffs/www/info-DaWeqKaN.js.gz",
       "size": 281
     },
     {
@@ -82,19 +72,29 @@
       "size": 8217
     },
     {
-      "name": "send-BxekNcma.js.gz",
-      "path": "/spiffs/www/send-BxekNcma.js.gz",
-      "size": 334
+      "name": "OnboardingWizardModal-CvYLlb_h.js.gz",
+      "path": "/spiffs/www/OnboardingWizardModal-CvYLlb_h.js.gz",
+      "size": 4524
     },
     {
-      "name": "shield-check-C1Zu3a5o.js.gz",
-      "path": "/spiffs/www/shield-check-C1Zu3a5o.js.gz",
+      "name": "send-D1WNMo7P.js.gz",
+      "path": "/spiffs/www/send-D1WNMo7P.js.gz",
+      "size": 335
+    },
+    {
+      "name": "shield-check-Clz76VD-.js.gz",
+      "path": "/spiffs/www/shield-check-Clz76VD-.js.gz",
       "size": 353
     },
     {
-      "name": "wifi-CcoCyZ7-.js.gz",
-      "path": "/spiffs/www/wifi-CcoCyZ7-.js.gz",
-      "size": 311
+      "name": "VehicleDashboard-C2cLip_u.js.gz",
+      "path": "/spiffs/www/VehicleDashboard-C2cLip_u.js.gz",
+      "size": 20431
+    },
+    {
+      "name": "wifi-Dg_DLnLW.js.gz",
+      "path": "/spiffs/www/wifi-Dg_DLnLW.js.gz",
+      "size": 312
     }
   ]
 }
