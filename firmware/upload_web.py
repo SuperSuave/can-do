@@ -12,7 +12,7 @@ import urllib.request
 import urllib.error
 import time
 
-DEFAULT_IP = "192.168.107.50"
+DEFAULT_IP = "10.30.119.64"
 
 def truncate_remote_file(ip, remote_path):
     url = f"http://{ip}/api/upload"
@@ -199,6 +199,20 @@ def main():
         "/spiffs/test.txt",
     ]
 
+    # 0. Clean up known stale hashed assets from previous builds to prevent LittleFS exhaustion
+    # Query remote frontend_manifest.json directly from device to ensure any prior bundle chunks are deleted
+    try:
+        import json
+        with urllib.request.urlopen(f"http://{ip}/frontend_manifest.json", timeout=4) as r:
+            remote_manifest = json.loads(r.read().decode("utf-8"))
+            for entry in remote_manifest.get("files", []):
+                p = entry.get("path") or f"/spiffs/www/{entry.get('name')}"
+                historic_stale.append(p)
+                if p.endswith(".gz"):
+                    historic_stale.append(p[:-3])
+    except Exception:
+        pass
+
     # Dynamically detect whatever hashed assets the device is currently running or in git
     try:
         import subprocess, re
@@ -206,7 +220,7 @@ def main():
             ["git", "log", "--name-only", "--pretty=format:", "-n", "30", "--", "firmware/data/www/index-*"],
             cwd=script_dir, text=True, stderr=subprocess.DEVNULL
         )
-        for m in re.findall(r'index-[a-zA-Z0-9_\-]+\.(?:js|css)', git_out):
+        for m in re.findall(r'[A-Za-z0-9_\-]+-[a-zA-Z0-9_\-]+\.(?:js|css)', git_out):
             historic_stale.append(f"/spiffs/www/{m}.gz")
             historic_stale.append(f"/spiffs/www/{m}")
     except Exception:
@@ -218,11 +232,21 @@ def main():
             raw = r.read()
             if r.headers.get("Content-Encoding") == "gzip":
                 raw = gzip.decompress(raw)
-            for m in re.findall(r'index-[a-zA-Z0-9_\-]+\.(?:js|css)', raw.decode("utf-8", errors="ignore")):
+            for m in re.findall(r'[A-Za-z0-9_\-]+-[a-zA-Z0-9_\-]+\.(?:js|css)', raw.decode("utf-8", errors="ignore")):
                 historic_stale.append(f"/spiffs/www/{m}.gz")
                 historic_stale.append(f"/spiffs/www/{m}")
     except Exception:
         pass
+
+    manifest_path = os.path.join(www_dir, "frontend_manifest.json")
+    if os.path.isfile(manifest_path):
+        try:
+            import json
+            with open(manifest_path, "r", encoding="utf-8") as mf:
+                mdata = json.load(mf)
+                print(f"Local Frontend Bundle Version: {mdata.get('version', 'unknown')}")
+        except Exception:
+            pass
 
     current_files = {f"/spiffs/www/{f}" for f in os.listdir(www_dir)}
     stale_to_clean = [s for s in set(historic_stale) if s not in current_files]
