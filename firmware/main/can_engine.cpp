@@ -380,7 +380,8 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
 }
 
 bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>& steps, const std::string& trigger_id) {
-    CanBurstCmd* cmd = new CanBurstCmd();
+    CanBurstCmd* cmd = new (std::nothrow) CanBurstCmd();
+    if (!cmd) return false;
     cmd->can_id = can_id;
     cmd->delay_ms = delay_ms;
     cmd->trigger_id = trigger_id;
@@ -392,9 +393,25 @@ bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<Ac
     return true;
 }
 
+bool queue_action_steps_ptr(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>* steps, const std::string& trigger_id) {
+    CanBurstCmd* cmd = new (std::nothrow) CanBurstCmd();
+    if (!cmd) return false;
+    cmd->can_id = can_id;
+    cmd->delay_ms = delay_ms;
+    cmd->trigger_id = trigger_id;
+    cmd->steps = steps;
+    if (xQueueSend(tx_command_queue, &cmd, pdMS_TO_TICKS(10)) != pdTRUE) {
+        delete cmd;
+        return false;
+    }
+    return true;
+}
+
 void can_rx_task(void* arg) {
     twai_message_t rx_msg;
     ESP_LOGI(TAG, "CAN RX task running");
+
+    int rx_processed = 0;
 
     while (true) {
         if (g_twai_reconfig_pending.load()) {
@@ -437,6 +454,7 @@ void can_rx_task(void* arg) {
         }
 
         if (twai_receive(&rx_msg, pdMS_TO_TICKS(10)) == ESP_OK) {
+            rx_processed++;
             board_led_can_activity();
             precondition_can_rx_hook(&rx_msg, CAN_BUS_0);
             track_popup_rx(&rx_msg, CAN_BUS_0);
@@ -551,7 +569,7 @@ void can_rx_task(void* arg) {
                                     ESP_LOGI(TAG, "Automation fired: %s (trigger: %s)", rule.name.c_str(), trig.id.c_str());
                                     rule.last_exec_time_ms = now_ms;
                                     broadcast_ws_automation_event(rule.id, rule.name);
-                                    queue_action_steps(0, 20, rule.actions, trig.id);
+                                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id);
                                 }
                             }
                         }
@@ -585,9 +603,16 @@ void can_rx_task(void* arg) {
                     }
                 }
             }
+        } else {
+            rx_processed = 0;
         }
         precondition_tick();
         track_popup_tick();
+
+        if (rx_processed >= 20) {
+            vTaskDelay(pdMS_TO_TICKS(1));
+            rx_processed = 0;
+        }
     }
 }
 
@@ -661,7 +686,7 @@ void time_scheduler_task(void* arg) {
                             ESP_LOGI(TAG, "Time schedule fired rule: %s (%02d:%02d)", rule.name.c_str(), timeinfo.tm_hour, timeinfo.tm_min);
                             rule.last_exec_time_ms = now_ms;
                             broadcast_ws_automation_event(rule.id, rule.name);
-                            queue_action_steps(0, 20, rule.actions, trig.id);
+                            queue_action_steps_ptr(0, 20, &rule.actions, trig.id);
                         }
                     }
                 }

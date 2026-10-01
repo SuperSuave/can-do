@@ -418,7 +418,7 @@ static esp_err_t api_test_automation_handler(httpd_req_t *req) {
                 httpd_resp_sendstr(req, resp.c_str());
                 return ESP_OK;
             } else if (strcmp(mode, "live_fire") == 0) {
-                queue_action_steps(0, 20, rule.actions);
+                queue_action_steps_ptr(0, 20, &rule.actions);
                 cJSON_Delete(root);
                 httpd_resp_sendstr(req, "{\"status\":\"ok\",\"message\":\"Live fire actions queued\"}");
                 return ESP_OK;
