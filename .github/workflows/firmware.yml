@@ -147,11 +147,15 @@ jobs:
 
       - name: Sync Version Changes Back to Main Branch
         if: startsWith(github.ref, 'refs/tags/') || inputs.create_release == true
+        continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git reset --hard
+          git clean -fd
           git fetch origin main
-          git checkout -B main origin/main
+          git checkout -f main
+
           # Re-apply version stamp on main in case tag was detached
           node -e "const fs = require('fs'); const p = 'catalog/can_do_catalog.json'; const c = JSON.parse(fs.readFileSync(p)); c.can_do_version = '${{ env.RELEASE_TAG }}'; delete c.catalog_version; fs.writeFileSync(p, JSON.stringify(c, null, 2) + '\n');"
           node -e "const fs = require('fs'); const p = 'frontend/package.json'; const pkg = JSON.parse(fs.readFileSync(p)); pkg.version = '${{ env.RELEASE_TAG }}'; fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');"
