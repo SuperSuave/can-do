@@ -459,6 +459,15 @@
   border-radius: 14px;
   padding: 1.15rem;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 640px) {
+  .can-do-section-box {
+    padding: 0.75rem !important;
+    border-radius: 10px !important;
+  }
 }
 
 .can-do-section-box.trig-section {

@@ -2000,7 +2000,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
             {/* Seat Comfort Controls */}
             <div className="pt-2 border-t border-slate-800/60 text-xs">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-2">
                 {/* Driver Seat Controls */}
                 <div className="space-y-1.5">
                   <span className="text-[11px] font-semibold text-slate-300 block">Driver Seat</span>
@@ -2011,8 +2011,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                       id="driver-seat-heat-btn"
                       onClick={() => cycleSeatHeat(driverSeat, true)}
                       title="Driver Seat Heating (Off/Low/Med/High)"
-                      style={{ width: '80.6364px', height: '52.2386px', backgroundColor: getSeatHeatLevel(driverSeat) > 0 ? undefined : '#0f172b' }}
-                      className={`rounded-xl border flex flex-col items-center justify-center transition-all duration-200 ${
+                      style={{ backgroundColor: getSeatHeatLevel(driverSeat) > 0 ? undefined : '#0f172b' }}
+                      className={`flex-1 h-[52px] rounded-xl border flex flex-col items-center justify-center transition-all duration-200 ${
                         getSeatHeatLevel(driverSeat) > 0
                           ? 'bg-amber-500/10 text-amber-500 border-amber-500/40 shadow-[0_0_8px_rgba(245,158,11,0.15)] scale-[1.01]'
                           : 'text-slate-400 border-slate-800/80 hover:text-slate-200 hover:border-slate-700'
@@ -2039,8 +2039,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                       id="driver-seat-cool-btn"
                       onClick={() => cycleSeatCool(driverSeat, true)}
                       title="Driver Seat Ventilation (Off/Low/Med/High)"
-                      style={{ width: '80.3182px', height: '52.2386px', backgroundColor: getSeatCoolLevel(driverSeat) > 0 ? undefined : '#0f172b' }}
-                      className={`rounded-xl border flex flex-col items-center justify-center transition-all duration-200 ${
+                      style={{ backgroundColor: getSeatCoolLevel(driverSeat) > 0 ? undefined : '#0f172b' }}
+                      className={`flex-1 h-[52px] rounded-xl border flex flex-col items-center justify-center transition-all duration-200 ${
                         getSeatCoolLevel(driverSeat) > 0
                           ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/40 shadow-[0_0_8px_rgba(34,211,238,0.15)] scale-[1.01]'
                           : 'text-slate-400 border-slate-800/80 hover:text-slate-200 hover:border-slate-700'
@@ -2073,8 +2073,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                       id="pass-seat-heat-btn"
                       onClick={() => cycleSeatHeat(passengerSeat, false)}
                       title="Passenger Seat Heating (Off/Low/Med/High)"
-                      style={{ width: '80.6364px', height: '52.2386px', backgroundColor: getSeatHeatLevel(passengerSeat) > 0 ? undefined : '#0f172b' }}
-                      className={`rounded-xl border flex flex-col items-center justify-center transition-all duration-200 ${
+                      style={{ backgroundColor: getSeatHeatLevel(passengerSeat) > 0 ? undefined : '#0f172b' }}
+                      className={`flex-1 h-[52px] rounded-xl border flex flex-col items-center justify-center transition-all duration-200 ${
                         getSeatHeatLevel(passengerSeat) > 0
                           ? 'bg-amber-500/10 text-amber-500 border-amber-500/40 shadow-[0_0_8px_rgba(245,158,11,0.15)] scale-[1.01]'
                           : 'text-slate-400 border-slate-800/80 hover:text-slate-200 hover:border-slate-700'
@@ -2101,8 +2101,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                       id="pass-seat-cool-btn"
                       onClick={() => cycleSeatCool(passengerSeat, false)}
                       title="Passenger Seat Ventilation (Off/Low/Med/High)"
-                      style={{ width: '80.3182px', height: '52.2386px', backgroundColor: getSeatCoolLevel(passengerSeat) > 0 ? undefined : '#0f172b' }}
-                      className={`rounded-xl border flex flex-col items-center justify-center transition-all duration-200 ${
+                      style={{ backgroundColor: getSeatCoolLevel(passengerSeat) > 0 ? undefined : '#0f172b' }}
+                      className={`flex-1 h-[52px] rounded-xl border flex flex-col items-center justify-center transition-all duration-200 ${
                         getSeatCoolLevel(passengerSeat) > 0
                           ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/40 shadow-[0_0_8px_rgba(34,211,238,0.15)] scale-[1.01]'
                           : 'text-slate-400 border-slate-800/80 hover:text-slate-200 hover:border-slate-700'
@@ -2150,10 +2150,11 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 type="button"
                 id="rear-right-seat-comfort-btn"
                 onClick={() => cycleRearSeat(false)}
+                style={{ backgroundColor: rearRightSeat?.startsWith('heat') ? undefined : '#0f172b' }}
                 className={`p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
                   rearRightSeat?.startsWith('heat')
                     ? 'bg-amber-950/70 text-amber-300 border-amber-700/80 shadow-sm shadow-amber-900/30'
-                    : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200'
+                    : 'text-slate-400 border-slate-800 hover:text-slate-200'
                 }`}
               >
                 <span className="text-[10px] block font-semibold opacity-75">Rear Right Seat</span>

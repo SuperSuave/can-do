@@ -660,14 +660,14 @@ function ConditionNodeEditor({
   );
 
   const actionButtons = (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1 shrink-0 flex-wrap">
       {validityBadge}
       {onMoveUp && (
         <button
           type="button"
           onClick={onMoveUp}
           disabled={isFirst}
-          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition"
+          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition shrink-0"
           title="Move up"
         >
           <ArrowUp className="w-3.5 h-3.5" />
@@ -678,7 +678,7 @@ function ConditionNodeEditor({
           type="button"
           onClick={onMoveDown}
           disabled={isLast}
-          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition"
+          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition shrink-0"
           title="Move down"
         >
           <ArrowDown className="w-3.5 h-3.5" />
@@ -688,7 +688,7 @@ function ConditionNodeEditor({
         <button
           type="button"
           onClick={onDuplicate}
-          className="p-1 text-slate-500 hover:text-cyan-400 transition"
+          className="p-1 text-slate-500 hover:text-cyan-400 transition shrink-0"
           title="Duplicate condition"
         >
           <Copy className="w-3.5 h-3.5" />
@@ -697,7 +697,7 @@ function ConditionNodeEditor({
       <button
         type="button"
         onClick={onDelete}
-        className="p-1 text-slate-500 hover:text-rose-400 transition"
+        className="p-1 text-slate-500 hover:text-rose-400 transition shrink-0"
         title="Delete condition"
       >
         <Trash2 className="w-3.5 h-3.5" />
@@ -720,17 +720,17 @@ function ConditionNodeEditor({
         : 'bg-rose-900 text-rose-200 border-rose-700';
 
     return (
-      <div className={`p-3 rounded-xl border ${borderCls} space-y-2 text-xs transition-all`}>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+      <div className={`p-2.5 sm:p-3 rounded-xl border ${borderCls} space-y-2 text-xs transition-all min-w-0 overflow-hidden`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap min-w-0">
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-slate-400 hover:text-white transition p-0.5"
+              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
-            <span className={`px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] border ${tagCls}`}>
+            <span className={`px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] border ${tagCls} shrink-0`}>
               {groupLogic} Group {depth > 0 && `(L${depth + 1})`}
             </span>
             <span className="text-slate-400 text-[11px] hidden sm:inline">
@@ -738,11 +738,11 @@ function ConditionNodeEditor({
               {groupLogic === 'or' && '(ANY nested must match)'}
               {groupLogic === 'not' && '(Children must NOT match)'}
             </span>
-            <span className="text-slate-500 font-mono text-[10px]">
+            <span className="text-slate-500 font-mono text-[10px] shrink-0">
               [{(cond.conditions || []).length} items]
             </span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
             <select
               value={groupLogic}
               onChange={e => onUpdate({ ...cond, logic: e.target.value as any })}
@@ -757,7 +757,7 @@ function ConditionNodeEditor({
         </div>
 
         {!collapsed && (
-          <div className="pl-2 border-l border-slate-800/80">
+          <div className="pl-1.5 sm:pl-2 border-l border-slate-800/80 min-w-0">
             <ConditionListEditor
               conditions={cond.conditions || []}
               depth={depth + 1}
@@ -780,25 +780,27 @@ function ConditionNodeEditor({
   if (cond.type === 'triggered_by' || cond.type === 'trigger' || cond.trigger_id !== undefined) {
     const matchedTrig = (availableTriggers || []).find(t => t.id === cond.trigger_id);
     return (
-      <div className="p-3 rounded-xl bg-slate-950 border border-amber-900/60 space-y-2 text-xs">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+      <div className="p-2.5 sm:p-3 rounded-xl bg-slate-950 border border-amber-900/60 space-y-2 text-xs min-w-0 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-slate-400 hover:text-white transition p-0.5"
+              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
-            <span className="w-5 h-5 rounded-full bg-amber-950 text-amber-300 font-bold text-[10px] flex items-center justify-center border border-amber-800">
+            <span className="w-5 h-5 rounded-full bg-amber-950 text-amber-300 font-bold text-[10px] flex items-center justify-center border border-amber-800 shrink-0">
               C{index + 1}
             </span>
-            <div className="flex items-center gap-1.5">
-              <Radio className="w-3.5 h-3.5 text-amber-400" />
-              <span className="font-semibold text-white">Triggered By</span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Radio className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="font-semibold text-white truncate">Triggered By</span>
             </div>
           </div>
-          {actionButtons}
+          <div className="shrink-0 ml-auto sm:ml-0">
+            {actionButtons}
+          </div>
         </div>
 
         {!collapsed && (
@@ -818,7 +820,7 @@ function ConditionNodeEditor({
                     if (tOpt) tName += ` (${tOpt.label})`;
                     return (
                       <option key={t.id || tIdx} value={t.id}>
-                        {tName} {t.id ? `[${t.id}]` : ''}
+                        {tName}
                       </option>
                     );
                   })}
@@ -826,7 +828,7 @@ function ConditionNodeEditor({
               </div>
             </div>
             {matchedTrig && (
-              <div className="text-[11px] text-slate-400 font-sans flex items-center gap-1.5 pt-0.5">
+              <div className="text-[11px] text-slate-400 font-sans flex items-center gap-1.5 pt-0.5 min-w-0 flex-wrap">
                 <span className="text-slate-500">Source:</span>
                 <span className="text-slate-300 font-semibold">{matchedTrig.source_command_name || matchedTrig.can_id}</span>
                 {matchedTrig.option_label && (
@@ -845,30 +847,32 @@ function ConditionNodeEditor({
   // Time window condition
   if (cond.type === 'time_condition' || cond.type === 'time') {
     return (
-      <div className="p-3 rounded-xl bg-slate-950 border border-cyan-900/60 space-y-2 text-xs">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+      <div className="p-2.5 sm:p-3 rounded-xl bg-slate-950 border border-cyan-900/60 space-y-2 text-xs min-w-0 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-slate-400 hover:text-white transition p-0.5"
+              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
-            <span className="w-5 h-5 rounded-full bg-cyan-950 text-cyan-300 font-bold text-[10px] flex items-center justify-center border border-cyan-800">
+            <span className="w-5 h-5 rounded-full bg-cyan-950 text-cyan-300 font-bold text-[10px] flex items-center justify-center border border-cyan-800 shrink-0">
               C{index + 1}
             </span>
-            <div className="flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="font-semibold text-white">Time Window Guardrail</span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <span className="font-semibold text-white truncate">Time Window</span>
               {(cond.start_time || cond.end_time) && (
-                <span className="px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 text-[10px] border border-cyan-800/60 font-mono">
+                <span className="px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 text-[10px] border border-cyan-800/60 font-mono shrink-0">
                   {cond.start_time || '--:--'} - {cond.end_time || '--:--'}
                 </span>
               )}
             </div>
           </div>
-          {actionButtons}
+          <div className="shrink-0 ml-auto sm:ml-0">
+            {actionButtons}
+          </div>
         </div>
 
         {!collapsed && (
@@ -919,39 +923,29 @@ function ConditionNodeEditor({
   const targetVal = cond.value ?? cond.evaluate?.value ?? (cond.match && dKey ? cond.match[dKey] : '') ?? '';
 
   return (
-    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 hover:border-slate-700/80 space-y-2.5 text-xs transition-all shadow-sm">
+    <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 hover:border-slate-700/80 space-y-2.5 text-xs transition-all shadow-sm min-w-0 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}
-            className="text-slate-400 hover:text-white transition p-0.5"
+            className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
           >
             {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </button>
           <span className="w-5 h-5 rounded-full bg-purple-950 text-purple-300 font-bold text-[10px] flex items-center justify-center border border-purple-800 shrink-0">
             C{index + 1}
           </span>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-white text-sm tracking-tight">{conditionName}</span>
-            {catalogCmd?.category && (
-              <span className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 text-[10px] border border-slate-800">
-                {catalogCmd.category}
-              </span>
-            )}
-            <span className="px-1.5 py-0.5 rounded bg-purple-950/60 text-purple-300/90 text-[10px] font-mono border border-purple-800/50">
-              {cond.can_id ? `CAN ${cond.can_id}` : 'CAN'} • Bus {cond.bus ?? 0}
-            </span>
-          </div>
+          <span className="font-semibold text-white text-xs sm:text-sm tracking-tight truncate">{conditionName}</span>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
           {hasOptions && !collapsed && (
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
+              className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
                 showAdvanced
                   ? 'bg-purple-950/60 text-purple-300 border-purple-800/80 shadow'
                   : 'bg-slate-900 text-slate-300 hover:text-white border-slate-800 hover:bg-slate-850'
@@ -959,7 +953,7 @@ function ConditionNodeEditor({
               title="Toggle configuration details"
             >
               <Sliders className="w-3.5 h-3.5 text-purple-400" />
-              <span>{showAdvanced ? 'Simple View' : 'Edit Details'}</span>
+              <span className="hidden xs:inline sm:inline">{showAdvanced ? 'Simple' : 'Details'}</span>
             </button>
           )}
           {actionButtons}
@@ -979,9 +973,9 @@ function ConditionNodeEditor({
                     : itemCount === 2
                     ? 'grid grid-cols-2 gap-1.5'
                     : itemCount === 3
-                    ? 'grid grid-cols-3 gap-1.5'
+                    ? 'grid grid-cols-2 sm:grid-cols-3 gap-1.5'
                     : itemCount === 4
-                    ? 'grid grid-cols-4 gap-1.5'
+                    ? 'grid grid-cols-2 sm:grid-cols-4 gap-1.5'
                     : 'grid grid-cols-2 sm:grid-cols-3 gap-1.5';
 
                 return (
@@ -1037,7 +1031,7 @@ function ConditionNodeEditor({
       {/* Advanced Details View */}
       {(!hasOptions || showAdvanced) && (
         <div className={`space-y-3 ${hasOptions ? 'pt-2.5 border-t border-slate-850' : ''}`}>
-          <div className="grid grid-cols-5 gap-2 font-mono text-[11px]">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 font-mono text-[11px]">
             <div className="col-span-1">
               <label className="block text-[10px] font-sans text-slate-500">CAN ID</label>
               <input
@@ -1047,6 +1041,18 @@ function ConditionNodeEditor({
                 placeholder="0x120"
                 className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
               />
+            </div>
+            <div className="col-span-1">
+              <label className="block text-[10px] font-sans text-slate-500">Bus</label>
+              <select
+                value={cond.bus ?? 0}
+                onChange={e => onUpdate({ ...cond, bus: parseInt(e.target.value) || 0 })}
+                className="w-full bg-slate-900 border border-slate-800 rounded px-1 py-1 text-slate-200 font-sans"
+              >
+                <option value={0}>Bus 0</option>
+                <option value={1}>Bus 1</option>
+                <option value={2}>Bus 2</option>
+              </select>
             </div>
             <div className="col-span-1">
               <label className="block text-[10px] font-sans text-slate-500">Byte</label>
@@ -1100,7 +1106,7 @@ function ConditionNodeEditor({
                 <option value="greater_than">&gt; (Greater Than)</option>
               </select>
             </div>
-            <div className="col-span-1">
+            <div className="col-span-2 sm:col-span-1">
               <label className="block text-[10px] font-sans text-slate-500">Target Value</label>
               <input
                 type="text"
@@ -1156,10 +1162,10 @@ function ConditionListEditor({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 min-w-0">
       {label && (
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-purple-300 font-bold text-[11px] uppercase tracking-wider">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <span className="text-purple-300 font-bold text-[11px] uppercase tracking-wider truncate">
             {label} ({conditions.length})
           </span>
         </div>
@@ -1170,7 +1176,7 @@ function ConditionListEditor({
           {emptyText}
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 min-w-0">
                   {conditions.map((c, idx) => {
                     const stableKey = c._clientId || (c._clientId = `cond_client_${idx}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`);
                     return (
@@ -1278,13 +1284,13 @@ function TriggerNodeEditor({
   };
 
   const actionButtons = (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1 shrink-0 flex-wrap">
       {onMoveUp && (
         <button
           type="button"
           onClick={onMoveUp}
           disabled={isFirst}
-          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition"
+          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition shrink-0"
           title="Move up"
         >
           <ArrowUp className="w-3.5 h-3.5" />
@@ -1295,7 +1301,7 @@ function TriggerNodeEditor({
           type="button"
           onClick={onMoveDown}
           disabled={isLast}
-          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition"
+          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition shrink-0"
           title="Move down"
         >
           <ArrowDown className="w-3.5 h-3.5" />
@@ -1305,7 +1311,7 @@ function TriggerNodeEditor({
         <button
           type="button"
           onClick={onDuplicate}
-          className="p-1 text-slate-500 hover:text-cyan-400 transition"
+          className="p-1 text-slate-500 hover:text-cyan-400 transition shrink-0"
           title="Duplicate trigger"
         >
           <Copy className="w-3.5 h-3.5" />
@@ -1314,7 +1320,7 @@ function TriggerNodeEditor({
       <button
         type="button"
         onClick={onDelete}
-        className="p-1 text-slate-500 hover:text-rose-400 transition"
+        className="p-1 text-slate-500 hover:text-rose-400 transition shrink-0"
         title="Delete trigger"
       >
         <Trash2 className="w-3.5 h-3.5" />
@@ -1493,44 +1499,34 @@ function TriggerNodeEditor({
     (trig.can_id ? `CAN Trigger ${trig.can_id}` : `Trigger ${tIdx + 1}`);
 
   return (
-    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 hover:border-slate-700/80 space-y-2.5 text-xs transition-all shadow-sm">
+    <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 hover:border-slate-700/80 space-y-2.5 text-xs transition-all shadow-sm min-w-0 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}
-            className="text-slate-400 hover:text-white transition p-0.5"
+            className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
           >
             {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </button>
           <span className="w-5 h-5 rounded-full bg-amber-950 text-amber-300 font-bold text-[10px] flex items-center justify-center border border-amber-800 shrink-0">
             T{tIdx + 1}
           </span>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-white text-sm tracking-tight">{triggerName}</span>
-            {catalogCmd?.category && (
-              <span className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 text-[10px] border border-slate-800">
-                {catalogCmd.category}
-              </span>
-            )}
-            <span className="px-1.5 py-0.5 rounded bg-amber-950/60 text-amber-300/90 text-[10px] font-mono border border-amber-800/50">
-              {trig.can_id ? `CAN ${trig.can_id}` : 'CAN'} • Bus {trig.bus ?? 0}
+          <span className="font-semibold text-white text-xs sm:text-sm tracking-tight truncate">{triggerName}</span>
+          {trig.click_count && trig.click_count > 1 && (
+            <span className="px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-200 text-[10px] border border-amber-700/60 font-medium shrink-0">
+              {trig.click_count === 2 ? 'Double Click' : 'Triple Click'}
             </span>
-            {trig.click_count && trig.click_count > 1 && (
-              <span className="px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-200 text-[10px] border border-amber-700/60 font-medium">
-                {trig.click_count === 2 ? 'Double Click' : 'Triple Click'}
-              </span>
-            )}
-          </div>
+          )}
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
           {hasOptions && !collapsed && (
             <button
               type="button"
               onClick={toggleAdvanced}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
+              className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
                 showAdvanced
                   ? 'bg-amber-950/60 text-amber-300 border-amber-800/80 shadow'
                   : 'bg-slate-900 text-slate-300 hover:text-white border-slate-800 hover:bg-slate-850'
@@ -1538,7 +1534,7 @@ function TriggerNodeEditor({
               title="Toggle configuration details"
             >
               <Sliders className="w-3.5 h-3.5 text-amber-400" />
-              <span>{showAdvanced ? 'Simple View' : 'Edit Details'}</span>
+              <span className="hidden xs:inline sm:inline">{showAdvanced ? 'Simple' : 'Details'}</span>
             </button>
           )}
           {actionButtons}
@@ -1559,9 +1555,9 @@ function TriggerNodeEditor({
                 : itemCount === 2
                 ? 'grid grid-cols-2 gap-1.5'
                 : itemCount === 3
-                ? 'grid grid-cols-3 gap-1.5'
+                ? 'grid grid-cols-2 sm:grid-cols-3 gap-1.5'
                 : itemCount === 4
-                ? 'grid grid-cols-4 gap-1.5'
+                ? 'grid grid-cols-2 sm:grid-cols-4 gap-1.5'
                 : 'grid grid-cols-2 sm:grid-cols-3 gap-1.5';
 
             return (
@@ -1601,7 +1597,7 @@ function TriggerNodeEditor({
       {/* Advanced Details View */}
       {(!hasOptions || showAdvanced) && (
         <div className={`space-y-3 ${hasOptions ? 'pt-2.5 border-t border-slate-850' : ''}`}>
-          <div className="grid grid-cols-4 gap-2 font-mono text-[11px]">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px]">
             <div>
               <label className="block text-[10px] font-sans text-slate-500">Trigger ID</label>
               <input
@@ -1802,13 +1798,13 @@ function ActionNodeEditor({
   };
 
   const actionButtons = (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1 shrink-0 flex-wrap">
       {onTestSingleAction && (
         <button
           type="button"
           onClick={handleTestTrigger}
           disabled={testFiring}
-          className={`p-1.5 rounded-lg border transition flex items-center gap-1 ${
+          className={`p-1 sm:p-1.5 rounded-lg border transition flex items-center gap-1 shrink-0 ${
             testFiring
               ? 'bg-emerald-500 text-slate-950 border-emerald-400 animate-pulse'
               : 'bg-emerald-950/40 text-emerald-300 hover:text-emerald-100 hover:bg-emerald-900/60 border-emerald-800/60 hover:border-emerald-500'
@@ -1824,7 +1820,7 @@ function ActionNodeEditor({
           type="button"
           onClick={onMoveUp}
           disabled={isFirst}
-          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition"
+          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition shrink-0"
           title="Move up"
         >
           <ArrowUp className="w-3.5 h-3.5" />
@@ -1835,7 +1831,7 @@ function ActionNodeEditor({
           type="button"
           onClick={onMoveDown}
           disabled={isLast}
-          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition"
+          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition shrink-0"
           title="Move down"
         >
           <ArrowDown className="w-3.5 h-3.5" />
@@ -1845,7 +1841,7 @@ function ActionNodeEditor({
         <button
           type="button"
           onClick={onDuplicate}
-          className="p-1 text-slate-500 hover:text-cyan-400 transition"
+          className="p-1 text-slate-500 hover:text-cyan-400 transition shrink-0"
           title="Duplicate action"
         >
           <Copy className="w-3.5 h-3.5" />
@@ -1854,7 +1850,7 @@ function ActionNodeEditor({
       <button
         type="button"
         onClick={onDelete}
-        className="p-1 text-slate-500 hover:text-rose-400 transition"
+        className="p-1 text-slate-500 hover:text-rose-400 transition shrink-0"
         title="Delete action"
       >
         <Trash2 className="w-3.5 h-3.5" />
@@ -1865,28 +1861,30 @@ function ActionNodeEditor({
   // If IF_THEN:
   if (act.type === 'if_then') {
     return (
-      <div className={`p-3 rounded-xl border border-cyan-800/80 bg-cyan-950/20 space-y-3 text-xs`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+      <div className={`p-2.5 sm:p-3 rounded-xl border border-cyan-800/80 bg-cyan-950/20 space-y-3 text-xs min-w-0 overflow-hidden`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-slate-400 hover:text-white transition p-0.5"
+              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
-            <span className="px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] bg-cyan-900 text-cyan-200 border border-cyan-700 flex items-center gap-1">
-              <GitFork className="w-3 h-3" />
-              IF - THEN - ELSE {depth > 0 && `(Level ${depth + 1})`}
+            <span className="px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] bg-cyan-900 text-cyan-200 border border-cyan-700 flex items-center gap-1 min-w-0">
+              <GitFork className="w-3 h-3 shrink-0" />
+              <span className="truncate">IF - THEN - ELSE</span> {depth > 0 && `(L${depth + 1})`}
             </span>
           </div>
-          {actionButtons}
+          <div className="shrink-0 ml-auto sm:ml-0">
+            {actionButtons}
+          </div>
         </div>
 
         {!collapsed && (
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             {/* IF CONDITIONS */}
-            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2">
+            <div className="p-2 sm:p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2 min-w-0 overflow-hidden">
               <ConditionListEditor
                 conditions={act.conditions || []}
                 depth={depth + 1}
@@ -1903,7 +1901,7 @@ function ActionNodeEditor({
             </div>
 
             {/* THEN ACTIONS */}
-            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2">
+            <div className="p-2 sm:p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2 min-w-0 overflow-hidden">
               <ActionListEditor
                 actions={act.then || []}
                 depth={depth + 1}
@@ -1922,7 +1920,7 @@ function ActionNodeEditor({
             </div>
 
             {/* ELSE ACTIONS */}
-            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2">
+            <div className="p-2 sm:p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2 min-w-0 overflow-hidden">
               <ActionListEditor
                 actions={act.else || []}
                 depth={depth + 1}
@@ -1948,46 +1946,49 @@ function ActionNodeEditor({
   // If CHOOSE:
   if (act.type === 'choose') {
     return (
-      <div className={`p-3 rounded-xl border border-blue-800/80 bg-blue-950/20 space-y-3 text-xs`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+      <div className={`p-2 sm:p-3 rounded-xl border border-blue-800/80 bg-blue-950/20 space-y-3 text-xs min-w-0 overflow-hidden`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-slate-400 hover:text-white transition p-0.5"
+              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
-            <span className="px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] bg-blue-900 text-blue-200 border border-blue-700 flex items-center gap-1">
-              <Split className="w-3 h-3" />
-              CHOOSE (Sequential Branching) {depth > 0 && `(Level ${depth + 1})`}
+            <span className="px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] bg-blue-900 text-blue-200 border border-blue-700 flex items-center gap-1 min-w-0">
+              <Split className="w-3 h-3 shrink-0" />
+              <span className="truncate">CHOOSE (Sequential Branching)</span> {depth > 0 && `(L${depth + 1})`}
             </span>
           </div>
-          {actionButtons}
+          <div className="shrink-0 ml-auto sm:ml-0">
+            {actionButtons}
+          </div>
         </div>
 
         {!collapsed && (
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             {/* BRANCHES */}
-            <div className="space-y-2.5">
+            <div className="space-y-2.5 min-w-0">
               {(act.choices || []).map((ch, chIdx) => (
-                <div key={chIdx} className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-blue-300 text-[11px]">Branch #{chIdx + 1}</span>
+                <div key={chIdx} className="p-2 sm:p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2 min-w-0 overflow-hidden">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-blue-300 text-[11px] truncate">Branch #{chIdx + 1}</span>
                     <button
                       type="button"
                       onClick={() => {
                         const choices = (act.choices || []).filter((_, i) => i !== chIdx);
                         onUpdate({ ...act, choices });
                       }}
-                      className="p-1 text-slate-500 hover:text-rose-400 transition"
+                      className="p-1 text-slate-500 hover:text-rose-400 transition shrink-0"
+                      title="Delete Branch"
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
 
                   {/* Conditions in Choice */}
-                  <div className="pl-2 border-l border-slate-800">
+                  <div className="pl-1.5 sm:pl-2 border-l border-slate-800 min-w-0">
                     <ConditionListEditor
                       conditions={ch.conditions || []}
                       depth={depth + 1}
@@ -2008,7 +2009,7 @@ function ActionNodeEditor({
                   </div>
 
                   {/* Sequence in Choice */}
-                  <div className="pl-2 border-l border-slate-800 pt-2">
+                  <div className="pl-1.5 sm:pl-2 border-l border-slate-800 pt-2 min-w-0">
                     <ActionListEditor
                       actions={ch.sequence || []}
                       depth={depth + 1}
@@ -2050,7 +2051,7 @@ function ActionNodeEditor({
             </button>
 
             {/* DEFAULT SEQUENCE */}
-            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
+            <div className="p-2 sm:p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2 min-w-0 overflow-hidden">
               <ActionListEditor
                 actions={act.default || []}
                 depth={depth + 1}
@@ -2093,39 +2094,29 @@ function ActionNodeEditor({
       : `Action ${index + 1}`);
 
   return (
-    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 hover:border-slate-700/80 space-y-2.5 text-xs transition-all shadow-sm">
+    <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 hover:border-slate-700/80 space-y-2.5 text-xs transition-all shadow-sm min-w-0 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}
-            className="text-slate-400 hover:text-white transition p-0.5"
+            className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
           >
             {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </button>
           <span className="w-5 h-5 rounded-full bg-emerald-950 text-emerald-300 font-bold text-[10px] flex items-center justify-center border border-emerald-800 shrink-0">
             A{index + 1}
           </span>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-white text-sm tracking-tight">{actionName}</span>
-            {catalogCmd?.category && (
-              <span className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 text-[10px] border border-slate-800">
-                {catalogCmd.category}
-              </span>
-            )}
-            <span className="px-1.5 py-0.5 rounded bg-emerald-950/60 text-emerald-300/90 text-[10px] font-mono border border-emerald-800/50">
-              {act.can_id ? `CAN ${act.can_id}` : act.type} • Bus {act.bus ?? 0}
-            </span>
-          </div>
+          <span className="font-semibold text-white text-xs sm:text-sm tracking-tight truncate">{actionName}</span>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
           {hasOptions && !collapsed && (
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
+              className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
                 showAdvanced
                   ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80 shadow'
                   : 'bg-slate-900 text-slate-300 hover:text-white border-slate-800 hover:bg-slate-850'
@@ -2133,7 +2124,7 @@ function ActionNodeEditor({
               title="Toggle configuration details"
             >
               <Sliders className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{showAdvanced ? 'Simple View' : 'Edit Details'}</span>
+              <span className="hidden xs:inline sm:inline">{showAdvanced ? 'Simple' : 'Details'}</span>
             </button>
           )}
           {actionButtons}
@@ -2154,9 +2145,9 @@ function ActionNodeEditor({
                 : itemCount === 2
                 ? 'grid grid-cols-2 gap-1.5'
                 : itemCount === 3
-                ? 'grid grid-cols-3 gap-1.5'
+                ? 'grid grid-cols-2 sm:grid-cols-3 gap-1.5'
                 : itemCount === 4
-                ? 'grid grid-cols-4 gap-1.5'
+                ? 'grid grid-cols-2 sm:grid-cols-4 gap-1.5'
                 : 'grid grid-cols-2 sm:grid-cols-3 gap-1.5';
 
             return (
@@ -2197,7 +2188,7 @@ function ActionNodeEditor({
       {/* Advanced Details View */}
       {(!hasOptions || showAdvanced) && (
         <div className={`space-y-3 ${hasOptions ? 'pt-2.5 border-t border-slate-850' : ''}`}>
-          <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 font-mono text-[11px]">
             <div>
               <label className="block text-[10px] font-sans text-slate-500">Action Type</label>
               <select
@@ -2426,6 +2417,18 @@ function ActionNodeEditor({
                   />
                 </div>
                 <div>
+                  <label className="block text-[10px] font-sans text-slate-500">Bus</label>
+                  <select
+                    value={act.bus ?? 0}
+                    onChange={e => onUpdate({ ...act, bus: parseInt(e.target.value) || 0 })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+                  >
+                    <option value={0}>Bus 0</option>
+                    <option value={1}>Bus 1</option>
+                    <option value={2}>Bus 2</option>
+                  </select>
+                </div>
+                <div>
                   <label className="block text-[10px] font-sans text-slate-500">Repeat × Delay</label>
                   <div className="flex items-center gap-1">
                     <input
@@ -2526,10 +2529,10 @@ function ActionListEditor({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 min-w-0">
       {label && (
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-emerald-400 font-bold text-[11px] uppercase tracking-wider">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <span className="text-emerald-400 font-bold text-[11px] uppercase tracking-wider truncate">
             {label} ({actions.length})
           </span>
         </div>
@@ -2540,7 +2543,7 @@ function ActionListEditor({
           {emptyText}
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 min-w-0">
                   {actions.map((act, idx) => {
                     const stableKey = act._clientId || (act._clientId = `act_client_${idx}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`);
                     return (
@@ -3494,14 +3497,14 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 min-w-0">
       {/* Main Builder Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-w-0">
         {/* Left Column: Active Rule Editor (8 cols = ~2/3 of area) */}
         {activeRule ? (
-          <div className="lg:col-span-8 space-y-4">
+          <div className="lg:col-span-8 space-y-4 min-w-0">
             {/* Active Rule Action Strip & Properties */}
-            <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 shadow-sm space-y-3">
+            <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-900 border border-slate-800 shadow-sm space-y-3 min-w-0 overflow-hidden">
               <div className="flex items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <span
@@ -3661,9 +3664,6 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     })}
                   </div>
                 </div>
-                <span className="text-[11px] font-mono text-amber-400 font-semibold">
-                  {activeRule.triggers.length} {activeRule.triggers.length === 1 ? 'Trigger' : 'Triggers'}
-                </span>
               </div>
 
               {!collapsedTriggers && (
