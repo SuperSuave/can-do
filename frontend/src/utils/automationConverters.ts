@@ -166,8 +166,24 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
     };
   }
 
+  // Handle explicit transmit or raw can_tx: return clean transmit structure without re-inlining
+  if (act.type === 'transmit' || act.type === 'can_tx') {
+    const payload = compileToByteMap(act.payload || act.to_payload);
+    return {
+      type: 'transmit',
+      can_id: act.can_id || '0x000',
+      bus: act.bus ?? 0,
+      payload: Object.keys(payload).length > 0 ? payload : { D1: '0x01' },
+      repeat: act.repeat || 1,
+      ...(act.source_command_id ? { source_command_id: act.source_command_id } : {}),
+      ...(act.source_command_name ? { source_command_name: act.source_command_name } : {}),
+      ...(act.option_label ? { option_label: act.option_label } : {}),
+      ...(act.entity_id ? { entity_id: act.entity_id } : {})
+    };
+  }
+
   // Handle entity_command: Inline catalog command definition into native CAN transmit bursts
-  if (act.type === 'entity_command' || act.entity_id || act.source_command_id) {
+  if (act.type === 'entity_command' || (!act.type && (act.entity_id || act.command))) {
     const entityId = act.entity_id || act.source_command_id;
     const commandLabel = act.command || act.option_label;
     const rawCmd = (catalog?.commands || []).find(c => c.id === entityId);
@@ -326,6 +342,53 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
   };
 }
 
+function isEqualAction(a: any, b: any): boolean {
+  if (!a || !b) return false;
+  if (a.type !== b.type) return false;
+  if (a.type === 'delay') {
+    return (a.ms ?? a.delay_ms) === (b.ms ?? b.delay_ms);
+  }
+  if (a.type === 'transmit') {
+    if ((a.can_id || '').toLowerCase() !== (b.can_id || '').toLowerCase()) return false;
+    if ((a.bus ?? 0) !== (b.bus ?? 0)) return false;
+    const aPayload = JSON.stringify(a.payload || {});
+    const bPayload = JSON.stringify(b.payload || {});
+    return aPayload === bPayload;
+  }
+  return false;
+}
+
+function deduplicateActionSequence(actions: any[]): any[] {
+  if (!actions || actions.length <= 1) return actions || [];
+
+  const deduped: any[] = [];
+  for (let i = 0; i < actions.length; i++) {
+    const curr = actions[i];
+
+    // Check if curr is an identical consecutive delay (e.g. delay 20 followed by delay 20)
+    if (curr.type === 'delay' && deduped.length > 0 && deduped[deduped.length - 1].type === 'delay') {
+      continue;
+    }
+
+    // Check if curr and next form a [delay, transmit] pair that is identical to the preceding [delay, transmit] pair
+    if (curr.type === 'delay' && i + 1 < actions.length && actions[i + 1]?.type === 'transmit') {
+      const nextAct = actions[i + 1];
+      if (deduped.length >= 2) {
+        const prevDelay = deduped[deduped.length - 2];
+        const prevTransmit = deduped[deduped.length - 1];
+        if (isEqualAction(curr, prevDelay) && isEqualAction(nextAct, prevTransmit)) {
+          // Skip both this delay and the duplicate transmit
+          i++; // skip nextAct
+          continue;
+        }
+      }
+    }
+
+    deduped.push(curr);
+  }
+  return deduped;
+}
+
 /**
  * Compiles a list of actions, flattening inlined action sequences
  */
@@ -342,7 +405,7 @@ export function compileActionList(
       result.push(compiled);
     }
   }
-  return result;
+  return deduplicateActionSequence(result);
 }
 
 /**

@@ -969,7 +969,6 @@ export default function App() {
           <div className="flex flex-col items-center md:items-start text-center md:text-left">
             <h1 className="text-xl sm:text-2xl font-bold text-[var(--text-heading)] tracking-tight leading-tight">
               <span className="block">CAN Do Automation</span>
-              <span className="block text-[var(--text-color)]">Message Catalog</span>
             </h1>
             <div className="mt-2 flex items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-[var(--input-bg)] text-cyan-400 border border-[var(--border-color)] shadow-sm">

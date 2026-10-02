@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.10.1-b003",
+  "can_do_version": "2026.10.1-b004",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -3460,50 +3460,6 @@
             "D7": "0x00"
           },
           "mask": "0x04"
-        }
-      ],
-      "subcategory": "Braking & Pedals"
-    },
-    {
-      "id": "brake_pedal_esc",
-      "ha_metadata": {
-        "name": "Brake Status (ESC / Stability)",
-        "domain": "binary_sensor",
-        "icon": "mdi:car-brake-alert"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Vehicle State & Telematics",
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x418"
-      },
-      "roles": [
-        "trigger",
-        "condition"
-      ],
-      "contributor": {
-        "name": "opendbc",
-        "github": "commaai/opendbc",
-        "notes": "Decoded from ESC/ABS 0x418 byte D6: 0x4C Pressed, 0x0C Released (bit 6 / 0x40 mask)"
-      },
-      "options": [
-        {
-          "label": "Brake Pressed (ESC)",
-          "match": {
-            "D6": "0x40"
-          },
-          "mask": "0x40",
-          "default": true
-        },
-        {
-          "label": "Brake Released (ESC)",
-          "match": {
-            "D6": "0x00"
-          },
-          "mask": "0x40"
         }
       ],
       "subcategory": "Braking & Pedals"
