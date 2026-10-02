@@ -172,25 +172,42 @@ static bool handle_client_rx(int sock) {
                 if (idx + 8 <= r) {
                     uint32_t bus0_cfg = rx_buf[idx] | (rx_buf[idx+1] << 8) | (rx_buf[idx+2] << 16) | (rx_buf[idx+3] << 24);
                     idx += 8;
+                    uint32_t speed = bus0_cfg & 0xFFFFF;
+                    if (speed > 1000000) {
+                        speed = 1000000; // Cap at 1 Mbps
+                    } else if (speed == 0) {
+                        speed = 500000;  // Default to 500 kbps
+                    }
                     bool listen_only = (bus0_cfg & 0x20000000) != 0;
-                    ESP_LOGI(TAG, "GVRET bus setup: 0x%08lX (listen_only=%d)", (unsigned long)bus0_cfg, listen_only ? 1 : 0);
+                    ESP_LOGI(TAG, "GVRET bus setup: speed=%lu, listen_only=%d", (unsigned long)speed, listen_only ? 1 : 0);
+                    if (listen_only != g_hardware_listen_only.load()) {
+                        set_sniffer_mode(g_sniffer_mode.load(), listen_only);
+                    }
                 } else {
                     idx = r;
                 }
             } else if (cmd == 0x06) {
-                // Bus configuration: reply 0xF1 0x06 + bus0 speed (500k = 500000 = 0x0007A120) + bus1
-                uint32_t baud0 = 500000 | 0x80000000 | 0x40000000;
-                uint32_t baud1 = 0;
-                uint8_t reply[10] = {
+                // Bus configuration (GVRET PROTO_GET_CANBUS_PARAMS):
+                // 0xF1 0x06 + bus0_flags (1 byte) + bus0_speed (4 bytes LE) + bus1_flags (1 byte) + bus1_speed (4 bytes LE)
+                uint8_t bus0_flags = 0x01; // bit 0: enabled
+                if (g_hardware_listen_only.load()) {
+                    bus0_flags |= 0x10; // bit 4: listen only
+                }
+                uint32_t bus0_speed = 500000; // default 500k
+                uint8_t bus1_flags = 0x00;   // disabled
+                uint32_t bus1_speed = 0;
+                uint8_t reply[12] = {
                     0xF1, 0x06,
-                    (uint8_t)(baud0 & 0xFF),
-                    (uint8_t)((baud0 >> 8) & 0xFF),
-                    (uint8_t)((baud0 >> 16) & 0xFF),
-                    (uint8_t)((baud0 >> 24) & 0xFF),
-                    (uint8_t)(baud1 & 0xFF),
-                    (uint8_t)((baud1 >> 8) & 0xFF),
-                    (uint8_t)((baud1 >> 16) & 0xFF),
-                    (uint8_t)((baud1 >> 24) & 0xFF)
+                    bus0_flags,
+                    (uint8_t)(bus0_speed & 0xFF),
+                    (uint8_t)((bus0_speed >> 8) & 0xFF),
+                    (uint8_t)((bus0_speed >> 16) & 0xFF),
+                    (uint8_t)((bus0_speed >> 24) & 0xFF),
+                    bus1_flags,
+                    (uint8_t)(bus1_speed & 0xFF),
+                    (uint8_t)((bus1_speed >> 8) & 0xFF),
+                    (uint8_t)((bus1_speed >> 16) & 0xFF),
+                    (uint8_t)((bus1_speed >> 24) & 0xFF)
                 };
                 send(sock, reply, sizeof(reply), MSG_DONTWAIT);
             } else if (cmd == 0x07) {
