@@ -148,8 +148,16 @@ extern "C" void app_main(void) {
     }
     ESP_ERROR_CHECK(ret);
 
-    // 3. Mount LittleFS and load catalog & automations
+    // 3. Mount LittleFS
     init_fs();
+
+    // 4. Network connectivity FIRST (Multi-SSID Roaming, Auto-AP Fallback, 192.168.4.1)
+    network_mgr_init();
+
+    // 5. Start Web Server and WS Hook (ensures web UI & OTA are accessible immediately)
+    start_webserver();
+
+    // 6. Load catalog & automations
     if (!load_catalog_from_fs("/spiffs/catalog.json")) {
         if (!load_catalog_from_fs("/spiffs/catalog/can_do_catalog.json")) {
             load_catalog_from_fs("/spiffs/can_do_catalog.json");
@@ -157,14 +165,6 @@ extern "C" void app_main(void) {
     }
     load_automations_from_fs("/spiffs/automations.json");
     mqtt_mgr_init();
-
-    // 3.5. Init Bluetooth Low Energy (BLE HID Controller)
-
-    // 4. Network connectivity (Multi-SSID Roaming, Auto-AP Fallback, 192.168.4.1)
-    network_mgr_init();
-
-    // 5. Start Web Server and WS Hook (now that network stack is running)
-    start_webserver();
 
     // 6. Start GVRET TCP Port 23 Server (SavvyCAN / SavvyLens)
     gvret_server_init(23);

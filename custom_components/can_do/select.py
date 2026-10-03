@@ -77,7 +77,10 @@ class CanDoSelectEntity(CanDoEntity, SelectEntity):
                 target_opt = opt
                 break
 
-        steps = build_action_steps(self.command, target_opt)
+        base_payload = self.coordinator.get_can_payload(action_can_id)
+        if not base_payload and self.state_can_id and self.state_can_id.lower() == action_can_id.lower():
+            base_payload = self.coordinator.get_can_payload(self.state_can_id)
+        steps = build_action_steps(self.command, target_opt, base_payload=base_payload)
         if steps:
             _LOGGER.info("Selecting option '%s' for '%s'", option, self.name)
             await self.coordinator.async_send_action(action_can_id, delay_ms, steps)

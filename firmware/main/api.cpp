@@ -1,4 +1,6 @@
 #include "api.h"
+#include "esp_littlefs.h"
+#include <dirent.h>
 #include "parser.h"
 #include "can_engine.h"
 #include "network_mgr.h"
@@ -697,9 +699,16 @@ static esp_err_t api_file_upload_handler(httpd_req_t *req) {
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "File receive failed");
             return ESP_FAIL;
         }
-        fwrite(buf, 1, recv_len, fd);
+        size_t written = fwrite(buf, 1, recv_len, fd);
+        if (written != static_cast<size_t>(recv_len)) {
+            fclose(fd);
+            ESP_LOGE(TAG, "fwrite failed: written %zu of %d (disk full?)", written, recv_len);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "File write failed (disk full?)");
+            return ESP_FAIL;
+        }
         remaining -= recv_len;
     }
+    fflush(fd);
     fclose(fd);
 
     char no_reboot_hdr[16] = {0};
@@ -1216,9 +1225,58 @@ static esp_err_t api_system_control_handler(httpd_req_t *req) {
     }
 
     cJSON *action_item = cJSON_GetObjectItem(root, "action");
+    bool should_reboot = false;
     if (cJSON_IsString(action_item)) {
         const char *act = action_item->valuestring;
-        if (strcmp(act, "toggle_automations") == 0) {
+        if (strcmp(act, "restart") == 0 || strcmp(act, "reboot") == 0) {
+            should_reboot = true;
+        } else if (strcmp(act, "list_files") == 0) {
+            size_t total_bytes = 0, used_bytes = 0;
+            esp_littlefs_info("storage", &total_bytes, &used_bytes);
+            DIR *d = opendir("/spiffs");
+            cJSON *arr = cJSON_CreateArray();
+            if (d) {
+                struct dirent *de;
+                while ((de = readdir(d)) != nullptr) {
+                    cJSON *f_obj = cJSON_CreateObject();
+                    cJSON_AddStringToObject(f_obj, "name", de->d_name);
+                    char subpath[320];
+                    snprintf(subpath, sizeof(subpath), "/spiffs/%s", de->d_name);
+                    struct stat s;
+                    if (stat(subpath, &s) == 0) {
+                        cJSON_AddNumberToObject(f_obj, "size", s.st_size);
+                        cJSON_AddBoolToObject(f_obj, "is_dir", S_ISDIR(s.st_mode));
+                    }
+                    cJSON_AddItemToArray(arr, f_obj);
+                }
+                closedir(d);
+            }
+            cJSON *resp_obj = cJSON_CreateObject();
+            cJSON_AddNumberToObject(resp_obj, "total", total_bytes);
+            cJSON_AddNumberToObject(resp_obj, "used", used_bytes);
+            cJSON_AddNumberToObject(resp_obj, "free", total_bytes > used_bytes ? total_bytes - used_bytes : 0);
+            cJSON_AddItemToObject(resp_obj, "files", arr);
+            cJSON_Delete(root);
+            char *resp = cJSON_PrintUnformatted(resp_obj);
+            cJSON_Delete(resp_obj);
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_sendstr(req, resp);
+            free(resp);
+            return ESP_OK;
+        } else if (strcmp(act, "reload_catalog") == 0) {
+            struct stat st;
+            int stat_res = stat("/spiffs/catalog.json", &st);
+            bool ok = load_catalog_from_fs("/spiffs/catalog.json");
+            char resp_buf[256];
+            snprintf(resp_buf, sizeof(resp_buf), 
+                     "{\"status\":\"%s\",\"stat_res\":%d,\"size\":%ld,\"entities\":%zu,\"automations\":%zu}",
+                     ok ? "ok" : "fail", stat_res, stat_res == 0 ? (long)st.st_size : -1L,
+                     global_catalog.size(), global_automations.size());
+            cJSON_Delete(root);
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_sendstr(req, resp_buf);
+            return ESP_OK;
+        } else if (strcmp(act, "toggle_automations") == 0) {
             set_automations_enabled(!g_automations_enabled.load());
         } else if (strcmp(act, "toggle_sniffer") == 0) {
             set_sniffer_mode(!g_sniffer_mode.load(), g_hardware_listen_only.load());
@@ -1244,7 +1302,7 @@ static esp_err_t api_system_control_handler(httpd_req_t *req) {
     }
 
     cJSON *reboot_item = cJSON_GetObjectItem(root, "reboot");
-    if (cJSON_IsTrue(reboot_item)) {
+    if (should_reboot || (reboot_item && cJSON_IsTrue(reboot_item))) {
         cJSON_Delete(root);
         httpd_resp_set_type(req, "application/json");
         httpd_resp_sendstr(req, "{\"status\":\"ok\",\"message\":\"Rebooting...\"}");

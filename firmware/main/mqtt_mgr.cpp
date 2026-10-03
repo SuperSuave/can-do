@@ -42,11 +42,13 @@ static void mqtt_delayed_restart_task(void *arg) {
 
 // Default monitored CAN IDs (Gen5W / E-GMP vehicle telemetry)
 static std::unordered_set<uint32_t> s_monitored_ids = {
-    0x038, 0x0A2, 0x130, 0x152, 0x1AC, 0x1CF, 0x226, 0x227,
-    0x2AD, 0x2AF, 0x2C0, 0x2FC, 0x31B, 0x380, 0x384, 0x3AA,
-    0x3C1, 0x411, 0x412, 0x414, 0x418, 0x435, 0x438, 0x442,
-    0x448, 0x474, 0x475, 0x476, 0x478, 0x47F, 0x496, 0x4CE,
-    0x540, 0x541, 0x594, 0x60E, 0x651, 0x652
+    0x038, 0x0A2, 0x130, 0x151, 0x152, 0x1AC, 0x1CF, 0x1F9,
+    0x200, 0x226, 0x227, 0x29C, 0x2AD, 0x2AF, 0x2C0, 0x2FC,
+    0x31B, 0x380, 0x384, 0x3AA, 0x3C1, 0x411, 0x412, 0x414,
+    0x418, 0x420, 0x435, 0x438, 0x442, 0x448, 0x453, 0x474,
+    0x475, 0x476, 0x478, 0x47F, 0x496, 0x49C, 0x4A2, 0x4C5, 0x4CE, 0x4ED,
+    0x540, 0x541, 0x578, 0x584, 0x594, 0x595, 0x597, 0x5CC,
+    0x5D0, 0x5F5, 0x60E, 0x651, 0x652, 0x7EC
 };
 static std::mutex s_monitored_mutex;
 
@@ -133,26 +135,32 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/status";
             esp_mqtt_client_publish(global_mqtt_client, status_topic.c_str(), "online", 6, 1, 1);
 
-            // 2. Subscribe to control topics
-            std::string tx_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/tx";
-            esp_mqtt_client_subscribe(global_mqtt_client, tx_topic.c_str(), 1);
+            // 2. Subscribe to control topics (specific, wildcard, and direct base topics)
+            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/tx").c_str(), 1);
+            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/+/tx").c_str(), 1);
+            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/tx").c_str(), 1);
 
-            std::string notify_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/notify";
-            esp_mqtt_client_subscribe(global_mqtt_client, notify_topic.c_str(), 1);
+            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/notify").c_str(), 1);
+            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/+/notify").c_str(), 1);
+            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/notify").c_str(), 1);
 
-            std::string nav_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/nav/set";
-            esp_mqtt_client_subscribe(global_mqtt_client, nav_topic.c_str(), 1);
+            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/nav/set").c_str(), 1);
+            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/+/nav/set").c_str(), 1);
+            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/nav/set").c_str(), 1);
 
-            std::string sub_ids_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/subscribe_ids";
-            esp_mqtt_client_subscribe(global_mqtt_client, sub_ids_topic.c_str(), 1);
+            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/subscribe_ids").c_str(), 1);
+            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/+/subscribe_ids").c_str(), 1);
+            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/subscribe_ids").c_str(), 1);
 
-            std::string config_set_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/set";
-            esp_mqtt_client_subscribe(global_mqtt_client, config_set_topic.c_str(), 1);
+            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/set").c_str(), 1);
+            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/config/automations/set").c_str(), 1);
             
             std::string config_get_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/get";
             esp_mqtt_client_subscribe(global_mqtt_client, config_get_topic.c_str(), 1);
+            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/config/automations/get").c_str(), 1);
 
             esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/set/#").c_str(), 1);
+            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/+/set/#").c_str(), 1);
 
             // 3. Publish initial state of all currently cached monitored IDs
             {
@@ -315,14 +323,18 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 return;
             }
 
-            std::string tx_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/tx";
-            std::string notify_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/notify";
-            std::string sub_ids_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/subscribe_ids";
-            std::string set_prefix = MQTT_BASE_TOPIC + "/set/";
+            auto topic_ends_with = [](const std::string& str, const std::string& suffix) {
+                return str.length() >= suffix.length() && 
+                       str.compare(str.length() - suffix.length(), suffix.length(), suffix) == 0;
+            };
 
-            std::string nav_set_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/nav/set";
+            bool is_notify = (topic_ends_with(topic, "/notify") || topic == (MQTT_BASE_TOPIC + "/notify"));
+            bool is_nav_set = (topic_ends_with(topic, "/nav/set") || topic == (MQTT_BASE_TOPIC + "/nav/set"));
+            bool is_tx = (topic_ends_with(topic, "/tx") || topic == (MQTT_BASE_TOPIC + "/tx"));
+            bool is_sub_ids = (topic_ends_with(topic, "/subscribe_ids") || topic == (MQTT_BASE_TOPIC + "/subscribe_ids"));
+            bool is_set_cmd = (topic.find("/set/") != std::string::npos);
 
-            if (topic == notify_topic) {
+            if (is_notify) {
                 ESP_LOGI(TAG, "Received cluster notify request: %s", payload.c_str());
                 std::string msg = payload;
                 std::string level = "info";
@@ -369,7 +381,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                         track_popup_show_info(msg.c_str());
                     }
                 }
-            } else if (topic == nav_set_topic) {
+            } else if (is_nav_set) {
                 ESP_LOGI(TAG, "Received HUD nav update: %s", payload.c_str());
                 cJSON* root = cJSON_Parse(payload.c_str());
                 if (root) {
@@ -400,7 +412,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     }
                     cJSON_Delete(root);
                 }
-            } else if (topic == tx_topic) {
+            } else if (is_tx) {
                 ESP_LOGI(TAG, "Received raw action burst: %s", payload.c_str());
                 cJSON* root = cJSON_Parse(payload.c_str());
                 if (root) {
@@ -456,7 +468,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                         queue_action_steps(can_id, delay_ms, steps);
                     }
                 }
-            } else if (topic == sub_ids_topic) {
+            } else if (is_sub_ids) {
                 cJSON* root = cJSON_Parse(payload.c_str());
                 if (root && cJSON_IsArray(root)) {
                     std::vector<uint32_t> ids;
@@ -473,8 +485,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     ESP_LOGI(TAG, "Updated monitored CAN IDs (%d IDs)", (int)ids.size());
                 }
                 if (root) cJSON_Delete(root);
-            } else if (topic.rfind(set_prefix, 0) == 0) {
-                std::string entity_id = topic.substr(set_prefix.length());
+            } else if (is_set_cmd) {
+                size_t set_pos = topic.find("/set/");
+                std::string entity_id = topic.substr(set_pos + 5);
                 queue_entity_command(entity_id, payload);
             }
             break;

@@ -120,6 +120,8 @@ class CanDoDataCoordinator:
             payload,
         )
         await mqtt.async_publish(self.hass, self.sub_ids_topic, payload, qos=1, retain=True)
+        if self.sub_ids_topic != f"{self.base_topic}/subscribe_ids":
+            await mqtt.async_publish(self.hass, f"{self.base_topic}/subscribe_ids", payload, qos=1, retain=True)
 
     @callback
     def _handle_status_message(self, msg: mqtt.ReceiveMessage) -> None:
@@ -273,6 +275,8 @@ class CanDoDataCoordinator:
         json_payload = json.dumps(payload_obj)
         _LOGGER.debug("Sending CAN burst to %s: %s", self.tx_topic, json_payload)
         await mqtt.async_publish(self.hass, self.tx_topic, json_payload, qos=1)
+        if self.tx_topic != f"{self.base_topic}/tx":
+            await mqtt.async_publish(self.hass, f"{self.base_topic}/tx", json_payload, qos=1)
 
     async def async_send_notification(self, message: str, level: str = "info") -> None:
         """Send cluster track popup notification to ESP32 edge device over MQTT."""
@@ -283,3 +287,5 @@ class CanDoDataCoordinator:
         json_payload = json.dumps(payload_obj)
         _LOGGER.info("Sending cluster notification to %s: %s", self.notify_topic, json_payload)
         await mqtt.async_publish(self.hass, self.notify_topic, json_payload, qos=1)
+        if self.notify_topic != f"{self.base_topic}/notify":
+            await mqtt.async_publish(self.hass, f"{self.base_topic}/notify", json_payload, qos=1)

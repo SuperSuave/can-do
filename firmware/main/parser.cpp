@@ -1,4 +1,7 @@
 #include "parser.h"
+#include <sys/stat.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -612,6 +615,10 @@ template<typename Handler>
 static bool stream_parse_array_from_file(FILE* f, const char* target_key, Handler handler) {
     if (!f || !target_key) return false;
 
+    // Buffer LittleFS I/O in 4KB chunks to eliminate single-byte flash read overhead
+    char stream_buf[4096];
+    setvbuf(f, stream_buf, _IOFBF, sizeof(stream_buf));
+
     // 1. Scan for target key in quotes
     int c;
     bool in_quote = false;
@@ -644,7 +651,10 @@ static bool stream_parse_array_from_file(FILE* f, const char* target_key, Handle
         }
     }
 
-    if (!found_key) return false;
+    if (!found_key) {
+        ESP_LOGW(TAG, "stream_parse: key '%s' not found in file", target_key);
+        return false;
+    }
 
     // 2. Find '['
     bool found_bracket = false;
@@ -705,25 +715,32 @@ static bool stream_parse_array_from_file(FILE* f, const char* target_key, Handle
                 handler(item_json);
                 cJSON_Delete(item_json);
                 parsed_count++;
+                if (parsed_count % 5 == 0) {
+                    vTaskDelay(pdMS_TO_TICKS(1)); // Feed FreeRTOS watchdog & allow network stack to breathe
+                }
             }
             obj_buf.clear();
         }
     }
 
+    ESP_LOGI(TAG, "stream_parse: key '%s' finished with %d items", target_key, parsed_count);
     return parsed_count > 0;
 }
 
 bool load_catalog_from_fs(const char* filepath) {
     ESP_LOGI(TAG, "Loading catalog from %s", filepath);
+    struct stat st;
+    if (stat(filepath, &st) != 0) {
+        ESP_LOGE(TAG, "Failed to stat catalog file: %s", filepath);
+        return false;
+    }
+    long size = st.st_size;
+
     FILE* f = fopen(filepath, "r");
     if (!f) {
         ESP_LOGE(TAG, "Failed to open catalog file: %s", filepath);
         return false;
     }
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
 
     global_catalog.clear();
     global_automations.clear();
@@ -734,7 +751,8 @@ bool load_catalog_from_fs(const char* filepath) {
         ESP_LOGI(TAG, "Using low-memory streaming parser for large catalog (%ld bytes)", size);
 
         // 1. Parse "commands" (fallback to "entities")
-        rewind(f);
+        fseek(f, 0, SEEK_SET);
+        clearerr(f);
         bool ok = stream_parse_array_from_file(f, "commands", [](cJSON* cmd_json) {
             CanEntity entity;
             if (parse_entity(cmd_json, entity)) {
@@ -742,7 +760,8 @@ bool load_catalog_from_fs(const char* filepath) {
             }
         });
         if (!ok) {
-            rewind(f);
+            fseek(f, 0, SEEK_SET);
+            clearerr(f);
             stream_parse_array_from_file(f, "entities", [](cJSON* cmd_json) {
                 CanEntity entity;
                 if (parse_entity(cmd_json, entity)) {
@@ -752,7 +771,8 @@ bool load_catalog_from_fs(const char* filepath) {
         }
 
         // 2. Parse "automations" if present
-        rewind(f);
+        fseek(f, 0, SEEK_SET);
+        clearerr(f);
         stream_parse_array_from_file(f, "automations", [](cJSON* auto_json) {
             AutomationRule rule;
             if (parse_automation(auto_json, rule)) {

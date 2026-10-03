@@ -3761,7 +3761,7 @@
       "network": {
         "bus": 0,
         "type": "can_tx",
-        "state_can_id": "0x475",
+        "state_can_id": "0x49C",
         "action_can_id": "0x4A2",
         "delay_ms": 20
       },
