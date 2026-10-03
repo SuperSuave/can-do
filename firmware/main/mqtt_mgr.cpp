@@ -115,6 +115,13 @@ static void publish_ha_discovery(esp_mqtt_client_handle_t client, const CanEntit
     cJSON_Delete(root);
 }
 
+static void clear_ha_discovery(esp_mqtt_client_handle_t client, const CanEntity& entity) {
+    if (!client || entity.ha_domain.empty()) return;
+    std::string topic = "homeassistant/" + entity.ha_domain + "/" + DEVICE_ID + "/" + entity.id + "/config";
+    esp_mqtt_client_publish(client, topic.c_str(), "", 0, 1, 1);
+}
+
+
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
     auto event = static_cast<esp_mqtt_event_handle_t>(event_data);
     switch (event->event_id) {
@@ -158,13 +165,22 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 }
             }
 
-            // 4. Publish HA discovery in a throttled background task so we don't exhaust the outbox queue
+            // 4. Publish or clear HA discovery in a throttled background task
             xTaskCreate([](void* arg) {
                 vTaskDelay(pdMS_TO_TICKS(1500));
+                bool disco_en = false;
+                {
+                    std::lock_guard<std::mutex> lock(s_mqtt_mutex);
+                    disco_en = s_mqtt_cfg.ha_discovery_enabled;
+                }
                 for (const auto& entity : global_catalog) {
                     if (!global_mqtt_client || !s_mqtt_connected.load()) break;
-                    publish_ha_discovery(global_mqtt_client, entity);
-                    vTaskDelay(pdMS_TO_TICKS(40));
+                    if (disco_en) {
+                        publish_ha_discovery(global_mqtt_client, entity);
+                    } else {
+                        clear_ha_discovery(global_mqtt_client, entity);
+                    }
+                    vTaskDelay(pdMS_TO_TICKS(30));
                 }
                 vTaskDelete(NULL);
             }, "ha_disco", 3072, nullptr, 1, nullptr);
@@ -512,6 +528,13 @@ static void load_settings_from_fs(void) {
         s_mqtt_cfg.enabled = cJSON_IsTrue(enabled_item);
     }
 
+    cJSON* disco_item = cJSON_GetObjectItem(root, "ha_discovery");
+    if (cJSON_IsBool(disco_item)) {
+        s_mqtt_cfg.ha_discovery_enabled = cJSON_IsTrue(disco_item);
+    } else {
+        s_mqtt_cfg.ha_discovery_enabled = false;
+    }
+
     cJSON* url_item = cJSON_GetObjectItem(root, "broker_url");
     if (cJSON_IsString(url_item) && strlen(url_item->valuestring) > 0) {
         s_mqtt_cfg.broker_url = url_item->valuestring;
@@ -619,6 +642,7 @@ bool mqtt_mgr_save_config(const MqttConfig& cfg) {
 
         cJSON* root = cJSON_CreateObject();
         cJSON_AddBoolToObject(root, "enabled", s_mqtt_cfg.enabled);
+        cJSON_AddBoolToObject(root, "ha_discovery", s_mqtt_cfg.ha_discovery_enabled);
         cJSON_AddStringToObject(root, "broker_url", s_mqtt_cfg.broker_url.c_str());
         cJSON_AddStringToObject(root, "username", s_mqtt_cfg.username.c_str());
         cJSON_AddStringToObject(root, "password", s_mqtt_cfg.password.c_str());
@@ -653,6 +677,14 @@ void mqtt_mgr_publish_discovery(void) {
     if (global_mqtt_client && s_mqtt_connected.load()) {
         for (const auto& entity : global_catalog) {
             publish_ha_discovery(global_mqtt_client, entity);
+        }
+    }
+}
+
+void mqtt_mgr_clear_discovery(void) {
+    if (global_mqtt_client && s_mqtt_connected.load()) {
+        for (const auto& entity : global_catalog) {
+            clear_ha_discovery(global_mqtt_client, entity);
         }
     }
 }

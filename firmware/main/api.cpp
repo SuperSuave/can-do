@@ -1476,6 +1476,7 @@ static esp_err_t api_mqtt_get_handler(httpd_req_t *req) {
     MqttConfig cfg = mqtt_mgr_get_config();
     cJSON *root = cJSON_CreateObject();
     cJSON_AddBoolToObject(root, "enabled", cfg.enabled);
+    cJSON_AddBoolToObject(root, "ha_discovery", cfg.ha_discovery_enabled);
     cJSON_AddStringToObject(root, "broker_url", cfg.broker_url.c_str());
     cJSON_AddStringToObject(root, "username", cfg.username.c_str());
     cJSON_AddBoolToObject(root, "has_password", !cfg.password.empty());
@@ -1506,6 +1507,11 @@ static esp_err_t api_mqtt_post_handler(httpd_req_t *req) {
     cJSON *en_item = cJSON_GetObjectItem(root, "enabled");
     if (cJSON_IsBool(en_item)) {
         cfg.enabled = cJSON_IsTrue(en_item);
+    }
+
+    cJSON *disco_item = cJSON_GetObjectItem(root, "ha_discovery");
+    if (cJSON_IsBool(disco_item)) {
+        cfg.ha_discovery_enabled = cJSON_IsTrue(disco_item);
     }
 
     cJSON *url_item = cJSON_GetObjectItem(root, "broker_url");

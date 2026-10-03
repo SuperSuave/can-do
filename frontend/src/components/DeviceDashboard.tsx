@@ -113,6 +113,7 @@ export interface CanFrame {
 
 export interface MqttConfig {
   enabled: boolean;
+  ha_discovery?: boolean;
   broker_url: string;
   username: string;
   has_password?: boolean;
@@ -508,6 +509,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
         const data = await res.json();
         setMqttConfig({
           enabled: data.enabled !== false,
+          ha_discovery: data.ha_discovery === true,
           broker_url: data.broker_url || 'mqtt://homeassistant.local:1883',
           username: data.username || '',
           has_password: !!data.has_password,
@@ -529,6 +531,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     try {
       const payload: any = {
         enabled: mqttConfig.enabled,
+        ha_discovery: !!mqttConfig.ha_discovery,
         broker_url: mqttConfig.broker_url.trim(),
         username: mqttConfig.username.trim()
       };
@@ -1858,7 +1861,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   Enable MQTT Client
                 </label>
                 <span className="text-[11px] text-[var(--text-muted)]">
-                  Connect to MQTT broker and broadcast Home Assistant discovery payloads
+                  Connect to MQTT broker and stream real-time vehicle telemetry states
                 </span>
               </div>
               <input
@@ -1866,6 +1869,25 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 type="checkbox"
                 checked={mqttConfig.enabled}
                 onChange={(e) => setMqttConfig((prev) => ({ ...prev, enabled: e.target.checked }))}
+                className="w-4 h-4 rounded text-cyan-500 focus:ring-cyan-500/30 bg-slate-800 border-slate-700 cursor-pointer"
+              />
+            </div>
+
+            {/* Toggle HA Generic Discovery */}
+            <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)]">
+              <div>
+                <label className="text-xs font-bold text-[var(--text-heading)] block cursor-pointer" htmlFor="chk-mqtt-disco">
+                  Broadcast Generic MQTT Auto-Discovery
+                </label>
+                <span className="text-[11px] text-[var(--text-muted)]">
+                  Publish legacy <code className="text-cyan-400 font-mono">homeassistant/.../config</code> topics. <strong className="text-amber-400 font-semibold">Leave disabled (recommended)</strong> when using the native CAN Do Home Assistant integration to avoid duplicate entities.
+                </span>
+              </div>
+              <input
+                id="chk-mqtt-disco"
+                type="checkbox"
+                checked={!!mqttConfig.ha_discovery}
+                onChange={(e) => setMqttConfig((prev) => ({ ...prev, ha_discovery: e.target.checked }))}
                 className="w-4 h-4 rounded text-cyan-500 focus:ring-cyan-500/30 bg-slate-800 border-slate-700 cursor-pointer"
               />
             </div>

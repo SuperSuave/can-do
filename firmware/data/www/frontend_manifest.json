@@ -2,43 +2,43 @@
   "version": "2026.10.1-b005",
   "files": [
     {
-      "name": "AutomationBuilder-CNhOsCaW.js.gz",
-      "path": "/spiffs/www/AutomationBuilder-CNhOsCaW.js.gz",
-      "size": 136280
+      "name": "AutomationBuilder-BSJN1CaN.js.gz",
+      "path": "/spiffs/www/AutomationBuilder-BSJN1CaN.js.gz",
+      "size": 136281
     },
     {
-      "name": "CatalogHealthModal-DORdmpkw.js.gz",
-      "path": "/spiffs/www/CatalogHealthModal-DORdmpkw.js.gz",
+      "name": "CatalogHealthModal-eF1Kz0Jd.js.gz",
+      "path": "/spiffs/www/CatalogHealthModal-eF1Kz0Jd.js.gz",
       "size": 2182
     },
     {
-      "name": "CategoryManagerModal-BkGw2sQO.js.gz",
-      "path": "/spiffs/www/CategoryManagerModal-BkGw2sQO.js.gz",
-      "size": 3828
+      "name": "CategoryManagerModal-DnVFDwks.js.gz",
+      "path": "/spiffs/www/CategoryManagerModal-DnVFDwks.js.gz",
+      "size": 3826
     },
     {
-      "name": "ContributeModal-BNzXETLp.js.gz",
-      "path": "/spiffs/www/ContributeModal-BNzXETLp.js.gz",
+      "name": "ContributeModal-DGVurd8w.js.gz",
+      "path": "/spiffs/www/ContributeModal-DGVurd8w.js.gz",
       "size": 4044
     },
     {
-      "name": "DeviceDashboard-Bwq7e7sm.js.gz",
-      "path": "/spiffs/www/DeviceDashboard-Bwq7e7sm.js.gz",
-      "size": 16714
+      "name": "DeviceDashboard-Chvn8x7C.js.gz",
+      "path": "/spiffs/www/DeviceDashboard-Chvn8x7C.js.gz",
+      "size": 16883
     },
     {
-      "name": "deviceWs-D4_glt2m.js.gz",
-      "path": "/spiffs/www/deviceWs-D4_glt2m.js.gz",
-      "size": 804
+      "name": "deviceWs-BxXG-J7C.js.gz",
+      "path": "/spiffs/www/deviceWs-BxXG-J7C.js.gz",
+      "size": 806
     },
     {
-      "name": "ExportModal-xTKk8MBN.js.gz",
-      "path": "/spiffs/www/ExportModal-xTKk8MBN.js.gz",
+      "name": "ExportModal-BDScg60H.js.gz",
+      "path": "/spiffs/www/ExportModal-BDScg60H.js.gz",
       "size": 3882
     },
     {
-      "name": "ImportModal-u0mVoI2i.js.gz",
-      "path": "/spiffs/www/ImportModal-u0mVoI2i.js.gz",
+      "name": "ImportModal-DvyWsxeG.js.gz",
+      "path": "/spiffs/www/ImportModal-DvyWsxeG.js.gz",
       "size": 3315
     },
     {
@@ -47,9 +47,9 @@
       "size": 18697
     },
     {
-      "name": "index-DOVSE6c0.js.gz",
-      "path": "/spiffs/www/index-DOVSE6c0.js.gz",
-      "size": 151193
+      "name": "index-SqOruXNk.js.gz",
+      "path": "/spiffs/www/index-SqOruXNk.js.gz",
+      "size": 151187
     },
     {
       "name": "index.html",
@@ -62,9 +62,9 @@
       "size": 760
     },
     {
-      "name": "info-OJ6_V8Ic.js.gz",
-      "path": "/spiffs/www/info-OJ6_V8Ic.js.gz",
-      "size": 281
+      "name": "info-Gn0KRTpF.js.gz",
+      "path": "/spiffs/www/info-Gn0KRTpF.js.gz",
+      "size": 282
     },
     {
       "name": "logo.svg",
@@ -72,28 +72,28 @@
       "size": 8217
     },
     {
-      "name": "OnboardingWizardModal-CADohTVL.js.gz",
-      "path": "/spiffs/www/OnboardingWizardModal-CADohTVL.js.gz",
-      "size": 4524
+      "name": "OnboardingWizardModal-Blt0OrlO.js.gz",
+      "path": "/spiffs/www/OnboardingWizardModal-Blt0OrlO.js.gz",
+      "size": 4523
     },
     {
-      "name": "send-CU-oA76n.js.gz",
-      "path": "/spiffs/www/send-CU-oA76n.js.gz",
+      "name": "send-DtRzVYJd.js.gz",
+      "path": "/spiffs/www/send-DtRzVYJd.js.gz",
       "size": 336
     },
     {
-      "name": "shield-check-BSkmrTp1.js.gz",
-      "path": "/spiffs/www/shield-check-BSkmrTp1.js.gz",
-      "size": 353
+      "name": "shield-check-oP317a3K.js.gz",
+      "path": "/spiffs/www/shield-check-oP317a3K.js.gz",
+      "size": 354
     },
     {
-      "name": "VehicleDashboard-DMChf8ug.js.gz",
-      "path": "/spiffs/www/VehicleDashboard-DMChf8ug.js.gz",
-      "size": 20404
+      "name": "VehicleDashboard-DDGD9cV9.js.gz",
+      "path": "/spiffs/www/VehicleDashboard-DDGD9cV9.js.gz",
+      "size": 20405
     },
     {
-      "name": "wifi-BMeIQ_ty.js.gz",
-      "path": "/spiffs/www/wifi-BMeIQ_ty.js.gz",
+      "name": "wifi-C-2rry6P.js.gz",
+      "path": "/spiffs/www/wifi-C-2rry6P.js.gz",
       "size": 312
     }
   ]
