@@ -615,9 +615,7 @@ template<typename Handler>
 static bool stream_parse_array_from_file(FILE* f, const char* target_key, Handler handler) {
     if (!f || !target_key) return false;
 
-    // Buffer LittleFS I/O in 4KB chunks to eliminate single-byte flash read overhead
-    char stream_buf[4096];
-    setvbuf(f, stream_buf, _IOFBF, sizeof(stream_buf));
+    // Note: I/O buffering is handled via heap in load_catalog_from_fs
 
     // 1. Scan for target key in quotes
     int c;
@@ -741,6 +739,8 @@ bool load_catalog_from_fs(const char* filepath) {
         ESP_LOGE(TAG, "Failed to open catalog file: %s", filepath);
         return false;
     }
+    // Heap-backed 4KB I/O buffer (automatically freed on fclose by libc)
+    setvbuf(f, nullptr, _IOFBF, 4096);
 
     global_catalog.clear();
     global_automations.clear();

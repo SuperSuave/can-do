@@ -157,15 +157,6 @@ extern "C" void app_main(void) {
     // 5. Start Web Server and WS Hook (ensures web UI & OTA are accessible immediately)
     start_webserver();
 
-    // 6. Load catalog & automations
-    if (!load_catalog_from_fs("/spiffs/catalog.json")) {
-        if (!load_catalog_from_fs("/spiffs/catalog/can_do_catalog.json")) {
-            load_catalog_from_fs("/spiffs/can_do_catalog.json");
-        }
-    }
-    load_automations_from_fs("/spiffs/automations.json");
-    mqtt_mgr_init();
-
     // 6. Start GVRET TCP Port 23 Server (SavvyCAN / SavvyLens)
     gvret_server_init(23);
 
@@ -184,6 +175,20 @@ extern "C" void app_main(void) {
     xTaskCreate(can_tx_task, "CAN_TX", 3072, nullptr, 4, nullptr);
     xTaskCreate(time_scheduler_task, "TIME_SCHED", 2048, nullptr, 3, nullptr);
 
-    ESP_LOGI(TAG, "Initialization complete. Ready.");
+    // 10. Load catalog, automations & init MQTT in dedicated background task with 8KB stack
+    xTaskCreate([](void*) {
+        ESP_LOGI(TAG, "Background catalog loader task starting...");
+        if (!load_catalog_from_fs("/spiffs/catalog.json")) {
+            if (!load_catalog_from_fs("/spiffs/catalog/can_do_catalog.json")) {
+                load_catalog_from_fs("/spiffs/can_do_catalog.json");
+            }
+        }
+        load_automations_from_fs("/spiffs/automations.json");
+        mqtt_mgr_init();
+        ESP_LOGI(TAG, "Background catalog loader complete.");
+        vTaskDelete(NULL);
+    }, "CAT_INIT", 8192, nullptr, 1, nullptr);
+
+    ESP_LOGI(TAG, "Hardware & Network Initialization complete. Ready.");
 }
 
