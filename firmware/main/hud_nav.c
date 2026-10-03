@@ -64,8 +64,7 @@ void hud_nav_init(hud_platform_type_t platform) {
     isotp_tx_init(&s_street_isotp, "hud-street-isotp", &cfg);
     isotp_tx_start_worker(&s_street_isotp, "hud_street_isotp", 2048, 5);
 
-    ESP_LOGI(TAG, "HUD Navigation initialized (platform=%d, frame_id=0x%03X)", 
-             s_platform, s_hud_frame_id);
+    ESP_LOGI(TAG, "HUD Navigation initialized (platform=%d, frame_id=0x%03X)", (int)s_platform, (unsigned int)s_hud_frame_id);
 }
 
 void hud_nav_tick_100ms(void) {
