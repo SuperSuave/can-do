@@ -2,6 +2,8 @@
 #include "parser.h"
 #include "can_engine.h"
 #include "track_popup.h"
+#include "call_popup.h"
+#include "hud_nav.h"
 #include "cJSON.h"
 #include "esp_log.h"
 #include <cstdio>
@@ -130,6 +132,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
             std::string notify_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/notify";
             esp_mqtt_client_subscribe(global_mqtt_client, notify_topic.c_str(), 1);
+
+            std::string nav_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/nav/set";
+            esp_mqtt_client_subscribe(global_mqtt_client, nav_topic.c_str(), 1);
 
             std::string sub_ids_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/subscribe_ids";
             esp_mqtt_client_subscribe(global_mqtt_client, sub_ids_topic.c_str(), 1);
@@ -299,10 +304,16 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             std::string sub_ids_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/subscribe_ids";
             std::string set_prefix = MQTT_BASE_TOPIC + "/set/";
 
+            std::string nav_set_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/nav/set";
+
             if (topic == notify_topic) {
                 ESP_LOGI(TAG, "Received cluster notify request: %s", payload.c_str());
                 std::string msg = payload;
                 std::string level = "info";
+                std::string caller = "Home Assistant";
+                bool is_call = false;
+                uint32_t hold_ms = 5000;
+
                 cJSON* root = cJSON_Parse(payload.c_str());
                 if (root) {
                     cJSON* m = cJSON_GetObjectItem(root, "message");
@@ -312,14 +323,66 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
                     cJSON* l = cJSON_GetObjectItem(root, "level");
                     if (l && cJSON_IsString(l)) level = l->valuestring;
+
+                    cJSON* t = cJSON_GetObjectItem(root, "type");
+                    if (t && cJSON_IsString(t) && (strcmp(t->valuestring, "call_alert") == 0 || strcmp(t->valuestring, "call") == 0)) {
+                        is_call = true;
+                    }
+                    cJSON* c = cJSON_GetObjectItem(root, "caller");
+                    if (c && cJSON_IsString(c)) {
+                        caller = c->valuestring;
+                        is_call = true;
+                    }
+                    cJSON* h = cJSON_GetObjectItem(root, "hold_ms");
+                    if (h && cJSON_IsNumber(h)) hold_ms = (uint32_t)h->valueint;
+
                     cJSON_Delete(root);
                 }
-                if (level == "warning") {
-                    track_popup_show_warning(msg.c_str());
-                } else if (level == "error") {
-                    track_popup_show_error(msg.c_str());
+
+                if (is_call) {
+                    call_popup_severity_t sev = CALL_POPUP_SEV_INFO;
+                    if (level == "warning") sev = CALL_POPUP_SEV_WARNING;
+                    else if (level == "error" || level == "critical") sev = CALL_POPUP_SEV_CRITICAL;
+                    call_popup_show(caller.c_str(), msg.c_str(), sev, hold_ms);
                 } else {
-                    track_popup_show_info(msg.c_str());
+                    if (level == "warning") {
+                        track_popup_show_warning(msg.c_str());
+                    } else if (level == "error") {
+                        track_popup_show_error(msg.c_str());
+                    } else {
+                        track_popup_show_info(msg.c_str());
+                    }
+                }
+            } else if (topic == nav_set_topic) {
+                ESP_LOGI(TAG, "Received HUD nav update: %s", payload.c_str());
+                cJSON* root = cJSON_Parse(payload.c_str());
+                if (root) {
+                    cJSON* act = cJSON_GetObjectItem(root, "action");
+                    if (act && cJSON_IsString(act) && strcmp(act->valuestring, "clear") == 0) {
+                        hud_nav_clear();
+                    } else {
+                        hud_nav_instruction_t instr{};
+                        cJSON* icon_item = cJSON_GetObjectItem(root, "icon");
+                        if (icon_item && cJSON_IsNumber(icon_item)) instr.icon = (hud_maneuver_icon_t)icon_item->valueint;
+
+                        cJSON* dist_item = cJSON_GetObjectItem(root, "distance");
+                        if (dist_item && cJSON_IsNumber(dist_item)) instr.distance_meters = (uint16_t)dist_item->valueint;
+
+                        cJSON* bars_item = cJSON_GetObjectItem(root, "bars");
+                        if (bars_item && cJSON_IsNumber(bars_item)) instr.bar_graph = (uint8_t)bars_item->valueint;
+
+                        cJSON* spd_item = cJSON_GetObjectItem(root, "speed_limit");
+                        if (spd_item && cJSON_IsNumber(spd_item)) instr.speed_limit_kph = (uint8_t)spd_item->valueint;
+
+                        cJSON* cam_item = cJSON_GetObjectItem(root, "camera_alert");
+                        if (cam_item && cJSON_IsBool(cam_item)) instr.speed_camera_alert = cJSON_IsTrue(cam_item);
+
+                        cJSON* street_item = cJSON_GetObjectItem(root, "street");
+                        if (street_item && cJSON_IsString(street_item)) instr.street_name = street_item->valuestring;
+
+                        hud_nav_update(&instr);
+                    }
+                    cJSON_Delete(root);
                 }
             } else if (topic == tx_topic) {
                 ESP_LOGI(TAG, "Received raw action burst: %s", payload.c_str());

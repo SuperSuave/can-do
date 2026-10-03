@@ -1744,7 +1744,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
       },
       "network": {
         "bus": 0,
@@ -1756,14 +1756,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "°F",
+        "unit": "\u00b0F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62°F",
+          "label": "62\u00b0F",
           "match": {
             "D4": "0x06"
           },
@@ -1784,7 +1784,7 @@
           "default": false
         },
         {
-          "label": "63°F",
+          "label": "63\u00b0F",
           "match": {
             "D4": "0x07"
           },
@@ -1805,7 +1805,7 @@
           "default": false
         },
         {
-          "label": "64°F",
+          "label": "64\u00b0F",
           "match": {
             "D4": "0x08"
           },
@@ -1826,7 +1826,7 @@
           "default": false
         },
         {
-          "label": "65°F",
+          "label": "65\u00b0F",
           "match": {
             "D4": "0x09"
           },
@@ -1847,7 +1847,7 @@
           "default": false
         },
         {
-          "label": "66°F",
+          "label": "66\u00b0F",
           "match": {
             "D4": "0x0A"
           },
@@ -1868,7 +1868,7 @@
           "default": false
         },
         {
-          "label": "67°F",
+          "label": "67\u00b0F",
           "match": {
             "D4": "0x0B"
           },
@@ -1889,7 +1889,7 @@
           "default": false
         },
         {
-          "label": "68°F",
+          "label": "68\u00b0F",
           "match": {
             "D4": "0x0C"
           },
@@ -1910,7 +1910,7 @@
           "default": false
         },
         {
-          "label": "69°F",
+          "label": "69\u00b0F",
           "match": {
             "D4": "0x0D"
           },
@@ -1931,7 +1931,7 @@
           "default": false
         },
         {
-          "label": "70°F",
+          "label": "70\u00b0F",
           "match": {
             "D4": "0x0E"
           },
@@ -1952,7 +1952,7 @@
           "default": true
         },
         {
-          "label": "71°F",
+          "label": "71\u00b0F",
           "match": {
             "D4": "0x0F"
           },
@@ -1973,7 +1973,7 @@
           "default": false
         },
         {
-          "label": "72°F",
+          "label": "72\u00b0F",
           "match": {
             "D4": "0x10"
           },
@@ -1994,7 +1994,7 @@
           "default": false
         },
         {
-          "label": "73°F",
+          "label": "73\u00b0F",
           "match": {
             "D4": "0x11"
           },
@@ -2015,7 +2015,7 @@
           "default": false
         },
         {
-          "label": "74°F",
+          "label": "74\u00b0F",
           "match": {
             "D4": "0x12"
           },
@@ -2036,7 +2036,7 @@
           "default": false
         },
         {
-          "label": "75°F",
+          "label": "75\u00b0F",
           "match": {
             "D4": "0x13"
           },
@@ -2057,7 +2057,7 @@
           "default": false
         },
         {
-          "label": "76°F",
+          "label": "76\u00b0F",
           "match": {
             "D4": "0x14"
           },
@@ -2078,7 +2078,7 @@
           "default": false
         },
         {
-          "label": "77°F",
+          "label": "77\u00b0F",
           "match": {
             "D4": "0x15"
           },
@@ -2099,7 +2099,7 @@
           "default": false
         },
         {
-          "label": "78°F",
+          "label": "78\u00b0F",
           "match": {
             "D4": "0x16"
           },
@@ -2120,7 +2120,7 @@
           "default": false
         },
         {
-          "label": "79°F",
+          "label": "79\u00b0F",
           "match": {
             "D4": "0x17"
           },
@@ -2141,7 +2141,7 @@
           "default": false
         },
         {
-          "label": "80°F",
+          "label": "80\u00b0F",
           "match": {
             "D4": "0x18"
           },
@@ -2162,7 +2162,7 @@
           "default": false
         },
         {
-          "label": "81°F",
+          "label": "81\u00b0F",
           "match": {
             "D4": "0x19"
           },
@@ -2183,7 +2183,7 @@
           "default": false
         },
         {
-          "label": "82°F",
+          "label": "82\u00b0F",
           "match": {
             "D4": "0x1A"
           },
@@ -2227,7 +2227,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
       },
       "network": {
         "bus": 0,
@@ -2239,14 +2239,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "°F",
+        "unit": "\u00b0F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62°F",
+          "label": "62\u00b0F",
           "match": {
             "D6": "0x06"
           },
@@ -2267,7 +2267,7 @@
           "default": false
         },
         {
-          "label": "63°F",
+          "label": "63\u00b0F",
           "match": {
             "D6": "0x07"
           },
@@ -2288,7 +2288,7 @@
           "default": false
         },
         {
-          "label": "64°F",
+          "label": "64\u00b0F",
           "match": {
             "D6": "0x08"
           },
@@ -2309,7 +2309,7 @@
           "default": false
         },
         {
-          "label": "65°F",
+          "label": "65\u00b0F",
           "match": {
             "D6": "0x09"
           },
@@ -2330,7 +2330,7 @@
           "default": false
         },
         {
-          "label": "66°F",
+          "label": "66\u00b0F",
           "match": {
             "D6": "0x0A"
           },
@@ -2351,7 +2351,7 @@
           "default": false
         },
         {
-          "label": "67°F",
+          "label": "67\u00b0F",
           "match": {
             "D6": "0x0B"
           },
@@ -2372,7 +2372,7 @@
           "default": false
         },
         {
-          "label": "68°F",
+          "label": "68\u00b0F",
           "match": {
             "D6": "0x0C"
           },
@@ -2393,7 +2393,7 @@
           "default": false
         },
         {
-          "label": "69°F",
+          "label": "69\u00b0F",
           "match": {
             "D6": "0x0D"
           },
@@ -2414,7 +2414,7 @@
           "default": false
         },
         {
-          "label": "70°F",
+          "label": "70\u00b0F",
           "match": {
             "D6": "0x0E"
           },
@@ -2435,7 +2435,7 @@
           "default": true
         },
         {
-          "label": "71°F",
+          "label": "71\u00b0F",
           "match": {
             "D6": "0x0F"
           },
@@ -2456,7 +2456,7 @@
           "default": false
         },
         {
-          "label": "72°F",
+          "label": "72\u00b0F",
           "match": {
             "D6": "0x10"
           },
@@ -2477,7 +2477,7 @@
           "default": false
         },
         {
-          "label": "73°F",
+          "label": "73\u00b0F",
           "match": {
             "D6": "0x11"
           },
@@ -2498,7 +2498,7 @@
           "default": false
         },
         {
-          "label": "74°F",
+          "label": "74\u00b0F",
           "match": {
             "D6": "0x12"
           },
@@ -2519,7 +2519,7 @@
           "default": false
         },
         {
-          "label": "75°F",
+          "label": "75\u00b0F",
           "match": {
             "D6": "0x13"
           },
@@ -2540,7 +2540,7 @@
           "default": false
         },
         {
-          "label": "76°F",
+          "label": "76\u00b0F",
           "match": {
             "D6": "0x14"
           },
@@ -2561,7 +2561,7 @@
           "default": false
         },
         {
-          "label": "77°F",
+          "label": "77\u00b0F",
           "match": {
             "D6": "0x15"
           },
@@ -2582,7 +2582,7 @@
           "default": false
         },
         {
-          "label": "78°F",
+          "label": "78\u00b0F",
           "match": {
             "D6": "0x16"
           },
@@ -2603,7 +2603,7 @@
           "default": false
         },
         {
-          "label": "79°F",
+          "label": "79\u00b0F",
           "match": {
             "D6": "0x17"
           },
@@ -2624,7 +2624,7 @@
           "default": false
         },
         {
-          "label": "80°F",
+          "label": "80\u00b0F",
           "match": {
             "D6": "0x18"
           },
@@ -2645,7 +2645,7 @@
           "default": false
         },
         {
-          "label": "81°F",
+          "label": "81\u00b0F",
           "match": {
             "D6": "0x19"
           },
@@ -2666,7 +2666,7 @@
           "default": false
         },
         {
-          "label": "82°F",
+          "label": "82\u00b0F",
           "match": {
             "D6": "0x1A"
           },
@@ -4456,18 +4456,18 @@
       },
       "options": [
         {
-          "label": "Info Notification (ⓘ)",
+          "label": "Info Notification (\u24d8)",
           "level": "info",
           "popup_message": "Preconditioning Active",
           "default": true
         },
         {
-          "label": "Warning Notification (⚠)",
+          "label": "Warning Notification (\u26a0)",
           "level": "warning",
           "popup_message": "Battery Cold / Limited"
         },
         {
-          "label": "Fault Notification (‼)",
+          "label": "Fault Notification (\u203c)",
           "level": "error",
           "popup_message": "Charge Interrupted"
         },
@@ -5493,9 +5493,9 @@
     {
       "id": "cond_charging",
       "ha_metadata": {
-        "name": "Vehicle Plugged In / EV Charging",
-        "domain": "binary_sensor",
-        "icon": "mdi:car-info"
+        "name": "Vehicle Plugged In / EV Charging Status",
+        "domain": "sensor",
+        "icon": "mdi:battery-charging"
       },
       "tags": [
         "all_egmp"
@@ -5510,14 +5510,33 @@
         "D3": "0x01"
       },
       "roles": [
+        "trigger",
         "condition",
-        "trigger"
+        "sensor"
       ],
       "contributor": {
-        "name": "Unknown",
-        "github": ""
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Decoded EV charging state from BMS1 frame 0x594 Byte D2 (Bit 1 CF_Bms_ChsSts: 1 = Active charging, 0 = Inactive) and BMS4 frame 0x597 Byte D1 (Bit 3 CF_Bms_ChgFinishedForOBC: 1 = Battery pack 100% full / terminated)."
       },
-      "subcategory": "Charging Status"
+      "subcategory": "Charging Status",
+      "options": [
+        {
+          "label": "Charging In Progress",
+          "match": {
+            "D2": "0x02"
+          },
+          "mask": "0x02",
+          "default": true
+        },
+        {
+          "label": "Not Charging / Disconnected",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0x02"
+        }
+      ]
     },
     {
       "id": "cond_ambient_temperature",
@@ -5539,16 +5558,16 @@
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x226",
-        "unit": "°C"
+        "unit": "\u00b0C"
       },
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 °C"
+        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 \u00b0C"
       },
       "options": [
         {
-          "label": "Freezing (<= 0°C / 32°F)",
+          "label": "Freezing (<= 0\u00b0C / 32\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": "less_equal",
@@ -5557,7 +5576,7 @@
           "default": true
         },
         {
-          "label": "Cold (< 15°C / 59°F)",
+          "label": "Cold (< 15\u00b0C / 59\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": "less_than",
@@ -5565,7 +5584,7 @@
           }
         },
         {
-          "label": "Warm (> 25°C / 77°F)",
+          "label": "Warm (> 25\u00b0C / 77\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": "greater_than",
@@ -6152,19 +6171,19 @@
           "default": true
         },
         {
-          "label": "Rear Temp 20.0°C / 68°F",
+          "label": "Rear Temp 20.0\u00b0C / 68\u00b0F",
           "match": {
             "D6": "0x0C"
           }
         },
         {
-          "label": "Rear Temp 21.0°C / 70°F",
+          "label": "Rear Temp 21.0\u00b0C / 70\u00b0F",
           "match": {
             "D6": "0x0E"
           }
         },
         {
-          "label": "Rear Temp 22.0°C / 72°F",
+          "label": "Rear Temp 22.0\u00b0C / 72\u00b0F",
           "match": {
             "D6": "0x10"
           }
@@ -6518,6 +6537,2030 @@
         "notes": "High precision BMS internal state of charge"
       },
       "subcategory": "BMS & Telemetry"
+    },
+    {
+      "id": "cluster_call_popup_alert",
+      "ha_metadata": {
+        "name": "Cluster Call & Notification Alert Modal",
+        "domain": "notify",
+        "icon": "mdi:phone-alert"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "type": "call_popup",
+      "category": "Cockpit & Controls",
+      "roles": [
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Cluster handsfree / telematics incoming call dialog modal (0x52A state D2 0x01 = Ringing/Alert, 0x02 = Active, 0x03 = Dismiss). Delivers dual-line text (Caller ID + Message) via ISO-TP channel 0x6D4/0x6B4 in UTF-16LE."
+      },
+      "network": {
+        "bus": 0,
+        "type": "call_popup",
+        "state_can_id": "0x52A",
+        "action_can_id": "0x6D4",
+        "flow_control_can_id": "0x6B4",
+        "trigger_frame_can_id": "0x52A"
+      },
+      "options": [
+        {
+          "label": "Info Notification (1 Beep)",
+          "level": "info",
+          "caller": "Home Assistant",
+          "popup_message": "Automation Triggered",
+          "default": true
+        },
+        {
+          "label": "Warning Alert (2 Beeps)",
+          "level": "warning",
+          "caller": "Security",
+          "popup_message": "Front Door Left Open"
+        },
+        {
+          "label": "Critical Alert (3 Beeps)",
+          "level": "error",
+          "caller": "Warning",
+          "popup_message": "Charge Cable Unplugged"
+        },
+        {
+          "label": "Garage Door Status",
+          "level": "info",
+          "caller": "Garage",
+          "popup_message": "Garage Door Closed"
+        },
+        {
+          "label": "EV Charging Complete",
+          "level": "info",
+          "caller": "EV Charger",
+          "popup_message": "Target SOC 80% Reached"
+        }
+      ],
+      "subcategory": "Cluster OSD Popups"
+    },
+    {
+      "id": "cluster_call_state",
+      "ha_metadata": {
+        "name": "Cluster Phone Call / Telematics State",
+        "domain": "sensor",
+        "icon": "mdi:phone-in-talk"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Cockpit & Controls",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x52A"
+      },
+      "roles": [
+        "trigger",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Instrument cluster telematics / phone call state (CLU15 / 0x52A Byte D2)."
+      },
+      "options": [
+        {
+          "label": "No Active Call",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0xFF",
+          "default": true
+        },
+        {
+          "label": "Incoming Call / Ringing",
+          "match": {
+            "D2": "0x01"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Active Connected Call",
+          "match": {
+            "D2": "0x02"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Call Terminated / Ended",
+          "match": {
+            "D2": "0x03"
+          },
+          "mask": "0xFF"
+        }
+      ],
+      "subcategory": "Cluster OSD Popups"
+    },
+    {
+      "id": "hud_turn_by_turn_maneuver",
+      "ha_metadata": {
+        "name": "Windshield HUD Turn-by-Turn Navigation",
+        "domain": "sensor",
+        "icon": "mdi:navigation-variant"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Cockpit & Controls",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "E-GMP / Gen 2.5 HUD Turn-by-Turn navigation frame 0x29B (HUD_01_100ms_1). Byte D1 = Maneuver icon, Bytes D3-D4 = 16-bit distance in meters, Byte D5 = 0-8 countdown bars, Byte D6 = speed camera alert, Byte D7 = speed limit. Street names sent via ISO-TP 0x6E2 in UTF-16LE."
+      },
+      "network": {
+        "bus": 0,
+        "type": "hud_nav",
+        "state_can_id": "0x29B",
+        "action_can_id": "0x29B",
+        "street_isotp_can_id": "0x6E2",
+        "street_fc_can_id": "0x6C0"
+      },
+      "options": [
+        {
+          "label": "Continue Straight",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0xFF",
+          "default": true
+        },
+        {
+          "label": "Bear Right",
+          "match": {
+            "D1": "0x02"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Turn Right 90\u00b0",
+          "match": {
+            "D1": "0x03"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Sharp Right",
+          "match": {
+            "D1": "0x04"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "U-Turn Left",
+          "match": {
+            "D1": "0x05"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "U-Turn Right",
+          "match": {
+            "D1": "0x06"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Bear Left",
+          "match": {
+            "D1": "0x07"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Turn Left 90\u00b0",
+          "match": {
+            "D1": "0x08"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Sharp Left",
+          "match": {
+            "D1": "0x09"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Roundabout 1st Exit",
+          "match": {
+            "D1": "0x0A"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Roundabout 2nd Exit",
+          "match": {
+            "D1": "0x0B"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Roundabout 3rd Exit",
+          "match": {
+            "D1": "0x0C"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Highway Fork Right",
+          "match": {
+            "D1": "0x0F"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Destination Reached",
+          "match": {
+            "D1": "0x1F"
+          },
+          "mask": "0xFF"
+        }
+      ],
+      "subcategory": "Head-Up Display & Navigation"
+    },
+    {
+      "id": "hud_display_settings",
+      "ha_metadata": {
+        "name": "HUD Mode & Target Screen Settings",
+        "domain": "sensor",
+        "icon": "mdi:monitor-dashboard"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Cockpit & Controls",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x29C"
+      },
+      "roles": [
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "E-GMP / Gen 2.5 HUD Settings frame 0x29C (HUD_01_100ms_2) for target display page, brightness, and AR mode status."
+      },
+      "options": [
+        {
+          "label": "HUD Standard Mode",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x0F",
+          "default": true
+        },
+        {
+          "label": "HUD Augmented Reality (AR) Mode",
+          "match": {
+            "D1": "0x02"
+          },
+          "mask": "0x0F"
+        }
+      ],
+      "subcategory": "Head-Up Display & Navigation"
+    },
+    {
+      "id": "hud_turn_by_turn_gen2",
+      "ha_metadata": {
+        "name": "HUD Turn-by-Turn Navigation (Gen 2 C-CAN)",
+        "domain": "sensor",
+        "icon": "mdi:navigation-variant-outline"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Cockpit & Controls",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Gen 2 C-CAN HUD11 (0x562 / 1378) Turn-by-turn guidance, distance bars, and speed camera alerts for Kona EV, Niro EV, and Ioniq EV."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x562",
+        "action_can_id": "0x562"
+      },
+      "options": [
+        {
+          "label": "Guidance Active",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x0F",
+          "default": true
+        },
+        {
+          "label": "No Active Guidance",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0x0F"
+        }
+      ],
+      "subcategory": "Head-Up Display & Navigation"
+    },
+    {
+      "id": "camera_speed_limit_sign",
+      "ha_metadata": {
+        "name": "Camera & Navigation Speed Limit Display",
+        "domain": "sensor",
+        "icon": "mdi:speedometer"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Cockpit & Controls",
+      "roles": [
+        "sensor",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Front camera & map speed limit sign display frame 0x1FA (FR_CMR_02_100ms / 506: ISLW_SpdNaviMainDis at bit 41, ISLA_SpdWrn at bit 124, ISLA_SchoolZone at bit 154)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x1FA"
+      },
+      "options": [
+        {
+          "label": "Speed Limit 25 mph / 40 km/h",
+          "match": {
+            "D6": "0x28"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Speed Limit 35 mph / 55 km/h",
+          "match": {
+            "D6": "0x37"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Speed Limit 45 mph / 70 km/h",
+          "match": {
+            "D6": "0x46"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Speed Limit 55 mph / 90 km/h",
+          "match": {
+            "D6": "0x5A"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Speed Limit 65 mph / 105 km/h",
+          "match": {
+            "D6": "0x69"
+          },
+          "mask": "0xFF",
+          "default": true
+        },
+        {
+          "label": "Speed Limit 70 mph / 110 km/h",
+          "match": {
+            "D6": "0x6E"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "No Speed Limit Recognized",
+          "match": {
+            "D6": "0x00"
+          },
+          "mask": "0xFF"
+        }
+      ],
+      "subcategory": "Cluster OSD Popups"
+    },
+    {
+      "id": "navigation_precond_status",
+      "ha_metadata": {
+        "name": "Navigation Charger Preconditioning Status",
+        "domain": "sensor",
+        "icon": "mdi:battery-charging-wireless"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "High Voltage & Charging",
+      "roles": [
+        "sensor",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "AVN Navigation Preconditioning Status frame 0x4ED (1261): distance to fast charger (Bytes D6-D7) and preconditioning activation request flag (Byte D8)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x4ED"
+      },
+      "options": [
+        {
+          "label": "Preconditioning Active",
+          "match": {
+            "D8": "0x01"
+          },
+          "mask": "0x0F",
+          "default": true
+        },
+        {
+          "label": "Preconditioning Inactive",
+          "match": {
+            "D8": "0x00"
+          },
+          "mask": "0x0F"
+        }
+      ],
+      "subcategory": "Battery Preconditioning"
+    },
+    {
+      "id": "remote_climate_tmu",
+      "ha_metadata": {
+        "name": "Telematics Unit Remote Climate & Preconditioning",
+        "domain": "switch",
+        "icon": "mdi:radiator"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "E-GMP Telematics Unit (TMU_01_200ms / 0x39B): Broadcasts remote start/stop climate commands, cabin heating, and defrost commands from Bluelink / Kia Connect."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x39B",
+        "action_can_id": "0x39B"
+      },
+      "options": [
+        {
+          "label": "Remote Climate On",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x0F",
+          "default": true
+        },
+        {
+          "label": "Remote Climate Off",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0x0F"
+        }
+      ],
+      "subcategory": "Remote Climate Controls"
+    },
+    {
+      "id": "remaining_charge_time_ac",
+      "ha_metadata": {
+        "name": "AC Normal Charge Remaining Time",
+        "domain": "sensor",
+        "icon": "mdi:timer-sand",
+        "device_class": "duration",
+        "unit_of_measurement": "min"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "High Voltage & Charging",
+      "subcategory": "Charging Status",
+      "roles": [
+        "sensor",
+        "condition",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "AC Normal Charging (Level 2) remaining time to full charge in minutes. Decoded from BMS3 frame 0x597 Bytes D2-D3 (CR_Bms_ChgRemainedTime_min): Minutes = (Byte D3 << 8) | Byte D2. Value 0xFFFF (65535) indicates inactive / not charging."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x597",
+        "unit": "min"
+      },
+      "options": [
+        {
+          "label": "Under 30 Minutes",
+          "evaluate": {
+            "byte": "D2",
+            "operator": "less_equal",
+            "value": "0x1E"
+          }
+        },
+        {
+          "label": "Under 1 Hour",
+          "evaluate": {
+            "byte": "D2",
+            "operator": "less_equal",
+            "value": "0x3C"
+          }
+        },
+        {
+          "label": "Over 2 Hours",
+          "evaluate": {
+            "byte": "D2",
+            "operator": "greater_than",
+            "value": "0x78"
+          }
+        },
+        {
+          "label": "Not Charging / Inactive",
+          "match": {
+            "D2": "0xFF",
+            "D3": "0xFF"
+          },
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "remaining_charge_time_dc",
+      "ha_metadata": {
+        "name": "DC Fast Charge Remaining Time",
+        "domain": "sensor",
+        "icon": "mdi:battery-charging-high",
+        "device_class": "duration",
+        "unit_of_measurement": "min"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "High Voltage & Charging",
+      "subcategory": "Charging Status",
+      "roles": [
+        "sensor",
+        "condition",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "DC Quick Fast Charge (CCS / 800V DCFC) remaining time to target charge limit in minutes. Decoded from BMS3 frame 0x597 Bytes D4-D5 (CR_Bms_QcChgRemainedTime_min): Minutes = (Byte D5 << 8) | Byte D4."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x597",
+        "unit": "min"
+      },
+      "options": [
+        {
+          "label": "Under 10 Minutes (Near 80%)",
+          "evaluate": {
+            "byte": "D4",
+            "operator": "less_equal",
+            "value": "0x0A"
+          }
+        },
+        {
+          "label": "Under 20 Minutes",
+          "evaluate": {
+            "byte": "D4",
+            "operator": "less_equal",
+            "value": "0x14"
+          }
+        },
+        {
+          "label": "Over 20 Minutes",
+          "evaluate": {
+            "byte": "D4",
+            "operator": "greater_than",
+            "value": "0x14"
+          }
+        },
+        {
+          "label": "Not Fast Charging",
+          "match": {
+            "D4": "0xFF",
+            "D5": "0xFF"
+          },
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "remaining_charge_time_120v",
+      "ha_metadata": {
+        "name": "Level 1 (120V) Charge Remaining Time",
+        "domain": "sensor",
+        "icon": "mdi:power-plug-outline",
+        "device_class": "duration",
+        "unit_of_measurement": "min"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "High Voltage & Charging",
+      "subcategory": "Charging Status",
+      "roles": [
+        "sensor",
+        "condition"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Level 1 (120V trickle) portable charger remaining time to full in minutes. Decoded from BMS8/BMS25 frame 0x4E2 Bytes D3-D4 (CR_Bms_ScChgRemainedTime_120_min): Minutes = (Byte D4 << 8) | Byte D3."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x4E2",
+        "unit": "min"
+      },
+      "options": [
+        {
+          "label": "Over 12 Hours",
+          "evaluate": {
+            "byte": "D4",
+            "operator": "greater_than",
+            "value": "0x02"
+          }
+        },
+        {
+          "label": "Not Level 1 Charging",
+          "match": {
+            "D3": "0xFF",
+            "D4": "0xFF"
+          },
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "ev_charge_type_active",
+      "ha_metadata": {
+        "name": "EV Charging Power Type & Source",
+        "domain": "sensor",
+        "icon": "mdi:ev-station"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "High Voltage & Charging",
+      "subcategory": "Charging Status",
+      "roles": [
+        "sensor",
+        "condition",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Active EV charging power source and protocol decoded from BMS2 frame 0x595 Byte D1 (Bit 1 CF_Bms_StdCha = Level 2 AC, Bit 2 CF_Bms_FstCha = DC Fast Charge CCS, Bit 3 CF_Bms_StdCha120V = Level 1 120V)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x595"
+      },
+      "options": [
+        {
+          "label": "Standard AC Charging (Level 2)",
+          "match": {
+            "D1": "0x02"
+          },
+          "mask": "0x0E",
+          "default": true
+        },
+        {
+          "label": "DC Fast Charging (CCS / 800V)",
+          "match": {
+            "D1": "0x04"
+          },
+          "mask": "0x0E"
+        },
+        {
+          "label": "120V Trickle Charging (Level 1)",
+          "match": {
+            "D1": "0x08"
+          },
+          "mask": "0x0E"
+        },
+        {
+          "label": "Not Charging / Disconnected",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0x0E"
+        }
+      ]
+    },
+    {
+      "id": "ev_charge_port_lock_mode",
+      "ha_metadata": {
+        "name": "EV Charge Port Connector Auto-Lock",
+        "domain": "sensor",
+        "icon": "mdi:lock-check"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "High Voltage & Charging",
+      "subcategory": "Charging Status",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Charge port connector electronic locking latch configuration decoded from EV_CP5 frame 0x578 Byte D1 (0x01 = Always Locked while plugged in, 0x02 = Locked while actively charging then auto-unlock at 100%, 0x03 = Do Not Lock)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x578"
+      },
+      "options": [
+        {
+          "label": "Always Locked (Plugged In)",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0xFF",
+          "default": true
+        },
+        {
+          "label": "Locked While Charging (Auto-Unlock at Full)",
+          "match": {
+            "D1": "0x02"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Do Not Lock Connector",
+          "match": {
+            "D1": "0x03"
+          },
+          "mask": "0xFF"
+        }
+      ]
+    },
+    {
+      "id": "v2l_discharge_remaining_time",
+      "ha_metadata": {
+        "name": "V2L Discharge Remaining Time",
+        "domain": "sensor",
+        "icon": "mdi:battery-arrow-down",
+        "device_class": "duration",
+        "unit_of_measurement": "min"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "High Voltage & Charging",
+      "subcategory": "Limits & V2L",
+      "roles": [
+        "sensor",
+        "condition"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Vehicle-to-Load (V2L) estimated discharge runtime remaining in minutes before hitting configured minimum battery SOC cutoff limit. Decoded from VCMS / V2X discharge telemetry."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x594",
+        "unit": "min"
+      },
+      "options": [
+        {
+          "label": "Over 5 Hours Remaining",
+          "evaluate": {
+            "byte": "D5",
+            "operator": "greater_than",
+            "value": "0x01"
+          },
+          "default": true
+        },
+        {
+          "label": "Low V2L Runtime (< 1 Hour)",
+          "evaluate": {
+            "byte": "D4",
+            "operator": "less_equal",
+            "value": "0x3C"
+          }
+        }
+      ]
+    },
+    {
+      "id": "bms_cell_extremes_voltage",
+      "ha_metadata": {
+        "name": "HV Battery Cell Min & Max Voltage",
+        "domain": "sensor",
+        "icon": "mdi:battery-heart-variant",
+        "unit_of_measurement": "V"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "High Voltage & Charging",
+      "subcategory": "BMS & Telemetry",
+      "roles": [
+        "sensor",
+        "condition"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Decoded highest (CR_Bms_BatMaxCel_V, Bytes D1-D2) and lowest (CR_Bms_BatMinCel_V, Bytes D3-D4) cell voltage in pack from BMS frame 0x5D6 (0.02V scaling)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x5D6",
+        "unit": "V"
+      },
+      "options": [
+        {
+          "label": "Cell Voltage Nominal (> 3.7V)",
+          "evaluate": {
+            "byte": "D1",
+            "operator": "greater_than",
+            "value": "0xB9"
+          },
+          "default": true
+        },
+        {
+          "label": "Cell Voltage High (> 4.15V)",
+          "evaluate": {
+            "byte": "D1",
+            "operator": "greater_than",
+            "value": "0xCF"
+          }
+        },
+        {
+          "label": "Cell Voltage Low (< 3.2V)",
+          "evaluate": {
+            "byte": "D3",
+            "operator": "less_than",
+            "value": "0xA0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "bms_module_extremes_temp",
+      "ha_metadata": {
+        "name": "HV Battery Module Min & Max Temp",
+        "domain": "sensor",
+        "icon": "mdi:thermometer-chevron-up",
+        "unit_of_measurement": "\u00b0C"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "High Voltage & Charging",
+      "subcategory": "BMS & Telemetry",
+      "roles": [
+        "sensor",
+        "condition"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40\u00b0C offset."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x5D7",
+        "unit": "\u00b0C"
+      },
+      "options": [
+        {
+          "label": "Battery Optimal Warm (20\u00b0C - 35\u00b0C)",
+          "evaluate": {
+            "byte": "D1",
+            "operator": "greater_equal",
+            "value": "0x3C"
+          },
+          "default": true
+        },
+        {
+          "label": "Battery High Temp (> 45\u00b0C / 113\u00b0F)",
+          "evaluate": {
+            "byte": "D1",
+            "operator": "greater_than",
+            "value": "0x55"
+          }
+        },
+        {
+          "label": "Battery Cold (< 10\u00b0C / 50\u00b0F)",
+          "evaluate": {
+            "byte": "D2",
+            "operator": "less_than",
+            "value": "0x32"
+          }
+        },
+        {
+          "label": "Battery Freezing (< 0\u00b0C / 32\u00b0F)",
+          "evaluate": {
+            "byte": "D2",
+            "operator": "less_than",
+            "value": "0x28"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ev_distance_to_empty",
+      "ha_metadata": {
+        "name": "EV Driving Range (Distance to Empty)",
+        "domain": "sensor",
+        "icon": "mdi:map-marker-distance",
+        "device_class": "distance",
+        "unit_of_measurement": "km"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "High Voltage & Charging",
+      "subcategory": "BMS & Telemetry",
+      "roles": [
+        "sensor",
+        "condition",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Estimated EV remaining driving range in kilometers (CR_Vcu_DistEmpty_km) decoded from VCU frame 0x200 Bytes D5-D6 (LE)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x200",
+        "unit": "km"
+      },
+      "options": [
+        {
+          "label": "Range Plentiful (> 200 km / 125 mi)",
+          "evaluate": {
+            "byte": "D5",
+            "operator": "greater_than",
+            "value": "0xC8"
+          },
+          "default": true
+        },
+        {
+          "label": "Range Medium (> 100 km / 62 mi)",
+          "evaluate": {
+            "byte": "D5",
+            "operator": "greater_than",
+            "value": "0x64"
+          }
+        },
+        {
+          "label": "Low Range Warning (< 50 km / 31 mi)",
+          "evaluate": {
+            "byte": "D5",
+            "operator": "less_than",
+            "value": "0x32"
+          }
+        },
+        {
+          "label": "Critical Range (< 20 km / 12 mi)",
+          "evaluate": {
+            "byte": "D5",
+            "operator": "less_than",
+            "value": "0x14"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ev_system_ready",
+      "ha_metadata": {
+        "name": "EV Drivetrain Ready (Contactors Closed)",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-electric"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Powertrain & Motor",
+      "roles": [
+        "sensor",
+        "condition",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "EV System Ready to Drive status flag (CF_Vcu_EvRdy) from VCU frame 0x200 Byte D1 Bit 0 (1 = High Voltage Contactors Closed, Ready to Drive)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x200"
+      },
+      "options": [
+        {
+          "label": "EV Ready (Drive Mode)",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x01",
+          "default": true
+        },
+        {
+          "label": "EV Not Ready (Standby/Off)",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0x01"
+        }
+      ]
+    },
+    {
+      "id": "scheduled_charging_departure",
+      "ha_metadata": {
+        "name": "Scheduled Charging Departure & Limits",
+        "domain": "sensor",
+        "icon": "mdi:calendar-clock"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "High Voltage & Charging",
+      "subcategory": "Limits & V2L",
+      "roles": [
+        "sensor",
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Scheduled charging departure schedule (Days/Hour/Min) and slow/fast charge caps decoded from EV_CP1 frame 0x5D0 (Byte D5 = AC Slow Max SOC, Byte D6 = DC Fast Max SOC)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x5D0",
+        "action_can_id": "0x5D0"
+      },
+      "options": [
+        {
+          "label": "Standard Schedule Active",
+          "match": {
+            "D5": "0x50"
+          },
+          "mask": "0xFF",
+          "default": true
+        },
+        {
+          "label": "Max 100% Charge Scheduled",
+          "match": {
+            "D5": "0x64"
+          },
+          "mask": "0xFF"
+        }
+      ]
+    },
+    {
+      "id": "scheduled_climate_preheat",
+      "ha_metadata": {
+        "name": "Scheduled Pre-departure Climate & Tariff",
+        "domain": "sensor",
+        "icon": "mdi:clock-digital"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "Remote Climate Controls",
+      "roles": [
+        "sensor",
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Pre-departure cabin climate pre-heating schedule and off-peak electricity tariff charging window from EV_CP2 frame 0x450."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x450",
+        "action_can_id": "0x450"
+      },
+      "options": [
+        {
+          "label": "Off-Peak Window Active",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x0F",
+          "default": true
+        },
+        {
+          "label": "Schedule Disabled",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0x0F"
+        }
+      ]
+    },
+    {
+      "id": "active_air_flaps_position",
+      "ha_metadata": {
+        "name": "Active Air Flap (AAF) Position",
+        "domain": "sensor",
+        "icon": "mdi:air-filter"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Exterior & Aerodynamics",
+      "roles": [
+        "sensor",
+        "condition",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Front bumper active grille air flaps position command from VCU frame 0x584 (AAF11). Flaps automatically open for radiator cooling and close at highway speeds for aero drag reduction."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x584"
+      },
+      "options": [
+        {
+          "label": "Flaps Fully Closed (0% - Aero Eco)",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0xFF",
+          "default": true
+        },
+        {
+          "label": "Flaps Half Open (50% - Moderate Cooling)",
+          "match": {
+            "D1": "0x32"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Flaps Fully Open (100% - Max Cooling)",
+          "match": {
+            "D1": "0x64"
+          },
+          "mask": "0xFF"
+        }
+      ]
+    },
+    {
+      "id": "climate_telemetry_status",
+      "ha_metadata": {
+        "name": "Cabin Displayed Target Temperature",
+        "domain": "sensor",
+        "icon": "mdi:thermometer-lines",
+        "unit_of_measurement": "\u00b0F"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "Zone Settings",
+      "roles": [
+        "sensor",
+        "condition"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in \u00b0C x 0.5, Byte D3 = Driver Temp in \u00b0F integer)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x5F5",
+        "unit": "\u00b0F"
+      },
+      "options": [
+        {
+          "label": "68\u00b0F (20.0\u00b0C)",
+          "match": {
+            "D3": "0x44"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "70\u00b0F (21.0\u00b0C)",
+          "match": {
+            "D3": "0x46"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "72\u00b0F (22.0\u00b0C)",
+          "match": {
+            "D3": "0x48"
+          },
+          "mask": "0xFF",
+          "default": true
+        },
+        {
+          "label": "74\u00b0F (23.5\u00b0C)",
+          "match": {
+            "D3": "0x4A"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "76\u00b0F (24.5\u00b0C)",
+          "match": {
+            "D3": "0x4C"
+          },
+          "mask": "0xFF"
+        }
+      ]
+    },
+    {
+      "id": "climate_blower_fan_status",
+      "ha_metadata": {
+        "name": "Climate Blower Fan Level & Defrost Status",
+        "domain": "sensor",
+        "icon": "mdi:fan"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "Blower & Fans",
+      "roles": [
+        "sensor",
+        "condition",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Real-time front blower fan bar level (0 to 8 bars) from DATC3 frame 0x5F7 Byte D1 (CR_Fatc_FrontBlwDisp) and front defrost amber LED status on Byte D2 Bit 0 (CR_Fatc_FrDefLed)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x5F7"
+      },
+      "options": [
+        {
+          "label": "Blower Off (0 Bars)",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Blower Low (1-2 Bars)",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0xFE"
+        },
+        {
+          "label": "Blower Medium (3-4 Bars)",
+          "match": {
+            "D1": "0x03"
+          },
+          "mask": "0xFE",
+          "default": true
+        },
+        {
+          "label": "Blower High (5-6 Bars)",
+          "match": {
+            "D1": "0x05"
+          },
+          "mask": "0xFE"
+        },
+        {
+          "label": "Blower Max (7-8 Bars)",
+          "match": {
+            "D1": "0x07"
+          },
+          "mask": "0xFE"
+        }
+      ]
+    },
+    {
+      "id": "climate_touchscreen_driver_cmd",
+      "ha_metadata": {
+        "name": "Touchscreen Driver Climate Controls",
+        "domain": "climate",
+        "icon": "mdi:thermostat-box-auto"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "Zone Settings",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Direct AVN touchscreen driver climate command frame 0x5CB (DATC_HU_PE_01) for target driver temperature, Auto mode trigger, system power toggle, and air intake vent selection."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x5CB",
+        "action_can_id": "0x5CB"
+      },
+      "options": [
+        {
+          "label": "Auto Climate On",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x0F",
+          "default": true
+        },
+        {
+          "label": "Climate Off",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0x0F"
+        }
+      ]
+    },
+    {
+      "id": "climate_touchscreen_passenger_cmd",
+      "ha_metadata": {
+        "name": "Touchscreen Passenger & Seat Climate Controls",
+        "domain": "climate",
+        "icon": "mdi:car-seat-heater"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "Seats & Steering Wheel",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Direct AVN touchscreen passenger/rear climate command frame 0x5CC (DATC_HU_PE_02) for passenger temperature, rear climate child lock, rear defrost/mirror heater trigger, and seat heating/ventilation."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x5CC",
+        "action_can_id": "0x5CC"
+      },
+      "options": [
+        {
+          "label": "Rear Defrost On",
+          "match": {
+            "D3": "0x01"
+          },
+          "mask": "0x0F",
+          "default": true
+        },
+        {
+          "label": "Rear Defrost Off",
+          "match": {
+            "D3": "0x00"
+          },
+          "mask": "0x0F"
+        }
+      ]
+    },
+    {
+      "id": "lkas_steering_status",
+      "ha_metadata": {
+        "name": "Lane Keeping Assist (LKAS) Steer-by-Wire",
+        "domain": "sensor",
+        "icon": "mdi:steering"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Driving Dynamics",
+      "roles": [
+        "sensor",
+        "condition",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Forward LKAS camera steering torque overlay command (Steering_Torque_Cmd, signed 11-bit), LKAS active state machine (Byte D2 bits 2-5), and hands-off steering wheel warning alarm level (Byte D7 bits 0-2) from frame 0x340."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x340"
+      },
+      "options": [
+        {
+          "label": "LKAS Actively Centering",
+          "match": {
+            "D2": "0x04"
+          },
+          "mask": "0x3C",
+          "default": true
+        },
+        {
+          "label": "LKAS Standby",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0x3C"
+        },
+        {
+          "label": "Driver Overriding Steering",
+          "match": {
+            "D2": "0x08"
+          },
+          "mask": "0x3C"
+        },
+        {
+          "label": "Hands-Off Wheel Alert",
+          "match": {
+            "D7": "0x01"
+          },
+          "mask": "0x07"
+        }
+      ]
+    },
+    {
+      "id": "scc_cruise_status",
+      "ha_metadata": {
+        "name": "Smart Cruise Control (SCC) Acceleration & Stop",
+        "domain": "sensor",
+        "icon": "mdi:speedometer-slow"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Driving Dynamics",
+      "roles": [
+        "sensor",
+        "condition",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s\u00b2 signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x420"
+      },
+      "options": [
+        {
+          "label": "Cruise Standstill Hold (Stop & Go)",
+          "match": {
+            "D3": "0x01"
+          },
+          "mask": "0x01",
+          "default": true
+        },
+        {
+          "label": "Normal Cruising",
+          "match": {
+            "D3": "0x00"
+          },
+          "mask": "0x01"
+        }
+      ]
+    },
+    {
+      "id": "scc_lead_vehicle_status",
+      "ha_metadata": {
+        "name": "Smart Cruise Lead Vehicle & Set Speed",
+        "domain": "sensor",
+        "icon": "mdi:car-estate"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Driving Dynamics",
+      "roles": [
+        "sensor",
+        "condition"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Smart Cruise Control display telemetry frame 0x421 (SCC12): Lead vehicle detected icon flag, cruise set speed, and inter-vehicle distance gap bars (1-4)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x421"
+      },
+      "options": [
+        {
+          "label": "Lead Vehicle Present Ahead",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x01",
+          "default": true
+        },
+        {
+          "label": "Open Road (No Lead Vehicle)",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0x01"
+        }
+      ]
+    },
+    {
+      "id": "aeb_emergency_braking",
+      "ha_metadata": {
+        "name": "Forward Collision Avoidance (FCA / AEB)",
+        "domain": "binary_sensor",
+        "icon": "mdi:alert-octagon"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Driving Dynamics",
+      "roles": [
+        "sensor",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Radar and camera fusion Autonomous Emergency Braking command frame 0x38D (AEB11): autonomous max deceleration braking command and brake hydraulic pre-fill trigger."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x38D"
+      },
+      "options": [
+        {
+          "label": "Emergency Braking Active",
+          "match": {
+            "D2": "0x01"
+          },
+          "mask": "0x01",
+          "default": true
+        },
+        {
+          "label": "AEB Inactive / Standby",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0x01"
+        }
+      ]
+    },
+    {
+      "id": "telematics_remote_door_locks",
+      "ha_metadata": {
+        "name": "Telematics Remote Door Lock & Horn Command",
+        "domain": "lock",
+        "icon": "mdi:car-door-lock"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Central Locking",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Telematics modem (TMU1 / 0x587) remote commands for Door Lock, Door Unlock, Hazard Light Flashes, and Horn Honks."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x587",
+        "action_can_id": "0x587"
+      },
+      "options": [
+        {
+          "label": "Lock Doors",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x0F",
+          "default": true
+        },
+        {
+          "label": "Unlock Doors",
+          "match": {
+            "D1": "0x02"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Flash Hazards & Honk Horn",
+          "match": {
+            "D2": "0x01"
+          },
+          "mask": "0x0F"
+        }
+      ]
+    },
+    {
+      "id": "telematics_remote_tailgate",
+      "ha_metadata": {
+        "name": "Telematics Remote Tailgate & Windows",
+        "domain": "cover",
+        "icon": "mdi:car-back"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Trunk & Frunk",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Telematics modem (TMU2 / 0x588) remote commands for Power Tailgate / Trunk open/close and remote power window roll-up/down."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x588",
+        "action_can_id": "0x588"
+      },
+      "options": [
+        {
+          "label": "Open Tailgate / Trunk",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x0F",
+          "default": true
+        },
+        {
+          "label": "Close Tailgate / Trunk",
+          "match": {
+            "D1": "0x02"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Roll Windows Up",
+          "match": {
+            "D2": "0x01"
+          },
+          "mask": "0x0F"
+        }
+      ]
+    },
+    {
+      "id": "infotainment_user_preferences",
+      "ha_metadata": {
+        "name": "Infotainment Convenience Preferences",
+        "domain": "sensor",
+        "icon": "mdi:tune"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Cockpit & Controls",
+      "subcategory": "Convenience Features",
+      "roles": [
+        "sensor",
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Touchscreen vehicle settings synchronization frame 0x542 (HU_USM_E_02): Auto-door-lock by speed/shift, Headlight delay escort timer, and one-touch turn signal count (3, 5, or 7 flashes)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x542",
+        "action_can_id": "0x542"
+      },
+      "options": [
+        {
+          "label": "Auto-Lock On Shift Out of Park",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x0F",
+          "default": true
+        },
+        {
+          "label": "Auto-Lock On Speed (> 15 km/h)",
+          "match": {
+            "D1": "0x02"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "One-Touch Turn Signal: 5 Flashes",
+          "match": {
+            "D3": "0x05"
+          },
+          "mask": "0xFF"
+        }
+      ]
+    },
+    {
+      "id": "shift_by_wire_selector",
+      "ha_metadata": {
+        "name": "Electronic Shift-by-Wire Gear Selector",
+        "domain": "sensor",
+        "icon": "mdi:car-shift-pattern"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Transmission & Shifter",
+      "roles": [
+        "sensor",
+        "condition",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Electronic gear selector dial/stalk command frame 0x10C (SCU1): target gear selection request (Park, Reverse, Neutral, Drive) and electronic park pawl lock/unlock."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x10C"
+      },
+      "options": [
+        {
+          "label": "Park (P)",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0x07",
+          "default": true
+        },
+        {
+          "label": "Drive (D)",
+          "match": {
+            "D1": "0x05"
+          },
+          "mask": "0x07"
+        },
+        {
+          "label": "Neutral (N)",
+          "match": {
+            "D1": "0x06"
+          },
+          "mask": "0x07"
+        },
+        {
+          "label": "Reverse (R)",
+          "match": {
+            "D1": "0x07"
+          },
+          "mask": "0x07"
+        }
+      ]
+    },
+    {
+      "id": "electric_parking_brake_status",
+      "ha_metadata": {
+        "name": "Electric Parking Brake (EPB) & Auto-Hold",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-brake-parking"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Driving Dynamics",
+      "roles": [
+        "sensor",
+        "condition",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Electric Parking Brake motor clamp/release and Auto-Hold system status from EPB frame 0x490."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x490"
+      },
+      "options": [
+        {
+          "label": "Parking Brake Clamped / Engaged",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x03",
+          "default": true
+        },
+        {
+          "label": "Parking Brake Released",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0x03"
+        },
+        {
+          "label": "Auto-Hold Active Braking",
+          "match": {
+            "D2": "0x01"
+          },
+          "mask": "0x01"
+        }
+      ]
+    },
+    {
+      "id": "parking_sensor_beeper",
+      "ha_metadata": {
+        "name": "Parking Assist Sensor Beeper Alert",
+        "domain": "sensor",
+        "icon": "mdi:volume-vibrate"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Cockpit & Controls",
+      "subcategory": "Cluster OSD Popups",
+      "roles": [
+        "sensor",
+        "trigger"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Parking Assist ultrasonic sensor beeper frequency and pulse repetition rate command frame 0x436 (PAS11) for obstacle proximity alert zones."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x436"
+      },
+      "options": [
+        {
+          "label": "No Obstacle Detected",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0x0F",
+          "default": true
+        },
+        {
+          "label": "Zone 1 (Far - Slow Beep)",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Zone 2 (Medium - Fast Beep)",
+          "match": {
+            "D1": "0x02"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Zone 3 (Close - Rapid Beep)",
+          "match": {
+            "D1": "0x03"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Zone 4 (Critical Stop - Continuous Tone)",
+          "match": {
+            "D1": "0x04"
+          },
+          "mask": "0x0F"
+        }
+      ]
+    },
+    {
+      "id": "rspa_smart_parking_ctrl",
+      "ha_metadata": {
+        "name": "Remote Smart Parking Assist (RSPA / Smart Summon)",
+        "domain": "sensor",
+        "icon": "mdi:remote"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Driving Dynamics",
+      "roles": [
+        "sensor",
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Remote Smart Parking Assist (RSPA1 / 0x38C) key fob / smartphone remote parking command: Forward/Reverse drive direction request, target crawl velocity, and emergency halt."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x38C",
+        "action_can_id": "0x38C"
+      },
+      "options": [
+        {
+          "label": "RSPA Idle / Inactive",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0x0F",
+          "default": true
+        },
+        {
+          "label": "RSPA Remote Drive Forward",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "RSPA Remote Drive Reverse",
+          "match": {
+            "D1": "0x02"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "RSPA Emergency Halt",
+          "match": {
+            "D1": "0x0F"
+          },
+          "mask": "0x0F"
+        }
+      ]
     }
   ],
   "automations": [

@@ -12,6 +12,8 @@
 #include "mqtt_client.h"
 #include "esp_timer.h"
 #include "track_popup.h"
+#include "call_popup.h"
+#include "hud_nav.h"
 #include "precondition.h"
 #include "board_pins.h"
 #include "can.h"
@@ -85,6 +87,8 @@ void init_can_engine(void) {
     if (!tx_command_queue) {
         tx_command_queue = xQueueCreate(16, sizeof(CanBurstCmd*));
     }
+    call_popup_init();
+    hud_nav_init(HUD_PLATFORM_EGMP_CANFD);
 }
 
 void update_state_cache(uint32_t can_id, const uint8_t* data) {
@@ -323,6 +327,14 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             if (fwd_res == FWD_BLOCK) {
                 continue;
             }
+            fwd_res = call_popup_fwd(&msg_to_send, CAN_BUS_0);
+            if (fwd_res == FWD_BLOCK) {
+                continue;
+            }
+            fwd_res = hud_nav_fwd(&msg_to_send, CAN_BUS_0);
+            if (fwd_res == FWD_BLOCK) {
+                continue;
+            }
             if (g_sniffer_mode.load()) {
                 ESP_LOGD(TAG, "Sniffer mode active: suppressed TX ID 0x%03lX", (unsigned long)msg_to_send.identifier);
                 continue;
@@ -458,6 +470,8 @@ void can_rx_task(void* arg) {
             board_led_can_activity();
             precondition_can_rx_hook(&rx_msg, CAN_BUS_0);
             track_popup_rx(&rx_msg, CAN_BUS_0);
+            call_popup_rx(&rx_msg, CAN_BUS_0);
+            hud_nav_rx(&rx_msg, CAN_BUS_0);
             uds_engine_on_can_rx(&rx_msg);
 
             // Stream raw frame to connected SavvyCAN/GVRET client
@@ -608,6 +622,14 @@ void can_rx_task(void* arg) {
         }
         precondition_tick();
         track_popup_tick();
+        call_popup_tick();
+
+        static uint32_t s_last_hud_tick_ms = 0;
+        uint32_t now_hud_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+        if (now_hud_ms - s_last_hud_tick_ms >= 100) {
+            s_last_hud_tick_ms = now_hud_ms;
+            hud_nav_tick_100ms();
+        }
 
         if (rx_processed >= 20) {
             vTaskDelay(pdMS_TO_TICKS(1));
