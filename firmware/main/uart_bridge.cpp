@@ -136,8 +136,7 @@ static void handle_incoming_command(const char* json_str) {
         cJSON *action_item = cJSON_GetObjectItem(root, "action");
         const char* action = cJSON_IsString(action_item) ? action_item->valuestring : "";
         if (strcmp(action, "preheat") == 0 || strcmp(action, "precon_toggle") == 0) {
-            bool running = precon_is_running();
-            precon_start(!running);
+            precondition_toggle_request();
             uart_bridge_send_raw("{\"type\":\"ack\",\"action\":\"precon_toggled\"}");
         } else {
             ESP_LOGW(TAG, "Unknown trigger action: %s", action);
