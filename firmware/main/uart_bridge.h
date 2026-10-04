@@ -4,12 +4,12 @@
 #include "driver/twai.h"
 #include "driver/uart.h"
 
-// MeatPi WiCAN Header Pins for UART1
-// IO1 = GPIO_NUM_1 (TX)
-// IO5 = GPIO_NUM_5 (RX)
+// MeatPi WiCAN Corner 2.54mm Header Pins:
+// TX pad = GPIO_NUM_21 (Connect to Atom Lite RX / G32)
+// RX pad = GPIO_NUM_20 (Connect to Atom Lite TX / G26)
 #define UART_BRIDGE_PORT        UART_NUM_1
-#define UART_BRIDGE_TX_PIN      GPIO_NUM_1
-#define UART_BRIDGE_RX_PIN      GPIO_NUM_5
+#define UART_BRIDGE_TX_PIN      GPIO_NUM_21
+#define UART_BRIDGE_RX_PIN      GPIO_NUM_20
 #define UART_BRIDGE_BAUD_RATE   921600
 
 void uart_bridge_init(void);

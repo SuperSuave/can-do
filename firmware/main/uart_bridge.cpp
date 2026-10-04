@@ -154,8 +154,8 @@ static void uart_bridge_rx_task(void* pvParameters) {
         return;
     }
 
-    std::string line_buffer = "";
-    ESP_LOGI(TAG, "UART Bridge RX task active (IO1=TX, IO5=RX, %d baud)", UART_BRIDGE_BAUD_RATE);
+    ESP_LOGI(TAG, "UART Bridge RX task active (Corner TX=GPIO%d, RX=GPIO%d, %d baud)", 
+             UART_BRIDGE_TX_PIN, UART_BRIDGE_RX_PIN, UART_BRIDGE_BAUD_RATE);
 
     while (true) {
         int len = uart_read_bytes(UART_BRIDGE_PORT, dtmp, RX_BUF_SIZE - 1, pdMS_TO_TICKS(50));
