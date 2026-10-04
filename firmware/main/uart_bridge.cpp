@@ -154,6 +154,7 @@ static void uart_bridge_rx_task(void* pvParameters) {
         return;
     }
 
+    std::string line_buffer = "";
     ESP_LOGI(TAG, "UART Bridge RX task active (Corner TX=GPIO%d, RX=GPIO%d, %d baud)", 
              UART_BRIDGE_TX_PIN, UART_BRIDGE_RX_PIN, UART_BRIDGE_BAUD_RATE);
 
@@ -190,6 +191,7 @@ void uart_bridge_init(void) {
         .parity    = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .rx_flow_ctrl_thresh = 0,
         .source_clk = UART_SCLK_DEFAULT,
     };
 
