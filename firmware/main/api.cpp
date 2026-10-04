@@ -1,4 +1,5 @@
 #include "api.h"
+#include "uart_bridge.h"
 #include "esp_littlefs.h"
 #include <dirent.h>
 #include "parser.h"
@@ -90,13 +91,16 @@ void broadcast_ws_raw(const std::string& json_str) {
 }
 
 void broadcast_ws_state(const std::string& entity_id, const std::string& state) {
+    uart_bridge_send_state(entity_id, state);
     if (!has_active_websocket_clients()) return;
     std::string json = "{\"type\":\"state\",\"entity\":\"" + entity_id + "\",\"state\":\"" + state + "\"}";
     broadcast_ws_raw(json);
 }
 
 void broadcast_ws_can_frame(const twai_message_t* msg) {
-    if (!msg || !has_active_websocket_clients()) return;
+    if (!msg) return;
+    uart_bridge_send_can_frame(msg);
+    if (!has_active_websocket_clients()) return;
     char hex_data[17] = {0};
     uint8_t dlc = msg->data_length_code > 8 ? 8 : msg->data_length_code;
     for (int i = 0; i < dlc; i++) {
@@ -113,12 +117,13 @@ void broadcast_ws_can_frame(const twai_message_t* msg) {
 }
 
 void broadcast_ws_automation_event(const std::string& id, const std::string& name) {
-    if (!has_active_websocket_clients()) return;
     char buf[256];
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
     snprintf(buf, sizeof(buf),
              "{\"type\":\"automation_fired\",\"id\":\"%s\",\"name\":\"%s\",\"ts\":%lu}",
              id.c_str(), name.c_str(), (unsigned long)now_ms);
+    uart_bridge_send_raw(buf);
+    if (!has_active_websocket_clients()) return;
     broadcast_ws_raw(buf);
 }
 

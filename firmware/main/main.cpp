@@ -27,6 +27,7 @@
 #include "vbat_sensor.h"
 #include "uds_engine.h"
 #include "power_mgr.h"
+#include "uart_bridge.h"
 
 #include "esp_mac.h"
 #include "esp_wifi.h"
@@ -129,6 +130,7 @@ extern "C" void app_main(void) {
     // 0. Initialize WiCAN board hardware (CAN Transceiver STB pin and LEDs)
     board_hardware_init();
     vbat_sensor_init();
+    uart_bridge_init();
 
     // 1. Core Networking Subsystems (MUST be initialized before any sockets or wifi)
     ESP_ERROR_CHECK(esp_netif_init());

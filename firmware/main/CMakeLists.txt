@@ -30,6 +30,7 @@ idf_component_register(
         "vbat_sensor.cpp"
         "uds_engine.cpp"
         "power_mgr.cpp"
+        "uart_bridge.cpp"
     INCLUDE_DIRS "."
     REQUIRES 
         "nvs_flash"
