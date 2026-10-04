@@ -1,5 +1,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <Preferences.h>
+#include <ESPmDNS.h>
 #include <LittleFS.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
@@ -51,6 +53,68 @@ std::vector<String> g_paired_devices;
 void set_led_color(CRGB color);
 void send_to_wican(const String& line);
 void handle_wican_message(const String& line);
+
+// ============================================================================
+// Wi-Fi Storage & Manager
+// ============================================================================
+struct SavedWifiNetwork {
+    String ssid;
+    String password;
+    int priority;
+};
+
+std::vector<SavedWifiNetwork> g_saved_wifi;
+Preferences g_prefs;
+
+void load_saved_wifi() {
+    g_saved_wifi.clear();
+    g_prefs.begin("wifi_config", false);
+    String json_str = g_prefs.getString("networks", "[]");
+    g_prefs.end();
+
+    JsonDocument doc;
+    if (deserializeJson(doc, json_str) == DeserializationError::Ok) {
+        JsonArray arr = doc.as<JsonArray>();
+        for (JsonObject item : arr) {
+            SavedWifiNetwork net;
+            net.ssid = item["ssid"].as<String>();
+            net.password = item["password"].as<String>();
+            net.priority = item["priority"] | 50;
+            if (!net.ssid.isEmpty()) {
+                g_saved_wifi.push_back(net);
+            }
+        }
+    }
+    Serial.printf("[WIFI] Loaded %u saved roaming networks from NVS\n", g_saved_wifi.size());
+}
+
+void persist_saved_wifi() {
+    JsonDocument doc;
+    JsonArray arr = doc.to<JsonArray>();
+    for (const auto& net : g_saved_wifi) {
+        JsonObject item = arr.add<JsonObject>();
+        item["ssid"] = net.ssid;
+        item["password"] = net.password;
+        item["priority"] = net.priority;
+    }
+    String json_str;
+    serializeJson(doc, json_str);
+    g_prefs.begin("wifi_config", false);
+    g_prefs.putString("networks", json_str);
+    g_prefs.end();
+}
+
+void connect_to_best_wifi() {
+    if (g_saved_wifi.empty()) return;
+    int best_idx = 0;
+    for (size_t i = 1; i < g_saved_wifi.size(); i++) {
+        if (g_saved_wifi[i].priority > g_saved_wifi[best_idx].priority) {
+            best_idx = i;
+        }
+    }
+    Serial.printf("[WIFI] Connecting to '%s'...\n", g_saved_wifi[best_idx].ssid.c_str());
+    WiFi.begin(g_saved_wifi[best_idx].ssid.c_str(), g_saved_wifi[best_idx].password.c_str());
+}
 
 // ============================================================================
 // NimBLE Scan Callbacks
@@ -231,12 +295,22 @@ void setup() {
                       LittleFS.totalBytes() / 1024, LittleFS.usedBytes() / 1024);
     }
 
-    // 5. Initialize Wi-Fi Access Point (CAN-Do / 192.168.4.1)
-    WiFi.mode(WIFI_AP);
+    // 5. Initialize Wi-Fi (AP + STA)
+    WiFi.mode(WIFI_AP_STA);
     WiFi.softAP("CAN-Do", "");
     IPAddress apIP(192, 168, 4, 1);
     WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-    Serial.printf("[WIFI] Access Point 'CAN-Do' active at IP: %s\n", WiFi.softAPIP().toString().c_str());
+    Serial.printf("[WIFI] SoftAP 'CAN-Do' active at IP: %s\n", WiFi.softAPIP().toString().c_str());
+
+    load_saved_wifi();
+    if (!g_saved_wifi.empty()) {
+        connect_to_best_wifi();
+    }
+
+    if (MDNS.begin("can-do")) {
+        MDNS.addService("http", "tcp", 80);
+        Serial.println("[MDNS] Responder active: http://can-do.local");
+    }
 
     // 6. Setup NimBLE
     NimBLEDevice::init("CAN-Do-Bridge");
@@ -249,7 +323,7 @@ void setup() {
 
     // 7. Configure Web Server Routes
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
-    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "*");
 
     ws.onEvent(onWsEvent);
@@ -341,6 +415,152 @@ void setup() {
         }
     );
 
+    // REST: GET /api/wifi/status
+    server.on("/api/wifi/status", HTTP_GET, [](AsyncWebServerRequest *request) {
+        JsonDocument doc;
+        bool connected = (WiFi.status() == WL_CONNECTED);
+        doc["sta_connected"] = connected;
+        doc["sta_ssid"] = connected ? WiFi.SSID() : "";
+        doc["sta_ip"] = connected ? WiFi.localIP().toString() : "";
+        doc["sta_gw"] = connected ? WiFi.gatewayIP().toString() : "";
+        doc["sta_mask"] = connected ? WiFi.subnetMask().toString() : "";
+        doc["sta_rssi"] = connected ? WiFi.RSSI() : 0;
+
+        doc["ap_active"] = true;
+        doc["ap_ssid"] = "CAN-Do";
+        doc["ap_ip"] = WiFi.softAPIP().toString();
+        doc["ap_clients"] = WiFi.softAPgetStationNum();
+        doc["ap_mode"] = "auto";
+
+        String out;
+        serializeJson(doc, out);
+        request->send(200, "application/json", out);
+    });
+
+    // REST: GET /api/wifi/networks
+    server.on("/api/wifi/networks", HTTP_GET, [](AsyncWebServerRequest *request) {
+        JsonDocument doc;
+        JsonArray arr = doc.to<JsonArray>();
+        for (const auto& net : g_saved_wifi) {
+            JsonObject item = arr.add<JsonObject>();
+            item["ssid"] = net.ssid;
+            item["priority"] = net.priority;
+        }
+        String out;
+        serializeJson(doc, out);
+        request->send(200, "application/json", out);
+    });
+
+    // REST: POST /api/wifi/networks
+    server.on("/api/wifi/networks", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+            String body = "";
+            for (size_t i = 0; i < len; i++) body += (char)data[i];
+            JsonDocument doc;
+            if (deserializeJson(doc, body) == DeserializationError::Ok) {
+                const char* ssid = doc["ssid"];
+                const char* pass = doc["password"] | "";
+                int prio = doc["priority"] | 50;
+
+                if (ssid && strlen(ssid) > 0) {
+                    bool updated = false;
+                    for (auto& net : g_saved_wifi) {
+                        if (net.ssid.equalsIgnoreCase(ssid)) {
+                            net.password = pass;
+                            net.priority = prio;
+                            updated = true;
+                            break;
+                        }
+                    }
+                    if (!updated) {
+                        g_saved_wifi.push_back({String(ssid), String(pass), prio});
+                    }
+                    persist_saved_wifi();
+                    Serial.printf("[WIFI] Saved network '%s' (priority %d)\n", ssid, prio);
+
+                    // Connect immediately
+                    WiFi.begin(ssid, pass);
+
+                    // Forward to WiCAN over UART bridge
+                    JsonDocument wican_doc;
+                    wican_doc["type"] = "wifi_save";
+                    wican_doc["ssid"] = ssid;
+                    wican_doc["password"] = pass;
+                    wican_doc["priority"] = prio;
+                    String wican_str;
+                    serializeJson(wican_doc, wican_str);
+                    send_to_wican(wican_str);
+
+                    request->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Network saved\"}");
+                    return;
+                }
+            }
+            request->send(400, "application/json", "{\"error\":\"invalid_payload\"}");
+        }
+    );
+
+    // REST: DELETE /api/wifi/networks
+    server.on("/api/wifi/networks", HTTP_DELETE, [](AsyncWebServerRequest *request) {}, NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+            String body = "";
+            for (size_t i = 0; i < len; i++) body += (char)data[i];
+            JsonDocument doc;
+            String target_ssid = "";
+            if (deserializeJson(doc, body) == DeserializationError::Ok) {
+                target_ssid = doc["ssid"].as<String>();
+            } else if (request->hasParam("ssid")) {
+                target_ssid = request->getParam("ssid")->value();
+            }
+
+            if (!target_ssid.isEmpty()) {
+                for (auto it = g_saved_wifi.begin(); it != g_saved_wifi.end(); ) {
+                    if (it->ssid.equalsIgnoreCase(target_ssid)) {
+                        it = g_saved_wifi.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+                persist_saved_wifi();
+                Serial.printf("[WIFI] Deleted network '%s'\n", target_ssid.c_str());
+
+                // Forward removal to WiCAN over UART bridge
+                JsonDocument wican_doc;
+                wican_doc["type"] = "wifi_delete";
+                wican_doc["ssid"] = target_ssid;
+                String wican_str;
+                serializeJson(wican_doc, wican_str);
+                send_to_wican(wican_str);
+
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+                return;
+            }
+            request->send(400, "application/json", "{\"error\":\"missing_ssid\"}");
+        }
+    );
+
+    // REST: GET /api/wifi/scan
+    server.on("/api/wifi/scan", HTTP_GET, [](AsyncWebServerRequest *request) {
+        int n = WiFi.scanNetworks();
+        JsonDocument doc;
+        JsonArray arr = doc.to<JsonArray>();
+        for (int i = 0; i < n; i++) {
+            JsonObject item = arr.add<JsonObject>();
+            item["ssid"] = WiFi.SSID(i);
+            item["rssi"] = WiFi.RSSI(i);
+            item["authmode"] = (int)WiFi.encryptionType(i);
+            item["channel"] = WiFi.channel(i);
+        }
+        WiFi.scanDelete();
+        String out;
+        serializeJson(doc, out);
+        request->send(200, "application/json", out);
+    });
+
+    // REST: POST /api/wifi/settings
+    server.on("/api/wifi/settings", HTTP_POST, [](AsyncWebServerRequest *request) {
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
+    });
+
     // Serve Static SPA files from LittleFS
     server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html").setCacheControl("max-age=600");
 
@@ -429,4 +649,14 @@ void loop() {
         }
     }
     last_btn_state = btn_state;
+
+    // 6. Wi-Fi Station reconnect watchdog
+    static unsigned long last_wifi_check_ms = 0;
+    if (millis() - last_wifi_check_ms > 15000) {
+        last_wifi_check_ms = millis();
+        if (!g_saved_wifi.empty() && WiFi.status() != WL_CONNECTED) {
+            Serial.println("[WIFI] Station disconnected, attempting auto-reconnect...");
+            connect_to_best_wifi();
+        }
+    }
 }

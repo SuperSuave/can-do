@@ -7,6 +7,7 @@
 #include "can_engine.h"
 #include "vbat_sensor.h"
 #include "precondition.h"
+#include "network_mgr.h"
 #include <cstring>
 #include <vector>
 #include <cctype>
@@ -140,6 +141,23 @@ static void handle_incoming_command(const char* json_str) {
             uart_bridge_send_raw("{\"type\":\"ack\",\"action\":\"precon_toggled\"}");
         } else {
             ESP_LOGW(TAG, "Unknown trigger action: %s", action);
+        }
+    } else if (strcmp(type, "wifi_save") == 0) {
+        cJSON *ssid_item = cJSON_GetObjectItem(root, "ssid");
+        cJSON *pass_item = cJSON_GetObjectItem(root, "password");
+        cJSON *prio_item = cJSON_GetObjectItem(root, "priority");
+        if (cJSON_IsString(ssid_item) && strlen(ssid_item->valuestring) > 0) {
+            const char* ssid = ssid_item->valuestring;
+            const char* pass = cJSON_IsString(pass_item) ? pass_item->valuestring : "";
+            int prio = cJSON_IsNumber(prio_item) ? prio_item->valueint : 50;
+            network_mgr_add_known_network(ssid, pass, prio);
+            ESP_LOGI(TAG, "Saved Wi-Fi network '%s' from bridge", ssid);
+        }
+    } else if (strcmp(type, "wifi_delete") == 0) {
+        cJSON *ssid_item = cJSON_GetObjectItem(root, "ssid");
+        if (cJSON_IsString(ssid_item) && strlen(ssid_item->valuestring) > 0) {
+            network_mgr_remove_known_network(ssid_item->valuestring);
+            ESP_LOGI(TAG, "Removed Wi-Fi network '%s' from bridge", ssid_item->valuestring);
         }
     }
 
