@@ -2,69 +2,89 @@
   "version": "2026.10.2-b001",
   "files": [
     {
-      "name": "AutomationBuilder-BDVIh_xa.js.gz",
-      "path": "/spiffs/www/AutomationBuilder-BDVIh_xa.js.gz",
-      "size": 136280
+      "name": "3JOvui8h.js.gz",
+      "path": "/spiffs/www/3JOvui8h.js.gz",
+      "size": 279
     },
     {
-      "name": "CatalogHealthModal-CrIadruK.js.gz",
-      "path": "/spiffs/www/CatalogHealthModal-CrIadruK.js.gz",
-      "size": 2183
+      "name": "Bm1oTO7n.js.gz",
+      "path": "/spiffs/www/Bm1oTO7n.js.gz",
+      "size": 136264
     },
     {
-      "name": "CategoryManagerModal-D0EWwpTp.js.gz",
-      "path": "/spiffs/www/CategoryManagerModal-D0EWwpTp.js.gz",
-      "size": 3828
+      "name": "C0PdmzHw.js.gz",
+      "path": "/spiffs/www/C0PdmzHw.js.gz",
+      "size": 16872
     },
     {
-      "name": "ContributeModal-B27oUSzY.js.gz",
-      "path": "/spiffs/www/ContributeModal-B27oUSzY.js.gz",
-      "size": 4045
+      "name": "C1fOvOvW.js.gz",
+      "path": "/spiffs/www/C1fOvOvW.js.gz",
+      "size": 352
     },
     {
-      "name": "DeviceDashboard-D6EKgSOO.js.gz",
-      "path": "/spiffs/www/DeviceDashboard-D6EKgSOO.js.gz",
-      "size": 16884
-    },
-    {
-      "name": "deviceWs-Cj50B98a.js.gz",
-      "path": "/spiffs/www/deviceWs-Cj50B98a.js.gz",
-      "size": 806
-    },
-    {
-      "name": "ExportModal-CY7RsBsV.js.gz",
-      "path": "/spiffs/www/ExportModal-CY7RsBsV.js.gz",
+      "name": "CjeZNyCw.js.gz",
+      "path": "/spiffs/www/CjeZNyCw.js.gz",
       "size": 3880
     },
     {
-      "name": "ImportModal-DEK4ZBvQ.js.gz",
-      "path": "/spiffs/www/ImportModal-DEK4ZBvQ.js.gz",
-      "size": 3315
+      "name": "ctISqMrE.js.gz",
+      "path": "/spiffs/www/ctISqMrE.js.gz",
+      "size": 3825
     },
     {
-      "name": "index-72vddkuu.css.gz",
-      "path": "/spiffs/www/index-72vddkuu.css.gz",
+      "name": "D1e6ZSws.js.gz",
+      "path": "/spiffs/www/D1e6ZSws.js.gz",
+      "size": 334
+    },
+    {
+      "name": "DLo3SRBV.js.gz",
+      "path": "/spiffs/www/DLo3SRBV.js.gz",
+      "size": 3313
+    },
+    {
+      "name": "DtFCsGdT.js.gz",
+      "path": "/spiffs/www/DtFCsGdT.js.gz",
+      "size": 4520
+    },
+    {
+      "name": "DThWX6yB.js.gz",
+      "path": "/spiffs/www/DThWX6yB.js.gz",
+      "size": 2171
+    },
+    {
+      "name": "DyOjYRqO.js.gz",
+      "path": "/spiffs/www/DyOjYRqO.js.gz",
+      "size": 4038
+    },
+    {
+      "name": "f4fO8jNT.js.gz",
+      "path": "/spiffs/www/f4fO8jNT.js.gz",
+      "size": 20386
+    },
+    {
+      "name": "G_DR__Mk.js.gz",
+      "path": "/spiffs/www/G_DR__Mk.js.gz",
+      "size": 802
+    },
+    {
+      "name": "index-72vddk.css.gz",
+      "path": "/spiffs/www/index-72vddk.css.gz",
       "size": 18697
     },
     {
-      "name": "index-BKli_bZa.js.gz",
-      "path": "/spiffs/www/index-BKli_bZa.js.gz",
-      "size": 151194
+      "name": "index-COoFRC.js.gz",
+      "path": "/spiffs/www/index-COoFRC.js.gz",
+      "size": 151064
     },
     {
       "name": "index.html",
       "path": "/spiffs/www/index.html",
-      "size": 1781
+      "size": 1777
     },
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 760
-    },
-    {
-      "name": "info-DYb5wMjL.js.gz",
-      "path": "/spiffs/www/info-DYb5wMjL.js.gz",
-      "size": 281
+      "size": 755
     },
     {
       "name": "logo.svg",
@@ -72,29 +92,9 @@
       "size": 8217
     },
     {
-      "name": "OnboardingWizardModal-CK6QwSAc.js.gz",
-      "path": "/spiffs/www/OnboardingWizardModal-CK6QwSAc.js.gz",
-      "size": 4524
-    },
-    {
-      "name": "send-DU2XGUUh.js.gz",
-      "path": "/spiffs/www/send-DU2XGUUh.js.gz",
-      "size": 336
-    },
-    {
-      "name": "shield-check-BUBSULEe.js.gz",
-      "path": "/spiffs/www/shield-check-BUBSULEe.js.gz",
-      "size": 355
-    },
-    {
-      "name": "VehicleDashboard-CQplkxb0.js.gz",
-      "path": "/spiffs/www/VehicleDashboard-CQplkxb0.js.gz",
-      "size": 20404
-    },
-    {
-      "name": "wifi-DwOfJq6p.js.gz",
-      "path": "/spiffs/www/wifi-DwOfJq6p.js.gz",
-      "size": 312
+      "name": "OEWJQ9vX.js.gz",
+      "path": "/spiffs/www/OEWJQ9vX.js.gz",
+      "size": 310
     }
   ]
 }
