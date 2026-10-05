@@ -1,6 +1,6 @@
 notify:
   name: Send Instrument Cluster Notification
-  description: Send a text popup notification to the vehicle instrument cluster OSD.
+  description: Send a text popup notification to the vehicle instrument cluster OSD (track popup or call popup).
   fields:
     message:
       name: Message
@@ -16,6 +16,25 @@ notify:
       required: false
       selector:
         text:
+    caller:
+      name: Caller Name (Call Popup)
+      description: Header/Caller name for Call Notification Popup (e.g. "Home Assistant", "Front Door", "Alice"). If provided, triggers the call popup instead of the track popup.
+      example: "Front Gate"
+      required: false
+      selector:
+        text:
+    type:
+      name: Popup Type
+      description: Type of notification popup to trigger.
+      example: "call"
+      default: "track"
+      selector:
+        select:
+          options:
+            - label: Track / Media Popup (OSD top banner)
+              value: track
+            - label: Call Popup (Incoming call style popup)
+              value: call
     level:
       name: Severity Level
       description: Popup severity level (controls cluster icon / color).
@@ -30,3 +49,14 @@ notify:
               value: warning
             - label: Error (Red)
               value: error
+    hold_ms:
+      name: Hold Duration (ms)
+      description: Duration to hold the notification popup on the cluster screen in milliseconds.
+      example: 5000
+      default: 5000
+      selector:
+        number:
+          min: 1000
+          max: 30000
+          step: 500
+          unit_of_measurement: ms

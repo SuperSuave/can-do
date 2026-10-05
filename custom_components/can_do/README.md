@@ -51,14 +51,38 @@ This directory contains the custom Home Assistant integration for **CAN Do**, pr
 
 You can send custom messages to your car's cluster from any Home Assistant automation, script, or Developer Tools:
 
+### 1. Standard Track / Media Popup (Top OSD Banner)
 ```yaml
-service: notify.send_message
+action: notify.send_message
 target:
-  entity_id: notify.can_do_c2f4_instrument_cluster_notification
+  entity_id: notify.can_do
 data:
-  message: "Charge Complete!"
+  message: "Charge Complete! (80%)"
   data:
     level: "info" # Options: "info", "warning", "error"
+```
+
+### 2. Call Notification Popup (High-Visibility Cluster Dialog)
+```yaml
+action: notify.send_message
+target:
+  entity_id: notify.can_do
+data:
+  message: "Front Door Motion Detected"
+  data:
+    caller: "Security System" # If caller or type: call is specified, triggers the call popup
+    level: "warning"          # Options: "info", "warning", "error"
+    hold_ms: 6000             # Display duration in milliseconds (default: 5000)
+```
+
+Alternatively, use the direct service:
+```yaml
+action: can_do.notify
+data:
+  caller: "Home Assistant"
+  message: "Garage door left open"
+  level: "warning"
+  hold_ms: 5000
 ```
 
 ---

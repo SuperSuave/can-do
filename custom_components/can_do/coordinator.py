@@ -278,12 +278,25 @@ class CanDoDataCoordinator:
         if self.tx_topic != f"{self.base_topic}/tx":
             await mqtt.async_publish(self.hass, f"{self.base_topic}/tx", json_payload, qos=1)
 
-    async def async_send_notification(self, message: str, level: str = "info") -> None:
-        """Send cluster track popup notification to ESP32 edge device over MQTT."""
-        payload_obj = {
+    async def async_send_notification(
+        self,
+        message: str,
+        level: str = "info",
+        caller: Optional[str] = None,
+        popup_type: Optional[str] = None,
+        hold_ms: Optional[int] = None,
+    ) -> None:
+        """Send cluster notification (track popup or call popup) to ESP32 edge device over MQTT."""
+        payload_obj: Dict[str, Any] = {
             "message": message,
             "level": level,
         }
+        if caller is not None:
+            payload_obj["caller"] = caller
+        if popup_type is not None:
+            payload_obj["type"] = popup_type
+        if hold_ms is not None:
+            payload_obj["hold_ms"] = hold_ms
         json_payload = json.dumps(payload_obj)
         _LOGGER.info("Sending cluster notification to %s: %s", self.notify_topic, json_payload)
         await mqtt.async_publish(self.hass, self.notify_topic, json_payload, qos=1)

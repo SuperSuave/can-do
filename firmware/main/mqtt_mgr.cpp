@@ -357,10 +357,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     if (l && cJSON_IsString(l)) level = l->valuestring;
 
                     cJSON* t = cJSON_GetObjectItem(root, "type");
-                    if (t && cJSON_IsString(t) && (strcmp(t->valuestring, "call_alert") == 0 || strcmp(t->valuestring, "call") == 0)) {
+                    if (t && cJSON_IsString(t) && (strcmp(t->valuestring, "call_alert") == 0 || strcmp(t->valuestring, "call") == 0 || strcmp(t->valuestring, "call_popup") == 0)) {
                         is_call = true;
                     }
                     cJSON* c = cJSON_GetObjectItem(root, "caller");
+                    if (!c && is_call) c = cJSON_GetObjectItem(root, "title");
                     if (c && cJSON_IsString(c)) {
                         caller = c->valuestring;
                         is_call = true;

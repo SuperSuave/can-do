@@ -41,10 +41,25 @@ async def async_setup_entry(
         title = call.data.get("title")
         data = call.data.get("data") or {}
         level = data.get("level", call.data.get("level", "info"))
+        caller = data.get("caller", call.data.get("caller"))
+        popup_type = data.get("type", call.data.get("type"))
+        hold_ms = data.get("hold_ms", call.data.get("hold_ms"))
 
-        full_msg = f"{title}: {message}" if title else message
-        _LOGGER.info("Cluster notify service called: '%s' (level=%s)", full_msg, level)
-        await coordinator.async_send_notification(full_msg, level=level)
+        is_call = bool(caller or (popup_type in ("call", "call_popup", "call_alert")))
+        if is_call:
+            if not caller and title:
+                caller = title
+            await coordinator.async_send_notification(
+                message=message,
+                level=level,
+                caller=caller or "Home Assistant",
+                popup_type=popup_type or "call",
+                hold_ms=hold_ms,
+            )
+        else:
+            full_msg = f"{title}: {message}" if title else message
+            _LOGGER.info("Cluster notify service called: '%s' (level=%s)", full_msg, level)
+            await coordinator.async_send_notification(full_msg, level=level, hold_ms=hold_ms)
 
     hass.services.async_register("notify", "can_do", async_send_cluster_notification)
     hass.services.async_register(DOMAIN, "notify", async_send_cluster_notification)
@@ -61,15 +76,37 @@ class CanDoNotifyEntity(CanDoEntity, NotifyEntity):
         """Send a notification message to the vehicle's instrument cluster."""
         data = kwargs.get("data") or {}
         level = data.get("level", "info")
+        caller = data.get("caller")
+        popup_type = data.get("type")
+        hold_ms = data.get("hold_ms")
 
-        full_msg = f"{title}: {message}" if title else message
-        _LOGGER.info(
-            "Sending cluster notification '%s' (level=%s) via entity %s",
-            full_msg,
-            level,
-            self.entity_id_str,
-        )
-        await self.coordinator.async_send_notification(full_msg, level=level)
+        is_call = bool(caller or (popup_type in ("call", "call_popup", "call_alert")))
+        if is_call:
+            if not caller and title:
+                caller = title
+            _LOGGER.info(
+                "Sending call notification caller='%s' msg='%s' (level=%s) via entity %s",
+                caller,
+                message,
+                level,
+                self.entity_id_str,
+            )
+            await self.coordinator.async_send_notification(
+                message=message,
+                level=level,
+                caller=caller or "Home Assistant",
+                popup_type=popup_type or "call",
+                hold_ms=hold_ms,
+            )
+        else:
+            full_msg = f"{title}: {message}" if title else message
+            _LOGGER.info(
+                "Sending cluster notification '%s' (level=%s) via entity %s",
+                full_msg,
+                level,
+                self.entity_id_str,
+            )
+            await self.coordinator.async_send_notification(full_msg, level=level, hold_ms=hold_ms)
 
 
 class CanDoClusterMasterNotifyEntity(NotifyEntity):
@@ -114,7 +151,28 @@ class CanDoClusterMasterNotifyEntity(NotifyEntity):
         """Send a notification message to the vehicle's instrument cluster."""
         data = kwargs.get("data") or {}
         level = data.get("level", "info")
+        caller = data.get("caller")
+        popup_type = data.get("type")
+        hold_ms = data.get("hold_ms")
 
-        full_msg = f"{title}: {message}" if title else message
-        _LOGGER.info("Cluster Master Notify: %s (level=%s)", full_msg, level)
-        await self.coordinator.async_send_notification(full_msg, level=level)
+        is_call = bool(caller or (popup_type in ("call", "call_popup", "call_alert")))
+        if is_call:
+            if not caller and title:
+                caller = title
+            _LOGGER.info(
+                "Cluster Master Notify Call: caller='%s' msg='%s' (level=%s)",
+                caller,
+                message,
+                level,
+            )
+            await self.coordinator.async_send_notification(
+                message=message,
+                level=level,
+                caller=caller or "Home Assistant",
+                popup_type=popup_type or "call",
+                hold_ms=hold_ms,
+            )
+        else:
+            full_msg = f"{title}: {message}" if title else message
+            _LOGGER.info("Cluster Master Notify: %s (level=%s)", full_msg, level)
+            await self.coordinator.async_send_notification(full_msg, level=level, hold_ms=hold_ms)
