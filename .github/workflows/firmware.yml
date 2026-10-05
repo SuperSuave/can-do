@@ -105,6 +105,10 @@ jobs:
           command: |
             sh -c "idf.py -DPROJECT_VER=\"${{ env.RELEASE_TAG }}\" build && cd build && esptool.py --chip ${{ inputs.target || 'esp32c3' }} merge_bin -o can-do-${{ inputs.target || 'esp32c3' }}-merged.bin @flash_args"
 
+      - name: Fix workspace permissions after Docker
+        if: always()
+        run: sudo chown -R $USER:$USER .
+
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -188,6 +192,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') || inputs.create_release == true
         continue-on-error: true
         run: |
+          sudo chown -R $USER:$USER .
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git reset --hard

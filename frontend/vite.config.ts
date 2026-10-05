@@ -144,22 +144,34 @@ export default defineConfig(() => {
           // Stage in firmware/data/catalog.json (LittleFS root)
           const catalogFile = path.resolve(__dirname, '../catalog/can_do_catalog.json');
           if (fs.existsSync(catalogFile)) {
-            if (!fs.existsSync(dataDir)) {
-              fs.mkdirSync(dataDir, { recursive: true });
+            try {
+              if (!fs.existsSync(dataDir)) {
+                fs.mkdirSync(dataDir, { recursive: true });
+              }
+              fs.copyFileSync(catalogFile, path.join(dataDir, 'catalog.json'));
+            } catch (e) {
+              console.warn('[vite closeBundle] Warning copying catalog.json:', e);
             }
-            fs.copyFileSync(catalogFile, path.join(dataDir, 'catalog.json'));
           }
 
           // Also copy automations.json if present in firmware
           const repoAuto = path.resolve(__dirname, '../firmware/automations.json');
           if (fs.existsSync(repoAuto)) {
-            fs.copyFileSync(repoAuto, path.join(dataDir, 'automations.json'));
+            try {
+              fs.copyFileSync(repoAuto, path.join(dataDir, 'automations.json'));
+            } catch (e) {
+              console.warn('[vite closeBundle] Warning copying automations.json:', e);
+            }
           }
 
           // Ensure default preferences.json exists for LittleFS filesystem
           const prefFile = path.join(dataDir, 'preferences.json');
           if (!fs.existsSync(prefFile)) {
-            fs.writeFileSync(prefFile, JSON.stringify({ onboarding_completed: false }, null, 2), 'utf-8');
+            try {
+              fs.writeFileSync(prefFile, JSON.stringify({ onboarding_completed: false }, null, 2), 'utf-8');
+            } catch (e) {
+              console.warn('[vite closeBundle] Warning writing preferences.json:', e);
+            }
           }
 
           if (!fs.existsSync(distDir)) return;
