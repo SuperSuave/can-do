@@ -407,13 +407,18 @@ void setup() {
             
             JsonDocument doc;
             if (deserializeJson(doc, body) == DeserializationError::Ok) {
-                const char* msg = doc["message"] | doc["text"] | "";
+                const char* msg = doc["message"] | doc["text"] | doc["popup_message"] | "";
                 const char* lvl = doc["level"] | "info";
+                const char* caller = doc["caller"] | doc["title"] | "";
+                const char* type = doc["type"] | "notify";
+                uint32_t hold_ms = doc["hold_ms"] | 5000;
                 if (strlen(msg) > 0) {
                     JsonDocument cmd;
-                    cmd["type"] = "notify";
+                    cmd["type"] = type;
                     cmd["message"] = msg;
                     cmd["level"] = lvl;
+                    if (strlen(caller) > 0) cmd["caller"] = caller;
+                    if (hold_ms != 5000) cmd["hold_ms"] = hold_ms;
                     String out;
                     serializeJson(cmd, out);
                     send_to_wican(out);

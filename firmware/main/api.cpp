@@ -8,6 +8,7 @@
 #include "gvret_server.h"
 #include "mqtt_mgr.h"
 #include "track_popup.h"
+#include "call_popup.h"
 #include "vbat_sensor.h"
 #include "uds_engine.h"
 #include "cJSON.h"
@@ -1619,9 +1620,22 @@ static esp_err_t api_notify_handler(httpd_req_t *req) {
     }
     cJSON *msg_item = cJSON_GetObjectItem(root, "message");
     if (!msg_item) msg_item = cJSON_GetObjectItem(root, "text");
+    if (!msg_item) msg_item = cJSON_GetObjectItem(root, "popup_message");
     std::string msg = (msg_item && cJSON_IsString(msg_item)) ? msg_item->valuestring : "";
+
     cJSON *lvl_item = cJSON_GetObjectItem(root, "level");
     std::string lvl = (lvl_item && cJSON_IsString(lvl_item)) ? lvl_item->valuestring : "info";
+
+    cJSON *caller_item = cJSON_GetObjectItem(root, "caller");
+    if (!caller_item) caller_item = cJSON_GetObjectItem(root, "title");
+    std::string caller = (caller_item && cJSON_IsString(caller_item)) ? caller_item->valuestring : "";
+
+    cJSON *type_item = cJSON_GetObjectItem(root, "type");
+    std::string type = (type_item && cJSON_IsString(type_item)) ? type_item->valuestring : "";
+
+    cJSON *hold_item = cJSON_GetObjectItem(root, "hold_ms");
+    uint32_t hold_ms = (hold_item && cJSON_IsNumber(hold_item)) ? (uint32_t)hold_item->valueint : 5000;
+
     cJSON_Delete(root);
 
     if (msg.empty()) {
@@ -1629,13 +1643,23 @@ static esp_err_t api_notify_handler(httpd_req_t *req) {
         return ESP_FAIL;
     }
 
+    bool is_call = (!caller.empty()) || (type == "call" || type == "call_popup" || type == "call_alert");
     bool sent = false;
-    if (lvl == "warning") {
-        sent = track_popup_show_warning(msg.c_str());
-    } else if (lvl == "error") {
-        sent = track_popup_show_error(msg.c_str());
+
+    if (is_call) {
+        if (caller.empty()) caller = "Home Assistant";
+        call_popup_severity_t sev = CALL_POPUP_SEV_INFO;
+        if (lvl == "warning") sev = CALL_POPUP_SEV_WARNING;
+        else if (lvl == "error" || lvl == "critical") sev = CALL_POPUP_SEV_CRITICAL;
+        sent = call_popup_show(caller.c_str(), msg.c_str(), sev, hold_ms);
     } else {
-        sent = track_popup_show_info(msg.c_str());
+        if (lvl == "warning") {
+            sent = track_popup_show_warning(msg.c_str());
+        } else if (lvl == "error") {
+            sent = track_popup_show_error(msg.c_str());
+        } else {
+            sent = track_popup_show_info(msg.c_str());
+        }
     }
 
     httpd_resp_set_type(req, "application/json");

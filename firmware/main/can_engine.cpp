@@ -285,6 +285,19 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             continue;
         }
 
+        if (step.type == ActionType::CALL_POPUP) {
+            const std::string& txt = !step.popup_text.empty() ? step.popup_text : step.popup_message;
+            if (!txt.empty()) {
+                call_popup_severity_t sev = CALL_POPUP_SEV_INFO;
+                if (step.popup_level == "warning") sev = CALL_POPUP_SEV_WARNING;
+                else if (step.popup_level == "error" || step.popup_level == "critical") sev = CALL_POPUP_SEV_CRITICAL;
+                std::string caller = !step.caller.empty() ? step.caller : "Home Assistant";
+                uint32_t hold = step.hold_ms > 0 ? step.hold_ms : 5000;
+                call_popup_show(caller.c_str(), txt.c_str(), sev, hold);
+            }
+            continue;
+        }
+
         if (step.type == ActionType::PRECONDITION) {
             precondition_execute_action(step.precon_mode.c_str(), step.precon_action.c_str());
             continue;

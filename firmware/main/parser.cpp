@@ -289,6 +289,26 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         if (cJSON_IsString(lvl)) step.popup_level = lvl->valuestring;
         else step.popup_level = "info";
         return true;
+    } else if (strcmp(type_str, "call_popup") == 0 || strcmp(type_str, "call") == 0 || strcmp(type_str, "call_alert") == 0) {
+        step.type = ActionType::CALL_POPUP;
+        cJSON* txt = cJSON_GetObjectItem(a_item, "text");
+        if (!txt) txt = cJSON_GetObjectItem(a_item, "message");
+        if (!txt) txt = cJSON_GetObjectItem(a_item, "popup_message");
+        if (cJSON_IsString(txt)) step.popup_text = txt->valuestring;
+
+        cJSON* caller = cJSON_GetObjectItem(a_item, "caller");
+        if (!caller) caller = cJSON_GetObjectItem(a_item, "title");
+        if (cJSON_IsString(caller)) step.caller = caller->valuestring;
+        else step.caller = "Home Assistant";
+
+        cJSON* lvl = cJSON_GetObjectItem(a_item, "level");
+        if (cJSON_IsString(lvl)) step.popup_level = lvl->valuestring;
+        else step.popup_level = "info";
+
+        cJSON* hold = cJSON_GetObjectItem(a_item, "hold_ms");
+        if (cJSON_IsNumber(hold)) step.hold_ms = static_cast<uint32_t>(hold->valueint);
+        else step.hold_ms = 5000;
+        return true;
     } else if (strcmp(type_str, "climate_target") == 0 || strcmp(type_str, "climate") == 0 || strcmp(type_str, "remote_climate") == 0) {
         step.type = ActionType::CLIMATE_TARGET;
         cJSON* tc = cJSON_GetObjectItem(a_item, "target_c");
@@ -526,6 +546,21 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
                         }
                     }
                 }
+                opt.steps.push_back(step);
+            }
+
+            // If no explicit steps array but option provides caller/popup_message (e.g. cluster_call_popup_alert)
+            cJSON* opt_caller = cJSON_GetObjectItem(opt_json, "caller");
+            cJSON* opt_pmsg = cJSON_GetObjectItem(opt_json, "popup_message");
+            if (opt.steps.empty() && (opt_caller || opt_pmsg)) {
+                ActionStep step;
+                step.type = ActionType::CALL_POPUP;
+                if (opt_caller && cJSON_IsString(opt_caller)) step.caller = opt_caller->valuestring;
+                if (opt_pmsg && cJSON_IsString(opt_pmsg)) step.popup_text = opt_pmsg->valuestring;
+                cJSON* opt_lvl = cJSON_GetObjectItem(opt_json, "level");
+                if (opt_lvl && cJSON_IsString(opt_lvl)) step.popup_level = opt_lvl->valuestring;
+                cJSON* opt_hold = cJSON_GetObjectItem(opt_json, "hold_ms");
+                if (opt_hold && cJSON_IsNumber(opt_hold)) step.hold_ms = (uint32_t)opt_hold->valueint;
                 opt.steps.push_back(step);
             }
 

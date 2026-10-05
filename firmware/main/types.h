@@ -53,6 +53,7 @@ enum class ActionType {
     IF_THEN,
     CHOOSE,
     TRACK_POPUP,
+    CALL_POPUP,
     CLIMATE_TARGET,
     PRECONDITION
 };
@@ -75,6 +76,8 @@ struct ActionStep {
     std::string popup_message;
     std::string popup_level = "info"; // "info", "warning", "error"
     std::string popup_text;
+    std::string caller = "Home Assistant";
+    uint32_t hold_ms = 5000;
 
     // For CLIMATE_TARGET
     float target_temp_c = 21.0f;
