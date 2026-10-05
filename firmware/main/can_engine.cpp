@@ -15,6 +15,7 @@
 #include "call_popup.h"
 #include "hud_nav.h"
 #include "precondition.h"
+#include "remote_climate.h"
 #include "board_pins.h"
 #include "can.h"
 #include "mqtt_mgr.h"
@@ -267,6 +268,11 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
 
         if (step.type == ActionType::PRECONDITION) {
             precondition_execute_action(step.precon_mode.c_str(), step.precon_action.c_str());
+            continue;
+        }
+
+        if (step.type == ActionType::CLIMATE_TARGET) {
+            remote_climate_start(step.target_temp_c, step.duration_minutes);
             continue;
         }
 

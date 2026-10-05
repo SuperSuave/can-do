@@ -7,6 +7,7 @@
 #include "can_engine.h"
 #include "vbat_sensor.h"
 #include "precondition.h"
+#include "remote_climate.h"
 #include "network_mgr.h"
 #include <cstring>
 #include <vector>
@@ -95,6 +96,15 @@ static void handle_incoming_command(const char* json_str) {
         if (cJSON_IsString(entity_item)) {
             const char* entity = entity_item->valuestring;
             const char* cmd = cJSON_IsString(cmd_item) ? cmd_item->valuestring : "";
+            if (strcmp(entity, "hvac_direct_climate_cmd") == 0) {
+                if (strstr(cmd, "Off") || strcasecmp(cmd, "off") == 0 || strcasecmp(cmd, "stop") == 0) {
+                    remote_climate_stop();
+                } else {
+                    remote_climate_start(22.0f, 10);
+                }
+                uart_bridge_send_raw("{\"type\":\"ack\",\"status\":\"queued\"}");
+                return;
+            }
             bool ok = queue_entity_command(entity, cmd);
             ESP_LOGI(TAG, "Entity command '%s' -> '%s' (queued: %d)", entity, cmd, ok);
             uart_bridge_send_raw(ok ? "{\"type\":\"ack\",\"status\":\"queued\"}" : "{\"type\":\"nack\",\"error\":\"entity_failed\"}");
@@ -139,6 +149,15 @@ static void handle_incoming_command(const char* json_str) {
         if (strcmp(action, "preheat") == 0 || strcmp(action, "precon_toggle") == 0) {
             precondition_toggle_request();
             uart_bridge_send_raw("{\"type\":\"ack\",\"action\":\"precon_toggled\"}");
+        } else if (strcmp(action, "climate_toggle") == 0) {
+            remote_climate_toggle(22.0f, 10);
+            uart_bridge_send_raw("{\"type\":\"ack\",\"action\":\"climate_toggled\"}");
+        } else if (strcmp(action, "climate_start") == 0) {
+            remote_climate_start(22.0f, 10);
+            uart_bridge_send_raw("{\"type\":\"ack\",\"action\":\"climate_started\"}");
+        } else if (strcmp(action, "climate_stop") == 0) {
+            remote_climate_stop();
+            uart_bridge_send_raw("{\"type\":\"ack\",\"action\":\"climate_stopped\"}");
         } else {
             ESP_LOGW(TAG, "Unknown trigger action: %s", action);
         }

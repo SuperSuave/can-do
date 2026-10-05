@@ -31,6 +31,7 @@ idf_component_register(
         "uds_engine.cpp"
         "power_mgr.cpp"
         "uart_bridge.cpp"
+        "remote_climate.cpp"
     INCLUDE_DIRS "."
     REQUIRES 
         "nvs_flash"

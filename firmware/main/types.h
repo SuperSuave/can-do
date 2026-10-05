@@ -78,6 +78,7 @@ struct ActionStep {
 
     // For CLIMATE_TARGET
     float target_temp_c = 21.0f;
+    uint32_t duration_minutes = 10;
     std::string zone = "driver";
     bool sync_on = false;
     bool driver_only = false;

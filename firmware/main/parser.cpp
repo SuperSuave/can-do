@@ -279,7 +279,7 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         if (cJSON_IsString(lvl)) step.popup_level = lvl->valuestring;
         else step.popup_level = "info";
         return true;
-    } else if (strcmp(type_str, "climate_target") == 0) {
+    } else if (strcmp(type_str, "climate_target") == 0 || strcmp(type_str, "climate") == 0 || strcmp(type_str, "remote_climate") == 0) {
         step.type = ActionType::CLIMATE_TARGET;
         cJSON* tc = cJSON_GetObjectItem(a_item, "target_c");
         if (!tc) tc = cJSON_GetObjectItem(a_item, "target_temp_c");
@@ -288,7 +288,23 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         if (cJSON_IsNumber(tc)) {
             step.target_temp_c = static_cast<float>(tc->valuedouble);
         } else {
-            step.target_temp_c = 21.0f;
+            cJSON* tf = cJSON_GetObjectItem(a_item, "target_temp_f");
+            if (!tf) tf = cJSON_GetObjectItem(a_item, "target_f");
+            if (!tf) tf = cJSON_GetObjectItem(a_item, "temp_f");
+            if (cJSON_IsNumber(tf)) {
+                step.target_temp_c = static_cast<float>((tf->valuedouble - 32.0) * 5.0 / 9.0);
+            } else {
+                step.target_temp_c = 22.0f; // 72°F default
+            }
+        }
+
+        cJSON* dur = cJSON_GetObjectItem(a_item, "duration_minutes");
+        if (!dur) dur = cJSON_GetObjectItem(a_item, "duration_min");
+        if (!dur) dur = cJSON_GetObjectItem(a_item, "duration");
+        if (cJSON_IsNumber(dur)) {
+            step.duration_minutes = static_cast<uint32_t>(dur->valueint);
+        } else {
+            step.duration_minutes = 10;
         }
 
         cJSON* zn = cJSON_GetObjectItem(a_item, "zone");
