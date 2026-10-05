@@ -14,6 +14,7 @@
 #include "esp_timer.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include "remote_climate.h"
 #include <sys/unistd.h>
 #include <sys/stat.h>
 
@@ -465,7 +466,16 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     cJSON_Delete(root);
 
                     if (!steps.empty()) {
-                        queue_action_steps(can_id, delay_ms, steps);
+                        if (can_id == 0x520) {
+                            if (steps[0].payload[0] == 0x01) {
+                                float temp_c = steps[0].payload[1] > 0 ? (steps[0].payload[1] / 2.0f) : 22.0f;
+                                remote_climate_start(temp_c, 10);
+                            } else {
+                                remote_climate_stop();
+                            }
+                        } else {
+                            queue_action_steps(can_id, delay_ms, steps);
+                        }
                     }
                 }
             } else if (is_sub_ids) {

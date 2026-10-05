@@ -276,6 +276,17 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             continue;
         }
 
+        if ((step.can_id == 0x520 || can_id == 0x520) && (step.mask & 0x01)) {
+            if (step.payload[0] == 0x01) {
+                float temp_c = (step.mask & 0x02 && step.payload[1] > 0) ? (step.payload[1] / 2.0f) : 22.0f;
+                remote_climate_start(temp_c, 10);
+                continue;
+            } else if (step.payload[0] == 0x00) {
+                remote_climate_stop();
+                continue;
+            }
+        }
+
         if (step.type == ActionType::IF_THEN) {
             bool passed = true;
             for (const auto& c : step.if_conditions) {
