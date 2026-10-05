@@ -14,6 +14,7 @@ from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .can_utils import build_action_steps
 from .catalog_loader import get_d_index
 from .const import DOMAIN
 from .coordinator import CanDoDataCoordinator
@@ -48,7 +49,7 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
         """Initialize climate entity."""
         super().__init__(coordinator, command)
         self.hass = hass
-        self._hvac_mode: HVACMode = HVACMode.AUTO
+        self._hvac_mode: HVACMode = HVACMode.OFF
         self._aux_unsubs: List[Callable[[], None]] = []
 
         net = command.get("network", {})
@@ -74,8 +75,8 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
     async def async_added_to_hass(self) -> None:
         """Register CAN state listener and auxiliary telemetry listeners."""
         await super().async_added_to_hass()
-        # Listen to ambient temperature (0x226) and climate status (0x31B, 0x541, 0x418, 0x496)
-        for aux_id in ("0x226", "0x31b", "0x541", "0x418", "0x496"):
+        # Listen to ambient temperature (0x226) and climate status (0x31B, 0x541, 0x418, 0x496, 0x6E1, 0x587)
+        for aux_id in ("0x226", "0x31b", "0x541", "0x418", "0x496", "0x6e1", "0x587"):
             if not self.state_can_id or aux_id != self.state_can_id.lower():
                 unsub = self.coordinator.register_listener(aux_id, self._handle_can_update)
                 self._aux_unsubs.append(unsub)
@@ -87,15 +88,43 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
         self._aux_unsubs.clear()
         await super().async_will_remove_from_hass()
 
+    def _is_hvac_active(self) -> bool:
+        """Determine if the vehicle HVAC system or remote climate is actively running."""
+        # 1. Check Smart Bridge state frame (0x6E1)
+        p_6e1 = self.coordinator.get_can_payload("0x6e1")
+        if p_6e1 and len(p_6e1) >= 2 and p_6e1[0] == 0x10:
+            if p_6e1[1] == 0x01:  # CLIMATE_AUTO_ON
+                return True
+            elif p_6e1[1] == 0x00:  # CLIMATE_OFF
+                return False
+
+        # 2. Check Blower Fan Speed from 0x31B Byte D4 low nibble
+        p_31b = self.coordinator.get_can_payload("0x31b")
+        if p_31b and len(p_31b) >= 4:
+            fan_raw = p_31b[3] & 0x0F
+            if fan_raw > 0:
+                return True
+
+        # 3. Check Remote Climate Telematics frame (0x587)
+        p_587 = self.coordinator.get_can_payload("0x587")
+        if p_587 and len(p_587) >= 2:
+            if (p_587[0] & 0x03) > 0 or (p_587[1] & 0x03) > 0:
+                return True
+
+        # If no active blower, bridge status, or telematics frame, car/HVAC is off
+        return False
+
     @property
     def hvac_mode(self) -> HVACMode:
-        """Return current HVAC mode."""
-        return self._hvac_mode
+        """Return current HVAC mode (reports OFF when vehicle climate is inactive)."""
+        if not self._is_hvac_active():
+            return HVACMode.OFF
+        return self._hvac_mode if self._hvac_mode != HVACMode.OFF else HVACMode.AUTO
 
     @property
     def hvac_action(self) -> Optional[HVACAction]:
         """Return the running HVAC action (heating, cooling, fan, off)."""
-        if self._hvac_mode == HVACMode.OFF:
+        if self.hvac_mode == HVACMode.OFF:
             return HVACAction.OFF
 
         # Check blower fan speed from 0x31B Byte D4 low nibble
@@ -115,7 +144,7 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
             elif diff < -threshold:
                 return HVACAction.COOLING
 
-        return HVACAction.HEATING if self._hvac_mode == HVACMode.HEAT_COOL else HVACAction.IDLE
+        return HVACAction.HEATING if self.hvac_mode == HVACMode.HEAT_COOL else HVACAction.IDLE
 
     @property
     def current_temperature(self) -> Optional[float]:
@@ -256,6 +285,18 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
 
         temp = max(self._attr_min_temp, min(self._attr_max_temp, float(temp)))
 
+        if self.command.get("id") == "bridge_smart_gateway_climate":
+            temp_c = int(round((temp - 32.0) / 1.8)) if self.temperature_unit == UnitOfTemperature.FAHRENHEIT else int(round(temp))
+            temp_c = max(17, min(27, temp_c))
+            hex_payload = f"1001{temp_c:02X}0000000000"
+            steps = [{"payload": hex_payload, "repeat": 2, "delay_ms": 20}]
+            _LOGGER.info("Sending Smart Bridge remote climate Auto (%.1f %s / %d°C on %s)", temp, self.temperature_unit, temp_c, self.action_can_id)
+            await self.coordinator.async_send_action(self.action_can_id, 20, steps)
+            self._target_temp = temp
+            self._hvac_mode = HVACMode.AUTO
+            self.async_write_ha_state()
+            return
+
         if self.temperature_unit == UnitOfTemperature.FAHRENHEIT:
             raw_val = 0x06 + int(round(temp - 62.0))
         else:
@@ -286,9 +327,29 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
         await self.coordinator.async_send_action(self.action_can_id, 20, steps)
 
         self._target_temp = temp
+        self._hvac_mode = HVACMode.AUTO
         self.async_write_ha_state()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new HVAC mode."""
         self._hvac_mode = hvac_mode
+        if hvac_mode == HVACMode.OFF:
+            if self.command.get("id") == "bridge_smart_gateway_climate":
+                # Smart Bridge Domain 0x10, Action 0x00 = Climate Off
+                steps = [{"payload": "1000000000000000", "repeat": 2, "delay_ms": 20}]
+                await self.coordinator.async_send_action(self.action_can_id, 20, steps)
+            else:
+                # Find option with label containing "off"
+                target_opt = None
+                for opt in self.command.get("options", []):
+                    if "off" in opt.get("label", "").lower():
+                        target_opt = opt
+                        break
+                if target_opt:
+                    steps = build_action_steps(self.command, target_opt)
+                    if steps:
+                        await self.coordinator.async_send_action(self.action_can_id, 20, steps)
+        elif hvac_mode in (HVACMode.AUTO, HVACMode.HEAT_COOL):
+            await self.async_set_temperature(temperature=self._target_temp)
+
         self.async_write_ha_state()
