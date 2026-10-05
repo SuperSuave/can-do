@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <Preferences.h>
 #include <ESPmDNS.h>
+#include <esp_mac.h>
 #include <LittleFS.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
@@ -57,6 +58,27 @@ void handle_wican_message(const String& line);
 // ============================================================================
 // Wi-Fi Storage & Manager
 // ============================================================================
+String g_device_id = "can-do";
+String g_ap_ssid = "CAN Do";
+String g_ap_pass = "candorules";
+
+void init_device_id() {
+    uint8_t mac[6] = {0};
+    if (esp_read_mac(mac, ESP_MAC_WIFI_STA) == ESP_OK) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "can-do-%02X%02X", mac[4], mac[5]);
+        g_device_id = buf;
+        char ap_buf[32];
+        snprintf(ap_buf, sizeof(ap_buf), "CAN Do-%02X%02X", mac[4], mac[5]);
+        g_ap_ssid = ap_buf;
+    } else {
+        g_device_id = "can-do-0000";
+        g_ap_ssid = "CAN Do-0000";
+    }
+    Serial.printf("[SYSTEM] Device ID initialized from MAC: %s, SoftAP SSID: '%s'\n", 
+                  g_device_id.c_str(), g_ap_ssid.c_str());
+}
+
 struct SavedWifiNetwork {
     String ssid;
     String password;
@@ -69,6 +91,11 @@ Preferences g_prefs;
 void load_saved_wifi() {
     g_saved_wifi.clear();
     g_prefs.begin("wifi_config", false);
+    String custom_ap_ssid = g_prefs.getString("ap_ssid", "");
+    String custom_ap_pass = g_prefs.getString("ap_pass", "");
+    if (!custom_ap_ssid.isEmpty()) g_ap_ssid = custom_ap_ssid;
+    if (!custom_ap_pass.isEmpty()) g_ap_pass = custom_ap_pass;
+
     String json_str = g_prefs.getString("networks", "[]");
     g_prefs.end();
 
@@ -275,6 +302,9 @@ void setup() {
     Serial.println("  CAN-Do M5Stack Atom Lite UI & BLE Bridge");
     Serial.println("==========================================");
 
+    // 0. Initialize Device Identity from MAC
+    init_device_id();
+
     // 1. Initialize RGB LED
     FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, 1);
     set_led_color(CRGB::Orange);
@@ -297,23 +327,26 @@ void setup() {
 
     // 5. Initialize Wi-Fi (AP + STA)
     WiFi.mode(WIFI_AP_STA);
-    WiFi.softAP("CAN-Do", "");
+    WiFi.setHostname(g_device_id.c_str());
+
     IPAddress apIP(192, 168, 4, 1);
     WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-    Serial.printf("[WIFI] SoftAP 'CAN-Do' active at IP: %s\n", WiFi.softAPIP().toString().c_str());
+    WiFi.softAP(g_ap_ssid.c_str(), g_ap_pass.c_str());
+    Serial.printf("[WIFI] SoftAP '%s' active (Pass: '%s') at IP: %s\n", 
+                  g_ap_ssid.c_str(), g_ap_pass.c_str(), WiFi.softAPIP().toString().c_str());
 
     load_saved_wifi();
     if (!g_saved_wifi.empty()) {
         connect_to_best_wifi();
     }
 
-    if (MDNS.begin("can-do")) {
+    if (MDNS.begin(g_device_id.c_str())) {
         MDNS.addService("http", "tcp", 80);
-        Serial.println("[MDNS] Responder active: http://can-do.local");
+        Serial.printf("[MDNS] Responder active: http://%s.local\n", g_device_id.c_str());
     }
 
     // 6. Setup NimBLE
-    NimBLEDevice::init("CAN-Do-Bridge");
+    NimBLEDevice::init(g_device_id.c_str());
     NimBLEScan* pScan = NimBLEDevice::getScan();
     pScan->setAdvertisedDeviceCallbacks(new AdvertisedDeviceCallbacks(), false);
     pScan->setActiveScan(true);
@@ -361,6 +394,8 @@ void setup() {
     server.on("/api/system/status", HTTP_GET, [](AsyncWebServerRequest *request) {
         JsonDocument doc;
         doc["device"] = "M5Stack Atom Lite UI Bridge";
+        doc["device_id"] = g_device_id;
+        doc["can_do_version"] = "2026.10.2-b001";
         doc["wican_online"] = g_wican_online;
         doc["free_heap"] = ESP.getFreeHeap();
         doc["uptime_s"] = millis() / 1000;
@@ -427,7 +462,7 @@ void setup() {
         doc["sta_rssi"] = connected ? WiFi.RSSI() : 0;
 
         doc["ap_active"] = true;
-        doc["ap_ssid"] = "CAN-Do";
+        doc["ap_ssid"] = g_ap_ssid;
         doc["ap_ip"] = WiFi.softAPIP().toString();
         doc["ap_clients"] = WiFi.softAPgetStationNum();
         doc["ap_mode"] = "auto";
@@ -557,9 +592,30 @@ void setup() {
     });
 
     // REST: POST /api/wifi/settings
-    server.on("/api/wifi/settings", HTTP_POST, [](AsyncWebServerRequest *request) {
-        request->send(200, "application/json", "{\"status\":\"ok\"}");
-    });
+    server.on("/api/wifi/settings", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+            String body = "";
+            for (size_t i = 0; i < len; i++) body += (char)data[i];
+            JsonDocument doc;
+            if (deserializeJson(doc, body) == DeserializationError::Ok) {
+                const char* ssid = doc["ap_ssid"];
+                const char* pass = doc["ap_password"];
+                g_prefs.begin("wifi_config", false);
+                if (ssid && strlen(ssid) > 0) {
+                    g_ap_ssid = ssid;
+                    g_prefs.putString("ap_ssid", g_ap_ssid);
+                }
+                if (pass && strlen(pass) >= 8) {
+                    g_ap_pass = pass;
+                    g_prefs.putString("ap_pass", g_ap_pass);
+                }
+                g_prefs.end();
+                WiFi.softAP(g_ap_ssid.c_str(), g_ap_pass.c_str());
+                Serial.printf("[WIFI] Updated SoftAP credentials: '%s' / '%s'\n", g_ap_ssid.c_str(), g_ap_pass.c_str());
+            }
+            request->send(200, "application/json", "{\"status\":\"ok\"}");
+        }
+    );
 
     // Serve Static SPA files from LittleFS
     server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html").setCacheControl("max-age=600");
