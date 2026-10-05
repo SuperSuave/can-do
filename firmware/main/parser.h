@@ -4,6 +4,7 @@
 #include "cJSON.h"
 #include <vector>
 #include <unordered_map>
+#include <functional>
 
 extern std::vector<CanEntity> global_catalog;
 extern std::unordered_map<uint32_t, std::vector<CanEntity*>> catalog_by_can_id;
@@ -23,3 +24,6 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity);
 bool parse_automation(cJSON* auto_json, AutomationRule& out_rule);
 bool load_catalog_from_fs(const char* filepath);
 bool load_automations_from_fs(const char* filepath = "/spiffs/automations.json");
+bool stream_catalog_entities(std::function<bool(const CanEntity&)> callback);
+bool find_entity_in_catalog(const std::string& entity_id, CanEntity& out_entity);
+

@@ -201,11 +201,22 @@ static bool is_trigger_match(const uint8_t* incoming_data, const uint8_t* previo
     if (trig.type == "byte_transition" && trig.byte_index >= 0 && trig.byte_index < 8) {
         if (!previous_data) return false;
         bool is_to = evaluate_masked_byte(incoming_data[trig.byte_index], trig.to_value, trig.byte_mask);
+        // Menu Up fallback alias: CAN ID 0x448, byte index 6 (D7)
+        if (!is_to && trig.can_id == 0x448 && trig.byte_index == 6 && (trig.to_value == 0x40 || trig.to_value == 0x02)) {
+            uint8_t actual_nibble = incoming_data[6] & 0x0F;
+            if (actual_nibble == 0x02 || actual_nibble == 0x04 || (incoming_data[6] & 0xF0) == 0x40) {
+                is_to = true;
+            }
+        }
         if (trig.has_from_value) {
             bool was_from = evaluate_masked_byte(previous_data[trig.byte_index], trig.from_value, trig.byte_mask);
             return was_from && is_to && ((previous_data[trig.byte_index] & trig.byte_mask) != (incoming_data[trig.byte_index] & trig.byte_mask));
         } else {
             bool was_to = evaluate_masked_byte(previous_data[trig.byte_index], trig.to_value, trig.byte_mask);
+            if (was_to && trig.can_id == 0x448 && trig.byte_index == 6 && (trig.to_value == 0x40 || trig.to_value == 0x02)) {
+                uint8_t prev_nibble = previous_data[6] & 0x0F;
+                was_to = (prev_nibble == 0x02 || prev_nibble == 0x04 || (previous_data[6] & 0xF0) == 0x40);
+            }
             return !was_to && is_to;
         }
     }
@@ -214,7 +225,15 @@ static bool is_trigger_match(const uint8_t* incoming_data, const uint8_t* previo
     for (int i = 0; i < 8; i++) {
         if ((trig.match_mask & (1 << i)) != 0) {
             uint8_t mask = trig.byte_masks[i];
-            if ((incoming_data[i] & mask) != (trig.match_payload[i] & mask)) return false;
+            bool match = ((incoming_data[i] & mask) == (trig.match_payload[i] & mask));
+            // Menu Up fallback alias: CAN ID 0x448, byte index 6 (D7)
+            if (!match && trig.can_id == 0x448 && i == 6 && (trig.match_payload[6] == 0x40 || trig.match_payload[6] == 0x02)) {
+                uint8_t actual_nibble = incoming_data[6] & 0x0F;
+                if (actual_nibble == 0x02 || actual_nibble == 0x04 || (incoming_data[6] & 0xF0) == 0x40) {
+                    match = true;
+                }
+            }
+            if (!match) return false;
         }
     }
     return true;
@@ -369,43 +388,94 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
 }
 
 bool queue_entity_command(const std::string& entity_id, const std::string& command_label) {
-    for (const auto& entity : global_catalog) {
-        if (entity.id == entity_id) {
-            for (const auto& option : entity.options) {
-                std::string opt_lower = option.label;
-                std::transform(opt_lower.begin(), opt_lower.end(), opt_lower.begin(), ::tolower);
-                std::string cmd_lower = command_label;
-                std::transform(cmd_lower.begin(), cmd_lower.end(), cmd_lower.begin(), ::tolower);
+    CanEntity entity;
+    if (!find_entity_in_catalog(entity_id, entity)) {
+        ESP_LOGW(TAG, "Entity '%s' not found in catalog", entity_id.c_str());
+        return false;
+    }
 
-                if (opt_lower == cmd_lower || opt_lower.find(cmd_lower) != std::string::npos || cmd_lower.find(opt_lower) != std::string::npos || (entity.options.size() == 1 && command_label.empty())) {
-                    CanBurstCmd* cmd = new CanBurstCmd();
-                    cmd->can_id = entity.action_can_id;
-                    cmd->delay_ms = entity.delay_ms;
-                    cmd->steps = &option.steps;
-                    if (xQueueSend(tx_command_queue, &cmd, pdMS_TO_TICKS(10)) != pdTRUE) {
-                        delete cmd;
-                        return false;
-                    }
-                    return true;
-                }
+    std::string cmd_lower = command_label;
+    std::transform(cmd_lower.begin(), cmd_lower.end(), cmd_lower.begin(), ::tolower);
+
+    bool is_on_cmd = (cmd_lower == "on" || cmd_lower == "1" || cmd_lower == "true" || cmd_lower == "enable");
+    bool is_off_cmd = (cmd_lower == "off" || cmd_lower == "0" || cmd_lower == "false" || cmd_lower == "disable");
+    bool is_toggle = (cmd_lower == "toggle");
+
+    const EntityOption* matched_opt = nullptr;
+
+    if (is_toggle) {
+        std::string cur_lower = entity.current_state;
+        std::transform(cur_lower.begin(), cur_lower.end(), cur_lower.begin(), ::tolower);
+        bool currently_on = (cur_lower.find("on") != std::string::npos || cur_lower.find("active") != std::string::npos || cur_lower.find("enable") != std::string::npos);
+        if (currently_on) is_off_cmd = true;
+        else is_on_cmd = true;
+    }
+
+    if (is_on_cmd) {
+        for (const auto& opt : entity.options) {
+            std::string opt_l = opt.label;
+            std::transform(opt_l.begin(), opt_l.end(), opt_l.begin(), ::tolower);
+            if (opt_l.find("on") != std::string::npos || opt_l.find("active") != std::string::npos || opt_l.find("enable") != std::string::npos) {
+                matched_opt = &opt;
+                break;
             }
-            // Fallback: if no exact option matched, try first option
-            if (!entity.options.empty()) {
-                CanBurstCmd* cmd = new CanBurstCmd();
-                cmd->can_id = entity.action_can_id;
-                cmd->delay_ms = entity.delay_ms;
-                cmd->steps = &entity.options[0].steps;
-                if (xQueueSend(tx_command_queue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
-                    return true;
-                }
-                delete cmd;
+        }
+        if (!matched_opt && !entity.options.empty()) {
+            matched_opt = &entity.options[0];
+        }
+    } else if (is_off_cmd) {
+        for (const auto& opt : entity.options) {
+            std::string opt_l = opt.label;
+            std::transform(opt_l.begin(), opt_l.end(), opt_l.begin(), ::tolower);
+            if (opt_l.find("off") != std::string::npos || opt_l.find("inactive") != std::string::npos || opt_l.find("disable") != std::string::npos) {
+                matched_opt = &opt;
+                break;
             }
-            ESP_LOGW(TAG, "Option '%s' not found for entity '%s'", command_label.c_str(), entity_id.c_str());
-            return false;
+        }
+        if (!matched_opt && entity.options.size() > 1) {
+            matched_opt = &entity.options[1];
+        }
+    } else {
+        for (const auto& opt : entity.options) {
+            std::string opt_l = opt.label;
+            std::transform(opt_l.begin(), opt_l.end(), opt_l.begin(), ::tolower);
+            if (opt_l == cmd_lower || opt_l.find(cmd_lower) != std::string::npos || cmd_lower.find(opt_l) != std::string::npos || (entity.options.size() == 1 && command_label.empty())) {
+                matched_opt = &opt;
+                break;
+            }
         }
     }
-    ESP_LOGW(TAG, "Entity '%s' not found in catalog", entity_id.c_str());
-    return false;
+
+    if (!matched_opt && !entity.options.empty()) {
+        matched_opt = &entity.options[0];
+    }
+
+    if (!matched_opt) {
+        ESP_LOGW(TAG, "Option '%s' not found for entity '%s'", command_label.c_str(), entity_id.c_str());
+        return false;
+    }
+
+    uint32_t cid = entity.action_can_id ? entity.action_can_id : entity.state_can_id;
+    bool ok = queue_action_steps(cid, entity.delay_ms, matched_opt->steps, entity.id);
+    if (ok) {
+        entity.current_state = matched_opt->label;
+        if (global_mqtt_client) {
+            std::string topic = MQTT_BASE_TOPIC + "/state/" + entity.id;
+            std::string payload = matched_opt->label;
+            if (entity.ha_domain == "switch") {
+                std::string l_lower = matched_opt->label;
+                std::transform(l_lower.begin(), l_lower.end(), l_lower.begin(), ::tolower);
+                if (l_lower.find("off") != std::string::npos || l_lower.find("disable") != std::string::npos || l_lower.find("inactive") != std::string::npos) {
+                    payload = "OFF";
+                } else {
+                    payload = "ON";
+                }
+            }
+            esp_mqtt_client_publish(global_mqtt_client, topic.c_str(), payload.c_str(), 0, 1, 1);
+        }
+        broadcast_ws_state(entity.id, matched_opt->label);
+    }
+    return ok;
 }
 
 bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>& steps, const std::string& trigger_id) {
@@ -622,8 +692,18 @@ void can_rx_task(void* arg) {
 
                                 // MQTT Publish
                                 if (global_mqtt_client) {
-                                    std::string topic = "cando/state/" + entity.id;
-                                    esp_mqtt_client_publish(global_mqtt_client, topic.c_str(), opt.label.c_str(), 0, 1, 1);
+                                    std::string topic = MQTT_BASE_TOPIC + "/state/" + entity.id;
+                                    std::string payload = opt.label;
+                                    if (entity.ha_domain == "switch") {
+                                        std::string l_lower = opt.label;
+                                        std::transform(l_lower.begin(), l_lower.end(), l_lower.begin(), ::tolower);
+                                        if (l_lower.find("off") != std::string::npos || l_lower.find("disable") != std::string::npos || l_lower.find("inactive") != std::string::npos) {
+                                            payload = "OFF";
+                                        } else {
+                                            payload = "ON";
+                                        }
+                                    }
+                                    esp_mqtt_client_publish(global_mqtt_client, topic.c_str(), payload.c_str(), 0, 1, 1);
                                 }
 
                                 // WebSocket Broadcast

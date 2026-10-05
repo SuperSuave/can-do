@@ -384,9 +384,44 @@ void setup() {
             String body = "";
             for (size_t i = 0; i < len; i++) body += (char)data[i];
             
-            // Forward command to WiCAN
-            send_to_wican(body);
+            JsonDocument doc;
+            if (deserializeJson(doc, body) == DeserializationError::Ok) {
+                if (!doc.containsKey("type")) {
+                    doc["type"] = "cmd";
+                }
+                String out;
+                serializeJson(doc, out);
+                send_to_wican(out);
+            } else {
+                send_to_wican(body);
+            }
             request->send(200, "application/json", "{\"status\":\"queued\"}");
+        }
+    );
+
+    // REST: POST /api/notify
+    server.on("/api/notify", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+            String body = "";
+            for (size_t i = 0; i < len; i++) body += (char)data[i];
+            
+            JsonDocument doc;
+            if (deserializeJson(doc, body) == DeserializationError::Ok) {
+                const char* msg = doc["message"] | doc["text"] | "";
+                const char* lvl = doc["level"] | "info";
+                if (strlen(msg) > 0) {
+                    JsonDocument cmd;
+                    cmd["type"] = "notify";
+                    cmd["message"] = msg;
+                    cmd["level"] = lvl;
+                    String out;
+                    serializeJson(cmd, out);
+                    send_to_wican(out);
+                    request->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Notification queued for cluster\"}");
+                    return;
+                }
+            }
+            request->send(400, "application/json", "{\"error\":\"Missing message\"}");
         }
     );
 

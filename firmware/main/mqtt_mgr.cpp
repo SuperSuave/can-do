@@ -103,6 +103,13 @@ static void publish_ha_discovery(esp_mqtt_client_handle_t client, const CanEntit
     cJSON_AddStringToObject(root, "command_topic", cmd_topic.c_str());
     cJSON_AddStringToObject(root, "state_topic", state_topic.c_str());
 
+    if (entity.ha_domain == "switch") {
+        cJSON_AddStringToObject(root, "payload_on", "ON");
+        cJSON_AddStringToObject(root, "payload_off", "OFF");
+        cJSON_AddStringToObject(root, "state_on", "ON");
+        cJSON_AddStringToObject(root, "state_off", "OFF");
+    }
+
     // Device grouping block for Home Assistant integration
     cJSON *device = cJSON_AddObjectToObject(root, "device");
     cJSON_AddStringToObject(device, "identifiers", DEVICE_ID.c_str());
@@ -182,14 +189,10 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     std::lock_guard<std::mutex> lock(s_mqtt_mutex);
                     disco_en = s_mqtt_cfg.ha_discovery_enabled;
                 }
-                for (const auto& entity : global_catalog) {
-                    if (!global_mqtt_client || !s_mqtt_connected.load()) break;
-                    if (disco_en) {
-                        publish_ha_discovery(global_mqtt_client, entity);
-                    } else {
-                        clear_ha_discovery(global_mqtt_client, entity);
-                    }
-                    vTaskDelay(pdMS_TO_TICKS(30));
+                if (disco_en) {
+                    mqtt_mgr_publish_discovery();
+                } else {
+                    mqtt_mgr_clear_discovery();
                 }
                 vTaskDelete(NULL);
             }, "ha_disco", 3072, nullptr, 1, nullptr);
@@ -736,17 +739,23 @@ bool mqtt_mgr_save_config(const MqttConfig& cfg) {
 
 void mqtt_mgr_publish_discovery(void) {
     if (global_mqtt_client && s_mqtt_connected.load()) {
-        for (const auto& entity : global_catalog) {
+        stream_catalog_entities([](const CanEntity& entity) -> bool {
+            if (!global_mqtt_client || !s_mqtt_connected.load()) return false;
             publish_ha_discovery(global_mqtt_client, entity);
-        }
+            vTaskDelay(pdMS_TO_TICKS(25));
+            return true;
+        });
     }
 }
 
 void mqtt_mgr_clear_discovery(void) {
     if (global_mqtt_client && s_mqtt_connected.load()) {
-        for (const auto& entity : global_catalog) {
+        stream_catalog_entities([](const CanEntity& entity) -> bool {
+            if (!global_mqtt_client || !s_mqtt_connected.load()) return false;
             clear_ha_discovery(global_mqtt_client, entity);
-        }
+            vTaskDelay(pdMS_TO_TICKS(15));
+            return true;
+        });
     }
 }
 

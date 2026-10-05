@@ -5,11 +5,15 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <list>
+#include <unordered_set>
+#include <type_traits>
 #include "esp_log.h"
 
 static const char* TAG = "CATALOG_PARSER";
 
 std::vector<CanEntity> global_catalog;
+static std::list<CanEntity> s_dynamic_entities;
 std::unordered_map<uint32_t, std::vector<CanEntity*>> catalog_by_can_id;
 std::vector<AutomationRule> global_automations;
 
@@ -20,7 +24,13 @@ void rebuild_catalog_can_id_index(void) {
             catalog_by_can_id[entity.state_can_id].push_back(&entity);
         }
     }
+    for (auto& entity : s_dynamic_entities) {
+        if (entity.state_can_id != 0) {
+            catalog_by_can_id[entity.state_can_id].push_back(&entity);
+        }
+    }
 }
+
 
 int get_d_index(const char* key) {
     if (key != nullptr && key[0] == 'D' && strlen(key) >= 2) {
@@ -496,18 +506,62 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
             parse_byte_match(cJSON_GetObjectItem(opt_json, "match"), opt.match_payload, opt.match_mask, opt.invert_mask, opt.byte_masks, cJSON_GetObjectItem(opt_json, "mask"));
             parse_steps(cJSON_GetObjectItem(opt_json, "steps"), opt.steps);
 
+            // If no explicit steps array but option provides CAN payload (e.g. Kids Mode / Quiet Mode), synthesize an ActionStep
+            cJSON* opt_payload = cJSON_GetObjectItem(opt_json, "payload");
+            if (opt.steps.empty() && opt_payload) {
+                ActionStep step;
+                step.type = ActionType::TRANSMIT_FRAME;
+                step.can_id = out_entity.action_can_id ? out_entity.action_can_id : out_entity.state_can_id;
+                step.delay_ms = out_entity.delay_ms;
+                cJSON* p_item = nullptr;
+                cJSON_ArrayForEach(p_item, opt_payload) {
+                    int idx = get_d_index(p_item->string);
+                    if (idx >= 0) {
+                        if (cJSON_IsString(p_item)) {
+                            step.payload[idx] = parse_hex_string(p_item->valuestring);
+                            step.mask |= (1 << idx);
+                        } else if (cJSON_IsNumber(p_item)) {
+                            step.payload[idx] = static_cast<uint8_t>(p_item->valueint);
+                            step.mask |= (1 << idx);
+                        }
+                    }
+                }
+                opt.steps.push_back(step);
+            }
+
             out_entity.options.push_back(opt);
         }
     } else {
-        // Flat command: treat root match/steps as a default option
+        // Flat command: treat root match/steps/payload as a default option
         cJSON* root_match = cJSON_GetObjectItem(entity_json, "match");
         cJSON* root_steps = cJSON_GetObjectItem(entity_json, "steps");
-        if (root_match || root_steps) {
+        cJSON* root_payload = cJSON_GetObjectItem(entity_json, "payload");
+        if (root_match || root_steps || root_payload) {
             EntityOption opt;
             opt.label = "Active";
             opt.is_default = true;
             parse_byte_match(root_match, opt.match_payload, opt.match_mask, opt.invert_mask, opt.byte_masks, cJSON_GetObjectItem(entity_json, "mask"));
             parse_steps(root_steps, opt.steps);
+            if (opt.steps.empty() && root_payload) {
+                ActionStep step;
+                step.type = ActionType::TRANSMIT_FRAME;
+                step.can_id = out_entity.action_can_id ? out_entity.action_can_id : out_entity.state_can_id;
+                step.delay_ms = out_entity.delay_ms;
+                cJSON* p_item = nullptr;
+                cJSON_ArrayForEach(p_item, root_payload) {
+                    int idx = get_d_index(p_item->string);
+                    if (idx >= 0) {
+                        if (cJSON_IsString(p_item)) {
+                            step.payload[idx] = parse_hex_string(p_item->valuestring);
+                            step.mask |= (1 << idx);
+                        } else if (cJSON_IsNumber(p_item)) {
+                            step.payload[idx] = static_cast<uint8_t>(p_item->valueint);
+                            step.mask |= (1 << idx);
+                        }
+                    }
+                }
+                opt.steps.push_back(step);
+            }
             out_entity.options.push_back(opt);
         }
     }
@@ -726,9 +780,17 @@ static bool stream_parse_array_from_file(FILE* f, const char* target_key, Handle
         if (depth == 0) {
             cJSON* item_json = cJSON_Parse(obj_buf.c_str());
             if (item_json) {
-                handler(item_json);
+                bool keep_going = true;
+                if constexpr (std::is_same_v<std::invoke_result_t<Handler, cJSON*>, bool>) {
+                    keep_going = handler(item_json);
+                } else {
+                    handler(item_json);
+                }
                 cJSON_Delete(item_json);
                 parsed_count++;
+                if (!keep_going) {
+                    break;
+                }
                 if (parsed_count % 5 == 0) {
                     vTaskDelay(pdMS_TO_TICKS(1)); // Feed FreeRTOS watchdog & allow network stack to breathe
                 }
@@ -862,6 +924,97 @@ bool load_catalog_from_fs(const char* filepath) {
     return true;
 }
 
+bool stream_catalog_entities(std::function<bool(const CanEntity&)> callback) {
+    const char* paths[] = {"/spiffs/catalog.json", "/spiffs/can_do_catalog.json"};
+    FILE* f = nullptr;
+    for (const char* p : paths) {
+        f = fopen(p, "r");
+        if (f) break;
+    }
+    if (!f) {
+        ESP_LOGW(TAG, "No catalog file found for streaming");
+        return false;
+    }
+
+    setvbuf(f, nullptr, _IOFBF, 2048);
+
+    bool user_stopped = false;
+    bool ok = stream_parse_array_from_file(f, "commands", [&](cJSON* cmd_json) -> bool {
+        CanEntity entity;
+        if (parse_entity(cmd_json, entity)) {
+            if (!callback(entity)) {
+                user_stopped = true;
+                return false;
+            }
+        }
+        return true;
+    });
+
+    if (!ok && !user_stopped) {
+        fseek(f, 0, SEEK_SET);
+        clearerr(f);
+        stream_parse_array_from_file(f, "entities", [&](cJSON* cmd_json) -> bool {
+            CanEntity entity;
+            if (parse_entity(cmd_json, entity)) {
+                if (!callback(entity)) {
+                    user_stopped = true;
+                    return false;
+                }
+            }
+            return true;
+        });
+    }
+
+    fclose(f);
+    return true;
+}
+
+bool find_entity_in_catalog(const std::string& entity_id, CanEntity& out_entity) {
+    if (entity_id.empty()) return false;
+
+    // 1. Check global_catalog
+    for (const auto& ent : global_catalog) {
+        if (ent.id == entity_id) {
+            out_entity = ent;
+            return true;
+        }
+    }
+
+    // 2. Check dynamic loaded entities
+    for (const auto& ent : s_dynamic_entities) {
+        if (ent.id == entity_id) {
+            out_entity = ent;
+            return true;
+        }
+    }
+
+    // 3. Search catalog file on LittleFS
+    bool found = false;
+    stream_catalog_entities([&](const CanEntity& ent) -> bool {
+        if (ent.id == entity_id) {
+            out_entity = ent;
+            found = true;
+            return false;
+        }
+        return true;
+    });
+
+    if (found) {
+        if (s_dynamic_entities.size() >= 32) {
+            s_dynamic_entities.pop_front();
+        }
+        s_dynamic_entities.push_back(out_entity);
+        CanEntity* ptr = &s_dynamic_entities.back();
+        if (ptr->state_can_id > 0) {
+            catalog_by_can_id[ptr->state_can_id].push_back(ptr);
+        }
+        return true;
+    }
+
+    return false;
+}
+
+
 bool load_automations_from_fs(const char* filepath) {
     ESP_LOGI(TAG, "Loading automations from %s", filepath);
     FILE* f = fopen(filepath, "r");
@@ -920,7 +1073,40 @@ bool load_automations_from_fs(const char* filepath) {
     }
 
     cJSON_Delete(root);
+
+    // Preload entities referenced in automations (triggers, actions)
+    std::unordered_set<std::string> referenced_entities;
+    std::function<void(const std::vector<ActionStep>&)> collect_from_steps;
+    collect_from_steps = [&](const std::vector<ActionStep>& steps) {
+        for (const auto& s : steps) {
+            if (!s.entity_id.empty()) referenced_entities.insert(s.entity_id);
+            collect_from_steps(s.then_steps);
+            collect_from_steps(s.else_steps);
+            for (const auto& ch : s.choices) {
+                collect_from_steps(ch.sequence);
+            }
+            collect_from_steps(s.default_steps);
+        }
+    };
+
+    for (const auto& rule : global_automations) {
+        for (const auto& trig : rule.triggers) {
+            if (!trig.id.empty()) referenced_entities.insert(trig.id);
+        }
+        collect_from_steps(rule.actions);
+    }
+
+    if (!referenced_entities.empty()) {
+        ESP_LOGI(TAG, "Pre-loading %zu entities referenced in automations...", referenced_entities.size());
+        for (const auto& eid : referenced_entities) {
+            CanEntity ent;
+            find_entity_in_catalog(eid, ent);
+        }
+        rebuild_catalog_can_id_index();
+    }
+
     ESP_LOGI(TAG, "Automations loaded: %zu active rules from %s", global_automations.size(), filepath);
     return true;
 }
+
 

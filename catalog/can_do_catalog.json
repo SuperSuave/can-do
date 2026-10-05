@@ -675,9 +675,9 @@
         {
           "label": "Menu Up",
           "match": {
-            "D7": "0x40"
+            "D7": "0x02"
           },
-          "mask": "0xF0"
+          "mask": "0x0F"
         },
         {
           "label": "Menu Down",

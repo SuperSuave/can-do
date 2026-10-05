@@ -9,6 +9,7 @@
 #include "precondition.h"
 #include "remote_climate.h"
 #include "network_mgr.h"
+#include "track_popup.h"
 #include <cstring>
 #include <vector>
 #include <cctype>
@@ -84,15 +85,31 @@ static void handle_incoming_command(const char* json_str) {
     cJSON *type_item = cJSON_GetObjectItem(root, "type");
     const char* type = cJSON_IsString(type_item) ? type_item->valuestring : "";
 
+    cJSON *msg_item = cJSON_GetObjectItem(root, "message");
+    if (!msg_item) msg_item = cJSON_GetObjectItem(root, "text");
+
+    cJSON *entity_item = cJSON_GetObjectItem(root, "entity");
+    cJSON *cmd_item = cJSON_GetObjectItem(root, "command");
+    cJSON *can_id_item = cJSON_GetObjectItem(root, "can_id");
+
     if (strcmp(type, "get_states") == 0) {
         uart_bridge_send_all_states();
     } else if (strcmp(type, "ping") == 0) {
         uart_bridge_send_raw("{\"type\":\"pong\"}");
-    } else if (strcmp(type, "cmd") == 0) {
-        cJSON *entity_item = cJSON_GetObjectItem(root, "entity");
-        cJSON *cmd_item = cJSON_GetObjectItem(root, "command");
-        cJSON *can_id_item = cJSON_GetObjectItem(root, "can_id");
-
+    } else if (strcmp(type, "notify") == 0 || (msg_item && cJSON_IsString(msg_item) && strlen(type) == 0)) {
+        std::string msg = (msg_item && cJSON_IsString(msg_item)) ? msg_item->valuestring : "";
+        cJSON *lvl_item = cJSON_GetObjectItem(root, "level");
+        std::string lvl = (lvl_item && cJSON_IsString(lvl_item)) ? lvl_item->valuestring : "info";
+        bool sent = false;
+        if (lvl == "warning") {
+            sent = track_popup_show_warning(msg.c_str());
+        } else if (lvl == "error") {
+            sent = track_popup_show_error(msg.c_str());
+        } else {
+            sent = track_popup_show_info(msg.c_str());
+        }
+        uart_bridge_send_raw(sent ? "{\"type\":\"ack\",\"status\":\"notified\"}" : "{\"type\":\"nack\",\"error\":\"notify_failed\"}");
+    } else if (strcmp(type, "cmd") == 0 || entity_item != nullptr || can_id_item != nullptr) {
         if (cJSON_IsString(entity_item)) {
             const char* entity = entity_item->valuestring;
             const char* cmd = cJSON_IsString(cmd_item) ? cmd_item->valuestring : "";
@@ -136,6 +153,27 @@ static void handle_incoming_command(const char* json_str) {
                 for (size_t i = 0; i < 8 && (i * 2 + 1) < clean.length(); i++) {
                     std::string bhex = clean.substr(i * 2, 2);
                     step.payload[i] = (uint8_t)strtoul(bhex.c_str(), nullptr, 16);
+                }
+            } else if (cJSON_IsObject(payload_item)) {
+                cJSON* p_sub = nullptr;
+                cJSON_ArrayForEach(p_sub, payload_item) {
+                    int idx = get_d_index(p_sub->string);
+                    if (idx >= 0) {
+                        if (cJSON_IsString(p_sub)) {
+                            step.payload[idx] = parse_hex_string(p_sub->valuestring);
+                        } else if (cJSON_IsNumber(p_sub)) {
+                            step.payload[idx] = static_cast<uint8_t>(p_sub->valueint);
+                        }
+                    }
+                }
+            } else if (cJSON_IsArray(payload_item)) {
+                int arr_sz = cJSON_GetArraySize(payload_item);
+                for (int i = 0; i < arr_sz && i < 8; i++) {
+                    cJSON* itm = cJSON_GetArrayItem(payload_item, i);
+                    if (itm) {
+                        if (cJSON_IsNumber(itm)) step.payload[i] = static_cast<uint8_t>(itm->valueint);
+                        else if (cJSON_IsString(itm)) step.payload[i] = parse_hex_string(itm->valuestring);
+                    }
                 }
             }
 
