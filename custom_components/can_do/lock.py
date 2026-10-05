@@ -54,9 +54,9 @@ class CanDoLockEntity(CanDoEntity, LockEntity):
             if not match_spec:
                 continue
 
-            if "unlocked" in label and check_match(payload, match_spec, opt.get("mask")):
+            if "unlock" in label and check_match(payload, match_spec, opt.get("mask")):
                 return False
-            elif "locked" in label and check_match(payload, match_spec, opt.get("mask")):
+            elif "lock" in label and check_match(payload, match_spec, opt.get("mask")):
                 return True
 
         return None
@@ -69,7 +69,8 @@ class CanDoLockEntity(CanDoEntity, LockEntity):
 
         target_opt = None
         for opt in self.command.get("options", []):
-            if "locked" in opt.get("label", "").lower():
+            label = opt.get("label", "").lower()
+            if "lock" in label and "unlock" not in label:
                 target_opt = opt
                 break
 
@@ -85,7 +86,8 @@ class CanDoLockEntity(CanDoEntity, LockEntity):
 
         target_opt = None
         for opt in self.command.get("options", []):
-            if "unlocked" in opt.get("label", "").lower():
+            label = opt.get("label", "").lower()
+            if "unlock" in label:
                 target_opt = opt
                 break
 

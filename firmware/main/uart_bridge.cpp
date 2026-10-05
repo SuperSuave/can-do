@@ -97,6 +97,13 @@ static void handle_incoming_command(const char* json_str) {
         uart_bridge_send_all_states();
     } else if (strcmp(type, "ping") == 0) {
         uart_bridge_send_raw("{\"type\":\"pong\"}");
+    } else if (strcmp(type, "lock") == 0 || strcmp(type, "unlock") == 0) {
+        bool is_lock = (strcmp(type, "lock") == 0);
+        bool ok = queue_entity_command("doors_lock_state", is_lock ? "lock" : "unlock");
+        if (!ok) ok = queue_entity_command("bridge_door_lock_ctrl", is_lock ? "lock" : "unlock");
+        uart_bridge_send_raw(ok ? "{\"type\":\"ack\",\"status\":\"queued\"}" : "{\"type\":\"nack\",\"error\":\"lock_failed\"}");
+        cJSON_Delete(root);
+        return;
     } else if (strcmp(type, "notify") == 0 || (msg_item && cJSON_IsString(msg_item) && strlen(type) == 0)) {
         std::string msg = (msg_item && cJSON_IsString(msg_item)) ? msg_item->valuestring : "";
         cJSON *lvl_item = cJSON_GetObjectItem(root, "level");
@@ -217,6 +224,18 @@ static void handle_incoming_command(const char* json_str) {
         } else if (strcmp(action, "climate_stop") == 0) {
             remote_climate_stop();
             uart_bridge_send_raw("{\"type\":\"ack\",\"action\":\"climate_stopped\"}");
+        } else if (strcmp(action, "lock") == 0) {
+            bool ok = queue_entity_command("doors_lock_state", "lock");
+            if (!ok) ok = queue_entity_command("bridge_door_lock_ctrl", "lock");
+            uart_bridge_send_raw(ok ? "{\"type\":\"ack\",\"action\":\"locked\"}" : "{\"type\":\"nack\",\"error\":\"lock_failed\"}");
+        } else if (strcmp(action, "unlock") == 0) {
+            bool ok = queue_entity_command("doors_lock_state", "unlock");
+            if (!ok) ok = queue_entity_command("bridge_door_lock_ctrl", "unlock");
+            uart_bridge_send_raw(ok ? "{\"type\":\"ack\",\"action\":\"unlocked\"}" : "{\"type\":\"nack\",\"error\":\"unlock_failed\"}");
+        } else if (strcmp(action, "lock_toggle") == 0) {
+            bool ok = queue_entity_command("doors_lock_state", "toggle");
+            if (!ok) ok = queue_entity_command("bridge_door_lock_ctrl", "toggle");
+            uart_bridge_send_raw(ok ? "{\"type\":\"ack\",\"action\":\"lock_toggled\"}" : "{\"type\":\"nack\",\"error\":\"toggle_failed\"}");
         } else {
             ESP_LOGW(TAG, "Unknown trigger action: %s", action);
         }

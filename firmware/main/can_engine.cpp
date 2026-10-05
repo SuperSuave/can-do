@@ -412,6 +412,8 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
 
     bool is_on_cmd = (cmd_lower == "on" || cmd_lower == "1" || cmd_lower == "true" || cmd_lower == "enable");
     bool is_off_cmd = (cmd_lower == "off" || cmd_lower == "0" || cmd_lower == "false" || cmd_lower == "disable");
+    bool is_lock_cmd = (cmd_lower == "lock" || cmd_lower == "locked" || cmd_lower == "secure");
+    bool is_unlock_cmd = (cmd_lower == "unlock" || cmd_lower == "unlocked");
     bool is_toggle = (cmd_lower == "toggle");
 
     const EntityOption* matched_opt = nullptr;
@@ -419,12 +421,36 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
     if (is_toggle) {
         std::string cur_lower = entity.current_state;
         std::transform(cur_lower.begin(), cur_lower.end(), cur_lower.begin(), ::tolower);
-        bool currently_on = (cur_lower.find("on") != std::string::npos || cur_lower.find("active") != std::string::npos || cur_lower.find("enable") != std::string::npos);
-        if (currently_on) is_off_cmd = true;
-        else is_on_cmd = true;
+        if (entity.ha_domain == "lock" || entity.id.find("lock") != std::string::npos) {
+            bool currently_locked = (cur_lower.find("lock") != std::string::npos && cur_lower.find("unlock") == std::string::npos);
+            if (currently_locked) is_unlock_cmd = true;
+            else is_lock_cmd = true;
+        } else {
+            bool currently_on = (cur_lower.find("on") != std::string::npos || cur_lower.find("active") != std::string::npos || cur_lower.find("enable") != std::string::npos);
+            if (currently_on) is_off_cmd = true;
+            else is_on_cmd = true;
+        }
     }
 
-    if (is_on_cmd) {
+    if (is_lock_cmd) {
+        for (const auto& opt : entity.options) {
+            std::string opt_l = opt.label;
+            std::transform(opt_l.begin(), opt_l.end(), opt_l.begin(), ::tolower);
+            if (opt_l.find("unlock") == std::string::npos && opt_l.find("lock") != std::string::npos) {
+                matched_opt = &opt;
+                break;
+            }
+        }
+    } else if (is_unlock_cmd) {
+        for (const auto& opt : entity.options) {
+            std::string opt_l = opt.label;
+            std::transform(opt_l.begin(), opt_l.end(), opt_l.begin(), ::tolower);
+            if (opt_l.find("unlock") != std::string::npos) {
+                matched_opt = &opt;
+                break;
+            }
+        }
+    } else if (is_on_cmd) {
         for (const auto& opt : entity.options) {
             std::string opt_l = opt.label;
             std::transform(opt_l.begin(), opt_l.end(), opt_l.begin(), ::tolower);
