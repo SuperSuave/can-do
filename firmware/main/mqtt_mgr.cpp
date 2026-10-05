@@ -502,6 +502,10 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             }
             break;
         }
+        case MQTT_EVENT_ERROR:
+            s_mqtt_connected = false;
+            ESP_LOGW(TAG, "MQTT client error event");
+            break;
         default:
             break;
     }
@@ -590,10 +594,13 @@ void mqtt_mgr_start(void) {
     }
 
     if (global_mqtt_client) {
-        esp_mqtt_client_stop(global_mqtt_client);
-        esp_mqtt_client_destroy(global_mqtt_client);
-        global_mqtt_client = nullptr;
+        ESP_LOGI(TAG, "MQTT client already initialized; nudging reconnection");
         s_mqtt_connected = false;
+        esp_err_t err = esp_mqtt_client_reconnect(global_mqtt_client);
+        if (err != ESP_OK) {
+            esp_mqtt_client_disconnect(global_mqtt_client);
+        }
+        return;
     }
 
     esp_mqtt_client_config_t mqtt_cfg = {};
@@ -613,7 +620,11 @@ void mqtt_mgr_start(void) {
     mqtt_cfg.session.last_will.msg_len = 7;
     mqtt_cfg.session.last_will.qos = 1;
     mqtt_cfg.session.last_will.retain = 1;
-    mqtt_cfg.network.reconnect_timeout_ms = 5000;
+
+    // Fast keepalive and short timeouts so network drop is detected quickly
+    mqtt_cfg.session.keepalive = 30;
+    mqtt_cfg.network.reconnect_timeout_ms = 3000;
+    mqtt_cfg.network.timeout_ms = 5000;
     mqtt_cfg.buffer.size = 2048;
 
     global_mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
@@ -646,6 +657,34 @@ void mqtt_mgr_stop(void) {
         global_mqtt_client = nullptr;
         s_mqtt_connected = false;
         ESP_LOGI(TAG, "MQTT client stopped");
+    }
+}
+
+void mqtt_mgr_on_wifi_disconnect(void) {
+    s_mqtt_connected = false;
+    ESP_LOGI(TAG, "Wi-Fi disconnected: aborting socket/disconnecting MQTT client");
+    if (global_mqtt_client) {
+        esp_mqtt_client_disconnect(global_mqtt_client);
+    }
+}
+
+void mqtt_mgr_on_wifi_connect(void) {
+    ESP_LOGI(TAG, "Wi-Fi connected/IP acquired: ensuring MQTT connection");
+    mqtt_mgr_start();
+}
+
+void mqtt_mgr_watchdog(void) {
+    if (!s_mqtt_connected.load()) {
+        if (!global_mqtt_client) {
+            ESP_LOGI(TAG, "MQTT watchdog: starting uninitialized client");
+            mqtt_mgr_start();
+        } else {
+            ESP_LOGD(TAG, "MQTT watchdog: client disconnected, nudging reconnect");
+            esp_err_t err = esp_mqtt_client_reconnect(global_mqtt_client);
+            if (err != ESP_OK) {
+                esp_mqtt_client_disconnect(global_mqtt_client);
+            }
+        }
     }
 }
 
@@ -687,10 +726,9 @@ bool mqtt_mgr_save_config(const MqttConfig& cfg) {
     }
 
     // Restart client with new configuration
+    mqtt_mgr_stop();
     if (cfg.enabled) {
         mqtt_mgr_start();
-    } else {
-        mqtt_mgr_stop();
     }
     return true;
 }

@@ -1,4 +1,5 @@
 #include "network_mgr.h"
+#include "mqtt_mgr.h"
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
@@ -223,6 +224,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
             s_cur_sta_ip = "0.0.0.0";
             if (!s_ap_active) board_led_wifi(false);
             ESP_LOGW(TAG, "Wi-Fi disconnected from '%s'", s_cur_sta_ssid.c_str());
+            mqtt_mgr_on_wifi_disconnect();
 
             if (s_retry_num < MAXIMUM_RETRY) {
                 esp_wifi_connect();
@@ -258,6 +260,8 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
 
         ESP_LOGI(TAG, "Associated with '%s'. Got IP: %s (GW: %s, power-save: NONE)", s_cur_sta_ssid.c_str(), ip_str, gw_str);
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+
+        mqtt_mgr_on_wifi_connect();
 
         if (s_ap_mode == AP_MODE_AUTO) {
             stop_softap();
@@ -377,6 +381,9 @@ static void network_roam_task(void* pvParameters) {
         }
 
         // Periodic roaming / watchdog tick every 10 seconds
+        if (s_sta_connected) {
+            mqtt_mgr_watchdog();
+        }
         vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }
