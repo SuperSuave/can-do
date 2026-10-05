@@ -259,6 +259,12 @@ export default defineConfig(() => {
           }, null, 2);
           fs.writeFileSync(path.join(wwwDir, 'frontend_manifest.json'), manifestJson, 'utf-8');
           fs.writeFileSync(path.join(distDir, 'frontend_manifest.json'), manifestJson, 'utf-8');
+
+          // Generate 404.html for GitHub Pages SPA routing fallback
+          const indexPath = path.join(distDir, 'index.html');
+          if (fs.existsSync(indexPath)) {
+            fs.copyFileSync(indexPath, path.join(distDir, '404.html'));
+          }
         },
       },
     ],

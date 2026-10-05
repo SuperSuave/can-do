@@ -88,6 +88,9 @@ export async function fetchDevicePreferences(): Promise<UserPreferences | null> 
   if (typeof window === 'undefined') return null;
   try {
     const baseUrl = resolveDeviceBaseUrl();
+    if (window.location.protocol === 'https:' && baseUrl.startsWith('http://')) {
+      return null;
+    }
     const res = await fetch(`${baseUrl}/api/preferences`, { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();

@@ -55,14 +55,29 @@ export class ErrorBoundary extends Component<Props, State> {
                   {this.state.error.message}
                 </div>
               )}
-              <button
-                type="button"
-                onClick={this.handleReset}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold transition"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Dismiss & Recover
-              </button>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={this.handleReset}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold transition"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Dismiss & Recover
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      localStorage.clear();
+                      sessionStorage.clear();
+                    } catch {}
+                    window.location.reload();
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition"
+                >
+                  Clear Cached Storage & Reset
+                </button>
+              </div>
             </div>
           </div>
         </div>

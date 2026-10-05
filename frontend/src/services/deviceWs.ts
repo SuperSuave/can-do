@@ -58,6 +58,10 @@ class DeviceWebSocketService {
     }
 
     const url = this.getWsUrl();
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('ws://')) {
+      // In secure HTTPS context (e.g. GitHub Pages), browsers block mixed content ws://.
+      return;
+    }
     try {
       this.ws = new WebSocket(url);
 
