@@ -8858,6 +8858,7 @@
         "all_gen3"
       ],
       "category": "Climate & Comfort",
+      "subcategory": "Smart Bridge & Gateways",
       "roles": [
         "action",
         "sensor"
@@ -8875,7 +8876,7 @@
       },
       "options": [
         {
-          "label": "Climate Auto 72\u00b0F (22\u00b0C)",
+          "label": "Smart Bridge Climate Auto 72\u00b0F (22\u00b0C)",
           "match": {
             "D1": "0x10",
             "D2": "0x01",
@@ -8894,7 +8895,7 @@
           "default": true
         },
         {
-          "label": "Climate Auto 70\u00b0F (21\u00b0C)",
+          "label": "Smart Bridge Climate Auto 70\u00b0F (21\u00b0C)",
           "match": {
             "D1": "0x10",
             "D2": "0x01",
@@ -8912,7 +8913,7 @@
           }
         },
         {
-          "label": "Climate Auto 68\u00b0F (20\u00b0C)",
+          "label": "Smart Bridge Climate Auto 68\u00b0F (20\u00b0C)",
           "match": {
             "D1": "0x10",
             "D2": "0x01",
@@ -8930,7 +8931,7 @@
           }
         },
         {
-          "label": "Climate Auto 74\u00b0F (23.5\u00b0C)",
+          "label": "Smart Bridge Climate Auto 74\u00b0F (23.5\u00b0C)",
           "match": {
             "D1": "0x10",
             "D2": "0x01",
@@ -8948,7 +8949,7 @@
           }
         },
         {
-          "label": "Climate Off",
+          "label": "Smart Bridge Climate Off",
           "match": {
             "D1": "0x10",
             "D2": "0x00"
@@ -8964,13 +8965,12 @@
             "D8": "0x00"
           }
         }
-      ],
-      "subcategory": "Smart Bridge & Gateways"
+      ]
     },
     {
       "id": "bridge_seat_ventilation_ctrl",
       "ha_metadata": {
-        "name": "Driver & Passenger Seat Ventilation (Smart Bridge)",
+        "name": "Smart Bridge Seat Ventilation (Driver & Passenger)",
         "domain": "select",
         "icon": "mdi:car-seat-cooler"
       },
@@ -8980,6 +8980,7 @@
         "all_gen3"
       ],
       "category": "Climate & Comfort",
+      "subcategory": "Smart Bridge & Gateways",
       "roles": [
         "action"
       ],
@@ -8995,7 +8996,7 @@
       },
       "options": [
         {
-          "label": "Driver Vent High (Level 3)",
+          "label": "Smart Bridge Driver Vent High (Level 3)",
           "payload": {
             "D1": "0x30",
             "D2": "0x01",
@@ -9008,7 +9009,7 @@
           }
         },
         {
-          "label": "Driver Vent Medium (Level 2)",
+          "label": "Smart Bridge Driver Vent Medium (Level 2)",
           "payload": {
             "D1": "0x30",
             "D2": "0x01",
@@ -9021,7 +9022,7 @@
           }
         },
         {
-          "label": "Driver Vent Low (Level 1)",
+          "label": "Smart Bridge Driver Vent Low (Level 1)",
           "payload": {
             "D1": "0x30",
             "D2": "0x01",
@@ -9034,7 +9035,7 @@
           }
         },
         {
-          "label": "Both Front Vent High (Level 3)",
+          "label": "Smart Bridge Both Front Vent High (Level 3)",
           "payload": {
             "D1": "0x30",
             "D2": "0x03",
@@ -9047,7 +9048,7 @@
           }
         },
         {
-          "label": "Passenger Vent High (Level 3)",
+          "label": "Smart Bridge Passenger Vent High (Level 3)",
           "payload": {
             "D1": "0x30",
             "D2": "0x02",
@@ -9060,7 +9061,7 @@
           }
         },
         {
-          "label": "Ventilation Off",
+          "label": "Smart Bridge Seat Ventilation Off",
           "payload": {
             "D1": "0x30",
             "D2": "0x01",
@@ -9073,13 +9074,12 @@
           },
           "default": true
         }
-      ],
-      "subcategory": "Seat Comfort"
+      ]
     },
     {
       "id": "bridge_seat_heater_ctrl",
       "ha_metadata": {
-        "name": "Driver & Passenger Seat Heating (Smart Bridge)",
+        "name": "Smart Bridge Seat Heating (Driver & Passenger)",
         "domain": "select",
         "icon": "mdi:car-seat-heater"
       },
@@ -9089,6 +9089,7 @@
         "all_gen3"
       ],
       "category": "Climate & Comfort",
+      "subcategory": "Smart Bridge & Gateways",
       "roles": [
         "action"
       ],
@@ -9104,7 +9105,7 @@
       },
       "options": [
         {
-          "label": "Driver Heat High (Level 3)",
+          "label": "Smart Bridge Driver Heat High (Level 3)",
           "payload": {
             "D1": "0x30",
             "D2": "0x01",
@@ -9117,7 +9118,7 @@
           }
         },
         {
-          "label": "Driver Heat Medium (Level 2)",
+          "label": "Smart Bridge Driver Heat Medium (Level 2)",
           "payload": {
             "D1": "0x30",
             "D2": "0x01",
@@ -9130,7 +9131,7 @@
           }
         },
         {
-          "label": "Driver Heat Low (Level 1)",
+          "label": "Smart Bridge Driver Heat Low (Level 1)",
           "payload": {
             "D1": "0x30",
             "D2": "0x01",
@@ -9143,7 +9144,7 @@
           }
         },
         {
-          "label": "Both Front Heat High (Level 3)",
+          "label": "Smart Bridge Both Front Heat High (Level 3)",
           "payload": {
             "D1": "0x30",
             "D2": "0x03",
@@ -9156,7 +9157,7 @@
           }
         },
         {
-          "label": "Passenger Heat High (Level 3)",
+          "label": "Smart Bridge Passenger Heat High (Level 3)",
           "payload": {
             "D1": "0x30",
             "D2": "0x02",
@@ -9169,7 +9170,7 @@
           }
         },
         {
-          "label": "Heating Off",
+          "label": "Smart Bridge Seat Heating Off",
           "payload": {
             "D1": "0x30",
             "D2": "0x01",
@@ -9182,13 +9183,149 @@
           },
           "default": true
         }
+      ]
+    },
+    {
+      "id": "bridge_smart_gateway_charging_ctrl",
+      "ha_metadata": {
+        "name": "Smart Bridge EV Charging Control (Start/Stop/Current)",
+        "domain": "select",
+        "icon": "mdi:ev-station"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
       ],
-      "subcategory": "Seat Comfort"
+      "category": "High Voltage & Charging",
+      "subcategory": "Smart Bridge & Gateways",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Smart Bridge",
+        "github": "supersuave",
+        "notes": "Commands high-voltage EV charging start, stop, current limit, and connector lock via HKMC Smart Bridge running on the Android Head Unit. M-CAN 0x6E0 (Domain 0x50) translates CAN commands directly to native TM_HSCANAdapter (requestImmediatelyCharging) and BCMManager (requestChargeLockDoor), commanding the VCU and OBC over C-CAN."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x6E0",
+        "state_can_id": "0x6E1"
+      },
+      "options": [
+        {
+          "label": "Smart Bridge Start Charging Immediately (100% Target)",
+          "payload": {
+            "D1": "0x50",
+            "D2": "0x01",
+            "D3": "0x64",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "default": true
+        },
+        {
+          "label": "Smart Bridge Start Charging Immediately (80% Target)",
+          "payload": {
+            "D1": "0x50",
+            "D2": "0x01",
+            "D3": "0x50",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          }
+        },
+        {
+          "label": "Smart Bridge Stop Charging & Unlock Connector",
+          "payload": {
+            "D1": "0x50",
+            "D2": "0x00",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          }
+        },
+        {
+          "label": "Smart Bridge AC Charging Current Maximum (100%)",
+          "payload": {
+            "D1": "0x50",
+            "D2": "0x02",
+            "D3": "0x02",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          }
+        },
+        {
+          "label": "Smart Bridge AC Charging Current Reduced (90%)",
+          "payload": {
+            "D1": "0x50",
+            "D2": "0x02",
+            "D3": "0x01",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          }
+        },
+        {
+          "label": "Smart Bridge AC Charging Current Minimum (60%)",
+          "payload": {
+            "D1": "0x50",
+            "D2": "0x02",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          }
+        },
+        {
+          "label": "Smart Bridge Lock Charging Connector",
+          "payload": {
+            "D1": "0x50",
+            "D2": "0x03",
+            "D3": "0x01",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          }
+        },
+        {
+          "label": "Smart Bridge Unlock Charging Connector",
+          "payload": {
+            "D1": "0x50",
+            "D2": "0x03",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          }
+        }
+      ]
     },
     {
       "id": "bridge_micom_power_keepalive",
       "ha_metadata": {
-        "name": "Head Unit Micom Keep-Alive (Smart Bridge)",
+        "name": "Smart Bridge Head Unit Micom Keep-Alive",
         "domain": "button",
         "icon": "mdi:power-sleep"
       },
@@ -9198,6 +9335,7 @@
         "all_gen3"
       ],
       "category": "Doors, Access & Security",
+      "subcategory": "Smart Bridge & Gateways",
       "roles": [
         "action"
       ],
@@ -9213,7 +9351,7 @@
       },
       "options": [
         {
-          "label": "Keepalive 15 Minutes",
+          "label": "Smart Bridge Keepalive 15 Minutes",
           "payload": {
             "D1": "0x40",
             "D2": "0x01",
@@ -9227,7 +9365,7 @@
           "default": true
         },
         {
-          "label": "Keepalive 30 Minutes",
+          "label": "Smart Bridge Keepalive 30 Minutes",
           "payload": {
             "D1": "0x40",
             "D2": "0x01",
@@ -9240,7 +9378,7 @@
           }
         },
         {
-          "label": "Cancel Keepalive",
+          "label": "Smart Bridge Cancel Keepalive",
           "payload": {
             "D1": "0x40",
             "D2": "0x00",
@@ -9252,13 +9390,12 @@
             "D8": "0x00"
           }
         }
-      ],
-      "subcategory": "Access & Wakeup"
+      ]
     },
     {
       "id": "bridge_door_lock_ctrl",
       "ha_metadata": {
-        "name": "Vehicle Door Locks (Smart Bridge)",
+        "name": "Smart Bridge Vehicle Door Locks (M-CAN to B-CAN)",
         "domain": "lock",
         "icon": "mdi:car-door-lock"
       },
@@ -9268,7 +9405,7 @@
         "all_gen3"
       ],
       "category": "Doors, Access & Security",
-      "subcategory": "Central Locking",
+      "subcategory": "Smart Bridge & Gateways",
       "roles": [
         "action",
         "state"
@@ -9286,7 +9423,7 @@
       },
       "options": [
         {
-          "label": "Lock Doors",
+          "label": "Smart Bridge Lock Doors",
           "match": {
             "D3": "0x00"
           },
@@ -9303,7 +9440,7 @@
           "default": true
         },
         {
-          "label": "Unlock Doors",
+          "label": "Smart Bridge Unlock Doors",
           "match": {
             "D3": "0x40"
           },
