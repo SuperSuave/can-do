@@ -84,12 +84,12 @@
     {
       "name": "index.html",
       "path": "/spiffs/www/index.html",
-      "size": 1741
+      "size": 4093
     },
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 747
+      "size": 1758
     },
     {
       "name": "logo.svg",
