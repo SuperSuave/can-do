@@ -726,7 +726,13 @@ static bool stream_parse_array_from_file(FILE* f, const char* target_key, Handle
 }
 
 bool load_catalog_from_fs(const char* filepath) {
-    ESP_LOGI(TAG, "Loading catalog from %s", filepath);
+    ESP_LOGI(TAG, "Loading catalog from %s (free heap: %lu)", filepath, (unsigned long)esp_get_free_heap_size());
+    // On ESP32-C3 CAN coprocessor mode, catalog and UI are hosted and executed on the UI bridge.
+    // Full catalog parsing into C3 RAM requires >150KB heap; skip if heap is low to prevent bad_alloc abort.
+    if (esp_get_free_heap_size() < 120000) {
+        ESP_LOGI(TAG, "Skipping catalog RAM caching to preserve memory for CAN coprocessor.");
+        return true;
+    }
     struct stat st;
     if (stat(filepath, &st) != 0) {
         ESP_LOGE(TAG, "Failed to stat catalog file: %s", filepath);
