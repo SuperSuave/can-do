@@ -79,12 +79,12 @@
     {
       "name": "index.html",
       "path": "/spiffs/www/index.html",
-      "size": 1777
+      "size": 4093
     },
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 759
+      "size": 1758
     },
     {
       "name": "KL3vsTVW.js.gz",
