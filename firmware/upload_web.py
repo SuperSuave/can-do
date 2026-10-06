@@ -191,6 +191,38 @@ def main():
         "/spiffs/www/index-uQb2UU3p.css",
         "/spiffs/www/index-xYBoX6bs.js.gz",
         "/spiffs/www/index-xYBoX6bs.js",
+        "/spiffs/www/DkzL0pi6.js.gz",
+        "/spiffs/www/DkzL0pi6.js",
+        "/spiffs/www/CwC6rF42.js.gz",
+        "/spiffs/www/CwC6rF42.js",
+        "/spiffs/www/C5q4UFHB.js.gz",
+        "/spiffs/www/C5q4UFHB.js",
+        "/spiffs/www/Cwr9cP0S.js.gz",
+        "/spiffs/www/Cwr9cP0S.js",
+        "/spiffs/www/B_ldHVQn.js.gz",
+        "/spiffs/www/B_ldHVQn.js",
+        "/spiffs/www/D-dusW_V.js.gz",
+        "/spiffs/www/D-dusW_V.js",
+        "/spiffs/www/D4LEsh4P.js.gz",
+        "/spiffs/www/D4LEsh4P.js",
+        "/spiffs/www/Dw17NxH_.js.gz",
+        "/spiffs/www/Dw17NxH_.js",
+        "/spiffs/www/Cl_HRsw3.js.gz",
+        "/spiffs/www/Cl_HRsw3.js",
+        "/spiffs/www/KL3vsTVW.js.gz",
+        "/spiffs/www/KL3vsTVW.js",
+        "/spiffs/www/DFEGyEHa.js.gz",
+        "/spiffs/www/DFEGyEHa.js",
+        "/spiffs/www/DzOzlYSF.js.gz",
+        "/spiffs/www/DzOzlYSF.js",
+        "/spiffs/www/BXPPhoTt.js.gz",
+        "/spiffs/www/BXPPhoTt.js",
+        "/spiffs/www/D1aLmn4A.js.gz",
+        "/spiffs/www/D1aLmn4A.js",
+        "/spiffs/www/index-DqQEye.js.gz",
+        "/spiffs/www/index-DqQEye.js",
+        "/spiffs/www/index-CWBUaL.js.gz",
+        "/spiffs/www/index-CWBUaL.js",
         "/spiffs/www/catalog/can_do_catalog.json.gz",
         "/spiffs/www/can_do_catalog.json.gz",
         "/spiffs/www/can_do_catalog.json",
@@ -217,10 +249,10 @@ def main():
     try:
         import subprocess, re
         git_out = subprocess.check_output(
-            ["git", "log", "--name-only", "--pretty=format:", "-n", "30", "--", "firmware/data/www/index-*"],
+            ["git", "log", "--name-only", "--pretty=format:", "-n", "50", "--", "firmware/data/www/"],
             cwd=script_dir, text=True, stderr=subprocess.DEVNULL
         )
-        for m in re.findall(r'[A-Za-z0-9_\-]+-[a-zA-Z0-9_\-]+\.(?:js|css)', git_out):
+        for m in re.findall(r'[A-Za-z0-9_\-]+\.(?:js|css)', git_out):
             historic_stale.append(f"/spiffs/www/{m}.gz")
             historic_stale.append(f"/spiffs/www/{m}")
     except Exception:
@@ -232,7 +264,7 @@ def main():
             raw = r.read()
             if r.headers.get("Content-Encoding") == "gzip":
                 raw = gzip.decompress(raw)
-            for m in re.findall(r'[A-Za-z0-9_\-]+-[a-zA-Z0-9_\-]+\.(?:js|css)', raw.decode("utf-8", errors="ignore")):
+            for m in re.findall(r'[A-Za-z0-9_\-]+\.(?:js|css)', raw.decode("utf-8", errors="ignore")):
                 historic_stale.append(f"/spiffs/www/{m}.gz")
                 historic_stale.append(f"/spiffs/www/{m}")
     except Exception:
