@@ -8848,7 +8848,7 @@
     {
       "id": "bridge_smart_gateway_climate",
       "ha_metadata": {
-        "name": "Smart Bridge Remote Climate (M-CAN to C-CAN)",
+        "name": "Smart Bridge Remote Climate (M-CAN to C-CAN) [Experimental - Awake Only]",
         "domain": "climate",
         "icon": "mdi:fan-auto"
       },
@@ -8866,7 +8866,7 @@
       "contributor": {
         "name": "SuaveEV & HKMC Smart Bridge",
         "github": "supersuave",
-        "notes": "Commands remote climate activation via HKMC Smart Bridge running on the Android Head Unit. The bridge receives CAN frame 0x6E0 on M-CAN and invokes native DATCManager IPC, commanding the VCU on C-CAN to engage high-voltage contactors, compressor, and PTC cabin heaters."
+        "notes": "UNVERIFIED / EXPERIMENTAL: Requires the head unit to already be awake (ignition/ACC or TMU remote session). Does NOT work while the vehicle is asleep. The current Smart Bridge daemon only accepts HTTP on port 8088; it does not yet listen for CAN 0x6E0, so sending this frame from WiCAN has no effect. Commands remote climate activation via HKMC Smart Bridge running on the Android Head Unit. The bridge receives CAN frame 0x6E0 on M-CAN and invokes native DATCManager IPC, commanding the VCU on C-CAN to engage high-voltage contactors, compressor, and PTC cabin heaters."
       },
       "network": {
         "bus": 0,
@@ -8970,7 +8970,7 @@
     {
       "id": "bridge_seat_ventilation_ctrl",
       "ha_metadata": {
-        "name": "Smart Bridge Seat Ventilation (Driver & Passenger)",
+        "name": "Smart Bridge Seat Ventilation (Driver & Passenger) [Experimental - Awake Only]",
         "domain": "select",
         "icon": "mdi:car-seat-cooler"
       },
@@ -8987,7 +8987,7 @@
       "contributor": {
         "name": "SuaveEV & HKMC Smart Bridge",
         "github": "supersuave",
-        "notes": "Commands ventilated front seats via HKMC Smart Bridge. M-CAN 0x6E0 (Domain 0x30, Target 0x01=Drv/0x02=Ast/0x03=Both, Mode 0x02=Ventilation, Level 1-3) triggers native BCMManager.requestSeatHeaterVentInfo, commanding the BCM over B-CAN."
+        "notes": "UNVERIFIED / EXPERIMENTAL: Requires the head unit to already be awake (ignition/ACC or TMU remote session). Does NOT work while the vehicle is asleep. The current Smart Bridge daemon only accepts HTTP on port 8088; it does not yet listen for CAN 0x6E0, so sending this frame from WiCAN has no effect. Commands ventilated front seats via HKMC Smart Bridge. M-CAN 0x6E0 (Domain 0x30, Target 0x01=Drv/0x02=Ast/0x03=Both, Mode 0x02=Ventilation, Level 1-3) triggers native BCMManager.requestSeatHeaterVentInfo, commanding the BCM over B-CAN."
       },
       "network": {
         "bus": 0,
@@ -9079,7 +9079,7 @@
     {
       "id": "bridge_seat_heater_ctrl",
       "ha_metadata": {
-        "name": "Smart Bridge Seat Heating (Driver & Passenger)",
+        "name": "Smart Bridge Seat Heating (Driver & Passenger) [Experimental - Awake Only]",
         "domain": "select",
         "icon": "mdi:car-seat-heater"
       },
@@ -9096,7 +9096,7 @@
       "contributor": {
         "name": "SuaveEV & HKMC Smart Bridge",
         "github": "supersuave",
-        "notes": "Commands heated front seats via HKMC Smart Bridge. M-CAN 0x6E0 (Domain 0x30, Target 0x01=Drv/0x02=Ast/0x03=Both, Mode 0x01=Heating, Level 1-3) triggers native BCMManager.requestSeatHeaterVentInfo, commanding the BCM over B-CAN."
+        "notes": "UNVERIFIED / EXPERIMENTAL: Requires the head unit to already be awake (ignition/ACC or TMU remote session). Does NOT work while the vehicle is asleep. The current Smart Bridge daemon only accepts HTTP on port 8088; it does not yet listen for CAN 0x6E0, so sending this frame from WiCAN has no effect. Commands heated front seats via HKMC Smart Bridge. M-CAN 0x6E0 (Domain 0x30, Target 0x01=Drv/0x02=Ast/0x03=Both, Mode 0x01=Heating, Level 1-3) triggers native BCMManager.requestSeatHeaterVentInfo, commanding the BCM over B-CAN."
       },
       "network": {
         "bus": 0,
@@ -9188,7 +9188,7 @@
     {
       "id": "bridge_smart_gateway_charging_ctrl",
       "ha_metadata": {
-        "name": "Smart Bridge EV Charging Control (Start/Stop/Current)",
+        "name": "Smart Bridge EV Charging Control (Start/Stop/Current) [Experimental - Awake Only]",
         "domain": "select",
         "icon": "mdi:ev-station"
       },
@@ -9206,7 +9206,7 @@
       "contributor": {
         "name": "SuaveEV & HKMC Smart Bridge",
         "github": "supersuave",
-        "notes": "Commands high-voltage EV charging start, stop, current limit, and connector lock via HKMC Smart Bridge running on the Android Head Unit. M-CAN 0x6E0 (Domain 0x50) translates CAN commands directly to native TM_HSCANAdapter (requestImmediatelyCharging) and BCMManager (requestChargeLockDoor), commanding the VCU and OBC over C-CAN."
+        "notes": "UNVERIFIED / EXPERIMENTAL: Requires the head unit to already be awake (ignition/ACC or TMU remote session). Does NOT work while the vehicle is asleep. The current Smart Bridge daemon only accepts HTTP on port 8088; it does not yet listen for CAN 0x6E0, so sending this frame from WiCAN has no effect. Commands high-voltage EV charging start, stop, current limit, and connector lock via HKMC Smart Bridge running on the Android Head Unit. M-CAN 0x6E0 (Domain 0x50) translates CAN commands directly to native TM_HSCANAdapter (requestImmediatelyCharging) and BCMManager (requestChargeLockDoor), commanding the VCU and OBC over C-CAN."
       },
       "network": {
         "bus": 0,
@@ -9325,7 +9325,7 @@
     {
       "id": "bridge_micom_power_keepalive",
       "ha_metadata": {
-        "name": "Smart Bridge Head Unit Micom Keep-Alive",
+        "name": "Smart Bridge Head Unit Micom Keep-Alive [Experimental - Awake Only]",
         "domain": "button",
         "icon": "mdi:power-sleep"
       },
@@ -9342,7 +9342,7 @@
       "contributor": {
         "name": "SuaveEV & HKMC Smart Bridge",
         "github": "supersuave",
-        "notes": "Commands head unit Micom power hold via HKMC Smart Bridge. M-CAN 0x6E0 (Domain 0x40, Action 0x01=PwrKeep, Duration in minutes) triggers native MicomPowerManager.requestPwrKeepStart, keeping head unit Android and Micom transceivers fully awake during remote operations."
+        "notes": "UNVERIFIED / EXPERIMENTAL: Requires the head unit to already be awake (ignition/ACC or TMU remote session). Does NOT work while the vehicle is asleep. The current Smart Bridge daemon only accepts HTTP on port 8088; it does not yet listen for CAN 0x6E0, so sending this frame from WiCAN has no effect. Commands head unit Micom power hold via HKMC Smart Bridge. M-CAN 0x6E0 (Domain 0x40, Action 0x01=PwrKeep, Duration in minutes) triggers native MicomPowerManager.requestPwrKeepStart, keeping head unit Android and Micom transceivers fully awake during remote operations."
       },
       "network": {
         "bus": 0,
@@ -9395,7 +9395,7 @@
     {
       "id": "bridge_door_lock_ctrl",
       "ha_metadata": {
-        "name": "Smart Bridge Vehicle Door Locks (M-CAN to B-CAN)",
+        "name": "Smart Bridge Vehicle Door Locks (M-CAN to B-CAN) [Experimental - Awake Only]",
         "domain": "lock",
         "icon": "mdi:car-door-lock"
       },
@@ -9413,7 +9413,7 @@
       "contributor": {
         "name": "SuaveEV & HKMC Smart Bridge",
         "github": "supersuave",
-        "notes": "Commands central door locking via HKMC Smart Bridge daemon (NEMESIS). CAN 0x6E0 (Domain 0x20: 0x01=Lock, 0x00=Unlock) triggers native BCMManager.lockDoor(boolean). State is read from Body frame 0x411."
+        "notes": "UNVERIFIED / EXPERIMENTAL: Requires the head unit to already be awake (ignition/ACC or TMU remote session). Does NOT work while the vehicle is asleep. The current Smart Bridge daemon only accepts HTTP on port 8088; it does not yet listen for CAN 0x6E0, so sending this frame from WiCAN has no effect. Commands central door locking via HKMC Smart Bridge daemon (NEMESIS). CAN 0x6E0 (Domain 0x20: 0x01=Lock, 0x00=Unlock) triggers native BCMManager.lockDoor(boolean). State is read from Body frame 0x411."
       },
       "network": {
         "bus": 0,
