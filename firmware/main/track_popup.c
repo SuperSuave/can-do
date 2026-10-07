@@ -2,12 +2,15 @@
 #include <stdint.h>
 #include <string.h>
 #include "beep.h"
+#include "can.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "isotp_tx.h"
 #include "track_popup.h"
 #include "utf8_utf16_converter.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "freertos/task.h"
 
 #define TAG "track_popup"
 
@@ -331,6 +334,9 @@ static fwd_result_t pin_media_type(track_popup_t *service,
 
 // ********************* idle state *********************
 
+static uint8_t s_last_media_type = TRACK_POPUP_FALLBACK_MEDIA_TYPE;
+static int64_t s_last_media_seen_us = 0;
+
 static void idle_enter(sm_t *sm) {
     // Media-type ownership is scoped to one popup attempt. Release it after
     // the display hold finishes or any setup/transfer failure returns here.
@@ -347,6 +353,15 @@ static void idle_tick(sm_t *sm) {
     }
 }
 
+static void idle_rx(sm_t *sm, const twai_message_t *msg, can_bus_t rx_bus) {
+    (void)sm;
+    (void)rx_bus;
+    if (msg->identifier == TRACK_POPUP_MEDIA_FRAME_ID && msg->data_length_code >= 2U) {
+        s_last_media_type = msg->data[0];
+        s_last_media_seen_us = esp_timer_get_time();
+    }
+}
+
 // ********************* trigger state *********************
 
 static void trigger_enter(sm_t *sm) {
@@ -354,9 +369,32 @@ static void trigger_enter(sm_t *sm) {
     trigger_ctx.request = service->pending_request;
     trigger_ctx.trigger_frames_remaining = TRACK_POPUP_TRIGGER_FRAME_COUNT;
     trigger_ctx.requested_at_us = sm_now(sm);
-    // Defer selection until the next 0x4CE so the media type and its transport
-    // pair come from the same current frame we trigger on in either wiring
-    // mode.
+
+    // If an active media strategy was observed recently (within 10s), reuse it.
+    // Otherwise fallback to Nature (0x04) with ISO-TP 0x6E0/0x6BE.
+    if (s_last_media_seen_us > 0
+            && (sm_now(sm) - s_last_media_seen_us <= 10000000LL)
+            && select_active_media_strategy(service, s_last_media_type)) {
+        // Active media strategy selected
+    } else {
+        select_fallback_strategy(service);
+    }
+
+    uint8_t mtype = service->media_type_owned ? TRACK_POPUP_FALLBACK_MEDIA_TYPE : s_last_media_type;
+
+    // Actively transmit 0x4CE trigger frames to wake cluster track popup
+    twai_message_t inj = {
+        .identifier = TRACK_POPUP_MEDIA_FRAME_ID,
+        .data_length_code = 8,
+        .data = { mtype, 0x11U, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
+    };
+    for (uint8_t i = 0; i < TRACK_POPUP_TRIGGER_FRAME_COUNT; i++) {
+        can_send(TRACK_POPUP_TARGET_BUS, &inj, pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    trigger_ctx.trigger_frames_remaining = 0U;
+    trigger_ctx.trigger_forwarded_at_us = sm_now(sm);
+    ESP_LOGI(TAG, "Sent 0x4CE trigger injection (media=0x%02X)", mtype);
 }
 
 static void trigger_tick(sm_t *sm) {
@@ -409,29 +447,10 @@ static fwd_result_t trigger_fwd(sm_t *sm, twai_message_t *msg,
 
 static void trigger_rx(sm_t *sm, const twai_message_t *msg, can_bus_t rx_bus) {
     (void)rx_bus;
-    track_popup_t *service = owner(sm);
+    (void)sm;
     if (msg->identifier == TRACK_POPUP_MEDIA_FRAME_ID && msg->data_length_code >= 2U) {
-        if (!trigger_ctx.strategy_selected
-                && !select_active_media_strategy(service, msg->data[0])) {
-            select_fallback_strategy(service);
-        }
-
-        if (trigger_ctx.trigger_frames_remaining > 0U) {
-            twai_message_t inj = *msg;
-            inj.extd = 0;
-            inj.rtr = 0;
-            if (service->media_type_owned) {
-                inj.data[0] = TRACK_POPUP_FALLBACK_MEDIA_TYPE;
-            }
-            inj.data[1] = 0x11U;
-            can_send(TRACK_POPUP_TARGET_BUS, &inj, pdMS_TO_TICKS(10));
-            trigger_ctx.trigger_frames_remaining--;
-            ESP_LOGI(TAG, "Sent 0x4CE trigger injection (media=0x%02X, remaining=%u)",
-                     inj.data[0], trigger_ctx.trigger_frames_remaining);
-            if (trigger_ctx.trigger_frames_remaining == 0U) {
-                trigger_ctx.trigger_forwarded_at_us = sm_now(sm);
-            }
-        }
+        s_last_media_type = msg->data[0];
+        s_last_media_seen_us = esp_timer_get_time();
     }
 }
 
@@ -496,6 +515,14 @@ static fwd_result_t popup_owned_fwd(sm_t *sm, twai_message_t *msg,
 
 static void hold_tick(sm_t *sm) {
     if (sm_time_in_us(sm, &S_HOLD) >= TRACK_POPUP_DISPLAY_HOLD_US) {
+        track_popup_t *service = owner(sm);
+        uint8_t mtype = service->media_type_owned ? TRACK_POPUP_FALLBACK_MEDIA_TYPE : s_last_media_type;
+        twai_message_t dis = {
+            .identifier = TRACK_POPUP_MEDIA_FRAME_ID,
+            .data_length_code = 8,
+            .data = { mtype, 0x00U, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
+        };
+        can_send(TRACK_POPUP_TARGET_BUS, &dis, pdMS_TO_TICKS(10));
         sm_transition(sm, &S_IDLE);
     }
 }
@@ -510,6 +537,7 @@ static const sm_state_t S_IDLE = {
     .name = "idle",
     .enter = idle_enter,
     .tick = idle_tick,
+    .rx = idle_rx,
 };
 
 static const sm_state_t S_TRIGGER = {

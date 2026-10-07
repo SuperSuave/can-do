@@ -77,12 +77,14 @@ static inline call_popup_t *owner(sm_t *sm) {
  * Format caller_id and message into a combined UTF-16LE payload for the cluster dialog.
  */
 static bool encode_call_text(const char *caller, const char *msg, call_popup_request_t *out) {
-    if (!caller && !msg) return false;
+    bool has_caller = (caller != NULL && caller[0] != '\0');
+    bool has_msg = (msg != NULL && msg[0] != '\0');
+    if (!has_caller && !has_msg) return false;
+
     char combined[CALL_POPUP_MAX_TEXT_UTF8_BYTES * 2 + 4];
-    
-    if (caller && msg && msg[0] != '\0') {
+    if (has_caller && has_msg) {
         snprintf(combined, sizeof(combined), "%s\n%s", caller, msg);
-    } else if (caller) {
+    } else if (has_caller) {
         snprintf(combined, sizeof(combined), "%s", caller);
     } else {
         snprintf(combined, sizeof(combined), "%s", msg);
@@ -124,7 +126,7 @@ static void idle_tick(sm_t *sm) {
     }
 }
 
-// TRIGGER STATE (Pulse 0x52A or 0x4CE with state = 0x01 Incoming Alert)
+// TRIGGER STATE (Pulse 0x52A and 0x4CE with state = 0x01 Incoming Alert)
 static void trigger_enter(sm_t *sm) {
     call_popup_t *svc = owner(sm);
     trigger_ctx.request = svc->pending_request;
@@ -132,22 +134,48 @@ static void trigger_enter(sm_t *sm) {
     trigger_ctx.requested_at_us = sm_now(sm);
     svc->dialog_active = true;
 
-    // Send initial trigger frame directly
+    // Send initial trigger frame directly on both primary and fallback trigger IDs
     twai_message_t trig = {
         .identifier = CALL_POPUP_STATE_FRAME_ID,
         .data_length_code = 8,
         .data = { 0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } // Phone Call Incoming
     };
     can_send(CALL_POPUP_TARGET_BUS, &trig, pdMS_TO_TICKS(10));
+
+    twai_message_t trig_fallback = {
+        .identifier = CALL_POPUP_FALLBACK_FRAME_ID,
+        .data_length_code = 8,
+        .data = { 0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
+    };
+    can_send(CALL_POPUP_TARGET_BUS, &trig_fallback, pdMS_TO_TICKS(10));
+
     trigger_ctx.trigger_frames_remaining--;
     trigger_ctx.trigger_forwarded_at_us = sm_now(sm);
-    ESP_LOGI(TAG, "Sent incoming alert trigger pulse");
+    ESP_LOGI(TAG, "Sent incoming alert trigger pulse (remaining=%u)", trigger_ctx.trigger_frames_remaining);
 }
 
 static void trigger_tick(sm_t *sm) {
     call_popup_t *svc = owner(sm);
-    if (trigger_ctx.trigger_frames_remaining == 0U &&
-        sm_now(sm) - trigger_ctx.trigger_forwarded_at_us >= CALL_POPUP_TRIGGER_SETTLE_US) {
+    if (trigger_ctx.trigger_frames_remaining > 0U) {
+        if (sm_now(sm) - trigger_ctx.trigger_forwarded_at_us >= 10000U) { // 10ms between pulses
+            twai_message_t trig = {
+                .identifier = CALL_POPUP_STATE_FRAME_ID,
+                .data_length_code = 8,
+                .data = { 0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
+            };
+            can_send(CALL_POPUP_TARGET_BUS, &trig, pdMS_TO_TICKS(10));
+
+            twai_message_t trig_fallback = {
+                .identifier = CALL_POPUP_FALLBACK_FRAME_ID,
+                .data_length_code = 8,
+                .data = { 0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
+            };
+            can_send(CALL_POPUP_TARGET_BUS, &trig_fallback, pdMS_TO_TICKS(10));
+
+            trigger_ctx.trigger_frames_remaining--;
+            trigger_ctx.trigger_forwarded_at_us = sm_now(sm);
+        }
+    } else if (sm_now(sm) - trigger_ctx.trigger_forwarded_at_us >= CALL_POPUP_TRIGGER_SETTLE_US) {
         if (isotp_tx_start(&svc->isotp, trigger_ctx.request.data, trigger_ctx.request.size)) {
             sm_transition(sm, &S_SENDING);
         } else {
@@ -195,6 +223,13 @@ static void dismiss_enter(sm_t *sm) {
         .data = { 0x10, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } // Call Ended
     };
     can_send(CALL_POPUP_TARGET_BUS, &dismiss_frame, pdMS_TO_TICKS(10));
+
+    twai_message_t dismiss_fallback = {
+        .identifier = CALL_POPUP_FALLBACK_FRAME_ID,
+        .data_length_code = 8,
+        .data = { 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
+    };
+    can_send(CALL_POPUP_TARGET_BUS, &dismiss_fallback, pdMS_TO_TICKS(10));
     ESP_LOGI(TAG, "Sent clean alert dismissal frame");
 }
 
@@ -263,7 +298,10 @@ static const sm_state_t S_DISMISS = {
 void call_popup_init(void) {
     memset(&call_service, 0, sizeof(call_service));
     call_service.queue = xQueueCreate(CALL_POPUP_QUEUE_DEPTH, sizeof(call_popup_request_t));
-    configASSERT(call_service.queue != NULL);
+    if (call_service.queue == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate call_popup queue (out of memory)");
+        return;
+    }
 
     const isotp_tx_config_t config = {
         .bus = CALL_POPUP_TARGET_BUS,
@@ -278,8 +316,11 @@ void call_popup_init(void) {
     bool worker_started = isotp_tx_start_worker(
         &call_service.isotp, "call_popup_isotp",
         CALL_POPUP_ISOTP_STACK_SIZE, CALL_POPUP_ISOTP_PRIORITY);
-    configASSERT(worker_started);
-    sm_init(&call_service.sm, "call-popup", &S_IDLE, NULL);
+    if (!worker_started) {
+        ESP_LOGE(TAG, "Failed to start call_popup_isotp worker (out of memory)");
+    } else {
+        sm_init(&call_service.sm, "call-popup", &S_IDLE, NULL);
+    }
 }
 
 void call_popup_tick(void) {
