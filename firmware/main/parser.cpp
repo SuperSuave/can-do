@@ -533,6 +533,12 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
         if (cJSON_IsNumber(delay)) out_entity.delay_ms = delay->valueint;
     }
 
+    cJSON* entity_type_item = cJSON_GetObjectItem(entity_json, "type");
+    const char* ent_type = cJSON_IsString(entity_type_item) ? entity_type_item->valuestring : "";
+    cJSON* net_type_item = network ? cJSON_GetObjectItem(network, "type") : nullptr;
+    const char* net_type = cJSON_IsString(net_type_item) ? net_type_item->valuestring : "";
+    bool is_hud_nav = (strcmp(ent_type, "hud_nav") == 0 || strcmp(net_type, "hud_nav") == 0 || out_entity.id == "cluster_hud_navigation_tbt");
+
     // Options array
     cJSON* options_array = cJSON_GetObjectItem(entity_json, "options");
     if (cJSON_IsArray(options_array)) {
@@ -590,7 +596,7 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
             }
 
             // If no explicit steps array in a hud_nav entity, extract icon code from match (e.g. cluster_hud_navigation_tbt)
-            if (opt.steps.empty() && (out_entity.type == "hud_nav" || out_entity.network_type == "hud_nav")) {
+            if (opt.steps.empty() && is_hud_nav) {
                 ActionStep step;
                 step.type = ActionType::HUD_NAV;
                 cJSON* m = cJSON_GetObjectItem(opt_json, "match");
