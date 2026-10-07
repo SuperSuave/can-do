@@ -45,6 +45,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         sw_version=VERSION,
     )
 
+    # Register HUD navigation services
+    async def async_handle_set_hud_nav(call: Any) -> None:
+        """Handle can_do.set_hud_nav service call."""
+        icon = call.data.get("icon", 1)
+        distance = call.data.get("distance", 0)
+        bars = call.data.get("bars", 0)
+        street = call.data.get("street")
+        speed_limit = call.data.get("speed_limit", 0)
+        camera_alert = call.data.get("camera_alert", False)
+        for coord in hass.data[DOMAIN].values():
+            if isinstance(coord, CanDoDataCoordinator):
+                await coord.async_send_hud_nav(
+                    icon=icon,
+                    distance_meters=distance,
+                    bars=bars,
+                    street=street,
+                    speed_limit_kph=speed_limit,
+                    camera_alert=camera_alert,
+                )
+
+    async def async_handle_clear_hud_nav(call: Any) -> None:
+        """Handle can_do.clear_hud_nav service call."""
+        for coord in hass.data[DOMAIN].values():
+            if isinstance(coord, CanDoDataCoordinator):
+                await coord.async_clear_hud_nav()
+
+    hass.services.async_register(DOMAIN, "set_hud_nav", async_handle_set_hud_nav)
+    hass.services.async_register(DOMAIN, "clear_hud_nav", async_handle_clear_hud_nav)
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

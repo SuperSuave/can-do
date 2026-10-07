@@ -60,3 +60,68 @@ notify:
           max: 30000
           step: 500
           unit_of_measurement: ms
+
+set_hud_nav:
+  name: Project Turn-by-Turn Navigation on HUD
+  description: Project turn-by-turn navigation maneuver graphics, distance countdown, and street names onto the vehicle Head-Up Display (HUD) and Cluster.
+  fields:
+    icon:
+      name: Maneuver Icon
+      description: Maneuver icon code (1=Straight, 2=Slight Right, 3=Right 90°, 4=Sharp Right, 5=U-Turn Left, 6=U-Turn Right, 7=Slight Left, 8=Left 90°, 9=Sharp Left, 10=Roundabout Exit 1, 31=Destination).
+      example: 3
+      default: 1
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 31
+          mode: box
+    distance:
+      name: Distance to Turn (meters)
+      description: Distance remaining to maneuver in meters.
+      example: 250
+      default: 0
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 65535
+          unit_of_measurement: m
+    bars:
+      name: Proximity Countdown Bars
+      description: Number of countdown blocks shown as turn approaches (0 to 8).
+      example: 4
+      default: 0
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 8
+    street:
+      name: Street Name
+      description: Street or road name displayed on the cluster navigation screen (e.g. "Main St").
+      example: "Main St"
+      required: false
+      selector:
+        text:
+    speed_limit:
+      name: Speed Limit (km/h)
+      description: Speed limit sign display in km/h (0 = off).
+      example: 65
+      default: 0
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 200
+    camera_alert:
+      name: Speed Camera Alert
+      description: Show speed camera warning icon on HUD.
+      default: false
+      required: false
+      selector:
+        boolean:
+
+clear_hud_nav:
+  name: Clear HUD Navigation
+  description: Gracefully dismiss and clear active turn-by-turn guidance graphics from the Head-Up Display.

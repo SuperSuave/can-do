@@ -312,3 +312,39 @@ class CanDoDataCoordinator:
         await mqtt.async_publish(self.hass, self.notify_topic, json_payload, qos=1)
         if self.notify_topic != f"{self.base_topic}/notify":
             await mqtt.async_publish(self.hass, f"{self.base_topic}/notify", json_payload, qos=1)
+
+    async def async_send_hud_nav(
+        self,
+        icon: int = 1,
+        distance_meters: int = 0,
+        bars: int = 0,
+        street: str | None = None,
+        speed_limit_kph: int = 0,
+        camera_alert: bool = False,
+    ) -> None:
+        """Send HUD turn-by-turn navigation instruction to ESP32 edge device over MQTT."""
+        payload_obj: dict[str, Any] = {
+            "icon": icon,
+            "distance": distance_meters,
+            "bars": bars,
+        }
+        if street:
+            payload_obj["street"] = street
+        if speed_limit_kph:
+            payload_obj["speed_limit"] = speed_limit_kph
+        if camera_alert:
+            payload_obj["camera_alert"] = camera_alert
+
+        json_payload = json.dumps(payload_obj)
+        nav_topic = f"{self.base_topic}/nav/set"
+        _LOGGER.info("Sending HUD navigation instruction to %s: %s", nav_topic, json_payload)
+        await mqtt.async_publish(self.hass, nav_topic, json_payload, qos=1)
+
+    async def async_clear_hud_nav(self) -> None:
+        """Clear active HUD navigation guidance on ESP32 edge device."""
+        payload_obj = {"action": "clear"}
+        json_payload = json.dumps(payload_obj)
+        nav_topic = f"{self.base_topic}/nav/set"
+        _LOGGER.info("Clearing HUD navigation on %s", nav_topic)
+        await mqtt.async_publish(self.hass, nav_topic, json_payload, qos=1)
+
