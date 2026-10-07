@@ -508,7 +508,15 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         }
         case MQTT_EVENT_ERROR:
             s_mqtt_connected = false;
-            ESP_LOGW(TAG, "MQTT client error event");
+            if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
+                ESP_LOGW(TAG, "MQTT client error: TCP Transport Error (TLS error code: %d, ESP-TLS error code: %d)",
+                         event->error_handle->esp_tls_last_esp_err,
+                         event->error_handle->esp_transport_sock_errno);
+            } else if (event->error_handle->error_type == MQTT_ERROR_TYPE_CONNECTION_REFUSED) {
+                ESP_LOGW(TAG, "MQTT client error: Connection Refused");
+            } else {
+                ESP_LOGW(TAG, "MQTT client error event: type %d", event->error_handle->error_type);
+            }
             break;
         default:
             break;
@@ -627,8 +635,8 @@ void mqtt_mgr_start(void) {
 
     // Fast keepalive and short timeouts so network drop is detected quickly
     mqtt_cfg.session.keepalive = 30;
-    mqtt_cfg.network.reconnect_timeout_ms = 3000;
-    mqtt_cfg.network.timeout_ms = 5000;
+    mqtt_cfg.network.reconnect_timeout_ms = 10000;
+    mqtt_cfg.network.timeout_ms = 12500;
     mqtt_cfg.buffer.size = 2048;
 
     global_mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
@@ -821,4 +829,3 @@ void mqtt_mgr_publish_bms(float kw, float soc, float v, float a, float delta_mv,
     esp_mqtt_client_publish(global_mqtt_client, delta_topic.c_str(), val_str, 0, 1, 1);
     esp_mqtt_client_publish(global_mqtt_client, (MQTT_BASE_TOPIC + "/state/bms_cell_delta_mv").c_str(), val_str, 0, 1, 1);
 }
-
