@@ -308,6 +308,24 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             continue;
         }
 
+        if (step.type == ActionType::HUD_NAV) {
+            if (step.nav_action == "clear") {
+                hud_nav_clear();
+            } else {
+                hud_nav_instruction_t instr = {};
+                instr.icon = (hud_maneuver_icon_t)step.nav_icon;
+                instr.distance_meters = step.nav_distance_meters;
+                instr.bar_graph = step.nav_bars;
+                instr.speed_limit_kph = step.nav_speed_limit;
+                instr.speed_camera_alert = step.nav_camera_alert;
+                if (!step.nav_street.empty()) {
+                    instr.street_name = step.nav_street.c_str();
+                }
+                hud_nav_update(&instr);
+            }
+            continue;
+        }
+
         if ((step.can_id == 0x520 || can_id == 0x520) && (step.mask & 0x01)) {
             if (step.payload[0] == 0x01) {
                 float temp_c = (step.mask & 0x02 && step.payload[1] > 0) ? (step.payload[1] / 2.0f) : 22.0f;

@@ -9,6 +9,7 @@
 #include "mqtt_mgr.h"
 #include "track_popup.h"
 #include "call_popup.h"
+#include "hud_nav.h"
 #include "vbat_sensor.h"
 #include "uds_engine.h"
 #include "cJSON.h"
@@ -1672,10 +1673,73 @@ static esp_err_t api_notify_handler(httpd_req_t *req) {
     }
 }
 
+static esp_err_t api_nav_handler(httpd_req_t *req) {
+    char buf[256];
+    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (ret <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty request");
+        return ESP_FAIL;
+    }
+    buf[ret] = '\0';
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
 
+    cJSON *act = cJSON_GetObjectItem(root, "action");
+    if (act && cJSON_IsString(act) && strcmp(act->valuestring, "clear") == 0) {
+        hud_nav_clear();
+        cJSON_Delete(root);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"status\":\"ok\",\"message\":\"HUD navigation cleared\"}");
+        return ESP_OK;
+    }
 
+    hud_nav_instruction_t instr = {};
+    cJSON *icon_item = cJSON_GetObjectItem(root, "icon");
+    if (icon_item && cJSON_IsNumber(icon_item)) {
+        instr.icon = (hud_maneuver_icon_t)icon_item->valueint;
+    } else {
+        instr.icon = HUD_MANEUVER_STRAIGHT;
+    }
 
+    cJSON *dist_item = cJSON_GetObjectItem(root, "distance");
+    if (dist_item && cJSON_IsNumber(dist_item)) instr.distance_meters = (uint16_t)dist_item->valueint;
 
+    cJSON *bars_item = cJSON_GetObjectItem(root, "bars");
+    if (bars_item && cJSON_IsNumber(bars_item)) instr.bar_graph = (uint8_t)bars_item->valueint;
+
+    cJSON *spd_item = cJSON_GetObjectItem(root, "speed_limit");
+    if (spd_item && cJSON_IsNumber(spd_item)) instr.speed_limit_kph = (uint8_t)spd_item->valueint;
+
+    cJSON *cam_item = cJSON_GetObjectItem(root, "camera_alert");
+    if (cam_item && cJSON_IsBool(cam_item)) instr.speed_camera_alert = cJSON_IsTrue(cam_item);
+
+    cJSON *street_item = cJSON_GetObjectItem(root, "street");
+    if (street_item && cJSON_IsString(street_item)) instr.street_name = street_item->valuestring;
+
+    cJSON *platform_item = cJSON_GetObjectItem(root, "platform");
+    if (platform_item && cJSON_IsString(platform_item)) {
+        if (strcmp(platform_item->valuestring, "gen2") == 0 || strcmp(platform_item->valuestring, "ccan") == 0) {
+            hud_nav_set_platform(HUD_PLATFORM_GEN2_CCAN);
+        } else if (strcmp(platform_item->valuestring, "egmp") == 0 || strcmp(platform_item->valuestring, "canfd") == 0) {
+            hud_nav_set_platform(HUD_PLATFORM_EGMP_CANFD);
+        }
+    }
+
+    bool updated = hud_nav_update(&instr);
+    cJSON_Delete(root);
+
+    httpd_resp_set_type(req, "application/json");
+    if (updated) {
+        httpd_resp_sendstr(req, "{\"status\":\"ok\",\"message\":\"HUD navigation updated\"}");
+        return ESP_OK;
+    } else {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to update HUD navigation");
+        return ESP_FAIL;
+    }
+}
 
 static esp_err_t ws_handler(httpd_req_t *req) {
     if (req->method == HTTP_GET) {
@@ -1736,6 +1800,7 @@ httpd_handle_t start_webserver(void) {
         reg_uri("/api/states", HTTP_GET, api_states_handler);
         reg_uri("/api/command", HTTP_POST, api_command_handler);
         reg_uri("/api/notify", HTTP_POST, api_notify_handler);
+        reg_uri("/api/nav", HTTP_POST, api_nav_handler);
         reg_uri("/api/test_automation", HTTP_POST, api_test_automation_handler);
         reg_uri("/api/automations/diagnostics", HTTP_GET, api_automations_diagnostics_handler);
         reg_uri("/api/automations", HTTP_GET, api_get_automations_handler);

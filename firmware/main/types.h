@@ -55,7 +55,8 @@ enum class ActionType {
     TRACK_POPUP,
     CALL_POPUP,
     CLIMATE_TARGET,
-    PRECONDITION
+    PRECONDITION,
+    HUD_NAV
 };
 
 struct ChoiceBranch {
@@ -89,6 +90,15 @@ struct ActionStep {
     // For PRECONDITION
     std::string precon_mode = "persistent";
     std::string precon_action = "start";
+
+    // For HUD_NAV
+    uint8_t nav_icon = 0;
+    uint16_t nav_distance_meters = 0;
+    uint8_t nav_bars = 0;
+    uint8_t nav_speed_limit = 0;
+    bool nav_camera_alert = false;
+    std::string nav_street;
+    std::string nav_action;
 
     // For IF_THEN
     std::vector<AutomationCondition> if_conditions;

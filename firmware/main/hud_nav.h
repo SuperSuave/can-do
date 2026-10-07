@@ -54,6 +54,11 @@ typedef struct {
 void hud_nav_init(hud_platform_type_t platform);
 
 /**
+ * Switch vehicle bus architecture dynamically between Gen 2 and E-GMP.
+ */
+void hud_nav_set_platform(hud_platform_type_t platform);
+
+/**
  * Periodic 100ms tick to transmit CAN frames to the HUD / Cluster.
  */
 void hud_nav_tick_100ms(void);

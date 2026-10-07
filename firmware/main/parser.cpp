@@ -364,6 +364,31 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         else step.precon_action = (step.precon_mode == "cancel" || step.precon_mode == "off") ? "stop" : "start";
 
         return true;
+    } else if (strcmp(type_str, "hud_nav") == 0 || strcmp(type_str, "nav") == 0) {
+        step.type = ActionType::HUD_NAV;
+        cJSON* act = cJSON_GetObjectItem(a_item, "action");
+        if (act && cJSON_IsString(act)) step.nav_action = act->valuestring;
+
+        cJSON* ic = cJSON_GetObjectItem(a_item, "icon");
+        if (ic && cJSON_IsNumber(ic)) step.nav_icon = static_cast<uint8_t>(ic->valueint);
+        else step.nav_icon = 1;
+
+        cJSON* dist = cJSON_GetObjectItem(a_item, "distance");
+        if (!dist) dist = cJSON_GetObjectItem(a_item, "distance_meters");
+        if (dist && cJSON_IsNumber(dist)) step.nav_distance_meters = static_cast<uint16_t>(dist->valueint);
+
+        cJSON* bars = cJSON_GetObjectItem(a_item, "bars");
+        if (bars && cJSON_IsNumber(bars)) step.nav_bars = static_cast<uint8_t>(bars->valueint);
+
+        cJSON* spd = cJSON_GetObjectItem(a_item, "speed_limit");
+        if (spd && cJSON_IsNumber(spd)) step.nav_speed_limit = static_cast<uint8_t>(spd->valueint);
+
+        cJSON* cam = cJSON_GetObjectItem(a_item, "camera_alert");
+        if (cam && cJSON_IsBool(cam)) step.nav_camera_alert = cJSON_IsTrue(cam);
+
+        cJSON* st = cJSON_GetObjectItem(a_item, "street");
+        if (st && cJSON_IsString(st)) step.nav_street = st->valuestring;
+        return true;
     } else if (strcmp(type_str, "delay") == 0) {
         step.type = ActionType::DELAY;
         cJSON* ms = cJSON_GetObjectItem(a_item, "ms");
@@ -561,6 +586,20 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
                 if (opt_lvl && cJSON_IsString(opt_lvl)) step.popup_level = opt_lvl->valuestring;
                 cJSON* opt_hold = cJSON_GetObjectItem(opt_json, "hold_ms");
                 if (opt_hold && cJSON_IsNumber(opt_hold)) step.hold_ms = (uint32_t)opt_hold->valueint;
+                opt.steps.push_back(step);
+            }
+
+            // If no explicit steps array in a hud_nav entity, extract icon code from match (e.g. cluster_hud_navigation_tbt)
+            if (opt.steps.empty() && (out_entity.type == "hud_nav" || out_entity.network_type == "hud_nav")) {
+                ActionStep step;
+                step.type = ActionType::HUD_NAV;
+                cJSON* m = cJSON_GetObjectItem(opt_json, "match");
+                if (m) {
+                    cJSON* d1 = cJSON_GetObjectItem(m, "D1");
+                    if (d1 && cJSON_IsString(d1)) {
+                        step.nav_icon = static_cast<uint8_t>(parse_hex_string(d1->valuestring));
+                    }
+                }
                 opt.steps.push_back(step);
             }
 
