@@ -523,6 +523,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 
+static bool s_mqtt_initialized = false;
+
 static void load_settings_from_fs(void) {
     std::lock_guard<std::mutex> lock(s_mqtt_mutex);
 
@@ -543,6 +545,7 @@ static void load_settings_from_fs(void) {
     FILE* f = fopen(MQTT_CONFIG_FILE, "r");
     if (!f) {
         ESP_LOGI(TAG, "No %s found, using defaults: %s", MQTT_CONFIG_FILE, s_mqtt_cfg.broker_url.c_str());
+        s_mqtt_initialized = true;
         return;
     }
 
@@ -552,6 +555,7 @@ static void load_settings_from_fs(void) {
 
     if (len <= 0) {
         fclose(f);
+        s_mqtt_initialized = true;
         return;
     }
 
@@ -560,7 +564,10 @@ static void load_settings_from_fs(void) {
     fclose(f);
 
     cJSON* root = cJSON_Parse(content.c_str());
-    if (!root) return;
+    if (!root) {
+        s_mqtt_initialized = true;
+        return;
+    }
 
     cJSON* enabled_item = cJSON_GetObjectItem(root, "enabled");
     if (cJSON_IsBool(enabled_item)) {
@@ -590,6 +597,7 @@ static void load_settings_from_fs(void) {
     }
 
     cJSON_Delete(root);
+    s_mqtt_initialized = true;
     ESP_LOGI(TAG, "Loaded MQTT settings from %s (enabled=%d, broker=%s)",
              MQTT_CONFIG_FILE, s_mqtt_cfg.enabled, s_mqtt_cfg.broker_url.c_str());
 }
@@ -599,6 +607,9 @@ void mqtt_mgr_init(void) {
 }
 
 void mqtt_mgr_start(void) {
+    if (!s_mqtt_initialized) {
+        load_settings_from_fs();
+    }
     std::lock_guard<std::mutex> lock(s_mqtt_mutex);
     if (!s_mqtt_cfg.enabled || s_mqtt_cfg.broker_url.empty()) {
         ESP_LOGI(TAG, "MQTT is disabled or broker URL is empty");

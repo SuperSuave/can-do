@@ -153,6 +153,7 @@ extern "C" void app_main(void) {
 
     // 3. Mount LittleFS
     init_fs();
+    mqtt_mgr_init();
 
     // 4. Network connectivity FIRST (Multi-SSID Roaming, Auto-AP Fallback, 192.168.4.1)
     network_mgr_init();
@@ -179,11 +180,10 @@ extern "C" void app_main(void) {
     xTaskCreate(can_tx_task, "CAN_TX", 3072, nullptr, 4, nullptr);
     xTaskCreate(time_scheduler_task, "TIME_SCHED", 2048, nullptr, 3, nullptr);
 
-    // 10. Start automations & init MQTT in dedicated background task (CAN coprocessor mode)
+    // 10. Start automations in dedicated background task (CAN coprocessor mode)
     xTaskCreate([](void*) {
         ESP_LOGI(TAG, "Background startup task starting (CAN coprocessor mode)...");
         load_automations_from_fs("/spiffs/automations.json");
-        mqtt_mgr_init();
         ESP_LOGI(TAG, "CAN coprocessor startup complete. Free heap: %lu bytes", (unsigned long)esp_get_free_heap_size());
         vTaskDelete(NULL);
     }, "BG_INIT", 4096, nullptr, 1, nullptr);
