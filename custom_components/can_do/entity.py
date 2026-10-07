@@ -32,6 +32,11 @@ class CanDoEntity(Entity):
         self._last_state_snapshot: Any = object()
 
     @property
+    def available(self) -> bool:
+        """Return True if the coordinator is available."""
+        return self.coordinator.available
+
+    @property
     def device_info(self) -> DeviceInfo:
         """Return device information to group entities by subsystem child devices."""
         parent_id = self.coordinator.device_id
@@ -121,22 +126,23 @@ class CanDoEntity(Entity):
 
     def _get_state_snapshot(self) -> Any:
         """Capture the current state of this entity to detect real changes."""
+        state_val = None
         # 1. Binary sensor
         if hasattr(self, "is_on"):
             try:
-                return self.is_on
+                state_val = self.is_on
             except Exception:
                 pass
         # 2. Numeric / text sensor
-        if hasattr(self, "native_value"):
+        elif hasattr(self, "native_value"):
             try:
-                return self.native_value
+                state_val = self.native_value
             except Exception:
                 pass
         # 3. Climate entity
-        if hasattr(self, "target_temperature"):
+        elif hasattr(self, "target_temperature"):
             try:
-                return (
+                state_val = (
                     getattr(self, "target_temperature", None),
                     getattr(self, "current_temperature", None),
                     getattr(self, "hvac_action", None),
@@ -145,6 +151,7 @@ class CanDoEntity(Entity):
             except Exception:
                 pass
         # 4. Switch entity
-        if hasattr(self, "_is_on"):
-            return getattr(self, "_is_on", None)
-        return None
+        elif hasattr(self, "_is_on"):
+            state_val = getattr(self, "_is_on", None)
+            
+        return (self.available, state_val)

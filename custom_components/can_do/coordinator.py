@@ -142,9 +142,13 @@ class CanDoDataCoordinator:
         parts = msg.topic.split("/")
         if len(parts) >= 3:
             dev_id = parts[1]
-            if dev_id != "+" and dev_id != self.active_device_id:
-                self.active_device_id = dev_id
-                _LOGGER.info("CAN Do coordinator bound to active device ID '%s'", dev_id)
+            if dev_id != "+":
+                if self.active_device_id and dev_id != self.active_device_id:
+                    # Ignore messages from other devices if we are already bound
+                    return
+                elif not self.active_device_id:
+                    self.active_device_id = dev_id
+                    _LOGGER.info("CAN Do coordinator bound to active device ID '%s'", dev_id)
 
         status = msg.payload.strip().lower()
         new_avail = status == "online"
@@ -166,9 +170,13 @@ class CanDoDataCoordinator:
         dev_id = parts[1]
         can_id = parts[3].lower()
 
-        if dev_id != "+" and dev_id != self.active_device_id:
-            self.active_device_id = dev_id
-            _LOGGER.info("CAN Do coordinator bound to active device ID '%s'", dev_id)
+        if dev_id != "+":
+            if self.active_device_id and dev_id != self.active_device_id:
+                # Ignore messages from other devices if we are already bound
+                return
+            elif not self.active_device_id:
+                self.active_device_id = dev_id
+                _LOGGER.info("CAN Do coordinator bound to active device ID '%s'", dev_id)
 
         # Receiving live CAN states indicates the edge device is online
         if not self.available:
