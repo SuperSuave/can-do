@@ -1,7 +1,7 @@
 """Lock platform for CAN Do integration."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from homeassistant.components.lock import LockEntity
 from homeassistant.config_entries import ConfigEntry
@@ -22,7 +22,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up CAN Do lock entities from config entry."""
     coordinator: CanDoDataCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: List[LockEntity] = []
+    entities: list[LockEntity] = []
 
     for cmd in coordinator.commands:
         if cmd.get("ha_metadata", {}).get("domain") == "lock":
@@ -34,12 +34,12 @@ async def async_setup_entry(
 class CanDoLockEntity(CanDoEntity, LockEntity):
     """Lock entity representing vehicle door locks."""
 
-    def __init__(self, coordinator: CanDoDataCoordinator, command: Dict[str, Any]) -> None:
+    def __init__(self, coordinator: CanDoDataCoordinator, command: dict[str, Any]) -> None:
         """Initialize lock entity."""
         super().__init__(coordinator, command)
 
     @property
-    def is_locked(self) -> Optional[bool]:
+    def is_locked(self) -> bool | None:
         """Return True if the vehicle is locked."""
         if not self.state_can_id:
             return None

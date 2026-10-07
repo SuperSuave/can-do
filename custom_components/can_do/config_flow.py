@@ -1,10 +1,9 @@
 """Config flow for CAN Do integration."""
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 import voluptuous as vol
-
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
@@ -32,13 +31,13 @@ class CanDoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         """Initialize the config flow."""
-        self._discovered_device: Dict[str, str] = {}
+        self._discovered_device: dict[str, str] = {}
 
     async def async_step_user(
-        self, user_input: Optional[Dict[str, Any]] = None
+        self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle the initial setup step."""
-        errors: Dict[str, str] = {}
+        errors: dict[str, str] = {}
 
         vehicles = await async_get_vehicles(self.hass)
         vehicle_map = {vid: label for vid, label in vehicles}
@@ -108,10 +107,10 @@ class CanDoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return await self.async_step_discovery_confirm()
 
     async def async_step_discovery_confirm(
-        self, user_input: Optional[Dict[str, Any]] = None
+        self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Confirm discovery and select vehicle profile."""
-        errors: Dict[str, str] = {}
+        errors: dict[str, str] = {}
         device_id = self._discovered_device.get(CONF_DEVICE_ID, DEFAULT_DEVICE_ID)
         base_topic = self._discovered_device.get(CONF_BASE_TOPIC, DEFAULT_BASE_TOPIC)
 
@@ -160,7 +159,7 @@ class CanDoOptionsFlow(config_entries.OptionsFlow):
         self.config_entry = config_entry
 
     async def async_step_init(
-        self, user_input: Optional[Dict[str, Any]] = None
+        self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Manage the options."""
         vehicles = await async_get_vehicles(self.hass)

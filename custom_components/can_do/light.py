@@ -1,7 +1,7 @@
 """Light platform for CAN Do integration (Ambient Mood Lighting)."""
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from homeassistant.components.light import ColorMode, LightEntity
 from homeassistant.config_entries import ConfigEntry
@@ -21,7 +21,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up CAN Do light entities from config entry."""
     coordinator: CanDoDataCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: List[LightEntity] = []
+    entities: list[LightEntity] = []
 
     for cmd in coordinator.commands:
         if cmd.get("ha_metadata", {}).get("domain") == "light":
@@ -36,7 +36,7 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
     _attr_color_mode = ColorMode.ONOFF
     _attr_supported_color_modes = {ColorMode.ONOFF}
 
-    def __init__(self, coordinator: CanDoDataCoordinator, command: Dict[str, Any]) -> None:
+    def __init__(self, coordinator: CanDoDataCoordinator, command: dict[str, Any]) -> None:
         """Initialize light entity."""
         super().__init__(coordinator, command)
         self._is_on: bool = False

@@ -1,7 +1,7 @@
 """Select platform for CAN Do integration."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
@@ -22,7 +22,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up CAN Do select entities from config entry."""
     coordinator: CanDoDataCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: List[SelectEntity] = []
+    entities: list[SelectEntity] = []
 
     for cmd in coordinator.commands:
         if cmd.get("ha_metadata", {}).get("domain") == "select":
@@ -34,18 +34,18 @@ async def async_setup_entry(
 class CanDoSelectEntity(CanDoEntity, SelectEntity):
     """Select entity representing multi-state CAN options (modes, comfort levels)."""
 
-    def __init__(self, coordinator: CanDoDataCoordinator, command: Dict[str, Any]) -> None:
+    def __init__(self, coordinator: CanDoDataCoordinator, command: dict[str, Any]) -> None:
         """Initialize select entity."""
         super().__init__(coordinator, command)
         self._attr_options = [
             opt["label"] for opt in self.command.get("options", []) if "label" in opt
         ]
-        self._current_option: Optional[str] = (
+        self._current_option: str | None = (
             self._attr_options[0] if self._attr_options else None
         )
 
     @property
-    def current_option(self) -> Optional[str]:
+    def current_option(self) -> str | None:
         """Return the selected entity option."""
         if not self.state_can_id:
             return self._current_option

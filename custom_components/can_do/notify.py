@@ -1,7 +1,7 @@
 """Notify platform for CAN Do integration (Instrument Cluster Notifications)."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from homeassistant.components.notify import NotifyEntity
 from homeassistant.config_entries import ConfigEntry
@@ -21,7 +21,7 @@ async def async_setup_entry(
     """Set up CAN Do notify entities from a config entry."""
     coordinator: CanDoDataCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    entities: List[NotifyEntity] = []
+    entities: list[NotifyEntity] = []
 
     # 1. Add notify entities defined in the catalog
     for cmd in coordinator.commands:
@@ -68,11 +68,11 @@ async def async_setup_entry(
 class CanDoNotifyEntity(CanDoEntity, NotifyEntity):
     """Catalog-defined notification entity sending text to instrument cluster OSD."""
 
-    def __init__(self, coordinator: CanDoDataCoordinator, command: Dict[str, Any]) -> None:
+    def __init__(self, coordinator: CanDoDataCoordinator, command: dict[str, Any]) -> None:
         """Initialize notify entity."""
         super().__init__(coordinator, command)
 
-    async def async_send_message(self, message: str, title: Optional[str] = None, **kwargs: Any) -> None:
+    async def async_send_message(self, message: str, title: str | None = None, **kwargs: Any) -> None:
         """Send a notification message to the vehicle's instrument cluster."""
         data = kwargs.get("data") or {}
         level = data.get("level", "info")
@@ -127,6 +127,7 @@ class CanDoClusterMasterNotifyEntity(NotifyEntity):
     def device_info(self) -> Any:
         """Return device information."""
         from homeassistant.helpers.entity import DeviceInfo
+
         from .catalog_loader import get_vehicle_definition
 
         parent_id = self.coordinator.device_id
@@ -147,7 +148,7 @@ class CanDoClusterMasterNotifyEntity(NotifyEntity):
             via_device=(DOMAIN, parent_id),
         )
 
-    async def async_send_message(self, message: str, title: Optional[str] = None, **kwargs: Any) -> None:
+    async def async_send_message(self, message: str, title: str | None = None, **kwargs: Any) -> None:
         """Send a notification message to the vehicle's instrument cluster."""
         data = kwargs.get("data") or {}
         level = data.get("level", "info")

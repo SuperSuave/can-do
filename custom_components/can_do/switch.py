@@ -1,7 +1,7 @@
 """Switch platform for CAN Do integration."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
@@ -22,7 +22,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up CAN Do switch entities from config entry."""
     coordinator: CanDoDataCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: List[SwitchEntity] = []
+    entities: list[SwitchEntity] = []
 
     for cmd in coordinator.commands:
         if cmd.get("ha_metadata", {}).get("domain") == "switch":
@@ -34,7 +34,7 @@ async def async_setup_entry(
 class CanDoSwitchEntity(CanDoEntity, SwitchEntity):
     """Switch entity representing toggleable CAN functions."""
 
-    def __init__(self, coordinator: CanDoDataCoordinator, command: Dict[str, Any]) -> None:
+    def __init__(self, coordinator: CanDoDataCoordinator, command: dict[str, Any]) -> None:
         """Initialize switch entity."""
         super().__init__(coordinator, command)
         self._is_on: bool = False

@@ -1,7 +1,7 @@
 """Sensor platform for CAN Do integration with linear scaling & counter filtering."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -34,7 +34,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up CAN Do sensor entities from config entry."""
     coordinator: CanDoDataCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: List[SensorEntity] = []
+    entities: list[SensorEntity] = []
 
     for cmd in coordinator.commands:
         if cmd.get("ha_metadata", {}).get("domain") == "sensor":
@@ -46,7 +46,7 @@ async def async_setup_entry(
 class CanDoSensorEntity(CanDoEntity, SensorEntity):
     """Sensor entity decoding vehicle telemetry and status from CAN."""
 
-    def __init__(self, coordinator: CanDoDataCoordinator, command: Dict[str, Any]) -> None:
+    def __init__(self, coordinator: CanDoDataCoordinator, command: dict[str, Any]) -> None:
         """Initialize sensor entity."""
         super().__init__(coordinator, command)
         self._last_native_val: Any = None
@@ -137,7 +137,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                     if idx < len(payload):
                         raw = payload[idx]
                         if 0x20 <= raw <= 0xB0:
-                            return int(round(raw * 0.5))
+                            return round(raw * 0.5)
 
         # 1B. Cluster Vehicle Road Speed (0x1AC Byte D1 = kph)
         if "cluster_vehicle_speed" in cid or (self.state_can_id.lower() == "0x1ac" and "speed" in cid):
@@ -254,11 +254,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                 idx = get_d_index(byte_str)
                 if 0 <= idx < len(payload):
                     actual = payload[idx]
-                    if op == "greater_than" and actual > val:
-                        return opt.get("label")
-                    elif op == "less_than" and actual < val:
-                        return opt.get("label")
-                    elif op in ("equal", "eq") and actual == val:
+                    if op == "greater_than" and actual > val or op == "less_than" and actual < val or op in ("equal", "eq") and actual == val:
                         return opt.get("label")
 
         # 3. Command-Level Binary Match
@@ -278,9 +274,9 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
         super()._handle_can_update()
 
     @property
-    def extra_state_attributes(self) -> Dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, Any]:
         """Return raw CAN telemetry bytes and decoded thresholds as state attributes."""
-        attrs: Dict[str, Any] = {}
+        attrs: dict[str, Any] = {}
         if self.state_can_id:
             payload = self.coordinator.get_can_payload(self.state_can_id)
             if payload:

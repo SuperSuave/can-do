@@ -1,7 +1,8 @@
 """Climate platform for CAN Do integration (Cabin Target Temperatures & HVAC telemetry)."""
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from homeassistant.components.climate import (
     ClimateEntity,
@@ -28,7 +29,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up CAN Do climate entities from config entry."""
     coordinator: CanDoDataCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: List[ClimateEntity] = []
+    entities: list[ClimateEntity] = []
 
     for cmd in coordinator.commands:
         if cmd.get("ha_metadata", {}).get("domain") == "climate":
@@ -44,13 +45,13 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
     _attr_hvac_modes = [HVACMode.AUTO, HVACMode.HEAT_COOL, HVACMode.OFF]
 
     def __init__(
-        self, coordinator: CanDoDataCoordinator, command: Dict[str, Any], hass: HomeAssistant
+        self, coordinator: CanDoDataCoordinator, command: dict[str, Any], hass: HomeAssistant
     ) -> None:
         """Initialize climate entity."""
         super().__init__(coordinator, command)
         self.hass = hass
         self._hvac_mode: HVACMode = HVACMode.OFF
-        self._aux_unsubs: List[Callable[[], None]] = []
+        self._aux_unsubs: list[Callable[[], None]] = []
 
         net = command.get("network", {})
         self.action_can_id = net.get("action_can_id", "0x4A0")
@@ -122,7 +123,7 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
         return self._hvac_mode if self._hvac_mode != HVACMode.OFF else HVACMode.AUTO
 
     @property
-    def hvac_action(self) -> Optional[HVACAction]:
+    def hvac_action(self) -> HVACAction | None:
         """Return the running HVAC action (heating, cooling, fan, off)."""
         if self.hvac_mode == HVACMode.OFF:
             return HVACAction.OFF
@@ -147,7 +148,7 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
         return HVACAction.HEATING if self.hvac_mode == HVACMode.HEAT_COOL else HVACAction.IDLE
 
     @property
-    def current_temperature(self) -> Optional[float]:
+    def current_temperature(self) -> float | None:
         """Return current outdoor ambient temperature from CAN ID 0x226 Byte D4 ([B3])."""
         payload = self.coordinator.get_can_payload("0x226")
         if payload and len(payload) >= 4:
@@ -160,7 +161,7 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
         return None
 
     @property
-    def target_temperature(self) -> Optional[float]:
+    def target_temperature(self) -> float | None:
         """Return the target temperature."""
         if not self.state_can_id:
             return self._target_temp
@@ -181,9 +182,9 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
         return self._target_temp
 
     @property
-    def extra_state_attributes(self) -> Dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, Any]:
         """Return rich climate telemetry attributes."""
-        attrs: Dict[str, Any] = {}
+        attrs: dict[str, Any] = {}
 
         # 1. HVAC Blower Fan Speed & Airflow (0x31B Byte D4)
         p_31b = self.coordinator.get_can_payload("0x31b")
@@ -286,7 +287,7 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
         temp = max(self._attr_min_temp, min(self._attr_max_temp, float(temp)))
 
         if self.command.get("id") == "bridge_smart_gateway_climate":
-            temp_c = int(round((temp - 32.0) / 1.8)) if self.temperature_unit == UnitOfTemperature.FAHRENHEIT else int(round(temp))
+            temp_c = round((temp - 32.0) / 1.8) if self.temperature_unit == UnitOfTemperature.FAHRENHEIT else round(temp)
             temp_c = max(17, min(27, temp_c))
             hex_payload = f"1001{temp_c:02X}0000000000"
             steps = [{"payload": hex_payload, "repeat": 2, "delay_ms": 20}]
@@ -298,9 +299,9 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
             return
 
         if self.temperature_unit == UnitOfTemperature.FAHRENHEIT:
-            raw_val = 0x06 + int(round(temp - 62.0))
+            raw_val = 0x06 + round(temp - 62.0)
         else:
-            raw_val = 0x1A if temp >= 27.5 else 0x06 + int(round((temp - 17.0) * 2.0))
+            raw_val = 0x1A if temp >= 27.5 else 0x06 + round((temp - 17.0) * 2.0)
 
         raw_val = max(0x06, min(0x1A, raw_val))
 

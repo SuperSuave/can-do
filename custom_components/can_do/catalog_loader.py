@@ -3,18 +3,19 @@
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
 # Track which (command_id, vehicle_id) pairs have already emitted a variant
 # fallback warning so we don't spam the log on every CAN frame.
-_warned_variants: Set[Tuple[str, str]] = set()
+_warned_variants: set[tuple[str, str]] = set()
 
-_CATALOG_DATA: Optional[Dict[str, Any]] = None
+_CATALOG_DATA: dict[str, Any] | None = None
+_VEHICLE_CACHE: dict[str, dict[str, Any]] | None = None
 
 
-def load_catalog() -> Dict[str, Any]:
+def load_catalog() -> dict[str, Any]:
     """Load can_do_catalog.json from repository or local cache."""
     global _CATALOG_DATA
     if _CATALOG_DATA is not None:
@@ -36,14 +37,15 @@ def load_catalog() -> Dict[str, Any]:
     ]
 
     for path in candidates:
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    _CATALOG_DATA = json.load(f)
-                    _LOGGER.debug("Loaded CAN Do catalog from %s", path)
-                    return _CATALOG_DATA
-            except Exception as ex:
-                _LOGGER.error("Failed to parse catalog at %s: %s", path, ex)
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                _CATALOG_DATA = json.load(f)
+                _LOGGER.debug("Loaded CAN Do catalog from %s", path)
+                return _CATALOG_DATA
+        except FileNotFoundError:
+            continue
+        except Exception as ex:
+            _LOGGER.error("Failed to parse catalog at %s: %s", path, ex)
 
     # 3. Dynamic fetch for standalone HACS installations without repo clone
     online_url = "https://raw.githubusercontent.com/SuperSuave/can-do/main/catalog/can_do_catalog.json"
@@ -68,7 +70,7 @@ def load_catalog() -> Dict[str, Any]:
     return _CATALOG_DATA
 
 
-async def async_load_catalog(hass: Any) -> Dict[str, Any]:
+async def async_load_catalog(hass: Any) -> dict[str, Any]:
     """Load catalog asynchronously via executor to avoid blocking the event loop."""
     global _CATALOG_DATA
     if _CATALOG_DATA is not None:
@@ -76,7 +78,7 @@ async def async_load_catalog(hass: Any) -> Dict[str, Any]:
     return await hass.async_add_executor_job(load_catalog)
 
 
-def get_vehicles() -> List[Tuple[str, str]]:
+def get_vehicles() -> list[tuple[str, str]]:
     """Return list of (vehicle_id, display_name)."""
     catalog = load_catalog()
     vehicles = []
@@ -92,22 +94,22 @@ def get_vehicles() -> List[Tuple[str, str]]:
     return vehicles
 
 
-async def async_get_vehicles(hass: Any) -> List[Tuple[str, str]]:
+async def async_get_vehicles(hass: Any) -> list[tuple[str, str]]:
     """Return list of (vehicle_id, display_name) asynchronously via executor."""
     await async_load_catalog(hass)
     return get_vehicles()
 
 
-def get_vehicle_definition(vehicle_id: str) -> Optional[Dict[str, Any]]:
+def get_vehicle_definition(vehicle_id: str) -> dict[str, Any] | None:
     """Get vehicle metadata dict by vehicle_id."""
-    catalog = load_catalog()
-    for v in catalog.get("vehicles", []):
-        if v.get("id") == vehicle_id:
-            return v
-    return None
+    global _VEHICLE_CACHE
+    if _VEHICLE_CACHE is None:
+        catalog = load_catalog()
+        _VEHICLE_CACHE = {v.get("id"): v for v in catalog.get("vehicles", []) if "id" in v}
+    return _VEHICLE_CACHE.get(vehicle_id)
 
 
-def resolve_variant(command: Dict[str, Any], vehicle_id: str) -> Dict[str, Any]:
+def resolve_variant(command: dict[str, Any], vehicle_id: str) -> dict[str, Any]:
     """Return a copy of *command* with network/options resolved for *vehicle_id*.
 
     If the command has no ``variants`` key it is returned unchanged (zero-copy).
@@ -154,7 +156,7 @@ def resolve_variant(command: Dict[str, Any], vehicle_id: str) -> Dict[str, Any]:
     return resolved
 
 
-def get_vehicle_commands(vehicle_id: str) -> List[Dict[str, Any]]:
+def get_vehicle_commands(vehicle_id: str) -> list[dict[str, Any]]:
     """Filter commands applicable to the selected vehicle, resolving variants."""
     catalog = load_catalog()
     vehicle = get_vehicle_definition(vehicle_id)
@@ -168,16 +170,16 @@ def get_vehicle_commands(vehicle_id: str) -> List[Dict[str, Any]]:
     return matched
 
 
-def get_monitored_can_ids(vehicle_id: str) -> List[str]:
+def get_monitored_can_ids(vehicle_id: str) -> list[str]:
     """Get unique state CAN IDs (e.g. '0x448') used by the selected vehicle's commands."""
     commands = get_vehicle_commands(vehicle_id)
-    ids: Set[str] = set()
+    ids: set[str] = set()
     for c in commands:
         net = c.get("network", {})
         cid = net.get("state_can_id")
         if cid:
             ids.add(cid.lower())
-    return sorted(list(ids))
+    return sorted(ids)
 
 
 def get_d_index(key: str) -> int:
@@ -195,7 +197,7 @@ def get_d_index(key: str) -> int:
     return -1
 
 
-def parse_hex_val(val: Any) -> Tuple[int, bool]:
+def parse_hex_val(val: Any) -> tuple[int, bool]:
     """Parse hex string or int, returning (integer_val, is_inverted)."""
     if isinstance(val, int):
         return val, False
@@ -210,7 +212,7 @@ def parse_hex_val(val: Any) -> Tuple[int, bool]:
         return 0, inverted
 
 
-def check_match(data: List[int], match_dict: Dict[str, Any], mask_spec: Any = None) -> bool:
+def check_match(data: list[int], match_dict: dict[str, Any], mask_spec: Any = None) -> bool:
     """Check whether raw 8-byte CAN payload matches the condition."""
     if not match_dict or not data:
         return False

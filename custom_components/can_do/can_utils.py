@@ -1,10 +1,11 @@
 """CAN conversion and helper utilities for CAN Do."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from .catalog_loader import get_d_index, parse_hex_val
 
 
-def build_hex_payload(payload_spec: Any, base_payload: Optional[List[int]] = None) -> str:
+def build_hex_payload(payload_spec: Any, base_payload: list[int] | None = None) -> str:
     """Build a 16-character hex string representing an 8-byte CAN message."""
     data = list(base_payload) if base_payload and len(base_payload) == 8 else [0] * 8
 
@@ -27,12 +28,12 @@ def build_hex_payload(payload_spec: Any, base_payload: Optional[List[int]] = Non
 
 
 def build_action_steps(
-    command: Dict[str, Any],
-    option: Optional[Dict[str, Any]] = None,
-    base_payload: Optional[List[int]] = None,
-) -> List[Dict[str, Any]]:
+    command: dict[str, Any],
+    option: dict[str, Any] | None = None,
+    base_payload: list[int] | None = None,
+) -> list[dict[str, Any]]:
     """Generate list of action steps suitable for ESP32 raw burst transmission."""
-    steps: List[Dict[str, Any]] = []
+    steps: list[dict[str, Any]] = []
 
     # 1. Option-level steps
     if option:

@@ -1,7 +1,7 @@
 """Number platform for CAN Do integration (Audio balance, fader, levels)."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from homeassistant.components.number import NumberEntity
 from homeassistant.config_entries import ConfigEntry
@@ -21,7 +21,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up CAN Do number entities from config entry."""
     coordinator: CanDoDataCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: List[NumberEntity] = []
+    entities: list[NumberEntity] = []
 
     for cmd in coordinator.commands:
         if cmd.get("ha_metadata", {}).get("domain") == "number":
@@ -33,7 +33,7 @@ async def async_setup_entry(
 class CanDoNumberEntity(CanDoEntity, NumberEntity):
     """Number entity controlling numeric vehicle settings."""
 
-    def __init__(self, coordinator: CanDoDataCoordinator, command: Dict[str, Any]) -> None:
+    def __init__(self, coordinator: CanDoDataCoordinator, command: dict[str, Any]) -> None:
         """Initialize number entity."""
         super().__init__(coordinator, command)
         net = command.get("network", {})
@@ -47,7 +47,7 @@ class CanDoNumberEntity(CanDoEntity, NumberEntity):
         self._value: float = self._attr_native_min_value
 
     @property
-    def native_value(self) -> Optional[float]:
+    def native_value(self) -> float | None:
         """Return the current number value."""
         if not self.state_can_id:
             return self._value
@@ -65,7 +65,7 @@ class CanDoNumberEntity(CanDoEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set new numeric value on CAN bus."""
-        raw_val = int(round(value + self.offset)) & 0xFF
+        raw_val = round(value + self.offset) & 0xFF
         idx = get_d_index(self.byte_str)
         data = [0] * 8
         if 0 <= idx < 8:

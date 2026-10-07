@@ -1,5 +1,6 @@
 import re
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import Any
 
 from homeassistant.helpers.entity import DeviceInfo, Entity
 
@@ -14,7 +15,7 @@ class CanDoEntity(Entity):
     _attr_has_entity_name = True
     _attr_should_poll = False
 
-    def __init__(self, coordinator: CanDoDataCoordinator, command: Dict[str, Any]) -> None:
+    def __init__(self, coordinator: CanDoDataCoordinator, command: dict[str, Any]) -> None:
         """Initialize base CAN Do entity."""
         self.coordinator = coordinator
         self.command = command
@@ -26,7 +27,7 @@ class CanDoEntity(Entity):
         self._attr_unique_id = f"{coordinator.device_id}_{self.entity_id_str}"
 
         net = command.get("network", {})
-        self.state_can_id: Optional[str] = net.get("state_can_id")
+        self.state_can_id: str | None = net.get("state_can_id")
         self._unsub_listeners: list[Callable[[], None]] = []
         self._last_state_snapshot: Any = object()
 

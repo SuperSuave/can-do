@@ -2,7 +2,7 @@
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -25,7 +25,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up CAN Do binary sensor entities from config entry."""
     coordinator: CanDoDataCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: List[BinarySensorEntity] = []
+    entities: list[BinarySensorEntity] = []
 
     for cmd in coordinator.commands:
         if cmd.get("ha_metadata", {}).get("domain") == "binary_sensor":
@@ -37,14 +37,14 @@ async def async_setup_entry(
 class CanDoBinarySensorEntity(CanDoEntity, BinarySensorEntity):
     """Binary sensor entity for doors, tailgate, seat occupancy, and touch sensors."""
 
-    def __init__(self, coordinator: CanDoDataCoordinator, command: Dict[str, Any]) -> None:
+    def __init__(self, coordinator: CanDoDataCoordinator, command: dict[str, Any]) -> None:
         """Initialize binary sensor."""
         super().__init__(coordinator, command)
         self._attr_device_class = self._infer_device_class()
         self._is_turn_signal: bool = "turn_signal" in self.entity_id_str.lower() or "blinker" in self.entity_id_str.lower()
         self._last_active_time: float = 0.0
 
-    def _infer_device_class(self) -> Optional[BinarySensorDeviceClass]:
+    def _infer_device_class(self) -> BinarySensorDeviceClass | None:
         """Infer device class from icon or entity identifier."""
         cid = self.entity_id_str.lower()
         if "door" in cid:
@@ -60,7 +60,7 @@ class CanDoBinarySensorEntity(CanDoEntity, BinarySensorEntity):
         return None
 
     @property
-    def is_on(self) -> Optional[bool]:
+    def is_on(self) -> bool | None:
         """Return True if binary sensor is triggered / active."""
         if not self.state_can_id:
             return None
@@ -72,7 +72,7 @@ class CanDoBinarySensorEntity(CanDoEntity, BinarySensorEntity):
             return None
 
         # 1. Match against options if present
-        is_active: Optional[bool] = None
+        is_active: bool | None = None
         for opt in self.command.get("options", []):
             label = opt.get("label", "").lower()
             if any(k in label for k in ["open", "active", "touched", "detected", "unlocked", "on", "yes", "true", "pressed"]):
@@ -99,8 +99,6 @@ class CanDoBinarySensorEntity(CanDoEntity, BinarySensorEntity):
             if is_active:
                 self._last_active_time = now
                 return True
-            if now - self._last_active_time < 3.0:
-                return True
-            return False
+            return now - self._last_active_time < 3.0
 
         return is_active

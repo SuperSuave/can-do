@@ -2,7 +2,8 @@
 
 import json
 import logging
-from typing import Any, Callable, Dict, List, Optional, Set
+from collections.abc import Callable
+from typing import Any
 
 from homeassistant.components import mqtt
 from homeassistant.core import HomeAssistant, callback
@@ -18,22 +19,34 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+_BMS_ALIASES: dict[str, list[str]] = {
+    "bms_soc": ["bms_display_soc", "cond_hv_battery_soc"],
+    "bms_display_soc": ["bms_soc"],
+    "bms_hv_v": ["bms_hv_voltage"],
+    "bms_hv_voltage": ["bms_hv_v"],
+    "bms_hv_a": ["bms_hv_current"],
+    "bms_hv_current": ["bms_hv_a"],
+    "bms_hv_kw": ["bms_hv_power_kw"],
+    "bms_hv_power_kw": ["bms_hv_kw"],
+    "bms_cell_delta_mv": ["bms_cell_delta_mv"],
+}
+
 
 class CanDoDataCoordinator:
     """Coordinates state updates and commands for CAN Do via Home Assistant MQTT."""
 
-    def __init__(self, hass: HomeAssistant, entry_data: Dict[str, Any]) -> None:
+    def __init__(self, hass: HomeAssistant, entry_data: dict[str, Any]) -> None:
         """Initialize the CAN Do coordinator."""
         self.hass = hass
         self.device_id: str = entry_data.get(CONF_DEVICE_ID, "auto")
         self.vehicle_id: str = entry_data.get(CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID)
         self.base_topic: str = entry_data.get(CONF_BASE_TOPIC, DEFAULT_BASE_TOPIC)
-        self.active_device_id: Optional[str] = None if self.device_id in ("auto", "*", "") else self.device_id
+        self.active_device_id: str | None = None if self.device_id in ("auto", "*", "") else self.device_id
 
         self.available: bool = True
-        self.can_states: Dict[str, List[int]] = {}
-        self._listeners: Dict[str, List[Callable[[], None]]] = {}
-        self._unsub_list: List[Callable[[], None]] = []
+        self.can_states: dict[str, list[int]] = {}
+        self._listeners: dict[str, list[Callable[[], None]]] = {}
+        self._unsub_list: list[Callable[[], None]] = []
 
         self.commands = get_vehicle_commands(self.vehicle_id)
         self.monitored_can_ids = get_monitored_can_ids(self.vehicle_id)
@@ -180,18 +193,7 @@ class CanDoDataCoordinator:
                             self.can_states[k] = val
                             self._notify_can_listeners(k)
                     elif can_id.startswith("bms_"):
-                        bms_aliases = {
-                            "bms_soc": ["bms_display_soc", "cond_hv_battery_soc"],
-                            "bms_display_soc": ["bms_soc"],
-                            "bms_hv_v": ["bms_hv_voltage"],
-                            "bms_hv_voltage": ["bms_hv_v"],
-                            "bms_hv_a": ["bms_hv_current"],
-                            "bms_hv_current": ["bms_hv_a"],
-                            "bms_hv_kw": ["bms_hv_power_kw"],
-                            "bms_hv_power_kw": ["bms_hv_kw"],
-                            "bms_cell_delta_mv": ["bms_cell_delta_mv"],
-                        }
-                        for alias in bms_aliases.get(can_id, []):
+                        for alias in _BMS_ALIASES.get(can_id, []):
                             self.can_states[alias] = val
                             self._notify_can_listeners(alias)
                 return
@@ -257,14 +259,14 @@ class CanDoDataCoordinator:
                     except Exception as err:
                         _LOGGER.exception("Error in availability listener: %s", err)
 
-    def get_can_payload(self, can_id: Optional[str]) -> Optional[List[int]]:
+    def get_can_payload(self, can_id: str | None) -> list[int] | None:
         """Retrieve current cached 8-byte payload for a CAN ID."""
         if not can_id:
             return None
         return self.can_states.get(can_id.lower())
 
     async def async_send_action(
-        self, can_id: str, delay_ms: int, steps: List[Dict[str, Any]]
+        self, can_id: str, delay_ms: int, steps: list[dict[str, Any]]
     ) -> None:
         """Send raw action burst to ESP32 edge device over MQTT."""
         payload_obj = {
@@ -282,12 +284,12 @@ class CanDoDataCoordinator:
         self,
         message: str,
         level: str = "info",
-        caller: Optional[str] = None,
-        popup_type: Optional[str] = None,
-        hold_ms: Optional[int] = None,
+        caller: str | None = None,
+        popup_type: str | None = None,
+        hold_ms: int | None = None,
     ) -> None:
         """Send cluster notification (track popup or call popup) to ESP32 edge device over MQTT."""
-        payload_obj: Dict[str, Any] = {
+        payload_obj: dict[str, Any] = {
             "message": message,
             "level": level,
         }

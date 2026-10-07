@@ -1,7 +1,7 @@
 """Event platform for CAN Do integration (Steering wheel & console button events)."""
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from homeassistant.components.event import EventEntity
 from homeassistant.config_entries import ConfigEntry
@@ -21,7 +21,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up CAN Do event entities from config entry."""
     coordinator: CanDoDataCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: List[EventEntity] = []
+    entities: list[EventEntity] = []
 
     for cmd in coordinator.commands:
         if cmd.get("ha_metadata", {}).get("domain") == "event":
@@ -35,7 +35,7 @@ class CanDoEventEntity(CanDoEntity, EventEntity):
 
     _attr_event_types = ["press"]
 
-    def __init__(self, coordinator: CanDoDataCoordinator, command: Dict[str, Any]) -> None:
+    def __init__(self, coordinator: CanDoDataCoordinator, command: dict[str, Any]) -> None:
         """Initialize event entity."""
         super().__init__(coordinator, command)
         self._last_matched: bool = False
