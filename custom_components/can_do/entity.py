@@ -33,8 +33,8 @@ class CanDoEntity(Entity):
 
     @property
     def available(self) -> bool:
-        """Return True if the coordinator is available."""
-        return self.coordinator.available
+        """Return True so entities stay active in Home Assistant and report unknown instead of unavailable."""
+        return True
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -133,13 +133,25 @@ class CanDoEntity(Entity):
                 state_val = self.is_on
             except Exception:
                 pass
-        # 2. Numeric / text sensor
+        # 2. Lock entity
+        elif hasattr(self, "is_locked"):
+            try:
+                state_val = self.is_locked
+            except Exception:
+                pass
+        # 3. Cover entity
+        elif hasattr(self, "is_closed"):
+            try:
+                state_val = self.is_closed
+            except Exception:
+                pass
+        # 4. Numeric / text sensor
         elif hasattr(self, "native_value"):
             try:
                 state_val = self.native_value
             except Exception:
                 pass
-        # 3. Climate entity
+        # 5. Climate entity
         elif hasattr(self, "target_temperature"):
             try:
                 state_val = (
@@ -150,8 +162,8 @@ class CanDoEntity(Entity):
                 )
             except Exception:
                 pass
-        # 4. Switch entity
+        # 6. Switch entity
         elif hasattr(self, "_is_on"):
             state_val = getattr(self, "_is_on", None)
             
-        return (self.available, state_val)
+        return state_val
