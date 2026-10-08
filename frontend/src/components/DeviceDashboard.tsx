@@ -57,6 +57,7 @@ import { MdiIcon } from './MdiIcon';
 import { BluetoothManager } from './BluetoothManager';
 
 export interface SystemStatus {
+  device?: string;
   device_id: string;
   automations_enabled: boolean;
   sniffer_mode: boolean;
@@ -270,6 +271,8 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const [updateProgressPct, setUpdateProgressPct] = useState<number>(0);
   const [updateMessage, setUpdateMessage] = useState<string>('');
 
+  const isAtomBridge = Boolean(status?.device && (status.device.toLowerCase().includes('atom') || status.device.toLowerCase().includes('bridge')));
+
   useEffect(() => {
     if (preferences) {
       setLocalPrefs(preferences);
@@ -282,7 +285,8 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       const currentFront = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__ !== 'unknown') ? __APP_VERSION__ : (status?.can_do_version || catalog?.can_do_version || '');
       const currentFw = status?.can_do_version || currentFront;
       const currentCat = catalog?.can_do_version || currentFront;
-      const res = await checkForUpdates(currentCat, currentFw, currentFront);
+      const targetDev = isAtomBridge ? 'atom' : 'esp32c3';
+      const res = await checkForUpdates(currentCat, currentFw, currentFront, targetDev);
       setUpdateResult(res);
       if (res.has_update) {
         showNotice(`Update available: ${res.release_name || res.version}`);
@@ -322,7 +326,8 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           setUpdateStage(stage);
           setUpdateProgressPct(pct);
           setUpdateMessage(msg);
-        }
+        },
+        isAtomBridge ? 'atom' : 'esp32c3'
       );
       setUpdateStage('complete');
       setUpdateProgressPct(100);
@@ -2312,7 +2317,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                       className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/60 text-xs font-bold transition shrink-0"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span>Download .bin</span>
+                      <span>{isAtomBridge ? 'Download Atom .bin' : 'Download WiCAN .bin'}</span>
                     </a>
                   )}
                   <button
@@ -2394,7 +2399,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/60 text-xs font-semibold shrink-0 transition"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Download Latest .bin</span>
+                  <span>{isAtomBridge ? 'Download Latest Atom .bin' : 'Download Latest WiCAN .bin'}</span>
                 </a>
               )}
             </div>
@@ -2405,7 +2410,9 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 Select or Drop .bin Firmware File to Flash
               </span>
               <span className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                Accepts can-do-esp32c3-*.bin or can-do.bin (application binary)
+                {isAtomBridge
+                  ? 'Accepts can-do-atom-bridge-*.bin (application binary)'
+                  : 'Accepts can-do-esp32c3-*.bin or can-do.bin (application binary)'}
               </span>
               <input
                 type="file"

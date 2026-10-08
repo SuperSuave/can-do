@@ -25,6 +25,8 @@ export interface UpdateCheckResult {
     firmware_url?: string;
     catalog_url?: string;
     frontend_manifest_url?: string;
+    wican_firmware_url?: string;
+    atom_firmware_url?: string;
   };
 }
 
@@ -89,7 +91,8 @@ export function getLastUpdateInstalledTime(): string | null {
 export async function checkForUpdates(
   currentCatalogVersion = '',
   currentFirmwareVersion = '',
-  currentFrontendVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : ''
+  currentFrontendVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '',
+  targetDevice = 'esp32c3'
 ): Promise<UpdateCheckResult> {
   try {
     const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
@@ -110,28 +113,68 @@ export async function checkForUpdates(
     const isFrontNewer = Boolean(tag && (!currentFrontendVersion || currentFrontendVersion === 'unknown' || isVersionNewer(tag, currentFrontendVersion)));
 
     // Locate assets if attached to GitHub release
-    let firmwareUrl: string | undefined;
+    let wicanFirmwareUrl: string | undefined;
+    let atomFirmwareUrl: string | undefined;
     let catalogUrl: string | undefined;
+    let manifestUrl: string | undefined;
 
     if (Array.isArray(release.assets)) {
+      let bestWicanScore = -1;
+      let bestAtomScore = -1;
+
       for (const asset of release.assets) {
         const name = (asset.name || '').toLowerCase();
-        // Match app binary (flexible matching supporting versioned names, excluding merged or storage)
-        const isAppBinary =
-          (name.startsWith('can-do') || name.startsWith('firmware')) &&
-          name.endsWith('.bin') &&
-          !name.includes('merged') &&
-          !name.includes('storage') &&
-          !name.includes('bootloader') &&
-          !name.includes('partition');
+        const downloadUrl = asset.browser_download_url;
 
-        if (isAppBinary && !firmwareUrl) {
-          firmwareUrl = asset.browser_download_url;
+        // Skip non-binary or auxiliary flash partitions (merged, storage, bootloader, partition table, littlefs)
+        const isBin = name.endsWith('.bin');
+        const isAuxiliary =
+          name.includes('merged') ||
+          name.includes('storage') ||
+          name.includes('bootloader') ||
+          name.includes('partition') ||
+          name.includes('littlefs');
+
+        if (isBin && !isAuxiliary) {
+          if (name.includes('atom') || name.includes('bridge')) {
+            // M5Stack Atom Lite Bridge application binary
+            let score = 10;
+            if (tag && name.includes(tag.toLowerCase())) score += 30;
+            if (name.includes('can-do-atom-bridge')) score += 20;
+            if (tag && name === `can-do-atom-bridge-${tag.toLowerCase()}.bin`) score += 40;
+            if (name === 'can-do-atom-bridge.bin') score += 15;
+            if (score > bestAtomScore) {
+              bestAtomScore = score;
+              atomFirmwareUrl = downloadUrl;
+            }
+          } else {
+            // WiCAN (ESP32-C3) application binary - strictly exclude Atom / Bridge
+            let score = 10;
+            if (name.includes('esp32c3')) score += 30;
+            if (tag && name.includes(tag.toLowerCase())) score += 30;
+            if (tag && name === `can-do-esp32c3-${tag.toLowerCase()}.bin`) score += 50;
+            if (name === 'can-do-esp32c3.bin') score += 20;
+            if (name === 'can-do.bin') score += 15;
+            if (score > bestWicanScore) {
+              bestWicanScore = score;
+              wicanFirmwareUrl = downloadUrl;
+            }
+          }
         } else if (name.includes('catalog') && name.endsWith('.json')) {
-          catalogUrl = asset.browser_download_url;
+          if (!catalogUrl || (tag && name.includes(tag.toLowerCase()))) {
+            catalogUrl = downloadUrl;
+          }
+        } else if (name.includes('frontend_manifest') && name.endsWith('.json')) {
+          manifestUrl = downloadUrl;
         }
       }
     }
+
+    // Select the firmware URL for the active device target (WiCAN vs Atom bridge)
+    const isAtom = (targetDevice || '').toLowerCase().includes('atom') || (targetDevice || '').toLowerCase().includes('bridge');
+    const firmwareUrl = isAtom
+      ? (atomFirmwareUrl || wicanFirmwareUrl)
+      : (wicanFirmwareUrl || atomFirmwareUrl);
 
     // Check if the release was rebuilt/re-published after last install even if same version tag
     const lastInstalledTs = getLastUpdateInstalledTime();
@@ -163,7 +206,10 @@ export async function checkForUpdates(
       },
       assets: {
         firmware_url: firmwareUrl,
+        wican_firmware_url: wicanFirmwareUrl,
+        atom_firmware_url: atomFirmwareUrl,
         catalog_url: catalogUrl,
+        frontend_manifest_url: manifestUrl,
       },
     };
   } catch {
@@ -297,7 +343,8 @@ export async function executeUpdateSequence(
   targetDeviceHost: string,
   componentsToUpdate: UpdateComponentSelection,
   updateData: UpdateCheckResult,
-  onProgress: UpdateProgressCallback
+  onProgress: UpdateProgressCallback,
+  targetDevice = 'esp32c3'
 ): Promise<void> {
   const deviceBaseUrl = resolveDeviceBaseUrl(targetDeviceHost);
   const pagesHost = `${GITHUB_REPO.split('/')[0].toLowerCase()}.github.io/${GITHUB_REPO.split('/')[1]}`;
@@ -472,21 +519,29 @@ export async function executeUpdateSequence(
     // -------------------------------------------------------------
     // STAGE 3: FIRMWARE BINARY (Final step, triggers reboot)
     // -------------------------------------------------------------
-    if (componentsToUpdate.firmware && updateData.assets.firmware_url) {
+    const isAtom = (targetDevice || '').toLowerCase().includes('atom') || (targetDevice || '').toLowerCase().includes('bridge');
+    const selectedFwUrl = isAtom
+      ? (updateData.assets.atom_firmware_url || updateData.assets.firmware_url)
+      : (updateData.assets.wican_firmware_url || updateData.assets.firmware_url);
+
+    if (componentsToUpdate.firmware && selectedFwUrl) {
       let browserStreamSuccess = false;
       onProgress('firmware', 80, 'Downloading firmware binary...');
 
-      // Priority list of binary sources:
-      // 1. GitHub Pages static binary (CORS-enabled, fast, CDN)
-      // 2. Raw GitHub on main branch
-      // 3. GitHub release download asset
-      const fwCandidates = [
-        `https://${pagesHost}/can-do-esp32c3.bin`,
-        `https://${pagesHost}/can-do.bin`,
-        `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/can-do-esp32c3.bin`,
-        `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/build/can-do.bin`,
-        updateData.assets.firmware_url,
-      ];
+      // Priority list of binary sources based on target:
+      const fwCandidates = isAtom
+        ? [
+            selectedFwUrl,
+            `https://${pagesHost}/can-do-atom-bridge.bin`,
+            `https://raw.githubusercontent.com/${GITHUB_REPO}/main/atom-ui-bridge/.pio/build/m5stack-atom/firmware.bin`,
+          ].filter(Boolean) as string[]
+        : [
+            selectedFwUrl,
+            `https://${pagesHost}/can-do-esp32c3.bin`,
+            `https://${pagesHost}/can-do.bin`,
+            `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/can-do-esp32c3.bin`,
+            `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/build/can-do.bin`,
+          ].filter(Boolean) as string[];
 
       for (const fwUrl of fwCandidates) {
         try {
@@ -519,7 +574,7 @@ export async function executeUpdateSequence(
         const cloudPullRes = await fetch(`${deviceBaseUrl}/api/ota/cloud_pull`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: updateData.assets.firmware_url }),
+          body: JSON.stringify({ url: selectedFwUrl }),
         });
 
         if (!cloudPullRes.ok) {
