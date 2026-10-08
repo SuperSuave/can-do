@@ -21,6 +21,7 @@ import {
   resolveCatalogCommandForAction,
   applyOptionToTrigger,
   applyOptionToCondition,
+  applyOptionsToCondition,
   applyOptionToAction
 } from '../utils/automationConverters';
 import { getDefaultEspIp, resolveDeviceBaseUrl, isRunningOnDevice } from '../utils/hostUtils';
@@ -627,6 +628,10 @@ function ConditionNodeEditor({
   onOpenAddConditionDialog
 }: ConditionNodeEditorProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [multiSelectMode, setMultiSelectMode] = useState<boolean>(() => {
+    return !!(cond.selected_options && cond.selected_options.length > 1) ||
+           !!(cond.match && Object.keys(cond.match).length > 1);
+  });
   const isGroup =
     cond.logic === 'and' ||
     cond.logic === 'or' ||
@@ -1097,19 +1102,36 @@ function ConditionNodeEditor({
 
         <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
           {hasOptions && !collapsed && (
-            <button
-              type="button"
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
-                showAdvanced
-                  ? 'bg-purple-950/60 text-purple-300 border-purple-800/80 shadow'
-                  : 'bg-slate-900 text-slate-300 hover:text-white border-slate-800 hover:bg-slate-850'
-              }`}
-              title="Toggle configuration details"
-            >
-              <Sliders className="w-3.5 h-3.5 text-purple-400" />
-              <span className="hidden xs:inline sm:inline">{showAdvanced ? 'Simple' : 'Details'}</span>
-            </button>
+            <>
+              {catalogCmd.options && catalogCmd.options.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setMultiSelectMode(!multiSelectMode)}
+                  className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
+                    multiSelectMode
+                      ? 'bg-purple-950/80 text-purple-200 border-purple-500 shadow-sm ring-1 ring-purple-500/50 font-semibold'
+                      : 'bg-slate-900 text-slate-400 hover:text-slate-200 border-slate-800 hover:bg-slate-850'
+                  }`}
+                  title="Toggle multi-state selection (e.g. check multiple doors simultaneously)"
+                >
+                  <CheckSquare className="w-3.5 h-3.5 text-purple-400" />
+                  <span className="hidden xs:inline sm:inline">{multiSelectMode ? 'Multi-State' : 'Multi-Select'}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
+                  showAdvanced
+                    ? 'bg-purple-950/60 text-purple-300 border-purple-800/80 shadow'
+                    : 'bg-slate-900 text-slate-300 hover:text-white border-slate-800 hover:bg-slate-850'
+                }`}
+                title="Toggle configuration details"
+              >
+                <Sliders className="w-3.5 h-3.5 text-purple-400" />
+                <span className="hidden xs:inline sm:inline">{showAdvanced ? 'Simple' : 'Details'}</span>
+              </button>
+            </>
           )}
           {actionButtons}
         </div>
@@ -1136,10 +1158,13 @@ function ConditionNodeEditor({
                 return (
                   <div key={group.key || gIdx} className={gridClass}>
                     {group.items.map(({ opt, origIndex }) => {
-                      const isSelected =
-                        (cond.option_label && opt.label.toLowerCase() === cond.option_label.toLowerCase()) ||
-                        (matchedOption && opt.label.toLowerCase() === matchedOption.label.toLowerCase()) ||
-                        (!cond.option_label && !matchedOption && origIndex === 0);
+                      const isMulti = multiSelectMode;
+                      const selectedList = cond.selected_options || (cond.option_label ? cond.option_label.split(',').map(s => s.trim()) : []);
+                      const isSelected = isMulti
+                        ? selectedList.some(l => l.toLowerCase() === opt.label.toLowerCase())
+                        : (cond.option_label && opt.label.toLowerCase() === cond.option_label.toLowerCase()) ||
+                          (matchedOption && opt.label.toLowerCase() === matchedOption.label.toLowerCase()) ||
+                          (!cond.option_label && !matchedOption && origIndex === 0);
 
                       const isLiveValid = isOptionCurrentlyValid(
                         opt,
@@ -1163,13 +1188,33 @@ function ConditionNodeEditor({
                           key={opt.label || origIndex}
                           type="button"
                           onClick={() => {
-                            const updated = applyOptionToCondition(cond, catalogCmd, opt);
-                            onUpdate(updated);
+                            if (isMulti) {
+                              const already = selectedList.some(l => l.toLowerCase() === opt.label.toLowerCase());
+                              let nextLabels: string[];
+                              if (already) {
+                                nextLabels = selectedList.filter(l => l.toLowerCase() !== opt.label.toLowerCase());
+                              } else {
+                                nextLabels = [...selectedList, opt.label];
+                              }
+                              const nextOpts = catalogCmd.options.filter(o => nextLabels.some(l => l.toLowerCase() === o.label.toLowerCase()));
+                              const updated = applyOptionsToCondition(cond, catalogCmd, nextOpts);
+                              onUpdate(updated);
+                            } else {
+                              const updated = applyOptionToCondition(cond, catalogCmd, opt);
+                              onUpdate({ ...updated, selected_options: [opt.label] });
+                            }
                           }}
                           className={`${
                             itemCount === 1 ? 'px-4 min-w-[90px]' : 'w-full px-2'
                           } py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 border cursor-pointer text-center relative ${pillStyle}`}
                         >
+                          {isMulti && (
+                            <span className={`w-3.5 h-3.5 rounded flex items-center justify-center border text-[9px] shrink-0 ${
+                              isSelected ? 'bg-purple-600 border-purple-400 text-white font-bold' : 'border-slate-700 bg-slate-900/60 text-transparent'
+                            }`}>
+                              ✓
+                            </span>
+                          )}
                           <span className="truncate">{opt.label}</span>
                           {isLiveValid && (
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" title="Matches current live vehicle state" />

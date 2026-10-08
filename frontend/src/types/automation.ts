@@ -61,7 +61,7 @@ export interface AutomationCondition {
   can_id?: string;
   bus?: number;
   byte?: string;
-  mask?: string;
+  mask?: string | ByteMap;
   operator?: string;
   value?: string;
   match_payload?: string | ByteMap;
@@ -70,7 +70,7 @@ export interface AutomationCondition {
   evaluate?: {
     byte: string;
     byte_index?: number;
-    mask?: string;
+    mask?: string | ByteMap;
     operator: string;
     value: string;
   };
@@ -79,6 +79,7 @@ export interface AutomationCondition {
   source_command_id?: string;
   source_command_name?: string;
   option_label?: string;
+  selected_options?: string[];
   preset_name?: string;
   days?: string[];
   start_time?: string;

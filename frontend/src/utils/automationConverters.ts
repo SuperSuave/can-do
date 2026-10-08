@@ -1169,3 +1169,76 @@ export function applyOptionToCondition(
     invert: false
   };
 }
+
+/**
+ * Apply multiple selected catalog options to a condition, merging their match bytes and masks
+ */
+export function applyOptionsToCondition(
+  cond: AutomationCondition,
+  rawCmd: Command,
+  opts: CommandOption[]
+): AutomationCondition {
+  if (!opts || opts.length === 0) {
+    return cond;
+  }
+  if (opts.length === 1) {
+    const res = applyOptionToCondition(cond, rawCmd, opts[0]);
+    return {
+      ...res,
+      selected_options: [opts[0].label]
+    };
+  }
+
+  const cmd = resolveVariant(rawCmd, null);
+  const friendlyName = cmd.ha_metadata?.name || cmd.name || cmd.id;
+  const mergedMatch: ByteMap = {};
+  const mergedMask: Record<string, string> = {};
+
+  opts.forEach(opt => {
+    const m = compileToByteMap(opt.match || opt.payload);
+    Object.assign(mergedMatch, m);
+
+    const rawMask = opt.mask;
+    if (typeof rawMask === 'string') {
+      Object.keys(m).forEach(k => {
+        mergedMask[k] = rawMask;
+      });
+    } else if (rawMask && typeof rawMask === 'object') {
+      Object.assign(mergedMask, rawMask);
+    } else {
+      Object.keys(m).forEach(k => {
+        if (!mergedMask[k]) mergedMask[k] = '0xFF';
+      });
+    }
+  });
+
+  const dKey = Object.keys(mergedMatch)[0] || 'D1';
+  const targetVal = mergedMatch[dKey] || '0x01';
+  const byteNum = parseInt(dKey.replace(/\D/g, ''), 10);
+  const byteIdx = isNaN(byteNum) ? 0 : byteNum - 1;
+
+  const labels = opts.map(o => o.label);
+
+  return {
+    ...cond,
+    source_command_id: cmd.id,
+    source_command_name: friendlyName,
+    option_label: labels.join(' + '),
+    selected_options: labels,
+    can_id: cmd.network?.state_can_id || cmd.state_can_id || cmd.network?.action_can_id || cmd.action_can_id || cond.can_id || '0x000',
+    bus: cmd.network?.bus ?? cmd.bus ?? cond.bus ?? 0,
+    byte: dKey,
+    mask: Object.keys(mergedMask).length > 1 ? mergedMask : (mergedMask[dKey] || '0xFF'),
+    match: mergedMatch,
+    operator: 'equal',
+    value: targetVal,
+    evaluate: {
+      byte: dKey,
+      byte_index: byteIdx,
+      operator: 'equal',
+      value: targetVal,
+      mask: Object.keys(mergedMask).length > 1 ? mergedMask : (mergedMask[dKey] || '0xFF')
+    },
+    invert: false
+  };
+}

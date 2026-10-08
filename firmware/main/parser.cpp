@@ -266,20 +266,74 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
     cJSON* bus = cJSON_GetObjectItem(c_item, "bus");
     if (cJSON_IsNumber(bus)) cond.bus = static_cast<uint8_t>(bus->valueint);
 
+    cJSON* match_obj = cJSON_GetObjectItem(c_item, "match");
+    if (!match_obj) match_obj = cJSON_GetObjectItem(c_item, "match_payload");
     cJSON* eval = cJSON_GetObjectItem(c_item, "evaluate");
+    cJSON* mask_obj = eval ? cJSON_GetObjectItem(eval, "mask") : cJSON_GetObjectItem(c_item, "mask");
+
+    // If multi-byte match map is provided (e.g. All Doors Closed or multi-selected state options), synthesize an AND_GROUP
+    if (cJSON_IsObject(match_obj) && cJSON_GetArraySize(match_obj) > 1) {
+        cond.logic = ConditionLogic::AND_GROUP;
+        cond.type = "and_group";
+        cJSON* m_item = nullptr;
+        cJSON_ArrayForEach(m_item, match_obj) {
+            int idx = get_d_index(m_item->string);
+            if (idx >= 0) {
+                AutomationCondition sub;
+                sub.logic = ConditionLogic::LEAF;
+                sub.type = "can_state";
+                sub.can_id = cond.can_id;
+                sub.bus = cond.bus;
+                sub.byte_index = static_cast<uint8_t>(idx);
+                sub.op = ConditionOperator::EQUAL;
+                if (cJSON_IsString(m_item)) {
+                    sub.target_value = parse_hex_string(m_item->valuestring);
+                } else if (cJSON_IsNumber(m_item)) {
+                    sub.target_value = static_cast<uint8_t>(m_item->valueint);
+                }
+                sub.byte_mask = 0xFF;
+                if (mask_obj) {
+                    if (cJSON_IsString(mask_obj)) {
+                        sub.byte_mask = parse_hex_string(mask_obj->valuestring);
+                    } else if (cJSON_IsObject(mask_obj)) {
+                        cJSON* mask_val = cJSON_GetObjectItem(mask_obj, m_item->string);
+                        if (cJSON_IsString(mask_val)) sub.byte_mask = parse_hex_string(mask_val->valuestring);
+                        else if (cJSON_IsNumber(mask_val)) sub.byte_mask = static_cast<uint8_t>(mask_val->valueint);
+                    }
+                }
+                cond.sub_conditions.push_back(sub);
+            }
+        }
+        return true;
+    }
+
     cJSON* b = eval ? cJSON_GetObjectItem(eval, "byte") : cJSON_GetObjectItem(c_item, "byte");
     if (cJSON_IsString(b)) {
         int idx = get_d_index(b->valuestring);
         if (idx >= 0) cond.byte_index = static_cast<uint8_t>(idx);
     } else if (cJSON_IsNumber(b)) {
         cond.byte_index = static_cast<uint8_t>(b->valueint);
+    } else if (cJSON_IsObject(match_obj) && cJSON_GetArraySize(match_obj) == 1) {
+        cJSON* first_item = match_obj->child;
+        if (first_item) {
+            int idx = get_d_index(first_item->string);
+            if (idx >= 0) cond.byte_index = static_cast<uint8_t>(idx);
+            if (cJSON_IsString(first_item)) cond.target_value = parse_hex_string(first_item->valuestring);
+            else if (cJSON_IsNumber(first_item)) cond.target_value = static_cast<uint8_t>(first_item->valueint);
+        }
     }
 
-    cJSON* mask = eval ? cJSON_GetObjectItem(eval, "mask") : cJSON_GetObjectItem(c_item, "mask");
+    cJSON* mask = mask_obj;
     if (cJSON_IsString(mask)) {
         cond.byte_mask = parse_hex_string(mask->valuestring);
     } else if (cJSON_IsNumber(mask)) {
         cond.byte_mask = static_cast<uint8_t>(mask->valueint);
+    } else if (cJSON_IsObject(mask)) {
+        std::string d_str = "D" + std::to_string(cond.byte_index + 1);
+        cJSON* mask_val = cJSON_GetObjectItem(mask, d_str.c_str());
+        if (cJSON_IsString(mask_val)) cond.byte_mask = parse_hex_string(mask_val->valuestring);
+        else if (cJSON_IsNumber(mask_val)) cond.byte_mask = static_cast<uint8_t>(mask_val->valueint);
+        else cond.byte_mask = 0xFF;
     } else {
         cond.byte_mask = 0xFF;
     }

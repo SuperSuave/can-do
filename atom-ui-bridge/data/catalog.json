@@ -2929,53 +2929,91 @@
       },
       "options": [
         {
+          "label": "All Doors Closed",
+          "match": {
+            "D4": "0x00",
+            "D5": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "mask": {
+            "D4": "0x01",
+            "D5": "0x04",
+            "D7": "0x10",
+            "D8": "0x01"
+          }
+        },
+        {
+          "label": "All Doors Opened",
+          "match": {
+            "D4": "0x01",
+            "D5": "0x04",
+            "D7": "0x10",
+            "D8": "0x01"
+          },
+          "mask": {
+            "D4": "0x01",
+            "D5": "0x04",
+            "D7": "0x10",
+            "D8": "0x01"
+          }
+        },
+        {
           "label": "Driver Door Opened",
           "match": {
             "D4": "0x01"
           },
+          "mask": "0x01",
           "default": true
         },
         {
           "label": "Driver Door Closed",
           "match": {
             "D4": "0x00"
-          }
+          },
+          "mask": "0x01"
         },
         {
           "label": "Passenger Door Opened",
           "match": {
             "D5": "0x04"
-          }
+          },
+          "mask": "0x04"
         },
         {
           "label": "Passenger Door Closed",
           "match": {
             "D5": "0x00"
-          }
+          },
+          "mask": "0x04"
         },
         {
           "label": "Rear Left Door Opened",
           "match": {
             "D7": "0x10"
-          }
+          },
+          "mask": "0x10"
         },
         {
           "label": "Rear Left Door Closed",
           "match": {
             "D7": "0x00"
-          }
+          },
+          "mask": "0x10"
         },
         {
           "label": "Rear Right Door Opened",
           "match": {
             "D8": "0x01"
-          }
+          },
+          "mask": "0x01"
         },
         {
           "label": "Rear Right Door Closed",
           "match": {
             "D8": "0x00"
-          }
+          },
+          "mask": "0x01"
         }
       ],
       "subcategory": "Doors & Latches"
