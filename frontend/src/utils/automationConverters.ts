@@ -249,8 +249,6 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
             bus: step.bus ?? bus,
             payload: Object.keys(stepPayload).length > 0 ? stepPayload : { D1: '0x01' },
             repeat: step.repeat || 1,
-            ...(step.delay_ms ? { delay_ms: step.delay_ms } : {}),
-            ...(step.dwell_ms ? { dwell_ms: step.dwell_ms } : {}),
             ...(idx === 0 ? {
               source_command_id: entityId,
               source_command_name: cmd.ha_metadata?.name || cmd.name || cmd.id,
