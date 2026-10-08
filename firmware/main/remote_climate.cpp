@@ -251,12 +251,16 @@ void remote_climate_stop(void) {
     }
 }
 
-void remote_climate_toggle(float target_temp_c, uint32_t duration_minutes, bool monitor_0x38) {
+void remote_climate_toggle_ext(float target_temp_c, uint32_t duration_minutes, bool monitor_0x38) {
     if (s_climate_running.load()) {
         remote_climate_stop();
     } else {
         remote_climate_start_ext(target_temp_c, duration_minutes, monitor_0x38);
     }
+}
+
+void remote_climate_toggle(float target_temp_c, uint32_t duration_minutes) {
+    remote_climate_toggle_ext(target_temp_c, duration_minutes, true);
 }
 
 bool remote_climate_is_active(void) {

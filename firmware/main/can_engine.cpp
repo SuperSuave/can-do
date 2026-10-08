@@ -496,7 +496,7 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
         if (is_off_cmd) {
             remote_climate_stop();
         } else if (is_toggle) {
-            remote_climate_toggle(22.0f, 10, false);
+            remote_climate_toggle_ext(22.0f, 10, false);
         } else {
             remote_climate_start_dumb(22.0f, 10);
         }
@@ -506,7 +506,7 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
         if (is_off_cmd) {
             remote_climate_stop();
         } else if (is_toggle) {
-            remote_climate_toggle(22.0f, 10, true);
+            remote_climate_toggle_ext(22.0f, 10, true);
         } else {
             remote_climate_start_smart(22.0f, 10);
         }
