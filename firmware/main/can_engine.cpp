@@ -358,7 +358,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
         }
 
         if (step.type == ActionType::CLIMATE_TARGET) {
-            remote_climate_start(step.target_temp_c, step.duration_minutes);
+            remote_climate_start_ext(step.target_temp_c, step.duration_minutes, step.monitor_0x38);
             continue;
         }
 
@@ -491,6 +491,27 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
     bool is_lock_cmd = (cmd_lower == "lock" || cmd_lower == "locked" || cmd_lower == "secure");
     bool is_unlock_cmd = (cmd_lower == "unlock" || cmd_lower == "unlocked");
     bool is_toggle = (cmd_lower == "toggle");
+
+    if (entity_id == "remote_climate_start" || entity_id == "remote_climate_start_dumb") {
+        if (is_off_cmd) {
+            remote_climate_stop();
+        } else if (is_toggle) {
+            remote_climate_toggle(22.0f, 10, false);
+        } else {
+            remote_climate_start_dumb(22.0f, 10);
+        }
+        return true;
+    }
+    if (entity_id == "remote_climate_start_smart") {
+        if (is_off_cmd) {
+            remote_climate_stop();
+        } else if (is_toggle) {
+            remote_climate_toggle(22.0f, 10, true);
+        } else {
+            remote_climate_start_smart(22.0f, 10);
+        }
+        return true;
+    }
 
     const EntityOption* matched_opt = nullptr;
 
@@ -675,6 +696,7 @@ void can_rx_task(void* arg) {
             call_popup_rx(&rx_msg, CAN_BUS_0);
             hud_nav_rx(&rx_msg, CAN_BUS_0);
             uds_engine_on_can_rx(&rx_msg);
+            remote_climate_on_can_rx(&rx_msg);
 
             // Stream raw frame to connected SavvyCAN/GVRET client
             gvret_enqueue_frame(&rx_msg);

@@ -8237,7 +8237,7 @@
     {
       "id": "remote_climate_start",
       "ha_metadata": {
-        "name": "Remote Climate Start",
+        "name": "Remote Climate Start (Timed)",
         "domain": "button",
         "icon": "mdi:snowflake"
       },
@@ -8253,18 +8253,33 @@
         "bus": 0,
         "type": "can_tx",
         "action_can_id": "0x4A2",
-        "delay_ms": 20
+        "delay_ms": 40
       },
       "options": [
         {
-          "label": "Start Climate",
+          "label": "Start Climate (Timed 15s Fallback)",
           "default": true,
           "steps": [
+            {
+              "can_id": "0x562",
+              "payload": {
+                "D1": "0x62",
+                "D2": "0x01",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0xFF",
+                "D8": "0xFF"
+              },
+              "repeat": 1,
+              "delay_ms": 400
+            },
             {
               "can_id": "0x4F1",
               "payload": {
                 "D1": "0x00",
-                "D2": "0xC0",
+                "D2": "0xF0",
                 "D3": "0x00",
                 "D4": "0x00",
                 "D5": "0x00",
@@ -8272,8 +8287,23 @@
                 "D7": "0x00",
                 "D8": "0x00"
               },
-              "repeat": 5,
-              "delay_ms": 500
+              "repeat": 15,
+              "delay_ms": 1000
+            },
+            {
+              "can_id": "0x4F1",
+              "payload": {
+                "D1": "0x00",
+                "D2": "0xD0",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 1,
+              "delay_ms": 40
             },
             {
               "can_id": "0x4A2",
@@ -8287,7 +8317,8 @@
                 "D7": "0x00",
                 "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 40
             },
             {
               "can_id": "0x4A2",
@@ -8301,14 +8332,186 @@
                 "D7": "0x00",
                 "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 40
+            },
+            {
+              "can_id": "0x4F1",
+              "payload": {
+                "D1": "0x00",
+                "D2": "0xD0",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3,
+              "delay_ms": 1000
+            },
+            {
+              "can_id": "0x4F1",
+              "payload": {
+                "D1": "0x00",
+                "D2": "0xC0",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3,
+              "delay_ms": 1000
             }
           ]
         }
       ],
       "contributor": {
         "name": "Community",
-        "github": ""
+        "github": "",
+        "notes": "E-GMP Remote Climate Start (Timed Fallback). Wakes bus via 0x562 AUTOSAR NM frame, runs 15s HV pre-charge loop via 0x4F1 (00 F0), broadcasts 0x4F1 (00 D0) command active while firing 0x4A2 prepare & execute macros, then closes session with 0x4F1 (00 C0) idle."
+      }
+    },
+    {
+      "id": "remote_climate_start_smart",
+      "ha_metadata": {
+        "name": "Remote Climate Start (Smart)",
+        "domain": "button",
+        "icon": "mdi:snowflake-check"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "HVAC Controls",
+      "roles": [
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x4A2",
+        "delay_ms": 40
+      },
+      "options": [
+        {
+          "label": "Start Climate (Smart 0x038 Monitored)",
+          "default": true,
+          "steps": [
+            {
+              "can_id": "0x562",
+              "payload": {
+                "D1": "0x62",
+                "D2": "0x01",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0xFF",
+                "D8": "0xFF"
+              },
+              "repeat": 1,
+              "delay_ms": 400
+            },
+            {
+              "can_id": "0x4F1",
+              "payload": {
+                "D1": "0x00",
+                "D2": "0xF0",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 1,
+              "delay_ms": 1000
+            },
+            {
+              "can_id": "0x4F1",
+              "payload": {
+                "D1": "0x00",
+                "D2": "0xD0",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 1,
+              "delay_ms": 40
+            },
+            {
+              "can_id": "0x4A2",
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0x0C",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3,
+              "delay_ms": 40
+            },
+            {
+              "can_id": "0x4A2",
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x03",
+                "D3": "0xFC",
+                "D4": "0x00",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3,
+              "delay_ms": 40
+            },
+            {
+              "can_id": "0x4F1",
+              "payload": {
+                "D1": "0x00",
+                "D2": "0xD0",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3,
+              "delay_ms": 1000
+            },
+            {
+              "can_id": "0x4F1",
+              "payload": {
+                "D1": "0x00",
+                "D2": "0xC0",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3,
+              "delay_ms": 1000
+            }
+          ]
+        }
+      ],
+      "contributor": {
+        "name": "Community",
+        "github": "",
+        "notes": "E-GMP Remote Climate Start (Smart Mode). Sends 0x562 ECU wakeup, broadcasts 0x4F1 (00 F0) while monitoring CAN 0x038 for Byte 6 == 0x82 (HV Ready). Once armed, broadcasts 0x4F1 (00 D0) for 4s, executes 0x4A2 prepare & execute macros, and cleanly closes session with 0x4F1 (00 C0) idle."
       }
     },
     {

@@ -434,6 +434,11 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         if (!d_only) d_only = cJSON_GetObjectItem(a_item, "climate_driver_only");
         if (cJSON_IsBool(d_only)) step.driver_only = cJSON_IsTrue(d_only);
 
+        cJSON* mon = cJSON_GetObjectItem(a_item, "monitor_0x38");
+        if (!mon) mon = cJSON_GetObjectItem(a_item, "smart");
+        if (cJSON_IsBool(mon)) step.monitor_0x38 = cJSON_IsTrue(mon);
+        else step.monitor_0x38 = true;
+
         return true;
     } else if (strcmp(type_str, "precondition") == 0 || strcmp(type_str, "battery_preconditioning") == 0) {
         step.type = ActionType::PRECONDITION;

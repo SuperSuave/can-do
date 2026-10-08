@@ -92,6 +92,7 @@ struct ActionStep {
     std::string zone = "driver";
     bool sync_on = false;
     bool driver_only = false;
+    bool monitor_0x38 = true;
 
     // For PRECONDITION
     std::string precon_mode = "persistent";
