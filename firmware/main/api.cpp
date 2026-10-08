@@ -103,20 +103,7 @@ void broadcast_ws_state(const std::string& entity_id, const std::string& state) 
 void broadcast_ws_can_frame(const twai_message_t* msg) {
     if (!msg) return;
     uart_bridge_send_can_frame(msg);
-    if (!has_active_websocket_clients()) return;
-    char hex_data[17] = {0};
-    uint8_t dlc = msg->data_length_code > 8 ? 8 : msg->data_length_code;
-    for (int i = 0; i < dlc; i++) {
-        snprintf(&hex_data[i * 2], 3, "%02X", msg->data[i]);
-    }
-    char buf[128];
-    snprintf(buf, sizeof(buf),
-             "{\"type\":\"can_frame\",\"id\":\"0x%03lX\",\"extd\":%s,\"dlc\":%d,\"data\":\"%s\"}",
-             (unsigned long)msg->identifier,
-             msg->extd ? "true" : "false",
-             (int)dlc,
-             hex_data);
-    broadcast_ws_raw(buf);
+    // Raw WebSocket frame streaming removed to eliminate socket churn and prioritize real-time state telemetry
 }
 
 void broadcast_ws_automation_event(const std::string& id, const std::string& name) {
@@ -1346,7 +1333,6 @@ static esp_err_t api_system_control_handler(httpd_req_t *req) {
             httpd_resp_sendstr(req, resp);
             free(resp);
             return ESP_OK;
-        }
         } else if (strcmp(act, "reload_catalog") == 0) {
             struct stat st;
             int stat_res = stat("/spiffs/catalog.json", &st);

@@ -701,17 +701,6 @@ void can_rx_task(void* arg) {
             // Stream raw frame to connected SavvyCAN/GVRET client
             gvret_enqueue_frame(&rx_msg);
 
-            // Stream raw CAN frame to WebSocket dashboard (throttled to max ~30Hz to prevent Wi-Fi buffer exhaustion)
-            // Pauses streaming only during active static web file transfers so browser asset downloads do not crash/choke
-            if (!is_serving_static_page()) {
-                static uint32_t s_last_ws_sniffer_ms = 0;
-                uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-                if (now_ms - s_last_ws_sniffer_ms >= 33) {
-                    s_last_ws_sniffer_ms = now_ms;
-                    broadcast_ws_can_frame(&rx_msg);
-                }
-            }
-
             if (rx_msg.rtr) continue;
 
             uint8_t prev_data[8] = {0};
@@ -821,6 +810,44 @@ void can_rx_task(void* arg) {
                 for (auto* entity_ptr : cat_it->second) {
                     if (!entity_ptr) continue;
                     auto& entity = *entity_ptr;
+
+                    // Special multi-door evaluation for "doors_status" on frame 0x411:
+                    // Prevents sequential option evaluation from breaking on the first door and ignoring others
+                    if (entity.id == "doors_status" && rx_msg.data_length_code >= 8) {
+                        bool fl = (rx_msg.data[3] & 0x01); // Driver Door
+                        bool fr = (rx_msg.data[4] & 0x04); // Passenger Door
+                        bool rl = (rx_msg.data[6] & 0x10); // Rear Left Door
+                        bool rr = (rx_msg.data[7] & 0x01); // Rear Right Door
+
+                        std::string new_door_state;
+                        if (!fl && !fr && !rl && !rr) {
+                            new_door_state = "All Doors Closed";
+                        } else if (fl && fr && rl && rr) {
+                            new_door_state = "All Doors Opened";
+                        } else {
+                            std::string s;
+                            s += (fl ? "Driver Door Opened" : "Driver Door Closed");
+                            s += ", ";
+                            s += (fr ? "Passenger Door Opened" : "Passenger Door Closed");
+                            s += ", ";
+                            s += (rl ? "Rear Left Door Opened" : "Rear Left Door Closed");
+                            s += ", ";
+                            s += (rr ? "Rear Right Door Opened" : "Rear Right Door Closed");
+                            new_door_state = s;
+                        }
+
+                        if (entity.current_state != new_door_state) {
+                            entity.current_state = new_door_state;
+                            ESP_LOGI(TAG, "State change: doors_status -> %s", new_door_state.c_str());
+                            if (global_mqtt_client) {
+                                std::string topic = MQTT_BASE_TOPIC + "/state/doors_status";
+                                esp_mqtt_client_publish(global_mqtt_client, topic.c_str(), new_door_state.c_str(), 0, 1, 1);
+                            }
+                            broadcast_ws_state("doors_status", new_door_state);
+                        }
+                        continue;
+                    }
+
                     for (const auto& opt : entity.options) {
                         if (is_match(rx_msg.data, opt)) {
                             if (entity.current_state != opt.label) {
@@ -849,6 +876,120 @@ void can_rx_task(void* arg) {
                             break;
                         }
                     }
+                }
+            }
+
+            // 4. Real-time Live Cockpit Telemetry Decoders (Speed, Temperature, Battery, SOC)
+            // Stream continuous sensor values as live entity states directly to the front end
+
+            // Road Speed (0x1AC Byte 0 = kph, or 0x0A2 Wheel Speed 16-bit LE * 0.03125)
+            if (rx_msg.identifier == 0x1AC && rx_msg.data_length_code >= 1) {
+                uint8_t kph = rx_msg.data[0];
+                static uint8_t s_last_kph = 255;
+                static uint32_t s_last_spd_ms = 0;
+                uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+                if (kph != s_last_kph && (now_ms - s_last_spd_ms >= 100)) {
+                    s_last_kph = kph;
+                    s_last_spd_ms = now_ms;
+                    std::string spd_str = std::to_string(kph) + " km/h";
+                    for (auto& entity : global_catalog) {
+                        if (entity.id == "cluster_vehicle_speed" || entity.id == "vehicle_speed") {
+                            entity.current_state = spd_str;
+                            break;
+                        }
+                    }
+                    broadcast_ws_state("cluster_vehicle_speed", spd_str);
+                }
+            } else if ((rx_msg.identifier == 0x0A2 || rx_msg.identifier == 0xA2) && rx_msg.data_length_code >= 2) {
+                uint16_t rawW1 = rx_msg.data[0] | (rx_msg.data[1] << 8);
+                uint8_t kph = (uint8_t)(rawW1 * 0.03125f);
+                static uint8_t s_last_wheel_kph = 255;
+                static uint32_t s_last_wheel_spd_ms = 0;
+                uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+                if (kph != s_last_wheel_kph && (now_ms - s_last_wheel_spd_ms >= 100)) {
+                    s_last_wheel_kph = kph;
+                    s_last_wheel_spd_ms = now_ms;
+                    std::string spd_str = std::to_string(kph) + " km/h";
+                    broadcast_ws_state("cluster_vehicle_speed", spd_str);
+                }
+            }
+
+            // Outdoor Ambient Temperature (0x226 Byte 3 = raw - 40 C)
+            if (rx_msg.identifier == 0x226 && rx_msg.data_length_code >= 4) {
+                uint8_t raw = rx_msg.data[3];
+                if (raw > 0 && raw < 255) {
+                    int c = (int)raw - 40;
+                    static int s_last_temp = 999;
+                    if (c != s_last_temp) {
+                        s_last_temp = c;
+                        std::string temp_str = std::to_string(c) + " °C";
+                        for (auto& entity : global_catalog) {
+                            if (entity.id == "cond_ambient_temperature") {
+                                entity.current_state = temp_str;
+                                break;
+                            }
+                        }
+                        broadcast_ws_state("cond_ambient_temperature", temp_str);
+                    }
+                }
+            }
+
+            // HV Traction Battery SOC (0x2FC Byte 7 = raw * 0.5 %)
+            if (rx_msg.identifier == 0x2FC && rx_msg.data_length_code >= 8) {
+                uint8_t raw = rx_msg.data[7];
+                int soc = (int)(raw * 0.5f);
+                static int s_last_soc = -1;
+                if (soc >= 0 && soc <= 100 && soc != s_last_soc) {
+                    s_last_soc = soc;
+                    std::string soc_str = std::to_string(soc) + "%";
+                    for (auto& entity : global_catalog) {
+                        if (entity.id == "cond_hv_battery_soc") {
+                            entity.current_state = soc_str;
+                            break;
+                        }
+                    }
+                    broadcast_ws_state("cond_hv_battery_soc", soc_str);
+                }
+            }
+
+            // 12V Aux Battery Voltage (0x1CF Byte 5 or 0x594 Byte 4 = factor 0.1V)
+            if ((rx_msg.identifier == 0x1CF || rx_msg.identifier == 0x594) && rx_msg.data_length_code >= 5) {
+                uint8_t vByte = rx_msg.data_length_code >= 6 ? rx_msg.data[5] : rx_msg.data[4];
+                float v = (float)(vByte * 0.1f);
+                if (v >= 8.0f && v <= 16.5f) {
+                    static float s_last_aux_v = 0.0f;
+                    if (fabs(v - s_last_aux_v) >= 0.1f) {
+                        s_last_aux_v = v;
+                        char vbuf[16];
+                        snprintf(vbuf, sizeof(vbuf), "%.1f V", v);
+                        for (auto& entity : global_catalog) {
+                            if (entity.id == "cond_aux_12v_battery") {
+                                entity.current_state = vbuf;
+                                break;
+                            }
+                        }
+                        broadcast_ws_state("cond_aux_12v_battery", vbuf);
+                    }
+                }
+            }
+
+            // BMS Module Min/Max Temperatures (0x152 Byte 0, Byte 1)
+            if (rx_msg.identifier == 0x152 && rx_msg.data_length_code >= 2) {
+                int minT = (int8_t)rx_msg.data[0];
+                int maxT = (int8_t)rx_msg.data[1];
+                static int s_last_minT = 999, s_last_maxT = 999;
+                if (minT != s_last_minT || maxT != s_last_maxT) {
+                    s_last_minT = minT;
+                    s_last_maxT = maxT;
+                    char tbuf[64];
+                    snprintf(tbuf, sizeof(tbuf), "Min: %d°C / Max: %d°C", minT, maxT);
+                    for (auto& entity : global_catalog) {
+                        if (entity.id == "hv_battery_temperatures") {
+                            entity.current_state = tbuf;
+                            break;
+                        }
+                    }
+                    broadcast_ws_state("hv_battery_temperatures", tbuf);
                 }
             }
         } else {

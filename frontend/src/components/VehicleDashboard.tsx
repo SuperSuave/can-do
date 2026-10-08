@@ -438,16 +438,25 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
   // Parser for high-level catalog entity states (broadcast via WebSocket or fetched via /api/states)
   const handleIncomingEntityState = (entity: string, stateStr: string) => {
+    if (!hasReceivedFrames) {
+      setHasReceivedFrames(true);
+    }
     const normState = stateStr.toLowerCase();
     if (entity === 'doors_status') {
-      if (normState.includes('driver door opened')) setDoors(d => ({ ...d, frontLeft: true }));
-      else if (normState.includes('driver door closed')) setDoors(d => ({ ...d, frontLeft: false }));
-      if (normState.includes('passenger door opened')) setDoors(d => ({ ...d, frontRight: true }));
-      else if (normState.includes('passenger door closed')) setDoors(d => ({ ...d, frontRight: false }));
-      if (normState.includes('rear left door opened')) setDoors(d => ({ ...d, rearLeft: true }));
-      else if (normState.includes('rear left door closed')) setDoors(d => ({ ...d, rearLeft: false }));
-      if (normState.includes('rear right door opened')) setDoors(d => ({ ...d, rearRight: true }));
-      else if (normState.includes('rear right door closed')) setDoors(d => ({ ...d, rearRight: false }));
+      if (normState.includes('all doors closed')) {
+        setDoors({ frontLeft: false, frontRight: false, rearLeft: false, rearRight: false });
+      } else if (normState.includes('all doors opened')) {
+        setDoors({ frontLeft: true, frontRight: true, rearLeft: true, rearRight: true });
+      } else {
+        if (normState.includes('driver door opened')) setDoors(d => ({ ...d, frontLeft: true }));
+        else if (normState.includes('driver door closed')) setDoors(d => ({ ...d, frontLeft: false }));
+        if (normState.includes('passenger door opened')) setDoors(d => ({ ...d, frontRight: true }));
+        else if (normState.includes('passenger door closed')) setDoors(d => ({ ...d, frontRight: false }));
+        if (normState.includes('rear left door opened')) setDoors(d => ({ ...d, rearLeft: true }));
+        else if (normState.includes('rear left door closed')) setDoors(d => ({ ...d, rearLeft: false }));
+        if (normState.includes('rear right door opened')) setDoors(d => ({ ...d, rearRight: true }));
+        else if (normState.includes('rear right door closed')) setDoors(d => ({ ...d, rearRight: false }));
+      }
     } else if (entity === 'door_locks' || entity === 'doors_lock_state') {
       setLocked(normState.includes('lock') && !normState.includes('unlock'));
     } else if (entity === 'trunk') {
@@ -615,7 +624,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     }
   };
 
-  // 1. Initial State Synchronization via /api/states REST endpoint
+  // 1. Initial State Synchronization & Fallback Polling via /api/states REST endpoint
   useEffect(() => {
     let cancelled = false;
     const fetchCurrentStates = async () => {
@@ -637,8 +646,11 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       }
     };
     fetchCurrentStates();
+    // 3-second fallback synchronization to ensure connection renegotiation never leaves stale states
+    const syncInterval = setInterval(fetchCurrentStates, 3000);
     return () => {
       cancelled = true;
+      clearInterval(syncInterval);
     };
   }, []);
 
@@ -652,9 +664,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     });
 
     const unsubscribeMsgs = deviceWs.subscribe((data) => {
-      if (data.type === 'can_frame') {
-        handleIncomingCanFrame((data as any).id, (data as any).data || '');
-      } else if (data.type === 'state' && (data as any).entity && (data as any).state) {
+      if (data.type === 'state' && (data as any).entity && (data as any).state) {
         handleIncomingEntityState((data as any).entity, (data as any).state);
       }
     });
