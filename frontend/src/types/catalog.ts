@@ -70,8 +70,14 @@ export interface CommandOption {
 }
 
 export interface CommandStep {
-  payload: string | ByteMap;
+  type?: 'transmit_frame' | 'delay' | string;
+  can_id?: string;
+  action_can_id?: string;
+  payload?: string | ByteMap;
   repeat?: number;
+  delay_ms?: number;
+  dwell_ms?: number;
+  ms?: number;
 }
 
 export interface ContributorInfo {

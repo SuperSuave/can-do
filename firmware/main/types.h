@@ -42,6 +42,12 @@ struct AutomationCondition {
     uint16_t end_time_min = 1439;
     uint8_t weekdays_mask = 0x7F; // Default all 7 days (bits 0..6: Sun..Sat)
 
+    // ESP32 Device / Wi-Fi evaluation fields
+    std::string device_property; // "wifi_ssid", "wifi_connected", "wifi_mode", "wifi_rssi", "ap_client_connected", "ap_client_rssi"
+    std::string target_string;   // SSID, mode ("ap", "sta", "both", "disabled"), or client MAC ("AA:BB:CC:DD:EE:FF")
+    int8_t target_rssi = 0;      // Target RSSI in dBm
+    bool target_bool = true;     // Boolean expectation
+
     // Nested sub-conditions for AND, OR, NOT groups
     std::vector<AutomationCondition> sub_conditions;
 };
@@ -153,7 +159,11 @@ struct AutomationTrigger {
     uint16_t schedule_time_min = 0; // minutes from midnight (0..1439)
     uint8_t weekdays_mask = 0x7F;   // bitmask (bits 0..6: Sun..Sat)
 
-    // For BLE button / keyboard triggers
+    // For ESP32 Device / Wi-Fi events
+    std::string wifi_event;         // "wifi_connected", "wifi_disconnected", "ap_client_connected", "ap_client_disconnected", "ap_client_rssi"
+    std::string ssid;               // Optional SSID filter
+    std::string client_mac;         // Optional client MAC filter
+    int8_t target_rssi = 0;         // Optional RSSI threshold
 };
 
 struct AutomationRule {

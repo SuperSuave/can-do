@@ -76,6 +76,17 @@ export function compileCondition(cond: AutomationCondition): any {
     };
   }
 
+  if (cond.type === 'device_state' || cond.type === 'wifi' || cond.type === 'wifi_condition') {
+    return {
+      type: 'device_state',
+      device_property: cond.device_property || 'wifi_ssid',
+      ...(cond.target_string ? { target_string: cond.target_string } : {}),
+      ...(cond.operator ? { operator: cond.operator } : {}),
+      ...(cond.target_bool !== undefined ? { target_bool: cond.target_bool } : {}),
+      ...(cond.target_rssi !== undefined ? { target_rssi: cond.target_rssi } : {})
+    };
+  }
+
   if (cond.type === 'param_range' || cond.type === 'voltage') {
     return {
       type: 'param_range',
@@ -220,10 +231,17 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
       const bus = cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? act.bus ?? 0;
       const delayMs = cmd.network?.delay_ms ?? cmd.delay_ms ?? act.delay_ms ?? 20;
 
-      // Case A: Option defines multi-step burst (e.g. heated/cooled seat sequence)
+      // Case A: Option defines multi-step burst (e.g. heated/cooled seat sequence or remote climate)
       if (opt?.steps && opt.steps.length > 0) {
         const inlinedSteps: any[] = [];
         opt.steps.forEach((step: any, idx: number) => {
+          if (step.type === 'delay') {
+            inlinedSteps.push({
+              type: 'delay',
+              ms: step.delay_ms || step.dwell_ms || step.ms || 500
+            });
+            return;
+          }
           const stepPayload = compileToByteMap(step.payload);
           inlinedSteps.push({
             type: 'transmit',
@@ -231,6 +249,8 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
             bus: step.bus ?? bus,
             payload: Object.keys(stepPayload).length > 0 ? stepPayload : { D1: '0x01' },
             repeat: step.repeat || 1,
+            ...(step.delay_ms ? { delay_ms: step.delay_ms } : {}),
+            ...(step.dwell_ms ? { dwell_ms: step.dwell_ms } : {}),
             ...(idx === 0 ? {
               source_command_id: entityId,
               source_command_name: cmd.ha_metadata?.name || cmd.name || cmd.id,
@@ -238,7 +258,12 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
               entity_id: entityId
             } : {})
           });
-          if (idx < opt.steps.length - 1 && delayMs > 0) {
+          if (step.delay_ms && step.delay_ms > 0) {
+            inlinedSteps.push({
+              type: 'delay',
+              ms: step.delay_ms
+            });
+          } else if (idx < opt.steps.length - 1 && delayMs > 0) {
             inlinedSteps.push({
               type: 'delay',
               ms: delayMs
@@ -438,6 +463,27 @@ export function compileAutomationRule(
           type: 'time_schedule',
           time: trig.time || '07:30',
           days: trig.days && trig.days.length > 0 ? trig.days : ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+        };
+      }
+
+      if (trig.type === 'ble_button' || trig.type === 'ble_key' || trig.source === 'ble') {
+        return {
+          ...baseTrigger,
+          type: 'ble_button',
+          ble_button: trig.ble_button || 'volume_up',
+          ble_action: trig.ble_action || 'press',
+          ...(trig.ble_device ? { ble_device: trig.ble_device } : {})
+        };
+      }
+
+      if (trig.type === 'wifi' || trig.type === 'wifi_event' || trig.source === 'wifi') {
+        return {
+          ...baseTrigger,
+          type: 'wifi_event',
+          wifi_event: trig.wifi_event || 'ap_client_connected',
+          ...(trig.ssid ? { ssid: trig.ssid } : {}),
+          ...(trig.client_mac ? { client_mac: trig.client_mac } : {}),
+          ...(trig.target_rssi ? { target_rssi: trig.target_rssi } : {})
         };
       }
 

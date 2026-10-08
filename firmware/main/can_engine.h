@@ -39,3 +39,4 @@ struct BleButtonEvent;
 void can_rx_task(void* arg);
 void can_tx_task(void* arg);
 void time_scheduler_task(void* arg);
+void can_engine_on_device_event(const std::string& event_type, const std::string& detail_str, int8_t rssi = 0);

@@ -257,12 +257,20 @@ export function formatCommandForCatalog(cmd: Command): Command {
   // Convert root steps
   let cleanSteps: any[] | undefined = undefined;
   if (cmd.steps && cmd.steps.length > 0) {
-    cleanSteps = cmd.steps.map(st => ({
-      payload: cleanToByteMap(st.payload),
-      ...(st.repeat && st.repeat > 1 ? { repeat: st.repeat } : {}),
-      ...((st as any).can_id ? { can_id: (st as any).can_id } : {}),
-      ...((st as any).bus !== undefined ? { bus: (st as any).bus } : {})
-    }));
+    cleanSteps = cmd.steps.map(st => {
+      const isDelay = st.type === 'delay';
+      return {
+        ...(st.type ? { type: st.type } : {}),
+        ...(!isDelay && st.payload ? { payload: cleanToByteMap(st.payload) } : {}),
+        ...(st.repeat && st.repeat > 1 ? { repeat: st.repeat } : {}),
+        ...((st as any).can_id ? { can_id: (st as any).can_id } : {}),
+        ...((st as any).action_can_id ? { can_id: (st as any).action_can_id } : {}),
+        ...((st as any).delay_ms !== undefined ? { delay_ms: (st as any).delay_ms } : {}),
+        ...((st as any).dwell_ms !== undefined ? { dwell_ms: (st as any).dwell_ms } : {}),
+        ...((st as any).ms !== undefined ? { ms: (st as any).ms } : {}),
+        ...((st as any).bus !== undefined ? { bus: (st as any).bus } : {})
+      };
+    });
   }
 
   // Derive mask
@@ -305,10 +313,20 @@ export function formatCommandForCatalog(cmd: Command): Command {
 
       // Option payload / steps
       if (opt.steps && opt.steps.length > 0) {
-        optClean.steps = opt.steps.map(st => ({
-          payload: cleanToByteMap(st.payload),
-          ...(st.repeat && st.repeat > 1 ? { repeat: st.repeat } : {})
-        }));
+        optClean.steps = opt.steps.map(st => {
+          const isDelay = st.type === 'delay';
+          return {
+            ...(st.type ? { type: st.type } : {}),
+            ...(!isDelay && st.payload ? { payload: cleanToByteMap(st.payload) } : {}),
+            ...(st.repeat && st.repeat > 1 ? { repeat: st.repeat } : {}),
+            ...((st as any).can_id ? { can_id: (st as any).can_id } : {}),
+            ...((st as any).action_can_id ? { can_id: (st as any).action_can_id } : {}),
+            ...((st as any).delay_ms !== undefined ? { delay_ms: (st as any).delay_ms } : {}),
+            ...((st as any).dwell_ms !== undefined ? { dwell_ms: (st as any).dwell_ms } : {}),
+            ...((st as any).ms !== undefined ? { ms: (st as any).ms } : {}),
+            ...((st as any).bus !== undefined ? { bus: (st as any).bus } : {})
+          };
+        });
       } else {
         let optPayload: ByteMap | undefined = undefined;
         if (opt.payload) {
@@ -346,10 +364,20 @@ export function formatCommandForCatalog(cmd: Command): Command {
           if (opt.mask) optClean.mask = opt.mask;
           if (opt.default) optClean.default = true;
           if (opt.steps) {
-            optClean.steps = opt.steps.map(s => ({
-              payload: cleanToByteMap(s.payload),
-              ...(s.repeat && s.repeat > 1 ? { repeat: s.repeat } : {})
-            }));
+            optClean.steps = opt.steps.map(s => {
+              const isDelay = s.type === 'delay';
+              return {
+                ...(s.type ? { type: s.type } : {}),
+                ...(!isDelay && s.payload ? { payload: cleanToByteMap(s.payload) } : {}),
+                ...(s.repeat && s.repeat > 1 ? { repeat: s.repeat } : {}),
+                ...((s as any).can_id ? { can_id: (s as any).can_id } : {}),
+                ...((s as any).action_can_id ? { can_id: (s as any).action_can_id } : {}),
+                ...((s as any).delay_ms !== undefined ? { delay_ms: (s as any).delay_ms } : {}),
+                ...((s as any).dwell_ms !== undefined ? { dwell_ms: (s as any).dwell_ms } : {}),
+                ...((s as any).ms !== undefined ? { ms: (s as any).ms } : {}),
+                ...((s as any).bus !== undefined ? { bus: (s as any).bus } : {})
+              };
+            });
           }
           return optClean;
         })

@@ -438,7 +438,18 @@ export function validateCommand(
       }
       if (opt.steps && opt.steps.length > 0) {
         opt.steps.forEach((step, sIdx) => {
-          if (!step.payload) {
+          const isDelay = step.type === 'delay';
+          if (isDelay) {
+            const delayTime = step.delay_ms ?? step.dwell_ms ?? step.ms;
+            if (delayTime === undefined || delayTime <= 0) {
+              issues.push({
+                type: 'warning',
+                field: `options[${idx}].steps[${sIdx}].delay_ms`,
+                message: `Option #${idx + 1} Delay Step #${sIdx + 1} has 0 or undefined duration.`,
+                commandId: command.id
+              });
+            }
+          } else if (!step.payload) {
             issues.push({
               type: 'error',
               field: `options[${idx}].steps[${sIdx}].payload`,
@@ -456,6 +467,18 @@ export function validateCommand(
               });
             }
           }
+          const stepCanId = (step as any).can_id ?? (step as any).action_can_id;
+          if (stepCanId) {
+            const stepCanRes = validateCanId(stepCanId);
+            if (!stepCanRes.isValid) {
+              issues.push({
+                type: 'error',
+                field: `options[${idx}].steps[${sIdx}].can_id`,
+                message: `Option #${idx + 1} Step #${sIdx + 1} CAN ID error: ${stepCanRes.error}`,
+                commandId: command.id
+              });
+            }
+          }
         });
       }
     });
@@ -464,7 +487,18 @@ export function validateCommand(
   // Steps validation
   if (command.steps && command.steps.length > 0) {
     command.steps.forEach((step, idx) => {
-      if (!step.payload || (typeof step.payload === 'string' && step.payload.trim() === '')) {
+      const isDelay = step.type === 'delay';
+      if (isDelay) {
+        const delayTime = step.delay_ms ?? step.dwell_ms ?? step.ms;
+        if (delayTime === undefined || delayTime <= 0) {
+          issues.push({
+            type: 'warning',
+            field: `steps[${idx}].delay_ms`,
+            message: `Delay Step #${idx + 1} has 0 or undefined duration.`,
+            commandId: command.id
+          });
+        }
+      } else if (!step.payload || (typeof step.payload === 'string' && step.payload.trim() === '')) {
         issues.push({
           type: 'error',
           field: `steps[${idx}].payload`,
@@ -478,6 +512,18 @@ export function validateCommand(
             type: 'error',
             field: `steps[${idx}].payload`,
             message: `Step #${idx + 1} payload error: ${stepRes.error}`,
+            commandId: command.id
+          });
+        }
+      }
+      const stepCanId = (step as any).can_id ?? (step as any).action_can_id;
+      if (stepCanId) {
+        const stepCanRes = validateCanId(stepCanId);
+        if (!stepCanRes.isValid) {
+          issues.push({
+            type: 'error',
+            field: `steps[${idx}].can_id`,
+            message: `Step #${idx + 1} CAN ID error: ${stepCanRes.error}`,
             commandId: command.id
           });
         }

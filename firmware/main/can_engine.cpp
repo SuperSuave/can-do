@@ -20,6 +20,15 @@
 #include "can.h"
 #include "mqtt_mgr.h"
 #include "uds_engine.h"
+#include "network_mgr.h"
+
+static bool mac_matches(const std::string& a, const std::string& b) {
+    std::string clean_a, clean_b;
+    for (char c : a) { if (isxdigit((unsigned char)c)) clean_a += (char)tolower((unsigned char)c); }
+    for (char c : b) { if (isxdigit((unsigned char)c)) clean_b += (char)tolower((unsigned char)c); }
+    return !clean_a.empty() && clean_a == clean_b;
+}
+
 
 #if defined(_WIN32) && !defined(__GNUC__)
 #define strcasecmp _stricmp
@@ -148,6 +157,51 @@ bool evaluate_condition(const AutomationCondition& cond) {
                     // Overnight window spanning midnight (e.g. 22:00 to 06:00)
                     return cur_min >= cond.start_time_min || cur_min <= cond.end_time_min;
                 }
+            }
+
+            if (cond.type == "device_state" || cond.type == "wifi_condition" || cond.type == "wifi") {
+                NetworkStatusInfo net_status = network_mgr_get_status();
+                if (cond.device_property == "wifi_ssid" || cond.device_property == "ssid") {
+                    if (cond.op == ConditionOperator::NOT_EQUAL) {
+                        return strcasecmp(net_status.sta_ssid.c_str(), cond.target_string.c_str()) != 0;
+                    }
+                    return strcasecmp(net_status.sta_ssid.c_str(), cond.target_string.c_str()) == 0;
+                } else if (cond.device_property == "wifi_connected" || cond.device_property == "connected") {
+                    return net_status.sta_connected == cond.target_bool;
+                } else if (cond.device_property == "wifi_mode" || cond.device_property == "ap_mode") {
+                    if (cond.target_string == "ap") return net_status.ap_active && !net_status.sta_connected;
+                    if (cond.target_string == "sta") return net_status.sta_connected && !net_status.ap_active;
+                    if (cond.target_string == "both" || cond.target_string == "ap_sta") return net_status.ap_active && net_status.sta_connected;
+                    return net_status.ap_active == cond.target_bool;
+                } else if (cond.device_property == "ap_client_connected") {
+                    auto stations = network_mgr_get_ap_stations();
+                    if (cond.target_string.empty()) {
+                        return cond.target_bool ? !stations.empty() : stations.empty();
+                    }
+                    bool found = false;
+                    for (const auto& sta : stations) {
+                        if (mac_matches(sta.mac, cond.target_string)) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    return found == cond.target_bool;
+                } else if (cond.device_property == "ap_client_rssi") {
+                    auto stations = network_mgr_get_ap_stations();
+                    for (const auto& sta : stations) {
+                        if (cond.target_string.empty() || mac_matches(sta.mac, cond.target_string)) {
+                            switch (cond.op) {
+                                case ConditionOperator::GREATER_THAN: return sta.rssi > cond.target_rssi;
+                                case ConditionOperator::LESS_THAN:    return sta.rssi < cond.target_rssi;
+                                case ConditionOperator::EQUAL:        return sta.rssi == cond.target_rssi;
+                                case ConditionOperator::NOT_EQUAL:    return sta.rssi != cond.target_rssi;
+                                default: return sta.rssi >= cond.target_rssi;
+                            }
+                        }
+                    }
+                    return false;
+                }
+                return false;
             }
 
             auto it = can_state_cache.find(cond.can_id);
@@ -414,6 +468,10 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             } else {
                 ESP_LOGW(TAG, "TWAI TX failed or queue full for ID 0x%03lX", (unsigned long)tx_msg.identifier);
             }
+        }
+
+        if (step.delay_ms > 0) {
+            vTaskDelay(pdMS_TO_TICKS(step.delay_ms));
         }
     }
 }
@@ -870,4 +928,73 @@ void time_scheduler_task(void* arg) {
         }
     }
 }
+
+void can_engine_on_device_event(const std::string& event_type, const std::string& detail_str, int8_t rssi) {
+    if (!g_automations_enabled.load()) return;
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+
+    for (auto& rule : global_automations) {
+        if (!rule.enabled) continue;
+
+        for (const auto& trig : rule.triggers) {
+            if (trig.type == "wifi" || trig.type == "wifi_event" || trig.type == "device_event") {
+                bool event_match = false;
+                if (trig.wifi_event == event_type) {
+                    event_match = true;
+                } else if (event_type == "wifi_connected" && (trig.wifi_event == "connected" || trig.wifi_event == "sta_connected")) {
+                    event_match = true;
+                } else if (event_type == "wifi_disconnected" && (trig.wifi_event == "disconnected" || trig.wifi_event == "sta_disconnected")) {
+                    event_match = true;
+                }
+
+                if (!event_match) continue;
+
+                // Match SSID if specified
+                if (!trig.ssid.empty() && (event_type == "wifi_connected" || event_type == "wifi_disconnected")) {
+                    if (strcasecmp(trig.ssid.c_str(), detail_str.c_str()) != 0) {
+                        continue;
+                    }
+                }
+
+                // Match client MAC if specified
+                if (!trig.client_mac.empty() && (event_type == "ap_client_connected" || event_type == "ap_client_disconnected")) {
+                    if (!mac_matches(trig.client_mac, detail_str)) {
+                        continue;
+                    }
+                }
+
+                // Match target RSSI if specified
+                if (trig.target_rssi != 0 && event_type == "ap_client_connected") {
+                    if (rssi < trig.target_rssi) {
+                        continue;
+                    }
+                }
+
+                // Check rule cooldown
+                if (rule.last_exec_time_ms != 0 && (now_ms - rule.last_exec_time_ms < rule.cooldown_ms)) {
+                    continue;
+                }
+
+                // Evaluate conditions
+                s_current_firing_trigger_id = trig.id;
+                bool passed = true;
+                for (const auto& cond : rule.conditions) {
+                    if (!evaluate_condition(cond)) {
+                        passed = false;
+                        break;
+                    }
+                }
+
+                if (passed) {
+                    ESP_LOGI(TAG, "Device/Wi-Fi event triggered automation: %s (trigger: %s, event: %s)",
+                             rule.name.c_str(), trig.id.c_str(), event_type.c_str());
+                    rule.last_exec_time_ms = now_ms;
+                    broadcast_ws_automation_event(rule.id, rule.name);
+                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id);
+                }
+            }
+        }
+    }
+}
+
 

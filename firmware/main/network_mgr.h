@@ -57,3 +57,10 @@ void network_mgr_set_ap_credentials(const std::string& ssid, const std::string& 
 bool network_mgr_start_scan(void);
 bool network_mgr_is_scanning(void);
 std::vector<WifiScanResult> network_mgr_get_scan_results(void);
+
+// Connected Stations (SoftAP Mode with Proximity RSSI)
+struct WifiConnectedStation {
+    std::string mac;
+    int8_t rssi;
+};
+std::vector<WifiConnectedStation> network_mgr_get_ap_stations(void);

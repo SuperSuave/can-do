@@ -25,6 +25,7 @@ import {
   MessageSquare,
   Thermometer,
   Search,
+  Wifi,
   X,
   ChevronRight,
   Shield,
@@ -146,6 +147,22 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
             ble_button: 'volume_up',
             ble_action: 'press'
           })
+        },
+        {
+          id: 'wifi_event',
+          title: 'Wi-Fi / AP Connection Event',
+          desc: 'Trigger on network connect/disconnect or when a client connects to the ESP32 SoftAP (with proximity RSSI)',
+          icon: Wifi,
+          color: 'text-sky-400 bg-sky-950/40 border-sky-800/60',
+          create: (): AutomationTrigger => ({
+            id: `trig_wifi_${Date.now().toString(36)}`,
+            source: 'wifi',
+            type: 'wifi_event',
+            wifi_event: 'ap_client_connected',
+            ssid: '',
+            client_mac: '',
+            target_rssi: 0
+          })
         }
       ];
     }
@@ -220,6 +237,22 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
             type: 'voltage',
             voltage_dir: 'above',
             voltage_val: ''
+          })
+        },
+        {
+          id: 'device_state',
+          title: 'ESP32 Wi-Fi / AP Mode Condition',
+          desc: 'Check connected Wi-Fi network (SSID), whether in AP mode, or connected device presence & signal strength (RSSI proximity)',
+          icon: Wifi,
+          color: 'text-sky-400 bg-sky-950/40 border-sky-800/60',
+          create: (): AutomationCondition => ({
+            id: `cond_wifi_${Date.now().toString(36)}`,
+            type: 'device_state',
+            device_property: 'wifi_ssid',
+            target_string: '',
+            operator: 'equal',
+            target_bool: true,
+            target_rssi: -65
           })
         },
         {

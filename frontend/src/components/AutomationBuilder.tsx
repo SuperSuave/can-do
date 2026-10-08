@@ -60,6 +60,7 @@ import {
   MessageSquare,
   Thermometer,
   Radio,
+  Wifi,
   Bluetooth,
   X,
   Share2,
@@ -908,6 +909,160 @@ function ConditionNodeEditor({
     );
   }
 
+  // ESP32 Wi-Fi / AP Mode condition
+  if (cond.type === 'device_state' || cond.type === 'wifi' || cond.type === 'wifi_condition') {
+    const prop = cond.device_property || 'wifi_ssid';
+    return (
+      <div className="p-2.5 sm:p-3 rounded-xl bg-slate-950 border border-sky-900/60 space-y-2 text-xs min-w-0 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
+            >
+              {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+            </button>
+            <span className="w-5 h-5 rounded-full bg-sky-950 text-sky-300 font-bold text-[10px] flex items-center justify-center border border-sky-800 shrink-0">
+              C{index + 1}
+            </span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Wifi className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <span className="font-semibold text-white truncate">ESP32 Wi-Fi / AP Mode</span>
+              <span className="px-1.5 py-0.2 rounded bg-sky-950 text-sky-300 text-[10px] border border-sky-800/60 font-mono shrink-0">
+                {prop}
+              </span>
+            </div>
+          </div>
+          <div className="shrink-0 ml-auto sm:ml-0">
+            {actionButtons}
+          </div>
+        </div>
+
+        {!collapsed && (
+          <div className="space-y-2 pt-1 border-t border-slate-900">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[10px] font-sans text-slate-400 mb-1">Device Property</label>
+                <select
+                  value={prop}
+                  onChange={e => onUpdate({ ...cond, device_property: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-sky-300 font-sans"
+                >
+                  <option value="wifi_ssid">Connected Wi-Fi SSID</option>
+                  <option value="wifi_connected">Wi-Fi Station Connection Status</option>
+                  <option value="wifi_mode">Wi-Fi Mode (AP / Station / Both)</option>
+                  <option value="ap_client_connected">AP Client Connected (MAC Presence)</option>
+                  <option value="ap_client_rssi">AP Client Proximity (Signal RSSI)</option>
+                </select>
+              </div>
+
+              {prop === 'wifi_ssid' && (
+                <div>
+                  <label className="block text-[10px] font-sans text-slate-400 mb-1">Target Network SSID</label>
+                  <div className="flex items-center gap-1">
+                    <select
+                      value={cond.operator || 'equal'}
+                      onChange={e => onUpdate({ ...cond, operator: e.target.value })}
+                      className="bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 font-mono w-24 shrink-0"
+                    >
+                      <option value="equal">== (Is)</option>
+                      <option value="not_equal">!= (Not)</option>
+                    </select>
+                    <input
+                      type="text"
+                      value={cond.target_string || ''}
+                      onChange={e => onUpdate({ ...cond, target_string: e.target.value })}
+                      placeholder="e.g. Home_WiFi"
+                      className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {prop === 'wifi_connected' && (
+                <div>
+                  <label className="block text-[10px] font-sans text-slate-400 mb-1">Expected Status</label>
+                  <select
+                    value={cond.target_bool !== false ? 'true' : 'false'}
+                    onChange={e => onUpdate({ ...cond, target_bool: e.target.value === 'true' })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                  >
+                    <option value="true">Connected to a Wi-Fi Network</option>
+                    <option value="false">Disconnected (No Network)</option>
+                  </select>
+                </div>
+              )}
+
+              {prop === 'wifi_mode' && (
+                <div>
+                  <label className="block text-[10px] font-sans text-slate-400 mb-1">Expected Mode</label>
+                  <select
+                    value={cond.target_string || 'ap'}
+                    onChange={e => onUpdate({ ...cond, target_string: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                  >
+                    <option value="ap">In SoftAP Mode (Standalone Hotspot)</option>
+                    <option value="sta">Connected as Client (Station Mode)</option>
+                    <option value="both">Both SoftAP and Station Active</option>
+                  </select>
+                </div>
+              )}
+
+              {prop === 'ap_client_connected' && (
+                <div>
+                  <label className="block text-[10px] font-sans text-slate-400 mb-1">Client MAC Address (Optional)</label>
+                  <input
+                    type="text"
+                    value={cond.target_string || ''}
+                    onChange={e => onUpdate({ ...cond, target_string: e.target.value })}
+                    placeholder="e.g. AA:BB:CC:DD:EE:FF (blank = any client)"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-mono"
+                  />
+                </div>
+              )}
+
+              {prop === 'ap_client_rssi' && (
+                <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-sans text-slate-400 mb-1">Client MAC Filter</label>
+                    <input
+                      type="text"
+                      value={cond.target_string || ''}
+                      onChange={e => onUpdate({ ...cond, target_string: e.target.value })}
+                      placeholder="e.g. AA:BB:CC:DD:EE:FF (or blank for closest)"
+                      className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-sans text-slate-400 mb-1">Proximity RSSI Threshold</label>
+                    <div className="flex items-center gap-1">
+                      <select
+                        value={cond.operator || 'greater_than'}
+                        onChange={e => onUpdate({ ...cond, operator: e.target.value })}
+                        className="bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 font-mono w-28 shrink-0"
+                      >
+                        <option value="greater_than">&gt; (Closer than)</option>
+                        <option value="less_than">&lt; (Further than)</option>
+                      </select>
+                      <input
+                        type="number"
+                        value={cond.target_rssi ?? -65}
+                        onChange={e => onUpdate({ ...cond, target_rssi: parseInt(e.target.value) || 0 })}
+                        className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-sky-300 font-mono font-bold text-center"
+                      />
+                      <span className="text-[10px] text-slate-500 shrink-0">dBm</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // Leaf CAN / Catalog condition
   const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForCondition(cond, catalog) : {};
   const hasOptions = !!(catalogCmd?.options && catalogCmd.options.length > 0);
@@ -1483,6 +1638,94 @@ function TriggerNodeEditor({
                 className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
               />
             </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Wi-Fi / Device Trigger
+  if (trig.type === 'wifi' || trig.type === 'wifi_event' || trig.source === 'wifi') {
+    return (
+      <div className="p-3.5 rounded-xl bg-slate-950 border border-sky-800/80 space-y-2.5 text-xs shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              className="text-slate-400 hover:text-white transition p-0.5"
+            >
+              {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+            </button>
+            <span className="w-5 h-5 rounded-full bg-sky-950 text-sky-300 font-bold text-[10px] flex items-center justify-center border border-sky-800 shrink-0">
+              T{tIdx + 1}
+            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 text-sky-400 font-semibold">
+                <Wifi className="w-3.5 h-3.5" />
+                <span>Wi-Fi / AP Connection Event</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded bg-sky-900/50 text-sky-200 text-[10px] font-mono border border-sky-700/50">
+                {trig.wifi_event || 'ap_client_connected'}
+                {trig.ssid ? ` • SSID: ${trig.ssid}` : ''}
+                {trig.client_mac ? ` • MAC: ${trig.client_mac}` : ''}
+              </span>
+            </div>
+          </div>
+          {actionButtons}
+        </div>
+
+        {!collapsed && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px]">
+            <div>
+              <label className="block text-[10px] font-sans text-slate-400 mb-1">Wi-Fi Event</label>
+              <select
+                value={trig.wifi_event || 'ap_client_connected'}
+                onChange={e => onUpdate({ ...trig, wifi_event: e.target.value })}
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-sky-300 font-sans"
+              >
+                <option value="ap_client_connected">AP Client Connected (Phone/Tablet)</option>
+                <option value="ap_client_disconnected">AP Client Disconnected</option>
+                <option value="wifi_connected">Connected to Station Network</option>
+                <option value="wifi_disconnected">Disconnected from Station Network</option>
+              </select>
+            </div>
+
+            {(trig.wifi_event === 'wifi_connected' || trig.wifi_event === 'wifi_disconnected') ? (
+              <div className="sm:col-span-2">
+                <label className="block text-[10px] font-sans text-slate-400 mb-1">Network SSID Filter (Optional)</label>
+                <input
+                  type="text"
+                  value={trig.ssid || ''}
+                  onChange={e => onUpdate({ ...trig, ssid: e.target.value })}
+                  placeholder="e.g. Home_Garage_WiFi (leave blank for any network)"
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                />
+              </div>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-[10px] font-sans text-slate-400 mb-1">Client MAC Filter (Optional)</label>
+                  <input
+                    type="text"
+                    value={trig.client_mac || ''}
+                    onChange={e => onUpdate({ ...trig, client_mac: e.target.value })}
+                    placeholder="e.g. AA:BB:CC:DD:EE:FF"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-sans text-slate-400 mb-1">Proximity RSSI Threshold (dBm)</label>
+                  <input
+                    type="number"
+                    value={trig.target_rssi || 0}
+                    onChange={e => onUpdate({ ...trig, target_rssi: parseInt(e.target.value) || 0 })}
+                    placeholder="0 = any, e.g. -60 for close"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-mono"
+                  />
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

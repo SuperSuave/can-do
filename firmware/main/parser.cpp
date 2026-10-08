@@ -228,6 +228,36 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
         return true;
     }
 
+    // Check if this condition is a device / Wi-Fi condition
+    if (cJSON_IsString(type_prop) && (strcmp(type_prop->valuestring, "device_state") == 0 ||
+                                      strcmp(type_prop->valuestring, "device") == 0 ||
+                                      strcmp(type_prop->valuestring, "wifi_condition") == 0 ||
+                                      strcmp(type_prop->valuestring, "wifi") == 0)) {
+        cond.type = "device_state";
+        cJSON* prop = cJSON_GetObjectItem(c_item, "device_property");
+        if (!prop) prop = cJSON_GetObjectItem(c_item, "property");
+        if (cJSON_IsString(prop)) cond.device_property = prop->valuestring;
+
+        cJSON* target_str = cJSON_GetObjectItem(c_item, "target_string");
+        if (!target_str) target_str = cJSON_GetObjectItem(c_item, "value");
+        if (!target_str) target_str = cJSON_GetObjectItem(c_item, "ssid");
+        if (!target_str) target_str = cJSON_GetObjectItem(c_item, "client_mac");
+        if (!target_str) target_str = cJSON_GetObjectItem(c_item, "mac");
+        if (cJSON_IsString(target_str)) cond.target_string = target_str->valuestring;
+
+        cJSON* target_b = cJSON_GetObjectItem(c_item, "target_bool");
+        if (cJSON_IsBool(target_b)) cond.target_bool = cJSON_IsTrue(target_b);
+
+        cJSON* op = cJSON_GetObjectItem(c_item, "operator");
+        if (cJSON_IsString(op)) cond.op = parse_operator(op->valuestring);
+
+        cJSON* rssi = cJSON_GetObjectItem(c_item, "target_rssi");
+        if (!rssi) rssi = cJSON_GetObjectItem(c_item, "rssi");
+        if (cJSON_IsNumber(rssi)) cond.target_rssi = static_cast<int8_t>(rssi->valueint);
+
+        return true;
+    }
+
     cond.type = "can_state";
     cJSON* cid = cJSON_GetObjectItem(c_item, "can_id");
     if (cJSON_IsString(cid)) cond.can_id = strtol(cid->valuestring, nullptr, 16);
@@ -392,6 +422,9 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
     } else if (strcmp(type_str, "delay") == 0) {
         step.type = ActionType::DELAY;
         cJSON* ms = cJSON_GetObjectItem(a_item, "ms");
+        if (!ms) ms = cJSON_GetObjectItem(a_item, "delay_ms");
+        if (!ms) ms = cJSON_GetObjectItem(a_item, "delay");
+        if (!ms) ms = cJSON_GetObjectItem(a_item, "dwell_ms");
         if (cJSON_IsNumber(ms)) step.delay_ms = ms->valueint;
         return true;
     } else if (strcmp(type_str, "if_then") == 0 || strcmp(type_str, "if") == 0) {
@@ -471,6 +504,7 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
     } else {
         step.type = ActionType::TRANSMIT_FRAME;
         cJSON* cid = cJSON_GetObjectItem(a_item, "can_id");
+        if (!cid) cid = cJSON_GetObjectItem(a_item, "action_can_id");
         if (cJSON_IsString(cid)) step.can_id = strtol(cid->valuestring, nullptr, 16);
         else if (cJSON_IsNumber(cid)) step.can_id = static_cast<uint32_t>(cid->valueint);
 
@@ -479,6 +513,12 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
 
         cJSON* rep = cJSON_GetObjectItem(a_item, "repeat");
         if (cJSON_IsNumber(rep)) step.repeat = static_cast<uint8_t>(rep->valueint);
+
+        cJSON* del = cJSON_GetObjectItem(a_item, "delay_ms");
+        if (!del) del = cJSON_GetObjectItem(a_item, "dwell_ms");
+        if (!del) del = cJSON_GetObjectItem(a_item, "delay");
+        if (!del) del = cJSON_GetObjectItem(a_item, "dwell");
+        if (cJSON_IsNumber(del)) step.delay_ms = static_cast<uint32_t>(del->valueint);
 
         cJSON* p = cJSON_GetObjectItem(a_item, "payload");
         if (p) {
@@ -692,6 +732,21 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
                 cJSON* time_val = cJSON_GetObjectItem(t_item, "time");
                 if (cJSON_IsString(time_val)) tr.schedule_time_min = parse_time_to_minutes(time_val->valuestring);
                 tr.weekdays_mask = parse_weekdays_mask(cJSON_GetObjectItem(t_item, "days"));
+            } else if (tr.type == "wifi" || tr.type == "wifi_event" || tr.type == "device_event") {
+                cJSON* evt = cJSON_GetObjectItem(t_item, "wifi_event");
+                if (!evt) evt = cJSON_GetObjectItem(t_item, "event");
+                if (cJSON_IsString(evt)) tr.wifi_event = evt->valuestring;
+
+                cJSON* ssid_item = cJSON_GetObjectItem(t_item, "ssid");
+                if (cJSON_IsString(ssid_item)) tr.ssid = ssid_item->valuestring;
+
+                cJSON* mac_item = cJSON_GetObjectItem(t_item, "client_mac");
+                if (!mac_item) mac_item = cJSON_GetObjectItem(t_item, "mac");
+                if (cJSON_IsString(mac_item)) tr.client_mac = mac_item->valuestring;
+
+                cJSON* rssi_item = cJSON_GetObjectItem(t_item, "target_rssi");
+                if (!rssi_item) rssi_item = cJSON_GetObjectItem(t_item, "rssi");
+                if (cJSON_IsNumber(rssi_item)) tr.target_rssi = static_cast<int8_t>(rssi_item->valueint);
             } else {
                 cJSON* cid = cJSON_GetObjectItem(t_item, "can_id");
                 if (cJSON_IsString(cid)) tr.can_id = strtol(cid->valuestring, nullptr, 16);

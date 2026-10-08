@@ -1,5 +1,6 @@
 #include "network_mgr.h"
 #include "mqtt_mgr.h"
+#include "can_engine.h"
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
@@ -225,6 +226,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
             if (!s_ap_active) board_led_wifi(false);
             ESP_LOGW(TAG, "Wi-Fi disconnected from '%s'", s_cur_sta_ssid.c_str());
             mqtt_mgr_on_wifi_disconnect();
+            can_engine_on_device_event("wifi_disconnected", s_cur_sta_ssid, 0);
 
             if (s_retry_num < MAXIMUM_RETRY) {
                 esp_wifi_connect();
@@ -233,6 +235,34 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
             } else {
                 xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
             }
+        } else if (event_id == WIFI_EVENT_AP_STACONNECTED) {
+            auto* event = static_cast<wifi_event_ap_staconnected_t*>(event_data);
+            char mac_str[18];
+            snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+                     event->mac[0], event->mac[1], event->mac[2],
+                     event->mac[3], event->mac[4], event->mac[5]);
+            ESP_LOGI(TAG, "Device connected to SoftAP: MAC %s (AID: %d)", mac_str, event->aid);
+            
+            // Retrieve station RSSI if available
+            int8_t sta_rssi = 0;
+            wifi_sta_list_t sta_list = {};
+            if (esp_wifi_ap_get_sta_list(&sta_list) == ESP_OK) {
+                for (int i = 0; i < sta_list.num; i++) {
+                    if (memcmp(sta_list.sta[i].mac, event->mac, 6) == 0) {
+                        sta_rssi = sta_list.sta[i].rssi;
+                        break;
+                    }
+                }
+            }
+            can_engine_on_device_event("ap_client_connected", mac_str, sta_rssi);
+        } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
+            auto* event = static_cast<wifi_event_ap_stadisconnected_t*>(event_data);
+            char mac_str[18];
+            snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+                     event->mac[0], event->mac[1], event->mac[2],
+                     event->mac[3], event->mac[4], event->mac[5]);
+            ESP_LOGW(TAG, "Device disconnected from SoftAP: MAC %s (AID: %d)", mac_str, event->aid);
+            can_engine_on_device_event("ap_client_disconnected", mac_str, 0);
         } else if (event_id == WIFI_EVENT_SCAN_DONE) {
             s_is_scanning = false;
             xEventGroupSetBits(s_wifi_event_group, WIFI_SCAN_DONE_BIT);
@@ -258,10 +288,11 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
             s_cur_sta_rssi = ap_info.rssi;
         }
 
-        ESP_LOGI(TAG, "Associated with '%s'. Got IP: %s (GW: %s, power-save: NONE)", s_cur_sta_ssid.c_str(), ip_str, gw_str);
+        ESP_LOGI(TAG, "Associated with '%s'. Got IP: %s (GW: %s, power-save: NONE, RSSI: %d dBm)", s_cur_sta_ssid.c_str(), ip_str, gw_str, (int)s_cur_sta_rssi);
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
 
         mqtt_mgr_on_wifi_connect();
+        can_engine_on_device_event("wifi_connected", s_cur_sta_ssid, s_cur_sta_rssi);
 
         if (s_ap_mode == AP_MODE_AUTO) {
             stop_softap();
@@ -565,4 +596,21 @@ bool network_mgr_is_scanning(void) {
 std::vector<WifiScanResult> network_mgr_get_scan_results(void) {
     std::lock_guard<std::mutex> lock(s_net_mutex);
     return s_scan_results;
+}
+
+std::vector<WifiConnectedStation> network_mgr_get_ap_stations(void) {
+    std::vector<WifiConnectedStation> stations;
+    if (!s_ap_active) return stations;
+
+    wifi_sta_list_t sta_list = {};
+    if (esp_wifi_ap_get_sta_list(&sta_list) == ESP_OK) {
+        for (int i = 0; i < sta_list.num; i++) {
+            char mac_str[18];
+            snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+                     sta_list.sta[i].mac[0], sta_list.sta[i].mac[1], sta_list.sta[i].mac[2],
+                     sta_list.sta[i].mac[3], sta_list.sta[i].mac[4], sta_list.sta[i].mac[5]);
+            stations.push_back({mac_str, sta_list.sta[i].rssi});
+        }
+    }
+    return stations;
 }

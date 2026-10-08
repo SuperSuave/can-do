@@ -21,7 +21,8 @@ import {
   ListOrdered,
   FileText,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Clock
 } from 'lucide-react';
 
 interface StateDefinitionsEditorProps {
@@ -54,17 +55,50 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
     const steps: CommandStep[] = [];
 
-    for (const line of lines) {
+    for (const rawLine of lines) {
+      // Check for standalone delay step
+      const delayMatch = rawLine.match(/(?:delay|wait|pause|dwell)\s*:?\s*(\d+)\s*(?:ms|s)?/i);
+      if (delayMatch && !rawLine.match(/[0-9A-Fa-f]{2}\s+[0-9A-Fa-f]{2}/)) {
+        let ms = parseInt(delayMatch[1], 10) || 500;
+        if (rawLine.toLowerCase().includes('s') && !rawLine.toLowerCase().includes('ms')) {
+          ms *= 1000;
+        }
+        steps.push({
+          type: 'delay',
+          delay_ms: ms
+        });
+        continue;
+      }
+
+      // Check CAN ID prefix or inside string, e.g. (0x4F1) or 0x4F1:
+      let stepCanId: string | undefined = undefined;
+      const canIdMatch = rawLine.match(/\b(0x[0-9A-Fa-f]{3,8})\b/i);
+      if (canIdMatch) {
+        stepCanId = canIdMatch[1].toUpperCase();
+      }
+
+      // Check post-burst dwell delay, e.g. "500 ms dwell" or "500ms delay"
+      let dwellMs: number | undefined = undefined;
+      const dwellMatch = rawLine.match(/(\d+)\s*ms\s*(?:dwell|delay|pause)?/i);
+      if (dwellMatch) {
+        dwellMs = parseInt(dwellMatch[1], 10);
+      }
+
       let repeat = 1;
-      const parenMatch = line.match(/\((\d+)\s*(?:times|x)?\)/i);
-      const endXMatch = line.match(/(?:x|\*)\s*(\d+)\s*$/i);
+      const parenMatch = rawLine.match(/\((\d+)\s*(?:times|x)?\)/i);
+      const endXMatch = rawLine.match(/(?:x|×|\*)\s*(\d+)/i);
       if (parenMatch) {
         repeat = parseInt(parenMatch[1], 10) || 1;
       } else if (endXMatch) {
         repeat = parseInt(endXMatch[1], 10) || 1;
       }
 
-      const cleanLine = line.replace(/\([^)]*\)/g, '').replace(/(?:x|\*)\s*\d+\s*$/i, '');
+      const cleanLine = rawLine
+        .replace(/\b0x[0-9A-Fa-f]{3,8}\b:?/gi, '')
+        .replace(/\([^)]*\)/g, '')
+        .replace(/—[^—]*$/g, '')
+        .replace(/(?:x|×|\*)\s*\d+/gi, '');
+
       const rawTokens = cleanLine
         .replace(/[,;:]/g, ' ')
         .trim()
@@ -88,21 +122,27 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
         });
 
         steps.push({
+          type: 'transmit_frame',
           payload: byteMap,
-          repeat
+          repeat,
+          ...(stepCanId ? { can_id: stepCanId } : {}),
+          ...(dwellMs ? { delay_ms: dwellMs } : {})
         });
       }
     }
     return steps;
   };
 
-  const handleAddOptionStep = (optIdx: number) => {
+  const handleAddOptionStep = (optIdx: number, isDelay: boolean = false) => {
     const opt = options[optIdx];
     const curSteps = opt.steps || [];
-    const newStep: CommandStep = {
-      payload: '* * * * * * * *',
-      repeat: 1
-    };
+    const newStep: CommandStep = isDelay
+      ? { type: 'delay', delay_ms: 500 }
+      : {
+          type: 'transmit_frame',
+          payload: '* * * * * * * *',
+          repeat: 1
+        };
     handleUpdateState(optIdx, { steps: [...curSteps, newStep] });
   };
 
@@ -672,11 +712,19 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleAddOptionStep(idx)}
+                                onClick={() => handleAddOptionStep(idx, false)}
                                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-[11px] font-semibold transition shadow-sm"
                               >
                                 <Plus className="w-3 h-3" />
-                                Add Step
+                                Add Frame Step
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleAddOptionStep(idx, true)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-amber-800/80 hover:bg-amber-700 text-amber-200 border border-amber-700/60 text-[11px] font-semibold transition shadow-sm"
+                              >
+                                <Clock className="w-3 h-3" />
+                                Add Delay
                               </button>
                             </div>
                           </div>
@@ -686,20 +734,20 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                             <div className="p-3 rounded-lg bg-slate-900 border border-cyan-800/80 space-y-2">
                               <div className="flex items-center justify-between text-xs">
                                 <span className="font-semibold text-cyan-300 flex items-center gap-1.5">
-                                  <FileText className="w-3.5 h-3.5" /> Paste Raw Step Sequence (Hex & Repeats)
+                                  <FileText className="w-3.5 h-3.5" /> Paste Raw Step Sequence (Hex, Repeats & Delays)
                                 </span>
-                                <span className="text-[10px] text-slate-400">e.g. FF,F1,FF,FF,FF,FF,FF,FF, (3 times)</span>
+                                <span className="text-[10px] text-slate-400">e.g. 0x4F1: 00 C0 ... × 5 (500 ms dwell) or Delay 500ms</span>
                               </div>
                               <textarea
                                 rows={4}
                                 value={pasteStepText}
                                 onChange={e => setPasteStepText(e.target.value)}
-                                placeholder="Paste lines like:&#10;FF,F1,FF,FF,FF,FF,FF,FF, (3 times)&#10;FF,FF,FF,FF,FF,FF,FF,FF&#10;FF,F0,FF,FF,FF,FF,FF,FF, (3 times)&#10;FF,FF,FF,FF,FF,FF,FF,FF"
+                                placeholder="Paste lines like:&#10;0x4F1: 00 C0 00 00 00 00 00 00 × 5 (500 ms dwell)&#10;0x4A2: 00 00 0C 00 00 00 00 00 × 3&#10;0x4A2: 00 03 FC 00 FF FF 00 00 × 3&#10;or standalone: Delay 500ms"
                                 className="w-full font-mono text-xs p-2 rounded bg-black/60 border border-slate-700 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500"
                               />
                               <div className="flex items-center justify-between text-xs">
                                 <span className="text-[10px] text-slate-400">
-                                  Auto-detects comma/space separated bytes and (N times) repeats.
+                                  Auto-detects CAN IDs (0x4F1), repeats (x 5), post-dwell delays, and delay steps.
                                 </span>
                                 <div className="flex items-center gap-2">
                                   <button
@@ -724,117 +772,263 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
 
                           {/* List of Steps */}
                           {(!opt.steps || opt.steps.length === 0) ? (
-                            <div className="text-center py-6 px-3 rounded-lg border border-dashed border-slate-800 bg-slate-900/30 text-xs text-slate-400">
+                            <div className="text-center py-6 px-3 rounded-lg border border-dashed border-slate-800 bg-slate-900/30 text-xs text-slate-400 space-y-2">
                               <p>No sequence steps defined yet.</p>
-                              <button
-                                type="button"
-                                onClick={() => handleAddOptionStep(idx)}
-                                className="mt-2 inline-flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-semibold"
-                              >
-                                <Plus className="w-3 h-3" /> Add First Step
-                              </button>
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddOptionStep(idx, false)}
+                                  className="inline-flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-semibold"
+                                >
+                                  <Plus className="w-3 h-3" /> Add Frame Step
+                                </button>
+                                <span className="text-slate-600">•</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddOptionStep(idx, true)}
+                                  className="inline-flex items-center gap-1 text-amber-400 hover:text-amber-300 font-semibold"
+                                >
+                                  <Clock className="w-3 h-3" /> Add Delay Step
+                                </button>
+                              </div>
                             </div>
                           ) : (
                             <div className="space-y-2.5">
-                              {opt.steps.map((step, sIdx) => (
-                                <div
-                                  key={sIdx}
-                                  className="p-3 rounded-lg bg-slate-900/90 border border-slate-800 space-y-2"
-                                >
-                                  <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
-                                    <div className="flex items-center gap-2">
-                                      <span className="w-5 h-5 rounded-full bg-emerald-950 border border-emerald-700/80 text-emerald-300 text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
-                                        {sIdx + 1}
-                                      </span>
-                                      <span className="font-semibold text-slate-200">
-                                        Frame Step #{sIdx + 1}
-                                      </span>
-                                      {step.repeat && step.repeat > 1 && (
-                                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950/70 text-amber-300 border border-amber-800/60 font-bold">
-                                          Repeated {step.repeat}x
-                                        </span>
-                                      )}
-                                    </div>
+                              {opt.steps.map((step, sIdx) => {
+                                const isDelay = step.type === 'delay';
 
-                                    <div className="flex items-center gap-2">
-                                      <div className="flex items-center gap-1">
-                                        <span className="text-[11px] text-slate-400">Repeat:</span>
-                                        <input
-                                          type="number"
-                                          min="1"
-                                          max="50"
-                                          value={step.repeat || 1}
-                                          onChange={e =>
-                                            handleUpdateOptionStep(idx, sIdx, { repeat: parseInt(e.target.value) || 1 })
-                                          }
-                                          className="w-14 px-1.5 py-0.5 rounded bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-amber-300 text-center font-bold"
-                                        />
-                                        <span className="text-[10px] text-slate-400">times</span>
+                                if (isDelay) {
+                                  return (
+                                    <div
+                                      key={sIdx}
+                                      className="p-3 rounded-lg bg-amber-950/30 border border-amber-800/60 space-y-2"
+                                    >
+                                      <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+                                        <div className="flex items-center gap-2">
+                                          <span className="w-5 h-5 rounded-full bg-amber-900 border border-amber-700 text-amber-200 text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
+                                            <Clock className="w-3 h-3" />
+                                          </span>
+                                          <span className="font-semibold text-amber-300">
+                                            Delay Step #{sIdx + 1}
+                                          </span>
+                                          <span className="text-[10px] text-amber-400/80 font-mono">
+                                            (Dwell pause before next step)
+                                          </span>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-[11px] text-slate-300">Duration:</span>
+                                            <input
+                                              type="number"
+                                              min="10"
+                                              step="50"
+                                              value={step.delay_ms ?? step.dwell_ms ?? step.ms ?? 500}
+                                              onChange={e =>
+                                                handleUpdateOptionStep(idx, sIdx, {
+                                                  delay_ms: parseInt(e.target.value) || 0
+                                                })
+                                              }
+                                              className="w-20 px-2 py-0.5 rounded bg-[var(--input-bg)] border border-amber-700/60 font-mono text-xs text-amber-300 text-center font-bold"
+                                            />
+                                            <span className="text-[11px] text-slate-400">ms</span>
+                                          </div>
+
+                                          <div className="h-4 w-[1px] bg-slate-800 mx-0.5"></div>
+
+                                          {/* Reorder Buttons */}
+                                          <button
+                                            type="button"
+                                            disabled={sIdx === 0}
+                                            onClick={() => handleMoveOptionStep(idx, sIdx, sIdx - 1)}
+                                            title="Move step up"
+                                            className="p-1 text-slate-400 hover:text-white disabled:opacity-30 rounded hover:bg-slate-800 transition"
+                                          >
+                                            <ArrowUp className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={sIdx === (opt.steps?.length || 1) - 1}
+                                            onClick={() => handleMoveOptionStep(idx, sIdx, sIdx + 1)}
+                                            title="Move step down"
+                                            className="p-1 text-slate-400 hover:text-white disabled:opacity-30 rounded hover:bg-slate-800 transition"
+                                          >
+                                            <ArrowDown className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDuplicateOptionStep(idx, sIdx)}
+                                            title="Duplicate step"
+                                            className="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition"
+                                          >
+                                            <Copy className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRemoveOptionStep(idx, sIdx)}
+                                            title="Remove step"
+                                            className="p-1 text-slate-400 hover:text-rose-400 rounded hover:bg-slate-800 transition"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <div
+                                    key={sIdx}
+                                    className="p-3 rounded-lg bg-slate-900/90 border border-slate-800 space-y-2"
+                                  >
+                                    <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-5 h-5 rounded-full bg-emerald-950 border border-emerald-700/80 text-emerald-300 text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
+                                          {sIdx + 1}
+                                        </span>
+                                        <span className="font-semibold text-slate-200">
+                                          Frame Step #{sIdx + 1}
+                                        </span>
+                                        {step.can_id && (
+                                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-950/70 text-cyan-300 border border-cyan-800/60 font-bold">
+                                            TX: {step.can_id}
+                                          </span>
+                                        )}
+                                        {step.repeat && step.repeat > 1 && (
+                                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950/70 text-amber-300 border border-amber-800/60 font-bold">
+                                            Repeated {step.repeat}x
+                                          </span>
+                                        )}
+                                        {step.delay_ms && step.delay_ms > 0 && (
+                                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-950/70 text-purple-300 border border-purple-800/60 font-bold">
+                                            +{step.delay_ms}ms dwell
+                                          </span>
+                                        )}
                                       </div>
 
-                                      <div className="h-4 w-[1px] bg-slate-800 mx-0.5"></div>
+                                      <div className="flex items-center gap-2">
+                                        {/* CAN ID Override */}
+                                        <div className="flex items-center gap-1" title="Override TX CAN ID for this specific step (leave blank to inherit command Action CAN ID)">
+                                          <span className="text-[11px] text-slate-400">CAN ID:</span>
+                                          <input
+                                            type="text"
+                                            placeholder={actionCanId || "0x..."}
+                                            value={step.can_id || ''}
+                                            onChange={e =>
+                                              handleUpdateOptionStep(idx, sIdx, {
+                                                can_id: e.target.value.trim().toUpperCase() || undefined
+                                              })
+                                            }
+                                            className="w-20 px-1.5 py-0.5 rounded bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-cyan-300 placeholder:text-slate-600 font-bold uppercase"
+                                          />
+                                        </div>
 
-                                      {/* Reorder Buttons */}
-                                      <button
-                                        type="button"
-                                        disabled={sIdx === 0}
-                                        onClick={() => handleMoveOptionStep(idx, sIdx, sIdx - 1)}
-                                        title="Move step up"
-                                        className="p-1 text-slate-400 hover:text-white disabled:opacity-30 rounded hover:bg-slate-800 transition"
-                                      >
-                                        <ArrowUp className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        disabled={sIdx === (opt.steps?.length || 1) - 1}
-                                        onClick={() => handleMoveOptionStep(idx, sIdx, sIdx + 1)}
-                                        title="Move step down"
-                                        className="p-1 text-slate-400 hover:text-white disabled:opacity-30 rounded hover:bg-slate-800 transition"
-                                      >
-                                        <ArrowDown className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDuplicateOptionStep(idx, sIdx)}
-                                        title="Duplicate step"
-                                        className="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition"
-                                      >
-                                        <Copy className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveOptionStep(idx, sIdx)}
-                                        title="Remove step"
-                                        className="p-1 text-slate-400 hover:text-rose-400 rounded hover:bg-slate-800 transition"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
+                                        {/* Repeat Count */}
+                                        <div className="flex items-center gap-1">
+                                          <span className="text-[11px] text-slate-400">Repeat:</span>
+                                          <input
+                                            type="number"
+                                            min="1"
+                                            max="50"
+                                            value={step.repeat || 1}
+                                            onChange={e =>
+                                              handleUpdateOptionStep(idx, sIdx, { repeat: parseInt(e.target.value) || 1 })
+                                            }
+                                            className="w-12 px-1 py-0.5 rounded bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-amber-300 text-center font-bold"
+                                          />
+                                          <span className="text-[10px] text-slate-400">x</span>
+                                        </div>
+
+                                        {/* Dwell Delay */}
+                                        <div className="flex items-center gap-1" title="Dwell delay after sending this frame burst before executing the next step">
+                                          <span className="text-[11px] text-slate-400">Dwell:</span>
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="50"
+                                            value={step.delay_ms || 0}
+                                            onChange={e =>
+                                              handleUpdateOptionStep(idx, sIdx, { delay_ms: parseInt(e.target.value) || 0 })
+                                            }
+                                            className="w-16 px-1.5 py-0.5 rounded bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-purple-300 text-center font-bold"
+                                          />
+                                          <span className="text-[10px] text-slate-400">ms</span>
+                                        </div>
+
+                                        <div className="h-4 w-[1px] bg-slate-800 mx-0.5"></div>
+
+                                        {/* Reorder Buttons */}
+                                        <button
+                                          type="button"
+                                          disabled={sIdx === 0}
+                                          onClick={() => handleMoveOptionStep(idx, sIdx, sIdx - 1)}
+                                          title="Move step up"
+                                          className="p-1 text-slate-400 hover:text-white disabled:opacity-30 rounded hover:bg-slate-800 transition"
+                                        >
+                                          <ArrowUp className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={sIdx === (opt.steps?.length || 1) - 1}
+                                          onClick={() => handleMoveOptionStep(idx, sIdx, sIdx + 1)}
+                                          title="Move step down"
+                                          className="p-1 text-slate-400 hover:text-white disabled:opacity-30 rounded hover:bg-slate-800 transition"
+                                        >
+                                          <ArrowDown className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDuplicateOptionStep(idx, sIdx)}
+                                          title="Duplicate step"
+                                          className="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition"
+                                        >
+                                          <Copy className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveOptionStep(idx, sIdx)}
+                                          title="Remove step"
+                                          className="p-1 text-slate-400 hover:text-rose-400 rounded hover:bg-slate-800 transition"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
                                     </div>
-                                  </div>
 
-                                  <PayloadByteEditor
-                                    label=""
-                                    value={step.payload || '* * * * * * * *'}
-                                    onChange={val =>
-                                      handleUpdateOptionStep(idx, sIdx, {
-                                        payload: compileToByteMap(val)
-                                      })
-                                    }
-                                  />
-                                </div>
-                              ))}
+                                    <PayloadByteEditor
+                                      label=""
+                                      value={step.payload || '* * * * * * * *'}
+                                      onChange={val =>
+                                        handleUpdateOptionStep(idx, sIdx, {
+                                          payload: compileToByteMap(val)
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                );
+                              })}
                             </div>
                           )}
 
                           {/* Footer Actions */}
-                          <div className="flex items-center justify-between pt-1 text-xs">
-                            <button
-                              type="button"
-                              onClick={() => handleAddOptionStep(idx)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/70 font-medium transition"
-                            >
-                              <Plus className="w-3.5 h-3.5" /> Add Next Step
-                            </button>
+                          <div className="flex items-center justify-between pt-1 text-xs flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleAddOptionStep(idx, false)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/70 font-medium transition"
+                              >
+                                <Plus className="w-3.5 h-3.5" /> Add Frame Step
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleAddOptionStep(idx, true)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-800/70 font-medium transition"
+                              >
+                                <Clock className="w-3.5 h-3.5" /> Add Delay Step
+                              </button>
+                            </div>
 
                             {opt.steps && opt.steps.length > 0 && (
                               <button
