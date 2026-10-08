@@ -71,8 +71,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if isinstance(coord, CanDoDataCoordinator):
                 await coord.async_clear_hud_nav()
 
+    async def async_handle_set_audio_dsp(call: Any) -> None:
+        """Handle can_do.set_audio_dsp service call."""
+        data = call.data
+        for coord in hass.data[DOMAIN].values():
+            if isinstance(coord, CanDoDataCoordinator):
+                await coord.async_send_audio_dsp(
+                    volume=data.get("volume"),
+                    fader=data.get("fader"),
+                    balance=data.get("balance"),
+                    bass=data.get("bass"),
+                    midrange=data.get("midrange"),
+                    treble=data.get("treble"),
+                    quiet_mode=data.get("quiet_mode"),
+                    kids_mode=data.get("kids_mode"),
+                    master_mute=data.get("master_mute"),
+                    surround=data.get("surround"),
+                    sdvc=data.get("sdvc"),
+                    can_id=data.get("can_id"),
+                )
+
     hass.services.async_register(DOMAIN, "set_hud_nav", async_handle_set_hud_nav)
     hass.services.async_register(DOMAIN, "clear_hud_nav", async_handle_clear_hud_nav)
+    hass.services.async_register(DOMAIN, "set_audio_dsp", async_handle_set_audio_dsp)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

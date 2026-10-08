@@ -99,7 +99,8 @@ static void handle_incoming_command(const char* json_str) {
         uart_bridge_send_raw("{\"type\":\"pong\"}");
     } else if (strcmp(type, "lock") == 0 || strcmp(type, "unlock") == 0) {
         bool is_lock = (strcmp(type, "lock") == 0);
-        bool ok = queue_entity_command("doors_lock_state", is_lock ? "lock" : "unlock");
+        bool ok = queue_entity_command("door_locks", is_lock ? "lock" : "unlock");
+        if (!ok) ok = queue_entity_command("doors_lock_state", is_lock ? "lock" : "unlock");
         if (!ok) ok = queue_entity_command("bridge_door_lock_ctrl", is_lock ? "lock" : "unlock");
         uart_bridge_send_raw(ok ? "{\"type\":\"ack\",\"status\":\"queued\"}" : "{\"type\":\"nack\",\"error\":\"lock_failed\"}");
         cJSON_Delete(root);
@@ -225,15 +226,18 @@ static void handle_incoming_command(const char* json_str) {
             remote_climate_stop();
             uart_bridge_send_raw("{\"type\":\"ack\",\"action\":\"climate_stopped\"}");
         } else if (strcmp(action, "lock") == 0) {
-            bool ok = queue_entity_command("doors_lock_state", "lock");
+            bool ok = queue_entity_command("door_locks", "lock");
+            if (!ok) ok = queue_entity_command("doors_lock_state", "lock");
             if (!ok) ok = queue_entity_command("bridge_door_lock_ctrl", "lock");
             uart_bridge_send_raw(ok ? "{\"type\":\"ack\",\"action\":\"locked\"}" : "{\"type\":\"nack\",\"error\":\"lock_failed\"}");
         } else if (strcmp(action, "unlock") == 0) {
-            bool ok = queue_entity_command("doors_lock_state", "unlock");
+            bool ok = queue_entity_command("door_locks", "unlock");
+            if (!ok) ok = queue_entity_command("doors_lock_state", "unlock");
             if (!ok) ok = queue_entity_command("bridge_door_lock_ctrl", "unlock");
             uart_bridge_send_raw(ok ? "{\"type\":\"ack\",\"action\":\"unlocked\"}" : "{\"type\":\"nack\",\"error\":\"unlock_failed\"}");
         } else if (strcmp(action, "lock_toggle") == 0) {
-            bool ok = queue_entity_command("doors_lock_state", "toggle");
+            bool ok = queue_entity_command("door_locks", "toggle");
+            if (!ok) ok = queue_entity_command("doors_lock_state", "toggle");
             if (!ok) ok = queue_entity_command("bridge_door_lock_ctrl", "toggle");
             uart_bridge_send_raw(ok ? "{\"type\":\"ack\",\"action\":\"lock_toggled\"}" : "{\"type\":\"nack\",\"error\":\"toggle_failed\"}");
         } else {

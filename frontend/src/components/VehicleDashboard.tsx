@@ -300,8 +300,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       gearOptions,
       doors: getCanId('doors_status', '411'),
       doorsName: findCmd('doors_status')?.ha_metadata?.name || 'Body Closures & Doors',
-      locks: getCanId('doors_lock_state', '411'),
-      locksName: findCmd('doors_lock_state')?.ha_metadata?.name || 'Door Locks & Security',
+      locks: getCanId('door_locks', getCanId('doors_lock_state', '411')),
+      locksName: findCmd('door_locks')?.ha_metadata?.name || findCmd('doors_lock_state')?.ha_metadata?.name || 'Door Locks & Security',
       trunk: getCanId('trunk', '414'),
       trunkName: findCmd('trunk')?.ha_metadata?.name || 'Power Liftgate / Trunk',
       hood: getCanId('hood', '411'),
@@ -448,7 +448,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       else if (normState.includes('rear left door closed')) setDoors(d => ({ ...d, rearLeft: false }));
       if (normState.includes('rear right door opened')) setDoors(d => ({ ...d, rearRight: true }));
       else if (normState.includes('rear right door closed')) setDoors(d => ({ ...d, rearRight: false }));
-    } else if (entity === 'doors_lock_state') {
+    } else if (entity === 'door_locks' || entity === 'doors_lock_state') {
       setLocked(normState.includes('lock') && !normState.includes('unlock'));
     } else if (entity === 'trunk') {
       setTrunkOpen(normState.includes('open'));
@@ -1395,7 +1395,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                       setHoodOpen(false);
                       setTrunkOpen(false);
                     }
-                    dispatchCommand('doors_lock_state', next ? 'lock' : 'unlock', next ? 'All Doors Locked & Secured' : 'Vehicle Unlocked');
+                    dispatchCommand('door_locks', next ? 'lock' : 'unlock', next ? 'All Doors Locked & Secured' : 'Vehicle Unlocked');
                   }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 border transition-colors ${
                     locked

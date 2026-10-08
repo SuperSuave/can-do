@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.10.3-b002",
+  "can_do_version": "2026.10.3-b003",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -432,6 +432,40 @@
         "camera_360",
         "sunroof",
         "asd",
+        "preconditioning",
+        "v2l"
+      ]
+    },
+    {
+      "id": "all_gen2",
+      "name": "All Gen2 EV Models (Kona EV / Niro EV Gen1)",
+      "make": "Universal",
+      "model": "Gen 2 EV Models",
+      "trim": "All Trims",
+      "region": "universal",
+      "family": "all_gen2",
+      "features": [
+        "heated_seats",
+        "ventilated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "preconditioning"
+      ]
+    },
+    {
+      "id": "all_gen3",
+      "name": "All Gen3 EV Models (Niro EV Gen2 SG2 / Kona EV Gen2 SX2)",
+      "make": "Universal",
+      "model": "Gen 3 EV Models",
+      "trim": "All Trims",
+      "region": "universal",
+      "family": "all_gen3",
+      "features": [
+        "heated_seats",
+        "ventilated_seats",
+        "heated_wheel",
+        "power_tailgate",
+        "camera_360",
         "preconditioning",
         "v2l"
       ]
@@ -1744,7 +1778,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
+        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
       },
       "network": {
         "bus": 0,
@@ -1756,14 +1790,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "\u00b0F",
+        "unit": "°F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62\u00b0F",
+          "label": "62°F",
           "match": {
             "D4": "0x06"
           },
@@ -1784,7 +1818,7 @@
           "default": false
         },
         {
-          "label": "63\u00b0F",
+          "label": "63°F",
           "match": {
             "D4": "0x07"
           },
@@ -1805,7 +1839,7 @@
           "default": false
         },
         {
-          "label": "64\u00b0F",
+          "label": "64°F",
           "match": {
             "D4": "0x08"
           },
@@ -1826,7 +1860,7 @@
           "default": false
         },
         {
-          "label": "65\u00b0F",
+          "label": "65°F",
           "match": {
             "D4": "0x09"
           },
@@ -1847,7 +1881,7 @@
           "default": false
         },
         {
-          "label": "66\u00b0F",
+          "label": "66°F",
           "match": {
             "D4": "0x0A"
           },
@@ -1868,7 +1902,7 @@
           "default": false
         },
         {
-          "label": "67\u00b0F",
+          "label": "67°F",
           "match": {
             "D4": "0x0B"
           },
@@ -1889,7 +1923,7 @@
           "default": false
         },
         {
-          "label": "68\u00b0F",
+          "label": "68°F",
           "match": {
             "D4": "0x0C"
           },
@@ -1910,7 +1944,7 @@
           "default": false
         },
         {
-          "label": "69\u00b0F",
+          "label": "69°F",
           "match": {
             "D4": "0x0D"
           },
@@ -1931,7 +1965,7 @@
           "default": false
         },
         {
-          "label": "70\u00b0F",
+          "label": "70°F",
           "match": {
             "D4": "0x0E"
           },
@@ -1952,7 +1986,7 @@
           "default": true
         },
         {
-          "label": "71\u00b0F",
+          "label": "71°F",
           "match": {
             "D4": "0x0F"
           },
@@ -1973,7 +2007,7 @@
           "default": false
         },
         {
-          "label": "72\u00b0F",
+          "label": "72°F",
           "match": {
             "D4": "0x10"
           },
@@ -1994,7 +2028,7 @@
           "default": false
         },
         {
-          "label": "73\u00b0F",
+          "label": "73°F",
           "match": {
             "D4": "0x11"
           },
@@ -2015,7 +2049,7 @@
           "default": false
         },
         {
-          "label": "74\u00b0F",
+          "label": "74°F",
           "match": {
             "D4": "0x12"
           },
@@ -2036,7 +2070,7 @@
           "default": false
         },
         {
-          "label": "75\u00b0F",
+          "label": "75°F",
           "match": {
             "D4": "0x13"
           },
@@ -2057,7 +2091,7 @@
           "default": false
         },
         {
-          "label": "76\u00b0F",
+          "label": "76°F",
           "match": {
             "D4": "0x14"
           },
@@ -2078,7 +2112,7 @@
           "default": false
         },
         {
-          "label": "77\u00b0F",
+          "label": "77°F",
           "match": {
             "D4": "0x15"
           },
@@ -2099,7 +2133,7 @@
           "default": false
         },
         {
-          "label": "78\u00b0F",
+          "label": "78°F",
           "match": {
             "D4": "0x16"
           },
@@ -2120,7 +2154,7 @@
           "default": false
         },
         {
-          "label": "79\u00b0F",
+          "label": "79°F",
           "match": {
             "D4": "0x17"
           },
@@ -2141,7 +2175,7 @@
           "default": false
         },
         {
-          "label": "80\u00b0F",
+          "label": "80°F",
           "match": {
             "D4": "0x18"
           },
@@ -2162,7 +2196,7 @@
           "default": false
         },
         {
-          "label": "81\u00b0F",
+          "label": "81°F",
           "match": {
             "D4": "0x19"
           },
@@ -2183,7 +2217,7 @@
           "default": false
         },
         {
-          "label": "82\u00b0F",
+          "label": "82°F",
           "match": {
             "D4": "0x1A"
           },
@@ -2227,7 +2261,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
+        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
       },
       "network": {
         "bus": 0,
@@ -2239,14 +2273,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "\u00b0F",
+        "unit": "°F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62\u00b0F",
+          "label": "62°F",
           "match": {
             "D6": "0x06"
           },
@@ -2267,7 +2301,7 @@
           "default": false
         },
         {
-          "label": "63\u00b0F",
+          "label": "63°F",
           "match": {
             "D6": "0x07"
           },
@@ -2288,7 +2322,7 @@
           "default": false
         },
         {
-          "label": "64\u00b0F",
+          "label": "64°F",
           "match": {
             "D6": "0x08"
           },
@@ -2309,7 +2343,7 @@
           "default": false
         },
         {
-          "label": "65\u00b0F",
+          "label": "65°F",
           "match": {
             "D6": "0x09"
           },
@@ -2330,7 +2364,7 @@
           "default": false
         },
         {
-          "label": "66\u00b0F",
+          "label": "66°F",
           "match": {
             "D6": "0x0A"
           },
@@ -2351,7 +2385,7 @@
           "default": false
         },
         {
-          "label": "67\u00b0F",
+          "label": "67°F",
           "match": {
             "D6": "0x0B"
           },
@@ -2372,7 +2406,7 @@
           "default": false
         },
         {
-          "label": "68\u00b0F",
+          "label": "68°F",
           "match": {
             "D6": "0x0C"
           },
@@ -2393,7 +2427,7 @@
           "default": false
         },
         {
-          "label": "69\u00b0F",
+          "label": "69°F",
           "match": {
             "D6": "0x0D"
           },
@@ -2414,7 +2448,7 @@
           "default": false
         },
         {
-          "label": "70\u00b0F",
+          "label": "70°F",
           "match": {
             "D6": "0x0E"
           },
@@ -2435,7 +2469,7 @@
           "default": true
         },
         {
-          "label": "71\u00b0F",
+          "label": "71°F",
           "match": {
             "D6": "0x0F"
           },
@@ -2456,7 +2490,7 @@
           "default": false
         },
         {
-          "label": "72\u00b0F",
+          "label": "72°F",
           "match": {
             "D6": "0x10"
           },
@@ -2477,7 +2511,7 @@
           "default": false
         },
         {
-          "label": "73\u00b0F",
+          "label": "73°F",
           "match": {
             "D6": "0x11"
           },
@@ -2498,7 +2532,7 @@
           "default": false
         },
         {
-          "label": "74\u00b0F",
+          "label": "74°F",
           "match": {
             "D6": "0x12"
           },
@@ -2519,7 +2553,7 @@
           "default": false
         },
         {
-          "label": "75\u00b0F",
+          "label": "75°F",
           "match": {
             "D6": "0x13"
           },
@@ -2540,7 +2574,7 @@
           "default": false
         },
         {
-          "label": "76\u00b0F",
+          "label": "76°F",
           "match": {
             "D6": "0x14"
           },
@@ -2561,7 +2595,7 @@
           "default": false
         },
         {
-          "label": "77\u00b0F",
+          "label": "77°F",
           "match": {
             "D6": "0x15"
           },
@@ -2582,7 +2616,7 @@
           "default": false
         },
         {
-          "label": "78\u00b0F",
+          "label": "78°F",
           "match": {
             "D6": "0x16"
           },
@@ -2603,7 +2637,7 @@
           "default": false
         },
         {
-          "label": "79\u00b0F",
+          "label": "79°F",
           "match": {
             "D6": "0x17"
           },
@@ -2624,7 +2658,7 @@
           "default": false
         },
         {
-          "label": "80\u00b0F",
+          "label": "80°F",
           "match": {
             "D6": "0x18"
           },
@@ -2645,7 +2679,7 @@
           "default": false
         },
         {
-          "label": "81\u00b0F",
+          "label": "81°F",
           "match": {
             "D6": "0x19"
           },
@@ -2666,7 +2700,7 @@
           "default": false
         },
         {
-          "label": "82\u00b0F",
+          "label": "82°F",
           "match": {
             "D6": "0x1A"
           },
@@ -2947,7 +2981,7 @@
       "subcategory": "Doors & Latches"
     },
     {
-      "id": "doors_lock_state",
+      "id": "door_locks",
       "ha_metadata": {
         "name": "Door Locks",
         "domain": "lock",
@@ -2957,19 +2991,17 @@
         "all_egmp"
       ],
       "category": "Doors, Access & Security",
+      "subcategory": "Locks & Security",
+      "roles": [
+        "trigger",
+        "condition",
+        "action"
+      ],
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x411"
-      },
-      "roles": [
-        "trigger",
-        "condition"
-      ],
-      "contributor": {
-        "name": "Electroniq Buttons Community",
-        "github": "",
-        "notes": "Decoded from E-GMP Body_Status frame 1041 (0x411) bit 22"
+        "state_can_id": "0x411",
+        "action_can_id": "0x4A2"
       },
       "options": [
         {
@@ -2977,16 +3009,116 @@
           "match": {
             "D3": "0x40"
           },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x43",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0xC0",
+                "D8": "0x00"
+              },
+              "repeat": 4
+            },
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0xC3",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0xC0",
+                "D8": "0x00"
+              },
+              "repeat": 4
+            },
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0xC3",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0xD0",
+                "D8": "0x00"
+              },
+              "repeat": 4
+            },
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0xC3",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0xF0",
+                "D8": "0x00"
+              },
+              "repeat": 2
+            }
+          ],
           "default": true
         },
         {
           "label": "Locked / Lock",
           "match": {
             "D3": "0x00"
-          }
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x73",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0xFF",
+                "D8": "0x00"
+              },
+              "repeat": 4
+            },
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0xF3",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x7F",
+                "D8": "0x00"
+              },
+              "repeat": 4
+            },
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0xF3",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0xFF",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
         }
       ],
-      "subcategory": "Locks & Security"
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "tested_vehicle": "Kia EV6 GT-Line (US)",
+        "role": "Discovered Unlock"
+      }
     },
     {
       "id": "seatbelts_status",
@@ -4456,18 +4588,18 @@
       },
       "options": [
         {
-          "label": "Info Notification (\u24d8)",
+          "label": "Info Notification (ⓘ)",
           "level": "info",
           "popup_message": "Preconditioning Active",
           "default": true
         },
         {
-          "label": "Warning Notification (\u26a0)",
+          "label": "Warning Notification (⚠)",
           "level": "warning",
           "popup_message": "Battery Cold / Limited"
         },
         {
-          "label": "Fault Notification (\u203c)",
+          "label": "Fault Notification (‼)",
           "level": "error",
           "popup_message": "Charge Interrupted"
         },
@@ -5405,6 +5537,9 @@
       "variants": [
         {
           "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
             "kia_ev6",
             "genesis_gv60"
           ],
@@ -5447,8 +5582,11 @@
         },
         {
           "targets": [
+            "all_egmp",
             "hyundai_ioniq5",
-            "hyundai_ioniq6"
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
           ],
           "network": {
             "bus": 0,
@@ -5558,16 +5696,16 @@
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x226",
-        "unit": "\u00b0C"
+        "unit": "°C"
       },
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 \u00b0C"
+        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 °C"
       },
       "options": [
         {
-          "label": "Freezing (<= 0\u00b0C / 32\u00b0F)",
+          "label": "Freezing (<= 0°C / 32°F)",
           "evaluate": {
             "byte": "D4",
             "operator": "less_equal",
@@ -5576,7 +5714,7 @@
           "default": true
         },
         {
-          "label": "Cold (< 15\u00b0C / 59\u00b0F)",
+          "label": "Cold (< 15°C / 59°F)",
           "evaluate": {
             "byte": "D4",
             "operator": "less_than",
@@ -5584,7 +5722,7 @@
           }
         },
         {
-          "label": "Warm (> 25\u00b0C / 77\u00b0F)",
+          "label": "Warm (> 25°C / 77°F)",
           "evaluate": {
             "byte": "D4",
             "operator": "greater_than",
@@ -6171,19 +6309,19 @@
           "default": true
         },
         {
-          "label": "Rear Temp 20.0\u00b0C / 68\u00b0F",
+          "label": "Rear Temp 20.0°C / 68°F",
           "match": {
             "D6": "0x0C"
           }
         },
         {
-          "label": "Rear Temp 21.0\u00b0C / 70\u00b0F",
+          "label": "Rear Temp 21.0°C / 70°F",
           "match": {
             "D6": "0x0E"
           }
         },
         {
-          "label": "Rear Temp 22.0\u00b0C / 72\u00b0F",
+          "label": "Rear Temp 22.0°C / 72°F",
           "match": {
             "D6": "0x10"
           }
@@ -6704,7 +6842,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Right 90\u00b0",
+          "label": "Turn Right 90°",
           "match": {
             "D1": "0x03"
           },
@@ -6739,7 +6877,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Left 90\u00b0",
+          "label": "Turn Left 90°",
           "match": {
             "D1": "0x08"
           },
@@ -7287,28 +7425,64 @@
       "id": "ev_charge_port_lock_mode",
       "ha_metadata": {
         "name": "EV Charge Port Connector Auto-Lock",
-        "domain": "sensor",
+        "domain": "select",
         "icon": "mdi:lock-check"
       },
       "tags": [
-        "all_egmp"
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
       ],
       "category": "High Voltage & Charging",
       "subcategory": "Charging Status",
       "roles": [
         "sensor",
-        "state"
+        "state",
+        "action"
       ],
       "contributor": {
-        "name": "SuaveEV",
+        "name": "SuaveEV & HKMC Decompilation Research",
         "github": "supersuave",
-        "notes": "Charge port connector electronic locking latch configuration decoded from EV_CP5 frame 0x578 Byte D1 (0x01 = Always Locked while plugged in, 0x02 = Locked while actively charging then auto-unlock at 100%, 0x03 = Do Not Lock)."
+        "notes": "Charge port connector electronic locking latch configuration. Decoded from EV_CP5 (0x578) on Gen 2 and VCMS_02 (0x30C) on Gen 3 E-GMP (0x01 = Always Locked, 0x02 = Locked while charging, 0x03 = Do Not Lock)."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x578"
+        "state_can_id": "0x30C",
+        "action_can_id": "0x30C"
       },
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x30C",
+            "action_can_id": "0x30C"
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen3",
+            "kia_niro_ev",
+            "hyundai_kona_ev",
+            "kia_soul_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x578",
+            "action_can_id": "0x578"
+          }
+        }
+      ],
       "options": [
         {
           "label": "Always Locked (Plugged In)",
@@ -7316,6 +7490,9 @@
             "D1": "0x01"
           },
           "mask": "0xFF",
+          "payload": {
+            "D1": "0x01"
+          },
           "default": true
         },
         {
@@ -7323,14 +7500,20 @@
           "match": {
             "D1": "0x02"
           },
-          "mask": "0xFF"
+          "mask": "0xFF",
+          "payload": {
+            "D1": "0x02"
+          }
         },
         {
           "label": "Do Not Lock Connector",
           "match": {
             "D1": "0x03"
           },
-          "mask": "0xFF"
+          "mask": "0xFF",
+          "payload": {
+            "D1": "0x03"
+          }
         }
       ]
     },
@@ -7445,7 +7628,7 @@
         "name": "HV Battery Module Min & Max Temp",
         "domain": "sensor",
         "icon": "mdi:thermometer-chevron-up",
-        "unit_of_measurement": "\u00b0C"
+        "unit_of_measurement": "°C"
       },
       "tags": [
         "all_egmp"
@@ -7459,17 +7642,17 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40\u00b0C offset."
+        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40°C offset."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x5D7",
-        "unit": "\u00b0C"
+        "unit": "°C"
       },
       "options": [
         {
-          "label": "Battery Optimal Warm (20\u00b0C - 35\u00b0C)",
+          "label": "Battery Optimal Warm (20°C - 35°C)",
           "evaluate": {
             "byte": "D1",
             "operator": "greater_equal",
@@ -7478,7 +7661,7 @@
           "default": true
         },
         {
-          "label": "Battery High Temp (> 45\u00b0C / 113\u00b0F)",
+          "label": "Battery High Temp (> 45°C / 113°F)",
           "evaluate": {
             "byte": "D1",
             "operator": "greater_than",
@@ -7486,7 +7669,7 @@
           }
         },
         {
-          "label": "Battery Cold (< 10\u00b0C / 50\u00b0F)",
+          "label": "Battery Cold (< 10°C / 50°F)",
           "evaluate": {
             "byte": "D2",
             "operator": "less_than",
@@ -7494,7 +7677,7 @@
           }
         },
         {
-          "label": "Battery Freezing (< 0\u00b0C / 32\u00b0F)",
+          "label": "Battery Freezing (< 0°C / 32°F)",
           "evaluate": {
             "byte": "D2",
             "operator": "less_than",
@@ -7622,7 +7805,9 @@
         "icon": "mdi:calendar-clock"
       },
       "tags": [
-        "all_egmp"
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
       ],
       "category": "High Voltage & Charging",
       "subcategory": "Limits & V2L",
@@ -7631,16 +7816,48 @@
         "action"
       ],
       "contributor": {
-        "name": "SuaveEV",
+        "name": "SuaveEV & HKMC Decompilation Research",
         "github": "supersuave",
-        "notes": "Scheduled charging departure schedule (Days/Hour/Min) and slow/fast charge caps decoded from EV_CP1 frame 0x5D0 (Byte D5 = AC Slow Max SOC, Byte D6 = DC Fast Max SOC)."
+        "notes": "Scheduled charging departure schedule (Days/Hour/Min) and slow/fast charge caps decoded from EV_CP1 (0x5D0) on Gen 2 and VCMS_03 (0x321) on Gen 3 E-GMP (Byte D5 = AC Slow Max SOC, Byte D6 = DC Fast Max SOC)."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x5D0",
-        "action_can_id": "0x5D0"
+        "state_can_id": "0x321",
+        "action_can_id": "0x321"
       },
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x321",
+            "action_can_id": "0x321"
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen3",
+            "kia_niro_ev",
+            "hyundai_kona_ev",
+            "kia_soul_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x5D0",
+            "action_can_id": "0x5D0"
+          }
+        }
+      ],
       "options": [
         {
           "label": "Standard Schedule Active",
@@ -7762,7 +7979,7 @@
         "name": "Cabin Displayed Target Temperature",
         "domain": "sensor",
         "icon": "mdi:thermometer-lines",
-        "unit_of_measurement": "\u00b0F"
+        "unit_of_measurement": "°F"
       },
       "tags": [
         "all_egmp"
@@ -7776,31 +7993,31 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in \u00b0C x 0.5, Byte D3 = Driver Temp in \u00b0F integer)."
+        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in °C x 0.5, Byte D3 = Driver Temp in °F integer)."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x5F5",
-        "unit": "\u00b0F"
+        "unit": "°F"
       },
       "options": [
         {
-          "label": "68\u00b0F (20.0\u00b0C)",
+          "label": "68°F (20.0°C)",
           "match": {
             "D3": "0x44"
           },
           "mask": "0xFF"
         },
         {
-          "label": "70\u00b0F (21.0\u00b0C)",
+          "label": "70°F (21.0°C)",
           "match": {
             "D3": "0x46"
           },
           "mask": "0xFF"
         },
         {
-          "label": "72\u00b0F (22.0\u00b0C)",
+          "label": "72°F (22.0°C)",
           "match": {
             "D3": "0x48"
           },
@@ -7808,14 +8025,14 @@
           "default": true
         },
         {
-          "label": "74\u00b0F (23.5\u00b0C)",
+          "label": "74°F (23.5°C)",
           "match": {
             "D3": "0x4A"
           },
           "mask": "0xFF"
         },
         {
-          "label": "76\u00b0F (24.5\u00b0C)",
+          "label": "76°F (24.5°C)",
           "match": {
             "D3": "0x4C"
           },
@@ -8058,7 +8275,7 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s\u00b2 signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
+        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s² signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
       },
       "network": {
         "bus": 0,
@@ -8251,7 +8468,9 @@
         "icon": "mdi:car-back"
       },
       "tags": [
-        "all_egmp"
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
       ],
       "category": "Doors, Access & Security",
       "subcategory": "Trunk & Frunk",
@@ -8260,16 +8479,48 @@
         "sensor"
       ],
       "contributor": {
-        "name": "SuaveEV",
+        "name": "SuaveEV & HKMC Decompilation Research",
         "github": "supersuave",
-        "notes": "Telematics modem (TMU2 / 0x588) remote commands for Power Tailgate / Trunk open/close and remote power window roll-up/down."
+        "notes": "Telematics modem (TMU2 / 0x588) remote commands for Power Tailgate / Trunk open/close and remote power window roll-up/down. On Gen 3 E-GMP, telemetry position is verified over PTGM_01 (0x3A6)."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x588",
+        "state_can_id": "0x3A6",
         "action_can_id": "0x588"
       },
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x3A6",
+            "action_can_id": "0x588"
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen3",
+            "kia_niro_ev",
+            "hyundai_kona_ev",
+            "kia_soul_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x588",
+            "action_can_id": "0x588"
+          }
+        }
+      ],
       "options": [
         {
           "label": "Open Tailgate / Trunk",
@@ -8277,6 +8528,10 @@
             "D1": "0x01"
           },
           "mask": "0x0F",
+          "payload": {
+            "D1": "0x01",
+            "D2": "0x00"
+          },
           "default": true
         },
         {
@@ -8284,14 +8539,22 @@
           "match": {
             "D1": "0x02"
           },
-          "mask": "0x0F"
+          "mask": "0x0F",
+          "payload": {
+            "D1": "0x02",
+            "D2": "0x00"
+          }
         },
         {
           "label": "Roll Windows Up",
           "match": {
             "D2": "0x01"
           },
-          "mask": "0x0F"
+          "mask": "0x0F",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x01"
+          }
         }
       ]
     },
@@ -8604,25 +8867,93 @@
       "contributor": {
         "name": "SuaveEV & HKMC Decompilation Research",
         "github": "supersuave",
-        "notes": "Decoded from HKMC_RearCareMode (RearCareManager / IMicomAudioService): Mutes rear speakers and clamps front cabin volume to level 25 (0x19) or 7 on CAN ID 0x520 (AMP_HU_PE_01) / 0x60C."
+        "notes": "Decoded from HKMC_RearCareMode (RearCareManager / IMicomAudioService) & AMP_HU_PE_01: Mutes rear speakers (D8 bit 1 = 1 / 0x02), shifts fader fully forward (D3 = 0x00), and clamps front cabin volume to level 25 (0x19) or 7 on CAN ID 0x520 (Gen 2/C-CAN/M-CAN) or 0x60C (Gen 3 E-GMP)."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x520",
-        "action_can_id": "0x520"
+        "action_can_id": "0x520",
+        "base_payload": [
+          "0x19",
+          "0x00",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x00"
+        ]
       },
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x60C",
+            "action_can_id": "0x60C",
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen3",
+            "kia_niro_ev",
+            "hyundai_kona_ev",
+            "kia_soul_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x520",
+            "action_can_id": "0x520",
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        }
+      ],
       "options": [
         {
           "label": "Quiet Mode On",
           "match": {
-            "D8": "0x01"
+            "D8": "0x02"
           },
           "payload": {
             "D1": "0x19",
-            "D8": "0x01"
+            "D2": "0x00",
+            "D3": "0x00",
+            "D4": "0x0A",
+            "D5": "0x0A",
+            "D6": "0x0A",
+            "D7": "0x0A",
+            "D8": "0x02"
           },
-          "mask": "0x01"
+          "mask": "0x02"
         },
         {
           "label": "Quiet Mode Off",
@@ -8630,9 +8961,16 @@
             "D8": "0x00"
           },
           "payload": {
+            "D1": "0x19",
+            "D2": "0x00",
+            "D3": "0x0A",
+            "D4": "0x0A",
+            "D5": "0x0A",
+            "D6": "0x0A",
+            "D7": "0x0A",
             "D8": "0x00"
           },
-          "mask": "0x01",
+          "mask": "0x02",
           "default": true
         }
       ],
@@ -8660,14 +8998,76 @@
       "contributor": {
         "name": "SuaveEV & HKMC Decompilation Research",
         "github": "supersuave",
-        "notes": "Opposite of OEM Quiet Mode: Completely fades audio to the rear speakers (Fader = 0x14 / +10 Rear) and mutes front speakers (D8 bit 2 = 1) so adults can converse upfront while kids listen to music in the back."
+        "notes": "Opposite of OEM Quiet Mode decoded from AMP_HU_PE_01: Completely fades audio to rear speakers (Fader D3 = 0x14 / +10 Rear), mutes front speakers (D8 bit 2 = 1 / 0x04), and applies safe volume cap (D1 = 0x16 / 22) on CAN ID 0x520 (Gen 2/C-CAN/M-CAN) or 0x60C (Gen 3 E-GMP)."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x520",
-        "action_can_id": "0x520"
+        "action_can_id": "0x520",
+        "base_payload": [
+          "0x16",
+          "0x00",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x00"
+        ]
       },
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x60C",
+            "action_can_id": "0x60C",
+            "base_payload": [
+              "0x16",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen3",
+            "kia_niro_ev",
+            "hyundai_kona_ev",
+            "kia_soul_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x520",
+            "action_can_id": "0x520",
+            "base_payload": [
+              "0x16",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        }
+      ],
       "options": [
         {
           "label": "Kids Music Mode On",
@@ -8675,8 +9075,15 @@
             "D3": "0x14",
             "D8": "0x04"
           },
+          "mask": "0x04",
           "payload": {
+            "D1": "0x16",
+            "D2": "0x00",
             "D3": "0x14",
+            "D4": "0x0A",
+            "D5": "0x0A",
+            "D6": "0x0A",
+            "D7": "0x0A",
             "D8": "0x04"
           }
         },
@@ -8686,8 +9093,1020 @@
             "D3": "0x0A",
             "D8": "0x00"
           },
+          "mask": "0x04",
           "payload": {
+            "D1": "0x16",
+            "D2": "0x00",
             "D3": "0x0A",
+            "D4": "0x0A",
+            "D5": "0x0A",
+            "D6": "0x0A",
+            "D7": "0x0A",
+            "D8": "0x00"
+          },
+          "default": true
+        }
+      ],
+      "subcategory": "Audio & Media"
+    },
+    {
+      "id": "audio_master_mute",
+      "ha_metadata": {
+        "name": "Audio Master Mute",
+        "domain": "switch",
+        "icon": "mdi:volume-mute"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Cockpit & Controls",
+      "roles": [
+        "trigger",
+        "condition",
+        "state",
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "External DSP amplifier master mute command decoded from AMP_HU_PE_01 Byte 7 Bit 0 (0x01) on CAN ID 0x520 (Gen 2/C-CAN/M-CAN) or 0x60C (Gen 3 E-GMP)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x520",
+        "action_can_id": "0x520",
+        "base_payload": [
+          "0x19",
+          "0x00",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x00"
+        ]
+      },
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x60C",
+            "action_can_id": "0x60C",
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen3",
+            "kia_niro_ev",
+            "hyundai_kona_ev",
+            "kia_soul_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x520",
+            "action_can_id": "0x520",
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        }
+      ],
+      "options": [
+        {
+          "label": "Mute On",
+          "match": {
+            "D8": "0x01"
+          },
+          "mask": "0x01",
+          "payload": {
+            "D8": "0x01"
+          }
+        },
+        {
+          "label": "Mute Off",
+          "match": {
+            "D8": "0x00"
+          },
+          "mask": "0x01",
+          "payload": {
+            "D8": "0x00"
+          },
+          "default": true
+        }
+      ],
+      "subcategory": "Audio & Media"
+    },
+    {
+      "id": "audio_master_volume",
+      "ha_metadata": {
+        "name": "Audio Master Volume",
+        "domain": "number",
+        "icon": "mdi:volume-high"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Cockpit & Controls",
+      "roles": [
+        "trigger",
+        "condition",
+        "state",
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "External DSP amplifier master volume step decoded from AMP_HU_PE_01 Byte 0 (D1) on CAN ID 0x520 / 0x60C. 0 = Mute/0, max = 75 (0x4B) on premium systems (45 on standard)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x520",
+        "action_can_id": "0x520",
+        "byte": "D1",
+        "offset": 0,
+        "min": 0,
+        "max": 75,
+        "step": 1,
+        "base_payload": [
+          "0x19",
+          "0x00",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x00"
+        ]
+      },
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x60C",
+            "action_can_id": "0x60C",
+            "byte": "D1",
+            "offset": 0,
+            "min": 0,
+            "max": 75,
+            "step": 1,
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen3",
+            "kia_niro_ev",
+            "hyundai_kona_ev",
+            "kia_soul_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x520",
+            "action_can_id": "0x520",
+            "byte": "D1",
+            "offset": 0,
+            "min": 0,
+            "max": 75,
+            "step": 1,
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        }
+      ],
+      "subcategory": "Audio & Media"
+    },
+    {
+      "id": "audio_amp_fader",
+      "ha_metadata": {
+        "name": "Audio Fader (Front / Rear)",
+        "domain": "number",
+        "icon": "mdi:speaker"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Cockpit & Controls",
+      "roles": [
+        "trigger",
+        "condition",
+        "state",
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "External DSP amplifier Front-to-Rear speaker fader decoded from AMP_HU_PE_01 Byte 2 (D3) on CAN ID 0x520 / 0x60C. -10 = Full Front (0x00), 0 = Center 50/50 (0x0A), +10 = Full Rear (0x14)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x520",
+        "action_can_id": "0x520",
+        "byte": "D3",
+        "offset": 10,
+        "min": -10,
+        "max": 10,
+        "step": 1,
+        "base_payload": [
+          "0x19",
+          "0x00",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x00"
+        ]
+      },
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x60C",
+            "action_can_id": "0x60C",
+            "byte": "D3",
+            "offset": 10,
+            "min": -10,
+            "max": 10,
+            "step": 1,
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen3",
+            "kia_niro_ev",
+            "hyundai_kona_ev",
+            "kia_soul_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x520",
+            "action_can_id": "0x520",
+            "byte": "D3",
+            "offset": 10,
+            "min": -10,
+            "max": 10,
+            "step": 1,
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        }
+      ],
+      "subcategory": "Audio & Media"
+    },
+    {
+      "id": "audio_amp_balance",
+      "ha_metadata": {
+        "name": "Audio Balance (Left / Right)",
+        "domain": "number",
+        "icon": "mdi:scale-balance"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Cockpit & Controls",
+      "roles": [
+        "trigger",
+        "condition",
+        "state",
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "External DSP amplifier Left-to-Right speaker balance decoded from AMP_HU_PE_01 Byte 3 (D4) on CAN ID 0x520 / 0x60C. -10 = Full Left (0x00), 0 = Center (0x0A), +10 = Full Right (0x14)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x520",
+        "action_can_id": "0x520",
+        "byte": "D4",
+        "offset": 10,
+        "min": -10,
+        "max": 10,
+        "step": 1,
+        "base_payload": [
+          "0x19",
+          "0x00",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x00"
+        ]
+      },
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x60C",
+            "action_can_id": "0x60C",
+            "byte": "D4",
+            "offset": 10,
+            "min": -10,
+            "max": 10,
+            "step": 1,
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen3",
+            "kia_niro_ev",
+            "hyundai_kona_ev",
+            "kia_soul_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x520",
+            "action_can_id": "0x520",
+            "byte": "D4",
+            "offset": 10,
+            "min": -10,
+            "max": 10,
+            "step": 1,
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        }
+      ],
+      "subcategory": "Audio & Media"
+    },
+    {
+      "id": "audio_bass_band",
+      "ha_metadata": {
+        "name": "Audio Equalizer (Bass)",
+        "domain": "number",
+        "icon": "mdi:equalizer"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Cockpit & Controls",
+      "roles": [
+        "trigger",
+        "condition",
+        "state",
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "External DSP amplifier Bass EQ level decoded from AMP_HU_PE_01 Byte 4 (D5) on CAN ID 0x520 / 0x60C. -10 dB (0x00) to +10 dB (0x14), 0 dB Flat = 0x0A."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x520",
+        "action_can_id": "0x520",
+        "byte": "D5",
+        "offset": 10,
+        "min": -10,
+        "max": 10,
+        "step": 1,
+        "base_payload": [
+          "0x19",
+          "0x00",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x00"
+        ]
+      },
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x60C",
+            "action_can_id": "0x60C",
+            "byte": "D5",
+            "offset": 10,
+            "min": -10,
+            "max": 10,
+            "step": 1,
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen3",
+            "kia_niro_ev",
+            "hyundai_kona_ev",
+            "kia_soul_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x520",
+            "action_can_id": "0x520",
+            "byte": "D5",
+            "offset": 10,
+            "min": -10,
+            "max": 10,
+            "step": 1,
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        }
+      ],
+      "subcategory": "Audio & Media"
+    },
+    {
+      "id": "audio_midrange_band",
+      "ha_metadata": {
+        "name": "Audio Equalizer (Midrange)",
+        "domain": "number",
+        "icon": "mdi:equalizer"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Cockpit & Controls",
+      "roles": [
+        "trigger",
+        "condition",
+        "state",
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "External DSP amplifier Midrange EQ level decoded from AMP_HU_PE_01 Byte 5 (D6) on CAN ID 0x520 / 0x60C. -10 dB (0x00) to +10 dB (0x14), 0 dB Flat = 0x0A."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x520",
+        "action_can_id": "0x520",
+        "byte": "D6",
+        "offset": 10,
+        "min": -10,
+        "max": 10,
+        "step": 1,
+        "base_payload": [
+          "0x19",
+          "0x00",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x00"
+        ]
+      },
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x60C",
+            "action_can_id": "0x60C",
+            "byte": "D6",
+            "offset": 10,
+            "min": -10,
+            "max": 10,
+            "step": 1,
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen3",
+            "kia_niro_ev",
+            "hyundai_kona_ev",
+            "kia_soul_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x520",
+            "action_can_id": "0x520",
+            "byte": "D6",
+            "offset": 10,
+            "min": -10,
+            "max": 10,
+            "step": 1,
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        }
+      ],
+      "subcategory": "Audio & Media"
+    },
+    {
+      "id": "audio_treble_band",
+      "ha_metadata": {
+        "name": "Audio Equalizer (Treble)",
+        "domain": "number",
+        "icon": "mdi:equalizer"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Cockpit & Controls",
+      "roles": [
+        "trigger",
+        "condition",
+        "state",
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "External DSP amplifier Treble EQ level decoded from AMP_HU_PE_01 Byte 6 (D7) on CAN ID 0x520 / 0x60C. -10 dB (0x00) to +10 dB (0x14), 0 dB Flat = 0x0A."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x520",
+        "action_can_id": "0x520",
+        "byte": "D7",
+        "offset": 10,
+        "min": -10,
+        "max": 10,
+        "step": 1,
+        "base_payload": [
+          "0x19",
+          "0x00",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x00"
+        ]
+      },
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x60C",
+            "action_can_id": "0x60C",
+            "byte": "D7",
+            "offset": 10,
+            "min": -10,
+            "max": 10,
+            "step": 1,
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen3",
+            "kia_niro_ev",
+            "hyundai_kona_ev",
+            "kia_soul_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x520",
+            "action_can_id": "0x520",
+            "byte": "D7",
+            "offset": 10,
+            "min": -10,
+            "max": 10,
+            "step": 1,
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        }
+      ],
+      "subcategory": "Audio & Media"
+    },
+    {
+      "id": "audio_surround_sound",
+      "ha_metadata": {
+        "name": "Surround Sound (QuantumLogic 3D)",
+        "domain": "switch",
+        "icon": "mdi:surround-sound-7-1"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Cockpit & Controls",
+      "roles": [
+        "trigger",
+        "condition",
+        "state",
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "External DSP amplifier Surround Sound / QuantumLogic 3D mode decoded from AMP_HU_PE_01 Byte 7 Bit 4 (0x10) on CAN ID 0x520 / 0x60C."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x520",
+        "action_can_id": "0x520",
+        "base_payload": [
+          "0x19",
+          "0x00",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x00"
+        ]
+      },
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x60C",
+            "action_can_id": "0x60C",
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen3",
+            "kia_niro_ev",
+            "hyundai_kona_ev",
+            "kia_soul_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x520",
+            "action_can_id": "0x520",
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        }
+      ],
+      "options": [
+        {
+          "label": "Surround Sound On",
+          "match": {
+            "D8": "0x10"
+          },
+          "mask": "0x10",
+          "payload": {
+            "D8": "0x10"
+          }
+        },
+        {
+          "label": "Surround Sound Off",
+          "match": {
+            "D8": "0x00"
+          },
+          "mask": "0x10",
+          "payload": {
+            "D8": "0x00"
+          },
+          "default": true
+        }
+      ],
+      "subcategory": "Audio & Media"
+    },
+    {
+      "id": "audio_sdvc",
+      "ha_metadata": {
+        "name": "Speed-Dependent Volume Control (SDVC)",
+        "domain": "switch",
+        "icon": "mdi:car-speed-limiter"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Cockpit & Controls",
+      "roles": [
+        "trigger",
+        "condition",
+        "state",
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "External DSP amplifier Speed-Dependent Volume Control (SDVC) curve toggle decoded from AMP_HU_PE_01 Byte 7 Bit 3 (0x08) on CAN ID 0x520 / 0x60C."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x520",
+        "action_can_id": "0x520",
+        "base_payload": [
+          "0x19",
+          "0x00",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x0A",
+          "0x00"
+        ]
+      },
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x60C",
+            "action_can_id": "0x60C",
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen3",
+            "kia_niro_ev",
+            "hyundai_kona_ev",
+            "kia_soul_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x520",
+            "action_can_id": "0x520",
+            "base_payload": [
+              "0x19",
+              "0x00",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x0A",
+              "0x00"
+            ]
+          }
+        }
+      ],
+      "options": [
+        {
+          "label": "SDVC On",
+          "match": {
+            "D8": "0x08"
+          },
+          "mask": "0x08",
+          "payload": {
+            "D8": "0x08"
+          }
+        },
+        {
+          "label": "SDVC Off",
+          "match": {
+            "D8": "0x00"
+          },
+          "mask": "0x08",
+          "payload": {
             "D8": "0x00"
           },
           "default": true
@@ -8776,7 +10195,7 @@
       "contributor": {
         "name": "SuaveEV & HKMC Decompilation Research",
         "github": "supersuave",
-        "notes": "Direct Head Unit DATC (Dual Automatic Temperature Control) CAN frame (0x520 / 0x5A0) decoded from HKMC_TAppService DATCManager. Byte 0 enables HVAC (0x01), Byte 1 sets target temp in 0.5 deg C steps (raw = Temp_C * 2, e.g. 72F = 22.0C = 0x2C), Byte 2 controls blower & auto mode. The vehicle VCU automatically engages the High Voltage contactors and runs the electric compressor / PTC heater when this frame is periodically broadcast and interlocks are satisfied."
+        "notes": "Direct Head Unit DATC (Dual Automatic Temperature Control) CAN frame (0x520 / 0x5A0) decoded from HKMC_TAppService DATCManager. Byte 0 enables HVAC (0x01), Byte 1 sets target temp in 0.5 deg C steps (raw = Temp_C * 2, e.g. 68°F=20.0°C=0x28, 70°F=21.0°C=0x2A, 72°F=22.0°C=0x2C, 74°F=23.5°C=0x2F, 76°F=24.5°C=0x31), Byte 2 controls blower & auto mode (0x04), Byte 3 controls air distribution (0x01 vent). The vehicle VCU automatically engages High Voltage contactors and runs the electric compressor / PTC heater when this frame is periodically broadcast alongside 0x4F1 CLU keep-alive."
       },
       "network": {
         "bus": 0,
@@ -8786,7 +10205,7 @@
       },
       "options": [
         {
-          "label": "Remote Climate 72\u00b0F Auto",
+          "label": "Remote Climate 72°F (22.0°C) Auto",
           "match": {
             "D1": "0x01",
             "D2": "0x2C"
@@ -8802,6 +10221,74 @@
             "D8": "0x00"
           },
           "default": true
+        },
+        {
+          "label": "Remote Climate 68°F (20.0°C) Auto",
+          "match": {
+            "D1": "0x01",
+            "D2": "0x28"
+          },
+          "payload": {
+            "D1": "0x01",
+            "D2": "0x28",
+            "D3": "0x04",
+            "D4": "0x01",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          }
+        },
+        {
+          "label": "Remote Climate 70°F (21.0°C) Auto",
+          "match": {
+            "D1": "0x01",
+            "D2": "0x2A"
+          },
+          "payload": {
+            "D1": "0x01",
+            "D2": "0x2A",
+            "D3": "0x04",
+            "D4": "0x01",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          }
+        },
+        {
+          "label": "Remote Climate 74°F (23.5°C) Auto",
+          "match": {
+            "D1": "0x01",
+            "D2": "0x2F"
+          },
+          "payload": {
+            "D1": "0x01",
+            "D2": "0x2F",
+            "D3": "0x04",
+            "D4": "0x01",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          }
+        },
+        {
+          "label": "Remote Climate 76°F (24.5°C) Auto",
+          "match": {
+            "D1": "0x01",
+            "D2": "0x31"
+          },
+          "payload": {
+            "D1": "0x01",
+            "D2": "0x31",
+            "D3": "0x04",
+            "D4": "0x01",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          }
         },
         {
           "label": "Remote Climate Off",
@@ -8821,6 +10308,707 @@
         }
       ],
       "subcategory": "Remote Climate Controls"
+    },
+    {
+      "id": "tpms_front_tires",
+      "ha_metadata": {
+        "name": "Front Tire Pressure & Temperature (TPMS)",
+        "domain": "sensor",
+        "icon": "mdi:tire"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Cockpit & Controls",
+      "subcategory": "Tire Pressure (TPMS)",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "Front axle tire pressure and temperature telemetry decoded from TPMS_01_200ms_1 (0x3A1). Bytes 0-1 Front Left PSI/kPa, Byte 2 Front Left temp, Bytes 3-4 Front Right PSI/kPa, Byte 5 Front Right temp, Byte 6 Low pressure alert flag."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x3A1"
+      },
+      "options": [
+        {
+          "label": "Normal Pressure",
+          "match": {
+            "D7": "0x00"
+          },
+          "mask": "0x01",
+          "default": true
+        },
+        {
+          "label": "Low Pressure Warning",
+          "match": {
+            "D7": "0x01"
+          },
+          "mask": "0x01"
+        }
+      ]
+    },
+    {
+      "id": "tpms_rear_tires",
+      "ha_metadata": {
+        "name": "Rear Tire Pressure & Temperature (TPMS)",
+        "domain": "sensor",
+        "icon": "mdi:tire"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Cockpit & Controls",
+      "subcategory": "Tire Pressure (TPMS)",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "Rear axle tire pressure and temperature telemetry decoded from TPMS_01_200ms_2 (0x3A2). Bytes 0-1 Rear Left PSI/kPa, Byte 2 Rear Left temp, Bytes 3-4 Rear Right PSI/kPa, Byte 5 Rear Right temp, Byte 6 Low pressure alert flag."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x3A2"
+      },
+      "options": [
+        {
+          "label": "Normal Pressure",
+          "match": {
+            "D7": "0x00"
+          },
+          "mask": "0x01",
+          "default": true
+        },
+        {
+          "label": "Low Pressure Warning",
+          "match": {
+            "D7": "0x01"
+          },
+          "mask": "0x01"
+        }
+      ]
+    },
+    {
+      "id": "ptgm_power_tailgate",
+      "ha_metadata": {
+        "name": "Power Tailgate Module (Liftgate Position)",
+        "domain": "cover",
+        "icon": "mdi:car-liftgate"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Trunk & Frunk",
+      "roles": [
+        "sensor",
+        "state",
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "Power Tailgate Module telemetry on CAN 0x3A6 (PTGM_01_200ms) and active command on 0x588 (TMU2). Byte 0 reports opening position (0% closed to 100% open). Byte 1 reports state (Closed, Opening, Closing, Paused, Anti-pinch reverse)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x3A6",
+        "action_can_id": "0x588"
+      },
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x3A6",
+            "action_can_id": "0x588"
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen3",
+            "kia_niro_ev",
+            "hyundai_kona_ev",
+            "kia_soul_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x588",
+            "action_can_id": "0x588"
+          }
+        }
+      ],
+      "options": [
+        {
+          "label": "Tailgate Closed",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0x0F",
+          "default": true
+        },
+        {
+          "label": "Tailgate Opening",
+          "match": {
+            "D2": "0x01"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Tailgate Closing",
+          "match": {
+            "D2": "0x02"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Tailgate Hold / Paused",
+          "match": {
+            "D2": "0x03"
+          },
+          "mask": "0x0F"
+        },
+        {
+          "label": "Anti-Pinch Reverse",
+          "match": {
+            "D2": "0x04"
+          },
+          "mask": "0x0F"
+        }
+      ]
+    },
+    {
+      "id": "ev_scheduled_cabin_climate",
+      "ha_metadata": {
+        "name": "Scheduled Departure Cabin Pre-Conditioning & Tariffs",
+        "domain": "switch",
+        "icon": "mdi:clock-digital"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "High Voltage & Charging",
+      "subcategory": "Limits & V2L",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "Scheduled pre-departure cabin climate heating/cooling and off-peak utility electricity tariff charging window. Decoded from EV_CP2 (0x450) on Gen 2 and VCMS_03 (0x321) on Gen 3 E-GMP."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x450",
+        "action_can_id": "0x450"
+      },
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x321",
+            "action_can_id": "0x321"
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen3",
+            "kia_niro_ev",
+            "hyundai_kona_ev",
+            "kia_soul_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x450",
+            "action_can_id": "0x450"
+          }
+        }
+      ],
+      "options": [
+        {
+          "label": "Departure Climate Active",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x01",
+          "payload": {
+            "D1": "0x01",
+            "D2": "0x00",
+            "D3": "0x00"
+          }
+        },
+        {
+          "label": "Departure Climate Off",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0x01",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x00",
+            "D3": "0x00"
+          },
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "datc_passenger_climate_comfort",
+      "ha_metadata": {
+        "name": "Passenger Cabin Climate & Seat Comfort",
+        "domain": "climate",
+        "icon": "mdi:car-seat-heater"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "Cabin Climate",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "Passenger temperature setpoint, rear defroster, and heated/ventilated seat comfort levels. Decoded from DATC_HU_PE_02 (0x5CC) on Gen 2 and DATC_01 (0x148) on Gen 3 E-GMP."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x5CC",
+        "action_can_id": "0x5CC"
+      },
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x148",
+            "action_can_id": "0x148"
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen3",
+            "kia_niro_ev",
+            "hyundai_kona_ev",
+            "kia_soul_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x5CC",
+            "action_can_id": "0x5CC"
+          }
+        }
+      ],
+      "options": [
+        {
+          "label": "Passenger 72°F (22.0°C)",
+          "match": {
+            "D4": "0x10"
+          },
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x00",
+            "D3": "0x00",
+            "D4": "0x10"
+          },
+          "default": true
+        },
+        {
+          "label": "Passenger 68°F (20.0°C)",
+          "match": {
+            "D4": "0x0C"
+          },
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x00",
+            "D3": "0x00",
+            "D4": "0x0C"
+          }
+        },
+        {
+          "label": "Passenger 76°F (24.5°C)",
+          "match": {
+            "D4": "0x14"
+          },
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x00",
+            "D3": "0x00",
+            "D4": "0x14"
+          }
+        }
+      ]
+    },
+    {
+      "id": "telematics_remote_security",
+      "ha_metadata": {
+        "name": "Telematics Remote Ignition & Security Immobilizer",
+        "domain": "switch",
+        "icon": "mdi:car-key"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Access & Wakeup",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "Telematics Modem Unit remote vehicle ignition start/stop, stolen vehicle slowdown (SVSD), and immobilizer alarm trigger on CAN 0x502 (TMU11)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x502",
+        "action_can_id": "0x502"
+      },
+      "options": [
+        {
+          "label": "Remote Ignition Start",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x0F",
+          "payload": {
+            "D1": "0x01",
+            "D2": "0x00",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          }
+        },
+        {
+          "label": "Remote Ignition Stop / Normal",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0x0F",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x00",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "audio_chime_nav_mix",
+      "ha_metadata": {
+        "name": "Audio Prompts & ADAS Chime Gain Matrix",
+        "domain": "number",
+        "icon": "mdi:bell-ring"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Cockpit & Controls",
+      "subcategory": "Audio & Media",
+      "roles": [
+        "trigger",
+        "condition",
+        "state",
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "External DSP amplifier chime and navigation speech attenuation matrix on CAN 0x60D (AMP_HU_PE_02). Byte 0: ADAS safety warning chime volume. Byte 1: Navigation speech ducking gain. Byte 2: Touch beep feedback level."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x60D",
+        "action_can_id": "0x60D",
+        "byte": "D1",
+        "offset": 0,
+        "min": 0,
+        "max": 15,
+        "step": 1,
+        "base_payload": [
+          "0x08",
+          "0x05",
+          "0x03",
+          "0x00",
+          "0x00",
+          "0x00",
+          "0x00",
+          "0x00"
+        ]
+      }
+    },
+    {
+      "id": "audio_amp_diagnostics",
+      "ha_metadata": {
+        "name": "DSP Amplifier Hardware Health & Diagnostics",
+        "domain": "sensor",
+        "icon": "mdi:amplifier"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Cockpit & Controls",
+      "subcategory": "Audio & Media",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "External DSP audio amplifier hardware power state, thermal status, and speaker impedance short diagnostics on CAN 0x60F (AMP_HU_PE_04)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x60F"
+      },
+      "options": [
+        {
+          "label": "Amplifier Normal / Active",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x01",
+          "default": true
+        },
+        {
+          "label": "Amplifier Thermal Derate",
+          "match": {
+            "D2": "0x01"
+          },
+          "mask": "0x01"
+        },
+        {
+          "label": "Speaker Line Fault",
+          "match": {
+            "D3": "0x01"
+          },
+          "mask": "0x01"
+        }
+      ]
+    },
+    {
+      "id": "telematics_remote_ig3_relay",
+      "ha_metadata": {
+        "name": "Telematics IG3 Power Relay & Remote Climate Trigger",
+        "domain": "switch",
+        "icon": "mdi:power-cycle"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Access & Wakeup",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "Telematics Modem Unit IG3 power relay activation and remote climate trigger on CAN 0x587 (TMU1). Required burst transmission to latch ignition relay prior to climate or remote commands."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x587",
+        "action_can_id": "0x587"
+      },
+      "options": [
+        {
+          "label": "IG3 Power Relay Engaged",
+          "match": {
+            "D1": "0x11"
+          },
+          "mask": "0xFF",
+          "payload": {
+            "D1": "0x11",
+            "D2": "0x00",
+            "D3": "0x00",
+            "D4": "0x01",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          }
+        },
+        {
+          "label": "IG3 Power Relay Disengaged",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0xFF",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x00",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "audio_spatial_sound_profile",
+      "ha_metadata": {
+        "name": "Spatial Audio & Active Sound Design (e-ASD)",
+        "domain": "select",
+        "icon": "mdi:surround-sound"
+      },
+      "tags": [
+        "all_egmp",
+        "all_gen2",
+        "all_gen3"
+      ],
+      "category": "Cockpit & Controls",
+      "subcategory": "Audio & Media",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV & HKMC Decompilation Research",
+        "github": "supersuave",
+        "notes": "QuantumLogic 3D soundstage immersion and Virtual Active Sound Design (e-ASD powertrain sound synthesis) on CAN 0x60E (AMP_HU_PE_03). D1: QuantumLogic 3D Stage (0=Off, 1=Audience, 2=On Stage), D2: e-ASD Profile (0=Off, 1=Soft, 2=Normal, 3=Enhanced)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x60E",
+        "action_can_id": "0x60E"
+      },
+      "options": [
+        {
+          "label": "Natural / Authentic (e-ASD Off)",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0x0F",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x00",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "default": true
+        },
+        {
+          "label": "QuantumLogic Audience (e-ASD Normal)",
+          "match": {
+            "D2": "0x02"
+          },
+          "mask": "0x0F",
+          "payload": {
+            "D1": "0x01",
+            "D2": "0x02",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          }
+        },
+        {
+          "label": "QuantumLogic On Stage (e-ASD Enhanced)",
+          "match": {
+            "D2": "0x03"
+          },
+          "mask": "0x0F",
+          "payload": {
+            "D1": "0x02",
+            "D2": "0x03",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          }
+        }
+      ]
     }
   ],
   "automations": [
@@ -9026,7 +11214,7 @@
         {
           "id": "act_unlock_doors",
           "type": "entity_command",
-          "entity_id": "doors_lock_state",
+          "entity_id": "door_locks",
           "command": "Unlock"
         }
       ]

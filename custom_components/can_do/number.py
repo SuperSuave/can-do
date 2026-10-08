@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .catalog_loader import get_d_index
+from .catalog_loader import get_d_index, parse_hex_val
 from .const import DOMAIN
 from .coordinator import CanDoDataCoordinator
 from .entity import CanDoEntity
@@ -59,7 +59,8 @@ class CanDoNumberEntity(CanDoEntity, NumberEntity):
         idx = get_d_index(self.byte_str)
         if 0 <= idx < len(payload):
             raw = payload[idx]
-            self._value = float(raw - self.offset)
+            val = float(raw - self.offset)
+            self._value = max(self._attr_native_min_value, min(self._attr_native_max_value, val))
 
         return self._value
 
@@ -67,7 +68,21 @@ class CanDoNumberEntity(CanDoEntity, NumberEntity):
         """Set new numeric value on CAN bus."""
         raw_val = round(value + self.offset) & 0xFF
         idx = get_d_index(self.byte_str)
-        data = [0] * 8
+
+        # Preserve latest known CAN frame or fall back to neutral base payload
+        latest = self.coordinator.get_can_payload(self.state_can_id) if self.state_can_id else None
+        if latest and len(latest) == 8:
+            data = list(latest)
+        else:
+            net_base = self.command.get("network", {}).get("base_payload")
+            if isinstance(net_base, list) and len(net_base) == 8:
+                data = []
+                for b in net_base:
+                    val, _ = parse_hex_val(b) if isinstance(b, str) else (int(b), False)
+                    data.append(val & 0xFF)
+            else:
+                data = [0] * 8
+
         if 0 <= idx < 8:
             data[idx] = raw_val
 

@@ -348,3 +348,96 @@ class CanDoDataCoordinator:
         _LOGGER.info("Clearing HUD navigation on %s", nav_topic)
         await mqtt.async_publish(self.hass, nav_topic, json_payload, qos=1)
 
+    async def async_send_audio_dsp(
+        self,
+        volume: int | None = None,
+        fader: int | None = None,
+        balance: int | None = None,
+        bass: int | None = None,
+        midrange: int | None = None,
+        treble: int | None = None,
+        quiet_mode: bool | None = None,
+        kids_mode: bool | None = None,
+        master_mute: bool | None = None,
+        surround: bool | None = None,
+        sdvc: bool | None = None,
+        can_id: str | None = None,
+    ) -> None:
+        """Send DSP external amplifier audio control command on CAN 0x520 / 0x60C."""
+        target_can_id = can_id
+        if not target_can_id:
+            target_can_id = (
+                "0x60C"
+                if "egmp" in self.vehicle_id
+                or self.vehicle_id.startswith("hi5")
+                or self.vehicle_id.startswith("ev6")
+                or self.vehicle_id.startswith("gv60")
+                else "0x520"
+            )
+
+        cached = self.get_can_payload(target_can_id)
+        if cached and len(cached) == 8:
+            data = list(cached)
+        else:
+            data = [0x19, 0x00, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x00]
+
+        if volume is not None:
+            data[0] = max(0, min(75, int(volume)))
+
+        if fader is not None:
+            data[2] = max(0, min(20, int(fader + 10)))
+
+        if balance is not None:
+            data[3] = max(0, min(20, int(balance + 10)))
+
+        if bass is not None:
+            data[4] = max(0, min(20, int(bass + 10)))
+
+        if midrange is not None:
+            data[5] = max(0, min(20, int(midrange + 10)))
+
+        if treble is not None:
+            data[6] = max(0, min(20, int(treble + 10)))
+
+        if master_mute is not None:
+            if master_mute:
+                data[7] |= 0x01
+            else:
+                data[7] &= ~0x01
+
+        if quiet_mode is not None:
+            if quiet_mode:
+                data[7] |= 0x02
+                if data[0] > 25:
+                    data[0] = 25
+                data[2] = 0x00
+            else:
+                data[7] &= ~0x02
+
+        if kids_mode is not None:
+            if kids_mode:
+                data[7] |= 0x04
+                data[2] = 0x14
+                if data[0] > 25:
+                    data[0] = 25
+            else:
+                data[7] &= ~0x04
+
+        if sdvc is not None:
+            if sdvc:
+                data[7] |= 0x08
+            else:
+                data[7] &= ~0x08
+
+        if surround is not None:
+            if surround:
+                data[7] |= 0x10
+            else:
+                data[7] &= ~0x10
+
+        hex_payload = "".join(f"{b:02X}" for b in data)
+        steps = [{"payload": hex_payload, "repeat": 1, "delay_ms": 20}]
+        _LOGGER.info("Sending Audio DSP command to %s: %s", target_can_id, hex_payload)
+        await self.async_send_action(target_can_id, 20, steps)
+
+

@@ -125,9 +125,21 @@ def resolve_variant(command: dict[str, Any], vehicle_id: str) -> dict[str, Any]:
     vehicle = get_vehicle_definition(vehicle_id)
     family = vehicle.get("family", "") if vehicle else ""
 
+    EGMP_FAMILIES = {"all_egmp", "hyundai_ioniq5", "hyundai_ioniq6", "kia_ev6", "genesis_gv60"}
+    GEN2_GEN3_FAMILIES = {"all_gen2", "all_gen3", "kia_niro_ev", "hyundai_kona_ev", "kia_soul_ev"}
+
     for variant in variants:
         targets = variant.get("targets", [])
-        if vehicle_id in targets or (family and family in targets):
+        is_match = (
+            vehicle_id in targets
+            or (family and family in targets)
+            or ("all_egmp" in targets and (family in EGMP_FAMILIES or vehicle_id in EGMP_FAMILIES))
+            or (
+                ("all_gen2" in targets or "all_gen3" in targets)
+                and (family in GEN2_GEN3_FAMILIES or vehicle_id in GEN2_GEN3_FAMILIES)
+            )
+        )
+        if is_match:
             resolved = dict(command)
             if "network" in variant:
                 resolved["network"] = variant["network"]

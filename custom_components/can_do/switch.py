@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .can_utils import build_action_steps
-from .catalog_loader import check_match
+from .catalog_loader import check_match, parse_hex_val
 from .const import DOMAIN
 from .coordinator import CanDoDataCoordinator
 from .entity import CanDoEntity
@@ -80,7 +80,21 @@ class CanDoSwitchEntity(CanDoEntity, SwitchEntity):
                 target_opt = opt
                 break
 
-        steps = build_action_steps(self.command, target_opt)
+        # Resolve base_payload from live CAN state or command network defaults
+        base_payload = None
+        if self.state_can_id:
+            curr = self.coordinator.get_can_payload(self.state_can_id)
+            if curr and len(curr) == 8:
+                base_payload = list(curr)
+        if not base_payload:
+            net_base = self.command.get("network", {}).get("base_payload")
+            if isinstance(net_base, list) and len(net_base) == 8:
+                base_payload = []
+                for b in net_base:
+                    val, _ = parse_hex_val(b) if isinstance(b, str) else (int(b), False)
+                    base_payload.append(val & 0xFF)
+
+        steps = build_action_steps(self.command, target_opt, base_payload)
         if steps:
             await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
 
@@ -100,7 +114,21 @@ class CanDoSwitchEntity(CanDoEntity, SwitchEntity):
                 target_opt = opt
                 break
 
-        steps = build_action_steps(self.command, target_opt)
+        # Resolve base_payload from live CAN state or command network defaults
+        base_payload = None
+        if self.state_can_id:
+            curr = self.coordinator.get_can_payload(self.state_can_id)
+            if curr and len(curr) == 8:
+                base_payload = list(curr)
+        if not base_payload:
+            net_base = self.command.get("network", {}).get("base_payload")
+            if isinstance(net_base, list) and len(net_base) == 8:
+                base_payload = []
+                for b in net_base:
+                    val, _ = parse_hex_val(b) if isinstance(b, str) else (int(b), False)
+                    base_payload.append(val & 0xFF)
+
+        steps = build_action_steps(self.command, target_opt, base_payload)
         if steps:
             await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
 

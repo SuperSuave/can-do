@@ -125,3 +125,106 @@ set_hud_nav:
 clear_hud_nav:
   name: Clear HUD Navigation
   description: Gracefully dismiss and clear active turn-by-turn guidance graphics from the Head-Up Display.
+
+set_audio_dsp:
+  name: Set DSP Audio Amplifier Settings
+  description: Set external audio DSP amplifier parameters (Master Volume, Fader, Balance, Bass/Mid/Treble Equalizer, Quiet Mode, Kids Mode, Master Mute, Surround Sound, SDVC) on CAN 0x520 / 0x60C.
+  fields:
+    volume:
+      name: Master Volume
+      description: Master system volume level (0 to 75).
+      example: 25
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 75
+          step: 1
+    fader:
+      name: Fader (Front / Rear)
+      description: Front-to-rear speaker balance (-10 = Full Front, 0 = Center, +10 = Full Rear).
+      example: 0
+      required: false
+      selector:
+        number:
+          min: -10
+          max: 10
+          step: 1
+    balance:
+      name: Balance (Left / Right)
+      description: Left-to-right speaker balance (-10 = Full Left, 0 = Center, +10 = Full Right).
+      example: 0
+      required: false
+      selector:
+        number:
+          min: -10
+          max: 10
+          step: 1
+    bass:
+      name: Bass EQ
+      description: Bass Equalizer level (-10 dB to +10 dB, 0 = Flat).
+      example: 0
+      required: false
+      selector:
+        number:
+          min: -10
+          max: 10
+          step: 1
+    midrange:
+      name: Midrange EQ
+      description: Midrange Equalizer level (-10 dB to +10 dB, 0 = Flat).
+      example: 0
+      required: false
+      selector:
+        number:
+          min: -10
+          max: 10
+          step: 1
+    treble:
+      name: Treble EQ
+      description: Treble Equalizer level (-10 dB to +10 dB, 0 = Flat).
+      example: 0
+      required: false
+      selector:
+        number:
+          min: -10
+          max: 10
+          step: 1
+    quiet_mode:
+      name: OEM Quiet Mode
+      description: Enable OEM Quiet Mode (mutes rear channels and clamps front volume to 25).
+      required: false
+      selector:
+        boolean:
+    kids_mode:
+      name: Kids Music Mode
+      description: Enable Kids Music Mode (mutes front channels, fades 100% to rear speakers, and caps volume).
+      required: false
+      selector:
+        boolean:
+    master_mute:
+      name: Master Mute
+      description: Mute all vehicle audio channels.
+      required: false
+      selector:
+        boolean:
+    surround:
+      name: Surround 3D Mode
+      description: Toggle QuantumLogic 3D / Surround sound processing.
+      required: false
+      selector:
+        boolean:
+    sdvc:
+      name: Speed-Dependent Volume Control (SDVC)
+      description: Toggle Speed-Dependent Volume Control curve.
+      required: false
+      selector:
+        boolean:
+    can_id:
+      name: CAN ID Override
+      description: Optional CAN ID override (defaults to 0x60C for E-GMP or 0x520 for Gen 2 / Gen 3).
+      example: "0x520"
+      required: false
+      selector:
+        text:
+
