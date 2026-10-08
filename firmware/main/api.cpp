@@ -24,6 +24,7 @@
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
+#include <unordered_set>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -703,13 +704,19 @@ static esp_err_t api_file_upload_handler(httpd_req_t *req) {
         int recv_len = httpd_req_recv(req, buf, std::min(remaining, static_cast<int>(sizeof(buf))));
         if (recv_len <= 0) {
             fclose(fd);
+            unlink(filepath);
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "File receive failed");
             return ESP_FAIL;
         }
         size_t written = fwrite(buf, 1, recv_len, fd);
         if (written != static_cast<size_t>(recv_len)) {
             fclose(fd);
-            ESP_LOGE(TAG, "fwrite failed: written %zu of %d (disk full?)", written, recv_len);
+            unlink(filepath);
+            size_t total_bytes = 0, used_bytes = 0;
+            esp_littlefs_info("storage", &total_bytes, &used_bytes);
+            ESP_LOGE(TAG, "fwrite failed for %s: written %zu of %d (disk full? LittleFS total: %zu, used: %zu, free: %zu)",
+                     filepath, written, recv_len, total_bytes, used_bytes,
+                     (total_bytes > used_bytes ? total_bytes - used_bytes : 0));
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "File write failed (disk full?)");
             return ESP_FAIL;
         }
@@ -1219,13 +1226,51 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static void collect_spiffs_files_recursive(const char *dir_path, cJSON *arr) {
+    DIR *d = opendir(dir_path);
+    if (!d) return;
+    struct dirent *de;
+    while ((de = readdir(d)) != nullptr) {
+        if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) continue;
+        char subpath[320];
+        snprintf(subpath, sizeof(subpath), "%s/%s", dir_path, de->d_name);
+        struct stat s;
+        if (stat(subpath, &s) == 0) {
+            cJSON *f_obj = cJSON_CreateObject();
+            cJSON_AddStringToObject(f_obj, "name", de->d_name);
+            cJSON_AddStringToObject(f_obj, "path", subpath);
+            cJSON_AddNumberToObject(f_obj, "size", s.st_size);
+            cJSON_AddBoolToObject(f_obj, "is_dir", S_ISDIR(s.st_mode));
+            cJSON_AddItemToArray(arr, f_obj);
+            if (S_ISDIR(s.st_mode)) {
+                collect_spiffs_files_recursive(subpath, arr);
+            }
+        }
+    }
+    closedir(d);
+}
+
 static esp_err_t api_system_control_handler(httpd_req_t *req) {
-    char buf[128];
-    int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
-    if (ret <= 0) return ESP_FAIL;
+    if (req->content_len == 0 || req->content_len > 16384) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
+        return ESP_FAIL;
+    }
+
+    char *buf = (char *)malloc(req->content_len + 1);
+    if (!buf) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+        return ESP_FAIL;
+    }
+
+    int ret = httpd_req_recv(req, buf, req->content_len);
+    if (ret <= 0) {
+        free(buf);
+        return ESP_FAIL;
+    }
     buf[ret] = '\0';
 
     cJSON *root = cJSON_Parse(buf);
+    free(buf);
     if (!root) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
         return ESP_FAIL;
@@ -1240,24 +1285,8 @@ static esp_err_t api_system_control_handler(httpd_req_t *req) {
         } else if (strcmp(act, "list_files") == 0) {
             size_t total_bytes = 0, used_bytes = 0;
             esp_littlefs_info("storage", &total_bytes, &used_bytes);
-            DIR *d = opendir("/spiffs");
             cJSON *arr = cJSON_CreateArray();
-            if (d) {
-                struct dirent *de;
-                while ((de = readdir(d)) != nullptr) {
-                    cJSON *f_obj = cJSON_CreateObject();
-                    cJSON_AddStringToObject(f_obj, "name", de->d_name);
-                    char subpath[320];
-                    snprintf(subpath, sizeof(subpath), "/spiffs/%s", de->d_name);
-                    struct stat s;
-                    if (stat(subpath, &s) == 0) {
-                        cJSON_AddNumberToObject(f_obj, "size", s.st_size);
-                        cJSON_AddBoolToObject(f_obj, "is_dir", S_ISDIR(s.st_mode));
-                    }
-                    cJSON_AddItemToArray(arr, f_obj);
-                }
-                closedir(d);
-            }
+            collect_spiffs_files_recursive("/spiffs", arr);
             cJSON *resp_obj = cJSON_CreateObject();
             cJSON_AddNumberToObject(resp_obj, "total", total_bytes);
             cJSON_AddNumberToObject(resp_obj, "used", used_bytes);
@@ -1270,6 +1299,54 @@ static esp_err_t api_system_control_handler(httpd_req_t *req) {
             httpd_resp_sendstr(req, resp);
             free(resp);
             return ESP_OK;
+        } else if (strcmp(act, "clean_stale_web") == 0 || strcmp(act, "clean_www") == 0) {
+            cJSON *keep_item = cJSON_GetObjectItem(root, "keep");
+            std::unordered_set<std::string> keep_set;
+            if (cJSON_IsArray(keep_item)) {
+                int sz = cJSON_GetArraySize(keep_item);
+                for (int i = 0; i < sz; i++) {
+                    cJSON *ki = cJSON_GetArrayItem(keep_item, i);
+                    if (cJSON_IsString(ki) && ki->valuestring) {
+                        keep_set.insert(ki->valuestring);
+                        const char *sl = strrchr(ki->valuestring, '/');
+                        if (sl) keep_set.insert(sl + 1);
+                    }
+                }
+            }
+
+            int deleted_count = 0;
+            size_t bytes_freed = 0;
+            DIR *d = opendir("/spiffs/www");
+            if (d) {
+                struct dirent *de;
+                while ((de = readdir(d)) != nullptr) {
+                    if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) continue;
+                    char subpath[320];
+                    snprintf(subpath, sizeof(subpath), "/spiffs/www/%s", de->d_name);
+                    struct stat s;
+                    if (stat(subpath, &s) == 0 && !S_ISDIR(s.st_mode)) {
+                        std::string fname = de->d_name;
+                        if (keep_set.empty() || (keep_set.find(fname) == keep_set.end() && keep_set.find(subpath) == keep_set.end())) {
+                            bytes_freed += s.st_size;
+                            unlink(subpath);
+                            deleted_count++;
+                        }
+                    }
+                }
+                closedir(d);
+            }
+            cJSON *resp_obj = cJSON_CreateObject();
+            cJSON_AddStringToObject(resp_obj, "status", "ok");
+            cJSON_AddNumberToObject(resp_obj, "deleted_count", deleted_count);
+            cJSON_AddNumberToObject(resp_obj, "bytes_freed", bytes_freed);
+            cJSON_Delete(root);
+            char *resp = cJSON_PrintUnformatted(resp_obj);
+            cJSON_Delete(resp_obj);
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_sendstr(req, resp);
+            free(resp);
+            return ESP_OK;
+        }
         } else if (strcmp(act, "reload_catalog") == 0) {
             struct stat st;
             int stat_res = stat("/spiffs/catalog.json", &st);

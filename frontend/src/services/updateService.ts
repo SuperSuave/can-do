@@ -291,12 +291,16 @@ async function uploadToDevice(
   if (noReboot) {
     headers['X-No-Reboot'] = '1';
   }
-  const res = await fetch(`${deviceBaseUrl}/api/upload`, {
-    method: 'POST',
-    headers,
-    body: data,
-  });
-  return res.ok;
+  try {
+    const res = await fetch(`${deviceBaseUrl}/api/upload`, {
+      method: 'POST',
+      headers,
+      body: data,
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -394,24 +398,113 @@ export async function executeUpdateSequence(
       }
 
       if (manifest && Array.isArray(manifest.files) && manifest.files.length > 0) {
-        // 1. Detect current hashed assets on device to clean up stale files
-        onProgress('frontend', 15, 'Scanning device for stale web assets...');
+        onProgress('frontend', 15, 'Scanning device and purging stale web assets...');
+
+        const newFileNames = new Set(manifest.files.map((f) => f.name));
+        const staleFilesToDelete = new Set<string>();
+
+        // 1a. Attempt hardware-side purge via /api/system/control clean_stale_web
+        try {
+          const cleanRes = await fetch(`${deviceBaseUrl}/api/system/control`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'clean_stale_web',
+              keep: Array.from(newFileNames),
+            }),
+          });
+          if (cleanRes.ok) {
+            const cleanJson = await cleanRes.json();
+            if (cleanJson.deleted_count > 0) {
+              console.log(`[UpdateService] Device purged ${cleanJson.deleted_count} stale files (${cleanJson.bytes_freed} bytes freed) via clean_stale_web`);
+            }
+          }
+        } catch {}
+
+        // 1b. Query device file list via /api/system/control list_files
+        try {
+          const listRes = await fetch(`${deviceBaseUrl}/api/system/control`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'list_files' }),
+          });
+          if (listRes.ok) {
+            const listJson = await listRes.json();
+            if (Array.isArray(listJson.files)) {
+              for (const f of listJson.files) {
+                const fname = f.name || '';
+                const fpath = f.path || `/spiffs/www/${fname}`;
+                const isWebAsset = fpath.includes('/www/') || fname.endsWith('.gz') || fname.endsWith('.js') || fname.endsWith('.css');
+                if (
+                  isWebAsset &&
+                  !newFileNames.has(fname) &&
+                  fname !== 'catalog.json' &&
+                  fname !== 'automations.json' &&
+                  fname !== 'preferences.json'
+                ) {
+                  staleFilesToDelete.add(fpath);
+                }
+              }
+            }
+          }
+        } catch {}
+
+        // 1c. Inspect device's currently installed frontend_manifest.json
+        try {
+          const devManifestRes = await fetch(`${deviceBaseUrl}/frontend_manifest.json`, { cache: 'no-cache' });
+          if (devManifestRes.ok) {
+            const devManifest = await devManifestRes.json();
+            if (Array.isArray(devManifest.files)) {
+              for (const f of devManifest.files) {
+                if (f.name && !newFileNames.has(f.name)) {
+                  staleFilesToDelete.add(f.path || `/spiffs/www/${f.name}`);
+                }
+              }
+            }
+          }
+        } catch {}
+
+        // 1d. Inspect device's current index.html and its entry bundle to discover loaded chunks
         try {
           const currentHtmlRes = await fetch(`${deviceBaseUrl}/index.html`, { cache: 'no-cache' });
           if (currentHtmlRes.ok) {
             const htmlText = await currentHtmlRes.text();
-            const matches = htmlText.match(/index-[a-zA-Z0-9_\-]+\.(?:js|css)/g) || [];
-            const newFileNames = new Set(manifest.files.map((f) => f.name));
+            const matches = htmlText.match(/[A-Za-z0-9_\-]+-[a-zA-Z0-9_\-]+\.(?:js|css)/g) || [];
             for (const staleBase of matches) {
-              const staleGz = `${staleBase}.gz`;
-              if (!newFileNames.has(staleGz) && !newFileNames.has(staleBase)) {
-                await truncateDeviceFile(deviceBaseUrl, `/spiffs/www/${staleGz}`);
-                await truncateDeviceFile(deviceBaseUrl, `/spiffs/www/${staleBase}`);
+              if (!newFileNames.has(staleBase) && !newFileNames.has(`${staleBase}.gz`)) {
+                staleFilesToDelete.add(`/spiffs/www/${staleBase}`);
+                staleFilesToDelete.add(`/spiffs/www/${staleBase}.gz`);
               }
+            }
+
+            // Also inspect entry js bundle for code-split chunks (e.g. CDr4PWH3.js, 0UrhFJN7.js)
+            const scriptMatch = htmlText.match(/src=["']\.\/([a-zA-Z0-9_\-]+\.js)["']/);
+            if (scriptMatch && scriptMatch[1]) {
+              try {
+                const scriptRes = await fetch(`${deviceBaseUrl}/${scriptMatch[1]}`, { cache: 'no-cache' });
+                if (scriptRes.ok) {
+                  const scriptText = await scriptRes.text();
+                  const chunkMatches = scriptText.match(/[a-zA-Z0-9_\-]{8}\.js/g) || [];
+                  for (const chunk of chunkMatches) {
+                    if (!newFileNames.has(chunk) && !newFileNames.has(`${chunk}.gz`)) {
+                      staleFilesToDelete.add(`/spiffs/www/${chunk}`);
+                      staleFilesToDelete.add(`/spiffs/www/${chunk}.gz`);
+                    }
+                  }
+                }
+              } catch {}
             }
           }
         } catch (e) {
           console.warn('Could not inspect current device HTML for stale cleanup:', e);
+        }
+
+        // 1e. Delete all detected stale files sequentially
+        if (staleFilesToDelete.size > 0) {
+          console.log(`[UpdateService] Purging ${staleFilesToDelete.size} detected stale files from LittleFS...`);
+          for (const stalePath of staleFilesToDelete) {
+            await truncateDeviceFile(deviceBaseUrl, stalePath);
+          }
         }
 
         // 2. Upload new web assets sequentially with fallback download URLs
@@ -447,9 +540,24 @@ export async function executeUpdateSequence(
           }
 
           // Always skip reboot for web assets!
-          const uploaded = await uploadToDevice(deviceBaseUrl, fileInfo.path, fileBuffer, true);
+          let uploaded = await uploadToDevice(deviceBaseUrl, fileInfo.path, fileBuffer, true);
           if (!uploaded) {
-            throw new Error(`Device failed to store ${fileInfo.name} to LittleFS`);
+            // Self-healing retry: disk space may be exhausted by lingering fragments.
+            // Run emergency purge of any file not matching newFileNames, truncate this file, and retry once.
+            console.warn(`[UpdateService] Failed to store ${fileInfo.name}. Performing emergency LittleFS purge and retrying...`);
+            try {
+              await fetch(`${deviceBaseUrl}/api/system/control`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'clean_stale_web', keep: Array.from(newFileNames) }),
+              });
+            } catch {}
+            await truncateDeviceFile(deviceBaseUrl, fileInfo.path);
+            uploaded = await uploadToDevice(deviceBaseUrl, fileInfo.path, fileBuffer, true);
+          }
+
+          if (!uploaded) {
+            throw new Error(`Device failed to store ${fileInfo.name} to LittleFS (LittleFS partition may be out of space). Please reboot the device and retry.`);
           }
         }
         onProgress('frontend', 35, 'Web Front-End successfully updated on LittleFS');
