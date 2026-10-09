@@ -23,7 +23,13 @@ void timezone_mgr_load_from_fs(void);
  * or friendly alias, applying POSIX TZ to runtime and optionally saving to preferences.
  * Returns true if recognized or applied.
  */
-bool timezone_mgr_set(const char* tz_id_or_name, bool persist = true);
+bool timezone_mgr_set(const char* tz_id_or_name, bool persist);
+
+#ifdef __cplusplus
+inline bool timezone_mgr_set(const char* tz_id_or_name) {
+    return timezone_mgr_set(tz_id_or_name, true);
+}
+#endif
 
 /**
  * Get current timezone identifier (e.g. "US/Pacific")

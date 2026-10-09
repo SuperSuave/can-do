@@ -13,7 +13,7 @@ struct TzMapping {
     const char* id;
     const char* label;
     const char* posix;
-    const char* aliases[8];
+    const char* aliases[16];
 };
 
 static const TzMapping s_timezones[] = {
@@ -100,7 +100,7 @@ static const TzMapping* find_tz(const char* tz_query) {
         if (str_equals_ci(tz_query, s_timezones[i].id)) {
             return &s_timezones[i];
         }
-        for (size_t a = 0; a < 8 && s_timezones[i].aliases[a] != nullptr; a++) {
+        for (size_t a = 0; a < 16 && s_timezones[i].aliases[a] != nullptr; a++) {
             if (str_equals_ci(tz_query, s_timezones[i].aliases[a])) {
                 return &s_timezones[i];
             }
