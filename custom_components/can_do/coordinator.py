@@ -67,6 +67,11 @@ class CanDoDataCoordinator:
         return f"{self.base_topic}/+/state/+"
 
     @property
+    def direct_state_topic(self) -> str:
+        """Return direct state topic for entity state reception."""
+        return f"{self.base_topic}/state/+"
+
+    @property
     def tx_topic(self) -> str:
         """Return MQTT raw action burst topic."""
         return f"{self.base_topic}/{self.effective_device_id}/tx"
@@ -95,11 +100,15 @@ class CanDoDataCoordinator:
         )
         self._unsub_list.append(unsub_status)
 
-        # 2. Subscribe to raw CAN state updates wildcard (e.g. cando/+/state/+)
+        # 2. Subscribe to raw CAN state updates and entity state updates
         unsub_states = await mqtt.async_subscribe(
             self.hass, self.state_wildcard_topic, self._handle_can_state_message, qos=1
         )
         self._unsub_list.append(unsub_states)
+        unsub_direct = await mqtt.async_subscribe(
+            self.hass, self.direct_state_topic, self._handle_can_state_message, qos=1
+        )
+        self._unsub_list.append(unsub_direct)
 
         # 3. Inform ESP32 edge device of the state CAN IDs we want it to publish
         if self.monitored_can_ids:
@@ -165,10 +174,14 @@ class CanDoDataCoordinator:
         """Handle incoming raw CAN state frame."""
         # Topic format: cando/{device_id}/state/0x4CE
         parts = msg.topic.split("/")
-        if len(parts) < 4:
+        if len(parts) >= 4 and parts[2] == "state":
+            dev_id = parts[1]
+            can_id = parts[3].lower()
+        elif len(parts) >= 3 and parts[1] == "state":
+            dev_id = "+"
+            can_id = parts[2].lower()
+        else:
             return
-        dev_id = parts[1]
-        can_id = parts[3].lower()
 
         if dev_id != "+":
             if self.active_device_id and dev_id != self.active_device_id:
@@ -211,26 +224,35 @@ class CanDoDataCoordinator:
         if len(hex_payload) < 2:
             return
 
-        try:
-            byte_vals = [
-                int(hex_payload[i : i + 2], 16) for i in range(0, len(hex_payload), 2)
-            ]
-            prev_vals = self.can_states.get(can_id)
-            self.can_states[can_id] = byte_vals
+        # Check if payload is a raw hex CAN frame (even length, <=16 chars, valid hex)
+        is_hex = (len(hex_payload) % 2 == 0) and len(hex_payload) <= 16 and all(c in "0123456789abcdefABCDEF" for c in hex_payload)
+        if is_hex:
+            try:
+                byte_vals = [
+                    int(hex_payload[i : i + 2], 16) for i in range(0, len(hex_payload), 2)
+                ]
+                prev_vals = self.can_states.get(can_id)
+                self.can_states[can_id] = byte_vals
 
-            # Skip duplicate identical frames
-            if prev_vals is not None and prev_vals == byte_vals:
-                return
-
-            # Filter out alive counter / checksum changes (E-GMP Byte 7 / D8)
-            if prev_vals is not None and len(prev_vals) == len(byte_vals) == 8:
-                if prev_vals[:7] == byte_vals[:7]:
-                    # Only rolling counter / CRC changed; skip notifying listeners to prevent event flood
+                # Skip duplicate identical frames
+                if prev_vals is not None and prev_vals == byte_vals:
                     return
 
-            self._notify_can_listeners(can_id)
-        except ValueError as err:
-            _LOGGER.warning("Malformed hex payload on %s: %s (%s)", msg.topic, hex_payload, err)
+                # Filter out alive counter / checksum changes (E-GMP Byte 7 / D8)
+                if prev_vals is not None and len(prev_vals) == len(byte_vals) == 8:
+                    if prev_vals[:7] == byte_vals[:7]:
+                        return
+
+                self._notify_can_listeners(can_id)
+            except ValueError:
+                self.can_states[can_id] = hex_payload
+                self._notify_can_listeners(can_id)
+        else:
+            # String or label state (e.g. "Locked / Lock", "Unlocked / Unlock", "All Doors Closed")
+            prev_val = self.can_states.get(can_id)
+            self.can_states[can_id] = hex_payload
+            if prev_val != hex_payload:
+                self._notify_can_listeners(can_id)
 
     def register_listener(self, can_id: str, callback_fn: Callable[[], None]) -> Callable[[], None]:
         """Register entity callback for a specific state CAN ID."""
@@ -287,6 +309,13 @@ class CanDoDataCoordinator:
         await mqtt.async_publish(self.hass, self.tx_topic, json_payload, qos=1)
         if self.tx_topic != f"{self.base_topic}/tx":
             await mqtt.async_publish(self.hass, f"{self.base_topic}/tx", json_payload, qos=1)
+
+    async def async_send_entity_command(self, entity_id: str, command: str) -> None:
+        """Send high-level entity command (e.g. lock/unlock) to ESP32 edge device over MQTT."""
+        topic = f"{self.base_topic}/{self.effective_device_id}/set/{entity_id}"
+        await mqtt.async_publish(self.hass, topic, command, qos=1)
+        if topic != f"{self.base_topic}/set/{entity_id}":
+            await mqtt.async_publish(self.hass, f"{self.base_topic}/set/{entity_id}", command, qos=1)
 
     async def async_send_notification(
         self,
