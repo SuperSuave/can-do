@@ -209,21 +209,9 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const [lastPingMs, setLastPingMs] = useState<number | null>(null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [wifi, setWifi] = useState<WifiStatus | null>(null);
-  const [activeTab, setActiveTab] = useState<'sniffer' | 'automations' | 'mqtt' | 'wifi' | 'ota'>('sniffer');
+  const [activeTab, setActiveTab] = useState<'automations' | 'mqtt' | 'wifi' | 'ota'>('automations');
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
-
-  // Sniffer state
-  const [snifferFrames, setSnifferFrames] = useState<Map<string, CanFrame>>(new Map());
-  const [snifferPaused, setSnifferPaused] = useState<boolean>(false);
-  const [snifferFilter, setSnifferFilter] = useState<string>('');
-  const [onlyCatalogMatches, setOnlyCatalogMatches] = useState<boolean>(false);
-  const [selectedFrameId, setSelectedFrameId] = useState<string | null>(null);
-  const [copiedFrameId, setCopiedFrameId] = useState<string | null>(null);
-  const framesRef = useRef<Map<string, CanFrame>>(new Map());
-  const isPausedRef = useRef<boolean>(false);
-  isPausedRef.current = snifferPaused;
-  const snifferThrottleRef = useRef<number | null>(null);
 
   // Automations diag state
   const [automations, setAutomations] = useState<AutomationDiag[]>([]);
@@ -413,29 +401,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     return `0x${clean.toUpperCase()}`;
   };
 
-  // Build lookup index from catalog commands for instant sniffer resolution
-  const catalogCommandMap = useMemo(() => {
-    const map = new Map<string, Command>();
-    if (!catalog?.commands) return map;
 
-    catalog.commands.forEach(cmd => {
-      const ids: string[] = [];
-      if (cmd.can_id) ids.push(cmd.can_id);
-      if (cmd.state_can_id) ids.push(cmd.state_can_id);
-      if (cmd.action_can_id) ids.push(cmd.action_can_id);
-      if (cmd.network?.state_can_id) ids.push(cmd.network.state_can_id);
-      if (cmd.network?.action_can_id) ids.push(cmd.network.action_can_id);
-
-      ids.forEach(id => {
-        const norm = normalizeHexId(id);
-        if (norm && !map.has(norm)) {
-          map.set(norm, cmd);
-        }
-      });
-    });
-
-    return map;
-  }, [catalog]);
 
   // Resolve active WebSocket endpoint
   const currentWsUrl = useMemo(() => deviceWs.getWsUrl(), [deviceHost]);
@@ -589,42 +555,6 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           const formatted = `[${new Date().toLocaleTimeString()}] ${line}`;
           setLogs((prev) => [...prev.slice(-150), formatted]);
         }
-      } else if (data.type === 'can_frame') {
-        if (!isPausedRef.current) {
-          const now = Date.now();
-          const idKey = normalizeHexId(data.id || '0x000');
-          const existing = framesRef.current.get(idKey);
-          const interval = existing ? now - existing.lastSeen : undefined;
-
-          const updated: CanFrame = {
-            id: idKey,
-            dlc: data.dlc ?? 8,
-            data: (data.data || '').trim(),
-            previousData: existing?.data,
-            count: (existing?.count || 0) + 1,
-            timestamp: new Date().toLocaleTimeString(),
-            lastIntervalMs: interval,
-            lastSeen: now
-          };
-
-          // Protect memory against runaway unique CAN IDs on noisy buses (max 500)
-          if (framesRef.current.size >= 500 && !framesRef.current.has(idKey)) {
-            const oldestKey = framesRef.current.keys().next().value;
-            if (oldestKey) framesRef.current.delete(oldestKey);
-          }
-
-          framesRef.current.set(idKey, updated);
-
-          // Only schedule React state update if user is currently looking at the sniffer tab
-          if (activeTabRef.current === 'sniffer' && snifferThrottleRef.current === null) {
-            snifferThrottleRef.current = window.setTimeout(() => {
-              snifferThrottleRef.current = null;
-              if (activeTabRef.current === 'sniffer') {
-                setSnifferFrames(new Map(framesRef.current));
-              }
-            }, 100); // 10 fps maximum refresh rate for live sniffer table
-          }
-        }
       } else if (data.type === 'automation_fired') {
         showNotice(`Rule Fired: ${data.rule_id || data.id || 'Automation'}`, 'info');
         fetchAutomationsDiag();
@@ -636,10 +566,6 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     }, 4000);
 
     return () => {
-      if (snifferThrottleRef.current !== null) {
-        clearTimeout(snifferThrottleRef.current);
-        snifferThrottleRef.current = null;
-      }
       clearInterval(interval);
       unsubscribeConn();
       unsubscribeMsgs();
@@ -647,9 +573,6 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'sniffer') {
-      setSnifferFrames(new Map(framesRef.current));
-    }
     if (activeTab === 'automations') fetchAutomationsDiag();
     if (activeTab === 'mqtt') fetchMqtt();
     if (activeTab === 'wifi') {
@@ -847,57 +770,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     }
   };
 
-  // Copy frame data helper
-  const handleCopyFrame = (frame: CanFrame) => {
-    const str = `${frame.id} DLC:${frame.dlc} DATA:${frame.data}`;
-    navigator.clipboard.writeText(str);
-    setCopiedFrameId(frame.id);
-    setTimeout(() => setCopiedFrameId(null), 2000);
-  };
 
-  // Export sniffer frames to JSON
-  const handleExportSnifferJson = () => {
-    const frames = Array.from(snifferFrames.values());
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(frames, null, 2));
-    const a = document.createElement('a');
-    a.href = dataStr;
-    a.download = `cando-can-capture-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  };
-
-  // Export sniffer frames to CSV
-  const handleExportSnifferCsv = () => {
-    const frames: CanFrame[] = Array.from(snifferFrames.values());
-    let csv = 'CAN_ID,DLC,DATA_HEX,COUNT,INTERVAL_MS,LAST_SEEN,CATALOG_MATCH\n';
-    frames.forEach((f: CanFrame) => {
-      const match = catalogCommandMap.get(f.id);
-      csv += `"${f.id}",${f.dlc},"${f.data}",${f.count},${f.lastIntervalMs ?? ''},"${f.timestamp}","${match?.name || ''}"\n`;
-    });
-    const dataStr = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-    const a = document.createElement('a');
-    a.href = dataStr;
-    a.download = `cando-can-capture-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  };
-
-  // Filtered sniffer frames
-  const filteredFrames = useMemo(() => {
-    const frames: CanFrame[] = Array.from(snifferFrames.values());
-    return frames.filter((f: CanFrame) => {
-      const match = catalogCommandMap.get(f.id);
-      if (onlyCatalogMatches && !match) return false;
-
-      if (!snifferFilter) return true;
-      const q = snifferFilter.trim().toUpperCase();
-      const matchName = (match?.name || '').toUpperCase();
-      const matchCategory = (match?.category || '').toUpperCase();
-      return f.id.includes(q) || f.data.toUpperCase().includes(q) || matchName.includes(q) || matchCategory.includes(q);
-    });
-  }, [snifferFrames, snifferFilter, onlyCatalogMatches, catalogCommandMap]);
 
   // Format uptime
   const formatUptime = (sec?: number) => {
@@ -1310,22 +1183,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           className="inline-flex items-center p-1 rounded-xl bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] text-xs font-medium overflow-x-auto no-scrollbar"
           aria-label="Device Console Tabs"
         >
-          {/* Tab 1: Live Sniffer */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('sniffer')}
-            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors shrink-0 ${
-              activeTab === 'sniffer'
-                ? 'bg-slate-800 text-white font-semibold shadow-sm'
-                : 'text-[var(--text-muted)] hover:text-white'
-            }`}
-          >
-            <Activity className={`w-3.5 h-3.5 ${activeTab === 'sniffer' ? 'text-cyan-400' : 'text-slate-500'}`} />
-            <span>Live Sniffer</span>
-            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-slate-900 text-cyan-300 border border-slate-700/60">
-              {snifferFrames.size}
-            </span>
-          </button>
+
 
           {/* Tab 2: Automations Diagnostics */}
           <button
@@ -1399,283 +1257,6 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           </button>
         </nav>
       </div>
-
-      {/* =========================================================================
-          TAB 1: Live Bus Sniffer (with Instant Catalog & Automations Linkage)
-         ========================================================================= */}
-      {activeTab === 'sniffer' && (
-        <div className="can-do-card p-4 sm:p-5 space-y-4">
-          {/* Sniffer Toolbar */}
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-            {/* Search Filter */}
-            <div className="flex items-center gap-2 flex-1 min-w-[240px]">
-              <div className="relative w-full">
-                <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  value={snifferFilter}
-                  onChange={(e) => setSnifferFilter(e.target.value)}
-                  placeholder="Filter by CAN ID (e.g. 0x226), Hex Data, or Catalog Name..."
-                  className="w-full pl-9 pr-3 py-2 rounded-lg bg-[var(--input-bg)] border border-[var(--border-color)] text-xs font-mono text-[var(--text-heading)] focus:outline-none focus:border-[var(--md-sys-color-primary)] transition"
-                />
-              </div>
-            </div>
-
-            {/* Filter Toggle: Only Catalog Matches */}
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-white cursor-pointer select-none transition">
-                <input
-                  type="checkbox"
-                  checked={onlyCatalogMatches}
-                  onChange={(e) => setOnlyCatalogMatches(e.target.checked)}
-                  className="rounded border-slate-700 bg-slate-900"
-                />
-                <span>Catalog Matches Only</span>
-              </label>
-
-              {/* Pause / Resume */}
-              <button
-                type="button"
-                onClick={() => setSnifferPaused(!snifferPaused)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
-                  snifferPaused
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                    : 'dash-outline-btn'
-                }`}
-              >
-                {snifferPaused ? <Play className="w-3.5 h-3.5 fill-current" /> : <Pause className="w-3.5 h-3.5" />}
-                <span>{snifferPaused ? 'Resume' : 'Pause'}</span>
-              </button>
-
-              {/* Clear */}
-              <button
-                type="button"
-                onClick={() => {
-                  framesRef.current.clear();
-                  setSnifferFrames(new Map());
-                  setSelectedFrameId(null);
-                }}
-                className="dash-outline-btn text-xs py-1.5 px-3 inline-flex items-center gap-1.5"
-                title="Clear captured frame history"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Clear</span>
-              </button>
-
-              {/* Export capture */}
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={handleExportSnifferJson}
-                  disabled={snifferFrames.size === 0}
-                  className="dash-outline-btn text-xs py-1.5 px-2.5 inline-flex items-center gap-1 disabled:opacity-40"
-                  title="Export live sniffer capture as JSON"
-                >
-                  <Download className="w-3 h-3" />
-                  <span>JSON</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleExportSnifferCsv}
-                  disabled={snifferFrames.size === 0}
-                  className="dash-outline-btn text-xs py-1.5 px-2.5 inline-flex items-center gap-1 disabled:opacity-40"
-                  title="Export live sniffer capture as CSV"
-                >
-                  <Download className="w-3 h-3" />
-                  <span>CSV</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Sniffer Frame Table */}
-          <div className="overflow-x-auto rounded-xl border border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-lowest)] max-h-[520px]">
-            <table className="w-full text-left text-xs font-mono">
-              <thead className="sticky top-0 bg-[var(--md-sys-color-surface-container-high)] border-b border-[var(--border-color)] text-[11px] text-[var(--text-muted)] uppercase tracking-wider">
-                <tr>
-                  <th className="py-2.5 px-3.5">CAN ID</th>
-                  <th className="py-2.5 px-3">Subsystem / Catalog Link</th>
-                  <th className="py-2.5 px-2.5">DLC</th>
-                  <th className="py-2.5 px-3.5">Payload Data Bytes (Hex)</th>
-                  <th className="py-2.5 px-3">Count</th>
-                  <th className="py-2.5 px-3">Interval</th>
-                  <th className="py-2.5 px-3">Time</th>
-                  <th className="py-2.5 px-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-color)]/60">
-                {filteredFrames.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="text-center py-14 text-[var(--text-muted)]">
-                      <div className="flex flex-col items-center justify-center gap-2">
-                        <Activity className="w-8 h-8 text-slate-600" />
-                        <span className="font-semibold text-sm">
-                          {connected
-                            ? 'Listening for vehicle CAN frames on TWAI bus...'
-                            : 'Connect to CAN Do device to view live telemetry.'}
-                        </span>
-                        <span className="text-xs max-w-sm text-slate-500">
-                          {connected
-                            ? 'Frames received from vehicle networks or GVRET bridge will appear here in real time.'
-                            : 'Ensure the ESP32 is powered on and connected to the same Wi-Fi or SoftAP network.'}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredFrames.map((frame) => {
-                    const match = catalogCommandMap.get(frame.id);
-                    const isSelected = selectedFrameId === frame.id;
-                    const bytes = frame.data.match(/.{1,2}/g) || [];
-
-                    return (
-                      <tr
-                        key={frame.id}
-                        onClick={() => setSelectedFrameId(isSelected ? null : frame.id)}
-                        className={`cursor-pointer transition-colors ${
-                          isSelected
-                            ? 'bg-cyan-950/40 border-l-4 border-l-cyan-400'
-                            : 'hover:bg-slate-900/60'
-                        }`}
-                      >
-                        {/* CAN ID */}
-                        <td className="py-2.5 px-3.5 font-bold text-cyan-400 whitespace-nowrap">
-                          {frame.id}
-                        </td>
-
-                        {/* Catalog Link / Subsystem Tag */}
-                        <td className="py-2.5 px-3 font-sans text-xs">
-                          {match ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-semibold text-white truncate max-w-[200px]" title={match.name}>
-                                {match.name}
-                              </span>
-                              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono">
-                                {match.category}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-[11px] text-slate-500 font-mono">
-                              Uncataloged ID
-                            </span>
-                          )}
-                        </td>
-
-                        {/* DLC */}
-                        <td className="py-2.5 px-2.5 text-slate-400">{frame.dlc}</td>
-
-                        {/* Payload Bytes */}
-                        <td className="py-2.5 px-3.5 font-mono tracking-wider">
-                          <div className="flex items-center gap-1.5">
-                            {bytes.map((byte, idx) => {
-                              const prevByte = frame.previousData?.match(/.{1,2}/g)?.[idx];
-                              const changed = prevByte && prevByte !== byte;
-                              return (
-                                <span
-                                  key={idx}
-                                  className={`px-1 py-0.5 rounded text-[11px] font-semibold ${
-                                    changed
-                                      ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40'
-                                      : 'text-emerald-300'
-                                  }`}
-                                >
-                                  {byte}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </td>
-
-                        {/* Packet Count */}
-                        <td className="py-2.5 px-3 text-slate-300 font-semibold">{frame.count}</td>
-
-                        {/* Interval ms */}
-                        <td className="py-2.5 px-3 text-slate-400">
-                          {frame.lastIntervalMs !== undefined ? `${frame.lastIntervalMs}ms` : '--'}
-                        </td>
-
-                        {/* Timestamp */}
-                        <td className="py-2.5 px-3 text-slate-500">{frame.timestamp}</td>
-
-                        {/* Actions */}
-                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                          <div className="inline-flex items-center gap-1 font-sans">
-                            {/* Copy Frame */}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCopyFrame(frame);
-                              }}
-                              className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white"
-                              title="Copy CAN frame"
-                            >
-                              {copiedFrameId === frame.id ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              ) : (
-                                <Copy className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-
-                            {/* View in Catalog / Add to Catalog */}
-                            {match ? (
-                              onNavigateToCatalog && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onNavigateToCatalog(frame.id);
-                                  }}
-                                  className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-cyan-300 inline-flex items-center gap-1"
-                                  title="Jump to command in Catalog"
-                                >
-                                  <span>Catalog</span>
-                                  <ExternalLink className="w-3 h-3" />
-                                </button>
-                              )
-                            ) : (
-                              onCreateCommandFromCanId && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onCreateCommandFromCanId(frame.id, frame.data);
-                                  }}
-                                  className="px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800/80 inline-flex items-center gap-1"
-                                  title="Register this frame into message catalog"
-                                >
-                                  <Plus className="w-3 h-3" />
-                                  <span>Catalog</span>
-                                </button>
-                              )
-                            )}
-
-                            {/* Create Automation Rule from this Frame */}
-                            {onCreateAutomationFromFrame && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onCreateAutomationFromFrame(frame.id, frame.data);
-                                }}
-                                className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-950 hover:bg-amber-900 text-amber-300 border border-amber-800/80 inline-flex items-center gap-1"
-                                title="Create automation rule reacting to this CAN message"
-                              >
-                                <Zap className="w-3 h-3" />
-                                <span>Rule</span>
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {/* =========================================================================
           TAB 2: Automations Diagnostics (Edge Execution Diagnostics)
