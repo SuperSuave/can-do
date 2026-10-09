@@ -487,9 +487,44 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
 }
 
 bool queue_entity_command(const std::string& entity_id, const std::string& command_label) {
+    // Check if entity_id matches an active automation rule
+    for (auto& rule : global_automations) {
+        if (rule.id == entity_id) {
+            std::string cmd_lower = command_label;
+            std::transform(cmd_lower.begin(), cmd_lower.end(), cmd_lower.begin(), ::tolower);
+            if (cmd_lower == "off" || cmd_lower == "0" || cmd_lower == "false" || cmd_lower == "disable") {
+                rule.enabled = false;
+                if (global_mqtt_client) {
+                    std::string state_topic = MQTT_BASE_TOPIC + "/state/" + rule.id;
+                    esp_mqtt_client_publish(global_mqtt_client, state_topic.c_str(), "OFF", 0, 1, 1);
+                }
+                broadcast_ws_state(rule.id, "OFF");
+                ESP_LOGI(TAG, "Automation rule '%s' disabled via entity command", rule.id.c_str());
+                return true;
+            } else if (cmd_lower == "on" || cmd_lower == "1" || cmd_lower == "true" || cmd_lower == "enable") {
+                rule.enabled = true;
+                if (global_mqtt_client) {
+                    std::string state_topic = MQTT_BASE_TOPIC + "/state/" + rule.id;
+                    esp_mqtt_client_publish(global_mqtt_client, state_topic.c_str(), "ON", 0, 1, 1);
+                }
+                broadcast_ws_state(rule.id, "ON");
+                ESP_LOGI(TAG, "Automation rule '%s' enabled via entity command", rule.id.c_str());
+                return true;
+            } else {
+                // Trigger/run the automation sequence directly
+                ESP_LOGI(TAG, "Triggering automation rule '%s' manually via command '%s'", rule.id.c_str(), command_label.c_str());
+                uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+                rule.last_exec_time_ms = now_ms;
+                broadcast_ws_automation_event(rule.id, rule.name);
+                bool ok = queue_action_steps_ptr(0, 20, &rule.actions, "manual_ha");
+                return ok;
+            }
+        }
+    }
+
     CanEntity entity;
     if (!find_entity_in_catalog(entity_id, entity)) {
-        ESP_LOGW(TAG, "Entity '%s' not found in catalog", entity_id.c_str());
+        ESP_LOGW(TAG, "Entity '%s' not found in catalog or automations", entity_id.c_str());
         return false;
     }
 

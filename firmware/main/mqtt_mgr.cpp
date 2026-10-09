@@ -130,6 +130,54 @@ static void clear_ha_discovery(esp_mqtt_client_handle_t client, const CanEntity&
     esp_mqtt_client_publish(client, topic.c_str(), "", 0, 1, 1);
 }
 
+static void publish_ha_automation_discovery(esp_mqtt_client_handle_t client, const AutomationRule& rule) {
+    if (!client || !rule.ha_expose || rule.id.empty()) return;
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "name", rule.name.c_str());
+
+    std::string unique_id = DEVICE_ID + "_auto_" + rule.id;
+    cJSON_AddStringToObject(root, "unique_id", unique_id.c_str());
+    cJSON_AddStringToObject(root, "object_id", ("auto_" + rule.id).c_str());
+
+    if (!rule.ha_icon.empty()) {
+        cJSON_AddStringToObject(root, "icon", rule.ha_icon.c_str());
+    }
+
+    std::string cmd_topic = MQTT_BASE_TOPIC + "/set/" + rule.id;
+    std::string state_topic = MQTT_BASE_TOPIC + "/state/" + rule.id;
+    cJSON_AddStringToObject(root, "command_topic", cmd_topic.c_str());
+    cJSON_AddStringToObject(root, "state_topic", state_topic.c_str());
+
+    cJSON_AddStringToObject(root, "payload_on", "ON");
+    cJSON_AddStringToObject(root, "payload_off", "OFF");
+    cJSON_AddStringToObject(root, "state_on", "ON");
+    cJSON_AddStringToObject(root, "state_off", "OFF");
+
+    cJSON *device = cJSON_AddObjectToObject(root, "device");
+    cJSON_AddStringToObject(device, "identifiers", DEVICE_ID.c_str());
+    cJSON_AddStringToObject(device, "name", ("CAN Do (" + DEVICE_ID + ")").c_str());
+    cJSON_AddStringToObject(device, "model", "Edge Engine");
+    cJSON_AddStringToObject(device, "manufacturer", "CAN Do");
+
+    char *payload = cJSON_PrintUnformatted(root);
+    std::string topic = "homeassistant/switch/" + DEVICE_ID + "/" + rule.id + "/config";
+    esp_mqtt_client_publish(client, topic.c_str(), payload, 0, 1, 1);
+
+    // Also publish the current state (ON / OFF)
+    esp_mqtt_client_publish(client, state_topic.c_str(), rule.enabled ? "ON" : "OFF", 0, 1, 1);
+
+    free(payload);
+    cJSON_Delete(root);
+}
+
+static void clear_ha_automation_discovery(esp_mqtt_client_handle_t client, const AutomationRule& rule) {
+    if (!client || rule.id.empty()) return;
+    std::string topic = "homeassistant/switch/" + DEVICE_ID + "/" + rule.id + "/config";
+    esp_mqtt_client_publish(client, topic.c_str(), "", 0, 1, 1);
+}
+
+
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
     auto event = static_cast<esp_mqtt_event_handle_t>(event_data);
@@ -765,6 +813,13 @@ void mqtt_mgr_publish_discovery(void) {
             vTaskDelay(pdMS_TO_TICKS(25));
             return true;
         });
+
+        // Also publish Home Assistant entities for exposed automations (ha_expose == true)
+        for (const auto& rule : global_automations) {
+            if (!global_mqtt_client || !s_mqtt_connected.load()) break;
+            publish_ha_automation_discovery(global_mqtt_client, rule);
+            vTaskDelay(pdMS_TO_TICKS(25));
+        }
     }
 }
 
@@ -776,6 +831,12 @@ void mqtt_mgr_clear_discovery(void) {
             vTaskDelay(pdMS_TO_TICKS(15));
             return true;
         });
+
+        for (const auto& rule : global_automations) {
+            if (!global_mqtt_client || !s_mqtt_connected.load()) break;
+            clear_ha_automation_discovery(global_mqtt_client, rule);
+            vTaskDelay(pdMS_TO_TICKS(15));
+        }
     }
 }
 

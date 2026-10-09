@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.10.4-b002",
+  "can_do_version": "2026.10.4-b003",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -11611,6 +11611,192 @@
           "type": "entity_command",
           "entity_id": "hazard_lights",
           "command": "Off"
+        }
+      ]
+    },
+    {
+      "id": "remote_climate_start_smart_automation",
+      "name": "E-GMP Smart Remote Climate (HV 0x038 Monitored)",
+      "description": "Wakes the vehicle network via 0x562, pulses 0x4F1 pre-charge until high-voltage contactors close (0x038 Byte 6 == 0x82), fires the 0x4A2 HVAC activation sequence, and closes session cleanly.",
+      "category": "Comfort & Climate",
+      "tags": [
+        "all_egmp",
+        "ioniq5",
+        "ioniq6",
+        "ev6",
+        "gv60"
+      ],
+      "enabled": true,
+      "ha_expose": true,
+      "ha_icon": "mdi:snowflake-check",
+      "exec_mode": "one_shot",
+      "cooldown_ms": 10000,
+      "contributor": {
+        "name": "SuaveEV & Community",
+        "github": "SuperSuave",
+        "notes": "Dynamic loop implementation replaces hardcoded C++ routines. Verified on E-GMP platforms."
+      },
+      "triggers": [
+        {
+          "id": "trig_morning_schedule",
+          "source": "schedule",
+          "type": "time_schedule",
+          "time": "07:30",
+          "days": [
+            "mon",
+            "tue",
+            "wed",
+            "thu",
+            "fri"
+          ]
+        }
+      ],
+      "conditions": [
+        {
+          "id": "cond_hv_soc_check",
+          "type": "can_comparison",
+          "can_id": "0x594",
+          "byte": "D1",
+          "operator": ">=",
+          "value": "0x14"
+        }
+      ],
+      "actions": [
+        {
+          "id": "act_wake_bus",
+          "type": "transmit",
+          "can_id": "0x562",
+          "payload": {
+            "D1": "0x62",
+            "D2": "0x01",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0xFF",
+            "D8": "0xFF"
+          },
+          "repeat": 1,
+          "delay_ms": 400
+        },
+        {
+          "id": "act_wait_hv_ready",
+          "type": "repeat_until",
+          "interval_ms": 1000,
+          "timeout_ms": 30000,
+          "condition": {
+            "can_id": "0x038",
+            "byte": 6,
+            "operator": "==",
+            "value": "0x82"
+          },
+          "sequence": [
+            {
+              "type": "transmit",
+              "can_id": "0x4F1",
+              "payload": {
+                "D1": "0x00",
+                "D2": "0xF0",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              }
+            }
+          ]
+        },
+        {
+          "id": "act_session_active",
+          "type": "transmit",
+          "can_id": "0x4F1",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0xD0",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "repeat": 1,
+          "delay_ms": 40
+        },
+        {
+          "id": "act_hvac_prep",
+          "type": "transmit",
+          "can_id": "0x4A2",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x00",
+            "D3": "0x0C",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "repeat": 3,
+          "delay_ms": 40
+        },
+        {
+          "id": "act_hvac_exec",
+          "type": "transmit",
+          "can_id": "0x4A2",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x03",
+            "D3": "0xFC",
+            "D4": "0x00",
+            "D5": "0xFF",
+            "D6": "0xFF",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "repeat": 3,
+          "delay_ms": 40
+        },
+        {
+          "id": "act_maintain_active",
+          "type": "transmit",
+          "can_id": "0x4F1",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0xD0",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "repeat": 3,
+          "delay_ms": 1000
+        },
+        {
+          "id": "act_session_close",
+          "type": "transmit",
+          "can_id": "0x4F1",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0xC0",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "repeat": 3,
+          "delay_ms": 1000
+        },
+        {
+          "id": "act_climate_toast",
+          "type": "track_popup",
+          "level": "info",
+          "text": "Remote Climate Started"
         }
       ]
     }
