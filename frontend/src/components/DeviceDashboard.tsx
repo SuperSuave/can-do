@@ -644,6 +644,26 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     }
   };
 
+  // System: Sync Time from Browser
+  const handleSyncTime = async () => {
+    try {
+      const epoch = Math.floor(Date.now() / 1000);
+      const res = await fetch(getApiUrl('/api/system/time'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ epoch })
+      });
+      if (res.ok) {
+        showNotice('Device clock synced with browser time', 'success');
+        fetchStatus();
+      } else {
+        showNotice('NTP is managed on device (update firmware for browser sync push)', 'info');
+      }
+    } catch (e: any) {
+      showNotice(`Sync request failed: ${e.message}`, 'error');
+    }
+  };
+
   // Wi-Fi: Scan
   const handleScanWifi = async () => {
     setScanning(true);
@@ -856,19 +876,23 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               <span>•</span>
               <span>Heap: <strong className="text-[var(--text-heading)]">{formatHeap(status?.free_heap)}</strong></span>
               <span>•</span>
-              <span
-                className="inline-flex items-center gap-1.5 cursor-help"
+              <button
+                type="button"
+                onClick={handleSyncTime}
+                className="inline-flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition group text-left"
                 title={
                   status?.time_synced
-                    ? `NTP Synchronized (${status?.ntp_server || 'pool.ntp.org'})\nEpoch: ${status?.epoch_time || 0}`
-                    : 'System clock unsynchronized (waiting for NTP response from pool.ntp.org)'
+                    ? `NTP Synchronized (${status?.ntp_server || 'pool.ntp.org'})\nEpoch: ${status?.epoch_time || 0}\nClick to re-sync from browser`
+                    : (status?.time_synced === false
+                      ? 'NTP sync in progress with pool.ntp.org\nClick to force sync from browser'
+                      : 'Firmware 2026.10.3-b004 running (OTA update required to read NTP state)\nClick to sync from browser')
                 }
               >
                 <Clock className={`w-3.5 h-3.5 ${status?.time_synced ? 'text-emerald-400' : 'text-amber-400 animate-pulse'}`} />
-                <span className={status?.time_synced ? 'text-[var(--text-heading)]' : 'text-amber-300 font-semibold'}>
-                  {status?.time_synced ? (status?.system_time || 'NTP Synced') : 'NTP Sync Pending'}
+                <span className={status?.time_synced ? 'text-[var(--text-heading)] group-hover:underline' : 'text-amber-300 font-semibold group-hover:underline'}>
+                  {status?.time_synced ? (status?.system_time || 'NTP Synced') : (status?.time_synced === false ? 'NTP Pending' : 'Sync Clock')}
                 </span>
-              </span>
+              </button>
               {status?.gvret_clients !== undefined && status.gvret_clients > 0 && (
                 <>
                   <span>•</span>

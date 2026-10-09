@@ -101,9 +101,11 @@ static void time_sync_notification_cb(struct timeval *tv) {
 static void init_sntp(void) {
     if (s_sntp_initialized) return;
     s_sntp_initialized = true;
-    ESP_LOGI(TAG, "Initializing SNTP time synchronization (pool.ntp.org)...");
+    ESP_LOGI(TAG, "Initializing SNTP time synchronization (pool.ntp.org, time.google.com, time.cloudflare.com)...");
     esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
     esp_sntp_setservername(0, "pool.ntp.org");
+    esp_sntp_setservername(1, "time.google.com");
+    esp_sntp_setservername(2, "time.cloudflare.com");
     esp_sntp_set_time_sync_notification_cb(time_sync_notification_cb);
     esp_sntp_init();
 }

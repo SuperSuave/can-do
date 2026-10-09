@@ -1233,6 +1233,43 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static esp_err_t api_system_set_time_handler(httpd_req_t *req) {
+    char buf[128] = {0};
+    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (ret <= 0) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+    cJSON *epoch_item = cJSON_GetObjectItem(root, "epoch");
+    if (epoch_item && cJSON_IsNumber(epoch_item)) {
+        time_t epoch_sec = (time_t)epoch_item->valuedouble;
+        if (epoch_sec >= 1704067200) { // Valid timestamp >= year 2024
+            struct timeval tv = {};
+            tv.tv_sec = epoch_sec;
+            tv.tv_usec = 0;
+            settimeofday(&tv, nullptr);
+            struct tm timeinfo;
+            gmtime_r(&epoch_sec, &timeinfo);
+            char strftime_buf[64];
+            strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d %H:%M:%S UTC", &timeinfo);
+            ESP_LOGI(TAG, "Device clock synchronized via HTTP: %s", strftime_buf);
+            broadcast_ws_state("system_time", strftime_buf);
+            cJSON_Delete(root);
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"Clock updated\"}");
+            return ESP_OK;
+        }
+    }
+    cJSON_Delete(root);
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing or invalid epoch");
+    return ESP_FAIL;
+}
+
 static void collect_spiffs_files_recursive(const char *dir_path, cJSON *arr) {
     DIR *d = opendir(dir_path);
     if (!d) return;
@@ -1892,6 +1929,7 @@ httpd_handle_t start_webserver(void) {
         reg_uri("/api/preferences", HTTP_POST, api_post_preferences_handler);
         reg_uri("/api/system/status", HTTP_GET, api_system_status_handler);
         reg_uri("/api/system/control", HTTP_POST, api_system_control_handler);
+        reg_uri("/api/system/time", HTTP_POST, api_system_set_time_handler);
         reg_uri("/api/wifi/status", HTTP_GET, api_wifi_status_handler);
         reg_uri("/api/wifi/networks", HTTP_GET, api_wifi_get_networks_handler);
         reg_uri("/api/wifi/networks", HTTP_POST, api_wifi_post_networks_handler);
