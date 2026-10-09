@@ -885,7 +885,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                     ? `NTP Synchronized (${status?.ntp_server || 'pool.ntp.org'})\nEpoch: ${status?.epoch_time || 0}\nClick to re-sync from browser`
                     : (status?.time_synced === false
                       ? 'NTP sync in progress with pool.ntp.org\nClick to force sync from browser'
-                      : 'Firmware 2026.10.3-b004 running (OTA update required to read NTP state)\nClick to sync from browser')
+                      : 'Firmware update required to read NTP state\nClick to sync from browser')
                 }
               >
                 <Clock className={`w-3.5 h-3.5 ${status?.time_synced ? 'text-emerald-400' : 'text-amber-400 animate-pulse'}`} />
