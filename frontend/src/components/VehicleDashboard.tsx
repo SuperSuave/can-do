@@ -621,6 +621,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     } else if (entity === 'hv_cell_delta_mv' || entity === 'bms_cell_delta_mv') {
       const match = stateStr.match(/(\d+(\.\d+)?)/);
       if (match) setCellDeltaMv(parseFloat(match[1]));
+    } else if (entity === 'sunroof_extended' || entity === 'sunroof') {
+      if (normState.includes('open')) setSunroof(prev => ({ ...prev, equipped: true, state: 'open' }));
+      else if (normState.includes('vent')) setSunroof(prev => ({ ...prev, equipped: true, state: 'vent' }));
+      else if (normState.includes('closed')) setSunroof(prev => ({ ...prev, equipped: true, state: 'closed' }));
     }
   };
 
@@ -666,6 +670,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     const unsubscribeMsgs = deviceWs.subscribe((data) => {
       if (data.type === 'state' && (data as any).entity && (data as any).state) {
         handleIncomingEntityState((data as any).entity, (data as any).state);
+      } else if (data.type === 'can_frame' && (data as any).id) {
+        handleIncomingCanFrame((data as any).id, (data as any).data || '');
       }
     });
 

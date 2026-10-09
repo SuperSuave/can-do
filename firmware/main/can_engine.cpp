@@ -669,6 +669,20 @@ bool queue_action_steps_ptr(uint32_t can_id, uint32_t delay_ms, const std::vecto
     return true;
 }
 
+static void emit_live_entity_state(const std::string& entity_id, const std::string& state) {
+    for (auto& entity : global_catalog) {
+        if (entity.id == entity_id) {
+            entity.current_state = state;
+            break;
+        }
+    }
+    if (global_mqtt_client) {
+        std::string topic = MQTT_BASE_TOPIC + "/state/" + entity_id;
+        esp_mqtt_client_publish(global_mqtt_client, topic.c_str(), state.c_str(), 0, 1, 1);
+    }
+    broadcast_ws_state(entity_id, state);
+}
+
 void can_rx_task(void* arg) {
     twai_message_t rx_msg;
     ESP_LOGI(TAG, "CAN RX task running");
@@ -837,43 +851,6 @@ void can_rx_task(void* arg) {
                     if (!entity_ptr) continue;
                     auto& entity = *entity_ptr;
 
-                    // Special multi-door evaluation for "doors_status" on frame 0x411:
-                    // Prevents sequential option evaluation from breaking on the first door and ignoring others
-                    if (entity.id == "doors_status" && rx_msg.data_length_code >= 8) {
-                        bool fl = (rx_msg.data[3] & 0x01); // Driver Door
-                        bool fr = (rx_msg.data[4] & 0x04); // Passenger Door
-                        bool rl = (rx_msg.data[6] & 0x10); // Rear Left Door
-                        bool rr = (rx_msg.data[7] & 0x01); // Rear Right Door
-
-                        std::string new_door_state;
-                        if (!fl && !fr && !rl && !rr) {
-                            new_door_state = "All Doors Closed";
-                        } else if (fl && fr && rl && rr) {
-                            new_door_state = "All Doors Opened";
-                        } else {
-                            std::string s;
-                            s += (fl ? "Driver Door Opened" : "Driver Door Closed");
-                            s += ", ";
-                            s += (fr ? "Passenger Door Opened" : "Passenger Door Closed");
-                            s += ", ";
-                            s += (rl ? "Rear Left Door Opened" : "Rear Left Door Closed");
-                            s += ", ";
-                            s += (rr ? "Rear Right Door Opened" : "Rear Right Door Closed");
-                            new_door_state = s;
-                        }
-
-                        if (entity.current_state != new_door_state) {
-                            entity.current_state = new_door_state;
-                            ESP_LOGI(TAG, "State change: doors_status -> %s", new_door_state.c_str());
-                            if (global_mqtt_client) {
-                                std::string topic = MQTT_BASE_TOPIC + "/state/doors_status";
-                                esp_mqtt_client_publish(global_mqtt_client, topic.c_str(), new_door_state.c_str(), 0, 1, 1);
-                            }
-                            broadcast_ws_state("doors_status", new_door_state);
-                        }
-                        continue;
-                    }
-
                     for (const auto& opt : entity.options) {
                         if (is_match(rx_msg.data, opt)) {
                             if (entity.current_state != opt.label) {
@@ -905,10 +882,10 @@ void can_rx_task(void* arg) {
                 }
             }
 
-            // 4. Real-time Live Cockpit Telemetry Decoders (Speed, Temperature, Battery, SOC)
-            // Stream continuous sensor values as live entity states directly to the front end
+            // 4. Real-time Live Cockpit Telemetry Decoders
+            // Stream continuous sensor values and discrete vehicle cockpit states directly to the front end
 
-            // Road Speed (0x1AC Byte 0 = kph, or 0x0A2 Wheel Speed 16-bit LE * 0.03125)
+            // Road Speed (0x1AC Byte 0 = kph, or 0x0A2 Wheel Speed 16-bit LE * 0.03125, or 0x1A0 ESC Speed)
             if (rx_msg.identifier == 0x1AC && rx_msg.data_length_code >= 1) {
                 uint8_t kph = rx_msg.data[0];
                 static uint8_t s_last_kph = 255;
@@ -918,13 +895,7 @@ void can_rx_task(void* arg) {
                     s_last_kph = kph;
                     s_last_spd_ms = now_ms;
                     std::string spd_str = std::to_string(kph) + " km/h";
-                    for (auto& entity : global_catalog) {
-                        if (entity.id == "cluster_vehicle_speed" || entity.id == "vehicle_speed") {
-                            entity.current_state = spd_str;
-                            break;
-                        }
-                    }
-                    broadcast_ws_state("cluster_vehicle_speed", spd_str);
+                    emit_live_entity_state("cluster_vehicle_speed", spd_str);
                 }
             } else if ((rx_msg.identifier == 0x0A2 || rx_msg.identifier == 0xA2) && rx_msg.data_length_code >= 2) {
                 uint16_t rawW1 = rx_msg.data[0] | (rx_msg.data[1] << 8);
@@ -936,7 +907,19 @@ void can_rx_task(void* arg) {
                     s_last_wheel_kph = kph;
                     s_last_wheel_spd_ms = now_ms;
                     std::string spd_str = std::to_string(kph) + " km/h";
-                    broadcast_ws_state("cluster_vehicle_speed", spd_str);
+                    emit_live_entity_state("cluster_vehicle_speed", spd_str);
+                }
+            } else if (rx_msg.identifier == 0x1A0 && rx_msg.data_length_code >= 2) {
+                uint16_t raw_esc = rx_msg.data[0] | (rx_msg.data[1] << 8);
+                uint8_t kph = (uint8_t)(raw_esc * 0.03125f);
+                static uint8_t s_last_esc_kph = 255;
+                static uint32_t s_last_esc_spd_ms = 0;
+                uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+                if (kph != s_last_esc_kph && (now_ms - s_last_esc_spd_ms >= 100)) {
+                    s_last_esc_kph = kph;
+                    s_last_esc_spd_ms = now_ms;
+                    std::string spd_str = std::to_string(kph) + " km/h";
+                    emit_live_entity_state("cluster_vehicle_speed", spd_str);
                 }
             }
 
@@ -949,13 +932,7 @@ void can_rx_task(void* arg) {
                     if (c != s_last_temp) {
                         s_last_temp = c;
                         std::string temp_str = std::to_string(c) + " °C";
-                        for (auto& entity : global_catalog) {
-                            if (entity.id == "cond_ambient_temperature") {
-                                entity.current_state = temp_str;
-                                break;
-                            }
-                        }
-                        broadcast_ws_state("cond_ambient_temperature", temp_str);
+                        emit_live_entity_state("cond_ambient_temperature", temp_str);
                     }
                 }
             }
@@ -968,13 +945,7 @@ void can_rx_task(void* arg) {
                 if (soc >= 0 && soc <= 100 && soc != s_last_soc) {
                     s_last_soc = soc;
                     std::string soc_str = std::to_string(soc) + "%";
-                    for (auto& entity : global_catalog) {
-                        if (entity.id == "cond_hv_battery_soc") {
-                            entity.current_state = soc_str;
-                            break;
-                        }
-                    }
-                    broadcast_ws_state("cond_hv_battery_soc", soc_str);
+                    emit_live_entity_state("cond_hv_battery_soc", soc_str);
                 }
             }
 
@@ -988,13 +959,7 @@ void can_rx_task(void* arg) {
                         s_last_aux_v = v;
                         char vbuf[16];
                         snprintf(vbuf, sizeof(vbuf), "%.1f V", v);
-                        for (auto& entity : global_catalog) {
-                            if (entity.id == "cond_aux_12v_battery") {
-                                entity.current_state = vbuf;
-                                break;
-                            }
-                        }
-                        broadcast_ws_state("cond_aux_12v_battery", vbuf);
+                        emit_live_entity_state("cond_aux_12v_battery", vbuf);
                     }
                 }
             }
@@ -1009,13 +974,336 @@ void can_rx_task(void* arg) {
                     s_last_maxT = maxT;
                     char tbuf[64];
                     snprintf(tbuf, sizeof(tbuf), "Min: %d°C / Max: %d°C", minT, maxT);
-                    for (auto& entity : global_catalog) {
-                        if (entity.id == "hv_battery_temperatures") {
-                            entity.current_state = tbuf;
-                            break;
+                    emit_live_entity_state("hv_battery_temperatures", tbuf);
+                }
+            }
+
+            // Transmission Gear Selection (0x045, 0x070, 0x130, 0x035)
+            if ((rx_msg.identifier == 0x045 || rx_msg.identifier == 0x070 || rx_msg.identifier == 0x130 || rx_msg.identifier == 0x035) && rx_msg.data_length_code >= 6) {
+                std::string detected_gear;
+                if (rx_msg.identifier == 0x130) {
+                    if ((rx_msg.data[4] & 0xF0) == 0x10) detected_gear = "P";
+                    else if ((rx_msg.data[5] & 0xF0) == 0x50) detected_gear = "D";
+                    else if ((rx_msg.data[5] & 0xF0) == 0x10) detected_gear = "R";
+                } else if (rx_msg.identifier == 0x045) {
+                    uint8_t d6 = rx_msg.data[5] & 0x70;
+                    if (d6 == 0x00) detected_gear = "P";
+                    else if (d6 == 0x50) detected_gear = "D";
+                    else if (d6 == 0x60) detected_gear = "N";
+                    else if (d6 == 0x70) detected_gear = "R";
+                } else if (rx_msg.identifier == 0x070 && rx_msg.data_length_code >= 8) {
+                    uint8_t d8 = rx_msg.data[7] & 0x70;
+                    if (d8 == 0x00) detected_gear = "P";
+                    else if (d8 == 0x50) detected_gear = "D";
+                    else if (d8 == 0x60) detected_gear = "N";
+                    else if (d8 == 0x70) detected_gear = "R";
+                } else if (rx_msg.identifier == 0x035) {
+                    for (int idx : {5, 6, 7, 2}) {
+                        if (rx_msg.data_length_code > idx) {
+                            uint8_t val = rx_msg.data[idx] & 0x70;
+                            if (val == 0x00) { detected_gear = "P"; break; }
+                            if (val == 0x50) { detected_gear = "D"; break; }
+                            if (val == 0x60) { detected_gear = "N"; break; }
+                            if (val == 0x70) { detected_gear = "R"; break; }
                         }
                     }
-                    broadcast_ws_state("hv_battery_temperatures", tbuf);
+                }
+                if (!detected_gear.empty()) {
+                    static std::string s_last_gear = "";
+                    if (detected_gear != s_last_gear) {
+                        s_last_gear = detected_gear;
+                        emit_live_entity_state("vehicle_gear_state", detected_gear);
+                    }
+                }
+            }
+
+            // Body Closures, Locks & Hood/Frunk (0x411)
+            if (rx_msg.identifier == 0x411 && rx_msg.data_length_code >= 8) {
+                bool fl = (rx_msg.data[3] & 0x01); // Driver Door
+                bool fr = (rx_msg.data[4] & 0x04); // Passenger Door
+                bool hood = (rx_msg.data[5] & 0x10); // Hood / Frunk
+                bool rl = (rx_msg.data[6] & 0x10); // Rear Left Door
+                bool rr = (rx_msg.data[7] & 0x01); // Rear Right Door
+                bool is_locked = (rx_msg.data_length_code >= 3) ? (rx_msg.data[2] == 0x00 || (rx_msg.data[2] & 0x40) == 0) : true;
+
+                std::string new_door_state;
+                if (!fl && !fr && !rl && !rr) {
+                    new_door_state = "All Doors Closed";
+                } else if (fl && fr && rl && rr) {
+                    new_door_state = "All Doors Opened";
+                } else {
+                    std::string s;
+                    s += (fl ? "Driver Door Opened" : "Driver Door Closed");
+                    s += ", ";
+                    s += (fr ? "Passenger Door Opened" : "Passenger Door Closed");
+                    s += ", ";
+                    s += (rl ? "Rear Left Door Opened" : "Rear Left Door Closed");
+                    s += ", ";
+                    s += (rr ? "Rear Right Door Opened" : "Rear Right Door Closed");
+                    new_door_state = s;
+                }
+
+                static std::string s_last_doors = "";
+                if (new_door_state != s_last_doors) {
+                    s_last_doors = new_door_state;
+                    emit_live_entity_state("doors_status", new_door_state);
+                }
+
+                static int s_last_locked = -1;
+                int locked_int = is_locked ? 1 : 0;
+                if (locked_int != s_last_locked) {
+                    s_last_locked = locked_int;
+                    emit_live_entity_state("door_locks", is_locked ? "Locked" : "Unlocked");
+                }
+
+                static int s_last_hood = -1;
+                int hood_int = hood ? 1 : 0;
+                if (hood_int != s_last_hood) {
+                    s_last_hood = hood_int;
+                    emit_live_entity_state("hood", hood ? "Open" : "Closed");
+                }
+            }
+
+            // Power Tailgate / Trunk (0x414)
+            if (rx_msg.identifier == 0x414 && rx_msg.data_length_code >= 4) {
+                bool tr = (rx_msg.data[3] & 0x01);
+                static int s_last_trunk = -1;
+                int tr_int = tr ? 1 : 0;
+                if (tr_int != s_last_trunk) {
+                    s_last_trunk = tr_int;
+                    emit_live_entity_state("trunk", tr ? "Open" : "Closed");
+                }
+            }
+
+            // Charge Port Door (0x3AA)
+            if (rx_msg.identifier == 0x3AA && rx_msg.data_length_code >= 5) {
+                bool cp = (rx_msg.data[4] & 0x02);
+                static int s_last_cp = -1;
+                int cp_int = cp ? 1 : 0;
+                if (cp_int != s_last_cp) {
+                    s_last_cp = cp_int;
+                    emit_live_entity_state("charge_port", cp ? "Open" : "Closed");
+                }
+            }
+
+            // EV Charging Status (0x594 Byte 2)
+            if (rx_msg.identifier == 0x594 && rx_msg.data_length_code >= 3) {
+                bool chg = (rx_msg.data[2] & 0x01);
+                static int s_last_chg = -1;
+                int chg_int = chg ? 1 : 0;
+                if (chg_int != s_last_chg) {
+                    s_last_chg = chg_int;
+                    emit_live_entity_state("cond_charging", chg ? "Charging" : "Inactive");
+                }
+            }
+
+            // Vehicle Odometer (0x227 Bytes 1-3 LE in 0.1 km units)
+            if (rx_msg.identifier == 0x227 && rx_msg.data_length_code >= 4) {
+                uint32_t raw_odo = rx_msg.data[1] | (rx_msg.data[2] << 8) | (rx_msg.data[3] << 16);
+                if (raw_odo > 0) {
+                    uint32_t km = (uint32_t)(raw_odo * 0.1f);
+                    static uint32_t s_last_km = 0;
+                    if (km != s_last_km) {
+                        s_last_km = km;
+                        emit_live_entity_state("vehicle_odometer", std::to_string(km));
+                    }
+                }
+            }
+
+            // Cabin Target Temperatures (0x380)
+            if (rx_msg.identifier == 0x380 && rx_msg.data_length_code >= 4) {
+                int rawD = -1, rawP = -1;
+                for (int idx : {3, 4, 1}) {
+                    if (rx_msg.data_length_code > idx && rx_msg.data[idx] >= 0x06 && rx_msg.data[idx] <= 0x1A) {
+                        rawD = rx_msg.data[idx];
+                        break;
+                    }
+                }
+                for (int idx : {5, 6, 2}) {
+                    if (rx_msg.data_length_code > idx && rx_msg.data[idx] >= 0x06 && rx_msg.data[idx] <= 0x1A) {
+                        rawP = rx_msg.data[idx];
+                        break;
+                    }
+                }
+                if (rawD >= 0) {
+                    int dF = 62 + (rawD - 0x06);
+                    int pF = (rawP >= 0) ? (62 + (rawP - 0x06)) : dF;
+                    static int s_last_dF = -1, s_last_pF = -1;
+                    if (dF != s_last_dF || pF != s_last_pF) {
+                        s_last_dF = dF;
+                        s_last_pF = pF;
+                        emit_live_entity_state("climate_dual_cabin_temp", std::to_string(dF) + " / " + std::to_string(pF));
+                    }
+                }
+            }
+
+            // HVAC Blower Fan Speed (0x31B Byte 3)
+            if (rx_msg.identifier == 0x31B && rx_msg.data_length_code >= 4) {
+                uint8_t fan_raw = rx_msg.data[3] & 0x0F;
+                int speed = (fan_raw >= 2 && fan_raw <= 9) ? (fan_raw - 1) : 0;
+                static int s_last_fan = -1;
+                if (speed != s_last_fan) {
+                    s_last_fan = speed;
+                    emit_live_entity_state("climate_fan_speed_level", "Fan " + std::to_string(speed));
+                }
+            }
+
+            // Rear Defroster (0x541 Byte 4 mask 0xF0 == 0x10)
+            if (rx_msg.identifier == 0x541 && rx_msg.data_length_code >= 5) {
+                bool def = ((rx_msg.data[4] & 0xF0) == 0x10);
+                static int s_last_def = -1;
+                int def_int = def ? 1 : 0;
+                if (def_int != s_last_def) {
+                    s_last_def = def_int;
+                    emit_live_entity_state("climate_rear_defog", def ? "ON" : "OFF");
+                }
+            }
+
+            // Heated Steering Wheel (0x418 Byte 0 & 0x03)
+            if (rx_msg.identifier == 0x418 && rx_msg.data_length_code >= 1) {
+                bool st_heat = ((rx_msg.data[0] & 0x03) > 0);
+                static int s_last_st_heat = -1;
+                int heat_int = st_heat ? 1 : 0;
+                if (heat_int != s_last_st_heat) {
+                    s_last_st_heat = heat_int;
+                    emit_live_entity_state("heated_steering_wheel_toggle", st_heat ? "ON" : "OFF");
+                }
+            }
+
+            // Driver & Passenger Seat Heating / Ventilation (0x496 / 0x475 Byte 0)
+            auto decode_seat_comfort = [](uint8_t b) -> const char* {
+                if (b == 0x46 || b == 0x02) return "High Heat";
+                if (b == 0x4E || b == 0x0A) return "Medium Heat";
+                if (b == 0x36 || b == 0x0E) return "Low Heat";
+                if (b == 0x2E || b == 0x10) return "High Cool";
+                if (b == 0x26 || b == 0x12) return "Medium Cool";
+                if (b == 0x1E || b == 0x14) return "Low Cool";
+                return "Off";
+            };
+            if (rx_msg.identifier == 0x496 && rx_msg.data_length_code >= 1) {
+                const char* lvl = decode_seat_comfort(rx_msg.data[0]);
+                static const char* s_last_drv = nullptr;
+                if (lvl != s_last_drv) {
+                    s_last_drv = lvl;
+                    emit_live_entity_state("drivers_seat_comfort", lvl);
+                }
+            }
+            if (rx_msg.identifier == 0x475 && rx_msg.data_length_code >= 1) {
+                const char* lvl = decode_seat_comfort(rx_msg.data[0]);
+                static const char* s_last_pass = nullptr;
+                if (lvl != s_last_pass) {
+                    s_last_pass = lvl;
+                    emit_live_entity_state("passengers_seat_comfort", lvl);
+                }
+            }
+
+            // Rear Heated Seats (0x438 Left, 0x453 Right)
+            if (rx_msg.identifier == 0x438 && rx_msg.data_length_code >= 1) {
+                uint8_t b = rx_msg.data[0];
+                const char* lvl = (b == 0x41) ? "Rear Left High Heat" : (b == 0x31) ? "Rear Left Low Heat" : "Rear Left Off";
+                static const char* s_last_rl = nullptr;
+                if (lvl != s_last_rl) {
+                    s_last_rl = lvl;
+                    emit_live_entity_state("rear_seats_comfort", lvl);
+                }
+            }
+            if (rx_msg.identifier == 0x453 && rx_msg.data_length_code >= 1) {
+                uint8_t b = rx_msg.data[0];
+                const char* lvl = (b == 0x41) ? "Rear Right High Heat" : (b == 0x31) ? "Rear Right Low Heat" : "Rear Right Off";
+                static const char* s_last_rr = nullptr;
+                if (lvl != s_last_rr) {
+                    s_last_rr = lvl;
+                    emit_live_entity_state("rear_seats_comfort", lvl);
+                }
+            }
+
+            // Hazard Lights & Turn Signals (0x413)
+            if (rx_msg.identifier == 0x413 && rx_msg.data_length_code >= 4) {
+                bool is_haz = ((rx_msg.data[3] & 0x04) != 0);
+                static int s_last_haz = -1;
+                int haz_int = is_haz ? 1 : 0;
+                if (haz_int != s_last_haz) {
+                    s_last_haz = haz_int;
+                    emit_live_entity_state("hazard_lights", is_haz ? "Active" : "Off");
+                }
+
+                uint8_t d3 = rx_msg.data[2];
+                const char* dir = (d3 & 0x10) ? "left" : (d3 & 0x40) ? "right" : "off";
+                static const char* s_last_dir = nullptr;
+                if (dir != s_last_dir) {
+                    s_last_dir = dir;
+                    emit_live_entity_state("turn_signal", dir);
+                }
+            }
+
+            // AC / DC Charging Limits (0x1F9: AC limit Byte 6/7, DC limit Byte 3/4)
+            if (rx_msg.identifier == 0x1F9 && rx_msg.data_length_code >= 6) {
+                int ac = -1;
+                for (int idx : {6, 7}) {
+                    if (rx_msg.data_length_code > idx) {
+                        uint8_t b = rx_msg.data[idx];
+                        if (b == 0x78) { ac = 50; break; }
+                        else if (b == 0xA0) { ac = 60; break; }
+                        else if (b == 0xC8) { ac = 70; break; }
+                        else if (b == 0xF5) { ac = 80; break; }
+                        else if (b == 0x1D) { ac = 90; break; }
+                        else if (b == 0x4A) { ac = 100; break; }
+                    }
+                }
+                if (ac > 0) {
+                    static int s_last_ac = -1;
+                    if (ac != s_last_ac) {
+                        s_last_ac = ac;
+                        emit_live_entity_state("ac_charging_limit", std::to_string(ac) + "%");
+                    }
+                }
+
+                int dc = -1;
+                for (int idx : {3, 4}) {
+                    if (rx_msg.data_length_code > idx) {
+                        uint8_t b = rx_msg.data[idx];
+                        if (b == 0x64) { dc = 50; break; }
+                        else if (b == 0x78) { dc = 60; break; }
+                        else if (b == 0x8C) { dc = 70; break; }
+                        else if (b == 0xA0) { dc = 80; break; }
+                        else if (b == 0xB4) { dc = 90; break; }
+                        else if (b == 0xC8) { dc = 100; break; }
+                    }
+                }
+                if (dc > 0) {
+                    static int s_last_dc = -1;
+                    if (dc != s_last_dc) {
+                        s_last_dc = dc;
+                        emit_live_entity_state("dc_charging_limit", std::to_string(dc) + "%");
+                    }
+                }
+            }
+
+            // TPMS Tire Pressures (0x593 or 0x368)
+            if ((rx_msg.identifier == 0x593 || rx_msg.identifier == 0x368) && rx_msg.data_length_code >= 4) {
+                int fl = (int)(rx_msg.data[0] * 0.2f * 14.5038f + 0.5f);
+                int fr = (int)(rx_msg.data[1] * 0.2f * 14.5038f + 0.5f);
+                int rl = (int)(rx_msg.data[2] * 0.2f * 14.5038f + 0.5f);
+                int rr = (int)(rx_msg.data[3] * 0.2f * 14.5038f + 0.5f);
+                if (fl > 20 && fl < 55) {
+                    static int s_last_fl = 0, s_last_fr = 0, s_last_rl = 0, s_last_rr = 0;
+                    if (fl != s_last_fl || fr != s_last_fr || rl != s_last_rl || rr != s_last_rr) {
+                        s_last_fl = fl; s_last_fr = fr; s_last_rl = rl; s_last_rr = rr;
+                        char tpms_buf[64];
+                        snprintf(tpms_buf, sizeof(tpms_buf), "FL: %d FR: %d RL: %d RR: %d PSI", fl, fr, rl, rr);
+                        emit_live_entity_state("wheel_speeds", tpms_buf);
+                    }
+                }
+            }
+
+            // Sunroof Glass (0x442 Byte 6)
+            if (rx_msg.identifier == 0x442 && rx_msg.data_length_code >= 7) {
+                uint8_t d7 = rx_msg.data[6];
+                const char* s_state = (d7 == 0x60 || d7 == 0x20) ? "open" : (d7 == 0x00) ? "vent" : "closed";
+                static const char* s_last_roof = nullptr;
+                if (s_state != s_last_roof) {
+                    s_last_roof = s_state;
+                    emit_live_entity_state("sunroof_extended", s_state);
                 }
             }
         } else {

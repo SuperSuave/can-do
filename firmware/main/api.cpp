@@ -95,7 +95,14 @@ void broadcast_ws_raw(const std::string& json_str) {
     }
 }
 
+static std::unordered_map<std::string, std::string> s_live_state_cache;
+
+const std::unordered_map<std::string, std::string>& get_live_state_cache(void) {
+    return s_live_state_cache;
+}
+
 void broadcast_ws_state(const std::string& entity_id, const std::string& state) {
+    s_live_state_cache[entity_id] = state;
     uart_bridge_send_state(entity_id, state);
     if (!has_active_websocket_clients()) return;
     std::string json = "{\"type\":\"state\",\"entity\":\"" + entity_id + "\",\"state\":\"" + state + "\"}";
@@ -276,19 +283,33 @@ static esp_err_t options_handler(httpd_req_t *req) {
 static esp_err_t api_states_handler(httpd_req_t *req) {
     set_cors_headers(req);
     cJSON *root = cJSON_CreateArray();
-    bool had_vbat = false;
+    std::unordered_set<std::string> included;
+
     for (const auto& entity : global_catalog) {
         cJSON *item = cJSON_CreateObject();
         cJSON_AddStringToObject(item, "entity", entity.id.c_str());
-        cJSON_AddStringToObject(item, "state", entity.current_state.empty() ? "Unknown" : entity.current_state.c_str());
+        std::string st = entity.current_state;
+        auto it = s_live_state_cache.find(entity.id);
+        if (it != s_live_state_cache.end()) {
+            st = it->second;
+        }
+        cJSON_AddStringToObject(item, "state", st.empty() ? "Unknown" : st.c_str());
         cJSON_AddItemToArray(root, item);
-        if (entity.id == "cond_aux_12v_battery") {
-            had_vbat = true;
+        included.insert(entity.id);
+    }
+
+    for (const auto& pair : s_live_state_cache) {
+        if (included.find(pair.first) == included.end()) {
+            cJSON *item = cJSON_CreateObject();
+            cJSON_AddStringToObject(item, "entity", pair.first.c_str());
+            cJSON_AddStringToObject(item, "state", pair.second.c_str());
+            cJSON_AddItemToArray(root, item);
+            included.insert(pair.first);
         }
     }
 
     // Always include live hardware ADC 12V battery reading
-    if (!had_vbat) {
+    if (included.find("cond_aux_12v_battery") == included.end()) {
         cJSON *item = cJSON_CreateObject();
         cJSON_AddStringToObject(item, "entity", "cond_aux_12v_battery");
         cJSON_AddStringToObject(item, "state", vbat_sensor_get_last_str());

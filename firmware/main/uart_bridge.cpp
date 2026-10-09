@@ -10,9 +10,11 @@
 #include "network_mgr.h"
 #include "track_popup.h"
 #include "call_popup.h"
+#include "api.h"
 #include <cstring>
 #include <vector>
 #include <cctype>
+#include <unordered_set>
 
 static const char* TAG = "UART_BRIDGE";
 static const int RX_BUF_SIZE = 2048;
@@ -47,17 +49,33 @@ void uart_bridge_send_can_frame(const twai_message_t* msg) {
 
 void uart_bridge_send_all_states(void) {
     cJSON *root = cJSON_CreateArray();
-    bool had_vbat = false;
+    std::unordered_set<std::string> included;
     for (const auto& entity : global_catalog) {
         cJSON *item = cJSON_CreateObject();
         cJSON_AddStringToObject(item, "entity", entity.id.c_str());
-        cJSON_AddStringToObject(item, "state", entity.current_state.empty() ? "Unknown" : entity.current_state.c_str());
+        std::string st = entity.current_state;
+        const auto& cache = get_live_state_cache();
+        auto it = cache.find(entity.id);
+        if (it != cache.end()) {
+            st = it->second;
+        }
+        cJSON_AddStringToObject(item, "state", st.empty() ? "Unknown" : st.c_str());
         cJSON_AddItemToArray(root, item);
-        if (entity.id == "cond_aux_12v_battery") {
-            had_vbat = true;
+        included.insert(entity.id);
+    }
+
+    const auto& cache = get_live_state_cache();
+    for (const auto& pair : cache) {
+        if (included.find(pair.first) == included.end()) {
+            cJSON *item = cJSON_CreateObject();
+            cJSON_AddStringToObject(item, "entity", pair.first.c_str());
+            cJSON_AddStringToObject(item, "state", pair.second.c_str());
+            cJSON_AddItemToArray(root, item);
+            included.insert(pair.first);
         }
     }
-    if (!had_vbat) {
+
+    if (included.find("cond_aux_12v_battery") == included.end()) {
         cJSON *item = cJSON_CreateObject();
         cJSON_AddStringToObject(item, "entity", "cond_aux_12v_battery");
         cJSON_AddStringToObject(item, "state", vbat_sensor_get_last_str());
