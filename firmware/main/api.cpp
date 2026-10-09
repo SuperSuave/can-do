@@ -1249,7 +1249,7 @@ static esp_err_t api_system_set_time_handler(httpd_req_t *req) {
 
     cJSON *tz_item = cJSON_GetObjectItem(root, "timezone");
     if (tz_item && cJSON_IsString(tz_item) && tz_item->valuestring && strlen(tz_item->valuestring) > 0) {
-        timezone_mgr_set(tz_item->valuestring, true);
+        timezone_mgr_set(tz_item->valuestring);
     }
 
     cJSON *epoch_item = cJSON_GetObjectItem(root, "epoch");

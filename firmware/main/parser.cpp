@@ -1257,7 +1257,7 @@ bool load_automations_from_fs(const char* filepath) {
         if (cJSON_IsObject(settings_obj)) {
             cJSON* tz = cJSON_GetObjectItem(settings_obj, "timezone");
             if (cJSON_IsString(tz) && tz->valuestring && strlen(tz->valuestring) > 0) {
-                timezone_mgr_set(tz->valuestring, false);
+                timezone_mgr_set_ext(tz->valuestring, false);
             }
         }
         rules_array = cJSON_GetObjectItem(root, "rules");

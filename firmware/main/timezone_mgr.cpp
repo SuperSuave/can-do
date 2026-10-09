@@ -160,7 +160,7 @@ static void save_tz_to_preferences(const char* tz_id) {
     free(rendered);
 }
 
-bool timezone_mgr_set(const char* tz_id_or_name, bool persist) {
+bool timezone_mgr_set_ext(const char* tz_id_or_name, bool persist) {
     if (!tz_id_or_name || strlen(tz_id_or_name) == 0) return false;
 
     const TzMapping* match = find_tz(tz_id_or_name);
@@ -193,6 +193,10 @@ bool timezone_mgr_set(const char* tz_id_or_name, bool persist) {
     }
 
     return true;
+}
+
+bool timezone_mgr_set(const char* tz_id_or_name) {
+    return timezone_mgr_set_ext(tz_id_or_name, true);
 }
 
 const char* timezone_mgr_get_id(void) {
@@ -272,7 +276,7 @@ void timezone_mgr_load_from_fs(void) {
         found_tz = "UTC";
     }
 
-    timezone_mgr_set(found_tz.c_str(), false);
+    timezone_mgr_set_ext(found_tz.c_str(), false);
 }
 
 void timezone_mgr_init(void) {

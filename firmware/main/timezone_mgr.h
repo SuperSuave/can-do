@@ -1,7 +1,7 @@
 #pragma once
-#include <string>
 #include <stddef.h>
 #include <time.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,16 +20,15 @@ void timezone_mgr_load_from_fs(void);
 
 /**
  * Set timezone using standard identifier (e.g. "US/Pacific", "America/New_York", "UTC")
- * or friendly alias, applying POSIX TZ to runtime and optionally saving to preferences.
+ * or friendly alias, applying POSIX TZ to runtime and saving to preferences.
  * Returns true if recognized or applied.
  */
-bool timezone_mgr_set(const char* tz_id_or_name, bool persist);
+bool timezone_mgr_set(const char* tz_id_or_name);
 
-#ifdef __cplusplus
-inline bool timezone_mgr_set(const char* tz_id_or_name) {
-    return timezone_mgr_set(tz_id_or_name, true);
-}
-#endif
+/**
+ * Set timezone with optional persistence flag.
+ */
+bool timezone_mgr_set_ext(const char* tz_id_or_name, bool persist);
 
 /**
  * Get current timezone identifier (e.g. "US/Pacific")
