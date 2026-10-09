@@ -88,12 +88,23 @@ static esp_err_t init_twai(void) {
 }
 
 static bool s_sntp_initialized = false;
+static void time_sync_notification_cb(struct timeval *tv) {
+    time_t now = tv->tv_sec;
+    struct tm timeinfo;
+    gmtime_r(&now, &timeinfo);
+    char strftime_buf[64];
+    strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d %H:%M:%S UTC", &timeinfo);
+    ESP_LOGI(TAG, "Time synchronized via NTP: %s", strftime_buf);
+    broadcast_ws_state("system_time", strftime_buf);
+}
+
 static void init_sntp(void) {
     if (s_sntp_initialized) return;
     s_sntp_initialized = true;
     ESP_LOGI(TAG, "Initializing SNTP time synchronization (pool.ntp.org)...");
     esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
     esp_sntp_setservername(0, "pool.ntp.org");
+    esp_sntp_set_time_sync_notification_cb(time_sync_notification_cb);
     esp_sntp_init();
 }
 

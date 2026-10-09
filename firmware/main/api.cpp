@@ -21,6 +21,7 @@
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
 #include "driver/twai.h"
+#include "esp_sntp.h"
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
@@ -1187,6 +1188,25 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
     const esp_app_desc_t *app_desc = esp_app_get_description();
     const char* fw_ver = (app_desc && app_desc->version[0] != '\0') ? app_desc->version : "unknown";
     cJSON_AddStringToObject(root, "can_do_version", fw_ver);
+
+    // Free heap and uptime
+    cJSON_AddNumberToObject(root, "free_heap", esp_get_free_heap_size());
+    cJSON_AddNumberToObject(root, "uptime_sec", (uint32_t)(esp_timer_get_time() / 1000000ULL));
+
+    // Device system time & NTP synchronization status
+    time_t now = time(nullptr);
+    bool time_synced = (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) || (now >= 1704067200);
+    cJSON_AddBoolToObject(root, "time_synced", time_synced);
+    cJSON_AddNumberToObject(root, "epoch_time", (double)now);
+    cJSON_AddStringToObject(root, "ntp_server", "pool.ntp.org");
+
+    char time_str[64] = "Unsynchronized";
+    if (time_synced) {
+        struct tm timeinfo;
+        gmtime_r(&now, &timeinfo);
+        strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S UTC", &timeinfo);
+    }
+    cJSON_AddStringToObject(root, "system_time", time_str);
 
     twai_status_info_t twai_st;
     if (twai_get_status_info(&twai_st) == ESP_OK) {

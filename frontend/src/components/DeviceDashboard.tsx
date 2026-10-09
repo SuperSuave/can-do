@@ -72,6 +72,10 @@ export interface SystemStatus {
   can_do_version?: string;
   free_heap?: number;
   uptime_sec?: number;
+  time_synced?: boolean;
+  system_time?: string;
+  epoch_time?: number;
+  ntp_server?: string;
 }
 
 export interface WifiStatus {
@@ -558,6 +562,8 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       } else if (data.type === 'automation_fired') {
         showNotice(`Rule Fired: ${data.rule_id || data.id || 'Automation'}`, 'info');
         fetchAutomationsDiag();
+      } else if (data.type === 'state' && data.entity === 'system_time') {
+        setStatus((prev) => prev ? { ...prev, time_synced: true, system_time: String(data.state) } : prev);
       }
     });
 
@@ -849,6 +855,20 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               <span>Uptime: <strong className="text-[var(--text-heading)]">{formatUptime(status?.uptime_sec)}</strong></span>
               <span>•</span>
               <span>Heap: <strong className="text-[var(--text-heading)]">{formatHeap(status?.free_heap)}</strong></span>
+              <span>•</span>
+              <span
+                className="inline-flex items-center gap-1.5 cursor-help"
+                title={
+                  status?.time_synced
+                    ? `NTP Synchronized (${status?.ntp_server || 'pool.ntp.org'})\nEpoch: ${status?.epoch_time || 0}`
+                    : 'System clock unsynchronized (waiting for NTP response from pool.ntp.org)'
+                }
+              >
+                <Clock className={`w-3.5 h-3.5 ${status?.time_synced ? 'text-emerald-400' : 'text-amber-400 animate-pulse'}`} />
+                <span className={status?.time_synced ? 'text-[var(--text-heading)]' : 'text-amber-300 font-semibold'}>
+                  {status?.time_synced ? (status?.system_time || 'NTP Synced') : 'NTP Sync Pending'}
+                </span>
+              </span>
               {status?.gvret_clients !== undefined && status.gvret_clients > 0 && (
                 <>
                   <span>•</span>
