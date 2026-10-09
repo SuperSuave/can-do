@@ -29,6 +29,7 @@
 #include "uds_engine.h"
 #include "power_mgr.h"
 #include "uart_bridge.h"
+#include "timezone_mgr.h"
 
 #include "esp_mac.h"
 #include "esp_wifi.h"
@@ -90,11 +91,9 @@ static esp_err_t init_twai(void) {
 static bool s_sntp_initialized = false;
 static void time_sync_notification_cb(struct timeval *tv) {
     time_t now = tv->tv_sec;
-    struct tm timeinfo;
-    gmtime_r(&now, &timeinfo);
     char strftime_buf[64];
-    strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d %H:%M:%S UTC", &timeinfo);
-    ESP_LOGI(TAG, "Time synchronized via NTP: %s", strftime_buf);
+    timezone_mgr_format_local(now, strftime_buf, sizeof(strftime_buf));
+    ESP_LOGI(TAG, "Time synchronized via NTP: %s (%s)", strftime_buf, timezone_mgr_get_id());
     broadcast_ws_state("system_time", strftime_buf);
 }
 
@@ -164,8 +163,9 @@ extern "C" void app_main(void) {
     }
     ESP_ERROR_CHECK(ret);
 
-    // 3. Mount LittleFS
+    // 3. Mount LittleFS and initialize system timezone
     init_fs();
+    timezone_mgr_init();
     mqtt_mgr_init();
 
     // 4. Network connectivity FIRST (Multi-SSID Roaming, Auto-AP Fallback, 192.168.4.1)

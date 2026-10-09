@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Catalog, Vehicle } from '../types/catalog';
 import { UserPreferences, UpdatePolicy, DEFAULT_USER_PREFERENCES } from '../types/settings';
 import { isRunningOnDevice } from '../utils/hostUtils';
+import { STANDARD_TIMEZONES, detectBrowserTimezone, getTimezoneLabel } from '../utils/timezone';
 import {
   Car,
   CheckCircle2,
@@ -39,6 +40,7 @@ export function OnboardingWizardModal({
   const [step, setStep] = useState<number>(1);
   const [vehicleId, setVehicleId] = useState<string>(initialPreferences.vehicle_id || 'ev6_gtline');
   const [unitSystem, setUnitSystem] = useState<'imperial' | 'metric'>(initialPreferences.unit_system || 'imperial');
+  const [timezone, setTimezone] = useState<string>(initialPreferences.timezone || detectBrowserTimezone());
   
   // Wi-Fi inputs
   const [wifiSsid, setWifiSsid] = useState<string>('');
@@ -67,6 +69,7 @@ export function OnboardingWizardModal({
       onboarding_completed: true,
       vehicle_id: vehicleId,
       unit_system: unitSystem,
+      timezone: timezone,
       update_policy: updatePolicy,
       update_components: {
         firmware: updateFirmware,
@@ -232,6 +235,28 @@ export function OnboardingWizardModal({
                     </div>
                   </button>
                 </div>
+              </div>
+
+              {/* System Timezone */}
+              <div className="space-y-2 pt-2 border-t border-slate-800">
+                <label className="text-xs font-semibold text-slate-300 flex items-center gap-2">
+                  <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                  Local Timezone
+                </label>
+                <p className="text-[11px] text-slate-400">
+                  Used by the ESP32 coprocessor for scheduled automations, quiet hours, and daylight saving time.
+                </p>
+                <select
+                  value={timezone}
+                  onChange={(e) => setTimezone(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-slate-800/90 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-500 transition"
+                >
+                  {STANDARD_TIMEZONES.map((tz) => (
+                    <option key={tz.id} value={tz.id} className="bg-slate-900 text-slate-100">
+                      {tz.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           )}
@@ -544,6 +569,10 @@ export function OnboardingWizardModal({
                 <div className="flex justify-between border-b border-slate-800/80 pb-1.5">
                   <span className="text-slate-400">Units:</span>
                   <span className="font-semibold text-cyan-300 capitalize">{unitSystem}</span>
+                </div>
+                <div className="flex justify-between border-b border-slate-800/80 pb-1.5">
+                  <span className="text-slate-400">Timezone:</span>
+                  <span className="font-semibold text-white">{getTimezoneLabel(timezone)}</span>
                 </div>
                 <div className="flex justify-between border-b border-slate-800/80 pb-1.5">
                   <span className="text-slate-400">Update Policy:</span>

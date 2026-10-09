@@ -22,6 +22,7 @@
 #include "esp_crt_bundle.h"
 #include "driver/twai.h"
 #include "esp_sntp.h"
+#include "timezone_mgr.h"
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
@@ -1174,6 +1175,7 @@ static esp_err_t api_post_preferences_handler(httpd_req_t *req) {
 
     ESP_LOGI(TAG, "User preferences saved to device (%d bytes)", req->content_len);
     uds_engine_load_preferences();
+    timezone_mgr_load_from_fs();
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"Preferences saved to device.\"}");
     return ESP_OK;
@@ -1199,12 +1201,11 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
     cJSON_AddBoolToObject(root, "time_synced", time_synced);
     cJSON_AddNumberToObject(root, "epoch_time", (double)now);
     cJSON_AddStringToObject(root, "ntp_server", "pool.ntp.org");
+    cJSON_AddStringToObject(root, "timezone", timezone_mgr_get_id());
 
     char time_str[64] = "Unsynchronized";
     if (time_synced) {
-        struct tm timeinfo;
-        gmtime_r(&now, &timeinfo);
-        strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S UTC", &timeinfo);
+        timezone_mgr_format_local(now, time_str, sizeof(time_str));
     }
     cJSON_AddStringToObject(root, "system_time", time_str);
 
@@ -1234,7 +1235,7 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_system_set_time_handler(httpd_req_t *req) {
-    char buf[128] = {0};
+    char buf[256] = {0};
     int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
     if (ret <= 0) {
         httpd_resp_send_500(req);
@@ -1245,6 +1246,12 @@ static esp_err_t api_system_set_time_handler(httpd_req_t *req) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
         return ESP_FAIL;
     }
+
+    cJSON *tz_item = cJSON_GetObjectItem(root, "timezone");
+    if (tz_item && cJSON_IsString(tz_item) && tz_item->valuestring && strlen(tz_item->valuestring) > 0) {
+        timezone_mgr_set(tz_item->valuestring, true);
+    }
+
     cJSON *epoch_item = cJSON_GetObjectItem(root, "epoch");
     if (epoch_item && cJSON_IsNumber(epoch_item)) {
         time_t epoch_sec = (time_t)epoch_item->valuedouble;
@@ -1253,15 +1260,13 @@ static esp_err_t api_system_set_time_handler(httpd_req_t *req) {
             tv.tv_sec = epoch_sec;
             tv.tv_usec = 0;
             settimeofday(&tv, nullptr);
-            struct tm timeinfo;
-            gmtime_r(&epoch_sec, &timeinfo);
             char strftime_buf[64];
-            strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d %H:%M:%S UTC", &timeinfo);
-            ESP_LOGI(TAG, "Device clock synchronized via HTTP: %s", strftime_buf);
+            timezone_mgr_format_local(epoch_sec, strftime_buf, sizeof(strftime_buf));
+            ESP_LOGI(TAG, "Device clock synchronized via HTTP: %s (%s)", strftime_buf, timezone_mgr_get_id());
             broadcast_ws_state("system_time", strftime_buf);
             cJSON_Delete(root);
             httpd_resp_set_type(req, "application/json");
-            httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"Clock updated\"}");
+            httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"Clock and timezone updated\"}");
             return ESP_OK;
         }
     }

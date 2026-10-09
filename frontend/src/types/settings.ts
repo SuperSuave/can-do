@@ -3,6 +3,7 @@
  */
 
 import { resolveDeviceBaseUrl } from '../utils/hostUtils';
+import { detectBrowserTimezone } from '../utils/timezone';
 
 export type UpdatePolicy = 'auto' | 'prompt' | 'manual';
 
@@ -22,6 +23,7 @@ export interface UserPreferences {
   onboarding_completed: boolean;
   vehicle_id: string;
   unit_system: 'imperial' | 'metric';
+  timezone?: string;
   update_policy: UpdatePolicy;
   update_components: UpdateComponentSelection;
   update_schedule: UpdateScheduleConfig;
@@ -41,6 +43,7 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   onboarding_completed: false,
   vehicle_id: 'ev6_gtline',
   unit_system: 'imperial',
+  timezone: detectBrowserTimezone(),
   update_policy: 'prompt', // Prompt user when updates are detected by default
   update_components: {
     firmware: true,

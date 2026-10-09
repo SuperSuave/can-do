@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <type_traits>
 #include "esp_log.h"
+#include "timezone_mgr.h"
 
 static const char* TAG = "CATALOG_PARSER";
 
@@ -1252,6 +1253,13 @@ bool load_automations_from_fs(const char* filepath) {
     if (cJSON_IsArray(root)) {
         rules_array = root;
     } else if (cJSON_IsObject(root)) {
+        cJSON* settings_obj = cJSON_GetObjectItem(root, "settings");
+        if (cJSON_IsObject(settings_obj)) {
+            cJSON* tz = cJSON_GetObjectItem(settings_obj, "timezone");
+            if (cJSON_IsString(tz) && tz->valuestring && strlen(tz->valuestring) > 0) {
+                timezone_mgr_set(tz->valuestring, false);
+            }
+        }
         rules_array = cJSON_GetObjectItem(root, "rules");
         if (!rules_array) rules_array = cJSON_GetObjectItem(root, "automations");
     }

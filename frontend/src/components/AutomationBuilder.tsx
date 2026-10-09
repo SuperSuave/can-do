@@ -71,6 +71,7 @@ import {
 } from 'lucide-react';
 import { AddElementModal, AddElementTarget } from './AddElementModal';
 import { CommunityAutomationsModal } from './CommunityAutomationsModal';
+import { STANDARD_TIMEZONES, getTimezoneLabel } from '../utils/timezone';
 
 interface AutomationBuilderProps {
   catalog: Catalog;
@@ -4336,6 +4337,25 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 </div>
               </div>
             )}
+
+            {/* Automation Timezone Selector */}
+            <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800 text-xs">
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span className="font-semibold text-slate-300">Schedule Timezone:</span>
+              </div>
+              <select
+                value={settings.timezone || 'US/Pacific'}
+                onChange={(e) => onUpdateSettings({ ...settings, timezone: e.target.value })}
+                className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-cyan-300 text-xs focus:outline-none focus:border-cyan-500 max-w-[170px]"
+              >
+                {STANDARD_TIMEZONES.map((tz) => (
+                  <option key={tz.id} value={tz.id}>
+                    {tz.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
               {rules.map((rule, idx) => (

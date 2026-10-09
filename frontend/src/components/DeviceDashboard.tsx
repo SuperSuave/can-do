@@ -55,6 +55,7 @@ import { UserPreferences, getUserPreferences, saveUserPreferences, DEFAULT_USER_
 import { checkForUpdates, executeUpdateSequence, UpdateCheckResult, UpdateStage, uploadFirmwareOta } from '../services/updateService';
 import { MdiIcon } from './MdiIcon';
 import { BluetoothManager } from './BluetoothManager';
+import { STANDARD_TIMEZONES, detectBrowserTimezone, getTimezoneLabel } from '../utils/timezone';
 
 export interface SystemStatus {
   device?: string;
@@ -76,6 +77,7 @@ export interface SystemStatus {
   system_time?: string;
   epoch_time?: number;
   ntp_server?: string;
+  timezone?: string;
 }
 
 export interface WifiStatus {
@@ -644,17 +646,18 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     }
   };
 
-  // System: Sync Time from Browser
+  // System: Sync Time & Timezone from Browser
   const handleSyncTime = async () => {
     try {
       const epoch = Math.floor(Date.now() / 1000);
+      const tz = localPrefs.timezone || detectBrowserTimezone();
       const res = await fetch(getApiUrl('/api/system/time'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ epoch })
+        body: JSON.stringify({ epoch, timezone: tz })
       });
       if (res.ok) {
-        showNotice('Device clock synced with browser time', 'success');
+        showNotice(`Device clock & timezone (${getTimezoneLabel(tz)}) synced`, 'success');
         fetchStatus();
       } else {
         showNotice('NTP is managed on device (update firmware for browser sync push)', 'info');
@@ -882,9 +885,9 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 className="inline-flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition group text-left"
                 title={
                   status?.time_synced
-                    ? `NTP Synchronized (${status?.ntp_server || 'pool.ntp.org'})\nEpoch: ${status?.epoch_time || 0}\nClick to re-sync from browser`
+                    ? `Synchronized (${status?.ntp_server || 'pool.ntp.org'})\nTimezone: ${getTimezoneLabel(status?.timezone || localPrefs.timezone)}\nEpoch: ${status?.epoch_time || 0}\nClick to re-sync from browser`
                     : (status?.time_synced === false
-                      ? 'NTP sync in progress with pool.ntp.org\nClick to force sync from browser'
+                      ? `NTP sync in progress\nTimezone: ${getTimezoneLabel(status?.timezone || localPrefs.timezone)}\nClick to force sync from browser`
                       : 'Firmware update required to read NTP state\nClick to sync from browser')
                 }
               >
@@ -2344,6 +2347,73 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                     }
                     className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-slate-700 rounded-lg"
                   />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* System Timezone & Clock Configuration */}
+          <div className="can-do-card p-4 sm:p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-[var(--text-heading)] flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-cyan-400" />
+                  System Timezone & Clock
+                </h4>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                  Controls scheduled automations, quiet hours evaluation, and live device timestamps
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSyncTime}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-cyan-950/40 text-cyan-300 border border-cyan-800/80 hover:bg-cyan-900/40 transition w-fit"
+                title="Synchronize time and timezone from your browser"
+              >
+                <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Sync Time from Browser</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-3.5 rounded-xl border border-slate-700/60 bg-slate-800/30 space-y-2">
+                <label className="block text-xs font-semibold text-white">Device Timezone</label>
+                <p className="text-[10px] text-slate-400 leading-relaxed">
+                  Used by the ESP32 coprocessor for local daylight savings and time schedule rules.
+                </p>
+                <select
+                  value={localPrefs.timezone || status?.timezone || 'US/Pacific'}
+                  onChange={(e) => {
+                    const newTz = e.target.value;
+                    handleSavePreferences({ timezone: newTz });
+                    fetch(getApiUrl('/api/system/time'), {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ epoch: Math.floor(Date.now() / 1000), timezone: newTz })
+                    }).then(() => fetchStatus());
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-none focus:border-cyan-500"
+                >
+                  {STANDARD_TIMEZONES.map((tz) => (
+                    <option key={tz.id} value={tz.id}>
+                      {tz.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="p-3.5 rounded-xl border border-slate-700/60 bg-slate-800/30 flex flex-col justify-center text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Device Clock:</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${status?.time_synced ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-amber-950 text-amber-400 border border-amber-800'}`}>
+                    {status?.time_synced ? 'SYNCHRONIZED' : 'PENDING'}
+                  </span>
+                </div>
+                <div className="font-mono text-cyan-300 font-bold text-sm">
+                  {status?.system_time || 'Unsynchronized'}
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  Active Zone: <strong className="text-slate-200">{getTimezoneLabel(status?.timezone || localPrefs.timezone)}</strong>
                 </div>
               </div>
             </div>
