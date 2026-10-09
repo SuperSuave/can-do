@@ -20,7 +20,6 @@
 #include "beep.h"
 #include "track_popup.h"
 #include "precondition.h"
-#include "remote_climate.h"
 #include "board_pins.h"
 #include "mqtt_mgr.h"
 #include "network_mgr.h"
@@ -183,7 +182,6 @@ extern "C" void app_main(void) {
     // 8. Init Cluster Track Selection Popup & Preconditioning Subsystems
     beep_init();
     precondition_init();
-    remote_climate_init();
 
     // 9. Command Queues and Tasks
     init_can_engine();

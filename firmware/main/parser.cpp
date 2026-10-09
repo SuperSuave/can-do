@@ -561,6 +561,31 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
             }
         }
         return true;
+    } else if (strcmp(type_str, "repeat_until") == 0 || strcmp(type_str, "wait_for") == 0) {
+        step.type = (strcmp(type_str, "wait_for") == 0) ? ActionType::WAIT_FOR : ActionType::REPEAT_UNTIL;
+
+        cJSON* interval = cJSON_GetObjectItem(a_item, "interval_ms");
+        if (cJSON_IsNumber(interval)) step.interval_ms = static_cast<uint32_t>(interval->valueint);
+
+        cJSON* timeout = cJSON_GetObjectItem(a_item, "timeout_ms");
+        if (cJSON_IsNumber(timeout)) step.timeout_ms = static_cast<uint32_t>(timeout->valueint);
+
+        cJSON* cond_obj = cJSON_GetObjectItem(a_item, "condition");
+        if (cond_obj && cJSON_IsObject(cond_obj)) {
+            parse_single_condition(cond_obj, step.condition);
+        }
+
+        cJSON* seq_arr = cJSON_GetObjectItem(a_item, "sequence");
+        if (cJSON_IsArray(seq_arr)) {
+            cJSON* s_sub = nullptr;
+            cJSON_ArrayForEach(s_sub, seq_arr) {
+                ActionStep s;
+                if (parse_action_step(s_sub, s)) {
+                    step.sequence.push_back(s);
+                }
+            }
+        }
+        return true;
     } else {
         step.type = ActionType::TRANSMIT_FRAME;
         cJSON* cid = cJSON_GetObjectItem(a_item, "can_id");

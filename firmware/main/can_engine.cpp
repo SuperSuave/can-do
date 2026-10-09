@@ -15,7 +15,6 @@
 #include "call_popup.h"
 #include "hud_nav.h"
 #include "precondition.h"
-#include "remote_climate.h"
 #include "board_pins.h"
 #include "can.h"
 #include "mqtt_mgr.h"
@@ -358,7 +357,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
         }
 
         if (step.type == ActionType::CLIMATE_TARGET) {
-            remote_climate_start_ext(step.target_temp_c, step.duration_minutes, step.monitor_0x38);
+            queue_entity_command("remote_climate_start_smart", "Start");
             continue;
         }
 
@@ -378,17 +377,6 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                 hud_nav_update(&instr);
             }
             continue;
-        }
-
-        if ((step.can_id == 0x520 || can_id == 0x520) && (step.mask & 0x01)) {
-            if (step.payload[0] == 0x01) {
-                float temp_c = (step.mask & 0x02 && step.payload[1] > 0) ? (step.payload[1] / 2.0f) : 22.0f;
-                remote_climate_start(temp_c, 10);
-                continue;
-            } else if (step.payload[0] == 0x00) {
-                remote_climate_stop();
-                continue;
-            }
         }
 
         if (step.type == ActionType::IF_THEN) {
@@ -425,6 +413,28 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             }
             if (!matched && !step.default_steps.empty()) {
                 execute_can_burst(can_id, step.default_steps, delay_ms);
+            }
+            continue;
+        }
+
+        if (step.type == ActionType::REPEAT_UNTIL || step.type == ActionType::WAIT_FOR) {
+            uint32_t start_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+            bool condition_met = false;
+            while (!condition_met) {
+                uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+                if (step.timeout_ms > 0 && (now_ms - start_ms) >= step.timeout_ms) {
+                    ESP_LOGW(TAG, "Timeout waiting for condition in %s", 
+                             step.type == ActionType::WAIT_FOR ? "WAIT_FOR" : "REPEAT_UNTIL");
+                    break;
+                }
+                if (step.type == ActionType::REPEAT_UNTIL && !step.sequence.empty()) {
+                    execute_can_burst(can_id, step.sequence, delay_ms);
+                }
+                if (evaluate_condition(step.condition)) {
+                    condition_met = true;
+                    break;
+                }
+                vTaskDelay(pdMS_TO_TICKS(step.interval_ms > 0 ? step.interval_ms : 100));
             }
             continue;
         }
@@ -492,26 +502,7 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
     bool is_unlock_cmd = (cmd_lower == "unlock" || cmd_lower == "unlocked");
     bool is_toggle = (cmd_lower == "toggle");
 
-    if (entity_id == "remote_climate_start" || entity_id == "remote_climate_start_dumb") {
-        if (is_off_cmd) {
-            remote_climate_stop();
-        } else if (is_toggle) {
-            remote_climate_toggle_ext(22.0f, 10, false);
-        } else {
-            remote_climate_start_dumb(22.0f, 10);
-        }
-        return true;
-    }
-    if (entity_id == "remote_climate_start_smart") {
-        if (is_off_cmd) {
-            remote_climate_stop();
-        } else if (is_toggle) {
-            remote_climate_toggle_ext(22.0f, 10, true);
-        } else {
-            remote_climate_start_smart(22.0f, 10);
-        }
-        return true;
-    }
+
 
     const EntityOption* matched_opt = nullptr;
 
@@ -614,6 +605,40 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
     return ok;
 }
 
+bool steps_contain_async(const std::vector<ActionStep>& steps) {
+    for (const auto& step : steps) {
+        if (step.type == ActionType::REPEAT_UNTIL || step.type == ActionType::WAIT_FOR) {
+            return true;
+        }
+        if (step.type == ActionType::DELAY && step.delay_ms >= 500) {
+            return true;
+        }
+        if (step.type == ActionType::IF_THEN) {
+            if (steps_contain_async(step.then_steps) || steps_contain_async(step.else_steps)) return true;
+        }
+        if (step.type == ActionType::CHOOSE) {
+            for (const auto& choice : step.choices) {
+                if (steps_contain_async(choice.sequence)) return true;
+            }
+            if (steps_contain_async(step.default_steps)) return true;
+        }
+    }
+    return false;
+}
+
+static void execute_can_burst_async_task(void* arg) {
+    CanBurstCmd* cmd = (CanBurstCmd*)arg;
+    if (cmd) {
+        if (cmd->steps && !cmd->steps->empty()) {
+            execute_can_burst(cmd->can_id, *cmd->steps, cmd->delay_ms);
+        } else if (!cmd->inline_steps.empty()) {
+            execute_can_burst(cmd->can_id, cmd->inline_steps, cmd->delay_ms);
+        }
+        delete cmd;
+    }
+    vTaskDelete(NULL);
+}
+
 bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>& steps, const std::string& trigger_id) {
     CanBurstCmd* cmd = new (std::nothrow) CanBurstCmd();
     if (!cmd) return false;
@@ -621,6 +646,7 @@ bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<Ac
     cmd->delay_ms = delay_ms;
     cmd->trigger_id = trigger_id;
     cmd->inline_steps = steps;
+    cmd->async = steps_contain_async(steps);
     if (xQueueSend(tx_command_queue, &cmd, pdMS_TO_TICKS(10)) != pdTRUE) {
         delete cmd;
         return false;
@@ -635,6 +661,7 @@ bool queue_action_steps_ptr(uint32_t can_id, uint32_t delay_ms, const std::vecto
     cmd->delay_ms = delay_ms;
     cmd->trigger_id = trigger_id;
     cmd->steps = steps;
+    cmd->async = steps ? steps_contain_async(*steps) : false;
     if (xQueueSend(tx_command_queue, &cmd, pdMS_TO_TICKS(10)) != pdTRUE) {
         delete cmd;
         return false;
@@ -696,7 +723,6 @@ void can_rx_task(void* arg) {
             call_popup_rx(&rx_msg, CAN_BUS_0);
             hud_nav_rx(&rx_msg, CAN_BUS_0);
             uds_engine_on_can_rx(&rx_msg);
-            remote_climate_on_can_rx(&rx_msg);
 
             // Stream raw frame to connected SavvyCAN/GVRET client
             gvret_enqueue_frame(&rx_msg);
@@ -1019,14 +1045,18 @@ void can_tx_task(void* arg) {
 
     while (true) {
         if (xQueueReceive(tx_command_queue, &cmd, portMAX_DELAY) == pdTRUE && cmd) {
-            s_current_firing_trigger_id = cmd->trigger_id;
-            if (cmd->steps && !cmd->steps->empty()) {
-                execute_can_burst(cmd->can_id, *cmd->steps, cmd->delay_ms);
-            } else if (!cmd->inline_steps.empty()) {
-                execute_can_burst(cmd->can_id, cmd->inline_steps, cmd->delay_ms);
+            if (cmd->async) {
+                xTaskCreate(execute_can_burst_async_task, "can_tx_async", 4096, cmd, 5, NULL);
+            } else {
+                s_current_firing_trigger_id = cmd->trigger_id;
+                if (cmd->steps && !cmd->steps->empty()) {
+                    execute_can_burst(cmd->can_id, *cmd->steps, cmd->delay_ms);
+                } else if (!cmd->inline_steps.empty()) {
+                    execute_can_burst(cmd->can_id, cmd->inline_steps, cmd->delay_ms);
+                }
+                s_current_firing_trigger_id = "";
+                delete cmd;
             }
-            s_current_firing_trigger_id = "";
-            delete cmd;
         }
     }
 }

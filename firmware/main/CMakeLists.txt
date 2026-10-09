@@ -31,7 +31,6 @@ idf_component_register(
         "uds_engine.cpp"
         "power_mgr.cpp"
         "uart_bridge.cpp"
-        "remote_climate.cpp"
         "timezone_mgr.cpp"
     INCLUDE_DIRS "."
     REQUIRES 

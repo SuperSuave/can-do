@@ -139,6 +139,16 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
     };
   }
 
+  if (act.type === 'repeat_until' || act.type === 'wait_for') {
+    return {
+      type: act.type,
+      interval_ms: act.interval_ms || 1000,
+      timeout_ms: act.timeout_ms || 30000,
+      condition: act.condition ? compileCondition(act.condition) : undefined,
+      sequence: act.sequence ? compileActionList(act.sequence, catalog) : undefined
+    };
+  }
+
   if (act.type === 'delay') {
     return {
       type: 'delay',
@@ -239,6 +249,16 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
             inlinedSteps.push({
               type: 'delay',
               ms: step.delay_ms || step.dwell_ms || step.ms || 500
+            });
+            return;
+          }
+          if (step.type === 'repeat_until' || step.type === 'wait_for') {
+            inlinedSteps.push({
+              type: step.type,
+              interval_ms: step.interval_ms || 1000,
+              timeout_ms: step.timeout_ms || 30000,
+              condition: step.condition ? compileCondition(step.condition) : undefined,
+              sequence: step.sequence ? compileActionList(step.sequence, catalog) : undefined
             });
             return;
           }

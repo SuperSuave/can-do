@@ -62,7 +62,9 @@ enum class ActionType {
     CALL_POPUP,
     CLIMATE_TARGET,
     PRECONDITION,
-    HUD_NAV
+    HUD_NAV,
+    REPEAT_UNTIL,
+    WAIT_FOR
 };
 
 struct ChoiceBranch {
@@ -115,6 +117,12 @@ struct ActionStep {
     // For CHOOSE
     std::vector<ChoiceBranch> choices;
     std::vector<ActionStep> default_steps;
+
+    // For REPEAT_UNTIL / WAIT_FOR
+    uint32_t interval_ms = 1000;
+    uint32_t timeout_ms = 30000;
+    AutomationCondition condition;
+    std::vector<ActionStep> sequence;
 };
 
 struct EntityOption {
@@ -188,4 +196,5 @@ struct CanBurstCmd {
     std::string trigger_id;
     const std::vector<ActionStep>* steps = nullptr;
     std::vector<ActionStep> inline_steps;
+    bool async = false;
 };
