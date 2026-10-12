@@ -45,3 +45,6 @@ atom-ui-bridge/data/can_do_catalog.json
 
 # Reference DBC files
 *.dbc
+
+# tmporary files
+*tmp.driveupload
