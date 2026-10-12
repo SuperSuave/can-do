@@ -120,7 +120,7 @@ export type PopupLevel = 'info' | 'warning' | 'error';
 export interface AutomationAction {
   id: string;
   _clientId?: string;
-  type: 'can_tx' | 'transmit' | 'entity_command' | 'delay' | 'precondition' | 'climate_target' | 'webhook' | 'choose' | 'if_then' | 'track_popup' | 'popup';
+  type: 'can_tx' | 'transmit' | 'entity_command' | 'delay' | 'precondition' | 'climate_target' | 'webhook' | 'choose' | 'if_then' | 'track_popup' | 'popup' | 'repeat_until' | 'wait_for' | string;
   level?: PopupLevel;
   text?: string;
   popup_message?: string;
@@ -157,6 +157,12 @@ export interface AutomationAction {
   // For choose
   choices?: AutomationActionChoice[];
   default?: AutomationAction[];
+
+  // For repeat_until / wait_for
+  interval_ms?: number;
+  timeout_ms?: number;
+  condition?: AutomationCondition;
+  sequence?: AutomationAction[];
 }
 
 export interface AutomationRule {

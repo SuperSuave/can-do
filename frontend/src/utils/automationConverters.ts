@@ -97,10 +97,33 @@ export function compileCondition(cond: AutomationCondition): any {
   }
 
   const match = compileToByteMap(cond.match || (cond as any).evaluate?.match || (cond as any).payload || cond.match_payload);
+  const op = cond.operator || cond.evaluate?.operator || (cond.invert ? 'not_equal' : 'equal');
+
+  if (Object.keys(match).length > 1) {
+    let fullMask: any = cond.mask || cond.evaluate?.mask;
+    if (typeof fullMask !== 'object' || fullMask === null) {
+      const defaultM = typeof fullMask === 'string' ? fullMask : '0xFF';
+      const mObj: Record<string, string> = {};
+      Object.keys(match).forEach(k => { mObj[k] = defaultM; });
+      fullMask = mObj;
+    }
+    return {
+      can_id: cond.can_id || '0x000',
+      bus: cond.bus ?? 0,
+      match,
+      mask: fullMask,
+      operator: op,
+      ...(cond.source_command_id ? { source_command_id: cond.source_command_id } : {}),
+      ...(cond.source_command_name ? { source_command_name: cond.source_command_name } : {}),
+      ...(cond.option_label ? { option_label: cond.option_label } : {})
+    };
+  }
+
   const dKey = cond.byte || cond.evaluate?.byte || Object.keys(match)[0] || 'D1';
   const targetVal = cond.value || cond.evaluate?.value || match[dKey] || '0x01';
-  const maskVal = cond.mask || cond.evaluate?.mask || '0xFF';
-  const op = cond.operator || cond.evaluate?.operator || (cond.invert ? 'not_equal' : 'equal');
+  const maskVal = typeof cond.mask === 'object' && cond.mask !== null
+    ? (cond.mask as any)[dKey] || '0xFF'
+    : (cond.mask || cond.evaluate?.mask || '0xFF');
 
   return {
     can_id: cond.can_id || '0x000',
@@ -505,6 +528,26 @@ export function compileAutomationRule(
         };
       }
 
+      if (trig.type === 'can_rx' || (trig.match && Object.keys(trig.match).length > 1)) {
+        let fullMask: any = trig.mask;
+        if (trig.match && Object.keys(trig.match).length > 1) {
+          if (typeof fullMask !== 'object' || fullMask === null) {
+            const defM = typeof fullMask === 'string' ? fullMask : '0xFF';
+            const mObj: Record<string, string> = {};
+            Object.keys(trig.match).forEach(k => { mObj[k] = defM; });
+            fullMask = mObj;
+          }
+        }
+        return {
+          ...baseTrigger,
+          type: 'can_rx',
+          can_id: trig.can_id || '',
+          bus: trig.bus ?? 0,
+          match: trig.match,
+          mask: fullMask || '0xFF'
+        };
+      }
+
       const targetByte = trig.byte || (trig.match ? Object.keys(trig.match)[0] : undefined) || (trig.byte_index !== undefined ? `D${trig.byte_index + 1}` : 'D7');
       const fromHex = trig.from || (trig.from_value !== undefined ? `0x${trig.from_value.toString(16).padStart(2, '0').toUpperCase()}` : '0x00');
       const toHex = trig.to || (trig.match && trig.match[targetByte]) || (trig.to_value !== undefined ? `0x${trig.to_value.toString(16).padStart(2, '0').toUpperCase()}` : '0x10');
@@ -687,11 +730,30 @@ export function commandToCondition(rawCmd: Command, opt?: CommandOption): Automa
   const byteIdx = parseInt(dKey.replace(/\D/g, ''), 10) - 1;
 
   const rawMask = optEval?.mask || chosenOpt?.mask || cmd.mask;
-  let targetMask = '0xFF';
-  if (typeof rawMask === 'string') {
-    targetMask = rawMask;
-  } else if (rawMask && typeof rawMask === 'object') {
-    targetMask = (rawMask as ByteMap)[dKey] || '0xFF';
+  const isMultiByte = Object.keys(cleanMatch).length > 1;
+  let targetMask: string | ByteMap = '0xFF';
+
+  if (isMultiByte) {
+    if (rawMask && typeof rawMask === 'object') {
+      const mObj: Record<string, string> = {};
+      Object.keys(cleanMatch).forEach(k => {
+        mObj[k] = (rawMask as ByteMap)[k] || '0xFF';
+      });
+      targetMask = mObj;
+    } else {
+      const defM = typeof rawMask === 'string' ? rawMask : '0xFF';
+      const mObj: Record<string, string> = {};
+      Object.keys(cleanMatch).forEach(k => {
+        mObj[k] = defM;
+      });
+      targetMask = mObj;
+    }
+  } else {
+    if (typeof rawMask === 'string') {
+      targetMask = rawMask;
+    } else if (rawMask && typeof rawMask === 'object') {
+      targetMask = (rawMask as ByteMap)[dKey] || '0xFF';
+    }
   }
 
   return {
@@ -1088,6 +1150,11 @@ export function applyOptionToTrigger(trig: AutomationTrigger, rawCmd: Command, o
   const toVal = parseInt(targetTo.replace('0x', ''), 16);
   const friendlyName = cmd.id === 'sw_menu' ? 'Menu / OK Button' : (cmd.ha_metadata?.name || cmd.name || cmd.id);
 
+  const targetFrom = (trig.from && trig.from !== targetTo)
+    ? trig.from
+    : (targetTo === '0x00' ? targetMask : '0x00');
+  const fromVal = parseInt(targetFrom.replace('0x', ''), 16);
+
   return {
     ...trig,
     source_command_id: cmd.id,
@@ -1098,6 +1165,8 @@ export function applyOptionToTrigger(trig: AutomationTrigger, rawCmd: Command, o
     byte: dKey,
     byte_index: byteIdx,
     mask: targetMask,
+    from: targetFrom,
+    from_value: isNaN(fromVal) ? undefined : fromVal,
     to: targetTo,
     to_value: isNaN(toVal) ? undefined : toVal,
     match: cleanMatch,
@@ -1158,11 +1227,30 @@ export function applyOptionToCondition(
   const byteIdx = isNaN(byteNum) ? 0 : byteNum - 1;
 
   const rawMask = opt.mask || cmd.mask;
-  let targetMask = '0xFF';
-  if (typeof rawMask === 'string') {
-    targetMask = rawMask;
-  } else if (rawMask && typeof rawMask === 'object') {
-    targetMask = (rawMask as ByteMap)[dKey] || '0xFF';
+  const isMultiByte = Object.keys(cleanMatch).length > 1;
+  let targetMask: string | ByteMap = '0xFF';
+
+  if (isMultiByte) {
+    if (rawMask && typeof rawMask === 'object') {
+      const mObj: Record<string, string> = {};
+      Object.keys(cleanMatch).forEach(k => {
+        mObj[k] = (rawMask as ByteMap)[k] || '0xFF';
+      });
+      targetMask = mObj;
+    } else {
+      const defM = typeof rawMask === 'string' ? rawMask : '0xFF';
+      const mObj: Record<string, string> = {};
+      Object.keys(cleanMatch).forEach(k => {
+        mObj[k] = defM;
+      });
+      targetMask = mObj;
+    }
+  } else {
+    if (typeof rawMask === 'string') {
+      targetMask = rawMask;
+    } else if (rawMask && typeof rawMask === 'object') {
+      targetMask = (rawMask as ByteMap)[dKey] || '0xFF';
+    }
   }
 
   const friendlyName = cmd.ha_metadata?.name || cmd.name || cmd.id;

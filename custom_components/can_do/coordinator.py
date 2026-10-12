@@ -31,6 +31,10 @@ _BMS_ALIASES: dict[str, list[str]] = {
     "bms_cell_delta_mv": ["bms_cell_delta_mv"],
 }
 
+_CRC_CAN_IDS: set[str] = {
+    "0x0a2", "0x130", "0x152", "0x1ac", "0x226", "0x2ad", "0x380", "0x31b", "0x476", "0x448", "0x4ce"
+}
+
 
 class CanDoDataCoordinator:
     """Coordinates state updates and commands for CAN Do via Home Assistant MQTT."""
@@ -238,8 +242,8 @@ class CanDoDataCoordinator:
                 if prev_vals is not None and prev_vals == byte_vals:
                     return
 
-                # Filter out alive counter / checksum changes (E-GMP Byte 7 / D8)
-                if prev_vals is not None and len(prev_vals) == len(byte_vals) == 8:
+                # Filter out alive counter / checksum changes (E-GMP Byte 7 / D8) on known telemetry IDs
+                if can_id in _CRC_CAN_IDS and prev_vals is not None and len(prev_vals) == len(byte_vals) == 8:
                     if prev_vals[:7] == byte_vals[:7]:
                         return
 
@@ -307,15 +311,11 @@ class CanDoDataCoordinator:
         json_payload = json.dumps(payload_obj)
         _LOGGER.debug("Sending CAN burst to %s: %s", self.tx_topic, json_payload)
         await mqtt.async_publish(self.hass, self.tx_topic, json_payload, qos=1)
-        if self.tx_topic != f"{self.base_topic}/tx":
-            await mqtt.async_publish(self.hass, f"{self.base_topic}/tx", json_payload, qos=1)
 
     async def async_send_entity_command(self, entity_id: str, command: str) -> None:
         """Send high-level entity command (e.g. lock/unlock) to ESP32 edge device over MQTT."""
         topic = f"{self.base_topic}/{self.effective_device_id}/set/{entity_id}"
         await mqtt.async_publish(self.hass, topic, command, qos=1)
-        if topic != f"{self.base_topic}/set/{entity_id}":
-            await mqtt.async_publish(self.hass, f"{self.base_topic}/set/{entity_id}", command, qos=1)
 
     async def async_send_notification(
         self,
@@ -339,8 +339,6 @@ class CanDoDataCoordinator:
         json_payload = json.dumps(payload_obj)
         _LOGGER.info("Sending cluster notification to %s: %s", self.notify_topic, json_payload)
         await mqtt.async_publish(self.hass, self.notify_topic, json_payload, qos=1)
-        if self.notify_topic != f"{self.base_topic}/notify":
-            await mqtt.async_publish(self.hass, f"{self.base_topic}/notify", json_payload, qos=1)
 
     async def async_send_hud_nav(
         self,

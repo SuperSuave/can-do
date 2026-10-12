@@ -11481,10 +11481,21 @@
           "type": "can_state",
           "can_id": "0x411",
           "bus": 0,
-          "byte": "D2",
-          "operator": "==",
-          "value": "0x00",
-          "source_command_id": "doors_status"
+          "match": {
+            "D4": "0x00",
+            "D5": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "mask": {
+            "D4": "0x01",
+            "D5": "0x04",
+            "D7": "0x10",
+            "D8": "0x01"
+          },
+          "operator": "equal",
+          "source_command_id": "doors_status",
+          "option_label": "All Doors Closed"
         }
       ],
       "actions": [

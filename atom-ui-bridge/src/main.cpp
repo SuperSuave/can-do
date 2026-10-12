@@ -16,8 +16,8 @@
 // ============================================================================
 #define LED_PIN         27      // SK6812 Single RGB LED
 #define BUTTON_PIN      39      // Onboard user button (active LOW)
-#define GROVE_RX_PIN    26      // Connect to WiCAN IO1 (TX)
-#define GROVE_TX_PIN    32      // Connect to WiCAN IO5 (RX)
+#define BRIDGE_RX_PIN    26      // Connect to WiCAN IO1 (TX)
+#define BRIDGE_TX_PIN    32      // Connect to WiCAN IO5 (RX)
 #define UART_BAUD       921600  // High-speed UART link
 
 CRGB leds[1];
@@ -313,8 +313,8 @@ void setup() {
     pinMode(BUTTON_PIN, INPUT_PULLUP);
 
     // 3. Hardware Serial2 link to WiCAN (IO1 -> G26 RX, IO5 -> G32 TX)
-    Serial2.begin(UART_BAUD, SERIAL_8N1, GROVE_RX_PIN, GROVE_TX_PIN);
-    Serial.printf("[UART] Serial2 initialized at %d baud (RX: %d, TX: %d)\n", UART_BAUD, GROVE_RX_PIN, GROVE_TX_PIN);
+    Serial2.begin(UART_BAUD, SERIAL_8N1, BRIDGE_RX_PIN, BRIDGE_TX_PIN);
+    Serial.printf("[UART] Serial2 initialized at %d baud (RX: %d, TX: %d)\n", UART_BAUD, BRIDGE_RX_PIN, BRIDGE_TX_PIN);
 
     // 4. Mount LittleFS for Frontend SPA assets
     if (!LittleFS.begin(true)) {

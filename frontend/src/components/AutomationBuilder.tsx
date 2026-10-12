@@ -440,6 +440,28 @@ export function evaluateConditionState(
     return { state: 'unknown', reason: `Invalid frame data for ${cid}` };
   }
 
+  // Multi-byte condition checking (e.g. All Doors Closed / Opened)
+  if (cond.match && Object.keys(cond.match).length > 1) {
+    const rawMaskObj = cond.mask || cond.evaluate?.mask;
+    for (const [dKey, targetValStr] of Object.entries(cond.match)) {
+      const m = dKey.match(/D(\d+)/i);
+      const bIdx = m ? parseInt(m[1], 10) - 1 : 0;
+      if (bIdx < 0 || bIdx >= 8) continue;
+      let maskVal = 0xFF;
+      if (typeof rawMaskObj === 'object' && rawMaskObj !== null) {
+        maskVal = parseInt((rawMaskObj as any)[dKey] || '0xFF', 16) || 0xFF;
+      } else if (typeof rawMaskObj === 'string') {
+        maskVal = parseInt(rawMaskObj, 16) || 0xFF;
+      }
+      const tVal = parseInt(String(targetValStr), 16) || 0;
+      const actByte = bytes[bIdx];
+      if ((actByte & maskVal) !== (tVal & maskVal)) {
+        return { state: 'invalid', reason: `${dKey} failed mask match` };
+      }
+    }
+    return { state: 'valid', reason: `All ${Object.keys(cond.match).length} bytes match` };
+  }
+
   // Determine byte index
   let byteIndex = cond.byte_index;
   if (byteIndex === undefined || byteIndex < 0) {
@@ -454,7 +476,8 @@ export function evaluateConditionState(
   }
 
   // Parse mask
-  const maskStr = cond.mask || cond.evaluate?.mask || '0xFF';
+  const rawMaskVal = cond.mask || cond.evaluate?.mask;
+  const maskStr = typeof rawMaskVal === 'string' ? rawMaskVal : '0xFF';
   const mask = parseInt(maskStr, 16) || 0xFF;
 
   // Parse target value
@@ -1079,7 +1102,8 @@ function ConditionNodeEditor({
     (cond.can_id ? `CAN Condition ${cond.can_id}` : `Condition ${index + 1}`);
 
   const dKey = cond.byte ?? cond.evaluate?.byte ?? (cond.match && Object.keys(cond.match).length > 0 ? Object.keys(cond.match)[0] : '') ?? '';
-  const maskVal = cond.mask ?? cond.evaluate?.mask ?? '';
+  const rawMaskVal = cond.mask ?? cond.evaluate?.mask ?? '';
+  const maskVal = typeof rawMaskVal === 'string' ? rawMaskVal : (rawMaskVal && typeof rawMaskVal === 'object' ? JSON.stringify(rawMaskVal) : '');
   const opVal = cond.operator || cond.evaluate?.operator || (cond.invert ? 'not_equal' : 'equal');
   const targetVal = cond.value ?? cond.evaluate?.value ?? (cond.match && dKey ? cond.match[dKey] : '') ?? '';
 

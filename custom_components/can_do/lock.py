@@ -96,6 +96,7 @@ class CanDoLockEntity(CanDoEntity, LockEntity):
     async def async_lock(self, **kwargs: Any) -> None:
         """Send lock CAN burst and entity command to the vehicle."""
         self._is_locked = True
+        self.coordinator.can_states[self.entity_id_str.lower()] = "Locked"
         self.async_write_ha_state()
 
         net = self.command.get("network", {})
@@ -112,13 +113,14 @@ class CanDoLockEntity(CanDoEntity, LockEntity):
         steps = build_action_steps(self.command, target_opt)
         if steps and action_can_id != "0x000":
             await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
-
-        # Dispatch high-level entity command to ESP32 edge engine
-        await self.coordinator.async_send_entity_command(self.entity_id_str, "lock")
+        else:
+            # Fallback to high-level entity command for edge engine
+            await self.coordinator.async_send_entity_command(self.entity_id_str, "lock")
 
     async def async_unlock(self, **kwargs: Any) -> None:
         """Send unlock CAN burst and entity command to the vehicle."""
         self._is_locked = False
+        self.coordinator.can_states[self.entity_id_str.lower()] = "Unlocked"
         self.async_write_ha_state()
 
         net = self.command.get("network", {})
@@ -135,6 +137,6 @@ class CanDoLockEntity(CanDoEntity, LockEntity):
         steps = build_action_steps(self.command, target_opt)
         if steps and action_can_id != "0x000":
             await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
-
-        # Dispatch high-level entity command to ESP32 edge engine
-        await self.coordinator.async_send_entity_command(self.entity_id_str, "unlock")
+        else:
+            # Fallback to high-level entity command for edge engine
+            await self.coordinator.async_send_entity_command(self.entity_id_str, "unlock")
