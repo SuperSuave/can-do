@@ -224,17 +224,14 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
             s_sta_connected = false;
             s_cur_sta_ip = "0.0.0.0";
             if (!s_ap_active) board_led_wifi(false);
-            ESP_LOGW(TAG, "Wi-Fi disconnected from '%s'", s_cur_sta_ssid.c_str());
+            auto* disc = static_cast<wifi_event_sta_disconnected_t*>(event_data);
+            ESP_LOGW(TAG, "Wi-Fi disconnected from '%s' (reason %d)", s_cur_sta_ssid.c_str(), disc ? disc->reason : -1);
             mqtt_mgr_on_wifi_disconnect();
             can_engine_on_device_event("wifi_disconnected", s_cur_sta_ssid, 0);
 
-            if (s_retry_num < MAXIMUM_RETRY) {
-                esp_wifi_connect();
-                s_retry_num++;
-                ESP_LOGI(TAG, "Retrying connection... (%d/%d)", s_retry_num, MAXIMUM_RETRY);
-            } else {
-                xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-            }
+            // Don't retry here: instant retries race the roam task's set_config/connect
+            // and hammer the AP with back-to-back handshakes. The roam task owns reconnects.
+            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
         } else if (event_id == WIFI_EVENT_AP_STACONNECTED) {
             auto* event = static_cast<wifi_event_ap_staconnected_t*>(event_data);
             char mac_str[18];
@@ -378,9 +375,14 @@ static void network_roam_task(void* pvParameters) {
                             wifi_config_t sta_config = {};
                             strncpy(reinterpret_cast<char*>(sta_config.sta.ssid), cand.first.ssid.c_str(), sizeof(sta_config.sta.ssid));
                             strncpy(reinterpret_cast<char*>(sta_config.sta.password), cand.first.password.c_str(), sizeof(sta_config.sta.password));
+                            sta_config.sta.pmf_cfg.capable = true;
 
                             s_cur_sta_ssid = cand.first.ssid;
                             s_retry_num = 0;
+
+                            // Ensure supplicant is idle before swapping config (stale 4-way state otherwise)
+                            esp_wifi_disconnect();
+                            vTaskDelay(pdMS_TO_TICKS(200));
                             xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
 
                             esp_wifi_set_config(WIFI_IF_STA, &sta_config);
