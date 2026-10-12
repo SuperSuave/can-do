@@ -215,7 +215,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const [lastPingMs, setLastPingMs] = useState<number | null>(null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [wifi, setWifi] = useState<WifiStatus | null>(null);
-  const [activeTab, setActiveTab] = useState<'automations' | 'mqtt' | 'wifi' | 'ota'>('automations');
+  const [activeTab, setActiveTab] = useState<'automations' | 'mqtt' | 'wifi' | 'bluetooth' | 'ota'>('automations');
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
 
@@ -1285,6 +1285,22 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             <span>Wi-Fi & AP</span>
           </button>
 
+          {/* Tab: Bluetooth (BLE HID) */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('bluetooth')}
+            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors shrink-0 ${
+              activeTab === 'bluetooth'
+                ? 'bg-slate-800 text-white font-semibold shadow-sm'
+                : 'text-[var(--text-muted)] hover:text-white'
+            }`}
+          >
+            <Bluetooth className={`w-3.5 h-3.5 ${activeTab === 'bluetooth' ? 'text-blue-400' : 'text-slate-500'}`} />
+            <span>Bluetooth</span>
+            <span className="px-1.5 py-0.2 rounded text-[9px] font-mono tracking-tight bg-blue-950/80 text-blue-300 border border-blue-800/60 uppercase">
+              Atom Bridge
+            </span>
+          </button>
 
           {/* Tab 5: System & Updates */}
           <button
@@ -1792,7 +1808,39 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       )}
 
       {/* =========================================================================
-          TAB 4: System & Software Updates
+          TAB: Bluetooth BLE HID Controllers & Automations (Atom Bridge)
+         ========================================================================= */}
+      {activeTab === 'bluetooth' && (
+        <div className="space-y-4">
+          {!isAtomBridge && connected && status?.device && (
+            <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-800/60 text-xs text-amber-200 flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold text-amber-300">
+                  Notice: Bluetooth (BLE HID) is currently supported on M5Stack Atom Lite Bridge firmware.
+                </p>
+                <p className="text-[11px] text-amber-400/80 leading-relaxed">
+                  The currently connected device reports as <span className="font-mono text-white font-bold">{status.device}</span>. Wireless steering wheel buttons, BLE media controllers, and macro keypads communicate via the Atom Bridge BLE subsystem.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <BluetoothManager
+            deviceHost={deviceHost}
+            onSelectTriggerForAutomation={(trigger) => {
+              if (onCreateAutomationWithTrigger) {
+                onCreateAutomationWithTrigger(trigger);
+              } else if (onNavigateToAutomations) {
+                onNavigateToAutomations();
+              }
+            }}
+          />
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 5: System & Software Updates
          ========================================================================= */}
       {activeTab === 'ota' && (
         <div className="space-y-6">

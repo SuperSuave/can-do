@@ -1294,25 +1294,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 )}
               </span>
               <span>•</span>
-              <div className="inline-flex items-center gap-2 font-mono text-slate-300">
-                <span className={`text-xs font-bold transition-all ${
-                  (turnSignal === 'left' || hazards) && blinkState
-                    ? 'text-emerald-400 opacity-100 scale-125 drop-shadow-[0_0_8px_rgba(52,211,153,0.9)]'
-                    : 'text-slate-600 opacity-25'
-                }`}>
-                  ◀
-                </span>
-                <span>
-                  {unitSystem === 'metric' ? `${speedKph} km/h` : `${speedMph} MPH`}
-                </span>
-                <span className={`text-xs font-bold transition-all ${
-                  (turnSignal === 'right' || hazards) && blinkState
-                    ? 'text-emerald-400 opacity-100 scale-125 drop-shadow-[0_0_8px_rgba(52,211,153,0.9)]'
-                    : 'text-slate-600 opacity-25'
-                }`}>
-                  ▶
-                </span>
-              </div>
+              <span className="font-mono text-slate-300">
+                {unitSystem === 'metric' ? `${speedKph} km/h` : `${speedMph} MPH`}
+              </span>
             </div>
           </div>
         </div>
