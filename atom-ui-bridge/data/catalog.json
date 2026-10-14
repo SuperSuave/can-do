@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.10.6-b001",
+  "can_do_version": "2026.10.14-b001",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -2727,7 +2727,7 @@
       "id": "climate_sync_toggle",
       "ha_metadata": {
         "name": "Climate Sync Passenger Zone",
-        "domain": "button",
+        "domain": "switch",
         "icon": "mdi:sync"
       },
       "type": "button",
@@ -2736,7 +2736,8 @@
       ],
       "category": "Climate & Comfort",
       "roles": [
-        "action"
+        "action",
+        "state"
       ],
       "contributor": {
         "name": "Electroniq Buttons Community",
@@ -2756,6 +2757,13 @@
           },
           "mask": "0xFF",
           "default": true
+        },
+        {
+          "label": "Dual Split / Sync Off",
+          "payload": {
+            "D4": "0x07"
+          },
+          "mask": "0xFF"
         }
       ],
       "subcategory": "HVAC Controls"
@@ -3260,7 +3268,7 @@
       "id": "charge_port",
       "ha_metadata": {
         "name": "Charge Port Door",
-        "domain": "binary_sensor",
+        "domain": "cover",
         "icon": "mdi:ev-plug-type2"
       },
       "device_class": "door",
@@ -3270,31 +3278,89 @@
       "category": "High Voltage & Charging",
       "network": {
         "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x3AA"
+        "type": "can_rx_tx",
+        "state_can_id": "0x3AA",
+        "action_can_id": "0x4A2",
+        "delay_ms": 20
       },
       "roles": [
         "trigger",
-        "condition"
+        "condition",
+        "sensor",
+        "state",
+        "action"
       ],
       "options": [
         {
           "label": "Opened / Open",
           "match": {
-            "D5": "0x02"
+            "D4": "0x01"
           },
+          "mask": "0xFF",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x00",
+            "D3": "0xFF",
+            "D4": "0xC3",
+            "D5": "0xFF",
+            "D6": "0xFF",
+            "D7": "0x02",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0xC3",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x02",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ],
           "default": true
         },
         {
           "label": "Closed / Shut",
           "match": {
-            "D5": "0x00"
-          }
+            "D4": "0x02"
+          },
+          "mask": "0xFF",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x00",
+            "D3": "0xFF",
+            "D4": "0xC3",
+            "D5": "0xFF",
+            "D6": "0xFF",
+            "D7": "0x01",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0xC3",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x01",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
         }
       ],
       "contributor": {
-        "name": "Unknown",
-        "github": ""
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Charge port door latch telemetry on 0x3AA Byte 3 / D4 (0x01=Open/Unlocked, 0x02=Closed/Locked). Actuation commanded via HU_CDMOpenCmd on 0x4A2 (Byte 6 / D7: 0x02=Open, 0x01=Close). Power pre-wakeup pulse 00 D0 00 00 00 00 00 00 on 0x4F1 powers latch relays if vehicle bus is asleep."
       },
       "subcategory": "Charging Status"
     },
@@ -3402,6 +3468,899 @@
         }
       ],
       "subcategory": "Windows & Sunroof"
+    },
+    {
+      "id": "driver_power_window",
+      "ha_metadata": {
+        "name": "Driver Power Window",
+        "domain": "cover",
+        "icon": "mdi:car-door"
+      },
+      "device_class": "window",
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Windows & Sunroof",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Driver power window control via ALL_HU_CNTL_E_01 on CAN ID 0x4A2 (Byte 0=0x15, Byte 1=Drv, Byte 2=Ast, Byte 3=IMS/0x07, Byte 4=RL, Byte 5=RR). Status broadcast on CGW4 (0x559) Byte 1 bit 0 (CF_Gway_DrvWdwStat)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x559",
+        "action_can_id": "0x4A2"
+      },
+      "options": [
+        {
+          "label": "Close Window",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0x01",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x05",
+            "D3": "0x0F",
+            "D4": "0x07",
+            "D5": "0x0F",
+            "D6": "0x0F",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x05",
+                "D3": "0x0F",
+                "D4": "0x07",
+                "D5": "0x0F",
+                "D6": "0x0F",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "Open Window",
+          "match": {
+            "D2": "0x01"
+          },
+          "mask": "0x01",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x06",
+            "D3": "0x0F",
+            "D4": "0x07",
+            "D5": "0x0F",
+            "D6": "0x0F",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x06",
+                "D3": "0x0F",
+                "D4": "0x07",
+                "D5": "0x0F",
+                "D6": "0x0F",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Vent Window",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x04",
+            "D3": "0x0F",
+            "D4": "0x07",
+            "D5": "0x0F",
+            "D6": "0x0F",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x04",
+                "D3": "0x0F",
+                "D4": "0x07",
+                "D5": "0x0F",
+                "D6": "0x0F",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "passenger_power_window",
+      "ha_metadata": {
+        "name": "Front Passenger Power Window",
+        "domain": "cover",
+        "icon": "mdi:car-door"
+      },
+      "device_class": "window",
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Windows & Sunroof",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Assistant / Front Passenger window control via 0x4A2 (Byte 2=Ast). Status broadcast on CGW4 (0x559) Byte 1 bit 3 (CF_Gway_AstWdwStat)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x559",
+        "action_can_id": "0x4A2"
+      },
+      "options": [
+        {
+          "label": "Close Window",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0x08",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x0F",
+            "D3": "0x05",
+            "D4": "0x07",
+            "D5": "0x0F",
+            "D6": "0x0F",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x0F",
+                "D3": "0x05",
+                "D4": "0x07",
+                "D5": "0x0F",
+                "D6": "0x0F",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "Open Window",
+          "match": {
+            "D2": "0x08"
+          },
+          "mask": "0x08",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x0F",
+            "D3": "0x06",
+            "D4": "0x07",
+            "D5": "0x0F",
+            "D6": "0x0F",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x0F",
+                "D3": "0x06",
+                "D4": "0x07",
+                "D5": "0x0F",
+                "D6": "0x0F",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Vent Window",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x0F",
+            "D3": "0x04",
+            "D4": "0x07",
+            "D5": "0x0F",
+            "D6": "0x0F",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x0F",
+                "D3": "0x04",
+                "D4": "0x07",
+                "D5": "0x0F",
+                "D6": "0x0F",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rear_left_power_window",
+      "ha_metadata": {
+        "name": "Rear Left Power Window",
+        "domain": "cover",
+        "icon": "mdi:car-door"
+      },
+      "device_class": "window",
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Windows & Sunroof",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Rear Left window control via 0x4A2 (Byte 4=RL). Status broadcast on CGW4 (0x559) Byte 1 bit 1 (CF_Gway_RLWdwState)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x559",
+        "action_can_id": "0x4A2"
+      },
+      "options": [
+        {
+          "label": "Close Window",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0x02",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x0F",
+            "D3": "0x0F",
+            "D4": "0x07",
+            "D5": "0x05",
+            "D6": "0x0F",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x0F",
+                "D3": "0x0F",
+                "D4": "0x07",
+                "D5": "0x05",
+                "D6": "0x0F",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "Open Window",
+          "match": {
+            "D2": "0x02"
+          },
+          "mask": "0x02",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x0F",
+            "D3": "0x0F",
+            "D4": "0x07",
+            "D5": "0x06",
+            "D6": "0x0F",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x0F",
+                "D3": "0x0F",
+                "D4": "0x07",
+                "D5": "0x06",
+                "D6": "0x0F",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Vent Window",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x0F",
+            "D3": "0x0F",
+            "D4": "0x07",
+            "D5": "0x04",
+            "D6": "0x0F",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x0F",
+                "D3": "0x0F",
+                "D4": "0x07",
+                "D5": "0x04",
+                "D6": "0x0F",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rear_right_power_window",
+      "ha_metadata": {
+        "name": "Rear Right Power Window",
+        "domain": "cover",
+        "icon": "mdi:car-door"
+      },
+      "device_class": "window",
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Windows & Sunroof",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Rear Right window control via 0x4A2 (Byte 5=RR). Status broadcast on CGW4 (0x559) Byte 1 bit 2 (CF_Gway_RRWdwState)."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x559",
+        "action_can_id": "0x4A2"
+      },
+      "options": [
+        {
+          "label": "Close Window",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0x04",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x0F",
+            "D3": "0x0F",
+            "D4": "0x07",
+            "D5": "0x0F",
+            "D6": "0x05",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x0F",
+                "D3": "0x0F",
+                "D4": "0x07",
+                "D5": "0x0F",
+                "D6": "0x05",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "Open Window",
+          "match": {
+            "D2": "0x04"
+          },
+          "mask": "0x04",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x0F",
+            "D3": "0x0F",
+            "D4": "0x07",
+            "D5": "0x0F",
+            "D6": "0x06",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x0F",
+                "D3": "0x0F",
+                "D4": "0x07",
+                "D5": "0x0F",
+                "D6": "0x06",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Vent Window",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x0F",
+            "D3": "0x0F",
+            "D4": "0x07",
+            "D5": "0x0F",
+            "D6": "0x04",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x0F",
+                "D3": "0x0F",
+                "D4": "0x07",
+                "D5": "0x0F",
+                "D6": "0x04",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "all_power_windows",
+      "ha_metadata": {
+        "name": "All Power Windows (Global)",
+        "domain": "cover",
+        "icon": "mdi:window-closed-variant"
+      },
+      "device_class": "window",
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Windows & Sunroof",
+      "roles": [
+        "action",
+        "sensor"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Global and multi-window commands on CAN ID 0x4A2 (ALL_HU_CNTL_E_01). Supports simultaneous roll-up (global close), roll-down (global open), vent all, front pair, and rear pair."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x559",
+        "action_can_id": "0x4A2"
+      },
+      "options": [
+        {
+          "label": "Close All Windows",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0x0F",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x05",
+            "D3": "0x05",
+            "D4": "0x07",
+            "D5": "0x05",
+            "D6": "0x05",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x05",
+                "D3": "0x05",
+                "D4": "0x07",
+                "D5": "0x05",
+                "D6": "0x05",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "Open All Windows",
+          "match": {
+            "D2": "0x0F"
+          },
+          "mask": "0x0F",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x06",
+            "D3": "0x06",
+            "D4": "0x07",
+            "D5": "0x06",
+            "D6": "0x06",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x06",
+                "D3": "0x06",
+                "D4": "0x07",
+                "D5": "0x06",
+                "D6": "0x06",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Vent All Windows",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x04",
+            "D3": "0x04",
+            "D4": "0x07",
+            "D5": "0x04",
+            "D6": "0x04",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x04",
+                "D3": "0x04",
+                "D4": "0x07",
+                "D5": "0x04",
+                "D6": "0x04",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Roll Down Front Windows",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x06",
+            "D3": "0x06",
+            "D4": "0x07",
+            "D5": "0x0F",
+            "D6": "0x0F",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x06",
+                "D3": "0x06",
+                "D4": "0x07",
+                "D5": "0x0F",
+                "D6": "0x0F",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Roll Up Front Windows",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x05",
+            "D3": "0x05",
+            "D4": "0x07",
+            "D5": "0x0F",
+            "D6": "0x0F",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x05",
+                "D3": "0x05",
+                "D4": "0x07",
+                "D5": "0x0F",
+                "D6": "0x0F",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Roll Down Rear Windows",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x0F",
+            "D3": "0x0F",
+            "D4": "0x07",
+            "D5": "0x06",
+            "D6": "0x06",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x0F",
+                "D3": "0x0F",
+                "D4": "0x07",
+                "D5": "0x06",
+                "D6": "0x06",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Roll Up Rear Windows",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x0F",
+            "D3": "0x0F",
+            "D4": "0x07",
+            "D5": "0x05",
+            "D6": "0x05",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x0F",
+                "D3": "0x0F",
+                "D4": "0x07",
+                "D5": "0x05",
+                "D6": "0x05",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Vent Front Windows",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x04",
+            "D3": "0x04",
+            "D4": "0x07",
+            "D5": "0x0F",
+            "D6": "0x0F",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x04",
+                "D3": "0x04",
+                "D4": "0x07",
+                "D5": "0x0F",
+                "D6": "0x0F",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Vent Rear Windows",
+          "payload": {
+            "D1": "0x15",
+            "D2": "0x0F",
+            "D3": "0x0F",
+            "D4": "0x07",
+            "D5": "0x04",
+            "D6": "0x04",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x15",
+                "D2": "0x0F",
+                "D3": "0x0F",
+                "D4": "0x07",
+                "D5": "0x04",
+                "D6": "0x04",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cabin_windows_status",
+      "ha_metadata": {
+        "name": "Cabin Windows State",
+        "domain": "binary_sensor",
+        "icon": "mdi:window-closed-variant"
+      },
+      "device_class": "window",
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Windows & Sunroof",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x559"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Decoded from CGW4 (0x559) Byte 1. Tracks open/closed state of all 4 vehicle power windows."
+      },
+      "options": [
+        {
+          "label": "All Windows Closed",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": {
+            "D2": "0x0F"
+          }
+        },
+        {
+          "label": "All Windows Opened",
+          "match": {
+            "D2": "0x0F"
+          },
+          "mask": {
+            "D2": "0x0F"
+          }
+        },
+        {
+          "label": "Driver Window Opened",
+          "match": {
+            "D2": "0x01"
+          },
+          "mask": "0x01",
+          "default": true
+        },
+        {
+          "label": "Driver Window Closed",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0x01"
+        },
+        {
+          "label": "Passenger Window Opened",
+          "match": {
+            "D2": "0x08"
+          },
+          "mask": "0x08"
+        },
+        {
+          "label": "Passenger Window Closed",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0x08"
+        },
+        {
+          "label": "Rear Left Window Opened",
+          "match": {
+            "D2": "0x02"
+          },
+          "mask": "0x02"
+        },
+        {
+          "label": "Rear Left Window Closed",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0x02"
+        },
+        {
+          "label": "Rear Right Window Opened",
+          "match": {
+            "D2": "0x04"
+          },
+          "mask": "0x04"
+        },
+        {
+          "label": "Rear Right Window Closed",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0x04"
+        }
+      ]
     },
     {
       "id": "hazard_lights",
@@ -3757,7 +4716,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Consolidated driver seat heat and ventilation states"
+        "notes": "Consolidated driver seat heat and ventilation states Decoded from BCMService.java: 0x4A2 Byte 4 (D5) high nibble = Driver Level, low nibble = Passenger Level (0x2=Off, 0x3=Level 1 Low, 0x4=Level 2 Med, 0x5=Level 3 High)."
       },
       "options": [
         {
@@ -3944,7 +4903,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Consolidated passenger seat heat and ventilation states"
+        "notes": "Consolidated passenger seat heat and ventilation states Decoded from BCMService.java: 0x4A2 Byte 4 (D5) high nibble = Driver Level, low nibble = Passenger Level (0x2=Off, 0x3=Level 1 Low, 0x4=Level 2 Med, 0x5=Level 3 High)."
       },
       "options": [
         {
@@ -7406,7 +8365,7 @@
         "action"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Charge port connector electronic locking latch configuration. Decoded from EV_CP5 (0x578) on Gen 2 and VCMS_02 (0x30C) on Gen 3 E-GMP (0x01 = Always Locked, 0x02 = Locked while charging, 0x03 = Do Not Lock)."
       },
@@ -7781,7 +8740,7 @@
         "action"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Scheduled charging departure schedule (Days/Hour/Min) and slow/fast charge caps decoded from EV_CP1 (0x5D0) on Gen 2 and VCMS_03 (0x321) on Gen 3 E-GMP (Byte D5 = AC Slow Max SOC, Byte D6 = DC Fast Max SOC)."
       },
@@ -8428,7 +9387,7 @@
     {
       "id": "telematics_remote_tailgate",
       "ha_metadata": {
-        "name": "Telematics Remote Tailgate & Windows",
+        "name": "Telematics Remote Tailgate",
         "domain": "cover",
         "icon": "mdi:car-back"
       },
@@ -8444,9 +9403,9 @@
         "sensor"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Telematics modem (TMU2 / 0x588) remote commands for Power Tailgate / Trunk open/close and remote power window roll-up/down. On Gen 3 E-GMP, telemetry position is verified over PTGM_01 (0x3A6)."
+        "notes": "Telematics modem (TMU2 / 0x588) remote command for Power Tailgate / Trunk open and close. On Gen 3 E-GMP, telemetry position is verified over PTGM_01 (0x3A6)."
       },
       "network": {
         "bus": 0,
@@ -8508,17 +9467,6 @@
           "payload": {
             "D1": "0x02",
             "D2": "0x00"
-          }
-        },
-        {
-          "label": "Roll Windows Up",
-          "match": {
-            "D2": "0x01"
-          },
-          "mask": "0x0F",
-          "payload": {
-            "D1": "0x00",
-            "D2": "0x01"
           }
         }
       ]
@@ -8830,7 +9778,7 @@
         "action"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Decoded from HKMC_RearCareMode (RearCareManager / IMicomAudioService) & AMP_HU_PE_01: Mutes rear speakers (D8 bit 1 = 1 / 0x02), shifts fader fully forward (D3 = 0x00), and clamps front cabin volume to level 25 (0x19) or 7 on CAN ID 0x520 (Gen 2/C-CAN/M-CAN) or 0x60C (Gen 3 E-GMP)."
       },
@@ -8961,7 +9909,7 @@
         "action"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Opposite of OEM Quiet Mode decoded from AMP_HU_PE_01: Completely fades audio to rear speakers (Fader D3 = 0x14 / +10 Rear), mutes front speakers (D8 bit 2 = 1 / 0x04), and applies safe volume cap (D1 = 0x16 / 22) on CAN ID 0x520 (Gen 2/C-CAN/M-CAN) or 0x60C (Gen 3 E-GMP)."
       },
@@ -9094,7 +10042,7 @@
         "action"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "External DSP amplifier master mute command decoded from AMP_HU_PE_01 Byte 7 Bit 0 (0x01) on CAN ID 0x520 (Gen 2/C-CAN/M-CAN) or 0x60C (Gen 3 E-GMP)."
       },
@@ -9211,7 +10159,7 @@
         "action"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "External DSP amplifier master volume step decoded from AMP_HU_PE_01 Byte 0 (D1) on CAN ID 0x520 / 0x60C. 0 = Mute/0, max = 75 (0x4B) on premium systems (45 on standard)."
       },
@@ -9320,7 +10268,7 @@
         "action"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "External DSP amplifier Front-to-Rear speaker fader decoded from AMP_HU_PE_01 Byte 2 (D3) on CAN ID 0x520 / 0x60C. -10 = Full Front (0x00), 0 = Center 50/50 (0x0A), +10 = Full Rear (0x14)."
       },
@@ -9429,7 +10377,7 @@
         "action"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "External DSP amplifier Left-to-Right speaker balance decoded from AMP_HU_PE_01 Byte 3 (D4) on CAN ID 0x520 / 0x60C. -10 = Full Left (0x00), 0 = Center (0x0A), +10 = Full Right (0x14)."
       },
@@ -9538,7 +10486,7 @@
         "action"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "External DSP amplifier Bass EQ level decoded from AMP_HU_PE_01 Byte 4 (D5) on CAN ID 0x520 / 0x60C. -10 dB (0x00) to +10 dB (0x14), 0 dB Flat = 0x0A."
       },
@@ -9647,7 +10595,7 @@
         "action"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "External DSP amplifier Midrange EQ level decoded from AMP_HU_PE_01 Byte 5 (D6) on CAN ID 0x520 / 0x60C. -10 dB (0x00) to +10 dB (0x14), 0 dB Flat = 0x0A."
       },
@@ -9756,7 +10704,7 @@
         "action"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "External DSP amplifier Treble EQ level decoded from AMP_HU_PE_01 Byte 6 (D7) on CAN ID 0x520 / 0x60C. -10 dB (0x00) to +10 dB (0x14), 0 dB Flat = 0x0A."
       },
@@ -9865,7 +10813,7 @@
         "action"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "External DSP amplifier Surround Sound / QuantumLogic 3D mode decoded from AMP_HU_PE_01 Byte 7 Bit 4 (0x10) on CAN ID 0x520 / 0x60C."
       },
@@ -9982,7 +10930,7 @@
         "action"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "External DSP amplifier Speed-Dependent Volume Control (SDVC) curve toggle decoded from AMP_HU_PE_01 Byte 7 Bit 3 (0x08) on CAN ID 0x520 / 0x60C."
       },
@@ -10096,7 +11044,7 @@
         "action"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "CLU11 (0x4F1) Instrument Cluster alive heartbeat frame [00 D0 00 00 00 00 00 00]. Wakes physical CAN transceivers from low-power standby and prevents the Central Gateway (CGW) from entering bus-sleep during remote commands or diagnostic operations."
       },
@@ -10158,7 +11106,7 @@
         "sensor"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Direct Head Unit DATC (Dual Automatic Temperature Control) CAN frame (0x520 / 0x5A0) decoded from HKMC_TAppService DATCManager. Byte 0 enables HVAC (0x01), Byte 1 sets target temp in 0.5 deg C steps (raw = Temp_C * 2, e.g. 68°F=20.0°C=0x28, 70°F=21.0°C=0x2A, 72°F=22.0°C=0x2C, 74°F=23.5°C=0x2F, 76°F=24.5°C=0x31), Byte 2 controls blower & auto mode (0x04), Byte 3 controls air distribution (0x01 vent). The vehicle VCU automatically engages High Voltage contactors and runs the electric compressor / PTC heater when this frame is periodically broadcast alongside 0x4F1 CLU keep-alive."
       },
@@ -10293,7 +11241,7 @@
         "state"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Front axle tire pressure and temperature telemetry decoded from TPMS_01_200ms_1 (0x3A1). Bytes 0-1 Front Left PSI/kPa, Byte 2 Front Left temp, Bytes 3-4 Front Right PSI/kPa, Byte 5 Front Right temp, Byte 6 Low pressure alert flag."
       },
@@ -10339,7 +11287,7 @@
         "state"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Rear axle tire pressure and temperature telemetry decoded from TPMS_01_200ms_2 (0x3A2). Bytes 0-1 Rear Left PSI/kPa, Byte 2 Rear Left temp, Bytes 3-4 Rear Right PSI/kPa, Byte 5 Rear Right temp, Byte 6 Low pressure alert flag."
       },
@@ -10386,7 +11334,7 @@
         "action"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Power Tailgate Module telemetry on CAN 0x3A6 (PTGM_01_200ms) and active command on 0x588 (TMU2). Byte 0 reports opening position (0% closed to 100% open). Byte 1 reports state (Closed, Opening, Closing, Paused, Anti-pinch reverse)."
       },
@@ -10464,6 +11412,34 @@
             "D2": "0x04"
           },
           "mask": "0x0F"
+        },
+        {
+          "label": "Tailgate Unlatch / Actuate",
+          "payload": {
+            "D1": "0xF4",
+            "D2": "0x91",
+            "D3": "0x42",
+            "D4": "0x10",
+            "D5": "0x0C",
+            "D6": "0x10",
+            "D7": "0x00",
+            "D8": "0x06"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0xF4",
+                "D2": "0x91",
+                "D3": "0x42",
+                "D4": "0x10",
+                "D5": "0x0C",
+                "D6": "0x10",
+                "D7": "0x00",
+                "D8": "0x06"
+              },
+              "repeat": 3
+            }
+          ]
         }
       ]
     },
@@ -10486,7 +11462,7 @@
         "sensor"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Scheduled pre-departure cabin climate heating/cooling and off-peak utility electricity tariff charging window. Decoded from EV_CP2 (0x450) on Gen 2 and VCMS_03 (0x321) on Gen 3 E-GMP."
       },
@@ -10575,7 +11551,7 @@
         "sensor"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Passenger temperature setpoint, rear defroster, and heated/ventilated seat comfort levels. Decoded from DATC_HU_PE_02 (0x5CC) on Gen 2 and DATC_01 (0x148) on Gen 3 E-GMP."
       },
@@ -10676,7 +11652,7 @@
         "sensor"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Telematics Modem Unit remote vehicle ignition start/stop, stolen vehicle slowdown (SVSD), and immobilizer alarm trigger on CAN 0x502 (TMU11)."
       },
@@ -10745,7 +11721,7 @@
         "action"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "External DSP amplifier chime and navigation speech attenuation matrix on CAN 0x60D (AMP_HU_PE_02). Byte 0: ADAS safety warning chime volume. Byte 1: Navigation speech ducking gain. Byte 2: Touch beep feedback level."
       },
@@ -10790,7 +11766,7 @@
         "state"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "External DSP audio amplifier hardware power state, thermal status, and speaker impedance short diagnostics on CAN 0x60F (AMP_HU_PE_04)."
       },
@@ -10843,7 +11819,7 @@
         "sensor"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Telematics Modem Unit IG3 power relay activation and remote climate trigger on CAN 0x587 (TMU1). Required burst transmission to latch ignition relay prior to climate or remote commands."
       },
@@ -10910,7 +11886,7 @@
         "sensor"
       ],
       "contributor": {
-        "name": "SuaveEV & HKMC Decompilation Research",
+        "name": "SuaveEV",
         "github": "supersuave",
         "notes": "QuantumLogic 3D soundstage immersion and Virtual Active Sound Design (e-ASD powertrain sound synthesis) on CAN 0x60E (AMP_HU_PE_03). D1: QuantumLogic 3D Stage (0=Off, 1=Audience, 2=On Stage), D2: e-ASD Profile (0=Off, 1=Soft, 2=Normal, 3=Enhanced)."
       },
@@ -10972,6 +11948,1813 @@
             "D7": "0x00",
             "D8": "0x00"
           }
+        }
+      ]
+    },
+    {
+      "id": "comfort_profile_seats_wheel",
+      "ha_metadata": {
+        "name": "Seat Warmers & Steering Wheel Comfort Profile",
+        "domain": "select",
+        "icon": "mdi:car-seat-heater"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "Seat Comfort",
+      "roles": [
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x4F2",
+        "delay_ms": 20
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "requestHeatingSeatProfileCmd on 0x4F2 (1266 dec) from BCMService. Byte 0 is packet header (0x02), Byte 2 encodes seat warmers (high nibble driver level, low nibble passenger level, 0xD=Level 2, 0xF=Cancel/Off), Byte 4 is Profile ID (0x03=Profile 1), Byte 5 is Steering Wheel Heat (0x01=ON, 0x00=OFF)."
+      },
+      "options": [
+        {
+          "label": "All Warmers Off",
+          "payload": {
+            "D1": "0x02",
+            "D2": "0xFF",
+            "D3": "0xFF",
+            "D4": "0xFF",
+            "D5": "0x03",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x02",
+                "D2": "0xFF",
+                "D3": "0xFF",
+                "D4": "0xFF",
+                "D5": "0x03",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "Both Front Seats Level 2 + Heated Wheel On",
+          "payload": {
+            "D1": "0x02",
+            "D2": "0xFF",
+            "D3": "0xDD",
+            "D4": "0xFF",
+            "D5": "0x03",
+            "D6": "0x01",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x02",
+                "D2": "0xFF",
+                "D3": "0xDD",
+                "D4": "0xFF",
+                "D5": "0x03",
+                "D6": "0x01",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Driver Seat Level 2 + Heated Wheel On",
+          "payload": {
+            "D1": "0x02",
+            "D2": "0xFF",
+            "D3": "0xCD",
+            "D4": "0xFF",
+            "D5": "0x03",
+            "D6": "0x01",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x02",
+                "D2": "0xFF",
+                "D3": "0xCD",
+                "D4": "0xFF",
+                "D5": "0x03",
+                "D6": "0x01",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Driver Seat Level 2 Only",
+          "payload": {
+            "D1": "0x02",
+            "D2": "0xFF",
+            "D3": "0xCD",
+            "D4": "0xFF",
+            "D5": "0x03",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x02",
+                "D2": "0xFF",
+                "D3": "0xCD",
+                "D4": "0xFF",
+                "D5": "0x03",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Heated Steering Wheel On",
+          "payload": {
+            "D1": "0x02",
+            "D2": "0xFF",
+            "D3": "0xFF",
+            "D4": "0xFF",
+            "D5": "0x03",
+            "D6": "0x01",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x02",
+                "D2": "0xFF",
+                "D3": "0xFF",
+                "D4": "0xFF",
+                "D5": "0x03",
+                "D6": "0x01",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "climate_driver_only_toggle",
+      "ha_metadata": {
+        "name": "Driver Only Climate Zone",
+        "domain": "switch",
+        "icon": "mdi:account"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "HVAC Controls",
+      "roles": [
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x41D",
+        "delay_ms": 20
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "HU_DATC_DrvOnlySet command on 0x41D (1053 dec) Byte 4 (D5: 0x0D=ON, 0x0C=OFF, 0x0F=Applied)."
+      },
+      "options": [
+        {
+          "label": "Driver Only On",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x00",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x0D",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x0D",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "Driver Only Off",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x00",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x0C",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x0C",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "climate_blower_speed_direct",
+      "ha_metadata": {
+        "name": "Direct DATC Blower Fan Speed",
+        "domain": "select",
+        "icon": "mdi:fan"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "Blower & Fans",
+      "roles": [
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x146",
+        "delay_ms": 20
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "HU_DATC_MainBlower on DATC_01_20ms_1 (0x146 / 326 dec). Byte 3 is 0x10 (DATC Active), Byte 4 is 0x04 (MainBlower flag), Byte 5 is Speed Step (0=Off, 1-8=Speed 1 to 8). Requires live CRC8 and 4-bit alive counter on Bytes 0-2."
+      },
+      "options": [
+        {
+          "label": "Climate Off",
+          "payload": {
+            "D4": "0x10",
+            "D5": "0x04",
+            "D6": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x10",
+                "D5": "0x04",
+                "D6": "0x00"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "Speed 1",
+          "payload": {
+            "D4": "0x10",
+            "D5": "0x04",
+            "D6": "0x01"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x10",
+                "D5": "0x04",
+                "D6": "0x01"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Speed 2",
+          "payload": {
+            "D4": "0x10",
+            "D5": "0x04",
+            "D6": "0x02"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x10",
+                "D5": "0x04",
+                "D6": "0x02"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Speed 3",
+          "payload": {
+            "D4": "0x10",
+            "D5": "0x04",
+            "D6": "0x03"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x10",
+                "D5": "0x04",
+                "D6": "0x03"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Speed 4",
+          "payload": {
+            "D4": "0x10",
+            "D5": "0x04",
+            "D6": "0x04"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x10",
+                "D5": "0x04",
+                "D6": "0x04"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Speed 5",
+          "payload": {
+            "D4": "0x10",
+            "D5": "0x04",
+            "D6": "0x05"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x10",
+                "D5": "0x04",
+                "D6": "0x05"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Speed 6",
+          "payload": {
+            "D4": "0x10",
+            "D5": "0x04",
+            "D6": "0x06"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x10",
+                "D5": "0x04",
+                "D6": "0x06"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Speed 7",
+          "payload": {
+            "D4": "0x10",
+            "D5": "0x04",
+            "D6": "0x07"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x10",
+                "D5": "0x04",
+                "D6": "0x07"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Speed 8 (Max)",
+          "payload": {
+            "D4": "0x10",
+            "D5": "0x04",
+            "D6": "0x08"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x10",
+                "D5": "0x04",
+                "D6": "0x08"
+              },
+              "repeat": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cgw_tailgate_speed_mode",
+      "ha_metadata": {
+        "name": "Power Tailgate Speed Mode",
+        "domain": "sensor",
+        "icon": "mdi:car-liftgate"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Trunk & Frunk",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x410"
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "CF_Gway_PTGMRValue in CGW_USM1 (0x410) bits 2-3 (Byte D1 bits 2-3, mask 0x0C)."
+      },
+      "options": [
+        {
+          "label": "Normal Speed",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0x0C"
+        },
+        {
+          "label": "Fast Speed",
+          "match": {
+            "D1": "0x04"
+          },
+          "mask": "0x0C",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "cgw_smart_proximity_trunk",
+      "ha_metadata": {
+        "name": "Smart Proximity Hands-Free Trunk",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-back"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Trunk & Frunk",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x410"
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "CF_Gway_HfreeTrunkRValue in CGW_USM1 (0x410) bits 32-34 (Byte D5 bits 0-2, mask 0x07)."
+      },
+      "options": [
+        {
+          "label": "Enabled / On",
+          "match": {
+            "D5": "0x07"
+          },
+          "mask": "0x07",
+          "default": true
+        },
+        {
+          "label": "Disabled / Off",
+          "match": {
+            "D5": "0x00"
+          },
+          "mask": "0x07"
+        }
+      ]
+    },
+    {
+      "id": "cgw_auto_door_lock_setting",
+      "ha_metadata": {
+        "name": "Auto Door Lock Setting",
+        "domain": "sensor",
+        "icon": "mdi:lock-outline"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Locks & Security",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x410"
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "CF_Gway_ADrLRValue in CGW_USM1 (0x410) bits 8-10 (Byte D2 bits 0-2, mask 0x07)."
+      },
+      "options": [
+        {
+          "label": "Off",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0x07"
+        },
+        {
+          "label": "Enable on Speed (15 km/h)",
+          "match": {
+            "D2": "0x01"
+          },
+          "mask": "0x07"
+        },
+        {
+          "label": "Enable on Shift to D/R/N",
+          "match": {
+            "D2": "0x02"
+          },
+          "mask": "0x07",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "cgw_auto_door_unlock_setting",
+      "ha_metadata": {
+        "name": "Auto Door Unlock Setting",
+        "domain": "sensor",
+        "icon": "mdi:lock-open-outline"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Locks & Security",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x410"
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "CF_Gway_ADrURValue in CGW_USM1 (0x410) bits 11-13 (Byte D2 bits 3-5, mask 0x38)."
+      },
+      "options": [
+        {
+          "label": "Off",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0x38"
+        },
+        {
+          "label": "On Vehicle Ignition Off",
+          "match": {
+            "D2": "0x20"
+          },
+          "mask": "0x38"
+        },
+        {
+          "label": "On Shift to Park (P)",
+          "match": {
+            "D2": "0x30"
+          },
+          "mask": "0x38",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "cgw_two_turn_unlock",
+      "ha_metadata": {
+        "name": "Two-Press Unlock Mode",
+        "domain": "binary_sensor",
+        "icon": "mdi:key-wireless"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Locks & Security",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x410"
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "CF_Gway_TTUnlockRValue in CGW_USM1 (0x410) bits 6-7 (Byte D1 bits 6-7, mask 0xC0)."
+      },
+      "options": [
+        {
+          "label": "Two-Press Unlock Enabled",
+          "match": {
+            "D1": "0x40"
+          },
+          "mask": "0xC0",
+          "default": true
+        },
+        {
+          "label": "Single-Press All Doors",
+          "match": {
+            "D1": "0x00"
+          },
+          "mask": "0xC0"
+        }
+      ]
+    },
+    {
+      "id": "cgw_ambient_mood_light_status",
+      "ha_metadata": {
+        "name": "Ambient Mood Lamp Active Status",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-light-dimmed"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Cockpit & Controls",
+      "subcategory": "Ambient Lighting",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x410"
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "CF_Gway_MoodLpRValue in CGW_USM1 (0x410) bits 30-31 (Byte D4 bits 6-7, mask 0xC0)."
+      },
+      "options": [
+        {
+          "label": "Mood Light Active",
+          "match": {
+            "D4": "0x40"
+          },
+          "mask": "0xC0",
+          "default": true
+        },
+        {
+          "label": "Mood Light Off",
+          "match": {
+            "D4": "0x00"
+          },
+          "mask": "0xC0"
+        }
+      ]
+    },
+    {
+      "id": "cgw_welcome_mirror_light",
+      "ha_metadata": {
+        "name": "Welcome Mirror Unfold & Light Proximity",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-door-lock"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Locks & Security",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x410"
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "CF_Gway_WlightRValue in CGW_USM1 (0x410) bits 16-17 (Byte D3 bits 0-1, mask 0x03)."
+      },
+      "options": [
+        {
+          "label": "Welcome Unfold On Approach",
+          "match": {
+            "D3": "0x02"
+          },
+          "mask": "0x03",
+          "default": true
+        },
+        {
+          "label": "Welcome Unfold Disabled",
+          "match": {
+            "D3": "0x00"
+          },
+          "mask": "0x03"
+        }
+      ]
+    },
+    {
+      "id": "cgw_one_touch_turn_signal",
+      "ha_metadata": {
+        "name": "One-Touch Turn Signal Flash Count",
+        "domain": "sensor",
+        "icon": "mdi:car-defrost-rear"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Cockpit & Controls",
+      "subcategory": "Steering Wheel",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x410"
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "CF_Gway_OTTurnRValue in CGW_USM1 (0x410) bits 21-23 (Byte D3 bits 5-7, mask 0xE0). 0=Off, 0x20=3 flashes, 0x40=5 flashes, 0x60=7 flashes."
+      },
+      "options": [
+        {
+          "label": "Off",
+          "match": {
+            "D3": "0x00"
+          },
+          "mask": "0xE0"
+        },
+        {
+          "label": "3 Flashes",
+          "match": {
+            "D3": "0x20"
+          },
+          "mask": "0xE0"
+        },
+        {
+          "label": "5 Flashes",
+          "match": {
+            "D3": "0x40"
+          },
+          "mask": "0xE0",
+          "default": true
+        },
+        {
+          "label": "7 Flashes",
+          "match": {
+            "D3": "0x60"
+          },
+          "mask": "0xE0"
+        }
+      ]
+    },
+    {
+      "id": "cgw_vess_speaker_volume",
+      "ha_metadata": {
+        "name": "Pedestrian Warning Speaker (VESS) Level",
+        "domain": "select",
+        "icon": "mdi:volume-high"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Drive Mode & Performance",
+      "roles": [
+        "sensor",
+        "state",
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x410",
+        "action_can_id": "0x410"
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "CF_Gway_PasSpkrLvRValue on CGW_USM1 (0x410) bits 40-42. Active control dispatched via sendEcoVehicle on 0x410 (Func ID 4379 / 0x111B, subtype 0x06). Values: 0=Normal, 1=Mute/Off, 2=Low, 3=High."
+      },
+      "options": [
+        {
+          "label": "Volume Normal",
+          "match": {
+            "D6": "0x00"
+          },
+          "mask": "0x07",
+          "payload": {
+            "D1": "0x92",
+            "D2": "0x11",
+            "D3": "0x11",
+            "D4": "0x1B",
+            "D5": "0x06",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x92",
+                "D2": "0x11",
+                "D3": "0x11",
+                "D4": "0x1B",
+                "D5": "0x06",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "Volume Mute / Off",
+          "payload": {
+            "D1": "0x92",
+            "D2": "0x11",
+            "D3": "0x11",
+            "D4": "0x1B",
+            "D5": "0x06",
+            "D6": "0x01",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x92",
+                "D2": "0x11",
+                "D3": "0x11",
+                "D4": "0x1B",
+                "D5": "0x06",
+                "D6": "0x01",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Volume Low",
+          "match": {
+            "D6": "0x01"
+          },
+          "mask": "0x07",
+          "payload": {
+            "D1": "0x92",
+            "D2": "0x11",
+            "D3": "0x11",
+            "D4": "0x1B",
+            "D5": "0x06",
+            "D6": "0x02",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x92",
+                "D2": "0x11",
+                "D3": "0x11",
+                "D4": "0x1B",
+                "D5": "0x06",
+                "D6": "0x02",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Volume High",
+          "match": {
+            "D6": "0x02"
+          },
+          "mask": "0x07",
+          "payload": {
+            "D1": "0x92",
+            "D2": "0x11",
+            "D3": "0x11",
+            "D4": "0x1B",
+            "D5": "0x06",
+            "D6": "0x03",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x92",
+                "D2": "0x11",
+                "D3": "0x11",
+                "D4": "0x1B",
+                "D5": "0x06",
+                "D6": "0x03",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cgw_driver_seat_easy_access",
+      "ha_metadata": {
+        "name": "Driver Seat Easy Access Slide Setting",
+        "domain": "sensor",
+        "icon": "mdi:car-seat"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "Seat Comfort",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x410"
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "CF_Gway_SCMRValue in CGW_USM1 (0x410) bits 14-15 (Byte D2 bits 6-7, mask 0xC0). Driver seat automatic slide on door open for easy ingress/egress."
+      },
+      "options": [
+        {
+          "label": "Off",
+          "match": {
+            "D2": "0x00"
+          },
+          "mask": "0xC0",
+          "default": true
+        },
+        {
+          "label": "Normal Slide",
+          "match": {
+            "D2": "0x40"
+          },
+          "mask": "0xC0"
+        },
+        {
+          "label": "Extended Slide",
+          "match": {
+            "D2": "0x80"
+          },
+          "mask": "0xC0"
+        }
+      ]
+    },
+    {
+      "id": "cgw_passenger_seat_easy_access",
+      "ha_metadata": {
+        "name": "Passenger Power Seat Easy Access Setting",
+        "domain": "sensor",
+        "icon": "mdi:car-seat"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "Seat Comfort",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x410"
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "CF_Gway_PSMRValue in CGW_USM1 (0x410) bits 18-20 (Byte D3 bits 2-4, mask 0x1C). Passenger seat automatic slide on door open."
+      },
+      "options": [
+        {
+          "label": "Off",
+          "match": {
+            "D3": "0x00"
+          },
+          "mask": "0x1C"
+        },
+        {
+          "label": "Passenger Easy Access On",
+          "match": {
+            "D3": "0x14"
+          },
+          "mask": "0x1C",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "cgw_auto_high_beam",
+      "ha_metadata": {
+        "name": "High Beam Assist (HBA) Setting",
+        "domain": "sensor",
+        "icon": "mdi:car-light-high"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Cockpit & Controls",
+      "subcategory": "Lighting Controls",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x410"
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "CF_Gway_HAnBRValue in CGW_USM1 (0x410) bits 27-29 (Byte D4 bits 3-5, mask 0x38)."
+      },
+      "options": [
+        {
+          "label": "Off",
+          "match": {
+            "D4": "0x00"
+          },
+          "mask": "0x38"
+        },
+        {
+          "label": "High Beam Assist Enabled",
+          "match": {
+            "D4": "0x38"
+          },
+          "mask": "0x38",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "cgw_auto_rear_wiper",
+      "ha_metadata": {
+        "name": "Auto Rear Wiper in Reverse",
+        "domain": "binary_sensor",
+        "icon": "mdi:wiper"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Cockpit & Controls",
+      "subcategory": "Wipers & Washers",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x410"
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "CF_Gway_RearWiperRValue in CGW_USM1 (0x410) bits 38-39 (Byte D5 bits 6-7, mask 0xC0)."
+      },
+      "options": [
+        {
+          "label": "Auto Rear Wiper Active",
+          "match": {
+            "D5": "0x40"
+          },
+          "mask": "0xC0",
+          "default": true
+        },
+        {
+          "label": "Auto Rear Wiper Off",
+          "match": {
+            "D5": "0x00"
+          },
+          "mask": "0xC0"
+        }
+      ]
+    },
+    {
+      "id": "ambient_mood_lamp_color",
+      "ha_metadata": {
+        "name": "Ambient Mood Lamp RGB Color",
+        "domain": "select",
+        "icon": "mdi:palette"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Cockpit & Controls",
+      "subcategory": "Ambient Lighting",
+      "roles": [
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "isotp",
+        "action_can_id": "0x7A0",
+        "flow_control_can_id": "0x7A8",
+        "delay_ms": 20
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "ISO 15765-2 (ISO-TP) multi-frame transport to BCM/ICU gateway on 0x7A0 / 0x7A8 for Mood Lamp Modules (MLM). Byte 0 is 0x64 (MLMALL mode), followed by 16-bit big-endian RGB (Bytes 1-6), animation mode (Byte 7: 1=Normal, 2=Welcome, 3=DriveMode Sync), and reserved Byte 8."
+      },
+      "options": [
+        {
+          "label": "Pure Cyan (R:0, G:255, B:255)",
+          "payload": {
+            "hex": "64000000FF00FF0100"
+          },
+          "default": true
+        },
+        {
+          "label": "Warm Amber (R:255, G:140, B:0)",
+          "payload": {
+            "hex": "6400FF008C00000100"
+          }
+        },
+        {
+          "label": "Neon Violet (R:180, G:0, B:255)",
+          "payload": {
+            "hex": "6400B4000000FF0100"
+          }
+        },
+        {
+          "label": "Glacier White (R:255, G:255, B:255)",
+          "payload": {
+            "hex": "6400FF00FF00FF0100"
+          }
+        },
+        {
+          "label": "Racing Red (R:255, G:0, B:0)",
+          "payload": {
+            "hex": "6400FF000000000100"
+          }
+        },
+        {
+          "label": "Electric Green (R:0, G:255, B:0)",
+          "payload": {
+            "hex": "64000000FF00000100"
+          }
+        },
+        {
+          "label": "Mood Light Off",
+          "payload": {
+            "hex": "640000000000000000"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ims_driver_memory_recall",
+      "ha_metadata": {
+        "name": "Driver Memory Seat & Mirror Profile (IMS)",
+        "domain": "select",
+        "icon": "mdi:car-seat"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "Seat Comfort",
+      "roles": [
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x559",
+        "delay_ms": 50
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Integrated Memory System (IMS) recall on CGW4 (0x559 / 1369 dec). Motorizes driver seat, mirrors, and steering wheel to stored profile positions. Bit 12 (D2 bit 4 / 0x10) is CF_Gway_MemoryEnable. Bit 2 (D1 bit 2 / 0x04) is Driver 1 Recall. Bit 3 (D1 bit 3 / 0x08) is Driver 2 Recall. Bit 14 (D2 bit 6 / 0x40) is Movement Abort/Stop."
+      },
+      "options": [
+        {
+          "label": "Recall Driver 1 Profile",
+          "payload": {
+            "D1": "0x04",
+            "D2": "0x10",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x04",
+                "D2": "0x10",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 4
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "Recall Driver 2 Profile",
+          "payload": {
+            "D1": "0x08",
+            "D2": "0x10",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x08",
+                "D2": "0x10",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 4
+            }
+          ]
+        },
+        {
+          "label": "Stop Seat Movement",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x50",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x50",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Save Current to Driver 1",
+          "payload": {
+            "D1": "0x01",
+            "D2": "0x10",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x01",
+                "D2": "0x10",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 4
+            }
+          ]
+        },
+        {
+          "label": "Save Current to Driver 2",
+          "payload": {
+            "D1": "0x02",
+            "D2": "0x10",
+            "D3": "0x00",
+            "D4": "0x00",
+            "D5": "0x00",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x02",
+                "D2": "0x10",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "smart_key_fob_detected",
+      "ha_metadata": {
+        "name": "Active Smart Key Fob / Driver ID",
+        "domain": "sensor",
+        "icon": "mdi:key-wireless"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Locks & Security",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x553"
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "CF_Gway_SMKFobID in CGW2 (0x553 / 1363 dec) bits 48-50 (Byte D7 bits 0-2, mask 0x07). Broadcast upon vehicle unlock and entry by the Smart Key Unit. Identifies Driver 1 (Fob 1), Driver 2 (Fob 2), or Smartphone NFC Digital Key."
+      },
+      "options": [
+        {
+          "label": "No Key Detected",
+          "match": {
+            "D7": "0x00"
+          },
+          "mask": "0x07",
+          "default": true
+        },
+        {
+          "label": "Driver 1 (Key Fob 1)",
+          "match": {
+            "D7": "0x01"
+          },
+          "mask": "0x07"
+        },
+        {
+          "label": "Driver 2 (Key Fob 2)",
+          "match": {
+            "D7": "0x02"
+          },
+          "mask": "0x07"
+        },
+        {
+          "label": "Smartphone NFC / Digital Key",
+          "match": {
+            "D7": "0x03"
+          },
+          "mask": "0x07"
+        }
+      ]
+    },
+    {
+      "id": "ipedal_one_pedal_driving",
+      "ha_metadata": {
+        "name": "i-Pedal (One-Pedal Driving)",
+        "domain": "switch",
+        "icon": "mdi:car-speed-limiter"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Powertrain & Battery",
+      "subcategory": "Drive Modes & Performance",
+      "roles": [
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Commands i-Pedal (one-pedal regenerative driving and full stop hold) via USMService.sendEcoVehicle on 0x410 (Func ID 4379 / 0x111B, subtype 0x0E). Byte 5: 0x01 = Latch ON, 0x00 = OFF."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x410"
+      },
+      "options": [
+        {
+          "label": "i-Pedal ON",
+          "payload": {
+            "D1": "0x92",
+            "D2": "0x11",
+            "D3": "0x11",
+            "D4": "0x1B",
+            "D5": "0x0E",
+            "D6": "0x01",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x92",
+                "D2": "0x11",
+                "D3": "0x11",
+                "D4": "0x1B",
+                "D5": "0x0E",
+                "D6": "0x01",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "i-Pedal OFF",
+          "payload": {
+            "D1": "0x92",
+            "D2": "0x11",
+            "D3": "0x11",
+            "D4": "0x1B",
+            "D5": "0x0E",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x92",
+                "D2": "0x11",
+                "D3": "0x11",
+                "D4": "0x1B",
+                "D5": "0x0E",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ev_smart_regenerative_braking",
+      "ha_metadata": {
+        "name": "Smart Regenerative Braking",
+        "domain": "select",
+        "icon": "mdi:car-brake-retarder"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Powertrain & Battery",
+      "subcategory": "Drive Modes & Performance",
+      "roles": [
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Commands Smart Regenerative Braking (radar-guided deceleration) level via USMService.sendEcoVehicle on 0x410 (Func ID 4379 / 0x111B, subtype 0x04). Values: 0=Off, 1=Gentle, 2=Medium, 3=Strong."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x410"
+      },
+      "options": [
+        {
+          "label": "Smart Regen Strong",
+          "payload": {
+            "D1": "0x92",
+            "D2": "0x11",
+            "D3": "0x11",
+            "D4": "0x1B",
+            "D5": "0x04",
+            "D6": "0x03",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x92",
+                "D2": "0x11",
+                "D3": "0x11",
+                "D4": "0x1B",
+                "D5": "0x04",
+                "D6": "0x03",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "Smart Regen Medium",
+          "payload": {
+            "D1": "0x92",
+            "D2": "0x11",
+            "D3": "0x11",
+            "D4": "0x1B",
+            "D5": "0x04",
+            "D6": "0x02",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x92",
+                "D2": "0x11",
+                "D3": "0x11",
+                "D4": "0x1B",
+                "D5": "0x04",
+                "D6": "0x02",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Smart Regen Gentle",
+          "payload": {
+            "D1": "0x92",
+            "D2": "0x11",
+            "D3": "0x11",
+            "D4": "0x1B",
+            "D5": "0x04",
+            "D6": "0x01",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x92",
+                "D2": "0x11",
+                "D3": "0x11",
+                "D4": "0x1B",
+                "D5": "0x04",
+                "D6": "0x01",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Smart Regen Off",
+          "payload": {
+            "D1": "0x92",
+            "D2": "0x11",
+            "D3": "0x11",
+            "D4": "0x1B",
+            "D5": "0x04",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x92",
+                "D2": "0x11",
+                "D3": "0x11",
+                "D4": "0x1B",
+                "D5": "0x04",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ev_charging_connector_locking_mode",
+      "ha_metadata": {
+        "name": "Charging Connector Lock Mode",
+        "domain": "select",
+        "icon": "mdi:ev-plug-type2"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "High Voltage & Charging",
+      "subcategory": "Charging Configuration",
+      "roles": [
+        "action"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Commands AC/DC charging port connector locking mode via USMService.sendEcoVehicle on 0x410 (Func ID 4379 / 0x111B, subtype 0x05). Values: 0=Always Lock, 1=Lock While Charging Only, 2=Never Lock."
+      },
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x410"
+      },
+      "options": [
+        {
+          "label": "Lock While Charging Only",
+          "payload": {
+            "D1": "0x92",
+            "D2": "0x11",
+            "D3": "0x11",
+            "D4": "0x1B",
+            "D5": "0x05",
+            "D6": "0x01",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x92",
+                "D2": "0x11",
+                "D3": "0x11",
+                "D4": "0x1B",
+                "D5": "0x05",
+                "D6": "0x01",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "Always Lock Connector",
+          "payload": {
+            "D1": "0x92",
+            "D2": "0x11",
+            "D3": "0x11",
+            "D4": "0x1B",
+            "D5": "0x05",
+            "D6": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x92",
+                "D2": "0x11",
+                "D3": "0x11",
+                "D4": "0x1B",
+                "D5": "0x05",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        },
+        {
+          "label": "Never Lock Connector",
+          "payload": {
+            "D1": "0x92",
+            "D2": "0x11",
+            "D3": "0x11",
+            "D4": "0x1B",
+            "D5": "0x05",
+            "D6": "0x02",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x92",
+                "D2": "0x11",
+                "D3": "0x11",
+                "D4": "0x1B",
+                "D5": "0x05",
+                "D6": "0x02",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
         }
       ]
     }

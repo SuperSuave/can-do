@@ -36,7 +36,7 @@ async def async_setup_entry(
 
 
 class CanDoCoverEntity(CanDoEntity, CoverEntity):
-    """Cover entity representing power tailgate / trunk."""
+    """Cover entity representing power windows, tailgate, and doors."""
 
     _attr_device_class = CoverDeviceClass.DOOR
     _attr_supported_features = (
@@ -46,6 +46,26 @@ class CanDoCoverEntity(CanDoEntity, CoverEntity):
     def __init__(self, coordinator: CanDoDataCoordinator, command: dict[str, Any]) -> None:
         """Initialize cover entity."""
         super().__init__(coordinator, command)
+        cid = self.entity_id_str.lower()
+        dev_class = command.get("device_class")
+        if dev_class == "window" or "window" in cid:
+            self._attr_device_class = CoverDeviceClass.WINDOW
+        elif dev_class == "door" or "tailgate" in cid or "trunk" in cid or "door" in cid:
+            self._attr_device_class = CoverDeviceClass.DOOR
+        elif dev_class == "garage" or "garage" in cid:
+            self._attr_device_class = CoverDeviceClass.GARAGE
+        elif dev_class == "gate" or "gate" in cid:
+            self._attr_device_class = CoverDeviceClass.GATE
+
+        has_vent = any(
+            ("vent" in opt.get("label", "").lower() or "tilt" in opt.get("label", "").lower())
+            and opt.get("payload")
+            for opt in self.command.get("options", [])
+        )
+        if has_vent:
+            self._attr_supported_features = (
+                CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.OPEN_TILT
+            )
 
     @property
     def is_closed(self) -> bool | None:
@@ -139,6 +159,28 @@ class CanDoCoverEntity(CanDoEntity, CoverEntity):
 
         if not target_opt:
             _LOGGER.warning("No close action payload found for %s", self.entity_id)
+            return
+
+        steps = build_action_steps(
+            self.action_can_id or self.state_can_id,
+            target_opt.get("payload", {}),
+            target_opt.get("mask"),
+            self.command.get("network", {}).get("bus", 0),
+        )
+        for can_id, payload in steps:
+            await self.coordinator.async_send_can_command(can_id, payload)
+
+    async def async_open_cover_tilt(self, **kwargs: Any) -> None:
+        """Vent / crack the window or cover."""
+        target_opt = None
+        for opt in self.command.get("options", []):
+            label = opt.get("label", "").lower()
+            if ("vent" in label or "tilt" in label) and opt.get("payload"):
+                target_opt = opt
+                break
+
+        if not target_opt:
+            _LOGGER.warning("No vent action payload found for %s", self.entity_id)
             return
 
         steps = build_action_steps(

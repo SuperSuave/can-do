@@ -21,6 +21,7 @@
 #include "uds_engine.h"
 #include "network_mgr.h"
 #include "remote_climate.h"
+#include "mood_light.h"
 
 static bool mac_matches(const std::string& a, const std::string& b) {
     std::string clean_a, clean_b;
@@ -568,6 +569,85 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
         return true;
     }
 
+    if (entity_id == "ambient_mood_lamp_color" || entity_id == "mood_lighting" || entity_id == "ambient_light") {
+        std::string cmd_lower = command_label;
+        std::transform(cmd_lower.begin(), cmd_lower.end(), cmd_lower.begin(), ::tolower);
+        bool ok = false;
+        std::string new_state = command_label;
+
+        if (cmd_lower.find("off") != std::string::npos || cmd_lower == "0" || cmd_lower == "false") {
+            ok = mood_light_set_rgb(0, 0, 0, 0);
+            new_state = "Mood Light Off";
+        } else if (cmd_lower.find("cyan") != std::string::npos) {
+            ok = mood_light_set_rgb(0, 255, 255, 1);
+            new_state = "Pure Cyan (R:0, G:255, B:255)";
+        } else if (cmd_lower.find("amber") != std::string::npos || cmd_lower.find("orange") != std::string::npos) {
+            ok = mood_light_set_rgb(255, 140, 0, 1);
+            new_state = "Warm Amber (R:255, G:140, B:0)";
+        } else if (cmd_lower.find("violet") != std::string::npos || cmd_lower.find("purple") != std::string::npos) {
+            ok = mood_light_set_rgb(180, 0, 255, 1);
+            new_state = "Neon Violet (R:180, G:0, B:255)";
+        } else if (cmd_lower.find("white") != std::string::npos) {
+            ok = mood_light_set_rgb(255, 255, 255, 1);
+            new_state = "Glacier White (R:255, G:255, B:255)";
+        } else if (cmd_lower.find("red") != std::string::npos) {
+            ok = mood_light_set_rgb(255, 0, 0, 1);
+            new_state = "Racing Red (R:255, G:0, B:0)";
+        } else if (cmd_lower.find("green") != std::string::npos) {
+            ok = mood_light_set_rgb(0, 255, 0, 1);
+            new_state = "Electric Green (R:0, G:255, B:0)";
+        } else if (!command_label.empty() && command_label[0] == '{') {
+            cJSON* root = cJSON_Parse(command_label.c_str());
+            if (root) {
+                uint16_t r = 0, g = 0, b = 0;
+                uint8_t mode = 1;
+                cJSON* r_it = cJSON_GetObjectItem(root, "r");
+                if (!r_it) r_it = cJSON_GetObjectItem(root, "red");
+                if (r_it && cJSON_IsNumber(r_it)) r = (uint16_t)r_it->valueint;
+
+                cJSON* g_it = cJSON_GetObjectItem(root, "g");
+                if (!g_it) g_it = cJSON_GetObjectItem(root, "green");
+                if (g_it && cJSON_IsNumber(g_it)) g = (uint16_t)g_it->valueint;
+
+                cJSON* b_it = cJSON_GetObjectItem(root, "b");
+                if (!b_it) b_it = cJSON_GetObjectItem(root, "blue");
+                if (b_it && cJSON_IsNumber(b_it)) b = (uint16_t)b_it->valueint;
+
+                cJSON* m_it = cJSON_GetObjectItem(root, "mode");
+                if (m_it && cJSON_IsNumber(m_it)) mode = (uint8_t)m_it->valueint;
+
+                cJSON_Delete(root);
+                ok = mood_light_set_rgb(r, g, b, mode);
+            }
+        } else {
+            std::string clean_hex;
+            for (char c : command_label) {
+                if (isxdigit((unsigned char)c)) clean_hex += c;
+            }
+            if (clean_hex.length() >= 18) {
+                uint8_t raw[16] = {0};
+                size_t byte_cnt = clean_hex.length() / 2;
+                if (byte_cnt > sizeof(raw)) byte_cnt = sizeof(raw);
+                for (size_t i = 0; i < byte_cnt; i++) {
+                    raw[i] = (uint8_t)strtoul(clean_hex.substr(i * 2, 2).c_str(), nullptr, 16);
+                }
+                ok = mood_light_send_raw(raw, byte_cnt);
+            } else {
+                ok = mood_light_set_rgb(0, 255, 255, 1);
+                new_state = "Pure Cyan (R:0, G:255, B:255)";
+            }
+        }
+
+        if (ok) {
+            broadcast_ws_state(entity_id, new_state);
+            if (global_mqtt_client) {
+                std::string topic = MQTT_BASE_TOPIC + "/state/" + entity_id;
+                esp_mqtt_client_publish(global_mqtt_client, topic.c_str(), new_state.c_str(), 0, 1, 1);
+            }
+        }
+        return ok;
+    }
+
     CanEntity entity;
     if (!find_entity_in_catalog(entity_id, entity)) {
         ESP_LOGW(TAG, "Entity '%s' not found in catalog or automations", entity_id.c_str());
@@ -581,9 +661,10 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
     bool is_off_cmd = (cmd_lower == "off" || cmd_lower == "0" || cmd_lower == "false" || cmd_lower == "disable");
     bool is_lock_cmd = (cmd_lower == "lock" || cmd_lower == "locked" || cmd_lower == "secure");
     bool is_unlock_cmd = (cmd_lower == "unlock" || cmd_lower == "unlocked");
+    bool is_open_cmd = (cmd_lower == "open" || cmd_lower == "opened" || cmd_lower == "roll down" || cmd_lower == "down");
+    bool is_close_cmd = (cmd_lower == "close" || cmd_lower == "closed" || cmd_lower == "roll up" || cmd_lower == "up");
+    bool is_vent_cmd = (cmd_lower == "vent" || cmd_lower == "tilt" || cmd_lower == "crack");
     bool is_toggle = (cmd_lower == "toggle");
-
-
 
     const EntityOption* matched_opt = nullptr;
 
@@ -594,6 +675,10 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
             bool currently_locked = (cur_lower.find("lock") != std::string::npos && cur_lower.find("unlock") == std::string::npos);
             if (currently_locked) is_unlock_cmd = true;
             else is_lock_cmd = true;
+        } else if (entity.ha_domain == "cover" || entity.id.find("window") != std::string::npos || entity.id.find("tailgate") != std::string::npos) {
+            bool currently_closed = (cur_lower.find("close") != std::string::npos);
+            if (currently_closed) is_open_cmd = true;
+            else is_close_cmd = true;
         } else {
             bool currently_on = (cur_lower.find("on") != std::string::npos || cur_lower.find("active") != std::string::npos || cur_lower.find("enable") != std::string::npos);
             if (currently_on) is_off_cmd = true;
@@ -615,6 +700,33 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
             std::string opt_l = opt.label;
             std::transform(opt_l.begin(), opt_l.end(), opt_l.begin(), ::tolower);
             if (opt_l.find("unlock") != std::string::npos) {
+                matched_opt = &opt;
+                break;
+            }
+        }
+    } else if (is_open_cmd) {
+        for (const auto& opt : entity.options) {
+            std::string opt_l = opt.label;
+            std::transform(opt_l.begin(), opt_l.end(), opt_l.begin(), ::tolower);
+            if (opt_l.find("close") == std::string::npos && (opt_l.find("open") != std::string::npos || opt_l.find("down") != std::string::npos)) {
+                matched_opt = &opt;
+                break;
+            }
+        }
+    } else if (is_close_cmd) {
+        for (const auto& opt : entity.options) {
+            std::string opt_l = opt.label;
+            std::transform(opt_l.begin(), opt_l.end(), opt_l.begin(), ::tolower);
+            if (opt_l.find("close") != std::string::npos || opt_l.find("up") != std::string::npos) {
+                matched_opt = &opt;
+                break;
+            }
+        }
+    } else if (is_vent_cmd) {
+        for (const auto& opt : entity.options) {
+            std::string opt_l = opt.label;
+            std::transform(opt_l.begin(), opt_l.end(), opt_l.begin(), ::tolower);
+            if (opt_l.find("vent") != std::string::npos || opt_l.find("tilt") != std::string::npos) {
                 matched_opt = &opt;
                 break;
             }
@@ -818,6 +930,7 @@ void can_rx_task(void* arg) {
             call_popup_rx(&rx_msg, CAN_BUS_0);
             hud_nav_rx(&rx_msg, CAN_BUS_0);
             uds_engine_on_can_rx(&rx_msg);
+            mood_light_rx(&rx_msg, CAN_BUS_0);
 
             // Stream raw frame to connected SavvyCAN/GVRET client
             gvret_enqueue_frame(&rx_msg);

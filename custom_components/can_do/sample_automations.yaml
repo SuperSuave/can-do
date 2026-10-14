@@ -46,3 +46,56 @@
         defrost: true
         duration_minutes: 15
   mode: single
+
+# 3. Key Fob detected on vehicle unlock -> Automatically recall driver memory seat
+- id: can_do_key_fob_ims_memory_recall
+  alias: "CAN Do: Recall Driver Profile on Key Fob Detection"
+  description: "When Key Fob 1 or 2 is detected by the Smart Key Unit on unlock, motorize seats & mirrors to that driver's stored position"
+  trigger:
+    - platform: state
+      entity_id: sensor.active_smart_key_fob_driver_id
+      to: "Driver 1 (Key Fob 1)"
+      id: "driver_1"
+    - platform: state
+      entity_id: sensor.active_smart_key_fob_driver_id
+      to: "Driver 2 (Key Fob 2)"
+      id: "driver_2"
+  action:
+    - choose:
+        - conditions:
+            - condition: trigger
+              id: "driver_1"
+          sequence:
+            - service: select.select_option
+              target:
+                entity_id: select.driver_memory_seat_mirror_profile_ims
+              data:
+                option: "Recall Driver 1 Profile"
+        - conditions:
+            - condition: trigger
+              id: "driver_2"
+          sequence:
+            - service: select.select_option
+              target:
+                entity_id: select.driver_memory_seat_mirror_profile_ims
+              data:
+                option: "Recall Driver 2 Profile"
+  mode: restart
+
+# 4. Auto-Close All Windows on Vehicle Lock / Rain
+- id: can_do_auto_close_windows_on_lock
+  alias: "CAN Do: Auto-Close All Windows on Vehicle Lock"
+  description: "When the vehicle is locked, automatically roll up any open windows to secure the cabin"
+  trigger:
+    - platform: state
+      entity_id: lock.door_locks
+      to: "locked"
+  condition:
+    - condition: state
+      entity_id: binary_sensor.cabin_windows_state
+      state: "on"
+  action:
+    - service: cover.close_cover
+      target:
+        entity_id: cover.all_power_windows_global
+  mode: single
