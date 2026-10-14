@@ -20,6 +20,14 @@ export const PayloadByteVisualizer: React.FC<PayloadByteVisualizerProps> = ({
   const parseTokens = (input?: ByteInput): string[] => {
     if (!input) return [];
     if (typeof input === 'object') {
+      if ('hex' in input && typeof input.hex === 'string') {
+        const clean = input.hex.replace(/\s+/g, '').replace(/^0x/i, '');
+        const bytes: string[] = [];
+        for (let i = 0; i < clean.length; i += 2) {
+          bytes.push('0x' + clean.slice(i, i + 2).toUpperCase());
+        }
+        return bytes;
+      }
       const keys = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'];
       return keys.map(k => input[k] ?? '*');
     }

@@ -14,18 +14,24 @@ export function isValidPayloadToken(token: string): boolean {
   return false;
 }
 
-// Validates a full space-separated payload string
+// Validates a full space-separated payload string or raw hex string
 export function validatePayloadString(payloadStr: string | undefined): { isValid: boolean; byteCount: number; error?: string } {
   if (!payloadStr || payloadStr.trim() === '') {
     return { isValid: true, byteCount: 0 };
   }
 
-  const tokens = payloadStr.trim().split(/\s+/);
-  if (tokens.length > 8) {
+  const trimmed = payloadStr.trim();
+  const cleanHex = trimmed.replace(/\s+/g, '').replace(/^0x/i, '');
+  if (!trimmed.includes(' ') && cleanHex.length >= 2 && cleanHex.length % 2 === 0 && /^[0-9A-Fa-f]+$/.test(cleanHex)) {
+    return { isValid: true, byteCount: cleanHex.length / 2 };
+  }
+
+  const tokens = trimmed.split(/\s+/);
+  if (tokens.length > 4096) {
     return {
       isValid: false,
       byteCount: tokens.length,
-      error: `Payload exceeds 8 bytes standard CAN frame limit (${tokens.length} bytes detected)`
+      error: `Payload exceeds maximum transport limit (${tokens.length} bytes detected)`
     };
   }
 
@@ -43,14 +49,28 @@ export function validatePayloadString(payloadStr: string | undefined): { isValid
   return { isValid: true, byteCount: tokens.length };
 }
 
-// Validates either a space-separated string or a D1..D8 ByteMap
+// Validates either a space-separated string, raw hex string, or a D1..D8 ByteMap / hex object
 export function validatePayload(payload: string | Record<string, string> | undefined): { isValid: boolean; byteCount: number; error?: string } {
   if (!payload) return { isValid: true, byteCount: 0 };
   if (typeof payload === 'object') {
+    // 1. Check for hex payload format (e.g. { hex: "64000000FF00FF0100" })
+    if ('hex' in payload || 'data' in payload || 'raw' in payload) {
+      const hexVal = (payload.hex ?? payload.data ?? payload.raw) as string;
+      if (typeof hexVal !== 'string') {
+        return { isValid: false, byteCount: 0, error: `Invalid 'hex' payload value. Must be a string.` };
+      }
+      const clean = hexVal.replace(/\s+/g, '').replace(/^0x/i, '');
+      if (clean.length === 0 || clean.length % 2 !== 0 || !/^[0-9A-Fa-f]+$/.test(clean)) {
+        return { isValid: false, byteCount: 0, error: `Invalid 'hex' payload value '${hexVal}'. Must be an even number of hex characters.` };
+      }
+      return { isValid: true, byteCount: clean.length / 2 };
+    }
+
+    // 2. Validate D1..D8 (or CAN-FD up to D64) ByteMap
     const keys = Object.keys(payload);
     for (const k of keys) {
-      if (!/^D[1-8]$/.test(k)) {
-        return { isValid: false, byteCount: keys.length, error: `Invalid byte key '${k}'. Must be D1 through D8.` };
+      if (!/^D([1-9]|[1-5][0-9]|6[0-4])$/.test(k)) {
+        return { isValid: false, byteCount: keys.length, error: `Invalid byte key '${k}'. Must be D1 through D8 (or 'hex').` };
       }
       const val = payload[k];
       const cleanVal = val.replace(/^!?(0x)?/i, '');

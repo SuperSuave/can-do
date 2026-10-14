@@ -18,6 +18,12 @@ def build_hex_payload(payload_spec: Any, base_payload: list[int] | None = None) 
         return clean.ljust(16, "0").upper()
 
     if isinstance(payload_spec, dict):
+        if "hex" in payload_spec:
+            return str(payload_spec["hex"]).strip().replace(" ", "").replace("0x", "").upper()
+        if "data" in payload_spec:
+            return str(payload_spec["data"]).strip().replace(" ", "").replace("0x", "").upper()
+        if "raw" in payload_spec:
+            return str(payload_spec["raw"]).strip().replace(" ", "").replace("0x", "").upper()
         for k, v in payload_spec.items():
             idx = get_d_index(k)
             if 0 <= idx < 8:

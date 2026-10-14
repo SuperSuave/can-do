@@ -18,6 +18,15 @@ export const PayloadByteEditor: React.FC<PayloadByteEditorProps> = ({
   const parseTokens = (input?: string | Record<string, string>): string[] => {
     if (!input) return Array(8).fill('*');
     if (typeof input === 'object') {
+      if ('hex' in input && typeof input.hex === 'string') {
+        const clean = input.hex.replace(/\s+/g, '').replace(/^0x/i, '');
+        const bytes: string[] = [];
+        for (let i = 0; i < clean.length; i += 2) {
+          bytes.push('0x' + clean.slice(i, i + 2).toUpperCase());
+        }
+        while (bytes.length < 8) bytes.push('*');
+        return bytes.slice(0, 8);
+      }
       const keys = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'];
       return keys.map(k => (input[k] !== undefined && input[k] !== '' ? String(input[k]) : '*'));
     }

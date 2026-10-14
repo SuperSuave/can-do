@@ -163,6 +163,9 @@ export function getEffectiveOptions(cmd: Command): CommandOption[] {
 export function cleanToByteMap(input: string | ByteMap | undefined): ByteMap {
   if (!input) return {};
   if (typeof input === 'object') {
+    if ('hex' in input) {
+      return { hex: String(input.hex).replace(/^0x/i, '').replace(/\s+/g, '').toUpperCase() };
+    }
     const cleanMap: ByteMap = {};
     for (const [k, v] of Object.entries(input)) {
       if (v && typeof v === 'string' && !v.includes('*') && v !== '?') {
