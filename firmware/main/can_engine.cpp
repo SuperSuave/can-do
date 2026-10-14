@@ -20,6 +20,7 @@
 #include "mqtt_mgr.h"
 #include "uds_engine.h"
 #include "network_mgr.h"
+#include "remote_climate.h"
 
 static bool mac_matches(const std::string& a, const std::string& b) {
     std::string clean_a, clean_b;
@@ -357,7 +358,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
         }
 
         if (step.type == ActionType::CLIMATE_TARGET) {
-            queue_entity_command("remote_climate_start_smart", "Start");
+            remote_climate_start(22.0f, false, 900);
             continue;
         }
 
@@ -520,6 +521,51 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
                 return ok;
             }
         }
+    }
+
+    if (entity_id == "remote_climate" || entity_id == "remote_climate_tmu" || entity_id == "remote_climate_start_smart") {
+        float temp_c = 22.0f;
+        bool defrost = false;
+        uint32_t duration_sec = 900;
+        bool is_start = true;
+
+        if (!command_label.empty() && command_label[0] == '{') {
+            cJSON* root = cJSON_Parse(command_label.c_str());
+            if (root) {
+                cJSON* act = cJSON_GetObjectItem(root, "action");
+                if (act && cJSON_IsString(act)) {
+                    std::string a = act->valuestring;
+                    std::transform(a.begin(), a.end(), a.begin(), ::tolower);
+                    if (a == "stop" || a == "off") is_start = false;
+                }
+                cJSON* t = cJSON_GetObjectItem(root, "temp");
+                if (!t) t = cJSON_GetObjectItem(root, "temperature");
+                if (t && cJSON_IsNumber(t)) temp_c = (float)t->valuedouble;
+
+                cJSON* d = cJSON_GetObjectItem(root, "defrost");
+                if (d && cJSON_IsBool(d)) defrost = cJSON_IsTrue(d);
+
+                cJSON* dur = cJSON_GetObjectItem(root, "duration");
+                if (dur && cJSON_IsNumber(dur)) duration_sec = (uint32_t)dur->valueint;
+
+                cJSON_Delete(root);
+            }
+        } else {
+            std::string c_lower = command_label;
+            std::transform(c_lower.begin(), c_lower.end(), c_lower.begin(), ::tolower);
+            if (c_lower == "off" || c_lower == "0" || c_lower == "stop" || c_lower == "inactive" || c_lower == "disable" || c_lower.find("off") != std::string::npos) {
+                is_start = false;
+            } else if (c_lower == "toggle") {
+                is_start = !remote_climate_is_active();
+            }
+        }
+
+        if (is_start) {
+            remote_climate_start(temp_c, defrost, duration_sec);
+        } else {
+            remote_climate_stop();
+        }
+        return true;
     }
 
     CanEntity entity;

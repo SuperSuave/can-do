@@ -95,6 +95,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_register(DOMAIN, "clear_hud_nav", async_handle_clear_hud_nav)
     hass.services.async_register(DOMAIN, "set_audio_dsp", async_handle_set_audio_dsp)
 
+    # Register Remote Climate services
+    async def async_handle_start_remote_climate(call: Any) -> None:
+        """Handle can_do.start_remote_climate service call."""
+        data = call.data
+        temp = data.get("temperature", 22.0)
+        defrost = data.get("defrost", False)
+        duration_min = data.get("duration_minutes", 15)
+        duration_sec = int(duration_min * 60)
+        for coord in hass.data[DOMAIN].values():
+            if isinstance(coord, CanDoDataCoordinator):
+                await coord.async_send_remote_climate(
+                    action="start",
+                    target_temp=float(temp),
+                    defrost=bool(defrost),
+                    duration_sec=duration_sec,
+                )
+
+    async def async_handle_stop_remote_climate(call: Any) -> None:
+        """Handle can_do.stop_remote_climate service call."""
+        for coord in hass.data[DOMAIN].values():
+            if isinstance(coord, CanDoDataCoordinator):
+                await coord.async_send_remote_climate(action="stop")
+
+    hass.services.async_register(DOMAIN, "start_remote_climate", async_handle_start_remote_climate)
+    hass.services.async_register(DOMAIN, "stop_remote_climate", async_handle_stop_remote_climate)
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

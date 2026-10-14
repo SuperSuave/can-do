@@ -230,16 +230,13 @@ static void handle_incoming_command(const char* json_str) {
             precondition_toggle_request();
             uart_bridge_send_raw("{\"type\":\"ack\",\"action\":\"precon_toggled\"}");
         } else if (strcmp(action, "climate_toggle") == 0) {
-            bool ok = queue_entity_command("remote_climate_start_smart", "toggle");
-            if (!ok) ok = queue_entity_command("remote_climate_start", "toggle");
+            bool ok = queue_entity_command("remote_climate", "toggle");
             uart_bridge_send_raw(ok ? "{\"type\":\"ack\",\"action\":\"climate_toggled\"}" : "{\"type\":\"nack\",\"error\":\"climate_failed\"}");
         } else if (strcmp(action, "climate_start") == 0) {
-            bool ok = queue_entity_command("remote_climate_start_smart", "Start");
-            if (!ok) ok = queue_entity_command("remote_climate_start", "Start");
+            bool ok = queue_entity_command("remote_climate", "Start");
             uart_bridge_send_raw(ok ? "{\"type\":\"ack\",\"action\":\"climate_started\"}" : "{\"type\":\"nack\",\"error\":\"climate_failed\"}");
         } else if (strcmp(action, "climate_stop") == 0) {
-            bool ok = queue_entity_command("remote_climate_start_smart", "off");
-            if (!ok) ok = queue_entity_command("remote_climate_start", "off");
+            bool ok = queue_entity_command("remote_climate", "off");
             uart_bridge_send_raw(ok ? "{\"type\":\"ack\",\"action\":\"climate_stopped\"}" : "{\"type\":\"nack\",\"error\":\"climate_failed\"}");
         } else if (strcmp(action, "lock") == 0) {
             bool ok = queue_entity_command("door_locks", "lock");

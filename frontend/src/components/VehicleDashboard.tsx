@@ -1823,7 +1823,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   onClick={() => {
                     const next = hvacPower === true ? false : true;
                     setHvacPower(next);
-                    dispatchCommand('remote_climate_start_seats_wheel', next ? 'Start (+ Seats & Wheel)' : 'Turn OFF', next ? 'Cabin Climate Activated' : 'Cabin Climate Turned OFF');
+                    dispatchCommand('remote_climate_tmu', next ? 'Remote Climate On' : 'Remote Climate Off', next ? 'Cabin Climate Activated' : 'Cabin Climate Turned OFF');
                   }}
                   className={`px-2.5 py-1 rounded-md text-xs font-bold transition-colors cursor-pointer ${
                     hvacPower === true

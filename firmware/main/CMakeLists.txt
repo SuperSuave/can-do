@@ -32,6 +32,7 @@ idf_component_register(
         "power_mgr.cpp"
         "uart_bridge.cpp"
         "timezone_mgr.cpp"
+        "remote_climate.cpp"
     INCLUDE_DIRS "."
     REQUIRES 
         "nvs_flash"

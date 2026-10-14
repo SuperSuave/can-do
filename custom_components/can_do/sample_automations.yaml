@@ -40,7 +40,9 @@
       entity_id: sensor.outdoor_temperature
       below: 45
   action:
-    - service: button.press
-      target:
-        entity_id: button.cando_kia_ev6_remote_climate_start____seats___wheel_
+    - service: can_do.start_remote_climate
+      data:
+        temperature: 22.0
+        defrost: true
+        duration_minutes: 15
   mode: single

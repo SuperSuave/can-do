@@ -228,3 +228,44 @@ set_audio_dsp:
       selector:
         text:
 
+start_remote_climate:
+  name: Start Remote Climate
+  description: Start remote cabin preconditioning and climate control via E-GMP Telematics Unit (TMU 0x039B) and UDS keepalive (0x07DF).
+  fields:
+    temperature:
+      name: Target Temperature (°C)
+      description: Desired cabin setpoint in Celsius (e.g. 21.0 to 24.0).
+      example: 22.0
+      default: 22.0
+      required: false
+      selector:
+        number:
+          min: 17.0
+          max: 27.5
+          step: 0.5
+          unit_of_measurement: "°C"
+    defrost:
+      name: Front Defroster Max
+      description: Turn on front windshield max defrost blower while preconditioning.
+      default: false
+      required: false
+      selector:
+        boolean:
+    duration_minutes:
+      name: Duration (Minutes)
+      description: Number of minutes to run remote climate before automatic shutdown.
+      example: 15
+      default: 15
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+          unit_of_measurement: "min"
+
+stop_remote_climate:
+  name: Stop Remote Climate
+  description: Terminate remote climate session immediately and transmit release frames to allow vehicle ECUs to return to sleep.
+
+

@@ -38,7 +38,7 @@ cards:
           action: toggle
 
       - type: custom:mushroom-entity-card
-        entity: button.cando_kia_ev6_remote_climate_start____seats___wheel_
+        entity: switch.cando_kia_ev6_telematics_unit_remote_climate___preconditioning
         name: Remote Climate
         icon: mdi:fan
         tap_action:

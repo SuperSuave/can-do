@@ -76,8 +76,9 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
     async def async_added_to_hass(self) -> None:
         """Register CAN state listener and auxiliary telemetry listeners."""
         await super().async_added_to_hass()
-        # Listen to ambient temperature (0x226) and climate status (0x31B, 0x541, 0x418, 0x496, 0x587)
-        for aux_id in ("0x226", "0x31b", "0x541", "0x418", "0x496", "0x587"):
+        # Listen to ambient temp (0x226), climate telemetry (0x31B, 0x541, 0x418, 0x496, 0x587),
+        # VCU HVAC/contactor status (0x2AD, 0x2AE), DATC blower (0x384), and TMU (0x39B).
+        for aux_id in ("0x226", "0x31b", "0x541", "0x418", "0x496", "0x587", "0x2ad", "0x2ae", "0x384", "0x39b"):
             if not self.state_can_id or aux_id != self.state_can_id.lower():
                 unsub = self.coordinator.register_listener(aux_id, self._handle_can_update)
                 self._aux_unsubs.append(unsub)
@@ -98,13 +99,37 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
             if fan_raw > 0:
                 return True
 
-        # 3. Check Remote Climate Telematics frame (0x587)
+        # 2. Check DATC Blower Fan Speed (0x384 / DATC_07_200ms)
+        p_384 = self.coordinator.get_can_payload("0x384")
+        if p_384 and len(p_384) >= 1:
+            fan_raw = p_384[0] & 0x0F
+            if fan_raw > 0:
+                return True
+
+        # 3. Check VCU Aircon Controller Status (0x02AD / VCU_04_100ms_3 Byte D1 bits 2-3)
+        p_2ad = self.coordinator.get_can_payload("0x2ad")
+        if p_2ad and len(p_2ad) >= 1:
+            if ((p_2ad[0] >> 2) & 0x03) != 0:
+                return True
+
+        # 4. Check VCU High-Voltage Contactors Closed (0x02AE / VCU_04_100ms_4 Byte D5 bits 6-7)
+        p_2ae = self.coordinator.get_can_payload("0x2ae")
+        if p_2ae and len(p_2ae) >= 5:
+            if ((p_2ae[4] >> 6) & 0x03) != 0:
+                return True
+
+        # 5. Check Remote Climate TMU active frame (0x39B / TMU_01_200ms Byte D1 bit 4)
+        p_39b = self.coordinator.get_can_payload("0x39b")
+        if p_39b and len(p_39b) >= 1:
+            if (p_39b[0] & 0x10) != 0:
+                return True
+
+        # 6. Check Remote Climate Telematics frame (0x587)
         p_587 = self.coordinator.get_can_payload("0x587")
         if p_587 and len(p_587) >= 2:
             if (p_587[0] & 0x03) > 0 or (p_587[1] & 0x03) > 0:
                 return True
 
-        # If no active blower, bridge status, or telematics frame, car/HVAC is off
         return False
 
     @property
@@ -277,7 +302,18 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
             return
 
         temp = max(self._attr_min_temp, min(self._attr_max_temp, float(temp)))
+        self._target_temp = temp
 
+        # Calculate Celsius target for E-GMP TMU frame
+        temp_c = temp
+        if self.temperature_unit == UnitOfTemperature.FAHRENHEIT:
+            temp_c = round((temp - 32.0) / 1.8, 1)
+
+        # 1. Update/trigger the background remote climate task
+        if self._is_hvac_active() or self._hvac_mode != HVACMode.OFF:
+            await self.coordinator.async_send_remote_climate(action="start", target_temp=temp_c)
+
+        # 2. Also send direct touchscreen CAN action (when vehicle is awake)
         if self.temperature_unit == UnitOfTemperature.FAHRENHEIT:
             raw_val = 0x06 + round(temp - 62.0)
         else:
@@ -307,7 +343,6 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
         )
         await self.coordinator.async_send_action(self.action_can_id, 20, steps)
 
-        self._target_temp = temp
         self._hvac_mode = HVACMode.AUTO
         self.async_write_ha_state()
 
@@ -315,6 +350,9 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
         """Set new HVAC mode."""
         self._hvac_mode = hvac_mode
         if hvac_mode == HVACMode.OFF:
+            # Stop the remote climate background loop on ESP32
+            await self.coordinator.async_send_remote_climate(action="stop")
+
             # Find option with label containing "off"
             target_opt = None
             for opt in self.command.get("options", []):
@@ -326,6 +364,10 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
                 if steps:
                     await self.coordinator.async_send_action(self.action_can_id, 20, steps)
         elif hvac_mode in (HVACMode.AUTO, HVACMode.HEAT_COOL):
+            temp_c = self._target_temp
+            if self.temperature_unit == UnitOfTemperature.FAHRENHEIT:
+                temp_c = round((self._target_temp - 32.0) / 1.8, 1)
+            await self.coordinator.async_send_remote_climate(action="start", target_temp=temp_c)
             await self.async_set_temperature(temperature=self._target_temp)
 
         self.async_write_ha_state()

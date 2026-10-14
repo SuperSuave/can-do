@@ -29,6 +29,7 @@
 #include "power_mgr.h"
 #include "uart_bridge.h"
 #include "timezone_mgr.h"
+#include "remote_climate.h"
 
 #include "esp_mac.h"
 #include "esp_wifi.h"
@@ -179,9 +180,10 @@ extern "C" void app_main(void) {
     // 7. Init TWAI (CAN)
     ESP_ERROR_CHECK(init_twai());
 
-    // 8. Init Cluster Track Selection Popup & Preconditioning Subsystems
+    // 8. Init Cluster Track Selection Popup, Preconditioning & Remote Climate Subsystems
     beep_init();
     precondition_init();
+    remote_climate_init();
 
     // 9. Command Queues and Tasks
     init_can_engine();

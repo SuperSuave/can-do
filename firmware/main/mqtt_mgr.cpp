@@ -519,10 +519,10 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     if (!steps.empty()) {
                         if (can_id == 0x520) {
                             if (steps[0].payload[0] == 0x01) {
-                                bool ok = queue_entity_command("remote_climate_start_smart", "Start");
+                                bool ok = queue_entity_command("remote_climate", "Start");
                                 if (!ok) queue_action_steps(can_id, delay_ms, steps);
                             } else {
-                                bool ok = queue_entity_command("remote_climate_start_smart", "off");
+                                bool ok = queue_entity_command("remote_climate", "off");
                                 if (!ok) queue_action_steps(can_id, delay_ms, steps);
                             }
                         } else {

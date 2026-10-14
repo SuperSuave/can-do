@@ -32,7 +32,7 @@ _BMS_ALIASES: dict[str, list[str]] = {
 }
 
 _CRC_CAN_IDS: set[str] = {
-    "0x0a2", "0x130", "0x152", "0x1ac", "0x226", "0x2ad", "0x380", "0x31b", "0x476", "0x448", "0x4ce"
+    "0x0a2", "0x130", "0x152", "0x1ac", "0x226", "0x2ad", "0x380", "0x31b", "0x39b", "0x476", "0x448", "0x4ce"
 }
 
 
@@ -89,6 +89,11 @@ class CanDoDataCoordinator:
     def sub_ids_topic(self) -> str:
         """Return MQTT dynamic monitored CAN IDs topic."""
         return f"{self.base_topic}/{self.effective_device_id}/subscribe_ids"
+
+    @property
+    def climate_topic(self) -> str:
+        """Return MQTT remote climate set topic."""
+        return f"{self.base_topic}/{self.effective_device_id}/set/remote_climate"
 
     async def async_start(self) -> None:
         """Subscribe to MQTT topics and request vehicle telemetry IDs."""
@@ -316,6 +321,26 @@ class CanDoDataCoordinator:
         """Send high-level entity command (e.g. lock/unlock) to ESP32 edge device over MQTT."""
         topic = f"{self.base_topic}/{self.effective_device_id}/set/{entity_id}"
         await mqtt.async_publish(self.hass, topic, command, qos=1)
+
+    async def async_send_remote_climate(
+        self,
+        action: str = "start",
+        target_temp: float = 22.0,
+        defrost: bool = False,
+        duration_sec: int = 900,
+    ) -> None:
+        """Send remote climate command to ESP32 edge device over MQTT."""
+        payload_obj = {
+            "action": action,
+            "temp": target_temp,
+            "defrost": defrost,
+            "duration": duration_sec,
+        }
+        json_payload = json.dumps(payload_obj)
+        _LOGGER.info("Sending remote climate command to %s: %s", self.climate_topic, json_payload)
+        await mqtt.async_publish(self.hass, self.climate_topic, json_payload, qos=1)
+        if self.climate_topic != f"{self.base_topic}/set/remote_climate":
+            await mqtt.async_publish(self.hass, f"{self.base_topic}/set/remote_climate", json_payload, qos=1)
 
     async def async_send_notification(
         self,
