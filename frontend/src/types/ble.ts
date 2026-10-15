@@ -8,6 +8,28 @@ export interface BleDeviceInfo {
   last_seen_ms?: number;
 }
 
+export interface BeaconTarget {
+  uuid: string;
+  mac: string;
+  name: string;
+  enter_rssi: number;
+  exit_timeout_s: number;
+  is_present?: boolean;
+  rssi?: number;
+  major?: number;
+  minor?: number;
+  last_seen_ms?: number;
+}
+
+export interface DiscoveredBeacon {
+  uuid: string;
+  mac: string;
+  rssi: number;
+  major?: number;
+  minor?: number;
+  last_seen_ms?: number;
+}
+
 export interface BleStatus {
   enabled: boolean;
   scanning: boolean;
@@ -15,6 +37,9 @@ export interface BleStatus {
   paired_devices: BleDeviceInfo[];
   discovered_devices?: BleDeviceInfo[];
   last_event?: BleButtonEvent | null;
+  recent_events?: BleButtonEvent[];
+  beacon_targets?: BeaconTarget[];
+  discovered_beacons?: DiscoveredBeacon[];
 }
 
 export interface BleButtonEvent {
@@ -26,3 +51,4 @@ export interface BleButtonEvent {
   modifiers?: number;
   timestamp_ms?: number;
 }
+

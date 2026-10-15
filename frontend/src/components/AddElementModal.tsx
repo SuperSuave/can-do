@@ -136,8 +136,8 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         },
         {
           id: 'ble_button',
-          title: 'Bluetooth Remote / Keypad Button',
-          desc: 'Fire on wireless media buttons (Volume +/-, Next/Prev, Play/Pause, Shutter) or wireless macro keys',
+          title: 'Bluetooth Remote / Keypad Button or Combo',
+          desc: 'Fire on wireless media buttons (Volume +/-, Next/Prev), macro keys, or multi-button combo chords (e.g. mute+volume_down)',
           icon: Bluetooth,
           color: 'text-blue-400 bg-blue-950/40 border-blue-800/60',
           create: (): AutomationTrigger => ({
@@ -146,6 +146,22 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
             type: 'ble_button',
             ble_button: 'volume_up',
             ble_action: 'press'
+          })
+        },
+        {
+          id: 'ble_presence',
+          title: 'Bluetooth Presence / Proximity',
+          desc: 'Trigger when your phone (iBeacon / Home Assistant), BLE key fob, or paired device enters or exits range (RSSI walk-up/walk-away)',
+          icon: Bluetooth,
+          color: 'text-purple-400 bg-purple-950/40 border-purple-800/60',
+          create: (): AutomationTrigger => ({
+            id: `trig_ble_${Date.now().toString(36)}`,
+            source: 'ble',
+            type: 'ble_presence',
+            ble_event: 'enter',
+            beacon_uuid: '',
+            ble_device: '',
+            target_rssi: -70
           })
         },
         {
@@ -256,6 +272,35 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           })
         },
         {
+          id: 'ble_button_cond',
+          title: 'Bluetooth Button Pressed (Wait For / If-Then)',
+          desc: 'Evaluate if a specific Bluetooth button or multi-button combo chord was pressed (ideal for WAIT_FOR step)',
+          icon: Bluetooth,
+          color: 'text-blue-400 bg-blue-950/40 border-blue-800/60',
+          create: (): AutomationCondition => ({
+            id: `cond_ble_btn_${Date.now().toString(36)}`,
+            type: 'ble_button',
+            ble_button: 'volume_up',
+            ble_action: 'press'
+          })
+        },
+        {
+          id: 'ble_presence_cond',
+          title: 'Bluetooth Presence / Proximity Condition',
+          desc: 'Check whether phone beacon, key fob, or paired device is present in range or within RSSI proximity',
+          icon: Bluetooth,
+          color: 'text-purple-400 bg-purple-950/40 border-purple-800/60',
+          create: (): AutomationCondition => ({
+            id: `cond_ble_pres_${Date.now().toString(36)}`,
+            type: 'ble_presence',
+            device_property: 'beacon_present',
+            beacon_uuid: '',
+            ble_device: '',
+            target_bool: true,
+            target_rssi: -70
+          })
+        },
+        {
           id: 'logic_and',
           title: 'AND Logic Block',
           desc: 'Group multiple child conditions; ALL must evaluate to true',
@@ -324,6 +369,26 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         })
       },
       {
+        id: 'flow_waitfor',
+        title: 'Wait (Condition or Delay)',
+        desc: 'Pause execution until a button or condition is met (with timeout), or pause for a specified delay duration',
+        icon: Clock,
+        color: 'text-violet-400 bg-violet-950/40 border-violet-800/60',
+        create: (): AutomationAction => ({
+          id: `act_wait_${Date.now().toString(36)}`,
+          type: 'wait_for',
+          timeout_ms: 10000,
+          delay_ms: 2000,
+          interval_ms: 50,
+          condition: {
+            id: `cond_wait_${Date.now().toString(36)}`,
+            type: 'ble_button',
+            ble_button: 'volume_up',
+            ble_action: 'press'
+          }
+        })
+      },
+      {
         id: 'entity_command',
         title: 'Entity Command',
         desc: 'Trigger high-level vehicle command (e.g. heated seats, mirrors, doors)',
@@ -349,18 +414,6 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           bus: 0,
           payload: '',
           repeat: 1,
-          delay_ms: 0
-        })
-      },
-      {
-        id: 'act_delay',
-        title: 'Delay / Wait',
-        desc: 'Pause automation execution pipeline for a specified millisecond duration',
-        icon: Clock,
-        color: 'text-amber-400 bg-amber-950/40 border-amber-800/60',
-        create: (): AutomationAction => ({
-          id: `act_delay_${Date.now().toString(36)}`,
-          type: 'delay',
           delay_ms: 0
         })
       },

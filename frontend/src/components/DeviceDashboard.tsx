@@ -151,7 +151,7 @@ export interface DeviceDashboardProps {
   onUpdatePreferences?: (prefs: Partial<UserPreferences>) => void;
   onRerunOnboarding?: () => void;
   onSyncAutomationsToDevice?: () => Promise<void>;
-  onPullAutomationsFromDevice?: () => Promise<void>;
+  onPullAutomationsFromDevice?: (silent?: boolean) => Promise<void>;
   onNavigateToCatalog?: (searchQuery?: string) => void;
   onNavigateToAutomations?: () => void;
   onCreateCommandFromCanId?: (canId: string, sampleData?: string) => void;
@@ -204,7 +204,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   useEffect(() => {
     if (isRunningOnDevice() && onPullAutomationsFromDevice && !hasAutoPulled.current) {
       hasAutoPulled.current = true;
-      onPullAutomationsFromDevice().catch(() => {});
+      onPullAutomationsFromDevice(true).catch(() => {});
     }
   }, [onPullAutomationsFromDevice]);
 

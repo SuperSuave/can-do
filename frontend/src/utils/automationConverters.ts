@@ -87,6 +87,26 @@ export function compileCondition(cond: AutomationCondition): any {
     };
   }
 
+  if (cond.type === 'ble_button' || cond.type === 'ble_key' || cond.type === 'ble') {
+    return {
+      type: 'ble_button',
+      ble_button: cond.ble_button || cond.target_string || 'volume_up',
+      ble_action: cond.ble_action || 'press',
+      ...(cond.ble_device ? { ble_device: cond.ble_device } : {})
+    };
+  }
+
+  if (cond.type === 'ble_device' || cond.type === 'ble_presence') {
+    return {
+      type: 'ble_device',
+      device_property: cond.device_property || 'connected',
+      ...(cond.ble_device ? { ble_device: cond.ble_device } : {}),
+      ...(cond.target_bool !== undefined ? { target_bool: cond.target_bool } : {}),
+      ...(cond.target_rssi !== undefined ? { target_rssi: cond.target_rssi } : {}),
+      ...(cond.operator ? { operator: cond.operator } : {})
+    };
+  }
+
   if (cond.type === 'param_range' || cond.type === 'voltage') {
     return {
       type: 'param_range',
@@ -507,13 +527,24 @@ export function compileAutomationRule(
         };
       }
 
-      if (trig.type === 'ble_button' || trig.type === 'ble_key' || trig.source === 'ble') {
+      if (trig.type === 'ble_button' || trig.type === 'ble_key' || (trig.source === 'ble' && trig.ble_button)) {
         return {
           ...baseTrigger,
           type: 'ble_button',
           ble_button: trig.ble_button || 'volume_up',
           ble_action: trig.ble_action || 'press',
           ...(trig.ble_device ? { ble_device: trig.ble_device } : {})
+        };
+      }
+
+      if (trig.type === 'ble_device_event' || trig.type === 'ble_device' || trig.type === 'ble_presence' || trig.source === 'ble') {
+        return {
+          ...baseTrigger,
+          type: 'ble_device_event',
+          ble_event: trig.ble_event || 'connected',
+          ...(trig.ble_device ? { ble_device: trig.ble_device } : {}),
+          ...(trig.client_mac ? { client_mac: trig.client_mac } : {}),
+          ...(trig.target_rssi !== undefined ? { target_rssi: trig.target_rssi } : {})
         };
       }
 

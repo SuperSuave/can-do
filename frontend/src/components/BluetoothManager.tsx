@@ -25,8 +25,9 @@ import {
   Zap,
   Info
 } from 'lucide-react';
-import { BleStatus, BleDeviceInfo, BleButtonEvent } from '../types/ble';
+import { BleStatus, BleDeviceInfo, BleButtonEvent, BeaconTarget } from '../types/ble';
 import { AutomationTrigger } from '../types/automation';
+import { deviceWs } from '../services/deviceWs';
 
 interface BluetoothManagerProps {
   deviceHost: string;
@@ -44,6 +45,13 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
   const [recentEvents, setRecentEvents] = useState<BleButtonEvent[]>([]);
   const [activePressedButton, setActivePressedButton] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Beacon & Phone Proximity state
+  const [beaconName, setBeaconName] = useState('My Phone');
+  const [beaconUuid, setBeaconUuid] = useState('');
+  const [beaconEnterRssi, setBeaconEnterRssi] = useState(-75);
+  const [beaconExitTimeout, setBeaconExitTimeout] = useState(10);
+  const [savingBeacon, setSavingBeacon] = useState(false);
 
   const resolveUrl = (path: string) => {
     const cleanHost = (deviceHost === 'auto' || !deviceHost)
@@ -67,7 +75,9 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
         if (data.scanning) {
           setScanning(true);
         }
-        if (data.last_event) {
+        if (data.recent_events && data.recent_events.length > 0) {
+          setRecentEvents(data.recent_events);
+        } else if (data.last_event) {
           setRecentEvents(prev => {
             if (prev.length === 0 || prev[0].timestamp_ms !== data.last_event?.timestamp_ms) {
               return [data.last_event!, ...prev.slice(0, 49)];
@@ -80,6 +90,29 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
       // Offline / not reachable
     }
   };
+
+  // Subscribe to real-time WebSocket events from WiCAN / Atom Lite
+  useEffect(() => {
+    const unsub = deviceWs.subscribe((msg: any) => {
+      if (msg && msg.type === 'ble_event') {
+        const btn = msg.button_name || msg.button || 'button';
+        const act = (msg.action || 'press') as 'press' | 'release' | 'hold';
+        if (act === 'press') {
+          setActivePressedButton(btn);
+          setTimeout(() => setActivePressedButton(null), 600);
+        }
+        const eventItem: BleButtonEvent = {
+          button_name: btn,
+          action: act,
+          device_name: msg.name || status?.connected_device?.name || 'BLE Device',
+          device_address: msg.address || status?.connected_device?.address || '',
+          timestamp_ms: Date.now()
+        };
+        setRecentEvents(prev => [eventItem, ...prev.slice(0, 49)]);
+      }
+    });
+    return () => unsub();
+  }, [status]);
 
   useEffect(() => {
     fetchStatus();
@@ -197,6 +230,68 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
     }
   };
 
+  const handleAddBeacon = async () => {
+    if (!beaconUuid.trim()) {
+      showNotice('Please enter a Beacon UUID or MAC address', 'error');
+      return;
+    }
+    setSavingBeacon(true);
+    try {
+      const isMac = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(beaconUuid.trim());
+      const payload = {
+        name: beaconName.trim() || 'Phone Beacon',
+        uuid: isMac ? '' : beaconUuid.trim(),
+        mac: isMac ? beaconUuid.trim() : '',
+        enter_rssi: beaconEnterRssi,
+        exit_timeout_s: beaconExitTimeout
+      };
+      const res = await fetch(resolveUrl('/api/ble/beacons'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        showNotice(`Beacon target '${payload.name}' saved!`, 'success');
+        setBeaconUuid('');
+        fetchStatus();
+      } else {
+        showNotice('Failed to save beacon target', 'error');
+      }
+    } catch {
+      showNotice('Error connecting to device', 'error');
+    } finally {
+      setSavingBeacon(false);
+    }
+  };
+
+  const handleDeleteBeacon = async (uuid: string, mac: string) => {
+    try {
+      await fetch(resolveUrl('/api/ble/beacons'), {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uuid, mac })
+      });
+      showNotice('Beacon target removed', 'info');
+      fetchStatus();
+    } catch {
+      showNotice('Failed to delete beacon', 'error');
+    }
+  };
+
+  const handleCreateAutomationForBeacon = (beacon: BeaconTarget) => {
+    if (onSelectTriggerForAutomation) {
+      onSelectTriggerForAutomation({
+        id: `trig_beacon_${Date.now().toString(36)}`,
+        source: 'ble',
+        type: 'ble_beacon',
+        ble_event: 'enter',
+        beacon_uuid: beacon.uuid || beacon.mac,
+        target_rssi: beacon.enter_rssi
+      });
+      showNotice(`Created proximity trigger for '${beacon.name}'! Switch to Automations tab to complete rule.`, 'success');
+    }
+  };
+
   const getSignalIcon = (rssi?: number) => {
     if (!rssi) return <Signal className="w-3.5 h-3.5 text-slate-500" />;
     if (rssi >= -60) return <SignalHigh className="w-3.5 h-3.5 text-emerald-400" />;
@@ -223,7 +318,8 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
     { id: 'key_6', label: '6' },
     { id: 'key_7', label: '7' },
     { id: 'key_8', label: '8' },
-    { id: 'key_9', label: '9' }
+    { id: 'key_9', label: '9' },
+    { id: 'key_0', label: '0' }
   ];
 
   const connectedDev = status?.connected_device;
@@ -486,6 +582,170 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
         </div>
       </div>
 
+      {/* BLE Beacon & Phone Proximity Manager Card */}
+      <div className="can-do-card p-4 sm:p-5 space-y-4 border border-purple-800/40 bg-slate-900/40">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <Radio className="w-5 h-5 text-purple-400" />
+            <div>
+              <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                BLE Beacons & Phone Proximity (iBeacon / Key Fobs)
+                <span className="px-2 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-800 text-[10px] font-mono">
+                  Walk-Up / Walk-Away
+                </span>
+              </h2>
+              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                Automatically trigger automations when your phone or BLE key fob enters or leaves vehicle range without pairing
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Add Beacon Target Form */}
+        <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
+          <span className="text-xs font-bold text-purple-300 uppercase tracking-wider block">
+            Add or Track a Phone Beacon / Key Fob
+          </span>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
+            <div>
+              <label className="block text-[10px] text-slate-400 mb-1">Friendly Name</label>
+              <input
+                type="text"
+                value={beaconName}
+                onChange={e => setBeaconName(e.target.value)}
+                placeholder="e.g. My iPhone"
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-white"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-[10px] text-slate-400 mb-1">
+                iBeacon UUID (Phone) or BLE MAC (Fob)
+              </label>
+              <input
+                type="text"
+                value={beaconUuid}
+                onChange={e => setBeaconUuid(e.target.value)}
+                placeholder="e.g. 2F234454-CF6D-4A0F-ADF2-F4911BA9FFA6"
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-white font-mono text-[11px]"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-slate-400 mb-1">Enter Threshold (RSSI)</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={beaconEnterRssi}
+                  onChange={e => setBeaconEnterRssi(parseInt(e.target.value) || -75)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-white font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddBeacon}
+                  disabled={savingBeacon}
+                  className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs whitespace-nowrap transition"
+                >
+                  {savingBeacon ? 'Saving...' : 'Add'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Configured Target Beacons List */}
+        <div className="space-y-2">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+            Configured Beacon Targets ({status?.beacon_targets?.length || 0})
+          </span>
+          {(!status?.beacon_targets || status.beacon_targets.length === 0) ? (
+            <div className="p-3 rounded-xl bg-slate-950/40 border border-slate-800 text-slate-500 text-xs italic text-center">
+              No beacon targets saved yet. Add your phone's Home Assistant UUID or click one of the detected beacons below.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {status.beacon_targets.map((tgt, i) => (
+                <div key={i} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3 text-xs">
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white truncate">{tgt.name}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-mono border ${
+                        tgt.is_present
+                          ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                          : 'bg-slate-900 text-slate-500 border-slate-800'
+                      }`}>
+                        {tgt.is_present ? 'NEAR CAR' : 'AWAY'}
+                      </span>
+                    </div>
+                    <div className="text-[11px] font-mono text-slate-400 truncate">
+                      {tgt.uuid ? `UUID: ${tgt.uuid}` : `MAC: ${tgt.mac}`}
+                    </div>
+                    <div className="text-[10px] text-slate-500 flex items-center gap-2">
+                      <span>Threshold: {tgt.enter_rssi} dBm</span>
+                      {tgt.is_present && (
+                        <span className="text-emerald-400 font-bold">
+                          Current RSSI: {tgt.rssi} dBm
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {onSelectTriggerForAutomation && (
+                      <button
+                        type="button"
+                        onClick={() => handleCreateAutomationForBeacon(tgt)}
+                        className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-purple-300 text-[11px] font-semibold transition"
+                        title="Create automation triggered by this beacon"
+                      >
+                        + Rule
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteBeacon(tgt.uuid, tgt.mac)}
+                      className="p-1 text-slate-500 hover:text-rose-400 transition"
+                      title="Remove beacon target"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Recently Discovered Beacons In Range */}
+        {status?.discovered_beacons && status.discovered_beacons.length > 0 && (
+          <div className="p-3 rounded-xl bg-purple-950/20 border border-purple-900/50 space-y-2">
+            <span className="text-[11px] font-bold text-purple-300 flex items-center gap-1.5">
+              <Signal className="w-3.5 h-3.5 text-purple-400" />
+              Nearby iBeacons Heard by Atom Lite (Click to Track):
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+              {status.discovered_beacons.map((b, idx) => (
+                <div key={idx} className="p-2 rounded bg-slate-900 border border-slate-800 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-white text-[11px] truncate">{b.uuid}</div>
+                    <div className="text-slate-400 text-[10px]">
+                      RSSI: {b.rssi} dBm {b.major ? `• Major: ${b.major}` : ''}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBeaconUuid(b.uuid);
+                      setBeaconName('Phone Beacon');
+                    }}
+                    className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-500 text-white font-sans text-[10px] font-bold shrink-0 transition"
+                  >
+                    Track
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Live Event Log & Guides Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Live Event Feed */}
@@ -518,7 +778,11 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
                     </span>
                   </div>
                   <span className="text-slate-500 text-[10px]">
-                    {evt.timestamp_ms ? new Date(evt.timestamp_ms).toLocaleTimeString() : '--'}
+                    {evt.timestamp_ms
+                      ? evt.timestamp_ms > 1000000000000
+                        ? new Date(evt.timestamp_ms).toLocaleTimeString()
+                        : `${(evt.timestamp_ms / 1000).toFixed(1)}s`
+                      : '--'}
                   </span>
                 </div>
               ))

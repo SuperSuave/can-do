@@ -26,6 +26,8 @@ import {
 } from '../utils/automationConverters';
 import { getDefaultEspIp, resolveDeviceBaseUrl, isRunningOnDevice } from '../utils/hostUtils';
 import { deviceWs } from '../services/deviceWs';
+import { BleButtonComboPicker } from './BleButtonComboPicker';
+import { BleDeviceSelect, BleBeaconSelect } from './BleSelects';
 import {
   Zap,
   Shield,
@@ -1092,6 +1094,204 @@ function ConditionNodeEditor({
     );
   }
 
+  // Bluetooth Presence / Proximity condition (Phone Beacon or Paired Device)
+  if (cond.type === 'ble_presence' || cond.type === 'ble_beacon' || cond.type === 'beacon' || cond.type === 'ble_device') {
+    const isDeviceMode = cond.type === 'ble_device' || cond.device_property === 'connected' || (cond.device_property === 'rssi' && !cond.beacon_uuid);
+    const currentMode = isDeviceMode ? 'paired_device' : 'phone_beacon';
+
+    return (
+      <div className="p-2.5 sm:p-3 rounded-xl bg-slate-950 border border-purple-900/60 space-y-2 text-xs min-w-0 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
+            >
+              {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+            </button>
+            <span className="w-5 h-5 rounded-full bg-purple-950 text-purple-300 font-bold text-[10px] flex items-center justify-center border border-purple-800 shrink-0">
+              C{index + 1}
+            </span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Bluetooth className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+              <span className="font-semibold text-white truncate">Bluetooth Presence</span>
+              <span className="px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 text-[10px] border border-purple-800/60 font-mono shrink-0">
+                {currentMode === 'phone_beacon'
+                  ? (cond.target_bool !== false ? 'Beacon Present' : 'Beacon Absent')
+                  : (cond.target_bool !== false ? 'Device Connected' : 'Device Disconnected')}
+              </span>
+            </div>
+          </div>
+          <div className="shrink-0 ml-auto sm:ml-0">
+            {actionButtons}
+          </div>
+        </div>
+
+        {!collapsed && (
+          <div className="space-y-2 pt-1 border-t border-slate-900">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px] items-end">
+              <div className="flex flex-col justify-end">
+                <label className="block text-[10px] font-sans text-slate-400 mb-1">Check Target</label>
+                <select
+                  value={currentMode}
+                  onChange={e => {
+                    const newMode = e.target.value;
+                    if (newMode === 'phone_beacon') {
+                      onUpdate({
+                        ...cond,
+                        type: 'ble_presence',
+                        device_property: 'beacon_present',
+                        target_bool: cond.target_bool !== false
+                      });
+                    } else {
+                      onUpdate({
+                        ...cond,
+                        type: 'ble_presence',
+                        device_property: 'connected',
+                        target_bool: cond.target_bool !== false
+                      });
+                    }
+                  }}
+                  className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-purple-300 font-sans box-border"
+                >
+                  <option value="phone_beacon">Phone iBeacon / Key Fob</option>
+                  <option value="paired_device">Paired Bluetooth Device</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col justify-end">
+                <label className="block text-[10px] font-sans text-slate-400 mb-1">Expected State</label>
+                {currentMode === 'phone_beacon' ? (
+                  <select
+                    value={cond.target_bool !== false ? 'true' : 'false'}
+                    onChange={e => onUpdate({ ...cond, target_bool: e.target.value === 'true' })}
+                    className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-slate-200 box-border"
+                  >
+                    <option value="true">Beacon is Present (Near Car)</option>
+                    <option value="false">Beacon is Absent (Away)</option>
+                  </select>
+                ) : (
+                  <select
+                    value={cond.target_bool !== false ? 'true' : 'false'}
+                    onChange={e => onUpdate({ ...cond, target_bool: e.target.value === 'true' })}
+                    className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-slate-200 box-border"
+                  >
+                    <option value="true">Device is Connected</option>
+                    <option value="false">Device is Disconnected</option>
+                  </select>
+                )}
+              </div>
+
+              <div className="flex flex-col justify-end">
+                {currentMode === 'phone_beacon' ? (
+                  <BleBeaconSelect
+                    value={cond.beacon_uuid || cond.ble_device || cond.target_string || ''}
+                    onChange={val => {
+                      onUpdate({ ...cond, beacon_uuid: val, ble_device: val, target_string: val });
+                    }}
+                    label="Beacon / Phone Filter"
+                  />
+                ) : (
+                  <BleDeviceSelect
+                    value={cond.ble_device || cond.target_string || ''}
+                    onChange={val => {
+                      onUpdate({ ...cond, ble_device: val, target_string: val });
+                    }}
+                    label="Device MAC Filter"
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Optional RSSI threshold */}
+            <div className="flex items-center gap-2 pt-1 border-t border-slate-900/60 font-mono text-[11px]">
+              <span className="text-[10px] font-sans text-slate-400">Min RSSI Filter (Optional):</span>
+              <input
+                type="number"
+                value={cond.target_rssi ?? 0}
+                onChange={e => onUpdate({ ...cond, target_rssi: parseInt(e.target.value) || 0 })}
+                placeholder="0 = ignore, -70 = in car"
+                className="w-24 bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-purple-300 font-mono font-bold text-center text-[11px]"
+              />
+              <span className="text-[10px] text-slate-500 font-mono">dBm</span>
+              <span className="text-[10px] text-slate-500 font-sans ml-2">(Set to 0 to check presence only)</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Bluetooth Button Pressed condition
+  if (cond.type === 'ble_button' || cond.type === 'ble_key' || cond.type === 'ble') {
+    const btn = cond.ble_button || cond.target_string || 'volume_up';
+    const act = cond.ble_action || 'press';
+    return (
+      <div className="p-2.5 sm:p-3 rounded-xl bg-slate-950 border border-blue-900/60 space-y-2 text-xs min-w-0 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
+            >
+              {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+            </button>
+            <span className="w-5 h-5 rounded-full bg-blue-950 text-blue-300 font-bold text-[10px] flex items-center justify-center border border-blue-800 shrink-0">
+              C{index + 1}
+            </span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Bluetooth className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span className="font-semibold text-white truncate">Bluetooth Button / Combo</span>
+              <span className="px-1.5 py-0.2 rounded bg-blue-950 text-blue-300 text-[10px] border border-blue-800/60 font-mono shrink-0">
+                {btn} • {act}
+              </span>
+            </div>
+          </div>
+          <div className="shrink-0 ml-auto sm:ml-0">
+            {actionButtons}
+          </div>
+        </div>
+
+        {!collapsed && (
+          <div className="space-y-2 pt-1 border-t border-slate-900">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px] items-end">
+              <div className="flex flex-col justify-end">
+                <BleButtonComboPicker
+                  value={btn}
+                  onChange={val => onUpdate({ ...cond, ble_button: val, target_string: val })}
+                  label="Target Button / Combo Chord"
+                />
+              </div>
+              <div className="flex flex-col justify-end">
+                <label className="block text-[10px] font-sans text-slate-400 mb-1">Action Event</label>
+                <select
+                  value={act}
+                  onChange={e => onUpdate({ ...cond, ble_action: e.target.value })}
+                  className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-slate-200 font-sans box-border"
+                >
+                  <option value="press">Press (or Combo)</option>
+                  <option value="release">Release</option>
+                  <option value="any">Any Event</option>
+                </select>
+              </div>
+              <div className="flex flex-col justify-end">
+                <BleDeviceSelect
+                  value={cond.ble_device || ''}
+                  onChange={val => onUpdate({ ...cond, ble_device: val })}
+                  label="Device MAC Filter (Optional)"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+
+
   // Leaf CAN / Catalog condition
   const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForCondition(cond, catalog) : {};
   const hasOptions = !!(catalogCmd?.options && catalogCmd.options.length > 0);
@@ -1617,7 +1817,7 @@ function TriggerNodeEditor({
   }
 
   // Bluetooth Remote / Button Trigger
-  if (trig.type === 'ble_button' || trig.type === 'ble_key' || trig.source === 'ble') {
+  if (trig.type === 'ble_button' || trig.type === 'ble_key' || (!trig.type && trig.source === 'ble' && trig.ble_button)) {
     return (
       <div
         className="p-3.5 rounded-xl bg-slate-950 border border-blue-800/80 space-y-2.5 text-xs shadow-sm"
@@ -1648,65 +1848,207 @@ function TriggerNodeEditor({
         </div>
 
         {!collapsed && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px]">
-            <div>
-              <label className="block text-[10px] font-sans text-slate-400 mb-1">Button / Macro Key</label>
-              <select
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px] items-end">
+            <div className="flex flex-col justify-end">
+              <BleButtonComboPicker
                 value={trig.ble_button || 'volume_up'}
-                onChange={e => onUpdate({ ...trig, ble_button: e.target.value })}
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-blue-300 font-sans"
-              >
-                <optgroup label="Media & Volume (Phone / Remote / Shutter)">
-                  <option value="volume_up">Volume Up (+)</option>
-                  <option value="volume_down">Volume Down (-)</option>
-                  <option value="play_pause">Play / Pause</option>
-                  <option value="next_track">Next Track (&gt;&gt;)</option>
-                  <option value="prev_track">Previous Track (&lt;&lt;)</option>
-                  <option value="mute">Mute</option>
-                  <option value="shutter">Camera Shutter (Enter)</option>
-                </optgroup>
-                <optgroup label="Macro Keypad (1 - 9)">
-                  <option value="key_1">Key 1</option>
-                  <option value="key_2">Key 2</option>
-                  <option value="key_3">Key 3</option>
-                  <option value="key_4">Key 4</option>
-                  <option value="key_5">Key 5</option>
-                  <option value="key_6">Key 6</option>
-                  <option value="key_7">Key 7</option>
-                  <option value="key_8">Key 8</option>
-                  <option value="key_9">Key 9</option>
-                </optgroup>
-                <optgroup label="Navigation Keys">
-                  <option value="key_space">Spacebar</option>
-                  <option value="key_enter">Enter</option>
-                  <option value="key_escape">Escape</option>
-                  <option value="key_tab">Tab</option>
-                </optgroup>
-              </select>
+                onChange={val => onUpdate({ ...trig, ble_button: val })}
+                label="Button or Multi-Button Combo Chord"
+              />
             </div>
 
-            <div>
+            <div className="flex flex-col justify-end">
               <label className="block text-[10px] font-sans text-slate-400 mb-1">Action Event</label>
               <select
                 value={trig.ble_action || 'press'}
                 onChange={e => onUpdate({ ...trig, ble_action: e.target.value as any })}
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+                className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-slate-200 font-sans box-border"
               >
-                <option value="press">Button Pressed</option>
+                <option value="press">Button Pressed (or Combo Chord)</option>
                 <option value="release">Button Released</option>
                 <option value="any">Any (Press or Release)</option>
               </select>
             </div>
 
-            <div>
-              <label className="block text-[10px] font-sans text-slate-400 mb-1">Device Filter (Optional)</label>
-              <input
-                type="text"
+            <div className="flex flex-col justify-end">
+              <BleDeviceSelect
                 value={trig.ble_device || ''}
-                onChange={e => onUpdate({ ...trig, ble_device: e.target.value })}
-                placeholder="Leave blank for any device"
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                onChange={val => onUpdate({ ...trig, ble_device: val })}
+                label="Device Filter (Optional)"
               />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Bluetooth Presence / Proximity Trigger (Phone Beacon, Key Fob, or Paired Device)
+  if (
+    trig.type === 'ble_presence' ||
+    trig.type === 'ble_device_event' ||
+    trig.type === 'ble_device' ||
+    trig.type === 'ble_beacon' ||
+    trig.type === 'beacon' ||
+    (!trig.type && trig.source === 'ble')
+  ) {
+    const isPairedDeviceMode = trig.ble_event === 'connected' || trig.ble_event === 'disconnected';
+    const currentMode = isPairedDeviceMode ? 'paired_device' : 'phone_beacon';
+
+    return (
+      <div className="p-3.5 rounded-xl bg-slate-950 border border-purple-800/80 space-y-2.5 text-xs shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              className="text-slate-400 hover:text-white transition p-0.5"
+            >
+              {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+            </button>
+            <span className="w-5 h-5 rounded-full bg-purple-950 text-purple-300 font-bold text-[10px] flex items-center justify-center border border-purple-800 shrink-0">
+              T{tIdx + 1}
+            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 text-purple-400 font-semibold">
+                <Bluetooth className="w-3.5 h-3.5" />
+                <span>Bluetooth Presence / Proximity</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-200 text-[10px] font-mono border border-purple-700/50">
+                {currentMode === 'phone_beacon'
+                  ? (trig.ble_event === 'exit' ? 'Walk-Away (exit)' : (trig.ble_event === 'proximity' ? 'Proximity' : 'Walk-Up (enter)'))
+                  : (trig.ble_event === 'disconnected' ? 'Disconnected' : 'Connected')}
+                {trig.beacon_uuid ? ` • ${trig.beacon_uuid.substring(0, 8)}...` : (trig.ble_device ? ` • ${trig.ble_device}` : '')}
+                {trig.target_rssi ? ` • RSSI: ${trig.target_rssi} dBm` : ''}
+              </span>
+            </div>
+          </div>
+          {actionButtons}
+        </div>
+
+        {!collapsed && (
+          <div className="space-y-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px] items-end">
+              <div className="flex flex-col justify-end">
+                <label className="block text-[10px] font-sans text-slate-400 mb-1">Tracking Target</label>
+                <select
+                  value={currentMode}
+                  onChange={e => {
+                    const newMode = e.target.value;
+                    if (newMode === 'phone_beacon') {
+                      onUpdate({
+                        ...trig,
+                        type: 'ble_presence',
+                        ble_event: 'enter',
+                        target_rssi: trig.target_rssi || -70
+                      });
+                    } else {
+                      onUpdate({
+                        ...trig,
+                        type: 'ble_presence',
+                        ble_event: 'connected',
+                        target_rssi: trig.target_rssi || -65
+                      });
+                    }
+                  }}
+                  className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-purple-300 font-sans box-border"
+                >
+                  <option value="phone_beacon">Phone iBeacon / Key Fob (Walk-Up / Walk-Away)</option>
+                  <option value="paired_device">Paired Remote / Bluetooth Device</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col justify-end">
+                <label className="block text-[10px] font-sans text-slate-400 mb-1">Trigger Event</label>
+                {currentMode === 'phone_beacon' ? (
+                  <select
+                    value={trig.ble_event || 'enter'}
+                    onChange={e => onUpdate({ ...trig, ble_event: e.target.value })}
+                    className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-purple-300 font-sans box-border"
+                  >
+                    <option value="enter">Walk-Up (Enters Proximity Range)</option>
+                    <option value="exit">Walk-Away (Exits Proximity Range)</option>
+                    <option value="proximity">Proximity Signal (Continuous RSSI)</option>
+                  </select>
+                ) : (
+                  <select
+                    value={trig.ble_event || 'connected'}
+                    onChange={e => onUpdate({ ...trig, ble_event: e.target.value })}
+                    className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-indigo-300 font-sans box-border"
+                  >
+                    <option value="connected">Device Connected (In Range)</option>
+                    <option value="disconnected">Device Disconnected (Walk Away)</option>
+                    <option value="proximity">Proximity Signal (RSSI)</option>
+                  </select>
+                )}
+              </div>
+
+              <div className="flex flex-col justify-end">
+                {currentMode === 'phone_beacon' ? (
+                  <BleBeaconSelect
+                    value={trig.beacon_uuid || trig.ble_device || ''}
+                    onChange={val => onUpdate({ ...trig, beacon_uuid: val, ble_device: val })}
+                    label="Beacon UUID / MAC Filter"
+                  />
+                ) : (
+                  <BleDeviceSelect
+                    value={trig.ble_device || ''}
+                    onChange={val => onUpdate({ ...trig, ble_device: val })}
+                    label="Device MAC / Name Filter"
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* RSSI Proximity threshold settings */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-sans text-slate-400">Proximity Threshold:</span>
+                <input
+                  type="number"
+                  value={trig.target_rssi ?? -70}
+                  onChange={e => onUpdate({ ...trig, target_rssi: parseInt(e.target.value) || -70 })}
+                  placeholder="-70"
+                  className="w-20 bg-slate-950 border border-slate-700 rounded px-2 py-0.5 text-purple-300 font-mono font-bold text-center text-[11px]"
+                />
+                <span className="text-[10px] font-mono text-slate-500">dBm</span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-sans text-slate-500">Quick Presets:</span>
+                <button
+                  type="button"
+                  onClick={() => onUpdate({ ...trig, target_rssi: -60 })}
+                  className={`px-2 py-0.5 text-[10px] font-sans rounded border transition ${
+                    (trig.target_rssi ?? -70) === -60
+                      ? 'bg-purple-900 text-purple-100 border-purple-500'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                  }`}
+                >
+                  Inside Vehicle (-60 dBm)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onUpdate({ ...trig, target_rssi: -75 })}
+                  className={`px-2 py-0.5 text-[10px] font-sans rounded border transition ${
+                    (trig.target_rssi ?? -70) === -75
+                      ? 'bg-purple-900 text-purple-100 border-purple-500'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                  }`}
+                >
+                  Near Doors (-75 dBm)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onUpdate({ ...trig, target_rssi: -85 })}
+                  className={`px-2 py-0.5 text-[10px] font-sans rounded border transition ${
+                    (trig.target_rssi ?? -70) === -85
+                      ? 'bg-purple-900 text-purple-100 border-purple-500'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                  }`}
+                >
+                  Perimeter / Walk-Up (-85 dBm)
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -2387,6 +2729,236 @@ function ActionNodeEditor({
     );
   }
 
+  // Unified WAIT (Condition or Delay)
+  if (act.type === 'wait_for' || act.type === 'delay') {
+    const isDelayMode = act.type === 'delay';
+    const condList = act.conditions || (act.condition ? [act.condition] : []);
+
+    const currentTotalMs = act.delay_ms !== undefined && act.delay_ms !== null 
+      ? act.delay_ms 
+      : (act.ms !== undefined && act.ms !== null ? act.ms : 2000);
+
+    let defaultUnit: 'ms' | 's' | 'mins' | 'hrs' = 'ms';
+    let displayVal = currentTotalMs;
+    if (currentTotalMs > 0) {
+      if (currentTotalMs % 3600000 === 0) {
+        defaultUnit = 'hrs';
+        displayVal = currentTotalMs / 3600000;
+      } else if (currentTotalMs % 60000 === 0) {
+        defaultUnit = 'mins';
+        displayVal = currentTotalMs / 60000;
+      } else if (currentTotalMs % 1000 === 0) {
+        defaultUnit = 's';
+        displayVal = currentTotalMs / 1000;
+      }
+    }
+    const multipliers: Record<string, number> = {
+      ms: 1,
+      s: 1000,
+      mins: 60000,
+      hrs: 3600000
+    };
+
+    return (
+      <div className="p-2 sm:p-3 rounded-xl border border-violet-800/80 bg-violet-950/20 space-y-3 text-xs min-w-0 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
+            >
+              {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+            </button>
+            <span className="px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] bg-violet-900 text-violet-200 border border-violet-700 flex items-center gap-1 min-w-0">
+              <Clock className="w-3 h-3 shrink-0" />
+              <span className="truncate">WAIT (Condition or Delay)</span>
+            </span>
+            <span className="px-1.5 py-0.5 rounded bg-violet-950 text-violet-300 text-[10px] font-mono border border-violet-800/60 truncate">
+              {isDelayMode 
+                ? `Delay: ${displayVal} ${defaultUnit}` 
+                : `Wait For Condition (timeout: ${act.timeout_ms || 10000}ms)`}
+            </span>
+          </div>
+          <div className="shrink-0 ml-auto sm:ml-0">
+            {actionButtons}
+          </div>
+        </div>
+
+        {!collapsed && (
+          <div className="space-y-3 min-w-0">
+            {/* Mode switch */}
+            <div className="flex items-center gap-2 p-1 bg-slate-900/80 border border-slate-800 rounded-lg">
+              <button
+                type="button"
+                onClick={() => {
+                  onUpdate({
+                    ...act,
+                    type: 'delay',
+                    delay_ms: currentTotalMs || 2000,
+                    ms: currentTotalMs || 2000
+                  });
+                }}
+                className={`flex-1 py-1 px-2.5 rounded text-xs font-medium transition ${
+                  isDelayMode
+                    ? 'bg-violet-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                Fixed Delay Duration
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onUpdate({
+                    ...act,
+                    type: 'wait_for',
+                    timeout_ms: act.timeout_ms || 10000,
+                    interval_ms: act.interval_ms || 50,
+                    conditions: condList.length > 0 ? condList : [{
+                      id: `cond_wait_${Date.now().toString(36)}`,
+                      type: 'ble_button',
+                      ble_button: 'volume_up',
+                      ble_action: 'press'
+                    }]
+                  });
+                }}
+                className={`flex-1 py-1 px-2.5 rounded text-xs font-medium transition ${
+                  !isDelayMode
+                    ? 'bg-violet-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                Wait For Condition / Button Press
+              </button>
+            </div>
+
+            {isDelayMode ? (
+              <div className="space-y-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[11px] items-end">
+                  <div className="flex flex-col justify-end">
+                    <label className="block text-[10px] font-sans text-slate-400 mb-1">Delay Duration Value</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={displayVal || ''}
+                      onChange={e => {
+                        const raw = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0;
+                        const factor = multipliers[defaultUnit] || 1;
+                        const total = Math.round(raw * factor);
+                        onUpdate({ ...act, type: 'delay', delay_ms: total, ms: total });
+                      }}
+                      placeholder="0"
+                      className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2.5 text-slate-200 font-mono text-xs focus:outline-none focus:border-violet-500 box-border"
+                    />
+                  </div>
+                  <div className="flex flex-col justify-end">
+                    <label className="block text-[10px] font-sans text-slate-400 mb-1">Duration Unit</label>
+                    <select
+                      value={defaultUnit}
+                      onChange={e => {
+                        const newUnit = e.target.value;
+                        const newFactor = multipliers[newUnit] || 1;
+                        const total = Math.round(displayVal * newFactor);
+                        onUpdate({ ...act, type: 'delay', delay_ms: total, ms: total });
+                      }}
+                      className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-violet-400 font-sans text-xs focus:outline-none focus:border-violet-500 box-border"
+                    >
+                      <option value="ms">Milliseconds (ms)</option>
+                      <option value="s">Seconds (s)</option>
+                      <option value="mins">Minutes (mins)</option>
+                      <option value="hrs">Hours (hrs)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-1 font-mono text-[10px]">
+                  <span className="text-slate-500 font-sans">Quick Presets:</span>
+                  {[
+                    { label: '250ms', val: 250 },
+                    { label: '500ms', val: 500 },
+                    { label: '1s', val: 1000 },
+                    { label: '2s', val: 2000 },
+                    { label: '5s', val: 5000 },
+                    { label: '10s', val: 10000 }
+                  ].map(p => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => onUpdate({ ...act, type: 'delay', delay_ms: p.val, ms: p.val })}
+                      className={`px-2 py-0.5 rounded border transition ${
+                        currentTotalMs === p.val
+                          ? 'bg-violet-900 text-violet-100 border-violet-500 font-bold'
+                          : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                  {currentTotalMs > 0 && (
+                    <span className="text-slate-500 ml-auto">
+                      = {currentTotalMs.toLocaleString()} ms ({currentTotalMs >= 1000 ? `${(currentTotalMs / 1000).toFixed(1)}s` : `${currentTotalMs}ms`})
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 min-w-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[11px] items-end">
+                  <div className="flex flex-col justify-end">
+                    <label className="block text-[10px] font-sans text-slate-400 mb-1">Timeout (ms)</label>
+                    <input
+                      type="number"
+                      value={act.timeout_ms || 10000}
+                      onChange={e => onUpdate({ ...act, timeout_ms: parseInt(e.target.value) || 10000 })}
+                      placeholder="10000 (10 seconds)"
+                      className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-slate-200 font-mono box-border"
+                    />
+                  </div>
+                  <div className="flex flex-col justify-end">
+                    <label className="block text-[10px] font-sans text-slate-400 mb-1">Check Interval (ms)</label>
+                    <input
+                      type="number"
+                      value={act.interval_ms || 50}
+                      onChange={e => onUpdate({ ...act, interval_ms: parseInt(e.target.value) || 50 })}
+                      placeholder="50"
+                      className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-slate-200 font-mono box-border"
+                    />
+                  </div>
+                </div>
+
+                {/* Target Condition in WAIT_FOR */}
+                <div className="p-2 sm:p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2 min-w-0 overflow-hidden">
+                  <ConditionListEditor
+                    conditions={condList}
+                    depth={depth + 1}
+                    label="Target Condition (e.g. Volume Up / Down or Key Pressed)"
+                    emptyText="No target condition set (will proceed immediately)."
+                    availableTriggers={availableTriggers}
+                    catalog={catalog}
+                    liveFrames={liveFrames}
+                    entityStates={entityStates}
+                    lastFiredTriggerId={lastFiredTriggerId}
+                    onUpdate={updatedConds => {
+                      onUpdate({
+                        ...act,
+                        conditions: updatedConds,
+                        condition: updatedConds[0]
+                      });
+                    }}
+                    onOpenAddConditionDialog={onOpenAddConditionDialog}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // Regular action step
   const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForAction(act, catalog) : {};
   const hasOptions = !!(catalogCmd?.options && catalogCmd.options.length > 0);
@@ -2650,72 +3222,7 @@ function ActionNodeEditor({
               </>
             )}
 
-            {act.type === 'delay' && (() => {
-              const currentTotalMs = act.delay_ms !== undefined && act.delay_ms !== null ? act.delay_ms : (act.ms !== undefined && act.ms !== null ? act.ms : 0);
-              // Choose friendliest display unit
-              let defaultUnit: 'ms' | 's' | 'mins' | 'hrs' = 'ms';
-              let displayVal = currentTotalMs;
-              if (currentTotalMs > 0) {
-                if (currentTotalMs % 3600000 === 0) {
-                  defaultUnit = 'hrs';
-                  displayVal = currentTotalMs / 3600000;
-                } else if (currentTotalMs % 60000 === 0) {
-                  defaultUnit = 'mins';
-                  displayVal = currentTotalMs / 60000;
-                } else if (currentTotalMs % 1000 === 0) {
-                  defaultUnit = 's';
-                  displayVal = currentTotalMs / 1000;
-                }
-              }
-              const multipliers: Record<string, number> = {
-                ms: 1,
-                s: 1000,
-                mins: 60000,
-                hrs: 3600000
-              };
 
-              return (
-                <div className="col-span-2">
-                  <label className="block text-[10px] font-sans text-slate-500 mb-1">Delay Duration</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={displayVal || ''}
-                      onChange={e => {
-                        const raw = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0;
-                        const factor = multipliers[defaultUnit] || 1;
-                        const total = Math.round(raw * factor);
-                        onUpdate({ ...act, delay_ms: total, ms: total });
-                      }}
-                      placeholder="0"
-                      className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-slate-200 font-mono text-xs focus:outline-none focus:border-emerald-500"
-                    />
-                    <select
-                      value={defaultUnit}
-                      onChange={e => {
-                        const newUnit = e.target.value;
-                        const newFactor = multipliers[newUnit] || 1;
-                        const total = Math.round(displayVal * newFactor);
-                        onUpdate({ ...act, delay_ms: total, ms: total });
-                      }}
-                      className="bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-emerald-400 font-sans text-xs focus:outline-none focus:border-emerald-500"
-                    >
-                      <option value="ms">Milliseconds (ms)</option>
-                      <option value="s">Seconds (s)</option>
-                      <option value="mins">Minutes (mins)</option>
-                      <option value="hrs">Hours (hrs)</option>
-                    </select>
-                  </div>
-                  {currentTotalMs > 0 && (
-                    <div className="text-[10px] text-slate-500 mt-1 font-mono">
-                      = {currentTotalMs.toLocaleString()} ms ({currentTotalMs >= 1000 ? `${(currentTotalMs / 1000).toFixed(1)}s` : `${currentTotalMs}ms`})
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
 
             {act.type === 'can_tx' && (
               <>

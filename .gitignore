@@ -48,3 +48,5 @@ atom-ui-bridge/data/can_do_catalog.json
 
 # tmporary files
 *tmp.driveupload
+backup_*.bin
+firmware/backup_storage.bin
