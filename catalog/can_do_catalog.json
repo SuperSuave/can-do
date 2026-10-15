@@ -1873,7 +1873,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
+        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
       },
       "network": {
         "bus": 0,
@@ -1885,14 +1885,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "\u00b0F",
+        "unit": "°F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62\u00b0F",
+          "label": "62°F",
           "match": {
             "D4": "0x06"
           },
@@ -1913,7 +1913,7 @@
           "default": false
         },
         {
-          "label": "63\u00b0F",
+          "label": "63°F",
           "match": {
             "D4": "0x07"
           },
@@ -1934,7 +1934,7 @@
           "default": false
         },
         {
-          "label": "64\u00b0F",
+          "label": "64°F",
           "match": {
             "D4": "0x08"
           },
@@ -1955,7 +1955,7 @@
           "default": false
         },
         {
-          "label": "65\u00b0F",
+          "label": "65°F",
           "match": {
             "D4": "0x09"
           },
@@ -1976,7 +1976,7 @@
           "default": false
         },
         {
-          "label": "66\u00b0F",
+          "label": "66°F",
           "match": {
             "D4": "0x0A"
           },
@@ -1997,7 +1997,7 @@
           "default": false
         },
         {
-          "label": "67\u00b0F",
+          "label": "67°F",
           "match": {
             "D4": "0x0B"
           },
@@ -2018,7 +2018,7 @@
           "default": false
         },
         {
-          "label": "68\u00b0F",
+          "label": "68°F",
           "match": {
             "D4": "0x0C"
           },
@@ -2039,7 +2039,7 @@
           "default": false
         },
         {
-          "label": "69\u00b0F",
+          "label": "69°F",
           "match": {
             "D4": "0x0D"
           },
@@ -2060,7 +2060,7 @@
           "default": false
         },
         {
-          "label": "70\u00b0F",
+          "label": "70°F",
           "match": {
             "D4": "0x0E"
           },
@@ -2081,7 +2081,7 @@
           "default": true
         },
         {
-          "label": "71\u00b0F",
+          "label": "71°F",
           "match": {
             "D4": "0x0F"
           },
@@ -2102,7 +2102,7 @@
           "default": false
         },
         {
-          "label": "72\u00b0F",
+          "label": "72°F",
           "match": {
             "D4": "0x10"
           },
@@ -2123,7 +2123,7 @@
           "default": false
         },
         {
-          "label": "73\u00b0F",
+          "label": "73°F",
           "match": {
             "D4": "0x11"
           },
@@ -2144,7 +2144,7 @@
           "default": false
         },
         {
-          "label": "74\u00b0F",
+          "label": "74°F",
           "match": {
             "D4": "0x12"
           },
@@ -2165,7 +2165,7 @@
           "default": false
         },
         {
-          "label": "75\u00b0F",
+          "label": "75°F",
           "match": {
             "D4": "0x13"
           },
@@ -2186,7 +2186,7 @@
           "default": false
         },
         {
-          "label": "76\u00b0F",
+          "label": "76°F",
           "match": {
             "D4": "0x14"
           },
@@ -2207,7 +2207,7 @@
           "default": false
         },
         {
-          "label": "77\u00b0F",
+          "label": "77°F",
           "match": {
             "D4": "0x15"
           },
@@ -2228,7 +2228,7 @@
           "default": false
         },
         {
-          "label": "78\u00b0F",
+          "label": "78°F",
           "match": {
             "D4": "0x16"
           },
@@ -2249,7 +2249,7 @@
           "default": false
         },
         {
-          "label": "79\u00b0F",
+          "label": "79°F",
           "match": {
             "D4": "0x17"
           },
@@ -2270,7 +2270,7 @@
           "default": false
         },
         {
-          "label": "80\u00b0F",
+          "label": "80°F",
           "match": {
             "D4": "0x18"
           },
@@ -2291,7 +2291,7 @@
           "default": false
         },
         {
-          "label": "81\u00b0F",
+          "label": "81°F",
           "match": {
             "D4": "0x19"
           },
@@ -2312,7 +2312,7 @@
           "default": false
         },
         {
-          "label": "82\u00b0F",
+          "label": "82°F",
           "match": {
             "D4": "0x1A"
           },
@@ -2356,7 +2356,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
+        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
       },
       "network": {
         "bus": 0,
@@ -2368,14 +2368,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "\u00b0F",
+        "unit": "°F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62\u00b0F",
+          "label": "62°F",
           "match": {
             "D6": "0x06"
           },
@@ -2396,7 +2396,7 @@
           "default": false
         },
         {
-          "label": "63\u00b0F",
+          "label": "63°F",
           "match": {
             "D6": "0x07"
           },
@@ -2417,7 +2417,7 @@
           "default": false
         },
         {
-          "label": "64\u00b0F",
+          "label": "64°F",
           "match": {
             "D6": "0x08"
           },
@@ -2438,7 +2438,7 @@
           "default": false
         },
         {
-          "label": "65\u00b0F",
+          "label": "65°F",
           "match": {
             "D6": "0x09"
           },
@@ -2459,7 +2459,7 @@
           "default": false
         },
         {
-          "label": "66\u00b0F",
+          "label": "66°F",
           "match": {
             "D6": "0x0A"
           },
@@ -2480,7 +2480,7 @@
           "default": false
         },
         {
-          "label": "67\u00b0F",
+          "label": "67°F",
           "match": {
             "D6": "0x0B"
           },
@@ -2501,7 +2501,7 @@
           "default": false
         },
         {
-          "label": "68\u00b0F",
+          "label": "68°F",
           "match": {
             "D6": "0x0C"
           },
@@ -2522,7 +2522,7 @@
           "default": false
         },
         {
-          "label": "69\u00b0F",
+          "label": "69°F",
           "match": {
             "D6": "0x0D"
           },
@@ -2543,7 +2543,7 @@
           "default": false
         },
         {
-          "label": "70\u00b0F",
+          "label": "70°F",
           "match": {
             "D6": "0x0E"
           },
@@ -2564,7 +2564,7 @@
           "default": true
         },
         {
-          "label": "71\u00b0F",
+          "label": "71°F",
           "match": {
             "D6": "0x0F"
           },
@@ -2585,7 +2585,7 @@
           "default": false
         },
         {
-          "label": "72\u00b0F",
+          "label": "72°F",
           "match": {
             "D6": "0x10"
           },
@@ -2606,7 +2606,7 @@
           "default": false
         },
         {
-          "label": "73\u00b0F",
+          "label": "73°F",
           "match": {
             "D6": "0x11"
           },
@@ -2627,7 +2627,7 @@
           "default": false
         },
         {
-          "label": "74\u00b0F",
+          "label": "74°F",
           "match": {
             "D6": "0x12"
           },
@@ -2648,7 +2648,7 @@
           "default": false
         },
         {
-          "label": "75\u00b0F",
+          "label": "75°F",
           "match": {
             "D6": "0x13"
           },
@@ -2669,7 +2669,7 @@
           "default": false
         },
         {
-          "label": "76\u00b0F",
+          "label": "76°F",
           "match": {
             "D6": "0x14"
           },
@@ -2690,7 +2690,7 @@
           "default": false
         },
         {
-          "label": "77\u00b0F",
+          "label": "77°F",
           "match": {
             "D6": "0x15"
           },
@@ -2711,7 +2711,7 @@
           "default": false
         },
         {
-          "label": "78\u00b0F",
+          "label": "78°F",
           "match": {
             "D6": "0x16"
           },
@@ -2732,7 +2732,7 @@
           "default": false
         },
         {
-          "label": "79\u00b0F",
+          "label": "79°F",
           "match": {
             "D6": "0x17"
           },
@@ -2753,7 +2753,7 @@
           "default": false
         },
         {
-          "label": "80\u00b0F",
+          "label": "80°F",
           "match": {
             "D6": "0x18"
           },
@@ -2774,7 +2774,7 @@
           "default": false
         },
         {
-          "label": "81\u00b0F",
+          "label": "81°F",
           "match": {
             "D6": "0x19"
           },
@@ -2795,7 +2795,7 @@
           "default": false
         },
         {
-          "label": "82\u00b0F",
+          "label": "82°F",
           "match": {
             "D6": "0x1A"
           },
@@ -5682,18 +5682,18 @@
       },
       "options": [
         {
-          "label": "Info Notification (\u24d8)",
+          "label": "Info Notification (ⓘ)",
           "level": "info",
           "popup_message": "Preconditioning Active",
           "default": true
         },
         {
-          "label": "Warning Notification (\u26a0)",
+          "label": "Warning Notification (⚠)",
           "level": "warning",
           "popup_message": "Battery Cold / Limited"
         },
         {
-          "label": "Fault Notification (\u203c)",
+          "label": "Fault Notification (‼)",
           "level": "error",
           "popup_message": "Charge Interrupted"
         },
@@ -6715,16 +6715,16 @@
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x226",
-        "unit": "\u00b0C"
+        "unit": "°C"
       },
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 \u00b0C"
+        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 °C"
       },
       "options": [
         {
-          "label": "Freezing (<= 0\u00b0C / 32\u00b0F)",
+          "label": "Freezing (<= 0°C / 32°F)",
           "evaluate": {
             "byte": "D4",
             "operator": "less_equal",
@@ -6733,7 +6733,7 @@
           "default": true
         },
         {
-          "label": "Cold (< 15\u00b0C / 59\u00b0F)",
+          "label": "Cold (< 15°C / 59°F)",
           "evaluate": {
             "byte": "D4",
             "operator": "less_than",
@@ -6741,7 +6741,7 @@
           }
         },
         {
-          "label": "Warm (> 25\u00b0C / 77\u00b0F)",
+          "label": "Warm (> 25°C / 77°F)",
           "evaluate": {
             "byte": "D4",
             "operator": "greater_than",
@@ -7328,19 +7328,19 @@
           "default": true
         },
         {
-          "label": "Rear Temp 20.0\u00b0C / 68\u00b0F",
+          "label": "Rear Temp 20.0°C / 68°F",
           "match": {
             "D6": "0x0C"
           }
         },
         {
-          "label": "Rear Temp 21.0\u00b0C / 70\u00b0F",
+          "label": "Rear Temp 21.0°C / 70°F",
           "match": {
             "D6": "0x0E"
           }
         },
         {
-          "label": "Rear Temp 22.0\u00b0C / 72\u00b0F",
+          "label": "Rear Temp 22.0°C / 72°F",
           "match": {
             "D6": "0x10"
           }
@@ -7861,7 +7861,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Right 90\u00b0",
+          "label": "Turn Right 90°",
           "match": {
             "D1": "0x03"
           },
@@ -7896,7 +7896,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Left 90\u00b0",
+          "label": "Turn Left 90°",
           "match": {
             "D1": "0x08"
           },
@@ -8647,7 +8647,7 @@
         "name": "HV Battery Module Min & Max Temp",
         "domain": "sensor",
         "icon": "mdi:thermometer-chevron-up",
-        "unit_of_measurement": "\u00b0C"
+        "unit_of_measurement": "°C"
       },
       "tags": [
         "all_egmp"
@@ -8661,17 +8661,17 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40\u00b0C offset."
+        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40°C offset."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x5D7",
-        "unit": "\u00b0C"
+        "unit": "°C"
       },
       "options": [
         {
-          "label": "Battery Optimal Warm (20\u00b0C - 35\u00b0C)",
+          "label": "Battery Optimal Warm (20°C - 35°C)",
           "evaluate": {
             "byte": "D1",
             "operator": "greater_equal",
@@ -8680,7 +8680,7 @@
           "default": true
         },
         {
-          "label": "Battery High Temp (> 45\u00b0C / 113\u00b0F)",
+          "label": "Battery High Temp (> 45°C / 113°F)",
           "evaluate": {
             "byte": "D1",
             "operator": "greater_than",
@@ -8688,7 +8688,7 @@
           }
         },
         {
-          "label": "Battery Cold (< 10\u00b0C / 50\u00b0F)",
+          "label": "Battery Cold (< 10°C / 50°F)",
           "evaluate": {
             "byte": "D2",
             "operator": "less_than",
@@ -8696,7 +8696,7 @@
           }
         },
         {
-          "label": "Battery Freezing (< 0\u00b0C / 32\u00b0F)",
+          "label": "Battery Freezing (< 0°C / 32°F)",
           "evaluate": {
             "byte": "D2",
             "operator": "less_than",
@@ -8998,7 +8998,7 @@
         "name": "Cabin Displayed Target Temperature",
         "domain": "sensor",
         "icon": "mdi:thermometer-lines",
-        "unit_of_measurement": "\u00b0F"
+        "unit_of_measurement": "°F"
       },
       "tags": [
         "all_egmp"
@@ -9012,31 +9012,31 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in \u00b0C x 0.5, Byte D3 = Driver Temp in \u00b0F integer)."
+        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in °C x 0.5, Byte D3 = Driver Temp in °F integer)."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x5F5",
-        "unit": "\u00b0F"
+        "unit": "°F"
       },
       "options": [
         {
-          "label": "68\u00b0F (20.0\u00b0C)",
+          "label": "68°F (20.0°C)",
           "match": {
             "D3": "0x44"
           },
           "mask": "0xFF"
         },
         {
-          "label": "70\u00b0F (21.0\u00b0C)",
+          "label": "70°F (21.0°C)",
           "match": {
             "D3": "0x46"
           },
           "mask": "0xFF"
         },
         {
-          "label": "72\u00b0F (22.0\u00b0C)",
+          "label": "72°F (22.0°C)",
           "match": {
             "D3": "0x48"
           },
@@ -9044,14 +9044,14 @@
           "default": true
         },
         {
-          "label": "74\u00b0F (23.5\u00b0C)",
+          "label": "74°F (23.5°C)",
           "match": {
             "D3": "0x4A"
           },
           "mask": "0xFF"
         },
         {
-          "label": "76\u00b0F (24.5\u00b0C)",
+          "label": "76°F (24.5°C)",
           "match": {
             "D3": "0x4C"
           },
@@ -9294,7 +9294,7 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s\u00b2 signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
+        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s² signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
       },
       "network": {
         "bus": 0,
@@ -11203,7 +11203,7 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Direct Head Unit DATC (Dual Automatic Temperature Control) CAN frame (0x520 / 0x5A0) decoded from HKMC_TAppService DATCManager. Byte 0 enables HVAC (0x01), Byte 1 sets target temp in 0.5 deg C steps (raw = Temp_C * 2, e.g. 68\u00b0F=20.0\u00b0C=0x28, 70\u00b0F=21.0\u00b0C=0x2A, 72\u00b0F=22.0\u00b0C=0x2C, 74\u00b0F=23.5\u00b0C=0x2F, 76\u00b0F=24.5\u00b0C=0x31), Byte 2 controls blower & auto mode (0x04), Byte 3 controls air distribution (0x01 vent). The vehicle VCU automatically engages High Voltage contactors and runs the electric compressor / PTC heater when this frame is periodically broadcast alongside 0x4F1 CLU keep-alive."
+        "notes": "Direct Head Unit DATC (Dual Automatic Temperature Control) CAN frame (0x520 / 0x5A0) decoded from HKMC_TAppService DATCManager. Byte 0 enables HVAC (0x01), Byte 1 sets target temp in 0.5 deg C steps (raw = Temp_C * 2, e.g. 68°F=20.0°C=0x28, 70°F=21.0°C=0x2A, 72°F=22.0°C=0x2C, 74°F=23.5°C=0x2F, 76°F=24.5°C=0x31), Byte 2 controls blower & auto mode (0x04), Byte 3 controls air distribution (0x01 vent). The vehicle VCU automatically engages High Voltage contactors and runs the electric compressor / PTC heater when this frame is periodically broadcast alongside 0x4F1 CLU keep-alive."
       },
       "network": {
         "bus": 0,
@@ -11213,7 +11213,7 @@
       },
       "options": [
         {
-          "label": "Remote Climate 72\u00b0F (22.0\u00b0C) Auto",
+          "label": "Remote Climate 72°F (22.0°C) Auto",
           "match": {
             "D1": "0x01",
             "D2": "0x2C"
@@ -11231,7 +11231,7 @@
           "default": true
         },
         {
-          "label": "Remote Climate 68\u00b0F (20.0\u00b0C) Auto",
+          "label": "Remote Climate 68°F (20.0°C) Auto",
           "match": {
             "D1": "0x01",
             "D2": "0x28"
@@ -11248,7 +11248,7 @@
           }
         },
         {
-          "label": "Remote Climate 70\u00b0F (21.0\u00b0C) Auto",
+          "label": "Remote Climate 70°F (21.0°C) Auto",
           "match": {
             "D1": "0x01",
             "D2": "0x2A"
@@ -11265,7 +11265,7 @@
           }
         },
         {
-          "label": "Remote Climate 74\u00b0F (23.5\u00b0C) Auto",
+          "label": "Remote Climate 74°F (23.5°C) Auto",
           "match": {
             "D1": "0x01",
             "D2": "0x2F"
@@ -11282,7 +11282,7 @@
           }
         },
         {
-          "label": "Remote Climate 76\u00b0F (24.5\u00b0C) Auto",
+          "label": "Remote Climate 76°F (24.5°C) Auto",
           "match": {
             "D1": "0x01",
             "D2": "0x31"
@@ -11690,7 +11690,7 @@
       ],
       "options": [
         {
-          "label": "Passenger 72\u00b0F (22.0\u00b0C)",
+          "label": "Passenger 72°F (22.0°C)",
           "match": {
             "D4": "0x10"
           },
@@ -11703,7 +11703,7 @@
           "default": true
         },
         {
-          "label": "Passenger 68\u00b0F (20.0\u00b0C)",
+          "label": "Passenger 68°F (20.0°C)",
           "match": {
             "D4": "0x0C"
           },
@@ -11715,7 +11715,7 @@
           }
         },
         {
-          "label": "Passenger 76\u00b0F (24.5\u00b0C)",
+          "label": "Passenger 76°F (24.5°C)",
           "match": {
             "D4": "0x14"
           },
