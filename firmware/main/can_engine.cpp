@@ -42,6 +42,8 @@ extern "C" esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t
     if (twai_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING) {
         return ESP_ERR_INVALID_STATE;
     }
+    // Single-Shot mode: never loop in hardware retries on unacknowledged frames, eliminating BUS_OFF
+    message->ss = 1;
     return twai_transmit(message, ticks_to_wait);
 }
 
@@ -482,13 +484,14 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                 ESP_LOGW(TAG, "TWAI controller not in RUNNING state (%d), skipping burst TX", info.state);
                 continue;
             }
+            msg_to_send.ss = 1; // Single-Shot mode: prevent infinite hardware retry loop on bus error
             if (twai_transmit(&msg_to_send, pdMS_TO_TICKS(10)) == ESP_OK) {
                 board_led_can_activity();
                 if (delay_ms > 0) {
                     vTaskDelay(pdMS_TO_TICKS(delay_ms));
                 }
             } else {
-                ESP_LOGW(TAG, "TWAI TX failed or queue full for ID 0x%03lX", (unsigned long)tx_msg.identifier);
+                ESP_LOGW(TAG, "TWAI TX failed or queue full for ID 0x%03lX", (unsigned long)msg_to_send.identifier);
             }
         }
 
@@ -958,10 +961,10 @@ void can_rx_task(void* arg) {
                 s_bus_off_or_recovering_start_ms = 0;
             }
 
-            // Watchdog: If stuck in BUS_OFF or RECOVERING for > 1500ms, hardware recovery has deadlocked
+            // Watchdog: If stuck in BUS_OFF or RECOVERING for > 5000ms, hardware recovery has deadlocked
             // (e.g. silent bus, disconnected line, transceiver standby). Force a complete hardware reinstall!
-            if (s_bus_off_or_recovering_start_ms > 0 && (now_ms - s_bus_off_or_recovering_start_ms > 1500)) {
-                ESP_LOGE(TAG, "TWAI recovery watchdog timeout (>1500ms). Forcing hardware driver reset...");
+            if (s_bus_off_or_recovering_start_ms > 0 && (now_ms - s_bus_off_or_recovering_start_ms > 5000)) {
+                ESP_LOGE(TAG, "TWAI recovery watchdog timeout (>5000ms). Forcing hardware driver reset...");
                 twai_clear_transmit_queue();
                 twai_stop();
                 twai_driver_uninstall();
@@ -1055,8 +1058,11 @@ void can_rx_task(void* arg) {
                     static std::unordered_map<uint32_t, uint32_t> s_last_mqtt_pub_ms;
                     auto pit = s_last_mqtt_pub_ms.find(rx_msg.identifier);
                     bool throttle = false;
-                    // For continuous high-frequency telemetry (speed 0x1AC, wheels 0x0A2), throttle to max 10Hz (100ms)
-                    if (rx_msg.identifier == 0x1AC || rx_msg.identifier == 0x0A2) {
+                    // For continuous high-frequency telemetry, throttle to max 10Hz (100ms) to protect MQTT outbox
+                    if (rx_msg.identifier == 0x1AC || rx_msg.identifier == 0x0A2 ||
+                        rx_msg.identifier == 0x130 || rx_msg.identifier == 0x2AD ||
+                        rx_msg.identifier == 0x227 || rx_msg.identifier == 0x29C ||
+                        rx_msg.identifier == 0x151 || rx_msg.identifier == 0x152) {
                         if (pit != s_last_mqtt_pub_ms.end() && (now_ms - pit->second < 100)) {
                             throttle = true;
                         }

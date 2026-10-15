@@ -39,7 +39,8 @@ void power_mgr_enter_deep_sleep(uint32_t sleep_duration_sec) {
     gpio_set_level(CAN_STB_PIN, 0);
 
     // 2. Configure native ESP32-C3 Deep Sleep GPIO wakeup on CAN RX falling edge (dominant bus state)
-    esp_deep_sleep_enable_gpio_wakeup((1ULL << CAN_RX_PIN), ESP_GPIO_WAKEUP_GPIO_LOW);
+    gpio_wakeup_enable((gpio_num_t)CAN_RX_PIN, GPIO_INTR_LOW_LEVEL);
+    esp_sleep_enable_gpio_wakeup();
 
     // 3. Configure periodic timer wake for heartbeat / 12V check
     if (sleep_duration_sec > 0) {
@@ -60,9 +61,11 @@ static void power_mgr_task(void* arg) {
 
         bool awake = uds_engine_is_vehicle_awake();
         float vbat = vbat_sensor_get_last();
+        // 12V rail >= 13.2V indicates high-voltage LDC converter is energized (vehicle is ON/driving or actively charging)
+        bool ldc_active = (vbat >= 13.2f);
 
-        // Stay in Active tier if vehicle is awake OR if device is powered via USB bench power (vbat < 5.0V)
-        if (awake || vbat < 5.0f) {
+        // Stay in Active tier if vehicle is awake, LDC is active, OR if device is powered via USB bench power (vbat < 5.0V)
+        if (awake || ldc_active || vbat < 5.0f) {
             power_mgr_set_tier(POWER_TIER_ACTIVE);
             critical_low_vbat_count = 0;
         } else {

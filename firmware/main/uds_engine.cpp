@@ -1,5 +1,6 @@
 #include "uds_engine.h"
 #include "vbat_sensor.h"
+#include "can_engine.h"
 #include "api.h"
 #include "mqtt_mgr.h"
 #include "esp_log.h"
@@ -51,13 +52,17 @@ static inline uint32_t get_time_ms(void) {
 }
 
 bool uds_engine_is_vehicle_awake(void) {
+    // 1. Physical 12V hardware rail fallback: If LDC is active (>= 13.2V), vehicle HV system is ON
+    if (vbat_sensor_get_last() >= 13.2f) {
+        return true;
+    }
+
     uint32_t last = s_last_can_traffic_ms.load();
     if (last == 0) return false;
-    // For active UDS diagnostics, require passive CAN traffic within the last 3000ms
-    // to avoid transmitting onto the bus while ECUs are powering down
-    uint32_t threshold_ms = (s_config.sleep_delay_sec > 0 && s_config.sleep_delay_sec < 3) ? 
-                            (s_config.sleep_delay_sec * 1000) : 3000;
-    return (get_time_ms() - last) <= threshold_ms;
+
+    // 2. Passive CAN traffic within sleep delay window (defaults to s_config.sleep_delay_sec, min 10s)
+    uint32_t sleep_sec = s_config.sleep_delay_sec > 0 ? s_config.sleep_delay_sec : 10;
+    return (get_time_ms() - last) <= (sleep_sec * 1000);
 }
 
 static bool is_quiet_hours(void) {
@@ -91,8 +96,10 @@ bool uds_engine_is_gate_open(void) {
         return false;
     }
 
-    // Gate 3: Passive Vehicle Awake Gate
-    if (!uds_engine_is_vehicle_awake()) {
+    // Gate 3: Passive Vehicle Awake Gate - require passive CAN traffic within the last 3000ms
+    // to avoid transmitting onto the bus while ECUs are powering down
+    uint32_t last = s_last_can_traffic_ms.load();
+    if (last == 0 || (get_time_ms() - last) > 3000) {
         return false;
     }
 
@@ -108,8 +115,8 @@ static void send_can_frame(uint32_t id, const uint8_t* data, uint8_t dlc) {
     if (twai_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING) {
         return;
     }
-    if (info.tx_error_counter >= 64) {
-        ESP_LOGW(TAG, "CAN TX error counter elevated (%lu), suppressing UDS TX to prevent BUS_OFF", 
+    if (info.tx_error_counter >= 16) {
+        ESP_LOGW(TAG, "CAN TX error counter elevated (%lu), suppressing UDS TX", 
                  (unsigned long)info.tx_error_counter);
         return;
     }
@@ -118,8 +125,9 @@ static void send_can_frame(uint32_t id, const uint8_t* data, uint8_t dlc) {
     tx_msg.data_length_code = dlc;
     tx_msg.extd = 0;
     tx_msg.rtr = 0;
+    tx_msg.ss = 1; // Single-Shot mode: never loop in hardware retries on un-ACKed frames, eliminating BUS_OFF
     memcpy(tx_msg.data, data, dlc);
-    twai_transmit(&tx_msg, pdMS_TO_TICKS(50));
+    twai_transmit(&tx_msg, pdMS_TO_TICKS(20));
 }
 
 static void decode_bms_payload(const uint8_t* payload, size_t len) {
@@ -232,6 +240,23 @@ static void uds_worker_task(void* arg) {
         vTaskDelay(pdMS_TO_TICKS(1000));
 
         if (uds_engine_is_gate_open()) {
+            // Suppress active UDS queries while vehicle is in motion / driving:
+            // E-GMP gateway isolates OBD-II UDS while driving, and passive broadcast frames (0x152, 0x2FC, 0x30E) stream live telemetry
+            uint8_t speed_frame[8];
+            if (get_cached_can_frame(0x1AC, speed_frame)) {
+                int raw_speed = (speed_frame[1] | ((speed_frame[2] & 0x01) << 8));
+                if (raw_speed > 2) {
+                    continue;
+                }
+            }
+            uint8_t gear_frame[8];
+            if (get_cached_can_frame(0x226, gear_frame) || get_cached_can_frame(0x038, gear_frame)) {
+                uint8_t g = gear_frame[0] & 0x0F;
+                if (g == 0x05 || g == 0x07 || g == 0x04) { // D or R
+                    continue;
+                }
+            }
+
             static uint32_t s_last_poll_ms = 0;
             uint32_t now = get_time_ms();
 

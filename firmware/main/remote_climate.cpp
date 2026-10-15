@@ -34,6 +34,7 @@ static void send_can_frame(uint32_t id, const uint8_t* data, uint8_t dlc) {
     tx_msg.data_length_code = dlc;
     tx_msg.extd = 0;
     tx_msg.rtr = 0;
+    tx_msg.ss = 1; // Single-Shot mode: prevent infinite hardware retry loop on bus error
     memcpy(tx_msg.data, data, dlc);
     twai_transmit(&tx_msg, pdMS_TO_TICKS(20));
 }

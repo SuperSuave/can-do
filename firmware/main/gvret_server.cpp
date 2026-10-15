@@ -139,6 +139,7 @@ static bool handle_client_rx(int sock) {
                         if (!g_sniffer_mode.load()) {
                             twai_status_info_t info;
                             if (twai_get_status_info(&info) == ESP_OK && info.state == TWAI_STATE_RUNNING) {
+                                tx_msg.ss = 1; // Single-Shot mode: prevent infinite hardware retry loop on bus error
                                 twai_transmit(&tx_msg, pdMS_TO_TICKS(10));
                             }
                         } else {
