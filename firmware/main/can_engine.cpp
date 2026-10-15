@@ -37,6 +37,11 @@ static bool mac_matches(const std::string& a, const std::string& b) {
 
 extern "C" esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t ticks_to_wait) {
     (void)bus;
+    if (!message) return ESP_ERR_INVALID_ARG;
+    twai_status_info_t info;
+    if (twai_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING) {
+        return ESP_ERR_INVALID_STATE;
+    }
     return twai_transmit(message, ticks_to_wait);
 }
 
@@ -472,6 +477,11 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                 ESP_LOGD(TAG, "Sniffer mode active: suppressed TX ID 0x%03lX", (unsigned long)msg_to_send.identifier);
                 continue;
             }
+            twai_status_info_t info;
+            if (twai_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING) {
+                ESP_LOGW(TAG, "TWAI controller not in RUNNING state (%d), skipping burst TX", info.state);
+                continue;
+            }
             if (twai_transmit(&msg_to_send, pdMS_TO_TICKS(10)) == ESP_OK) {
                 board_led_can_activity();
                 if (delay_ms > 0) {
@@ -881,6 +891,8 @@ void can_rx_task(void* arg) {
     ESP_LOGI(TAG, "CAN RX task running");
 
     int rx_processed = 0;
+    static uint32_t s_bus_off_or_recovering_start_ms = 0;
+    static uint32_t s_last_can_frame_ms = 0;
 
     while (true) {
         if (g_twai_reconfig_pending.load()) {
@@ -893,7 +905,7 @@ void can_rx_task(void* arg) {
             twai_driver_uninstall();
 
             twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, new_mode);
-            g_config.rx_queue_len = 64;
+            g_config.rx_queue_len = 128;
             g_config.tx_queue_len = 32;
             g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR | TWAI_ALERT_RX_QUEUE_FULL;
             twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
@@ -910,20 +922,73 @@ void can_rx_task(void* arg) {
             g_twai_reconfig_pending.store(false);
         }
 
-        // Auto-recover TWAI peripheral if in BUS_OFF or STOPPED state
+        // Drain alerts so alert buffer never fills up
+        uint32_t alerts = 0;
+        if (twai_read_alerts(&alerts, 0) == ESP_OK && alerts != 0) {
+            if (alerts & TWAI_ALERT_BUS_OFF) {
+                ESP_LOGW(TAG, "TWAI alert: BUS_OFF");
+            }
+            if (alerts & TWAI_ALERT_RX_QUEUE_FULL) {
+                ESP_LOGW(TAG, "TWAI alert: RX queue full, dropping frame");
+            }
+        }
+
+        // Auto-recover and watchdog supervisor for TWAI peripheral
         twai_status_info_t twai_status;
+        uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+
         if (twai_get_status_info(&twai_status) == ESP_OK) {
             if (twai_status.state == TWAI_STATE_BUS_OFF) {
-                ESP_LOGW(TAG, "TWAI controller in BUS_OFF! Initiating auto-recovery...");
-                twai_initiate_recovery();
+                if (s_bus_off_or_recovering_start_ms == 0) {
+                    s_bus_off_or_recovering_start_ms = now_ms;
+                    ESP_LOGW(TAG, "TWAI controller in BUS_OFF! Clearing TX queue and initiating recovery...");
+                    twai_clear_transmit_queue();
+                    twai_initiate_recovery();
+                }
             } else if (twai_status.state == TWAI_STATE_STOPPED) {
-                ESP_LOGI(TAG, "TWAI recovered from bus-off. Restarting controller...");
+                ESP_LOGI(TAG, "TWAI recovered from bus-off. Clearing TX queue and restarting controller...");
+                twai_clear_transmit_queue();
                 twai_start();
+                s_bus_off_or_recovering_start_ms = 0;
+            } else if (twai_status.state == TWAI_STATE_RECOVERING) {
+                if (s_bus_off_or_recovering_start_ms == 0) {
+                    s_bus_off_or_recovering_start_ms = now_ms;
+                }
+            } else if (twai_status.state == TWAI_STATE_RUNNING) {
+                s_bus_off_or_recovering_start_ms = 0;
+            }
+
+            // Watchdog: If stuck in BUS_OFF or RECOVERING for > 1500ms, hardware recovery has deadlocked
+            // (e.g. silent bus, disconnected line, transceiver standby). Force a complete hardware reinstall!
+            if (s_bus_off_or_recovering_start_ms > 0 && (now_ms - s_bus_off_or_recovering_start_ms > 1500)) {
+                ESP_LOGE(TAG, "TWAI recovery watchdog timeout (>1500ms). Forcing hardware driver reset...");
+                twai_clear_transmit_queue();
+                twai_stop();
+                twai_driver_uninstall();
+                vTaskDelay(pdMS_TO_TICKS(50));
+
+                twai_mode_t cur_mode = g_hardware_listen_only.load() ? TWAI_MODE_LISTEN_ONLY : TWAI_MODE_NORMAL;
+                twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, cur_mode);
+                g_config.rx_queue_len = 128;
+                g_config.tx_queue_len = 32;
+                g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR | TWAI_ALERT_RX_QUEUE_FULL;
+                twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
+                twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+
+                esp_err_t err = twai_driver_install(&g_config, &t_config, &f_config);
+                if (err == ESP_OK) {
+                    twai_start();
+                    ESP_LOGI(TAG, "TWAI driver re-installed and running after watchdog reset");
+                } else {
+                    ESP_LOGE(TAG, "TWAI driver reinstall failed (%s)", esp_err_to_name(err));
+                }
+                s_bus_off_or_recovering_start_ms = 0;
             }
         }
 
         if (twai_receive(&rx_msg, pdMS_TO_TICKS(10)) == ESP_OK) {
             rx_processed++;
+            s_last_can_frame_ms = now_ms;
             board_led_can_activity();
             precondition_can_rx_hook(&rx_msg, CAN_BUS_0);
             track_popup_rx(&rx_msg, CAN_BUS_0);
@@ -1502,6 +1567,10 @@ void can_rx_task(void* arg) {
             }
         } else {
             rx_processed = 0;
+            // Cleanly extinguish yellow CAN activity LED when bus is idle (>200ms)
+            if (s_last_can_frame_ms > 0 && (now_ms - s_last_can_frame_ms > 200)) {
+                board_led_can_set(false);
+            }
         }
         precondition_tick();
         track_popup_tick();

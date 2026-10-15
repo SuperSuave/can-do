@@ -25,6 +25,10 @@ static std::atomic<uint32_t> s_last_tmu_tx_ms{0};
 static const uint8_t UDS_TESTER_PRESENT[8] = { 0x02, 0x3E, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
 static void send_can_frame(uint32_t id, const uint8_t* data, uint8_t dlc) {
+    twai_status_info_t info;
+    if (twai_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING) {
+        return;
+    }
     twai_message_t tx_msg = {};
     tx_msg.identifier = id;
     tx_msg.data_length_code = dlc;

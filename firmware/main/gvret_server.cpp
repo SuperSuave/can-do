@@ -137,7 +137,10 @@ static bool handle_client_rx(int sock) {
                         if (idx < r) idx++; // checksum byte
 
                         if (!g_sniffer_mode.load()) {
-                            twai_transmit(&tx_msg, pdMS_TO_TICKS(10));
+                            twai_status_info_t info;
+                            if (twai_get_status_info(&info) == ESP_OK && info.state == TWAI_STATE_RUNNING) {
+                                twai_transmit(&tx_msg, pdMS_TO_TICKS(10));
+                            }
                         } else {
                             ESP_LOGD(TAG, "Sniffer mode active: GVRET client TX 0x%03lX suppressed", (unsigned long)tx_msg.identifier);
                         }

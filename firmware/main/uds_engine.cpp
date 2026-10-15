@@ -53,7 +53,11 @@ static inline uint32_t get_time_ms(void) {
 bool uds_engine_is_vehicle_awake(void) {
     uint32_t last = s_last_can_traffic_ms.load();
     if (last == 0) return false;
-    return (get_time_ms() - last) <= (s_config.sleep_delay_sec * 1000);
+    // For active UDS diagnostics, require passive CAN traffic within the last 3000ms
+    // to avoid transmitting onto the bus while ECUs are powering down
+    uint32_t threshold_ms = (s_config.sleep_delay_sec > 0 && s_config.sleep_delay_sec < 3) ? 
+                            (s_config.sleep_delay_sec * 1000) : 3000;
+    return (get_time_ms() - last) <= threshold_ms;
 }
 
 static bool is_quiet_hours(void) {
@@ -100,6 +104,15 @@ bms_live_data_t uds_engine_get_bms_data(void) {
 }
 
 static void send_can_frame(uint32_t id, const uint8_t* data, uint8_t dlc) {
+    twai_status_info_t info;
+    if (twai_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING) {
+        return;
+    }
+    if (info.tx_error_counter >= 64) {
+        ESP_LOGW(TAG, "CAN TX error counter elevated (%lu), suppressing UDS TX to prevent BUS_OFF", 
+                 (unsigned long)info.tx_error_counter);
+        return;
+    }
     twai_message_t tx_msg = {};
     tx_msg.identifier = id;
     tx_msg.data_length_code = dlc;

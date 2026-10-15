@@ -2,6 +2,7 @@
 
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
 // =========================================================================
 // MeatPi WiCAN-OBD (ESP32-C3) Pin Definitions
@@ -55,9 +56,20 @@ static inline void board_led_wifi(bool active) {
     gpio_set_level(LED_WIFI_PIN, active ? 0 : 1);
 }
 
-// Message/Envelope LED (Right icon / Yellow): Active LOW -> toggles on CAN traffic
+// Explicit control of Message/Envelope LED (Yellow): Active LOW -> 0 = ON, 1 = OFF
+static inline void board_led_can_set(bool on) {
+    gpio_set_level(LED_MSG_PIN, on ? 0 : 1);
+}
+
+// Message/Envelope LED (Right icon / Yellow): Rate-limited activity toggle (~20Hz)
 static inline void board_led_can_activity(void) {
-    static bool state = false;
-    state = !state;
-    gpio_set_level(LED_MSG_PIN, state ? 0 : 1);
+    static int64_t s_last_toggle_us = 0;
+    static bool s_state = false;
+    int64_t now_us = esp_timer_get_time();
+    // Throttle toggling to ~20Hz (50ms interval) for visible, flicker-free activity indication
+    if (now_us - s_last_toggle_us >= 50000) {
+        s_last_toggle_us = now_us;
+        s_state = !s_state;
+        gpio_set_level(LED_MSG_PIN, s_state ? 0 : 1);
+    }
 }

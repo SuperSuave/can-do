@@ -32,15 +32,14 @@ power_tier_t power_mgr_get_tier(void) {
 }
 
 void power_mgr_enter_deep_sleep(uint32_t sleep_duration_sec) {
-    ESP_LOGI(TAG, "Entering Tier 3 Deep Sleep (<1mA). Wake sources: CAN RX (GPIO 3) falling edge + %lu s timer",
-             (unsigned long)sleep_duration_sec);
+    ESP_LOGI(TAG, "Entering Tier 3 Emergency Deep Sleep (<1mA). Wake sources: CAN RX (GPIO %d) + %lu s timer",
+             (int)CAN_RX_PIN, (unsigned long)sleep_duration_sec);
 
-    // 1. Put CAN transceiver into low-power Standby mode (CAN_STB_PIN GPIO 6 = 1)
-    gpio_set_level(CAN_STB_PIN, 1);
+    // 1. Ensure CAN transceiver STB is LOW (0 = enabled) so dominant CAN pulses pull CAN_RX LOW
+    gpio_set_level(CAN_STB_PIN, 0);
 
-    // 2. Configure instant wake on CAN RX (GPIO 3) when vehicle bus transitions to dominant (LOW)
-    gpio_wakeup_enable(CAN_RX_PIN, GPIO_INTR_LOW_LEVEL);
-    esp_sleep_enable_gpio_wakeup();
+    // 2. Configure native ESP32-C3 Deep Sleep GPIO wakeup on CAN RX falling edge (dominant bus state)
+    esp_deep_sleep_enable_gpio_wakeup((1ULL << CAN_RX_PIN), ESP_GPIO_WAKEUP_GPIO_LOW);
 
     // 3. Configure periodic timer wake for heartbeat / 12V check
     if (sleep_duration_sec > 0) {
@@ -54,6 +53,7 @@ void power_mgr_enter_deep_sleep(uint32_t sleep_duration_sec) {
 
 static void power_mgr_task(void* arg) {
     ESP_LOGI(TAG, "Smart power manager task running");
+    int critical_low_vbat_count = 0;
 
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(5000));
@@ -64,22 +64,34 @@ static void power_mgr_task(void* arg) {
         // Stay in Active tier if vehicle is awake OR if device is powered via USB bench power (vbat < 5.0V)
         if (awake || vbat < 5.0f) {
             power_mgr_set_tier(POWER_TIER_ACTIVE);
+            critical_low_vbat_count = 0;
         } else {
-            // Vehicle bus is silent and running on 12V vehicle battery
+            // Vehicle bus is silent and running on 12V vehicle battery:
+            // Enter Tier 2 Standby (Modem Sleep: ~18mA @ 3.3V / ~6mA @ 12V).
+            // This maintains 100% active Wi-Fi, MQTT, web dashboard, and instant CAN responsiveness
+            // without draining the car battery (takes ~1 year to drain a 60Ah battery).
             power_mgr_set_tier(POWER_TIER_STANDBY);
 
-            // Check if extreme power save (Tier 3 Deep Sleep) is warranted:
-            // 1. Critical 12V battery protection (< 12.0V)
-            // 2. Or quiet hours are active
-            if (vbat > 5.0f && vbat < 12.0f) {
-                ESP_LOGW(TAG, "12V Battery critical (%.2fV < 12.0V). Triggering Deep Sleep protection.", vbat);
-                power_mgr_enter_deep_sleep(1800); // 30 min timer check
+            // Tier 3 Deep Sleep is an EMERGENCY fail-safe ONLY if 12V battery is genuinely depleted
+            // (< 11.0V) continuously for 12 consecutive checks (60 seconds debounced).
+            // 11.0V indicates deep discharge where battery health or starting capability is in danger.
+            // 12.0V is a completely normal resting voltage for a healthy parked vehicle!
+            if (vbat > 5.0f && vbat < 11.0f) {
+                critical_low_vbat_count++;
+                ESP_LOGW(TAG, "12V Battery critically low (%.2fV < 11.0V) [check %d/12]", 
+                         vbat, critical_low_vbat_count);
+                if (critical_low_vbat_count >= 12) {
+                    ESP_LOGE(TAG, "12V Battery critically low for 60s (%.2fV). Entering Emergency Deep Sleep protection.", vbat);
+                    power_mgr_enter_deep_sleep(1800); // 30 min timer check
+                }
+            } else {
+                critical_low_vbat_count = 0;
             }
         }
     }
 }
 
 void power_mgr_init(void) {
-    xTaskCreate(power_mgr_task, "PWR_MGR", 2048, nullptr, 1, nullptr);
+    xTaskCreate(power_mgr_task, "PWR_MGR", 2560, nullptr, 1, nullptr);
     ESP_LOGI(TAG, "Multi-Tier Smart Power Manager initialized");
 }
