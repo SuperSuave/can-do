@@ -4,55 +4,58 @@ import gzip
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 FRONTEND_DIST = os.path.join(REPO_ROOT, "frontend", "dist")
-CATALOG_PATH = os.path.join(REPO_ROOT, "catalog", "can_do_catalog.json")
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+FIRMWARE_WWW = os.path.join(REPO_ROOT, "firmware", "data", "www")
+ATOM_DATA = os.path.join(os.path.dirname(__file__), "data")
 
 def sync():
     if not os.path.exists(FRONTEND_DIST):
-        print(f"Error: {FRONTEND_DIST} does not exist. Run 'bun run build' or 'npm run build' in frontend first.")
+        print("Frontend dist directory not found!")
         return
 
-    if os.path.exists(DATA_DIR):
-        try:
-            shutil.rmtree(DATA_DIR, ignore_errors=True)
-        except Exception:
-            pass
-    os.makedirs(DATA_DIR, exist_ok=True)
+    # Clean destination directories
+    for d in [FIRMWARE_WWW, ATOM_DATA]:
+        if os.path.exists(d):
+            shutil.rmtree(d, ignore_errors=True)
+        os.makedirs(d, exist_ok=True)
 
-    print(f"Syncing optimized web assets from {FRONTEND_DIST} to {DATA_DIR}...")
-    
-    # 1. Collect all files in dist
-    all_files = set()
     for root, dirs, files in os.walk(FRONTEND_DIST):
         for f in files:
+            if f.endswith(".map") or f == ".nojekyll" or f.endswith(".gz.gz"):
+                continue
+            if "catalog" in f or "catalog" in root:
+                continue
+
             rel = os.path.relpath(os.path.join(root, f), FRONTEND_DIST)
-            all_files.add(rel)
+            src_path = os.path.join(root, f)
 
-    for rel in sorted(all_files):
-        # Skip uncompressed version if a .gz version exists (e.g. bundle.js vs bundle.js.gz)
-        if (rel + ".gz") in all_files:
-            continue
-        # Also skip .nojekyll or non-essential map files if any
-        if rel.endswith(".map"):
-            continue
+            with open(src_path, "rb") as fin:
+                raw = fin.read()
 
-        src = os.path.join(FRONTEND_DIST, rel)
-        dst = os.path.join(DATA_DIR, rel)
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        shutil.copy2(src, dst)
+            for dest_dir in [FIRMWARE_WWW, ATOM_DATA]:
+                dst_path = os.path.join(dest_dir, rel)
+                os.makedirs(os.path.dirname(dst_path), exist_ok=True)
 
-    # 2. Stage catalog.json (and catalog.json.gz)
-    if os.path.exists(CATALOG_PATH):
-        dst_catalog = os.path.join(DATA_DIR, "catalog.json")
-        shutil.copy2(CATALOG_PATH, dst_catalog)
-        # Also create catalog.json.gz for fast serving
-        with open(CATALOG_PATH, "rb") as f_in:
-            with gzip.open(dst_catalog + ".gz", "wb", compresslevel=9) as f_out:
-                shutil.copyfileobj(f_in, f_out)
-        print(f"Copied and compressed catalog -> {dst_catalog}.gz")
+                if f.endswith(".gz"):
+                    with open(dst_path, "wb") as fg:
+                        fg.write(raw)
+                else:
+                    # If dist already has a .gz version, skip compressing this uncompressed file unless index.html
+                    gz_dist = src_path + ".gz"
+                    if os.path.exists(gz_dist):
+                        if f == "index.html":
+                            with open(dst_path, "wb") as fu:
+                                fu.write(raw)
+                    else:
+                        gz_path = dst_path + ".gz"
+                        with gzip.open(gz_path, "wb", compresslevel=9) as fg:
+                            fg.write(raw)
+                        if len(raw) < 4096 or f == "index.html":
+                            with open(dst_path, "wb") as fu:
+                                fu.write(raw)
 
-    total_size = sum(os.path.getsize(os.path.join(r, f)) for r, d, fs in os.walk(DATA_DIR) for f in fs)
-    print(f"Sync complete! Total LittleFS footprint: {total_size / 1024:.1f} KB (easily fits within 2MB partition)")
+    atom_bytes = sum(os.path.getsize(os.path.join(r, f)) for r, d, fs in os.walk(ATOM_DATA) for f in fs)
+    firmware_bytes = sum(os.path.getsize(os.path.join(r, f)) for r, d, fs in os.walk(FIRMWARE_WWW) for f in fs)
+    print(f"Sync complete! Atom Lite LittleFS: {atom_bytes / 1024:.1f} KB (Partition: 1400 KB), Firmware WWW: {firmware_bytes / 1024:.1f} KB")
 
 if __name__ == "__main__":
     sync()

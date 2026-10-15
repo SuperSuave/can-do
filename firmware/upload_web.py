@@ -234,9 +234,12 @@ def main():
     # 0. Clean up known stale hashed assets from previous builds to prevent LittleFS exhaustion
     # Query remote frontend_manifest.json directly from device to ensure any prior bundle chunks are deleted
     try:
-        import json
+        import json, gzip
         with urllib.request.urlopen(f"http://{ip}/frontend_manifest.json", timeout=4) as r:
-            remote_manifest = json.loads(r.read().decode("utf-8"))
+            raw_bytes = r.read()
+            if raw_bytes.startswith(b"\x1f\x8b"):
+                raw_bytes = gzip.decompress(raw_bytes)
+            remote_manifest = json.loads(raw_bytes.decode("utf-8"))
             for entry in remote_manifest.get("files", []):
                 p = entry.get("path") or f"/spiffs/www/{entry.get('name')}"
                 historic_stale.append(p)
