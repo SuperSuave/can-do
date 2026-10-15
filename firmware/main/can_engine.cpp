@@ -51,6 +51,37 @@ static const char* TAG = "CAN_ENGINE";
 
 static std::string s_current_firing_trigger_id = "";
 
+struct LastBleEvent {
+    std::string address;
+    std::string button;
+    std::string combo;
+    std::string action;
+    uint32_t timestamp_ms = 0;
+};
+static LastBleEvent s_last_ble_event;
+
+struct BleDeviceInfo {
+    std::string address;
+    std::string name;
+    bool connected = false;
+    int8_t rssi = -100;
+    uint32_t last_seen_ms = 0;
+};
+static std::unordered_map<std::string, BleDeviceInfo> s_ble_devices;
+static uint32_t s_wait_for_start_ms = 0;
+
+struct BleBeaconState {
+    std::string uuid;
+    std::string mac;
+    std::string name;
+    int8_t rssi = -100;
+    uint16_t major = 0;
+    uint16_t minor = 0;
+    bool present = false;
+    uint32_t last_seen_ms = 0;
+};
+static std::unordered_map<std::string, BleBeaconState> s_ble_beacons;
+
 std::unordered_map<uint32_t, std::array<uint8_t, 8>> can_state_cache;
 QueueHandle_t tx_command_queue = nullptr;
 extern esp_mqtt_client_handle_t global_mqtt_client;
@@ -210,6 +241,104 @@ bool evaluate_condition(const AutomationCondition& cond) {
                     return false;
                 }
                 return false;
+            }
+
+            if (cond.type == "ble_button" || cond.type == "ble" || cond.type == "bluetooth") {
+                uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+                uint32_t threshold_ms = (s_wait_for_start_ms > 0) ? s_wait_for_start_ms : (now_ms > 2500 ? now_ms - 2500 : 0);
+                if (s_last_ble_event.timestamp_ms < threshold_ms) {
+                    return false;
+                }
+
+                const std::string& target_btn = !cond.ble_button.empty() ? cond.ble_button : cond.target_string;
+                if (!target_btn.empty() && target_btn != "any") {
+                    bool btn_match = (strcasecmp(target_btn.c_str(), s_last_ble_event.button.c_str()) == 0);
+                    if (!btn_match && !s_last_ble_event.combo.empty()) {
+                        btn_match = (strcasecmp(target_btn.c_str(), s_last_ble_event.combo.c_str()) == 0);
+                    }
+                    if (!btn_match) {
+                        return false;
+                    }
+                }
+
+                if (!cond.ble_action.empty() && cond.ble_action != "any") {
+                    bool act_match = (strcasecmp(cond.ble_action.c_str(), s_last_ble_event.action.c_str()) == 0);
+                    if (!act_match && cond.ble_action == "press" && s_last_ble_event.action.rfind("combo_", 0) == 0) {
+                        act_match = true;
+                    }
+                    if (!act_match) return false;
+                }
+
+                const std::string& target_dev = !cond.ble_device.empty() ? cond.ble_device : cond.target_string;
+                if (!target_dev.empty()) {
+                    if (!mac_matches(target_dev, s_last_ble_event.address)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            if (cond.type == "ble_device" || cond.type == "ble_presence") {
+                const std::string& target_dev = !cond.ble_device.empty() ? cond.ble_device : cond.target_string;
+                if (target_dev.empty()) {
+                    if (cond.device_property == "connected") {
+                        for (const auto& kv : s_ble_devices) {
+                            if (kv.second.connected) return cond.target_bool;
+                        }
+                        return !cond.target_bool;
+                    }
+                    return false;
+                }
+
+                for (const auto& kv : s_ble_devices) {
+                    if (mac_matches(target_dev, kv.second.address) || strcasecmp(target_dev.c_str(), kv.second.name.c_str()) == 0) {
+                        if (cond.device_property == "connected") {
+                            return kv.second.connected == cond.target_bool;
+                        } else if (cond.device_property == "rssi" || cond.device_property == "proximity") {
+                            switch (cond.op) {
+                                case ConditionOperator::GREATER_THAN: return kv.second.rssi > cond.target_rssi;
+                                case ConditionOperator::LESS_THAN:    return kv.second.rssi < cond.target_rssi;
+                                case ConditionOperator::EQUAL:        return kv.second.rssi == cond.target_rssi;
+                                case ConditionOperator::NOT_EQUAL:    return kv.second.rssi != cond.target_rssi;
+                                default: return kv.second.rssi >= cond.target_rssi;
+                            }
+                        }
+                    }
+                }
+                return (cond.device_property == "connected") ? (!cond.target_bool) : false;
+            }
+
+            if (cond.type == "ble_beacon" || cond.type == "beacon") {
+                const std::string& target_uuid = !cond.beacon_uuid.empty() ? cond.beacon_uuid : (!cond.ble_device.empty() ? cond.ble_device : cond.target_string);
+                if (target_uuid.empty()) {
+                    for (const auto& kv : s_ble_beacons) {
+                        if (kv.second.present) return cond.target_bool;
+                    }
+                    return !cond.target_bool;
+                }
+
+                for (const auto& kv : s_ble_beacons) {
+                    bool match = false;
+                    if (!kv.second.uuid.empty() && strcasestr(kv.second.uuid.c_str(), target_uuid.c_str()) != nullptr) match = true;
+                    if (!kv.second.mac.empty() && mac_matches(target_uuid, kv.second.mac)) match = true;
+                    if (!kv.second.name.empty() && strcasecmp(target_uuid.c_str(), kv.second.name.c_str()) == 0) match = true;
+
+                    if (match) {
+                        if (cond.device_property == "rssi" || cond.device_property == "proximity" || cond.target_rssi != 0) {
+                            if (!kv.second.present) return false;
+                            switch (cond.op) {
+                                case ConditionOperator::GREATER_THAN: return kv.second.rssi > cond.target_rssi;
+                                case ConditionOperator::LESS_THAN:    return kv.second.rssi < cond.target_rssi;
+                                case ConditionOperator::EQUAL:        return kv.second.rssi == cond.target_rssi;
+                                case ConditionOperator::NOT_EQUAL:    return kv.second.rssi != cond.target_rssi;
+                                default: return kv.second.rssi >= cond.target_rssi;
+                            }
+                        }
+                        return kv.second.present == cond.target_bool;
+                    }
+                }
+                return !cond.target_bool;
             }
 
             auto it = can_state_cache.find(cond.can_id);
@@ -428,6 +557,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
 
         if (step.type == ActionType::REPEAT_UNTIL || step.type == ActionType::WAIT_FOR) {
             uint32_t start_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+            s_wait_for_start_ms = start_ms;
             bool condition_met = false;
             while (!condition_met) {
                 uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
@@ -443,8 +573,9 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                     condition_met = true;
                     break;
                 }
-                vTaskDelay(pdMS_TO_TICKS(step.interval_ms > 0 ? step.interval_ms : 100));
+                vTaskDelay(pdMS_TO_TICKS(step.interval_ms > 0 ? step.interval_ms : 50));
             }
+            s_wait_for_start_ms = 0;
             continue;
         }
 
@@ -1746,5 +1877,225 @@ void can_engine_on_device_event(const std::string& event_type, const std::string
         }
     }
 }
+
+void can_engine_on_ble_event(const std::string& address, const std::string& button, const std::string& action, const std::string& combo) {
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    s_last_ble_event.address = address;
+    s_last_ble_event.button = button;
+    s_last_ble_event.combo = combo;
+    s_last_ble_event.action = action;
+    s_last_ble_event.timestamp_ms = now_ms;
+
+    mqtt_mgr_publish_ble_button(address, button, action, combo);
+
+    if (!g_automations_enabled.load()) return;
+
+    for (auto& rule : global_automations) {
+        if (!rule.enabled) continue;
+
+        for (const auto& trig : rule.triggers) {
+            if (trig.type == "ble_button" || trig.type == "ble_key" || trig.type == "ble") {
+                // Match button (or combo chord string, e.g. "mute+volume_down" or "key_1+key_2")
+                if (!trig.ble_button.empty() && trig.ble_button != "any") {
+                    bool btn_match = (strcasecmp(trig.ble_button.c_str(), button.c_str()) == 0);
+                    if (!btn_match && !combo.empty()) {
+                        btn_match = (strcasecmp(trig.ble_button.c_str(), combo.c_str()) == 0);
+                    }
+                    if (!btn_match) {
+                        continue;
+                    }
+                }
+
+                // Match action (press, release, hold, combo_*)
+                if (!trig.ble_action.empty() && trig.ble_action != "any") {
+                    bool action_match = (strcasecmp(trig.ble_action.c_str(), action.c_str()) == 0);
+                    if (!action_match && trig.ble_action == "press" && action.rfind("combo_", 0) == 0) {
+                        action_match = true;
+                    }
+                    if (!action_match) continue;
+                }
+
+                // Match device address / MAC if specified
+                if (!trig.ble_device.empty()) {
+                    if (!mac_matches(trig.ble_device, address)) {
+                        continue;
+                    }
+                }
+
+                // Check rule cooldown
+                if (rule.last_exec_time_ms != 0 && (now_ms - rule.last_exec_time_ms < rule.cooldown_ms)) {
+                    continue;
+                }
+
+                // Evaluate conditions
+                s_current_firing_trigger_id = trig.id;
+                bool passed = true;
+                for (const auto& cond : rule.conditions) {
+                    if (!evaluate_condition(cond)) {
+                        passed = false;
+                        break;
+                    }
+                }
+
+                if (passed) {
+                    ESP_LOGI(TAG, "BLE event triggered automation: %s (trigger: %s, button: %s, action: %s)",
+                             rule.name.c_str(), trig.id.c_str(), button.c_str(), action.c_str());
+                    rule.last_exec_time_ms = now_ms;
+                    broadcast_ws_automation_event(rule.id, rule.name);
+                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id);
+                }
+            }
+        }
+    }
+}
+
+void can_engine_on_ble_device_event(const std::string& address, const std::string& event, int8_t rssi, const std::string& name) {
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    auto& info = s_ble_devices[address];
+    info.address = address;
+    if (!name.empty()) info.name = name;
+    if (event == "connected") info.connected = true;
+    else if (event == "disconnected") info.connected = false;
+    if (rssi != 0) info.rssi = rssi;
+    info.last_seen_ms = now_ms;
+
+    mqtt_mgr_publish_ble_device(address, event, rssi, name);
+
+    if (!g_automations_enabled.load()) return;
+
+    for (auto& rule : global_automations) {
+        if (!rule.enabled) continue;
+
+        for (const auto& trig : rule.triggers) {
+            if (trig.type == "ble_device_event" || trig.type == "ble_device" || trig.type == "ble_presence") {
+                // Match event: "connected", "disconnected", "proximity"
+                if (!trig.ble_event.empty() && trig.ble_event != "any") {
+                    if (strcasecmp(trig.ble_event.c_str(), event.c_str()) != 0) {
+                        continue;
+                    }
+                }
+
+                // Match device MAC if specified
+                if (!trig.ble_device.empty()) {
+                    if (!mac_matches(trig.ble_device, address) && strcasecmp(trig.ble_device.c_str(), name.c_str()) != 0) {
+                        continue;
+                    }
+                }
+
+                // Match target RSSI if specified
+                if (trig.target_rssi != 0 && (event == "connected" || event == "proximity")) {
+                    if (rssi < trig.target_rssi) {
+                        continue;
+                    }
+                }
+
+                // Check rule cooldown
+                if (rule.last_exec_time_ms != 0 && (now_ms - rule.last_exec_time_ms < rule.cooldown_ms)) {
+                    continue;
+                }
+
+                // Evaluate conditions
+                s_current_firing_trigger_id = trig.id;
+                bool passed = true;
+                for (const auto& cond : rule.conditions) {
+                    if (!evaluate_condition(cond)) {
+                        passed = false;
+                        break;
+                    }
+                }
+
+                if (passed) {
+                    ESP_LOGI(TAG, "BLE device event triggered automation: %s (trigger: %s, event: %s, mac: %s)",
+                             rule.name.c_str(), trig.id.c_str(), event.c_str(), address.c_str());
+                    rule.last_exec_time_ms = now_ms;
+                    broadcast_ws_automation_event(rule.id, rule.name);
+                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id);
+                }
+            }
+        }
+    }
+}
+
+void can_engine_on_ble_beacon_event(const std::string& uuid, const std::string& event, int8_t rssi, uint16_t major, uint16_t minor, const std::string& mac, const std::string& name) {
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    std::string key = !uuid.empty() ? uuid : mac;
+    if (key.empty()) return;
+
+    auto& info = s_ble_beacons[key];
+    info.uuid = uuid;
+    if (!mac.empty()) info.mac = mac;
+    if (!name.empty()) info.name = name;
+    if (major != 0) info.major = major;
+    if (minor != 0) info.minor = minor;
+    if (rssi != 0) info.rssi = rssi;
+    info.last_seen_ms = now_ms;
+    if (event == "enter") info.present = true;
+    else if (event == "exit") info.present = false;
+    else if (event == "proximity") info.present = true;
+
+    if (!mac.empty() && mac != key) {
+        s_ble_beacons[mac] = info;
+    }
+
+    mqtt_mgr_publish_ble_beacon(uuid, event, rssi, major, minor, mac, name);
+
+    if (!g_automations_enabled.load()) return;
+
+    for (auto& rule : global_automations) {
+        if (!rule.enabled) continue;
+
+        for (const auto& trig : rule.triggers) {
+            if (trig.type == "ble_beacon" || trig.type == "beacon" || trig.type == "ble_presence") {
+                // Match event: "enter", "exit", "proximity", "any"
+                if (!trig.ble_event.empty() && trig.ble_event != "any") {
+                    if (strcasecmp(trig.ble_event.c_str(), event.c_str()) != 0) {
+                        continue;
+                    }
+                }
+
+                // Match UUID / MAC / Name if specified
+                const std::string& target_filter = !trig.beacon_uuid.empty() ? trig.beacon_uuid : (!trig.ble_device.empty() ? trig.ble_device : trig.client_mac);
+                if (!target_filter.empty()) {
+                    bool match = false;
+                    if (!uuid.empty() && strcasestr(uuid.c_str(), target_filter.c_str()) != nullptr) match = true;
+                    if (!mac.empty() && mac_matches(target_filter, mac)) match = true;
+                    if (!name.empty() && strcasecmp(target_filter.c_str(), name.c_str()) == 0) match = true;
+                    if (!match) continue;
+                }
+
+                // Match target RSSI if specified
+                if (trig.target_rssi != 0 && (event == "enter" || event == "proximity")) {
+                    if (rssi < trig.target_rssi) {
+                        continue;
+                    }
+                }
+
+                // Check rule cooldown
+                if (rule.last_exec_time_ms != 0 && (now_ms - rule.last_exec_time_ms < rule.cooldown_ms)) {
+                    continue;
+                }
+
+                // Evaluate conditions
+                s_current_firing_trigger_id = trig.id;
+                bool passed = true;
+                for (const auto& cond : rule.conditions) {
+                    if (!evaluate_condition(cond)) {
+                        passed = false;
+                        break;
+                    }
+                }
+
+                if (passed) {
+                    ESP_LOGI(TAG, "BLE beacon event triggered automation: %s (trigger: %s, event: %s, uuid: %s, rssi: %d)",
+                             rule.name.c_str(), trig.id.c_str(), event.c_str(), uuid.c_str(), rssi);
+                    rule.last_exec_time_ms = now_ms;
+                    broadcast_ws_automation_event(rule.id, rule.name);
+                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id);
+                }
+            }
+        }
+    }
+}
+
 
 

@@ -515,6 +515,10 @@ static esp_err_t api_automations_diagnostics_handler(httpd_req_t *req) {
                 snprintf(sched_buf, sizeof(sched_buf), "%02d:%02d", trig.schedule_time_min / 60, trig.schedule_time_min % 60);
                 cJSON_AddStringToObject(t_obj, "schedule_time", sched_buf);
                 cJSON_AddNumberToObject(t_obj, "weekdays_mask", trig.weekdays_mask);
+            } else if (trig.type == "ble_beacon" || trig.type == "beacon") {
+                cJSON_AddStringToObject(t_obj, "beacon_uuid", trig.beacon_uuid.c_str());
+                cJSON_AddStringToObject(t_obj, "ble_event", trig.ble_event.c_str());
+                cJSON_AddNumberToObject(t_obj, "target_rssi", trig.target_rssi);
             }
 
             // Live state from cache
@@ -560,6 +564,10 @@ static esp_err_t api_automations_diagnostics_handler(httpd_req_t *req) {
                          cond.end_time_min / 60, cond.end_time_min % 60);
                 cJSON_AddStringToObject(c_obj, "time_window", t_window);
                 cJSON_AddNumberToObject(c_obj, "weekdays_mask", cond.weekdays_mask);
+            } else if (cond.type == "ble_beacon" || cond.type == "beacon") {
+                cJSON_AddStringToObject(c_obj, "beacon_uuid", cond.beacon_uuid.c_str());
+                cJSON_AddBoolToObject(c_obj, "target_bool", cond.target_bool);
+                cJSON_AddNumberToObject(c_obj, "target_rssi", cond.target_rssi);
             } else {
                 char hex_id[16];
                 snprintf(hex_id, sizeof(hex_id), "0x%03lX", (unsigned long)cond.can_id);
@@ -1916,12 +1924,199 @@ static esp_err_t ws_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static esp_err_t api_ble_status_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    std::string status_json = uart_bridge_get_ble_status();
+    httpd_resp_sendstr(req, status_json.c_str());
+    return ESP_OK;
+}
+
+static esp_err_t api_ble_scan_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    int dur = 10;
+    char query[32] = {0};
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+        char val[16] = {0};
+        if (httpd_query_key_value(query, "duration", val, sizeof(val)) == ESP_OK) {
+            dur = atoi(val);
+            if (dur <= 0 || dur > 60) dur = 10;
+        }
+    }
+    char buf[64];
+    snprintf(buf, sizeof(buf), "{\"type\":\"ble_scan\",\"duration\":%d}", dur);
+    uart_bridge_send_raw(buf);
+    httpd_resp_sendstr(req, "{\"status\":\"scanning_started\"}");
+    return ESP_OK;
+}
+
+static esp_err_t api_ble_pair_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    char buf[256];
+    int len = std::min(req->content_len, sizeof(buf) - 1);
+    int ret = (len > 0) ? httpd_req_recv(req, buf, len) : 0;
+    if (ret > 0) {
+        buf[ret] = '\0';
+        cJSON *root = cJSON_Parse(buf);
+        if (root) {
+            cJSON *addr = cJSON_GetObjectItem(root, "mac");
+            if (!addr) addr = cJSON_GetObjectItem(root, "address");
+            cJSON *name = cJSON_GetObjectItem(root, "name");
+            if (addr && cJSON_IsString(addr)) {
+                std::string cmd = "{\"type\":\"ble_pair\",\"address\":\"";
+                cmd += addr->valuestring;
+                cmd += "\",\"name\":\"";
+                cmd += (name && cJSON_IsString(name)) ? name->valuestring : "";
+                cmd += "\"}";
+                uart_bridge_send_raw(cmd);
+                cJSON_Delete(root);
+                httpd_resp_sendstr(req, "{\"status\":\"pairing_requested\"}");
+                return ESP_OK;
+            }
+            cJSON_Delete(root);
+        }
+    }
+    httpd_resp_sendstr(req, "{\"status\":\"error\",\"message\":\"missing_address\"}");
+    return ESP_OK;
+}
+
+static esp_err_t api_ble_unpair_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    char buf[256];
+    int len = std::min(req->content_len, sizeof(buf) - 1);
+    int ret = (len > 0) ? httpd_req_recv(req, buf, len) : 0;
+    std::string cmd = "{\"type\":\"ble_unpair\"}";
+    if (ret > 0) {
+        buf[ret] = '\0';
+        cJSON *root = cJSON_Parse(buf);
+        if (root) {
+            cJSON *addr = cJSON_GetObjectItem(root, "mac");
+            if (!addr) addr = cJSON_GetObjectItem(root, "address");
+            if (addr && cJSON_IsString(addr)) {
+                cmd = "{\"type\":\"ble_unpair\",\"address\":\"" + std::string(addr->valuestring) + "\"}";
+            }
+            cJSON_Delete(root);
+        }
+    }
+    uart_bridge_send_raw(cmd);
+    httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
+    return ESP_OK;
+}
+
+static esp_err_t api_ble_test_event_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    char buf[256];
+    int len = std::min(req->content_len, sizeof(buf) - 1);
+    int ret = (len > 0) ? httpd_req_recv(req, buf, len) : 0;
+    if (ret > 0) {
+        buf[ret] = '\0';
+        cJSON *root = cJSON_Parse(buf);
+        if (root) {
+            cJSON *btn = cJSON_GetObjectItem(root, "button");
+            cJSON *act = cJSON_GetObjectItem(root, "action");
+            std::string cmd = "{\"type\":\"ble_test_event\",\"button\":\"";
+            cmd += (btn && cJSON_IsString(btn)) ? btn->valuestring : "volume_up";
+            cmd += "\",\"action\":\"";
+            cmd += (act && cJSON_IsString(act)) ? act->valuestring : "press";
+            cmd += "\"}";
+            uart_bridge_send_raw(cmd);
+            cJSON_Delete(root);
+            httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
+            return ESP_OK;
+        }
+    }
+    uart_bridge_send_raw("{\"type\":\"ble_test_event\",\"button\":\"volume_up\",\"action\":\"press\"}");
+    httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
+    return ESP_OK;
+}
+
+static esp_err_t api_ble_beacons_get_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    std::string ble_json = uart_bridge_get_ble_status();
+    cJSON *root = cJSON_Parse(ble_json.c_str());
+    cJSON *resp = cJSON_CreateObject();
+    if (root) {
+        cJSON *targets = cJSON_GetObjectItem(root, "beacon_targets");
+        cJSON *disc = cJSON_GetObjectItem(root, "discovered_beacons");
+        if (targets) cJSON_AddItemToObject(resp, "targets", cJSON_Duplicate(targets, 1));
+        else cJSON_AddArrayToObject(resp, "targets");
+        if (disc) cJSON_AddItemToObject(resp, "discovered", cJSON_Duplicate(disc, 1));
+        else cJSON_AddArrayToObject(resp, "discovered");
+        cJSON_Delete(root);
+    } else {
+        cJSON_AddArrayToObject(resp, "targets");
+        cJSON_AddArrayToObject(resp, "discovered");
+    }
+    char *out = cJSON_PrintUnformatted(resp);
+    cJSON_Delete(resp);
+    httpd_resp_sendstr(req, out ? out : "{\"targets\":[],\"discovered\":[]}");
+    if (out) free(out);
+    return ESP_OK;
+}
+
+static esp_err_t api_ble_beacons_post_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    char buf[512];
+    int len = std::min(req->content_len, sizeof(buf) - 1);
+    int ret = (len > 0) ? httpd_req_recv(req, buf, len) : 0;
+    if (ret > 0) {
+        buf[ret] = '\0';
+        cJSON *root = cJSON_Parse(buf);
+        if (root) {
+            cJSON_AddStringToObject(root, "type", "ble_beacon_config");
+            cJSON_AddStringToObject(root, "action", "set");
+            char *json_cmd = cJSON_PrintUnformatted(root);
+            if (json_cmd) {
+                uart_bridge_send_raw(json_cmd);
+                free(json_cmd);
+            }
+            cJSON_Delete(root);
+            httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
+            return ESP_OK;
+        }
+    }
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid beacon JSON");
+    return ESP_FAIL;
+}
+
+static esp_err_t api_ble_beacons_delete_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    char buf[256];
+    int len = std::min(req->content_len, sizeof(buf) - 1);
+    int ret = (len > 0) ? httpd_req_recv(req, buf, len) : 0;
+    if (ret > 0) {
+        buf[ret] = '\0';
+        cJSON *root = cJSON_Parse(buf);
+        if (root) {
+            cJSON_AddStringToObject(root, "type", "ble_beacon_config");
+            cJSON_AddStringToObject(root, "action", "delete");
+            char *json_cmd = cJSON_PrintUnformatted(root);
+            if (json_cmd) {
+                uart_bridge_send_raw(json_cmd);
+                free(json_cmd);
+            }
+            cJSON_Delete(root);
+            httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
+            return ESP_OK;
+        }
+    }
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid beacon delete JSON");
+    return ESP_FAIL;
+}
+
 httpd_handle_t start_webserver(void) {
     httpd_handle_t server = nullptr;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.stack_size = 6144;
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 40;
+    config.max_uri_handlers = 48;
     config.lru_purge_enable = true;
     config.keep_alive_enable = true;
     config.keep_alive_idle = 10;
@@ -1962,6 +2157,14 @@ httpd_handle_t start_webserver(void) {
         reg_uri("/api/wifi/networks", HTTP_DELETE, api_wifi_delete_networks_handler);
         reg_uri("/api/wifi/scan", HTTP_GET, api_wifi_scan_handler);
         reg_uri("/api/wifi/settings", HTTP_POST, api_wifi_settings_handler);
+        reg_uri("/api/ble/status", HTTP_GET, api_ble_status_handler);
+        reg_uri("/api/ble/scan", HTTP_POST, api_ble_scan_handler);
+        reg_uri("/api/ble/pair", HTTP_POST, api_ble_pair_handler);
+        reg_uri("/api/ble/unpair", HTTP_POST, api_ble_unpair_handler);
+        reg_uri("/api/ble/test_event", HTTP_POST, api_ble_test_event_handler);
+        reg_uri("/api/ble/beacons", HTTP_GET, api_ble_beacons_get_handler);
+        reg_uri("/api/ble/beacons", HTTP_POST, api_ble_beacons_post_handler);
+        reg_uri("/api/ble/beacons", HTTP_DELETE, api_ble_beacons_delete_handler);
         reg_uri("/api/mqtt", HTTP_GET, api_mqtt_get_handler);
         reg_uri("/api/mqtt", HTTP_POST, api_mqtt_post_handler);
         reg_uri("/api/upload", HTTP_POST, api_file_upload_handler);

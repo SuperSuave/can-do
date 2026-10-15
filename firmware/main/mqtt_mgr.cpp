@@ -901,3 +901,89 @@ void mqtt_mgr_publish_bms(float kw, float soc, float v, float a, float delta_mv,
     esp_mqtt_client_publish(global_mqtt_client, delta_topic.c_str(), val_str, 0, 1, 1);
     esp_mqtt_client_publish(global_mqtt_client, (MQTT_BASE_TOPIC + "/state/bms_cell_delta_mv").c_str(), val_str, 0, 1, 1);
 }
+
+void mqtt_mgr_publish_ble_button(const std::string& address, const std::string& button, const std::string& action, const std::string& combo) {
+    if (!global_mqtt_client || !s_mqtt_connected.load()) return;
+
+    cJSON* root = cJSON_CreateObject();
+    if (!root) return;
+
+    cJSON_AddStringToObject(root, "device_id", DEVICE_ID.c_str());
+    cJSON_AddStringToObject(root, "address", address.c_str());
+    cJSON_AddStringToObject(root, "button", button.c_str());
+    cJSON_AddStringToObject(root, "action", action.c_str());
+    if (!combo.empty()) {
+        cJSON_AddStringToObject(root, "combo", combo.c_str());
+    }
+
+    char* payload = cJSON_PrintUnformatted(root);
+    if (payload) {
+        std::string topic_dev = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/ble_button";
+        esp_mqtt_client_publish(global_mqtt_client, topic_dev.c_str(), payload, 0, 1, 0);
+
+        std::string topic_base = MQTT_BASE_TOPIC + "/ble_button";
+        esp_mqtt_client_publish(global_mqtt_client, topic_base.c_str(), payload, 0, 1, 0);
+        free(payload);
+    }
+    cJSON_Delete(root);
+}
+
+void mqtt_mgr_publish_ble_device(const std::string& address, const std::string& event, int8_t rssi, const std::string& name) {
+    if (!global_mqtt_client || !s_mqtt_connected.load()) return;
+
+    cJSON* root = cJSON_CreateObject();
+    if (!root) return;
+
+    cJSON_AddStringToObject(root, "device_id", DEVICE_ID.c_str());
+    cJSON_AddStringToObject(root, "address", address.c_str());
+    cJSON_AddStringToObject(root, "event", event.c_str());
+    cJSON_AddNumberToObject(root, "rssi", rssi);
+    cJSON_AddBoolToObject(root, "connected", (event == "connected"));
+    if (!name.empty()) {
+        cJSON_AddStringToObject(root, "name", name.c_str());
+    }
+
+    char* payload = cJSON_PrintUnformatted(root);
+    if (payload) {
+        std::string topic_dev = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/ble_device";
+        esp_mqtt_client_publish(global_mqtt_client, topic_dev.c_str(), payload, 0, 1, 0);
+
+        std::string topic_base = MQTT_BASE_TOPIC + "/ble_device";
+        esp_mqtt_client_publish(global_mqtt_client, topic_base.c_str(), payload, 0, 1, 0);
+        free(payload);
+    }
+    cJSON_Delete(root);
+}
+
+void mqtt_mgr_publish_ble_beacon(const std::string& uuid, const std::string& event, int8_t rssi, uint16_t major, uint16_t minor, const std::string& mac, const std::string& name) {
+    if (!global_mqtt_client || !s_mqtt_connected.load()) return;
+
+    cJSON* root = cJSON_CreateObject();
+    if (!root) return;
+
+    cJSON_AddStringToObject(root, "device_id", DEVICE_ID.c_str());
+    cJSON_AddStringToObject(root, "uuid", uuid.c_str());
+    cJSON_AddStringToObject(root, "event", event.c_str());
+    cJSON_AddNumberToObject(root, "rssi", rssi);
+    cJSON_AddNumberToObject(root, "major", major);
+    cJSON_AddNumberToObject(root, "minor", minor);
+    cJSON_AddBoolToObject(root, "present", (event != "exit"));
+    if (!mac.empty()) {
+        cJSON_AddStringToObject(root, "mac", mac.c_str());
+    }
+    if (!name.empty()) {
+        cJSON_AddStringToObject(root, "name", name.c_str());
+    }
+
+    char* payload = cJSON_PrintUnformatted(root);
+    if (payload) {
+        std::string topic_dev = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/ble_beacon";
+        esp_mqtt_client_publish(global_mqtt_client, topic_dev.c_str(), payload, 0, 1, 0);
+
+        std::string topic_base = MQTT_BASE_TOPIC + "/ble_beacon";
+        esp_mqtt_client_publish(global_mqtt_client, topic_base.c_str(), payload, 0, 1, 0);
+        free(payload);
+    }
+    cJSON_Delete(root);
+}
+

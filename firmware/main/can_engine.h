@@ -40,3 +40,6 @@ void can_rx_task(void* arg);
 void can_tx_task(void* arg);
 void time_scheduler_task(void* arg);
 void can_engine_on_device_event(const std::string& event_type, const std::string& detail_str, int8_t rssi = 0);
+void can_engine_on_ble_event(const std::string& address, const std::string& button, const std::string& action, const std::string& combo = "");
+void can_engine_on_ble_device_event(const std::string& address, const std::string& event, int8_t rssi, const std::string& name = "");
+void can_engine_on_ble_beacon_event(const std::string& uuid, const std::string& event, int8_t rssi, uint16_t major = 0, uint16_t minor = 0, const std::string& mac = "", const std::string& name = "");

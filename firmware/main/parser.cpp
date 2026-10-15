@@ -259,6 +259,87 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
         return true;
     }
 
+    // Check if this condition is a BLE button condition
+    if (cJSON_IsString(type_prop) && (strcmp(type_prop->valuestring, "ble_button") == 0 ||
+                                      strcmp(type_prop->valuestring, "ble_key") == 0 ||
+                                      strcmp(type_prop->valuestring, "ble") == 0)) {
+        cond.type = "ble_button";
+        cJSON* btn = cJSON_GetObjectItem(c_item, "ble_button");
+        if (!btn) btn = cJSON_GetObjectItem(c_item, "button");
+        if (cJSON_IsString(btn)) cond.ble_button = btn->valuestring;
+
+        cJSON* act = cJSON_GetObjectItem(c_item, "ble_action");
+        if (!act) act = cJSON_GetObjectItem(c_item, "action");
+        if (cJSON_IsString(act)) cond.ble_action = act->valuestring;
+        else cond.ble_action = "press";
+
+        cJSON* dev = cJSON_GetObjectItem(c_item, "ble_device");
+        if (!dev) dev = cJSON_GetObjectItem(c_item, "device");
+        if (!dev) dev = cJSON_GetObjectItem(c_item, "mac");
+        if (cJSON_IsString(dev)) cond.ble_device = dev->valuestring;
+        return true;
+    }
+
+    // Check if this condition is a BLE device presence / proximity condition
+    if (cJSON_IsString(type_prop) && (strcmp(type_prop->valuestring, "ble_device") == 0 ||
+                                      strcmp(type_prop->valuestring, "ble_presence") == 0)) {
+        cond.type = "ble_device";
+        cJSON* prop = cJSON_GetObjectItem(c_item, "device_property");
+        if (!prop) prop = cJSON_GetObjectItem(c_item, "property");
+        if (cJSON_IsString(prop)) cond.device_property = prop->valuestring;
+        else cond.device_property = "connected";
+
+        cJSON* dev = cJSON_GetObjectItem(c_item, "ble_device");
+        if (!dev) dev = cJSON_GetObjectItem(c_item, "device");
+        if (!dev) dev = cJSON_GetObjectItem(c_item, "mac");
+        if (!dev) dev = cJSON_GetObjectItem(c_item, "client_mac");
+        if (cJSON_IsString(dev)) cond.ble_device = dev->valuestring;
+
+        cJSON* target_b = cJSON_GetObjectItem(c_item, "target_bool");
+        if (cJSON_IsBool(target_b)) cond.target_bool = cJSON_IsTrue(target_b);
+
+        cJSON* rssi = cJSON_GetObjectItem(c_item, "target_rssi");
+        if (!rssi) rssi = cJSON_GetObjectItem(c_item, "rssi");
+        if (cJSON_IsNumber(rssi)) cond.target_rssi = static_cast<int8_t>(rssi->valueint);
+
+        cJSON* op = cJSON_GetObjectItem(c_item, "operator");
+        if (cJSON_IsString(op)) cond.op = parse_operator(op->valuestring);
+
+        return true;
+    }
+
+    // Check if this condition is a BLE beacon presence condition
+    if (cJSON_IsString(type_prop) && (strcmp(type_prop->valuestring, "ble_beacon") == 0 ||
+                                      strcmp(type_prop->valuestring, "beacon") == 0)) {
+        cond.type = "ble_beacon";
+        cJSON* prop = cJSON_GetObjectItem(c_item, "device_property");
+        if (!prop) prop = cJSON_GetObjectItem(c_item, "property");
+        if (cJSON_IsString(prop)) cond.device_property = prop->valuestring;
+        else cond.device_property = "beacon_present";
+
+        cJSON* uuid = cJSON_GetObjectItem(c_item, "beacon_uuid");
+        if (!uuid) uuid = cJSON_GetObjectItem(c_item, "uuid");
+        if (cJSON_IsString(uuid)) cond.beacon_uuid = uuid->valuestring;
+
+        cJSON* dev = cJSON_GetObjectItem(c_item, "ble_device");
+        if (!dev) dev = cJSON_GetObjectItem(c_item, "device");
+        if (!dev) dev = cJSON_GetObjectItem(c_item, "mac");
+        if (!dev) dev = cJSON_GetObjectItem(c_item, "client_mac");
+        if (cJSON_IsString(dev)) cond.ble_device = dev->valuestring;
+
+        cJSON* target_b = cJSON_GetObjectItem(c_item, "target_bool");
+        if (cJSON_IsBool(target_b)) cond.target_bool = cJSON_IsTrue(target_b);
+
+        cJSON* rssi = cJSON_GetObjectItem(c_item, "target_rssi");
+        if (!rssi) rssi = cJSON_GetObjectItem(c_item, "rssi");
+        if (cJSON_IsNumber(rssi)) cond.target_rssi = static_cast<int8_t>(rssi->valueint);
+
+        cJSON* op = cJSON_GetObjectItem(c_item, "operator");
+        if (cJSON_IsString(op)) cond.op = parse_operator(op->valuestring);
+
+        return true;
+    }
+
     cond.type = "can_state";
     cJSON* cid = cJSON_GetObjectItem(c_item, "can_id");
     if (cJSON_IsString(cid)) cond.can_id = strtol(cid->valuestring, nullptr, 16);
@@ -828,6 +909,57 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
                 cJSON* mac_item = cJSON_GetObjectItem(t_item, "client_mac");
                 if (!mac_item) mac_item = cJSON_GetObjectItem(t_item, "mac");
                 if (cJSON_IsString(mac_item)) tr.client_mac = mac_item->valuestring;
+
+                cJSON* rssi_item = cJSON_GetObjectItem(t_item, "target_rssi");
+                if (!rssi_item) rssi_item = cJSON_GetObjectItem(t_item, "rssi");
+                if (cJSON_IsNumber(rssi_item)) tr.target_rssi = static_cast<int8_t>(rssi_item->valueint);
+            } else if (tr.type == "ble_button" || tr.type == "ble_key" || tr.type == "ble") {
+                tr.type = "ble_button";
+                cJSON* btn = cJSON_GetObjectItem(t_item, "ble_button");
+                if (!btn) btn = cJSON_GetObjectItem(t_item, "button");
+                if (cJSON_IsString(btn)) tr.ble_button = btn->valuestring;
+
+                cJSON* act = cJSON_GetObjectItem(t_item, "ble_action");
+                if (!act) act = cJSON_GetObjectItem(t_item, "action");
+                if (cJSON_IsString(act)) tr.ble_action = act->valuestring;
+                else tr.ble_action = "press";
+
+                cJSON* dev = cJSON_GetObjectItem(t_item, "ble_device");
+                if (!dev) dev = cJSON_GetObjectItem(t_item, "device");
+                if (!dev) dev = cJSON_GetObjectItem(t_item, "mac");
+                if (cJSON_IsString(dev)) tr.ble_device = dev->valuestring;
+            } else if (tr.type == "ble_device_event" || tr.type == "ble_device" || tr.type == "ble_presence") {
+                tr.type = "ble_device_event";
+                cJSON* evt = cJSON_GetObjectItem(t_item, "ble_event");
+                if (!evt) evt = cJSON_GetObjectItem(t_item, "event");
+                if (cJSON_IsString(evt)) tr.ble_event = evt->valuestring;
+                else tr.ble_event = "connected";
+
+                cJSON* dev = cJSON_GetObjectItem(t_item, "ble_device");
+                if (!dev) dev = cJSON_GetObjectItem(t_item, "device");
+                if (!dev) dev = cJSON_GetObjectItem(t_item, "mac");
+                if (!dev) dev = cJSON_GetObjectItem(t_item, "client_mac");
+                if (cJSON_IsString(dev)) tr.ble_device = dev->valuestring;
+
+                cJSON* rssi_item = cJSON_GetObjectItem(t_item, "target_rssi");
+                if (!rssi_item) rssi_item = cJSON_GetObjectItem(t_item, "rssi");
+                if (cJSON_IsNumber(rssi_item)) tr.target_rssi = static_cast<int8_t>(rssi_item->valueint);
+            } else if (tr.type == "ble_beacon" || tr.type == "beacon") {
+                tr.type = "ble_beacon";
+                cJSON* evt = cJSON_GetObjectItem(t_item, "ble_event");
+                if (!evt) evt = cJSON_GetObjectItem(t_item, "event");
+                if (cJSON_IsString(evt)) tr.ble_event = evt->valuestring;
+                else tr.ble_event = "enter";
+
+                cJSON* uuid = cJSON_GetObjectItem(t_item, "beacon_uuid");
+                if (!uuid) uuid = cJSON_GetObjectItem(t_item, "uuid");
+                if (cJSON_IsString(uuid)) tr.beacon_uuid = uuid->valuestring;
+
+                cJSON* dev = cJSON_GetObjectItem(t_item, "ble_device");
+                if (!dev) dev = cJSON_GetObjectItem(t_item, "device");
+                if (!dev) dev = cJSON_GetObjectItem(t_item, "mac");
+                if (!dev) dev = cJSON_GetObjectItem(t_item, "client_mac");
+                if (cJSON_IsString(dev)) tr.ble_device = dev->valuestring;
 
                 cJSON* rssi_item = cJSON_GetObjectItem(t_item, "target_rssi");
                 if (!rssi_item) rssi_item = cJSON_GetObjectItem(t_item, "rssi");

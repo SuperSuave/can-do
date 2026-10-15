@@ -11,6 +11,7 @@
 #include "track_popup.h"
 #include "call_popup.h"
 #include "api.h"
+#include "esp_timer.h"
 #include <cstring>
 #include <vector>
 #include <cctype>
@@ -48,8 +49,25 @@ void uart_bridge_send_can_frame(const twai_message_t* msg) {
 }
 
 void uart_bridge_send_all_states(void) {
-    cJSON *root = cJSON_CreateArray();
     std::unordered_set<std::string> included;
+    cJSON *batch = cJSON_CreateArray();
+    int batch_count = 0;
+
+    auto flush_batch = [&batch, &batch_count]() {
+        if (batch_count == 0) return;
+        char *json_str = cJSON_PrintUnformatted(batch);
+        if (json_str) {
+            std::string payload = "{\"type\":\"states_dump\",\"data\":";
+            payload += json_str;
+            payload += "}";
+            uart_bridge_send_raw(payload);
+            free(json_str);
+        }
+        cJSON_Delete(batch);
+        batch = cJSON_CreateArray();
+        batch_count = 0;
+    };
+
     for (const auto& entity : global_catalog) {
         cJSON *item = cJSON_CreateObject();
         cJSON_AddStringToObject(item, "entity", entity.id.c_str());
@@ -60,8 +78,12 @@ void uart_bridge_send_all_states(void) {
             st = it->second;
         }
         cJSON_AddStringToObject(item, "state", st.empty() ? "Unknown" : st.c_str());
-        cJSON_AddItemToArray(root, item);
+        cJSON_AddItemToArray(batch, item);
         included.insert(entity.id);
+        batch_count++;
+        if (batch_count >= 20) {
+            flush_batch();
+        }
     }
 
     const auto& cache = get_live_state_cache();
@@ -70,8 +92,12 @@ void uart_bridge_send_all_states(void) {
             cJSON *item = cJSON_CreateObject();
             cJSON_AddStringToObject(item, "entity", pair.first.c_str());
             cJSON_AddStringToObject(item, "state", pair.second.c_str());
-            cJSON_AddItemToArray(root, item);
+            cJSON_AddItemToArray(batch, item);
             included.insert(pair.first);
+            batch_count++;
+            if (batch_count >= 20) {
+                flush_batch();
+            }
         }
     }
 
@@ -79,19 +105,16 @@ void uart_bridge_send_all_states(void) {
         cJSON *item = cJSON_CreateObject();
         cJSON_AddStringToObject(item, "entity", "cond_aux_12v_battery");
         cJSON_AddStringToObject(item, "state", vbat_sensor_get_last_str());
-        cJSON_AddItemToArray(root, item);
+        cJSON_AddItemToArray(batch, item);
+        batch_count++;
     }
 
-    char *json_str = cJSON_PrintUnformatted(root);
-    if (json_str) {
-        std::string payload = "{\"type\":\"states_dump\",\"data\":";
-        payload += json_str;
-        payload += "}";
-        uart_bridge_send_raw(payload);
-        free(json_str);
-    }
-    cJSON_Delete(root);
+    flush_batch();
+    cJSON_Delete(batch);
 }
+
+static std::string s_cached_ble_status = "{\"enabled\":true,\"scanning\":false,\"connected_device\":null,\"paired_devices\":[],\"discovered_devices\":[]}";
+static int64_t s_last_bridge_rx_us = 0;
 
 static void handle_incoming_command(const char* json_str) {
     cJSON *root = cJSON_Parse(json_str);
@@ -111,8 +134,10 @@ static void handle_incoming_command(const char* json_str) {
     cJSON *can_id_item = cJSON_GetObjectItem(root, "can_id");
 
     if (strcmp(type, "get_states") == 0) {
+        ESP_LOGI(TAG, "Bridge requested all states -> sending states dump");
         uart_bridge_send_all_states();
     } else if (strcmp(type, "ping") == 0) {
+        ESP_LOGI(TAG, "Bridge ping received -> sending pong");
         uart_bridge_send_raw("{\"type\":\"pong\"}");
     } else if (strcmp(type, "lock") == 0 || strcmp(type, "unlock") == 0) {
         bool is_lock = (strcmp(type, "lock") == 0);
@@ -273,9 +298,70 @@ static void handle_incoming_command(const char* json_str) {
             network_mgr_remove_known_network(ssid_item->valuestring);
             ESP_LOGI(TAG, "Removed Wi-Fi network '%s' from bridge", ssid_item->valuestring);
         }
+    } else if (strcmp(type, "ble_status") == 0) {
+        cJSON *data_item = cJSON_GetObjectItem(root, "data");
+        if (data_item) {
+            char *d_str = cJSON_PrintUnformatted(data_item);
+            if (d_str) {
+                s_cached_ble_status = d_str;
+                free(d_str);
+            }
+        }
+    } else if (strcmp(type, "ble_event") == 0) {
+        broadcast_ws_raw(json_str);
+        cJSON* addr = cJSON_GetObjectItem(root, "address");
+        if (!addr) addr = cJSON_GetObjectItem(root, "mac");
+        cJSON* btn = cJSON_GetObjectItem(root, "button");
+        cJSON* act = cJSON_GetObjectItem(root, "action");
+        cJSON* combo = cJSON_GetObjectItem(root, "combo");
+        std::string addr_str = (addr && cJSON_IsString(addr)) ? addr->valuestring : "";
+        std::string btn_str = (btn && cJSON_IsString(btn)) ? btn->valuestring : "";
+        std::string act_str = (act && cJSON_IsString(act)) ? act->valuestring : "press";
+        std::string combo_str = (combo && cJSON_IsString(combo)) ? combo->valuestring : "";
+        can_engine_on_ble_event(addr_str, btn_str, act_str, combo_str);
+    } else if (strcmp(type, "ble_device_event") == 0) {
+        broadcast_ws_raw(json_str);
+        cJSON* addr = cJSON_GetObjectItem(root, "address");
+        if (!addr) addr = cJSON_GetObjectItem(root, "mac");
+        cJSON* evt = cJSON_GetObjectItem(root, "event");
+        cJSON* rssi = cJSON_GetObjectItem(root, "rssi");
+        cJSON* name = cJSON_GetObjectItem(root, "name");
+        std::string addr_str = (addr && cJSON_IsString(addr)) ? addr->valuestring : "";
+        std::string evt_str = (evt && cJSON_IsString(evt)) ? evt->valuestring : "connected";
+        std::string name_str = (name && cJSON_IsString(name)) ? name->valuestring : "";
+        int8_t rssi_val = (rssi && cJSON_IsNumber(rssi)) ? static_cast<int8_t>(rssi->valueint) : 0;
+        can_engine_on_ble_device_event(addr_str, evt_str, rssi_val, name_str);
+    } else if (strcmp(type, "ble_beacon") == 0) {
+        broadcast_ws_raw(json_str);
+        cJSON* uuid = cJSON_GetObjectItem(root, "uuid");
+        cJSON* mac = cJSON_GetObjectItem(root, "mac");
+        if (!mac) mac = cJSON_GetObjectItem(root, "address");
+        cJSON* evt = cJSON_GetObjectItem(root, "event");
+        cJSON* rssi = cJSON_GetObjectItem(root, "rssi");
+        cJSON* major = cJSON_GetObjectItem(root, "major");
+        cJSON* minor = cJSON_GetObjectItem(root, "minor");
+        cJSON* name = cJSON_GetObjectItem(root, "name");
+        std::string uuid_str = (uuid && cJSON_IsString(uuid)) ? uuid->valuestring : "";
+        std::string mac_str = (mac && cJSON_IsString(mac)) ? mac->valuestring : "";
+        std::string evt_str = (evt && cJSON_IsString(evt)) ? evt->valuestring : "enter";
+        std::string name_str = (name && cJSON_IsString(name)) ? name->valuestring : "";
+        int8_t rssi_val = (rssi && cJSON_IsNumber(rssi)) ? static_cast<int8_t>(rssi->valueint) : 0;
+        uint16_t major_val = (major && cJSON_IsNumber(major)) ? static_cast<uint16_t>(major->valueint) : 0;
+        uint16_t minor_val = (minor && cJSON_IsNumber(minor)) ? static_cast<uint16_t>(minor->valueint) : 0;
+        can_engine_on_ble_beacon_event(uuid_str, evt_str, rssi_val, major_val, minor_val, mac_str, name_str);
     }
 
     cJSON_Delete(root);
+}
+
+bool uart_bridge_is_online(void) {
+    if (s_last_bridge_rx_us == 0) return false;
+    return (esp_timer_get_time() - s_last_bridge_rx_us) < 6000000;
+}
+
+std::string uart_bridge_get_ble_status(void) {
+    uart_bridge_send_raw("{\"type\":\"ble_get_status\"}");
+    return s_cached_ble_status;
 }
 
 static void uart_bridge_rx_task(void* pvParameters) {
@@ -291,8 +377,9 @@ static void uart_bridge_rx_task(void* pvParameters) {
              UART_BRIDGE_TX_PIN, UART_BRIDGE_RX_PIN, UART_BRIDGE_BAUD_RATE);
 
     while (true) {
-        int len = uart_read_bytes(UART_BRIDGE_PORT, dtmp, RX_BUF_SIZE - 1, pdMS_TO_TICKS(50));
+        int len = uart_read_bytes(UART_BRIDGE_PORT, dtmp, RX_BUF_SIZE - 1, pdMS_TO_TICKS(100));
         if (len > 0) {
+            s_last_bridge_rx_us = esp_timer_get_time();
             for (int i = 0; i < len; i++) {
                 char c = (char)dtmp[i];
                 if (c == '\n' || c == '\r') {
@@ -301,14 +388,20 @@ static void uart_bridge_rx_task(void* pvParameters) {
                         line_buffer.clear();
                     }
                 } else {
-                    if (line_buffer.length() < 1024) {
+                    if (line_buffer.length() < 8192) {
                         line_buffer += c;
                     } else {
-                        // Overflow guard
                         line_buffer.clear();
                     }
                 }
             }
+        }
+
+        static int64_t last_heartbeat_us = 0;
+        int64_t now_us = esp_timer_get_time();
+        if (now_us - last_heartbeat_us >= 3000000) {
+            last_heartbeat_us = now_us;
+            uart_bridge_send_raw("{\"type\":\"ping\"}");
         }
     }
 

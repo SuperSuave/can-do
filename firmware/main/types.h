@@ -43,10 +43,18 @@ struct AutomationCondition {
     uint8_t weekdays_mask = 0x7F; // Default all 7 days (bits 0..6: Sun..Sat)
 
     // ESP32 Device / Wi-Fi evaluation fields
-    std::string device_property; // "wifi_ssid", "wifi_connected", "wifi_mode", "wifi_rssi", "ap_client_connected", "ap_client_rssi"
-    std::string target_string;   // SSID, mode ("ap", "sta", "both", "disabled"), or client MAC ("AA:BB:CC:DD:EE:FF")
+    std::string device_property; // "wifi_ssid", "wifi_connected", "wifi_mode", "wifi_rssi", "ap_client_connected", "ap_client_rssi", "ble_connected", "ble_rssi"
+    std::string target_string;   // SSID, mode ("ap", "sta", "both", "disabled"), client MAC ("AA:BB:CC:DD:EE:FF"), or button name
     int8_t target_rssi = 0;      // Target RSSI in dBm
     bool target_bool = true;     // Boolean expectation
+
+    // Bluetooth BLE evaluation fields
+    std::string ble_button;      // e.g. "volume_up", "mute+volume_down"
+    std::string ble_action;      // "press", "release", "hold", "any"
+    std::string ble_device;      // Optional device address or name filter
+    std::string beacon_uuid;     // Optional iBeacon UUID or beacon MAC filter
+    uint16_t beacon_major = 0;
+    uint16_t beacon_minor = 0;
 
     // Nested sub-conditions for AND, OR, NOT groups
     std::vector<AutomationCondition> sub_conditions;
@@ -173,6 +181,15 @@ struct AutomationTrigger {
     std::string ssid;               // Optional SSID filter
     std::string client_mac;         // Optional client MAC filter
     int8_t target_rssi = 0;         // Optional RSSI threshold
+
+    // For Bluetooth BLE events
+    std::string ble_event;          // "button", "connected", "disconnected", "proximity", "enter", "exit"
+    std::string ble_button;         // "volume_up", "mute+volume_down", etc.
+    std::string ble_action = "press"; // "press", "release", "hold", "any"
+    std::string ble_device;         // Optional device address or name filter
+    std::string beacon_uuid;        // Optional iBeacon UUID or beacon MAC filter
+    uint16_t beacon_major = 0;
+    uint16_t beacon_minor = 0;
 };
 
 struct AutomationRule {

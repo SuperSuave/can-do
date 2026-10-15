@@ -37,3 +37,7 @@ bool mqtt_mgr_is_monitored_id(uint32_t can_id);
 struct BleButtonEvent;
 void mqtt_mgr_publish_vbat(float vbat);
 void mqtt_mgr_publish_bms(float kw, float soc, float v, float a, float delta_mv, int min_t, int max_t);
+void mqtt_mgr_publish_ble_button(const std::string& address, const std::string& button, const std::string& action, const std::string& combo = "");
+void mqtt_mgr_publish_ble_device(const std::string& address, const std::string& event, int8_t rssi, const std::string& name = "");
+void mqtt_mgr_publish_ble_beacon(const std::string& uuid, const std::string& event, int8_t rssi, uint16_t major = 0, uint16_t minor = 0, const std::string& mac = "", const std::string& name = "");
+
