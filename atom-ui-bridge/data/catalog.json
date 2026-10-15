@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.10.14-b001",
+  "can_do_version": "2026.10.6-b003",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -1305,15 +1305,24 @@
         "all_egmp"
       ],
       "category": "Cockpit & Controls",
+      "subcategory": "Instrument Cluster",
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x474"
       },
       "roles": [
-        "trigger"
+        "trigger",
+        "sensor",
+        "state"
       ],
       "options": [
+        {
+          "label": "Idle",
+          "match": {
+            "D8": "0x0A"
+          }
+        },
         {
           "label": "Brightness Up (+)",
           "match": {
@@ -1329,10 +1338,96 @@
         }
       ],
       "contributor": {
-        "name": "Unknown",
-        "github": ""
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "CAN ID 0x474 (Cluster_Brightness_Button) Byte 7 (D8): 0x0A (Idle), 0x4A (Brightness +), 0x8A (Brightness -)."
+      }
+    },
+    {
+      "id": "cluster_brightness_up",
+      "ha_metadata": {
+        "name": "Cluster Brightness Up (+)",
+        "domain": "button",
+        "icon": "mdi:brightness-5"
       },
-      "subcategory": "Instrument Cluster"
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Cockpit & Controls",
+      "subcategory": "Instrument Cluster",
+      "roles": [
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x474",
+        "delay_ms": 20
+      },
+      "steps": [
+        {
+          "payload": {
+            "D8": "0x4A"
+          },
+          "repeat": 3,
+          "delay_ms": 20
+        },
+        {
+          "payload": {
+            "D8": "0x0A"
+          },
+          "repeat": 2,
+          "delay_ms": 20
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Injects Instrument Cluster Brightness Up (+) button press on 0x474 Byte 7 (D8: 0x4A active pulse, 0x0A idle release). Steps display/dash illumination up via automation."
+      }
+    },
+    {
+      "id": "cluster_brightness_down",
+      "ha_metadata": {
+        "name": "Cluster Brightness Down (-)",
+        "domain": "button",
+        "icon": "mdi:brightness-4"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Cockpit & Controls",
+      "subcategory": "Instrument Cluster",
+      "roles": [
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x474",
+        "delay_ms": 20
+      },
+      "steps": [
+        {
+          "payload": {
+            "D8": "0x8A"
+          },
+          "repeat": 3,
+          "delay_ms": 20
+        },
+        {
+          "payload": {
+            "D8": "0x0A"
+          },
+          "repeat": 2,
+          "delay_ms": 20
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Injects Instrument Cluster Brightness Down (-) button press on 0x474 Byte 7 (D8: 0x8A active pulse, 0x0A idle release). Steps display/dash illumination down via automation."
+      }
     },
     {
       "id": "head_unit_media_source",
@@ -1778,7 +1873,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
       },
       "network": {
         "bus": 0,
@@ -1790,14 +1885,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "°F",
+        "unit": "\u00b0F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62°F",
+          "label": "62\u00b0F",
           "match": {
             "D4": "0x06"
           },
@@ -1818,7 +1913,7 @@
           "default": false
         },
         {
-          "label": "63°F",
+          "label": "63\u00b0F",
           "match": {
             "D4": "0x07"
           },
@@ -1839,7 +1934,7 @@
           "default": false
         },
         {
-          "label": "64°F",
+          "label": "64\u00b0F",
           "match": {
             "D4": "0x08"
           },
@@ -1860,7 +1955,7 @@
           "default": false
         },
         {
-          "label": "65°F",
+          "label": "65\u00b0F",
           "match": {
             "D4": "0x09"
           },
@@ -1881,7 +1976,7 @@
           "default": false
         },
         {
-          "label": "66°F",
+          "label": "66\u00b0F",
           "match": {
             "D4": "0x0A"
           },
@@ -1902,7 +1997,7 @@
           "default": false
         },
         {
-          "label": "67°F",
+          "label": "67\u00b0F",
           "match": {
             "D4": "0x0B"
           },
@@ -1923,7 +2018,7 @@
           "default": false
         },
         {
-          "label": "68°F",
+          "label": "68\u00b0F",
           "match": {
             "D4": "0x0C"
           },
@@ -1944,7 +2039,7 @@
           "default": false
         },
         {
-          "label": "69°F",
+          "label": "69\u00b0F",
           "match": {
             "D4": "0x0D"
           },
@@ -1965,7 +2060,7 @@
           "default": false
         },
         {
-          "label": "70°F",
+          "label": "70\u00b0F",
           "match": {
             "D4": "0x0E"
           },
@@ -1986,7 +2081,7 @@
           "default": true
         },
         {
-          "label": "71°F",
+          "label": "71\u00b0F",
           "match": {
             "D4": "0x0F"
           },
@@ -2007,7 +2102,7 @@
           "default": false
         },
         {
-          "label": "72°F",
+          "label": "72\u00b0F",
           "match": {
             "D4": "0x10"
           },
@@ -2028,7 +2123,7 @@
           "default": false
         },
         {
-          "label": "73°F",
+          "label": "73\u00b0F",
           "match": {
             "D4": "0x11"
           },
@@ -2049,7 +2144,7 @@
           "default": false
         },
         {
-          "label": "74°F",
+          "label": "74\u00b0F",
           "match": {
             "D4": "0x12"
           },
@@ -2070,7 +2165,7 @@
           "default": false
         },
         {
-          "label": "75°F",
+          "label": "75\u00b0F",
           "match": {
             "D4": "0x13"
           },
@@ -2091,7 +2186,7 @@
           "default": false
         },
         {
-          "label": "76°F",
+          "label": "76\u00b0F",
           "match": {
             "D4": "0x14"
           },
@@ -2112,7 +2207,7 @@
           "default": false
         },
         {
-          "label": "77°F",
+          "label": "77\u00b0F",
           "match": {
             "D4": "0x15"
           },
@@ -2133,7 +2228,7 @@
           "default": false
         },
         {
-          "label": "78°F",
+          "label": "78\u00b0F",
           "match": {
             "D4": "0x16"
           },
@@ -2154,7 +2249,7 @@
           "default": false
         },
         {
-          "label": "79°F",
+          "label": "79\u00b0F",
           "match": {
             "D4": "0x17"
           },
@@ -2175,7 +2270,7 @@
           "default": false
         },
         {
-          "label": "80°F",
+          "label": "80\u00b0F",
           "match": {
             "D4": "0x18"
           },
@@ -2196,7 +2291,7 @@
           "default": false
         },
         {
-          "label": "81°F",
+          "label": "81\u00b0F",
           "match": {
             "D4": "0x19"
           },
@@ -2217,7 +2312,7 @@
           "default": false
         },
         {
-          "label": "82°F",
+          "label": "82\u00b0F",
           "match": {
             "D4": "0x1A"
           },
@@ -2261,7 +2356,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
       },
       "network": {
         "bus": 0,
@@ -2273,14 +2368,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "°F",
+        "unit": "\u00b0F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62°F",
+          "label": "62\u00b0F",
           "match": {
             "D6": "0x06"
           },
@@ -2301,7 +2396,7 @@
           "default": false
         },
         {
-          "label": "63°F",
+          "label": "63\u00b0F",
           "match": {
             "D6": "0x07"
           },
@@ -2322,7 +2417,7 @@
           "default": false
         },
         {
-          "label": "64°F",
+          "label": "64\u00b0F",
           "match": {
             "D6": "0x08"
           },
@@ -2343,7 +2438,7 @@
           "default": false
         },
         {
-          "label": "65°F",
+          "label": "65\u00b0F",
           "match": {
             "D6": "0x09"
           },
@@ -2364,7 +2459,7 @@
           "default": false
         },
         {
-          "label": "66°F",
+          "label": "66\u00b0F",
           "match": {
             "D6": "0x0A"
           },
@@ -2385,7 +2480,7 @@
           "default": false
         },
         {
-          "label": "67°F",
+          "label": "67\u00b0F",
           "match": {
             "D6": "0x0B"
           },
@@ -2406,7 +2501,7 @@
           "default": false
         },
         {
-          "label": "68°F",
+          "label": "68\u00b0F",
           "match": {
             "D6": "0x0C"
           },
@@ -2427,7 +2522,7 @@
           "default": false
         },
         {
-          "label": "69°F",
+          "label": "69\u00b0F",
           "match": {
             "D6": "0x0D"
           },
@@ -2448,7 +2543,7 @@
           "default": false
         },
         {
-          "label": "70°F",
+          "label": "70\u00b0F",
           "match": {
             "D6": "0x0E"
           },
@@ -2469,7 +2564,7 @@
           "default": true
         },
         {
-          "label": "71°F",
+          "label": "71\u00b0F",
           "match": {
             "D6": "0x0F"
           },
@@ -2490,7 +2585,7 @@
           "default": false
         },
         {
-          "label": "72°F",
+          "label": "72\u00b0F",
           "match": {
             "D6": "0x10"
           },
@@ -2511,7 +2606,7 @@
           "default": false
         },
         {
-          "label": "73°F",
+          "label": "73\u00b0F",
           "match": {
             "D6": "0x11"
           },
@@ -2532,7 +2627,7 @@
           "default": false
         },
         {
-          "label": "74°F",
+          "label": "74\u00b0F",
           "match": {
             "D6": "0x12"
           },
@@ -2553,7 +2648,7 @@
           "default": false
         },
         {
-          "label": "75°F",
+          "label": "75\u00b0F",
           "match": {
             "D6": "0x13"
           },
@@ -2574,7 +2669,7 @@
           "default": false
         },
         {
-          "label": "76°F",
+          "label": "76\u00b0F",
           "match": {
             "D6": "0x14"
           },
@@ -2595,7 +2690,7 @@
           "default": false
         },
         {
-          "label": "77°F",
+          "label": "77\u00b0F",
           "match": {
             "D6": "0x15"
           },
@@ -2616,7 +2711,7 @@
           "default": false
         },
         {
-          "label": "78°F",
+          "label": "78\u00b0F",
           "match": {
             "D6": "0x16"
           },
@@ -2637,7 +2732,7 @@
           "default": false
         },
         {
-          "label": "79°F",
+          "label": "79\u00b0F",
           "match": {
             "D6": "0x17"
           },
@@ -2658,7 +2753,7 @@
           "default": false
         },
         {
-          "label": "80°F",
+          "label": "80\u00b0F",
           "match": {
             "D6": "0x18"
           },
@@ -2679,7 +2774,7 @@
           "default": false
         },
         {
-          "label": "81°F",
+          "label": "81\u00b0F",
           "match": {
             "D6": "0x19"
           },
@@ -2700,7 +2795,7 @@
           "default": false
         },
         {
-          "label": "82°F",
+          "label": "82\u00b0F",
           "match": {
             "D6": "0x1A"
           },
@@ -5587,18 +5682,18 @@
       },
       "options": [
         {
-          "label": "Info Notification (ⓘ)",
+          "label": "Info Notification (\u24d8)",
           "level": "info",
           "popup_message": "Preconditioning Active",
           "default": true
         },
         {
-          "label": "Warning Notification (⚠)",
+          "label": "Warning Notification (\u26a0)",
           "level": "warning",
           "popup_message": "Battery Cold / Limited"
         },
         {
-          "label": "Fault Notification (‼)",
+          "label": "Fault Notification (\u203c)",
           "level": "error",
           "popup_message": "Charge Interrupted"
         },
@@ -6620,16 +6715,16 @@
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x226",
-        "unit": "°C"
+        "unit": "\u00b0C"
       },
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 °C"
+        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 \u00b0C"
       },
       "options": [
         {
-          "label": "Freezing (<= 0°C / 32°F)",
+          "label": "Freezing (<= 0\u00b0C / 32\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": "less_equal",
@@ -6638,7 +6733,7 @@
           "default": true
         },
         {
-          "label": "Cold (< 15°C / 59°F)",
+          "label": "Cold (< 15\u00b0C / 59\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": "less_than",
@@ -6646,7 +6741,7 @@
           }
         },
         {
-          "label": "Warm (> 25°C / 77°F)",
+          "label": "Warm (> 25\u00b0C / 77\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": "greater_than",
@@ -7233,19 +7328,19 @@
           "default": true
         },
         {
-          "label": "Rear Temp 20.0°C / 68°F",
+          "label": "Rear Temp 20.0\u00b0C / 68\u00b0F",
           "match": {
             "D6": "0x0C"
           }
         },
         {
-          "label": "Rear Temp 21.0°C / 70°F",
+          "label": "Rear Temp 21.0\u00b0C / 70\u00b0F",
           "match": {
             "D6": "0x0E"
           }
         },
         {
-          "label": "Rear Temp 22.0°C / 72°F",
+          "label": "Rear Temp 22.0\u00b0C / 72\u00b0F",
           "match": {
             "D6": "0x10"
           }
@@ -7766,7 +7861,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Right 90°",
+          "label": "Turn Right 90\u00b0",
           "match": {
             "D1": "0x03"
           },
@@ -7801,7 +7896,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Left 90°",
+          "label": "Turn Left 90\u00b0",
           "match": {
             "D1": "0x08"
           },
@@ -8552,7 +8647,7 @@
         "name": "HV Battery Module Min & Max Temp",
         "domain": "sensor",
         "icon": "mdi:thermometer-chevron-up",
-        "unit_of_measurement": "°C"
+        "unit_of_measurement": "\u00b0C"
       },
       "tags": [
         "all_egmp"
@@ -8566,17 +8661,17 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40°C offset."
+        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40\u00b0C offset."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x5D7",
-        "unit": "°C"
+        "unit": "\u00b0C"
       },
       "options": [
         {
-          "label": "Battery Optimal Warm (20°C - 35°C)",
+          "label": "Battery Optimal Warm (20\u00b0C - 35\u00b0C)",
           "evaluate": {
             "byte": "D1",
             "operator": "greater_equal",
@@ -8585,7 +8680,7 @@
           "default": true
         },
         {
-          "label": "Battery High Temp (> 45°C / 113°F)",
+          "label": "Battery High Temp (> 45\u00b0C / 113\u00b0F)",
           "evaluate": {
             "byte": "D1",
             "operator": "greater_than",
@@ -8593,7 +8688,7 @@
           }
         },
         {
-          "label": "Battery Cold (< 10°C / 50°F)",
+          "label": "Battery Cold (< 10\u00b0C / 50\u00b0F)",
           "evaluate": {
             "byte": "D2",
             "operator": "less_than",
@@ -8601,7 +8696,7 @@
           }
         },
         {
-          "label": "Battery Freezing (< 0°C / 32°F)",
+          "label": "Battery Freezing (< 0\u00b0C / 32\u00b0F)",
           "evaluate": {
             "byte": "D2",
             "operator": "less_than",
@@ -8903,7 +8998,7 @@
         "name": "Cabin Displayed Target Temperature",
         "domain": "sensor",
         "icon": "mdi:thermometer-lines",
-        "unit_of_measurement": "°F"
+        "unit_of_measurement": "\u00b0F"
       },
       "tags": [
         "all_egmp"
@@ -8917,31 +9012,31 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in °C x 0.5, Byte D3 = Driver Temp in °F integer)."
+        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in \u00b0C x 0.5, Byte D3 = Driver Temp in \u00b0F integer)."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x5F5",
-        "unit": "°F"
+        "unit": "\u00b0F"
       },
       "options": [
         {
-          "label": "68°F (20.0°C)",
+          "label": "68\u00b0F (20.0\u00b0C)",
           "match": {
             "D3": "0x44"
           },
           "mask": "0xFF"
         },
         {
-          "label": "70°F (21.0°C)",
+          "label": "70\u00b0F (21.0\u00b0C)",
           "match": {
             "D3": "0x46"
           },
           "mask": "0xFF"
         },
         {
-          "label": "72°F (22.0°C)",
+          "label": "72\u00b0F (22.0\u00b0C)",
           "match": {
             "D3": "0x48"
           },
@@ -8949,14 +9044,14 @@
           "default": true
         },
         {
-          "label": "74°F (23.5°C)",
+          "label": "74\u00b0F (23.5\u00b0C)",
           "match": {
             "D3": "0x4A"
           },
           "mask": "0xFF"
         },
         {
-          "label": "76°F (24.5°C)",
+          "label": "76\u00b0F (24.5\u00b0C)",
           "match": {
             "D3": "0x4C"
           },
@@ -9199,7 +9294,7 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s² signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
+        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s\u00b2 signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
       },
       "network": {
         "bus": 0,
@@ -11108,7 +11203,7 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Direct Head Unit DATC (Dual Automatic Temperature Control) CAN frame (0x520 / 0x5A0) decoded from HKMC_TAppService DATCManager. Byte 0 enables HVAC (0x01), Byte 1 sets target temp in 0.5 deg C steps (raw = Temp_C * 2, e.g. 68°F=20.0°C=0x28, 70°F=21.0°C=0x2A, 72°F=22.0°C=0x2C, 74°F=23.5°C=0x2F, 76°F=24.5°C=0x31), Byte 2 controls blower & auto mode (0x04), Byte 3 controls air distribution (0x01 vent). The vehicle VCU automatically engages High Voltage contactors and runs the electric compressor / PTC heater when this frame is periodically broadcast alongside 0x4F1 CLU keep-alive."
+        "notes": "Direct Head Unit DATC (Dual Automatic Temperature Control) CAN frame (0x520 / 0x5A0) decoded from HKMC_TAppService DATCManager. Byte 0 enables HVAC (0x01), Byte 1 sets target temp in 0.5 deg C steps (raw = Temp_C * 2, e.g. 68\u00b0F=20.0\u00b0C=0x28, 70\u00b0F=21.0\u00b0C=0x2A, 72\u00b0F=22.0\u00b0C=0x2C, 74\u00b0F=23.5\u00b0C=0x2F, 76\u00b0F=24.5\u00b0C=0x31), Byte 2 controls blower & auto mode (0x04), Byte 3 controls air distribution (0x01 vent). The vehicle VCU automatically engages High Voltage contactors and runs the electric compressor / PTC heater when this frame is periodically broadcast alongside 0x4F1 CLU keep-alive."
       },
       "network": {
         "bus": 0,
@@ -11118,7 +11213,7 @@
       },
       "options": [
         {
-          "label": "Remote Climate 72°F (22.0°C) Auto",
+          "label": "Remote Climate 72\u00b0F (22.0\u00b0C) Auto",
           "match": {
             "D1": "0x01",
             "D2": "0x2C"
@@ -11136,7 +11231,7 @@
           "default": true
         },
         {
-          "label": "Remote Climate 68°F (20.0°C) Auto",
+          "label": "Remote Climate 68\u00b0F (20.0\u00b0C) Auto",
           "match": {
             "D1": "0x01",
             "D2": "0x28"
@@ -11153,7 +11248,7 @@
           }
         },
         {
-          "label": "Remote Climate 70°F (21.0°C) Auto",
+          "label": "Remote Climate 70\u00b0F (21.0\u00b0C) Auto",
           "match": {
             "D1": "0x01",
             "D2": "0x2A"
@@ -11170,7 +11265,7 @@
           }
         },
         {
-          "label": "Remote Climate 74°F (23.5°C) Auto",
+          "label": "Remote Climate 74\u00b0F (23.5\u00b0C) Auto",
           "match": {
             "D1": "0x01",
             "D2": "0x2F"
@@ -11187,7 +11282,7 @@
           }
         },
         {
-          "label": "Remote Climate 76°F (24.5°C) Auto",
+          "label": "Remote Climate 76\u00b0F (24.5\u00b0C) Auto",
           "match": {
             "D1": "0x01",
             "D2": "0x31"
@@ -11595,7 +11690,7 @@
       ],
       "options": [
         {
-          "label": "Passenger 72°F (22.0°C)",
+          "label": "Passenger 72\u00b0F (22.0\u00b0C)",
           "match": {
             "D4": "0x10"
           },
@@ -11608,7 +11703,7 @@
           "default": true
         },
         {
-          "label": "Passenger 68°F (20.0°C)",
+          "label": "Passenger 68\u00b0F (20.0\u00b0C)",
           "match": {
             "D4": "0x0C"
           },
@@ -11620,7 +11715,7 @@
           }
         },
         {
-          "label": "Passenger 76°F (24.5°C)",
+          "label": "Passenger 76\u00b0F (24.5\u00b0C)",
           "match": {
             "D4": "0x14"
           },
@@ -12134,43 +12229,35 @@
       "category": "Climate & Comfort",
       "subcategory": "HVAC Controls",
       "roles": [
-        "action"
+        "action",
+        "sensor",
+        "state"
       ],
       "network": {
         "bus": 0,
         "type": "can_tx",
-        "action_can_id": "0x41D",
+        "state_can_id": "0x465",
+        "action_can_id": "0x465",
         "delay_ms": 20
       },
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "HU_DATC_DrvOnlySet command on 0x41D (1053 dec) Byte 4 (D5: 0x0D=ON, 0x0C=OFF, 0x0F=Applied)."
+        "notes": "Driver Only HVAC toggle on CAN ID 0x465 (Climate_Button_Status) Byte 6 (D7: 0x04 = ON, 0x0C = OFF). Turns 'Driver Only' mode on and off to shut off passenger vents and conserve battery when driving solo. (Also accepts DATC injection on 0x41D)."
       },
       "options": [
         {
           "label": "Driver Only On",
+          "match": {
+            "D7": "0x04"
+          },
           "payload": {
-            "D1": "0x00",
-            "D2": "0x00",
-            "D3": "0x00",
-            "D4": "0x00",
-            "D5": "0x0D",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
+            "D7": "0x04"
           },
           "steps": [
             {
               "payload": {
-                "D1": "0x00",
-                "D2": "0x00",
-                "D3": "0x00",
-                "D4": "0x00",
-                "D5": "0x0D",
-                "D6": "0x00",
-                "D7": "0x00",
-                "D8": "0x00"
+                "D7": "0x04"
               },
               "repeat": 3
             }
@@ -12179,33 +12266,64 @@
         },
         {
           "label": "Driver Only Off",
+          "match": {
+            "D7": "0x0C"
+          },
           "payload": {
-            "D1": "0x00",
-            "D2": "0x00",
-            "D3": "0x00",
-            "D4": "0x00",
-            "D5": "0x0C",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
+            "D7": "0x0C"
           },
           "steps": [
             {
               "payload": {
-                "D1": "0x00",
-                "D2": "0x00",
-                "D3": "0x00",
-                "D4": "0x00",
-                "D5": "0x0C",
-                "D6": "0x00",
-                "D7": "0x00",
-                "D8": "0x00"
+                "D7": "0x0C"
               },
               "repeat": 3
             }
           ]
         }
       ]
+    },
+    {
+      "id": "climate_driver_only_status",
+      "ha_metadata": {
+        "name": "Driver Only Climate Status",
+        "domain": "binary_sensor",
+        "icon": "mdi:account-outline"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "HVAC Controls",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x465"
+      },
+      "options": [
+        {
+          "label": "On",
+          "match": {
+            "D7": "0x04"
+          },
+          "default": true
+        },
+        {
+          "label": "Off",
+          "match": {
+            "D7": "0x0C"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Live telemetry status of Driver Only HVAC zone isolation from CAN ID 0x465 Byte 6 (D7)."
+      }
     },
     {
       "id": "climate_blower_speed_direct",
@@ -13757,6 +13875,37 @@
           ]
         }
       ]
+    },
+    {
+      "id": "ev_charging_power",
+      "ha_metadata": {
+        "name": "Live EV Charging Power",
+        "domain": "sensor",
+        "icon": "mdi:lightning-bolt"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "High Voltage & Charging",
+      "subcategory": "Charging Status",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x30E",
+        "state_byte": "D7",
+        "unit": "kW",
+        "min": 0,
+        "max": 255
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Direct live EV charging power reported in integer kW (0 to 255 kW) by the OBC / BMS on CAN ID 0x30E Byte 6 (D7) during AC Level 2 and DC Fast Charging, eliminating the need to calculate Volts * Amps / 1000."
+      }
     }
   ],
   "automations": [

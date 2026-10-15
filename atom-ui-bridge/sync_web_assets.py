@@ -13,7 +13,10 @@ def sync():
         return
 
     if os.path.exists(DATA_DIR):
-        shutil.rmtree(DATA_DIR)
+        try:
+            shutil.rmtree(DATA_DIR, ignore_errors=True)
+        except Exception:
+            pass
     os.makedirs(DATA_DIR, exist_ok=True)
 
     print(f"Syncing optimized web assets from {FRONTEND_DIST} to {DATA_DIR}...")
