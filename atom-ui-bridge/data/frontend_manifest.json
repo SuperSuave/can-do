@@ -1,75 +1,80 @@
 {
-  "version": "2026.10.6-b002",
+  "version": "2026.10.6-b003",
   "files": [
     {
-      "name": "B9G8HSSz.js.gz",
-      "path": "/spiffs/www/B9G8HSSz.js.gz",
+      "name": "4kd4KG_z.js.gz",
+      "path": "/spiffs/www/4kd4KG_z.js.gz",
       "size": 3825
     },
     {
-      "name": "BHA_nF5-.js.gz",
-      "path": "/spiffs/www/BHA_nF5-.js.gz",
-      "size": 138375
+      "name": "55BuQ07P.js.gz",
+      "path": "/spiffs/www/55BuQ07P.js.gz",
+      "size": 3879
     },
     {
-      "name": "Bi8y-MBO.js.gz",
-      "path": "/spiffs/www/Bi8y-MBO.js.gz",
-      "size": 311
+      "name": "BGzteLNU.js.gz",
+      "path": "/spiffs/www/BGzteLNU.js.gz",
+      "size": 21623
     },
     {
-      "name": "CPBe0hZt.js.gz",
-      "path": "/spiffs/www/CPBe0hZt.js.gz",
+      "name": "BRvJOjS9.js.gz",
+      "path": "/spiffs/www/BRvJOjS9.js.gz",
+      "size": 333
+    },
+    {
+      "name": "Bu0Vcgy7.js.gz",
+      "path": "/spiffs/www/Bu0Vcgy7.js.gz",
+      "size": 310
+    },
+    {
+      "name": "BWEcgLPX.js.gz",
+      "path": "/spiffs/www/BWEcgLPX.js.gz",
+      "size": 4038
+    },
+    {
+      "name": "CR_UmEEt.js.gz",
+      "path": "/spiffs/www/CR_UmEEt.js.gz",
+      "size": 20437
+    },
+    {
+      "name": "D1JftuSu.js.gz",
+      "path": "/spiffs/www/D1JftuSu.js.gz",
+      "size": 2176
+    },
+    {
+      "name": "D2zpmPpD.js.gz",
+      "path": "/spiffs/www/D2zpmPpD.js.gz",
       "size": 351
     },
     {
-      "name": "CqWoSHW7.js.gz",
-      "path": "/spiffs/www/CqWoSHW7.js.gz",
-      "size": 333
+      "name": "DLnx7Lq1.js.gz",
+      "path": "/spiffs/www/DLnx7Lq1.js.gz",
+      "size": 3316
     },
     {
-      "name": "CSI3lzrX.js.gz",
-      "path": "/spiffs/www/CSI3lzrX.js.gz",
-      "size": 2177
+      "name": "Dpwo2upv.js.gz",
+      "path": "/spiffs/www/Dpwo2upv.js.gz",
+      "size": 332
     },
     {
-      "name": "D5n650YQ.js.gz",
-      "path": "/spiffs/www/D5n650YQ.js.gz",
-      "size": 832
+      "name": "Dw3DrObZ.js.gz",
+      "path": "/spiffs/www/Dw3DrObZ.js.gz",
+      "size": 831
     },
     {
-      "name": "Dh_dRVrO.js.gz",
-      "path": "/spiffs/www/Dh_dRVrO.js.gz",
-      "size": 3317
+      "name": "f9w93VFW.js.gz",
+      "path": "/spiffs/www/f9w93VFW.js.gz",
+      "size": 4661
     },
     {
-      "name": "DQulBRcm.js.gz",
-      "path": "/spiffs/www/DQulBRcm.js.gz",
-      "size": 333
+      "name": "index-B-yyp5.js.gz",
+      "path": "/spiffs/www/index-B-yyp5.js.gz",
+      "size": 155732
     },
     {
-      "name": "DuhDMEf7.js.gz",
-      "path": "/spiffs/www/DuhDMEf7.js.gz",
-      "size": 20436
-    },
-    {
-      "name": "DUIiWmj3.js.gz",
-      "path": "/spiffs/www/DUIiWmj3.js.gz",
-      "size": 19822
-    },
-    {
-      "name": "hQlE8mH5.js.gz",
-      "path": "/spiffs/www/hQlE8mH5.js.gz",
-      "size": 4662
-    },
-    {
-      "name": "index-C7g7B3.js.gz",
-      "path": "/spiffs/www/index-C7g7B3.js.gz",
-      "size": 155620
-    },
-    {
-      "name": "index-Jfj3jW.css.gz",
-      "path": "/spiffs/www/index-Jfj3jW.css.gz",
-      "size": 18913
+      "name": "index-CrxtPv.css.gz",
+      "path": "/spiffs/www/index-CrxtPv.css.gz",
+      "size": 19396
     },
     {
       "name": "index.html",
@@ -79,22 +84,17 @@
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 1767
+      "size": 1765
     },
     {
       "name": "logo.svg",
       "path": "/spiffs/www/logo.svg",
-      "size": 8217
+      "size": 8221
     },
     {
-      "name": "MSqkuSjL.js.gz",
-      "path": "/spiffs/www/MSqkuSjL.js.gz",
-      "size": 3880
-    },
-    {
-      "name": "XmcX_DqA.js.gz",
-      "path": "/spiffs/www/XmcX_DqA.js.gz",
-      "size": 4039
+      "name": "VWaAYwV9.js.gz",
+      "path": "/spiffs/www/VWaAYwV9.js.gz",
+      "size": 142316
     }
   ]
 }
