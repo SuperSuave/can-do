@@ -224,8 +224,14 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                         val = round(payload[alt_idx] * 0.1, 1)
                         if 8.0 <= val <= 16.5:
                             return val
+        # 1I. Live EV Charging Power (0x30E: Byte D7 = integer in kW, 0-255 kW)
+        if "charging_power" in cid or (self.state_can_id and self.state_can_id.lower() == "0x30e"):
+            state_byte = net.get("state_byte", "D7")
+            idx = get_d_index(state_byte)
+            if isinstance(payload, list) and 0 <= idx < len(payload):
+                return int(payload[idx])
 
-        # 1E. Generic Linear Scale
+        # 1J. Generic Linear Scale
         if self.command.get("type") == "linear_scale" or "min" in net:
             state_byte = net.get("state_byte", "D1")
             idx = get_d_index(state_byte)
