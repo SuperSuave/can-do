@@ -52,6 +52,16 @@ class CanDoDataCoordinator:
         self._listeners: dict[str, list[Callable[[], None]]] = {}
         self._unsub_list: list[Callable[[], None]] = []
 
+        # BLE remote buttons, combos, and beacon presence state
+        self.ble_beacons: dict[str, dict[str, Any]] = {}
+        self.ble_devices: dict[str, dict[str, Any]] = {}
+        self.last_ble_button: dict[str, Any] | None = None
+        self.last_ble_beacon: dict[str, Any] | None = None
+        self.last_ble_device: dict[str, Any] | None = None
+        self._ble_button_listeners: list[Callable[[], None]] = []
+        self._ble_beacon_listeners: list[Callable[[], None]] = []
+        self._ble_device_listeners: list[Callable[[], None]] = []
+
         self.commands = get_vehicle_commands(self.vehicle_id)
         self.monitored_can_ids = get_monitored_can_ids(self.vehicle_id)
 
@@ -74,6 +84,21 @@ class CanDoDataCoordinator:
     def direct_state_topic(self) -> str:
         """Return direct state topic for entity state reception."""
         return f"{self.base_topic}/state/+"
+
+    @property
+    def ble_button_topic(self) -> str:
+        """Return MQTT BLE button event wildcard."""
+        return f"{self.base_topic}/+/ble_button"
+
+    @property
+    def ble_beacon_topic(self) -> str:
+        """Return MQTT BLE beacon proximity event wildcard."""
+        return f"{self.base_topic}/+/ble_beacon"
+
+    @property
+    def ble_device_topic(self) -> str:
+        """Return MQTT BLE device connection event wildcard."""
+        return f"{self.base_topic}/+/ble_device"
 
     @property
     def tx_topic(self) -> str:
@@ -119,7 +144,35 @@ class CanDoDataCoordinator:
         )
         self._unsub_list.append(unsub_direct)
 
-        # 3. Inform ESP32 edge device of the state CAN IDs we want it to publish
+        # 3. Subscribe to BLE buttons, combo chords, beacons, and presence events
+        unsub_btn = await mqtt.async_subscribe(
+            self.hass, self.ble_button_topic, self._handle_ble_button_message, qos=1
+        )
+        self._unsub_list.append(unsub_btn)
+        unsub_btn_dir = await mqtt.async_subscribe(
+            self.hass, f"{self.base_topic}/ble_button", self._handle_ble_button_message, qos=1
+        )
+        self._unsub_list.append(unsub_btn_dir)
+
+        unsub_bcn = await mqtt.async_subscribe(
+            self.hass, self.ble_beacon_topic, self._handle_ble_beacon_message, qos=1
+        )
+        self._unsub_list.append(unsub_bcn)
+        unsub_bcn_dir = await mqtt.async_subscribe(
+            self.hass, f"{self.base_topic}/ble_beacon", self._handle_ble_beacon_message, qos=1
+        )
+        self._unsub_list.append(unsub_bcn_dir)
+
+        unsub_dev = await mqtt.async_subscribe(
+            self.hass, self.ble_device_topic, self._handle_ble_device_message, qos=1
+        )
+        self._unsub_list.append(unsub_dev)
+        unsub_dev_dir = await mqtt.async_subscribe(
+            self.hass, f"{self.base_topic}/ble_device", self._handle_ble_device_message, qos=1
+        )
+        self._unsub_list.append(unsub_dev_dir)
+
+        # 4. Inform ESP32 edge device of the state CAN IDs we want it to publish
         if self.monitored_can_ids:
             await self.async_publish_monitored_ids()
             # Also publish to known hardware MAC topic if different
@@ -274,6 +327,132 @@ class CanDoDataCoordinator:
             if can_id_norm in self._listeners and callback_fn in self._listeners[can_id_norm]:
                 self._listeners[can_id_norm].remove(callback_fn)
 
+        return remove_listener
+
+    @callback
+    def _handle_ble_button_message(self, msg: mqtt.ReceiveMessage) -> None:
+        """Handle incoming BLE remote button or combo chord event."""
+        try:
+            payload = json.loads(msg.payload)
+            if not isinstance(payload, dict):
+                return
+        except Exception:
+            payload = {"button": msg.payload.strip(), "action": "press"}
+
+        self.last_ble_button = payload
+        _LOGGER.debug("BLE button event received: %s", payload)
+
+        event_data = {
+            "device_id": self.effective_device_id,
+            "address": payload.get("address", ""),
+            "button": payload.get("button", ""),
+            "action": payload.get("action", "press"),
+            "combo": payload.get("combo", ""),
+        }
+        self.hass.bus.async_fire("cando_ble_button_event", event_data)
+
+        for listener in list(self._ble_button_listeners):
+            try:
+                listener()
+            except Exception as err:
+                _LOGGER.exception("Error in BLE button listener: %s", err)
+
+    @callback
+    def _handle_ble_beacon_message(self, msg: mqtt.ReceiveMessage) -> None:
+        """Handle incoming BLE beacon / iBeacon proximity event."""
+        try:
+            payload = json.loads(msg.payload)
+            if not isinstance(payload, dict):
+                return
+        except Exception:
+            return
+
+        key = payload.get("uuid") or payload.get("mac") or payload.get("name")
+        if not key:
+            return
+
+        self.ble_beacons[key] = payload
+        if payload.get("mac") and payload.get("mac") != key:
+            self.ble_beacons[payload["mac"]] = payload
+
+        self.last_ble_beacon = payload
+        _LOGGER.debug("BLE beacon event received: %s", payload)
+
+        event_data = {
+            "device_id": self.effective_device_id,
+            "uuid": payload.get("uuid", ""),
+            "mac": payload.get("mac", ""),
+            "name": payload.get("name", ""),
+            "event": payload.get("event", "proximity"),
+            "rssi": payload.get("rssi", 0),
+            "major": payload.get("major", 0),
+            "minor": payload.get("minor", 0),
+            "present": payload.get("present", True),
+        }
+        self.hass.bus.async_fire("cando_ble_beacon_event", event_data)
+
+        for listener in list(self._ble_beacon_listeners):
+            try:
+                listener()
+            except Exception as err:
+                _LOGGER.exception("Error in BLE beacon listener: %s", err)
+
+    @callback
+    def _handle_ble_device_message(self, msg: mqtt.ReceiveMessage) -> None:
+        """Handle incoming BLE device connection / presence event."""
+        try:
+            payload = json.loads(msg.payload)
+            if not isinstance(payload, dict):
+                return
+        except Exception:
+            return
+
+        address = payload.get("address")
+        if not address:
+            return
+
+        self.ble_devices[address] = payload
+        self.last_ble_device = payload
+        _LOGGER.debug("BLE device event received: %s", payload)
+
+        event_data = {
+            "device_id": self.effective_device_id,
+            "address": address,
+            "name": payload.get("name", ""),
+            "event": payload.get("event", "connected"),
+            "rssi": payload.get("rssi", 0),
+            "connected": payload.get("connected", True),
+        }
+        self.hass.bus.async_fire("cando_ble_device_event", event_data)
+
+        for listener in list(self._ble_device_listeners):
+            try:
+                listener()
+            except Exception as err:
+                _LOGGER.exception("Error in BLE device listener: %s", err)
+
+    def register_ble_button_listener(self, callback_fn: Callable[[], None]) -> Callable[[], None]:
+        """Register entity callback for BLE remote button events."""
+        self._ble_button_listeners.append(callback_fn)
+        def remove_listener() -> None:
+            if callback_fn in self._ble_button_listeners:
+                self._ble_button_listeners.remove(callback_fn)
+        return remove_listener
+
+    def register_ble_beacon_listener(self, callback_fn: Callable[[], None]) -> Callable[[], None]:
+        """Register entity callback for BLE beacon events."""
+        self._ble_beacon_listeners.append(callback_fn)
+        def remove_listener() -> None:
+            if callback_fn in self._ble_beacon_listeners:
+                self._ble_beacon_listeners.remove(callback_fn)
+        return remove_listener
+
+    def register_ble_device_listener(self, callback_fn: Callable[[], None]) -> Callable[[], None]:
+        """Register entity callback for BLE device presence/connection events."""
+        self._ble_device_listeners.append(callback_fn)
+        def remove_listener() -> None:
+            if callback_fn in self._ble_device_listeners:
+                self._ble_device_listeners.remove(callback_fn)
         return remove_listener
 
     def _notify_can_listeners(self, can_id: str) -> None:

@@ -99,3 +99,37 @@
       target:
         entity_id: cover.all_power_windows_global
   mode: single
+
+# 5. Bluetooth Remote Multi-Button Combo Chord -> Trigger Action / Garage Door
+- id: can_do_ble_remote_button_chord
+  alias: "CAN Do: BLE Remote Combo Chord (Mute + Vol Down)"
+  description: "When the Bluetooth remote dual-button chord 'mute+volume_down' is pressed, trigger garage door or driveway gate"
+  trigger:
+    - platform: event
+      event_type: cando_ble_button_event
+      event_data:
+        combo: "mute+volume_down"
+  action:
+    - service: notify.notify
+      data:
+        message: "BLE Button Chord Detected: Mute + Vol Down"
+  mode: single
+
+# 6. BLE Beacon / Phone Proximity Arrival -> Welcome Lighting & Unlock
+- id: can_do_ble_beacon_approach_welcome
+  alias: "CAN Do: BLE Beacon Proximity Approach"
+  description: "When the driver approaches vehicle within RSSI threshold (-75 dBm), turn on puddle lamps and welcome lights"
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.ble_beacon_presence
+      to: "on"
+  condition:
+    - condition: numeric_state
+      entity_id: sensor.ble_beacon_rssi
+      above: -75
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.exterior_welcome_puddle_lamps
+  mode: single
+

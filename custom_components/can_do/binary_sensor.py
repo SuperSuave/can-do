@@ -31,7 +31,147 @@ async def async_setup_entry(
         if cmd.get("ha_metadata", {}).get("domain") == "binary_sensor":
             entities.append(CanDoBinarySensorEntity(coordinator, cmd))
 
+    # Add BLE Beacon Presence & Device Connectivity sensors
+    entities.append(CanDoBleBeaconPresenceSensor(coordinator))
+    entities.append(CanDoBleDeviceConnectedSensor(coordinator))
+
     async_add_entities(entities)
+
+
+class CanDoBleBeaconPresenceSensor(BinarySensorEntity):
+    """Binary sensor representing BLE beacon / iBeacon presence."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_name = "BLE Beacon Presence"
+    _attr_icon = "mdi:radar"
+    _attr_device_class = BinarySensorDeviceClass.PRESENCE
+
+    def __init__(self, coordinator: CanDoDataCoordinator) -> None:
+        """Initialize BLE beacon presence sensor."""
+        self.coordinator = coordinator
+        self._attr_unique_id = f"{coordinator.device_id}_ble_beacon_presence"
+        self._unsub = None
+
+    @property
+    def available(self) -> bool:
+        """Return True so entity stays active."""
+        return True
+
+    @property
+    def device_info(self):
+        """Link to parent CAN Do Bridge device."""
+        from homeassistant.helpers.entity import DeviceInfo
+        from .const import VERSION
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.coordinator.device_id)},
+            name=f"CAN Do Bridge ({self.coordinator.device_id})",
+            manufacturer="CAN Do",
+            model="ESP32 Bridge",
+            sw_version=VERSION,
+        )
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return True if beacon is currently present."""
+        last = self.coordinator.last_ble_beacon
+        if not last:
+            return False
+        if "present" in last:
+            return bool(last["present"])
+        return last.get("event") in ("enter", "proximity")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return beacon details."""
+        last = self.coordinator.last_ble_beacon or {}
+        return {
+            "uuid": last.get("uuid", ""),
+            "mac": last.get("mac", ""),
+            "name": last.get("name", ""),
+            "rssi": last.get("rssi", 0),
+            "event": last.get("event", ""),
+            "major": last.get("major", 0),
+            "minor": last.get("minor", 0),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        """Register listener when added to hass."""
+        await super().async_added_to_hass()
+        self._unsub = self.coordinator.register_ble_beacon_listener(self.async_write_ha_state)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Unsubscribe listener on remove."""
+        if self._unsub:
+            self._unsub()
+        await super().async_will_remove_from_hass()
+
+
+class CanDoBleDeviceConnectedSensor(BinarySensorEntity):
+    """Binary sensor representing BLE device / remote connection state."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_name = "BLE Remote Connected"
+    _attr_icon = "mdi:bluetooth-connect"
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+
+    def __init__(self, coordinator: CanDoDataCoordinator) -> None:
+        """Initialize BLE device connected sensor."""
+        self.coordinator = coordinator
+        self._attr_unique_id = f"{coordinator.device_id}_ble_device_connected"
+        self._unsub = None
+
+    @property
+    def available(self) -> bool:
+        """Return True so entity stays active."""
+        return True
+
+    @property
+    def device_info(self):
+        """Link to parent CAN Do Bridge device."""
+        from homeassistant.helpers.entity import DeviceInfo
+        from .const import VERSION
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.coordinator.device_id)},
+            name=f"CAN Do Bridge ({self.coordinator.device_id})",
+            manufacturer="CAN Do",
+            model="ESP32 Bridge",
+            sw_version=VERSION,
+        )
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return True if device is connected."""
+        last = self.coordinator.last_ble_device
+        if not last:
+            return False
+        if "connected" in last:
+            return bool(last["connected"])
+        return last.get("event") == "connected"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return device details."""
+        last = self.coordinator.last_ble_device or {}
+        return {
+            "address": last.get("address", ""),
+            "name": last.get("name", ""),
+            "rssi": last.get("rssi", 0),
+            "event": last.get("event", ""),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        """Register listener when added to hass."""
+        await super().async_added_to_hass()
+        self._unsub = self.coordinator.register_ble_device_listener(self.async_write_ha_state)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Unsubscribe listener on remove."""
+        if self._unsub:
+            self._unsub()
+        await super().async_will_remove_from_hass()
+
 
 
 class CanDoBinarySensorEntity(CanDoEntity, BinarySensorEntity):

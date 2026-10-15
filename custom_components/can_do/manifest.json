@@ -13,7 +13,13 @@
     "mqtt"
   ],
   "mqtt": [
-    "cando/+/status"
+    "cando/+/status",
+    "cando/+/ble_button",
+    "cando/+/ble_beacon",
+    "cando/+/ble_device",
+    "cando/ble_button",
+    "cando/ble_beacon",
+    "cando/ble_device"
   ],
   "zeroconf": [
     {
@@ -21,5 +27,5 @@
       "name": "CAN Do*"
     }
   ],
-  "version": "2026.10.6-b003"
+  "version": "2026.10.6-b004"
 }

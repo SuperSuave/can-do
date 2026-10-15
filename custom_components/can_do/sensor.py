@@ -40,7 +40,207 @@ async def async_setup_entry(
         if cmd.get("ha_metadata", {}).get("domain") == "sensor":
             entities.append(CanDoSensorEntity(coordinator, cmd))
 
+    # Add BLE Last Button and RSSI Sensors
+    entities.append(CanDoBleLastButtonSensor(coordinator))
+    entities.append(CanDoBleBeaconRssiSensor(coordinator))
+    entities.append(CanDoBleDeviceRssiSensor(coordinator))
+
     async_add_entities(entities)
+
+
+class CanDoBleLastButtonSensor(SensorEntity):
+    """Sensor displaying last Bluetooth remote button or chord pressed."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_name = "Last Bluetooth Button Pressed"
+    _attr_icon = "mdi:gesture-tap-button"
+
+    def __init__(self, coordinator: CanDoDataCoordinator) -> None:
+        """Initialize last button sensor."""
+        self.coordinator = coordinator
+        self._attr_unique_id = f"{coordinator.device_id}_ble_last_button"
+        self._unsub = None
+
+    @property
+    def available(self) -> bool:
+        """Return True so entity stays active."""
+        return True
+
+    @property
+    def device_info(self):
+        """Link to parent CAN Do Bridge device."""
+        from homeassistant.helpers.entity import DeviceInfo
+        from .const import VERSION
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.coordinator.device_id)},
+            name=f"CAN Do Bridge ({self.coordinator.device_id})",
+            manufacturer="CAN Do",
+            model="ESP32 Bridge",
+            sw_version=VERSION,
+        )
+
+    @property
+    def native_value(self) -> str | None:
+        """Return formatted button / combo state."""
+        last = self.coordinator.last_ble_button
+        if not last:
+            return "None"
+        btn = last.get("combo") or last.get("button") or "Unknown"
+        action = last.get("action", "press")
+        return f"{btn} ({action})"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return button details."""
+        last = self.coordinator.last_ble_button or {}
+        return {
+            "button": last.get("button", ""),
+            "combo": last.get("combo", ""),
+            "action": last.get("action", ""),
+            "address": last.get("address", ""),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        """Register listener when added to hass."""
+        await super().async_added_to_hass()
+        self._unsub = self.coordinator.register_ble_button_listener(self.async_write_ha_state)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Unsubscribe listener on remove."""
+        if self._unsub:
+            self._unsub()
+        await super().async_will_remove_from_hass()
+
+
+class CanDoBleBeaconRssiSensor(SensorEntity):
+    """Sensor reporting active BLE beacon signal strength."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_name = "BLE Beacon RSSI"
+    _attr_icon = "mdi:signal-distance-variant"
+    _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
+    _attr_native_unit_of_measurement = "dBm"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: CanDoDataCoordinator) -> None:
+        """Initialize BLE beacon RSSI sensor."""
+        self.coordinator = coordinator
+        self._attr_unique_id = f"{coordinator.device_id}_ble_beacon_rssi"
+        self._unsub = None
+
+    @property
+    def available(self) -> bool:
+        """Return True so entity stays active."""
+        return True
+
+    @property
+    def device_info(self):
+        """Link to parent CAN Do Bridge device."""
+        from homeassistant.helpers.entity import DeviceInfo
+        from .const import VERSION
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.coordinator.device_id)},
+            name=f"CAN Do Bridge ({self.coordinator.device_id})",
+            manufacturer="CAN Do",
+            model="ESP32 Bridge",
+            sw_version=VERSION,
+        )
+
+    @property
+    def native_value(self) -> int | None:
+        """Return RSSI integer value."""
+        last = self.coordinator.last_ble_beacon
+        if not last or "rssi" not in last or last["rssi"] == 0:
+            return None
+        return int(last["rssi"])
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return beacon details."""
+        last = self.coordinator.last_ble_beacon or {}
+        return {
+            "uuid": last.get("uuid", ""),
+            "mac": last.get("mac", ""),
+            "name": last.get("name", ""),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        """Register listener when added to hass."""
+        await super().async_added_to_hass()
+        self._unsub = self.coordinator.register_ble_beacon_listener(self.async_write_ha_state)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Unsubscribe listener on remove."""
+        if self._unsub:
+            self._unsub()
+        await super().async_will_remove_from_hass()
+
+
+class CanDoBleDeviceRssiSensor(SensorEntity):
+    """Sensor reporting active BLE device signal strength."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_name = "BLE Device RSSI"
+    _attr_icon = "mdi:signal-distance-variant"
+    _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
+    _attr_native_unit_of_measurement = "dBm"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: CanDoDataCoordinator) -> None:
+        """Initialize BLE device RSSI sensor."""
+        self.coordinator = coordinator
+        self._attr_unique_id = f"{coordinator.device_id}_ble_device_rssi"
+        self._unsub = None
+
+    @property
+    def available(self) -> bool:
+        """Return True so entity stays active."""
+        return True
+
+    @property
+    def device_info(self):
+        """Link to parent CAN Do Bridge device."""
+        from homeassistant.helpers.entity import DeviceInfo
+        from .const import VERSION
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.coordinator.device_id)},
+            name=f"CAN Do Bridge ({self.coordinator.device_id})",
+            manufacturer="CAN Do",
+            model="ESP32 Bridge",
+            sw_version=VERSION,
+        )
+
+    @property
+    def native_value(self) -> int | None:
+        """Return RSSI integer value."""
+        last = self.coordinator.last_ble_device
+        if not last or "rssi" not in last or last["rssi"] == 0:
+            return None
+        return int(last["rssi"])
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return device details."""
+        last = self.coordinator.last_ble_device or {}
+        return {
+            "address": last.get("address", ""),
+            "name": last.get("name", ""),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        """Register listener when added to hass."""
+        await super().async_added_to_hass()
+        self._unsub = self.coordinator.register_ble_device_listener(self.async_write_ha_state)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Unsubscribe listener on remove."""
+        if self._unsub:
+            self._unsub()
+        await super().async_will_remove_from_hass()
+
 
 
 class CanDoSensorEntity(CanDoEntity, SensorEntity):
