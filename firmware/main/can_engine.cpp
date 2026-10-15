@@ -12,7 +12,6 @@
 #include "mqtt_client.h"
 #include "esp_timer.h"
 #include "track_popup.h"
-#include "call_popup.h"
 #include "hud_nav.h"
 #include "precondition.h"
 #include "board_pins.h"
@@ -136,7 +135,6 @@ void init_can_engine(void) {
     if (!tx_command_queue) {
         tx_command_queue = xQueueCreate(16, sizeof(CanBurstCmd*));
     }
-    call_popup_init();
     hud_nav_init(HUD_PLATFORM_EGMP_CANFD);
 }
 
@@ -476,18 +474,6 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             continue;
         }
 
-        if (step.type == ActionType::CALL_POPUP) {
-            const std::string& txt = !step.popup_text.empty() ? step.popup_text : step.popup_message;
-            if (!txt.empty()) {
-                call_popup_severity_t sev = CALL_POPUP_SEV_INFO;
-                if (step.popup_level == "warning") sev = CALL_POPUP_SEV_WARNING;
-                else if (step.popup_level == "error" || step.popup_level == "critical") sev = CALL_POPUP_SEV_CRITICAL;
-                std::string caller = !step.caller.empty() ? step.caller : "Home Assistant";
-                uint32_t hold = step.hold_ms > 0 ? step.hold_ms : 5000;
-                call_popup_show(caller.c_str(), txt.c_str(), sev, hold);
-            }
-            continue;
-        }
 
         if (step.type == ActionType::PRECONDITION) {
             precondition_execute_action(step.precon_mode.c_str(), step.precon_action.c_str());
@@ -598,10 +584,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             if (fwd_res == FWD_BLOCK) {
                 continue;
             }
-            fwd_res = call_popup_fwd(&msg_to_send, CAN_BUS_0);
-            if (fwd_res == FWD_BLOCK) {
-                continue;
-            }
+
             fwd_res = hud_nav_fwd(&msg_to_send, CAN_BUS_0);
             if (fwd_res == FWD_BLOCK) {
                 continue;
@@ -1126,7 +1109,6 @@ void can_rx_task(void* arg) {
             board_led_can_activity();
             precondition_can_rx_hook(&rx_msg, CAN_BUS_0);
             track_popup_rx(&rx_msg, CAN_BUS_0);
-            call_popup_rx(&rx_msg, CAN_BUS_0);
             hud_nav_rx(&rx_msg, CAN_BUS_0);
             uds_engine_on_can_rx(&rx_msg);
             mood_light_rx(&rx_msg, CAN_BUS_0);
@@ -1711,7 +1693,6 @@ void can_rx_task(void* arg) {
         }
         precondition_tick();
         track_popup_tick();
-        call_popup_tick();
 
         static uint32_t s_last_hud_tick_ms = 0;
         uint32_t now_hud_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);

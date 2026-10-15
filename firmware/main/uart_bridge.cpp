@@ -9,7 +9,6 @@
 #include "precondition.h"
 #include "network_mgr.h"
 #include "track_popup.h"
-#include "call_popup.h"
 #include "api.h"
 #include "esp_timer.h"
 #include <cstring>
@@ -152,30 +151,13 @@ static void handle_incoming_command(const char* json_str) {
         cJSON *lvl_item = cJSON_GetObjectItem(root, "level");
         std::string lvl = (lvl_item && cJSON_IsString(lvl_item)) ? lvl_item->valuestring : "info";
 
-        cJSON *caller_item = cJSON_GetObjectItem(root, "caller");
-        if (!caller_item) caller_item = cJSON_GetObjectItem(root, "title");
-        std::string caller = (caller_item && cJSON_IsString(caller_item)) ? caller_item->valuestring : "";
-
-        cJSON *hold_item = cJSON_GetObjectItem(root, "hold_ms");
-        uint32_t hold_ms = (hold_item && cJSON_IsNumber(hold_item)) ? (uint32_t)hold_item->valueint : 5000;
-
-        bool is_call = (!caller.empty()) || (strcmp(type, "call") == 0 || strcmp(type, "call_popup") == 0 || strcmp(type, "call_alert") == 0);
         bool sent = false;
-
-        if (is_call) {
-            if (caller.empty()) caller = "Home Assistant";
-            call_popup_severity_t sev = CALL_POPUP_SEV_INFO;
-            if (lvl == "warning") sev = CALL_POPUP_SEV_WARNING;
-            else if (lvl == "error" || lvl == "critical") sev = CALL_POPUP_SEV_CRITICAL;
-            sent = call_popup_show(caller.c_str(), msg.c_str(), sev, hold_ms);
+        if (lvl == "warning") {
+            sent = track_popup_show_warning(msg.c_str());
+        } else if (lvl == "error" || lvl == "critical") {
+            sent = track_popup_show_error(msg.c_str());
         } else {
-            if (lvl == "warning") {
-                sent = track_popup_show_warning(msg.c_str());
-            } else if (lvl == "error") {
-                sent = track_popup_show_error(msg.c_str());
-            } else {
-                sent = track_popup_show_info(msg.c_str());
-            }
+            sent = track_popup_show_info(msg.c_str());
         }
         uart_bridge_send_raw(sent ? "{\"type\":\"ack\",\"status\":\"notified\"}" : "{\"type\":\"nack\",\"error\":\"notify_failed\"}");
         cJSON_Delete(root);

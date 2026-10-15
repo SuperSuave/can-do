@@ -170,7 +170,6 @@ When generating code, refactoring, or assisting with this repository, you must a
     │   ├── parser.cpp        # cJSON parser loading compiled catalog structures
     │   ├── can_engine.cpp    # State cache, transition evaluator, and TX queue
     │   ├── isotp_tx.c/.h     # ISO 15765-2 multi-frame transport worker
-    │   ├── call_popup.c/.h   # Instrument cluster call alert modal dialogs
     │   ├── track_popup.c/.h  # Cluster media track info banner display
     │   ├── hud_nav.c/.h      # HUD / Cluster turn-by-turn navigation injector
     │   └── mood_light.c/.h   # DualLight RGB ambient lighting controller

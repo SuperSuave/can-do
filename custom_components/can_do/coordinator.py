@@ -525,19 +525,13 @@ class CanDoDataCoordinator:
         self,
         message: str,
         level: str = "info",
-        caller: str | None = None,
-        popup_type: str | None = None,
         hold_ms: int | None = None,
     ) -> None:
-        """Send cluster notification (track popup or call popup) to ESP32 edge device over MQTT."""
+        """Send cluster notification (OSD track popup) to ESP32 edge device over MQTT."""
         payload_obj: dict[str, Any] = {
             "message": message,
             "level": level,
         }
-        if caller is not None:
-            payload_obj["caller"] = caller
-        if popup_type is not None:
-            payload_obj["type"] = popup_type
         if hold_ms is not None:
             payload_obj["hold_ms"] = hold_ms
         json_payload = json.dumps(payload_obj)

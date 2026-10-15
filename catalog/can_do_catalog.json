@@ -6645,7 +6645,45 @@
           ]
         }
       ],
-      "subcategory": "Transmission & Shifter"
+      "subcategory": "Transmission & Shifter",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x45",
+        "state_byte": "D6",
+        "mask": "0x70"
+      },
+      "options": [
+        {
+          "label": "P",
+          "match": {
+            "D6": "0x00"
+          },
+          "mask": "0x70",
+          "default": true
+        },
+        {
+          "label": "D",
+          "match": {
+            "D6": "0x50"
+          },
+          "mask": "0x70"
+        },
+        {
+          "label": "N",
+          "match": {
+            "D6": "0x60"
+          },
+          "mask": "0x70"
+        },
+        {
+          "label": "R",
+          "match": {
+            "D6": "0x70"
+          },
+          "mask": "0x70"
+        }
+      ]
     },
     {
       "id": "cond_charging",
@@ -7694,127 +7732,6 @@
         "notes": "High precision BMS internal state of charge"
       },
       "subcategory": "BMS & Telemetry"
-    },
-    {
-      "id": "cluster_call_popup_alert",
-      "ha_metadata": {
-        "name": "Cluster Call & Notification Alert Modal",
-        "domain": "notify",
-        "icon": "mdi:phone-alert"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "type": "call_popup",
-      "category": "Cockpit & Controls",
-      "roles": [
-        "action"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Cluster handsfree / telematics incoming call dialog modal (0x52A state D2 0x01 = Ringing/Alert, 0x02 = Active, 0x03 = Dismiss). Delivers dual-line text (Caller ID + Message) via ISO-TP channel 0x6D4/0x6B4 in UTF-16LE."
-      },
-      "network": {
-        "bus": 0,
-        "type": "call_popup",
-        "state_can_id": "0x52A",
-        "action_can_id": "0x6D4",
-        "flow_control_can_id": "0x6B4",
-        "trigger_frame_can_id": "0x52A"
-      },
-      "options": [
-        {
-          "label": "Info Notification (1 Beep)",
-          "level": "info",
-          "caller": "Home Assistant",
-          "popup_message": "Automation Triggered",
-          "default": true
-        },
-        {
-          "label": "Warning Alert (2 Beeps)",
-          "level": "warning",
-          "caller": "Security",
-          "popup_message": "Front Door Left Open"
-        },
-        {
-          "label": "Critical Alert (3 Beeps)",
-          "level": "error",
-          "caller": "Warning",
-          "popup_message": "Charge Cable Unplugged"
-        },
-        {
-          "label": "Garage Door Status",
-          "level": "info",
-          "caller": "Garage",
-          "popup_message": "Garage Door Closed"
-        },
-        {
-          "label": "EV Charging Complete",
-          "level": "info",
-          "caller": "EV Charger",
-          "popup_message": "Target SOC 80% Reached"
-        }
-      ],
-      "subcategory": "Cluster OSD Popups"
-    },
-    {
-      "id": "cluster_call_state",
-      "ha_metadata": {
-        "name": "Cluster Phone Call / Telematics State",
-        "domain": "sensor",
-        "icon": "mdi:phone-in-talk"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Cockpit & Controls",
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x52A"
-      },
-      "roles": [
-        "trigger",
-        "sensor"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Instrument cluster telematics / phone call state (CLU15 / 0x52A Byte D2)."
-      },
-      "options": [
-        {
-          "label": "No Active Call",
-          "match": {
-            "D2": "0x00"
-          },
-          "mask": "0xFF",
-          "default": true
-        },
-        {
-          "label": "Incoming Call / Ringing",
-          "match": {
-            "D2": "0x01"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "Active Connected Call",
-          "match": {
-            "D2": "0x02"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "Call Terminated / Ended",
-          "match": {
-            "D2": "0x03"
-          },
-          "mask": "0xFF"
-        }
-      ],
-      "subcategory": "Cluster OSD Popups"
     },
     {
       "id": "hud_turn_by_turn_maneuver",
@@ -9880,8 +9797,8 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x520",
-        "action_can_id": "0x520",
+        "state_can_id": "0x60C",
+        "action_can_id": "0x60C",
         "base_payload": [
           "0x19",
           "0x00",
@@ -10011,8 +9928,8 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x520",
-        "action_can_id": "0x520",
+        "state_can_id": "0x60C",
+        "action_can_id": "0x60C",
         "base_payload": [
           "0x16",
           "0x00",
@@ -10144,8 +10061,8 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x520",
-        "action_can_id": "0x520",
+        "state_can_id": "0x60C",
+        "action_can_id": "0x60C",
         "base_payload": [
           "0x19",
           "0x00",
@@ -10261,8 +10178,8 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x520",
-        "action_can_id": "0x520",
+        "state_can_id": "0x60C",
+        "action_can_id": "0x60C",
         "byte": "D1",
         "offset": 0,
         "min": 0,
@@ -10370,8 +10287,8 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x520",
-        "action_can_id": "0x520",
+        "state_can_id": "0x60C",
+        "action_can_id": "0x60C",
         "byte": "D3",
         "offset": 10,
         "min": -10,
@@ -10479,8 +10396,8 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x520",
-        "action_can_id": "0x520",
+        "state_can_id": "0x60C",
+        "action_can_id": "0x60C",
         "byte": "D4",
         "offset": 10,
         "min": -10,
@@ -10588,8 +10505,8 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x520",
-        "action_can_id": "0x520",
+        "state_can_id": "0x60C",
+        "action_can_id": "0x60C",
         "byte": "D5",
         "offset": 10,
         "min": -10,
@@ -10697,8 +10614,8 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x520",
-        "action_can_id": "0x520",
+        "state_can_id": "0x60C",
+        "action_can_id": "0x60C",
         "byte": "D6",
         "offset": 10,
         "min": -10,
@@ -10806,8 +10723,8 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x520",
-        "action_can_id": "0x520",
+        "state_can_id": "0x60C",
+        "action_can_id": "0x60C",
         "byte": "D7",
         "offset": 10,
         "min": -10,
@@ -10915,8 +10832,8 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x520",
-        "action_can_id": "0x520",
+        "state_can_id": "0x60C",
+        "action_can_id": "0x60C",
         "base_payload": [
           "0x19",
           "0x00",
@@ -11032,8 +10949,8 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x520",
-        "action_can_id": "0x520",
+        "state_can_id": "0x60C",
+        "action_can_id": "0x60C",
         "base_payload": [
           "0x19",
           "0x00",
@@ -11182,140 +11099,6 @@
         }
       ],
       "subcategory": "Access & Wakeup"
-    },
-    {
-      "id": "hvac_direct_climate_cmd",
-      "ha_metadata": {
-        "name": "Direct Head Unit DATC Remote Climate",
-        "domain": "switch",
-        "icon": "mdi:thermostat"
-      },
-      "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
-      ],
-      "category": "Climate & Comfort",
-      "roles": [
-        "action",
-        "sensor"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Direct Head Unit DATC (Dual Automatic Temperature Control) CAN frame (0x520 / 0x5A0) decoded from HKMC_TAppService DATCManager. Byte 0 enables HVAC (0x01), Byte 1 sets target temp in 0.5 deg C steps (raw = Temp_C * 2, e.g. 68°F=20.0°C=0x28, 70°F=21.0°C=0x2A, 72°F=22.0°C=0x2C, 74°F=23.5°C=0x2F, 76°F=24.5°C=0x31), Byte 2 controls blower & auto mode (0x04), Byte 3 controls air distribution (0x01 vent). The vehicle VCU automatically engages High Voltage contactors and runs the electric compressor / PTC heater when this frame is periodically broadcast alongside 0x4F1 CLU keep-alive."
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x520",
-        "action_can_id": "0x520"
-      },
-      "options": [
-        {
-          "label": "Remote Climate 72°F (22.0°C) Auto",
-          "match": {
-            "D1": "0x01",
-            "D2": "0x2C"
-          },
-          "payload": {
-            "D1": "0x01",
-            "D2": "0x2C",
-            "D3": "0x04",
-            "D4": "0x01",
-            "D5": "0x00",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "default": true
-        },
-        {
-          "label": "Remote Climate 68°F (20.0°C) Auto",
-          "match": {
-            "D1": "0x01",
-            "D2": "0x28"
-          },
-          "payload": {
-            "D1": "0x01",
-            "D2": "0x28",
-            "D3": "0x04",
-            "D4": "0x01",
-            "D5": "0x00",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          }
-        },
-        {
-          "label": "Remote Climate 70°F (21.0°C) Auto",
-          "match": {
-            "D1": "0x01",
-            "D2": "0x2A"
-          },
-          "payload": {
-            "D1": "0x01",
-            "D2": "0x2A",
-            "D3": "0x04",
-            "D4": "0x01",
-            "D5": "0x00",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          }
-        },
-        {
-          "label": "Remote Climate 74°F (23.5°C) Auto",
-          "match": {
-            "D1": "0x01",
-            "D2": "0x2F"
-          },
-          "payload": {
-            "D1": "0x01",
-            "D2": "0x2F",
-            "D3": "0x04",
-            "D4": "0x01",
-            "D5": "0x00",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          }
-        },
-        {
-          "label": "Remote Climate 76°F (24.5°C) Auto",
-          "match": {
-            "D1": "0x01",
-            "D2": "0x31"
-          },
-          "payload": {
-            "D1": "0x01",
-            "D2": "0x31",
-            "D3": "0x04",
-            "D4": "0x01",
-            "D5": "0x00",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          }
-        },
-        {
-          "label": "Remote Climate Off",
-          "match": {
-            "D1": "0x00"
-          },
-          "payload": {
-            "D1": "0x00",
-            "D2": "0x00",
-            "D3": "0x00",
-            "D4": "0x00",
-            "D5": "0x00",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          }
-        }
-      ],
-      "subcategory": "Remote Climate Controls"
     },
     {
       "id": "tpms_front_tires",

@@ -8,7 +8,6 @@
 #include "gvret_server.h"
 #include "mqtt_mgr.h"
 #include "track_popup.h"
-#include "call_popup.h"
 #include "hud_nav.h"
 #include "vbat_sensor.h"
 #include "uds_engine.h"
@@ -1798,23 +1797,13 @@ static esp_err_t api_notify_handler(httpd_req_t *req) {
         return ESP_FAIL;
     }
 
-    bool is_call = (!caller.empty()) || (type == "call" || type == "call_popup" || type == "call_alert");
     bool sent = false;
-
-    if (is_call) {
-        if (caller.empty()) caller = "Home Assistant";
-        call_popup_severity_t sev = CALL_POPUP_SEV_INFO;
-        if (lvl == "warning") sev = CALL_POPUP_SEV_WARNING;
-        else if (lvl == "error" || lvl == "critical") sev = CALL_POPUP_SEV_CRITICAL;
-        sent = call_popup_show(caller.c_str(), msg.c_str(), sev, hold_ms);
+    if (lvl == "warning") {
+        sent = track_popup_show_warning(msg.c_str());
+    } else if (lvl == "error" || lvl == "critical") {
+        sent = track_popup_show_error(msg.c_str());
     } else {
-        if (lvl == "warning") {
-            sent = track_popup_show_warning(msg.c_str());
-        } else if (lvl == "error") {
-            sent = track_popup_show_error(msg.c_str());
-        } else {
-            sent = track_popup_show_info(msg.c_str());
-        }
+        sent = track_popup_show_info(msg.c_str());
     }
 
     httpd_resp_set_type(req, "application/json");

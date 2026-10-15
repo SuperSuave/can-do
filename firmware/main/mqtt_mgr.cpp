@@ -2,7 +2,6 @@
 #include "parser.h"
 #include "can_engine.h"
 #include "track_popup.h"
-#include "call_popup.h"
 #include "hud_nav.h"
 #include "cJSON.h"
 #include "esp_log.h"
@@ -42,13 +41,13 @@ static void mqtt_delayed_restart_task(void *arg) {
 
 // Default monitored CAN IDs (Gen5W / E-GMP vehicle telemetry)
 static std::unordered_set<uint32_t> s_monitored_ids = {
-    0x038, 0x0A2, 0x130, 0x151, 0x152, 0x1AC, 0x1CF, 0x1F9,
+    0x038, 0x045, 0x070, 0x0A2, 0x130, 0x151, 0x152, 0x1AC, 0x1CF, 0x1F9,
     0x200, 0x226, 0x227, 0x29C, 0x2AD, 0x2AF, 0x2C0, 0x2FC,
     0x30E, 0x31B, 0x380, 0x384, 0x3AA, 0x3C1, 0x410, 0x411, 0x412, 0x414,
     0x418, 0x420, 0x435, 0x438, 0x442, 0x448, 0x453, 0x465, 0x474,
     0x475, 0x476, 0x478, 0x47F, 0x496, 0x49C, 0x4A2, 0x4C5, 0x4CE, 0x4ED,
     0x540, 0x541, 0x559, 0x578, 0x584, 0x594, 0x595, 0x597, 0x5CC,
-    0x5D0, 0x5F5, 0x60E, 0x651, 0x652, 0x7EC
+    0x5D0, 0x5F5, 0x60C, 0x60E, 0x651, 0x652, 0x7EC
 };
 static std::mutex s_monitored_mutex;
 
@@ -389,9 +388,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 ESP_LOGI(TAG, "Received cluster notify request: %s", payload.c_str());
                 std::string msg = payload;
                 std::string level = "info";
-                std::string caller = "Home Assistant";
-                bool is_call = false;
-                uint32_t hold_ms = 5000;
 
                 cJSON* root = cJSON_Parse(payload.c_str());
                 if (root) {
@@ -403,35 +399,15 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     cJSON* l = cJSON_GetObjectItem(root, "level");
                     if (l && cJSON_IsString(l)) level = l->valuestring;
 
-                    cJSON* t = cJSON_GetObjectItem(root, "type");
-                    if (t && cJSON_IsString(t) && (strcmp(t->valuestring, "call_alert") == 0 || strcmp(t->valuestring, "call") == 0 || strcmp(t->valuestring, "call_popup") == 0)) {
-                        is_call = true;
-                    }
-                    cJSON* c = cJSON_GetObjectItem(root, "caller");
-                    if (!c && is_call) c = cJSON_GetObjectItem(root, "title");
-                    if (c && cJSON_IsString(c)) {
-                        caller = c->valuestring;
-                        is_call = true;
-                    }
-                    cJSON* h = cJSON_GetObjectItem(root, "hold_ms");
-                    if (h && cJSON_IsNumber(h)) hold_ms = (uint32_t)h->valueint;
-
                     cJSON_Delete(root);
                 }
 
-                if (is_call) {
-                    call_popup_severity_t sev = CALL_POPUP_SEV_INFO;
-                    if (level == "warning") sev = CALL_POPUP_SEV_WARNING;
-                    else if (level == "error" || level == "critical") sev = CALL_POPUP_SEV_CRITICAL;
-                    call_popup_show(caller.c_str(), msg.c_str(), sev, hold_ms);
+                if (level == "warning") {
+                    track_popup_show_warning(msg.c_str());
+                } else if (level == "error" || level == "critical") {
+                    track_popup_show_error(msg.c_str());
                 } else {
-                    if (level == "warning") {
-                        track_popup_show_warning(msg.c_str());
-                    } else if (level == "error") {
-                        track_popup_show_error(msg.c_str());
-                    } else {
-                        track_popup_show_info(msg.c_str());
-                    }
+                    track_popup_show_info(msg.c_str());
                 }
             } else if (is_nav_set) {
                 ESP_LOGI(TAG, "Received HUD nav update: %s", payload.c_str());
@@ -517,17 +493,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     cJSON_Delete(root);
 
                     if (!steps.empty()) {
-                        if (can_id == 0x520) {
-                            if (steps[0].payload[0] == 0x01) {
-                                bool ok = queue_entity_command("remote_climate", "Start");
-                                if (!ok) queue_action_steps(can_id, delay_ms, steps);
-                            } else {
-                                bool ok = queue_entity_command("remote_climate", "off");
-                                if (!ok) queue_action_steps(can_id, delay_ms, steps);
-                            }
-                        } else {
-                            queue_action_steps(can_id, delay_ms, steps);
-                        }
+                        queue_action_steps(can_id, delay_ms, steps);
                     }
                 }
             } else if (is_sub_ids) {

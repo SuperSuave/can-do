@@ -72,31 +72,25 @@ The Central Gateway broadcasts open/closed window status on **CAN ID `0x559` (`C
 
 ---
 
-## 3. Instrument Cluster Call & Alert Modal Popups
+## 3. Instrument Cluster OSD Track & Alert Banner Popups
 
-The instrument cluster supports high-priority alert dialogs via the handsfree / telematics channel. This enables Home Assistant or CAN Do to pop up notification modals (with audio beeps) directly in the driver's display.
+The instrument cluster supports high-priority alert and track banner dialogs. This enables Home Assistant or CAN Do to pop up notification banners directly in the driver's display.
 
-### 3.1 Architecture & CAN Protocol
+### 3.1 Verified OSD Protocol (`cluster_track_popup_message`)
 ```
-[CAN Do / HA] ───(Trigger: 0x52A / 0x4CE)───► [Instrument Cluster] (Modal Opens)
-              ───(ISO-TP: 0x6D4 / 0x6B4)────► [Instrument Cluster] (UTF-16LE Text Rendered)
-              ───(Hold Duration: 5000ms)────► [Driver View]
-              ───(Dismiss: 0x10, 0x03)─────► [Instrument Cluster] (Modal Closed Cleanly)
+[CAN Do / HA] ───(Trigger: 0x4CE)─────────► [Instrument Cluster] (OSD Banner Injected)
+              ───(ISO-TP Text: 0x6E0)─────► [Instrument Cluster] (UTF-16LE Text Rendered)
 ```
 
 1. **Trigger Phase**:
-   * Broadcast 3 pulses of `{ 0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }` spaced 10ms apart on **CAN ID `0x52A`** (telematics incoming alert) and **`0x4CE`** (media/bluetooth fallback).
-   * 5ms settle delay before text transmission.
+   * Broadcast state on **CAN ID `0x4CE`** (`HU_DATC_MediaSource` / AVN state).
 2. **Text Payload Transport (ISO 15765-2)**:
-   * **TX CAN ID**: `0x6D4`
-   * **Flow Control Response ID**: `0x6B4`
-   * **Encoding**: UTF-16LE without BOM.
-   * **Format**: `Caller/Title
-Message Body`. The newline (`0x000A`) creates the visual split between the header banner and the message body on the cluster.
-3. **Clean Dismissal**:
-   * Send `{ 0x10, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }` on `0x52A` and `{ 0x10, 0x00, ... }` on `0x4CE` to dismiss the modal cleanly.
-4. **Bridge Filtering**:
-   * While the modal is active, the bridge filter suppresses factory head unit frames on `0x52A` and `0x6D4` towards the cluster, and blocks flow control `0x6B4` towards the head unit.
+   * **TX CAN ID**: `0x6E0` (Media / OSD Track Info Popup)
+   * **Encoding**: UTF-16LE.
+   * Delivers title and notification strings directly onto the cluster LCD.
+
+> [!NOTE]
+> Frame **`0x52A` (`CLU15`)** is an output telemetry broadcast from the instrument cluster carrying vehicle speed and gear telemetry; the cluster ignores incoming injection frames on `0x52A`. Verified popups rely exclusively on `0x4CE` + `0x6E0`.
 
 ---
 
