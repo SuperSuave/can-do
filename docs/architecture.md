@@ -152,7 +152,11 @@ When generating code, refactoring, or assisting with this repository, you must a
 /CAN-Do
 │
 ├── /catalog                  
-│   └── can_do_catalog.js     # PRIMARY SOURCE OF TRUTH (JS/TS data structure)
+│   └── can_do_catalog.json   # PRIMARY SOURCE OF TRUTH (Canonical JSON catalog)
+│
+├── /docs
+│   ├── architecture.md       # Core axioms, execution engine, and firmware design
+│   └── egmp_can_reference.md # Complete E-GMP CAN ID, payload, bitmask & ISO-TP reference
 │
 ├── /frontend                 # Material Design 3 (MD3) Web Dashboard
 │   ├── index.html
@@ -164,7 +168,12 @@ When generating code, refactoring, or assisting with this repository, you must a
     │   ├── main.cpp          # FreeRTOS tasks, OS hooks, and app entry
     │   ├── api.cpp           # REST endpoints (/api/upload, /api/states, /api/ota)
     │   ├── parser.cpp        # cJSON parser loading compiled catalog structures
-    │   └── can_engine.cpp    # State cache, transition evaluator, and TX queue
+    │   ├── can_engine.cpp    # State cache, transition evaluator, and TX queue
+    │   ├── isotp_tx.c/.h     # ISO 15765-2 multi-frame transport worker
+    │   ├── call_popup.c/.h   # Instrument cluster call alert modal dialogs
+    │   ├── track_popup.c/.h  # Cluster media track info banner display
+    │   ├── hud_nav.c/.h      # HUD / Cluster turn-by-turn navigation injector
+    │   └── mood_light.c/.h   # DualLight RGB ambient lighting controller
     └── partitions.csv        # Custom 4MB layout (OTA A/B + LittleFS storage)
 ⚙️ Execution & Data Flow
 1. The State Cache (std::unordered_map)
