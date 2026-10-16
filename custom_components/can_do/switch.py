@@ -95,6 +95,8 @@ class CanDoSwitchEntity(CanDoEntity, SwitchEntity):
                     base_payload.append(val & 0xFF)
 
         steps = build_action_steps(self.command, target_opt, base_payload)
+        if "remote_climate" in self.entity_id_str:
+            await self.coordinator.async_send_remote_climate(action="start")
         if steps:
             await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
 
@@ -129,6 +131,8 @@ class CanDoSwitchEntity(CanDoEntity, SwitchEntity):
                     base_payload.append(val & 0xFF)
 
         steps = build_action_steps(self.command, target_opt, base_payload)
+        if "remote_climate" in self.entity_id_str:
+            await self.coordinator.async_send_remote_climate(action="stop")
         if steps:
             await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
 

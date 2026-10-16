@@ -6,36 +6,80 @@ dist/
 node/
 *.zip
 
-# ESP-IDF / C++
+# ESP-IDF / PlatformIO / Embedded Build Artifacts
+build/
 firmware/build/
 firmware/sdkconfig
 firmware/sdkconfig.old
 firmware/dependencies.lock
 firmware/managed_components/
+.pio/
+atom-ui-bridge/.pio/
+release_assets/
 
-# Environment & local configs
+# Compiled Binaries & Object Files
+*.bin
+*.elf
+*.map
+*.hex
+*.o
+*.obj
+*.a
+*.lib
+
+# Local Scripts, Bridges & Scratch Files
+savvylens_bridge.py
+temp.js
+bulk_ingest_telemetry.py
+
+# CAN Bus Captures, Dumps & Traces
+*.trc
+*.asc
+*.candump*
+*.blf
+*.pcap
+*.pcapng
+captures/
+traces/
+recordings/
+
+# Environment & Local Configs
 .env
 .env.local
 *.local
 firmware/data/mqtt.json
 firmware/data/networks.json
 
-# Python
+# Python Virtual Environments & Caches
 __pycache__/
 *.py[cod]
 *$py.class
-bulk_ingest_telemetry.py
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Scratch / OTA artifacts
+# Scratch / OTA Artifacts
 firmware_ota*/
 
-# System & IDE artifacts
+# System & IDE Artifacts
 .DS_Store
 Thumbs.db
+ehthumbs.db
+desktop.ini
 .vscode/
 .idea/
 *.swp
 *.bak
+*.tmp
+*.temp
+
+# Cloud Sync Caches
+*tmp.driveupload*
+*tmp.drivedownload*
 
 # Derived/cached catalog copies (catalog/can_do_catalog.json is the single source of truth)
 custom_components/can_do/can_do_catalog.json
@@ -45,8 +89,3 @@ atom-ui-bridge/data/can_do_catalog.json
 
 # Reference DBC files
 *.dbc
-
-# tmporary files
-*tmp.driveupload
-backup_*.bin
-firmware/backup_storage.bin

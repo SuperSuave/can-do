@@ -28,6 +28,7 @@ class CanDoEntity(Entity):
 
         net = command.get("network", {})
         self.state_can_id: str | None = net.get("state_can_id")
+        self.action_can_id: str | None = net.get("action_can_id")
         self._unsub_listeners: list[Callable[[], None]] = []
         self._last_state_snapshot: Any = object()
 

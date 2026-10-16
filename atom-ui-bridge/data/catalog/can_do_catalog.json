@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.10.6-b004",
+  "can_do_version": "2026.10.6-b005",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -432,40 +432,6 @@
         "camera_360",
         "sunroof",
         "asd",
-        "preconditioning",
-        "v2l"
-      ]
-    },
-    {
-      "id": "all_gen2",
-      "name": "All Gen2 EV Models (Kona EV / Niro EV Gen1)",
-      "make": "Universal",
-      "model": "Gen 2 EV Models",
-      "trim": "All Trims",
-      "region": "universal",
-      "family": "all_gen2",
-      "features": [
-        "heated_seats",
-        "ventilated_seats",
-        "heated_wheel",
-        "power_tailgate",
-        "preconditioning"
-      ]
-    },
-    {
-      "id": "all_gen3",
-      "name": "All Gen3 EV Models (Niro EV Gen2 SG2 / Kona EV Gen2 SX2)",
-      "make": "Universal",
-      "model": "Gen 3 EV Models",
-      "trim": "All Trims",
-      "region": "universal",
-      "family": "all_gen3",
-      "features": [
-        "heated_seats",
-        "ventilated_seats",
-        "heated_wheel",
-        "power_tailgate",
-        "camera_360",
         "preconditioning",
         "v2l"
       ]
@@ -1645,183 +1611,6 @@
         }
       ],
       "subcategory": "Audio & Media"
-    },
-    {
-      "id": "audio_speaker_balance",
-      "ha_metadata": {
-        "name": "Audio Speaker Balance",
-        "domain": "number",
-        "icon": "mdi:surround-sound"
-      },
-      "type": "linear_scale",
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Cockpit & Controls",
-      "roles": [
-        "trigger",
-        "condition",
-        "state"
-      ],
-      "contributor": {
-        "name": "Electroniq Buttons Community",
-        "github": "",
-        "notes": "Infotainment speaker Left/Right balance on CAN ID 0x60E Byte D2 (offset 10: Center 0x0A, Left -9 to -1, Right +1 to +10)"
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x60E",
-        "byte": "D2",
-        "offset": 10,
-        "min": -9,
-        "max": 10,
-        "step": 1
-      },
-      "options": [
-        {
-          "label": "Center (0)",
-          "match": {
-            "D2": "0x0A"
-          },
-          "mask": "0xFF",
-          "default": true
-        },
-        {
-          "label": "Driver Side / Left (< 0)",
-          "evaluate": {
-            "byte": "D2",
-            "operator": "less_than",
-            "value": "0x0A"
-          }
-        },
-        {
-          "label": "Passenger Side / Right (> 0)",
-          "evaluate": {
-            "byte": "D2",
-            "operator": "greater_than",
-            "value": "0x0A"
-          }
-        },
-        {
-          "label": "Full Left (-9)",
-          "match": {
-            "D2": "0x01"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "Full Right (+10)",
-          "match": {
-            "D2": "0x14"
-          },
-          "mask": "0xFF"
-        }
-      ],
-      "subcategory": "Audio & Media"
-    },
-    {
-      "id": "audio_speaker_fade",
-      "ha_metadata": {
-        "name": "Audio Speaker Fade",
-        "domain": "number",
-        "icon": "mdi:speaker"
-      },
-      "type": "linear_scale",
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Cockpit & Controls",
-      "roles": [
-        "trigger",
-        "condition",
-        "state"
-      ],
-      "contributor": {
-        "name": "Electroniq Buttons Community",
-        "github": "",
-        "notes": "Infotainment speaker Front/Rear fade on CAN ID 0x60E Byte D3 (offset 10: Center 0x0A, Rear -9 to -1, Front +1 to +10)"
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x60E",
-        "byte": "D3",
-        "offset": 10,
-        "min": -9,
-        "max": 10,
-        "step": 1
-      },
-      "options": [
-        {
-          "label": "Center (0)",
-          "match": {
-            "D3": "0x0A"
-          },
-          "mask": "0xFF",
-          "default": true
-        },
-        {
-          "label": "Rear Seats Focus (< 0)",
-          "evaluate": {
-            "byte": "D3",
-            "operator": "less_than",
-            "value": "0x0A"
-          }
-        },
-        {
-          "label": "Front Seats Focus (> 0)",
-          "evaluate": {
-            "byte": "D3",
-            "operator": "greater_than",
-            "value": "0x0A"
-          }
-        },
-        {
-          "label": "Full Rear (-9)",
-          "match": {
-            "D3": "0x01"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "Full Front (+10)",
-          "match": {
-            "D3": "0x14"
-          },
-          "mask": "0xFF"
-        }
-      ],
-      "subcategory": "Audio & Media"
-    },
-    {
-      "id": "heated_wheel_btn",
-      "ha_metadata": {
-        "name": "Heated Steering Wheel Button",
-        "domain": "sensor",
-        "icon": "mdi:steering-wheel"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "requires_feature": "heated_wheel",
-      "category": "Climate & Comfort",
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x418"
-      },
-      "match": {
-        "D3": "0x00"
-      },
-      "roles": [
-        "trigger"
-      ],
-      "contributor": {
-        "name": "Unknown",
-        "github": ""
-      },
-      "subcategory": "Steering Wheel Heat"
     },
     {
       "id": "climate_rear_defog",
@@ -5560,58 +5349,6 @@
       "subcategory": "Preconditioning"
     },
     {
-      "id": "cluster_telemetry_popup",
-      "ha_metadata": {
-        "name": "Cluster Telemetry Toast",
-        "domain": "notify",
-        "icon": "mdi:message-badge"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "type": "popup",
-      "category": "Cockpit & Controls",
-      "roles": [
-        "action"
-      ],
-      "contributor": {
-        "name": "Electroniq Buttons Community",
-        "github": "",
-        "notes": "Consolidated cluster popup formats"
-      },
-      "options": [
-        {
-          "label": "Live Batt Temp & Voltage",
-          "popup_message": "Batt: {battery_temp}C ({voltage}V)",
-          "popup_message_imperial": "Batt: {battery_temp_f}F ({voltage}V)",
-          "default": true
-        },
-        {
-          "label": "Min / Max Batt Temp Range",
-          "popup_message": "Batt: {temp_min}C to {temp_max}C",
-          "popup_message_imperial": "Batt: {temp_min}F to {temp_max}F"
-        },
-        {
-          "label": "Preconditioning Status & Temp",
-          "popup_message": "Precon: {status} ({battery_temp}C)",
-          "popup_message_imperial": "Precon: {status} ({battery_temp_f}F)"
-        },
-        {
-          "label": "Charge Port Opened Toast",
-          "popup_message": "CHARGE PORT OPEN"
-        },
-        {
-          "label": "Sport Mode Active Toast",
-          "popup_message": "SPORT MODE ACTIVE"
-        }
-      ],
-      "network": {
-        "bus": 0,
-        "type": "popup"
-      },
-      "subcategory": "Cluster OSD Popups"
-    },
-    {
       "id": "cluster_track_popup_message",
       "ha_metadata": {
         "name": "Cluster Track-Selection Popup Notification",
@@ -6360,59 +6097,6 @@
       "subcategory": "Access & Wakeup"
     },
     {
-      "id": "home_assistant_webhook_event",
-      "ha_metadata": {
-        "name": "Home Assistant Webhook Event",
-        "domain": "button",
-        "icon": "mdi:car-info"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "type": "webhook",
-      "webhook_url": "http://homeassistant.local:8123/api/webhook/wican_event",
-      "category": "Bridge & Automations",
-      "roles": [
-        "action"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "webhook"
-      },
-      "contributor": {
-        "name": "Unknown",
-        "github": ""
-      },
-      "subcategory": "Cloud & Webhooks"
-    },
-    {
-      "id": "mqtt_json_event_alert",
-      "ha_metadata": {
-        "name": "MQTT JSON Event Alert",
-        "domain": "button",
-        "icon": "mdi:car-info"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "type": "mqtt",
-      "mqtt_topic": "wican/event/alert",
-      "mqtt_payload": "{\"event\": \"triggered\", \"status\": \"active\"}",
-      "category": "Bridge & Automations",
-      "roles": [
-        "action"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "mqtt"
-      },
-      "contributor": {
-        "name": "Unknown",
-        "github": ""
-      },
-      "subcategory": "Cloud & Webhooks"
-    },
-    {
       "id": "ambient_mood_lighting",
       "ha_metadata": {
         "name": "Ambient Mood Lighting",
@@ -6946,70 +6630,6 @@
       "subcategory": "12V Aux Battery"
     },
     {
-      "id": "wheel_speeds",
-      "ha_metadata": {
-        "name": "Wheel Speeds (4 Wheels)",
-        "domain": "sensor",
-        "icon": "mdi:car-speed-limiter"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Vehicle State & Telematics",
-      "subcategory": "Driving Dynamics",
-      "roles": [
-        "trigger",
-        "condition"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x0A2"
-      },
-      "notes": "Decoded from E-GMP WHEEL_SPEEDS frame 162 (0x0A2). Four 16-bit Little Endian (Intel) unsigned wheel speeds (factor 0.03125 kph, 0-2047.96 kph): Wheel 1 (bits 0-15), Wheel 2 (bits 16-31), Wheel 3 (bits 32-47), Wheel 4 (bits 48-63).",
-      "contributor": {
-        "name": "Tichael",
-        "github": "tichael",
-        "notes": "E-GMP wheel speed telemetry sensors"
-      },
-      "options": [
-        {
-          "label": "All Wheels Stopped (0 kph)",
-          "match": {
-            "D1": "0x00",
-            "D2": "0x00",
-            "D3": "0x00",
-            "D4": "0x00"
-          },
-          "default": true
-        },
-        {
-          "label": "Vehicle Moving (> 5 kph)",
-          "evaluate": {
-            "byte": "D1",
-            "operator": "greater_than",
-            "value": "0xA0"
-          }
-        },
-        {
-          "label": "City Cruising (> 40 kph)",
-          "evaluate": {
-            "byte": "D2",
-            "operator": "greater_than",
-            "value": "0x05"
-          }
-        },
-        {
-          "label": "Highway Speed (> 100 kph)",
-          "evaluate": {
-            "byte": "D2",
-            "operator": "greater_than",
-            "value": "0x0C"
-          }
-        }
-      ]
-    },
-    {
       "id": "cluster_vehicle_speed",
       "ha_metadata": {
         "name": "Cluster Vehicle Speed",
@@ -7122,7 +6742,7 @@
       "id": "climate_airflow_direction",
       "ha_metadata": {
         "name": "Climate Airflow Direction",
-        "domain": "select",
+        "domain": "sensor",
         "icon": "mdi:air-conditioner"
       },
       "tags": [
@@ -7185,55 +6805,10 @@
       ]
     },
     {
-      "id": "cluster_distance_unit",
-      "ha_metadata": {
-        "name": "Cluster Distance Unit",
-        "domain": "sensor",
-        "icon": "mdi:map-marker-distance"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Cockpit & Controls",
-      "subcategory": "Instrument Cluster",
-      "roles": [
-        "trigger",
-        "condition"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x4D8"
-      },
-      "notes": "Decoded from CLUSTER_INFO frame 1240 (0x4D8) bit 0 (0: Kilometers, 1: Miles).",
-      "contributor": {
-        "name": "opendbc",
-        "github": "commaai/opendbc",
-        "notes": "Decoded from CLUSTER_INFO 0x4D8 bit 0"
-      },
-      "options": [
-        {
-          "label": "Miles (mi)",
-          "match": {
-            "D1": "0x01"
-          },
-          "mask": "0x01",
-          "default": true
-        },
-        {
-          "label": "Kilometers (km)",
-          "match": {
-            "D1": "0x00"
-          },
-          "mask": "0x01"
-        }
-      ]
-    },
-    {
       "id": "climate_fan_speed_level",
       "ha_metadata": {
         "name": "Climate Fan Speed Level",
-        "domain": "select",
+        "domain": "sensor",
         "icon": "mdi:fan"
       },
       "type": "linear_scale",
@@ -7327,61 +6902,6 @@
             "D4": "0x09"
           },
           "mask": "0x0F"
-        }
-      ]
-    },
-    {
-      "id": "climate_rear_cabin_temp",
-      "ha_metadata": {
-        "name": "Rear Cabin Target Temperature",
-        "domain": "climate",
-        "icon": "mdi:thermometer"
-      },
-      "tags": [
-        "kia_ev9"
-      ],
-      "category": "Climate & Comfort",
-      "subcategory": "HVAC Controls",
-      "roles": [
-        "trigger",
-        "condition"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x380"
-      },
-      "notes": "Decoded from E-GMP CLIMATE_TEMPERATURE frame 896 (0x380) Rear_Temp_1_Raw (Start Bit 40, Length 8, Factor 0.5, Offset 14 C, Byte D6) and Rear_Temp_2_Raw (Start Bit 48, Length 8, Factor 0.5, Offset 14 C, Byte D7).",
-      "contributor": {
-        "name": "Tichael",
-        "github": "tichael",
-        "notes": "Rear cabin seat row climate setpoints"
-      },
-      "options": [
-        {
-          "label": "Rear Climate Off",
-          "match": {
-            "D6": "0x00"
-          },
-          "default": true
-        },
-        {
-          "label": "Rear Temp 20.0°C / 68°F",
-          "match": {
-            "D6": "0x0C"
-          }
-        },
-        {
-          "label": "Rear Temp 21.0°C / 70°F",
-          "match": {
-            "D6": "0x0E"
-          }
-        },
-        {
-          "label": "Rear Temp 22.0°C / 72°F",
-          "match": {
-            "D6": "0x10"
-          }
         }
       ]
     },
@@ -7569,33 +7089,6 @@
           ]
         }
       ],
-      "subcategory": "Limits & V2L"
-    },
-    {
-      "id": "v2l_minimum_charge_state",
-      "ha_metadata": {
-        "name": "V2L Minimum Charge Limit",
-        "domain": "sensor",
-        "icon": "mdi:power-plug-battery"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x151",
-        "unit": "%"
-      },
-      "category": "High Voltage & Charging",
-      "roles": [
-        "condition"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "V2L minimum charge threshold state"
-      },
       "subcategory": "Limits & V2L"
     },
     {
@@ -7908,51 +7401,6 @@
       "subcategory": "Head-Up Display & Navigation"
     },
     {
-      "id": "hud_turn_by_turn_gen2",
-      "ha_metadata": {
-        "name": "HUD Turn-by-Turn Navigation (Gen 2 C-CAN)",
-        "domain": "sensor",
-        "icon": "mdi:navigation-variant-outline"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Cockpit & Controls",
-      "roles": [
-        "action",
-        "sensor"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Gen 2 C-CAN HUD11 (0x562 / 1378) Turn-by-turn guidance, distance bars, and speed camera alerts for Kona EV, Niro EV, and Ioniq EV."
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x562",
-        "action_can_id": "0x562"
-      },
-      "options": [
-        {
-          "label": "Guidance Active",
-          "match": {
-            "D1": "0x01"
-          },
-          "mask": "0x0F",
-          "default": true
-        },
-        {
-          "label": "No Active Guidance",
-          "match": {
-            "D1": "0x00"
-          },
-          "mask": "0x0F"
-        }
-      ],
-      "subcategory": "Head-Up Display & Navigation"
-    },
-    {
       "id": "camera_speed_limit_sign",
       "ha_metadata": {
         "name": "Camera & Navigation Speed Limit Display",
@@ -8108,14 +7556,20 @@
             "D1": "0x10"
           },
           "mask": "0x10",
-          "default": true
+          "default": true,
+          "payload": {
+            "D1": "0x10"
+          }
         },
         {
           "label": "Remote Climate Off",
           "match": {
             "D1": "0x00"
           },
-          "mask": "0x10"
+          "mask": "0x10",
+          "payload": {
+            "D1": "0x00"
+          }
         }
       ],
       "subcategory": "Remote Climate Controls"
@@ -8365,9 +7819,7 @@
         "icon": "mdi:lock-check"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "High Voltage & Charging",
       "subcategory": "Charging Status",
@@ -8401,21 +7853,6 @@
             "type": "can_rx",
             "state_can_id": "0x30C",
             "action_can_id": "0x30C"
-          }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen3",
-            "kia_niro_ev",
-            "hyundai_kona_ev",
-            "kia_soul_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x578",
-            "action_can_id": "0x578"
           }
         }
       ],
@@ -8741,9 +8178,7 @@
         "icon": "mdi:calendar-clock"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "High Voltage & Charging",
       "subcategory": "Limits & V2L",
@@ -8776,21 +8211,6 @@
             "type": "can_rx",
             "state_can_id": "0x321",
             "action_can_id": "0x321"
-          }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen3",
-            "kia_niro_ev",
-            "hyundai_kona_ev",
-            "kia_soul_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x5D0",
-            "action_can_id": "0x5D0"
           }
         }
       ],
@@ -9039,96 +8459,6 @@
             "D1": "0x07"
           },
           "mask": "0xFE"
-        }
-      ]
-    },
-    {
-      "id": "climate_touchscreen_driver_cmd",
-      "ha_metadata": {
-        "name": "Touchscreen Driver Climate Controls",
-        "domain": "climate",
-        "icon": "mdi:thermostat-box-auto"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Climate & Comfort",
-      "subcategory": "Zone Settings",
-      "roles": [
-        "action",
-        "sensor"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Direct AVN touchscreen driver climate command frame 0x5CB (DATC_HU_PE_01) for target driver temperature, Auto mode trigger, system power toggle, and air intake vent selection."
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x5CB",
-        "action_can_id": "0x5CB"
-      },
-      "options": [
-        {
-          "label": "Auto Climate On",
-          "match": {
-            "D1": "0x01"
-          },
-          "mask": "0x0F",
-          "default": true
-        },
-        {
-          "label": "Climate Off",
-          "match": {
-            "D1": "0x00"
-          },
-          "mask": "0x0F"
-        }
-      ]
-    },
-    {
-      "id": "climate_touchscreen_passenger_cmd",
-      "ha_metadata": {
-        "name": "Touchscreen Passenger & Seat Climate Controls",
-        "domain": "climate",
-        "icon": "mdi:car-seat-heater"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Climate & Comfort",
-      "subcategory": "Seats & Steering Wheel",
-      "roles": [
-        "action",
-        "sensor"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Direct AVN touchscreen passenger/rear climate command frame 0x5CC (DATC_HU_PE_02) for passenger temperature, rear climate child lock, rear defrost/mirror heater trigger, and seat heating/ventilation."
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x5CC",
-        "action_can_id": "0x5CC"
-      },
-      "options": [
-        {
-          "label": "Rear Defrost On",
-          "match": {
-            "D3": "0x01"
-          },
-          "mask": "0x0F",
-          "default": true
-        },
-        {
-          "label": "Rear Defrost Off",
-          "match": {
-            "D3": "0x00"
-          },
-          "mask": "0x0F"
         }
       ]
     },
@@ -9404,9 +8734,7 @@
         "icon": "mdi:car-back"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Doors, Access & Security",
       "subcategory": "Trunk & Frunk",
@@ -9438,21 +8766,6 @@
             "bus": 0,
             "type": "can_rx",
             "state_can_id": "0x3A6",
-            "action_can_id": "0x588"
-          }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen3",
-            "kia_niro_ev",
-            "hyundai_kona_ev",
-            "kia_soul_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x588",
             "action_can_id": "0x588"
           }
         }
@@ -9532,65 +8845,6 @@
             "D3": "0x05"
           },
           "mask": "0xFF"
-        }
-      ]
-    },
-    {
-      "id": "shift_by_wire_selector",
-      "ha_metadata": {
-        "name": "Electronic Shift-by-Wire Gear Selector",
-        "domain": "sensor",
-        "icon": "mdi:car-shift-pattern"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Vehicle State & Telematics",
-      "subcategory": "Transmission & Shifter",
-      "roles": [
-        "sensor",
-        "condition",
-        "trigger"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Electronic gear selector dial/stalk command frame 0x10C (SCU1): target gear selection request (Park, Reverse, Neutral, Drive) and electronic park pawl lock/unlock."
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x10C"
-      },
-      "options": [
-        {
-          "label": "Park (P)",
-          "match": {
-            "D1": "0x00"
-          },
-          "mask": "0x07",
-          "default": true
-        },
-        {
-          "label": "Drive (D)",
-          "match": {
-            "D1": "0x05"
-          },
-          "mask": "0x07"
-        },
-        {
-          "label": "Neutral (N)",
-          "match": {
-            "D1": "0x06"
-          },
-          "mask": "0x07"
-        },
-        {
-          "label": "Reverse (R)",
-          "match": {
-            "D1": "0x07"
-          },
-          "mask": "0x07"
         }
       ]
     },
@@ -9778,9 +9032,7 @@
         "icon": "mdi:volume-off"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Cockpit & Controls",
       "roles": [
@@ -9824,31 +9076,6 @@
             "type": "can_rx",
             "state_can_id": "0x60C",
             "action_can_id": "0x60C",
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen3",
-            "kia_niro_ev",
-            "hyundai_kona_ev",
-            "kia_soul_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x520",
-            "action_can_id": "0x520",
             "base_payload": [
               "0x19",
               "0x00",
@@ -9909,9 +9136,7 @@
         "icon": "mdi:music-box"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Cockpit & Controls",
       "roles": [
@@ -9955,31 +9180,6 @@
             "type": "can_rx",
             "state_can_id": "0x60C",
             "action_can_id": "0x60C",
-            "base_payload": [
-              "0x16",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen3",
-            "kia_niro_ev",
-            "hyundai_kona_ev",
-            "kia_soul_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x520",
-            "action_can_id": "0x520",
             "base_payload": [
               "0x16",
               "0x00",
@@ -10042,9 +9242,7 @@
         "icon": "mdi:volume-mute"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Cockpit & Controls",
       "roles": [
@@ -10099,31 +9297,6 @@
               "0x00"
             ]
           }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen3",
-            "kia_niro_ev",
-            "hyundai_kona_ev",
-            "kia_soul_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x520",
-            "action_can_id": "0x520",
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
         }
       ],
       "options": [
@@ -10159,9 +9332,7 @@
         "icon": "mdi:volume-high"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Cockpit & Controls",
       "roles": [
@@ -10226,36 +9397,6 @@
               "0x00"
             ]
           }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen3",
-            "kia_niro_ev",
-            "hyundai_kona_ev",
-            "kia_soul_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x520",
-            "action_can_id": "0x520",
-            "byte": "D1",
-            "offset": 0,
-            "min": 0,
-            "max": 75,
-            "step": 1,
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
         }
       ],
       "subcategory": "Audio & Media"
@@ -10268,9 +9409,7 @@
         "icon": "mdi:speaker"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Cockpit & Controls",
       "roles": [
@@ -10335,36 +9474,6 @@
               "0x00"
             ]
           }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen3",
-            "kia_niro_ev",
-            "hyundai_kona_ev",
-            "kia_soul_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x520",
-            "action_can_id": "0x520",
-            "byte": "D3",
-            "offset": 10,
-            "min": -10,
-            "max": 10,
-            "step": 1,
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
         }
       ],
       "subcategory": "Audio & Media"
@@ -10377,9 +9486,7 @@
         "icon": "mdi:scale-balance"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Cockpit & Controls",
       "roles": [
@@ -10444,36 +9551,6 @@
               "0x00"
             ]
           }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen3",
-            "kia_niro_ev",
-            "hyundai_kona_ev",
-            "kia_soul_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x520",
-            "action_can_id": "0x520",
-            "byte": "D4",
-            "offset": 10,
-            "min": -10,
-            "max": 10,
-            "step": 1,
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
         }
       ],
       "subcategory": "Audio & Media"
@@ -10486,9 +9563,7 @@
         "icon": "mdi:equalizer"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Cockpit & Controls",
       "roles": [
@@ -10553,36 +9628,6 @@
               "0x00"
             ]
           }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen3",
-            "kia_niro_ev",
-            "hyundai_kona_ev",
-            "kia_soul_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x520",
-            "action_can_id": "0x520",
-            "byte": "D5",
-            "offset": 10,
-            "min": -10,
-            "max": 10,
-            "step": 1,
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
         }
       ],
       "subcategory": "Audio & Media"
@@ -10595,9 +9640,7 @@
         "icon": "mdi:equalizer"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Cockpit & Controls",
       "roles": [
@@ -10662,36 +9705,6 @@
               "0x00"
             ]
           }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen3",
-            "kia_niro_ev",
-            "hyundai_kona_ev",
-            "kia_soul_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x520",
-            "action_can_id": "0x520",
-            "byte": "D6",
-            "offset": 10,
-            "min": -10,
-            "max": 10,
-            "step": 1,
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
         }
       ],
       "subcategory": "Audio & Media"
@@ -10704,9 +9717,7 @@
         "icon": "mdi:equalizer"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Cockpit & Controls",
       "roles": [
@@ -10771,36 +9782,6 @@
               "0x00"
             ]
           }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen3",
-            "kia_niro_ev",
-            "hyundai_kona_ev",
-            "kia_soul_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x520",
-            "action_can_id": "0x520",
-            "byte": "D7",
-            "offset": 10,
-            "min": -10,
-            "max": 10,
-            "step": 1,
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
         }
       ],
       "subcategory": "Audio & Media"
@@ -10813,9 +9794,7 @@
         "icon": "mdi:surround-sound-7-1"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Cockpit & Controls",
       "roles": [
@@ -10870,31 +9849,6 @@
               "0x00"
             ]
           }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen3",
-            "kia_niro_ev",
-            "hyundai_kona_ev",
-            "kia_soul_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x520",
-            "action_can_id": "0x520",
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
         }
       ],
       "options": [
@@ -10930,9 +9884,7 @@
         "icon": "mdi:car-speed-limiter"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Cockpit & Controls",
       "roles": [
@@ -10987,31 +9939,6 @@
               "0x00"
             ]
           }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen3",
-            "kia_niro_ev",
-            "hyundai_kona_ev",
-            "kia_soul_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x520",
-            "action_can_id": "0x520",
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
         }
       ],
       "options": [
@@ -11047,9 +9974,7 @@
         "icon": "mdi:network"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Doors, Access & Security",
       "roles": [
@@ -11108,9 +10033,7 @@
         "icon": "mdi:tire"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Cockpit & Controls",
       "subcategory": "Tire Pressure (TPMS)",
@@ -11154,9 +10077,7 @@
         "icon": "mdi:tire"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Cockpit & Controls",
       "subcategory": "Tire Pressure (TPMS)",
@@ -11193,135 +10114,6 @@
       ]
     },
     {
-      "id": "ptgm_power_tailgate",
-      "ha_metadata": {
-        "name": "Power Tailgate Module (Liftgate Position)",
-        "domain": "cover",
-        "icon": "mdi:car-liftgate"
-      },
-      "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
-      ],
-      "category": "Doors, Access & Security",
-      "subcategory": "Trunk & Frunk",
-      "roles": [
-        "sensor",
-        "state",
-        "action"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Power Tailgate Module telemetry on CAN 0x3A6 (PTGM_01_200ms) and active command on 0x588 (TMU2). Byte 0 reports opening position (0% closed to 100% open). Byte 1 reports state (Closed, Opening, Closing, Paused, Anti-pinch reverse)."
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x3A6",
-        "action_can_id": "0x588"
-      },
-      "variants": [
-        {
-          "targets": [
-            "all_egmp",
-            "hyundai_ioniq5",
-            "hyundai_ioniq6",
-            "kia_ev6",
-            "genesis_gv60"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x3A6",
-            "action_can_id": "0x588"
-          }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen3",
-            "kia_niro_ev",
-            "hyundai_kona_ev",
-            "kia_soul_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x588",
-            "action_can_id": "0x588"
-          }
-        }
-      ],
-      "options": [
-        {
-          "label": "Tailgate Closed",
-          "match": {
-            "D2": "0x00"
-          },
-          "mask": "0x0F",
-          "default": true
-        },
-        {
-          "label": "Tailgate Opening",
-          "match": {
-            "D2": "0x01"
-          },
-          "mask": "0x0F"
-        },
-        {
-          "label": "Tailgate Closing",
-          "match": {
-            "D2": "0x02"
-          },
-          "mask": "0x0F"
-        },
-        {
-          "label": "Tailgate Hold / Paused",
-          "match": {
-            "D2": "0x03"
-          },
-          "mask": "0x0F"
-        },
-        {
-          "label": "Anti-Pinch Reverse",
-          "match": {
-            "D2": "0x04"
-          },
-          "mask": "0x0F"
-        },
-        {
-          "label": "Tailgate Unlatch / Actuate",
-          "payload": {
-            "D1": "0xF4",
-            "D2": "0x91",
-            "D3": "0x42",
-            "D4": "0x10",
-            "D5": "0x0C",
-            "D6": "0x10",
-            "D7": "0x00",
-            "D8": "0x06"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0xF4",
-                "D2": "0x91",
-                "D3": "0x42",
-                "D4": "0x10",
-                "D5": "0x0C",
-                "D6": "0x10",
-                "D7": "0x00",
-                "D8": "0x06"
-              },
-              "repeat": 3
-            }
-          ]
-        }
-      ]
-    },
-    {
       "id": "ev_scheduled_cabin_climate",
       "ha_metadata": {
         "name": "Scheduled Departure Cabin Pre-Conditioning & Tariffs",
@@ -11329,9 +10121,7 @@
         "icon": "mdi:clock-digital"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "High Voltage & Charging",
       "subcategory": "Limits & V2L",
@@ -11365,21 +10155,6 @@
             "state_can_id": "0x321",
             "action_can_id": "0x321"
           }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen3",
-            "kia_niro_ev",
-            "hyundai_kona_ev",
-            "kia_soul_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x450",
-            "action_can_id": "0x450"
-          }
         }
       ],
       "options": [
@@ -11411,107 +10186,6 @@
       ]
     },
     {
-      "id": "datc_passenger_climate_comfort",
-      "ha_metadata": {
-        "name": "Passenger Cabin Climate & Seat Comfort",
-        "domain": "climate",
-        "icon": "mdi:car-seat-heater"
-      },
-      "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
-      ],
-      "category": "Climate & Comfort",
-      "subcategory": "Cabin Climate",
-      "roles": [
-        "action",
-        "sensor"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Passenger temperature setpoint, rear defroster, and heated/ventilated seat comfort levels. Decoded from DATC_HU_PE_02 (0x5CC) on Gen 2 and DATC_01 (0x148) on Gen 3 E-GMP."
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x5CC",
-        "action_can_id": "0x5CC"
-      },
-      "variants": [
-        {
-          "targets": [
-            "all_egmp",
-            "hyundai_ioniq5",
-            "hyundai_ioniq6",
-            "kia_ev6",
-            "genesis_gv60"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x148",
-            "action_can_id": "0x148"
-          }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen3",
-            "kia_niro_ev",
-            "hyundai_kona_ev",
-            "kia_soul_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x5CC",
-            "action_can_id": "0x5CC"
-          }
-        }
-      ],
-      "options": [
-        {
-          "label": "Passenger 72°F (22.0°C)",
-          "match": {
-            "D4": "0x10"
-          },
-          "payload": {
-            "D1": "0x00",
-            "D2": "0x00",
-            "D3": "0x00",
-            "D4": "0x10"
-          },
-          "default": true
-        },
-        {
-          "label": "Passenger 68°F (20.0°C)",
-          "match": {
-            "D4": "0x0C"
-          },
-          "payload": {
-            "D1": "0x00",
-            "D2": "0x00",
-            "D3": "0x00",
-            "D4": "0x0C"
-          }
-        },
-        {
-          "label": "Passenger 76°F (24.5°C)",
-          "match": {
-            "D4": "0x14"
-          },
-          "payload": {
-            "D1": "0x00",
-            "D2": "0x00",
-            "D3": "0x00",
-            "D4": "0x14"
-          }
-        }
-      ]
-    },
-    {
       "id": "telematics_remote_security",
       "ha_metadata": {
         "name": "Telematics Remote Ignition & Security Immobilizer",
@@ -11519,9 +10193,7 @@
         "icon": "mdi:car-key"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Doors, Access & Security",
       "subcategory": "Access & Wakeup",
@@ -11586,9 +10258,7 @@
         "icon": "mdi:bell-ring"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Cockpit & Controls",
       "subcategory": "Audio & Media",
@@ -11633,9 +10303,7 @@
         "icon": "mdi:amplifier"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Cockpit & Controls",
       "subcategory": "Audio & Media",
@@ -11686,9 +10354,7 @@
         "icon": "mdi:power-cycle"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Doors, Access & Security",
       "subcategory": "Access & Wakeup",
@@ -11753,9 +10419,7 @@
         "icon": "mdi:surround-sound"
       },
       "tags": [
-        "all_egmp",
-        "all_gen2",
-        "all_gen3"
+        "all_egmp"
       ],
       "category": "Cockpit & Controls",
       "subcategory": "Audio & Media",
@@ -12067,48 +10731,6 @@
       ]
     },
     {
-      "id": "climate_driver_only_status",
-      "ha_metadata": {
-        "name": "Driver Only Climate Status",
-        "domain": "binary_sensor",
-        "icon": "mdi:account-outline"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Climate & Comfort",
-      "subcategory": "HVAC Controls",
-      "roles": [
-        "sensor",
-        "state"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x465"
-      },
-      "options": [
-        {
-          "label": "On",
-          "match": {
-            "D7": "0x04"
-          },
-          "default": true
-        },
-        {
-          "label": "Off",
-          "match": {
-            "D7": "0x0C"
-          }
-        }
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Live telemetry status of Driver Only HVAC zone isolation from CAN ID 0x465 Byte 6 (D7)."
-      }
-    },
-    {
       "id": "climate_blower_speed_direct",
       "ha_metadata": {
         "name": "Direct DATC Blower Fan Speed",
@@ -12301,50 +10923,6 @@
       ]
     },
     {
-      "id": "cgw_tailgate_speed_mode",
-      "ha_metadata": {
-        "name": "Power Tailgate Speed Mode",
-        "domain": "sensor",
-        "icon": "mdi:car-liftgate"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Doors, Access & Security",
-      "subcategory": "Trunk & Frunk",
-      "roles": [
-        "sensor",
-        "state"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x410"
-      },
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "CF_Gway_PTGMRValue in CGW_USM1 (0x410) bits 2-3 (Byte D1 bits 2-3, mask 0x0C)."
-      },
-      "options": [
-        {
-          "label": "Normal Speed",
-          "match": {
-            "D1": "0x00"
-          },
-          "mask": "0x0C"
-        },
-        {
-          "label": "Fast Speed",
-          "match": {
-            "D1": "0x04"
-          },
-          "mask": "0x0C",
-          "default": true
-        }
-      ]
-    },
-    {
       "id": "cgw_smart_proximity_trunk",
       "ha_metadata": {
         "name": "Smart Proximity Hands-Free Trunk",
@@ -12385,152 +10963,6 @@
             "D5": "0x00"
           },
           "mask": "0x07"
-        }
-      ]
-    },
-    {
-      "id": "cgw_auto_door_lock_setting",
-      "ha_metadata": {
-        "name": "Auto Door Lock Setting",
-        "domain": "sensor",
-        "icon": "mdi:lock-outline"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Doors, Access & Security",
-      "subcategory": "Locks & Security",
-      "roles": [
-        "sensor",
-        "state"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x410"
-      },
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "CF_Gway_ADrLRValue in CGW_USM1 (0x410) bits 8-10 (Byte D2 bits 0-2, mask 0x07)."
-      },
-      "options": [
-        {
-          "label": "Off",
-          "match": {
-            "D2": "0x00"
-          },
-          "mask": "0x07"
-        },
-        {
-          "label": "Enable on Speed (15 km/h)",
-          "match": {
-            "D2": "0x01"
-          },
-          "mask": "0x07"
-        },
-        {
-          "label": "Enable on Shift to D/R/N",
-          "match": {
-            "D2": "0x02"
-          },
-          "mask": "0x07",
-          "default": true
-        }
-      ]
-    },
-    {
-      "id": "cgw_auto_door_unlock_setting",
-      "ha_metadata": {
-        "name": "Auto Door Unlock Setting",
-        "domain": "sensor",
-        "icon": "mdi:lock-open-outline"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Doors, Access & Security",
-      "subcategory": "Locks & Security",
-      "roles": [
-        "sensor",
-        "state"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x410"
-      },
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "CF_Gway_ADrURValue in CGW_USM1 (0x410) bits 11-13 (Byte D2 bits 3-5, mask 0x38)."
-      },
-      "options": [
-        {
-          "label": "Off",
-          "match": {
-            "D2": "0x00"
-          },
-          "mask": "0x38"
-        },
-        {
-          "label": "On Vehicle Ignition Off",
-          "match": {
-            "D2": "0x20"
-          },
-          "mask": "0x38"
-        },
-        {
-          "label": "On Shift to Park (P)",
-          "match": {
-            "D2": "0x30"
-          },
-          "mask": "0x38",
-          "default": true
-        }
-      ]
-    },
-    {
-      "id": "cgw_two_turn_unlock",
-      "ha_metadata": {
-        "name": "Two-Press Unlock Mode",
-        "domain": "binary_sensor",
-        "icon": "mdi:key-wireless"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Doors, Access & Security",
-      "subcategory": "Locks & Security",
-      "roles": [
-        "sensor",
-        "state"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x410"
-      },
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "CF_Gway_TTUnlockRValue in CGW_USM1 (0x410) bits 6-7 (Byte D1 bits 6-7, mask 0xC0)."
-      },
-      "options": [
-        {
-          "label": "Two-Press Unlock Enabled",
-          "match": {
-            "D1": "0x40"
-          },
-          "mask": "0xC0",
-          "default": true
-        },
-        {
-          "label": "Single-Press All Doors",
-          "match": {
-            "D1": "0x00"
-          },
-          "mask": "0xC0"
         }
       ]
     },
@@ -12619,64 +11051,6 @@
             "D3": "0x00"
           },
           "mask": "0x03"
-        }
-      ]
-    },
-    {
-      "id": "cgw_one_touch_turn_signal",
-      "ha_metadata": {
-        "name": "One-Touch Turn Signal Flash Count",
-        "domain": "sensor",
-        "icon": "mdi:car-defrost-rear"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Cockpit & Controls",
-      "subcategory": "Steering Wheel",
-      "roles": [
-        "sensor",
-        "state"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x410"
-      },
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "CF_Gway_OTTurnRValue in CGW_USM1 (0x410) bits 21-23 (Byte D3 bits 5-7, mask 0xE0). 0=Off, 0x20=3 flashes, 0x40=5 flashes, 0x60=7 flashes."
-      },
-      "options": [
-        {
-          "label": "Off",
-          "match": {
-            "D3": "0x00"
-          },
-          "mask": "0xE0"
-        },
-        {
-          "label": "3 Flashes",
-          "match": {
-            "D3": "0x20"
-          },
-          "mask": "0xE0"
-        },
-        {
-          "label": "5 Flashes",
-          "match": {
-            "D3": "0x40"
-          },
-          "mask": "0xE0",
-          "default": true
-        },
-        {
-          "label": "7 Flashes",
-          "match": {
-            "D3": "0x60"
-          },
-          "mask": "0xE0"
         }
       ]
     },
@@ -12833,189 +11207,6 @@
               "repeat": 3
             }
           ]
-        }
-      ]
-    },
-    {
-      "id": "cgw_driver_seat_easy_access",
-      "ha_metadata": {
-        "name": "Driver Seat Easy Access Slide Setting",
-        "domain": "sensor",
-        "icon": "mdi:car-seat"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Climate & Comfort",
-      "subcategory": "Seat Comfort",
-      "roles": [
-        "sensor",
-        "state"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x410"
-      },
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "CF_Gway_SCMRValue in CGW_USM1 (0x410) bits 14-15 (Byte D2 bits 6-7, mask 0xC0). Driver seat automatic slide on door open for easy ingress/egress."
-      },
-      "options": [
-        {
-          "label": "Off",
-          "match": {
-            "D2": "0x00"
-          },
-          "mask": "0xC0",
-          "default": true
-        },
-        {
-          "label": "Normal Slide",
-          "match": {
-            "D2": "0x40"
-          },
-          "mask": "0xC0"
-        },
-        {
-          "label": "Extended Slide",
-          "match": {
-            "D2": "0x80"
-          },
-          "mask": "0xC0"
-        }
-      ]
-    },
-    {
-      "id": "cgw_passenger_seat_easy_access",
-      "ha_metadata": {
-        "name": "Passenger Power Seat Easy Access Setting",
-        "domain": "sensor",
-        "icon": "mdi:car-seat"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Climate & Comfort",
-      "subcategory": "Seat Comfort",
-      "roles": [
-        "sensor",
-        "state"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x410"
-      },
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "CF_Gway_PSMRValue in CGW_USM1 (0x410) bits 18-20 (Byte D3 bits 2-4, mask 0x1C). Passenger seat automatic slide on door open."
-      },
-      "options": [
-        {
-          "label": "Off",
-          "match": {
-            "D3": "0x00"
-          },
-          "mask": "0x1C"
-        },
-        {
-          "label": "Passenger Easy Access On",
-          "match": {
-            "D3": "0x14"
-          },
-          "mask": "0x1C",
-          "default": true
-        }
-      ]
-    },
-    {
-      "id": "cgw_auto_high_beam",
-      "ha_metadata": {
-        "name": "High Beam Assist (HBA) Setting",
-        "domain": "sensor",
-        "icon": "mdi:car-light-high"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Cockpit & Controls",
-      "subcategory": "Lighting Controls",
-      "roles": [
-        "sensor",
-        "state"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x410"
-      },
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "CF_Gway_HAnBRValue in CGW_USM1 (0x410) bits 27-29 (Byte D4 bits 3-5, mask 0x38)."
-      },
-      "options": [
-        {
-          "label": "Off",
-          "match": {
-            "D4": "0x00"
-          },
-          "mask": "0x38"
-        },
-        {
-          "label": "High Beam Assist Enabled",
-          "match": {
-            "D4": "0x38"
-          },
-          "mask": "0x38",
-          "default": true
-        }
-      ]
-    },
-    {
-      "id": "cgw_auto_rear_wiper",
-      "ha_metadata": {
-        "name": "Auto Rear Wiper in Reverse",
-        "domain": "binary_sensor",
-        "icon": "mdi:wiper"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Cockpit & Controls",
-      "subcategory": "Wipers & Washers",
-      "roles": [
-        "sensor",
-        "state"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x410"
-      },
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "CF_Gway_RearWiperRValue in CGW_USM1 (0x410) bits 38-39 (Byte D5 bits 6-7, mask 0xC0)."
-      },
-      "options": [
-        {
-          "label": "Auto Rear Wiper Active",
-          "match": {
-            "D5": "0x40"
-          },
-          "mask": "0xC0",
-          "default": true
-        },
-        {
-          "label": "Auto Rear Wiper Off",
-          "match": {
-            "D5": "0x00"
-          },
-          "mask": "0xC0"
         }
       ]
     },
@@ -13537,119 +11728,6 @@
                 "D4": "0x1B",
                 "D5": "0x04",
                 "D6": "0x00",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "ev_charging_connector_locking_mode",
-      "ha_metadata": {
-        "name": "Charging Connector Lock Mode",
-        "domain": "select",
-        "icon": "mdi:ev-plug-type2"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "High Voltage & Charging",
-      "subcategory": "Charging Configuration",
-      "roles": [
-        "action"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Commands AC/DC charging port connector locking mode via USMService.sendEcoVehicle on 0x410 (Func ID 4379 / 0x111B, subtype 0x05). Values: 0=Always Lock, 1=Lock While Charging Only, 2=Never Lock."
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_tx",
-        "action_can_id": "0x410"
-      },
-      "options": [
-        {
-          "label": "Lock While Charging Only",
-          "payload": {
-            "D1": "0x92",
-            "D2": "0x11",
-            "D3": "0x11",
-            "D4": "0x1B",
-            "D5": "0x05",
-            "D6": "0x01",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x92",
-                "D2": "0x11",
-                "D3": "0x11",
-                "D4": "0x1B",
-                "D5": "0x05",
-                "D6": "0x01",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ],
-          "default": true
-        },
-        {
-          "label": "Always Lock Connector",
-          "payload": {
-            "D1": "0x92",
-            "D2": "0x11",
-            "D3": "0x11",
-            "D4": "0x1B",
-            "D5": "0x05",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x92",
-                "D2": "0x11",
-                "D3": "0x11",
-                "D4": "0x1B",
-                "D5": "0x05",
-                "D6": "0x00",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "Never Lock Connector",
-          "payload": {
-            "D1": "0x92",
-            "D2": "0x11",
-            "D3": "0x11",
-            "D4": "0x1B",
-            "D5": "0x05",
-            "D6": "0x02",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x92",
-                "D2": "0x11",
-                "D3": "0x11",
-                "D4": "0x1B",
-                "D5": "0x05",
-                "D6": "0x02",
                 "D7": "0x00",
                 "D8": "0x00"
               },

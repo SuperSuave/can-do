@@ -137,14 +137,12 @@ class CanDoCoverEntity(CanDoEntity, CoverEntity):
             _LOGGER.warning("No open action payload found for %s", self.entity_id)
             return
 
-        steps = build_action_steps(
-            self.action_can_id or self.state_can_id,
-            target_opt.get("payload", {}),
-            target_opt.get("mask"),
-            self.command.get("network", {}).get("bus", 0),
-        )
-        for can_id, payload in steps:
-            await self.coordinator.async_send_can_command(can_id, payload)
+        net = self.command.get("network", {})
+        action_can_id = net.get("action_can_id", self.state_can_id or "0x000")
+        delay_ms = net.get("delay_ms", 20)
+        steps = build_action_steps(self.command, target_opt)
+        if steps and action_can_id != "0x000":
+            await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
 
     async def async_close_cover(self, **kwargs: Any) -> None:
         """Close the tailgate / cover."""
@@ -161,14 +159,12 @@ class CanDoCoverEntity(CanDoEntity, CoverEntity):
             _LOGGER.warning("No close action payload found for %s", self.entity_id)
             return
 
-        steps = build_action_steps(
-            self.action_can_id or self.state_can_id,
-            target_opt.get("payload", {}),
-            target_opt.get("mask"),
-            self.command.get("network", {}).get("bus", 0),
-        )
-        for can_id, payload in steps:
-            await self.coordinator.async_send_can_command(can_id, payload)
+        net = self.command.get("network", {})
+        action_can_id = net.get("action_can_id", self.state_can_id or "0x000")
+        delay_ms = net.get("delay_ms", 20)
+        steps = build_action_steps(self.command, target_opt)
+        if steps and action_can_id != "0x000":
+            await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
 
     async def async_open_cover_tilt(self, **kwargs: Any) -> None:
         """Vent / crack the window or cover."""
@@ -183,11 +179,9 @@ class CanDoCoverEntity(CanDoEntity, CoverEntity):
             _LOGGER.warning("No vent action payload found for %s", self.entity_id)
             return
 
-        steps = build_action_steps(
-            self.action_can_id or self.state_can_id,
-            target_opt.get("payload", {}),
-            target_opt.get("mask"),
-            self.command.get("network", {}).get("bus", 0),
-        )
-        for can_id, payload in steps:
-            await self.coordinator.async_send_can_command(can_id, payload)
+        net = self.command.get("network", {})
+        action_can_id = net.get("action_can_id", self.state_can_id or "0x000")
+        delay_ms = net.get("delay_ms", 20)
+        steps = build_action_steps(self.command, target_opt)
+        if steps and action_can_id != "0x000":
+            await self.coordinator.async_send_action(action_can_id, delay_ms, steps)

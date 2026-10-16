@@ -1492,7 +1492,7 @@ void setup() {
         JsonDocument doc;
         doc["device"] = "M5Stack Atom Lite UI Bridge";
         doc["device_id"] = g_device_id;
-        doc["can_do_version"] = "2026.10.6-b004";
+        doc["can_do_version"] = "2026.10.6-b005";
         doc["wican_online"] = g_wican_online;
         doc["free_heap"] = ESP.getFreeHeap();
         doc["uptime_s"] = millis() / 1000;
