@@ -47,52 +47,49 @@ class CanDoSelectEntity(CanDoEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         """Return the selected entity option."""
-        # 1. Direct decoded entity state from coordinator (e.g. from WiCAN / ESP32 emit_live_entity_state)
+        # 1. Raw CAN payload matching from vehicle bus (Ground Truth)
+        if self.state_can_id:
+            payload = self.coordinator.get_can_payload(self.state_can_id)
+            if isinstance(payload, list):
+                for opt in self.command.get("options", []):
+                    match_spec = opt.get("match") or opt.get("payload")
+                    if match_spec and check_match(payload, match_spec, opt.get("mask")):
+                        return opt.get("label")
+
+                # Fallback for E-GMP charging limits (0x1F9: Byte 2 = AC limit, Byte 3 = DC limit)
+                if self.state_can_id.lower() == "0x1f9" and len(payload) >= 4:
+                    idx = 2 if "ac" in self.entity_id_str.lower() else 3
+                    raw = payload[idx]
+                    val_pct = round(raw * 0.5)
+                    lbl = f"{val_pct}%"
+                    if lbl in self.options:
+                        return lbl
+
+                # Fallback for E-GMP seat comfort (0x496 Driver, 0x475 Passenger)
+                if self.state_can_id.lower() in ("0x496", "0x475") and len(payload) >= 1:
+                    b = payload[0]
+                    if b in (0x46, 0x02):
+                        return "High Heat"
+                    if b in (0x4E, 0x0A):
+                        return "Medium Heat"
+                    if b in (0x36, 0x0E):
+                        return "Low Heat"
+                    if b in (0x2E, 0x10):
+                        return "High Cool"
+                    if b in (0x26, 0x12):
+                        return "Medium Cool"
+                    if b in (0x1E, 0x14):
+                        return "Low Cool"
+                    return "Off"
+
+            # Direct string payload on state_can_id
+            if isinstance(payload, str) and payload in self.options:
+                return payload
+
+        # 2. Direct decoded entity state from coordinator (e.g. from WiCAN / ESP32 emit_live_entity_state)
         entity_val = self.coordinator.get_can_payload(self.entity_id_str)
         if entity_val and isinstance(entity_val, str) and entity_val in self.options:
             return entity_val
-
-        if not self.state_can_id:
-            return self._current_option
-
-        payload = self.coordinator.get_can_payload(self.state_can_id)
-        if not payload:
-            return self._current_option
-
-        # Direct string payload on state_can_id
-        if isinstance(payload, str) and payload in self.options:
-            return payload
-
-        # Raw CAN payload matching
-        if isinstance(payload, list):
-            for opt in self.command.get("options", []):
-                match_spec = opt.get("match") or opt.get("payload")
-                if match_spec and check_match(payload, match_spec, opt.get("mask")):
-                    return opt.get("label")
-
-            # Fallback for E-GMP seat comfort (0x496 Driver, 0x475 Passenger)
-            if self.state_can_id.lower() in ("0x496", "0x475") and len(payload) >= 1:
-                b = payload[0]
-                if b in (0x46, 0x02):
-                    return "High Heat"
-                if b in (0x4E, 0x0A):
-                    return "Medium Heat"
-                if b in (0x36, 0x0E):
-                    return "Low Heat"
-                if b in (0x2E, 0x10):
-                    return "High Cool"
-                if b in (0x26, 0x12):
-                    return "Medium Cool"
-                if b in (0x1E, 0x14):
-                    return "Low Cool"
-            # Fallback for E-GMP charging limits (0x1F9: Byte 2 = AC limit, Byte 3 = DC limit)
-            if self.state_can_id.lower() == "0x1f9" and len(payload) >= 4:
-                idx = 2 if "ac" in self.entity_id_str.lower() else 3
-                raw = payload[idx]
-                val_pct = round(raw * 0.5)
-                lbl = f"{val_pct}%"
-                if lbl in self.options:
-                    return lbl
 
         return self._current_option
 
