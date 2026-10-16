@@ -41,6 +41,11 @@ extern "C" esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t
     if (twai_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING) {
         return ESP_ERR_INVALID_STATE;
     }
+    // Suppress TX when bus error counter is elevated (Error Passive) to prevent triggering BUS_OFF on silent/disconnected bus
+    if (info.tx_error_counter >= 128) {
+        ESP_LOGW("CAN_ENGINE", "CAN TX suppressed: TEC=%lu (Error Passive: disconnected or silent bus)", (unsigned long)info.tx_error_counter);
+        return ESP_ERR_INVALID_STATE;
+    }
     // Single-Shot mode: never loop in hardware retries on unacknowledged frames, eliminating BUS_OFF
     message->ss = 1;
     return twai_transmit(message, ticks_to_wait);
@@ -596,7 +601,11 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             twai_status_info_t info;
             if (twai_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING) {
                 ESP_LOGW(TAG, "TWAI controller not in RUNNING state (%d), skipping burst TX", info.state);
-                continue;
+                break;
+            }
+            if (info.tx_error_counter >= 128) {
+                ESP_LOGW(TAG, "CAN burst TX suppressed: TEC=%lu (Error Passive: disconnected or silent bus)", (unsigned long)info.tx_error_counter);
+                break;
             }
             msg_to_send.ss = 1; // Single-Shot mode: prevent infinite hardware retry loop on bus error
             if (twai_transmit(&msg_to_send, pdMS_TO_TICKS(10)) == ESP_OK) {
@@ -1087,10 +1096,30 @@ void can_rx_task(void* arg) {
                 if (s_bus_off_or_recovering_start_ms == 0) {
                     s_bus_off_or_recovering_start_ms = now_ms;
                 }
-                // If hardware is stuck in RECOVERING for > 3000ms, automatic warm restart guarantees recovery
+                // If hardware is stuck in RECOVERING for > 3000ms (e.g. bench test, silent bus, transceiver standby),
+                // do NOT restart MCU (which kills Wi-Fi and Web server). Reinstall hardware driver cleanly!
                 if (now_ms - s_bus_off_or_recovering_start_ms > 3000) {
-                    ESP_LOGE(TAG, "TWAI stuck in RECOVERING state (>3000ms). Resetting MCU...");
-                    esp_restart();
+                    ESP_LOGW(TAG, "TWAI stuck in RECOVERING state (>3000ms). Reinstalling driver without MCU reset...");
+                    twai_clear_transmit_queue();
+                    twai_driver_uninstall();
+                    vTaskDelay(pdMS_TO_TICKS(10));
+
+                    twai_mode_t cur_mode = g_hardware_listen_only.load() ? TWAI_MODE_LISTEN_ONLY : TWAI_MODE_NORMAL;
+                    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, cur_mode);
+                    g_config.rx_queue_len = 128;
+                    g_config.tx_queue_len = 32;
+                    g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR | TWAI_ALERT_RX_QUEUE_FULL;
+                    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
+                    twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+
+                    esp_err_t err = twai_driver_install(&g_config, &t_config, &f_config);
+                    if (err == ESP_OK) {
+                        twai_start();
+                        ESP_LOGI(TAG, "TWAI driver re-installed and running after recovery timeout");
+                    } else {
+                        ESP_LOGE(TAG, "TWAI driver reinstall failed (%s)", esp_err_to_name(err));
+                    }
+                    s_bus_off_or_recovering_start_ms = 0;
                 }
             } else if (twai_status.state == TWAI_STATE_RUNNING) {
                 s_bus_off_or_recovering_start_ms = 0;

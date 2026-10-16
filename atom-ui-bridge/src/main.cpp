@@ -404,12 +404,8 @@ void fire_ble_button_event(const String& addr, const String& name, const String&
     uart_msg += "}";
     send_to_wican(uart_msg);
 
-    if (action == "press") {
-        if (combo.length() > 0) {
-            send_to_wican("{\"type\":\"trigger\",\"action\":\"combo_" + combo + "\"}");
-        }
-        send_to_wican("{\"type\":\"trigger\",\"action\":\"precon_toggle\"}");
-    }
+    // Note: External BLE button events & chords are forwarded to WiCAN above via ble_event
+    // (Automation rules & MQTT handle specific actions; we do NOT hijack buttons to trigger preconditioning)
 
     // 3. Immediately broadcast status so polling Web UI and WiCAN update last_event
     broadcast_ble_status();
@@ -1496,7 +1492,7 @@ void setup() {
         JsonDocument doc;
         doc["device"] = "M5Stack Atom Lite UI Bridge";
         doc["device_id"] = g_device_id;
-        doc["can_do_version"] = "2026.10.6-b003";
+        doc["can_do_version"] = "2026.10.6-b004";
         doc["wican_online"] = g_wican_online;
         doc["free_heap"] = ESP.getFreeHeap();
         doc["uptime_s"] = millis() / 1000;
