@@ -5,7 +5,7 @@
 
 #define TAG "mood_light"
 
-#define MOOD_LIGHT_ISOTP_TIMEOUT_US 150000U // 150ms timeout for Flow Control
+#define MOOD_LIGHT_ISOTP_TIMEOUT_US 1000000U // 1000ms timeout for Flow Control across gateway domains
 #define MOOD_LIGHT_ISOTP_STACK_SIZE (2U * 1024U)
 #define MOOD_LIGHT_ISOTP_PRIORITY   5U
 
@@ -35,8 +35,8 @@ void mood_light_init(void) {
     }
 
     s_initialized = true;
-    ESP_LOGI(TAG, "Ambient Mood Lighting ISO-TP initialized (TX: 0x%03X, FC: 0x%03X)",
-             MOOD_LIGHT_ISOTP_TX_ID, MOOD_LIGHT_ISOTP_FC_ID);
+    ESP_LOGI(TAG, "Ambient Mood Lighting ISO-TP initialized (TX: 0x%03X, FC: 0x%03X, timeout: %u ms)",
+             MOOD_LIGHT_ISOTP_TX_ID, MOOD_LIGHT_ISOTP_FC_ID, (unsigned int)(MOOD_LIGHT_ISOTP_TIMEOUT_US / 1000U));
 }
 
 void mood_light_rx(const twai_message_t *msg, can_bus_t rx_bus) {
@@ -47,6 +47,17 @@ void mood_light_rx(const twai_message_t *msg, can_bus_t rx_bus) {
 bool mood_light_send_raw(const uint8_t *payload, size_t size) {
     if (!s_initialized || payload == NULL || size == 0) return false;
     ESP_LOGI(TAG, "Queueing ISO-TP mood lamp payload (%u bytes)", (unsigned int)size);
+
+    // Send single-shot Tester Present to ensure diagnostic server on 0x7A0 is active
+    twai_message_t tp = {0};
+    tp.identifier = MOOD_LIGHT_ISOTP_TX_ID;
+    tp.data_length_code = 8;
+    tp.ss = 1;
+    tp.data[0] = 0x02; // DLC = 2
+    tp.data[1] = 0x3E; // TesterPresent (0x3E)
+    tp.data[2] = 0x80; // Suppress positive response
+    can_send(CAN_BUS_0, &tp, 1);
+
     return isotp_tx_start(&mood_isotp, payload, size);
 }
 
