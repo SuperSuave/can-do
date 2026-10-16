@@ -14,6 +14,6 @@ void broadcast_ws_can_frame(const twai_message_t* msg);
 void broadcast_ws_automation_event(const std::string& id, const std::string& name);
 int custom_websocket_logger(const char *fmt, va_list args);
 bool is_serving_static_page(void);
-const std::unordered_map<std::string, std::string>& get_live_state_cache(void);
+std::unordered_map<std::string, std::string> get_live_state_cache(void);
 
 httpd_handle_t start_webserver(void);

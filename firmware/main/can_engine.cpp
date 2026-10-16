@@ -53,6 +53,31 @@ extern "C" esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t
 
 static const char* TAG = "CAN_ENGINE";
 
+#include "esp_attr.h"
+
+static RTC_NOINIT_ATTR RtcCrashInfo s_rtc_crash;
+
+const RtcCrashInfo* get_rtc_crash_info(void) {
+    if (s_rtc_crash.magic == 0xDEADBEEF) {
+        return &s_rtc_crash;
+    }
+    return nullptr;
+}
+
+void rtc_crash_record(uint32_t can_id, uint8_t dlc, const uint8_t* data, uint32_t step, const char* decoder) {
+    s_rtc_crash.magic = 0xDEADBEEF;
+    s_rtc_crash.can_id = can_id;
+    s_rtc_crash.dlc = dlc;
+    if (data && dlc > 0) {
+        memcpy(s_rtc_crash.data, data, dlc > 8 ? 8 : dlc);
+    }
+    s_rtc_crash.step_marker = step;
+    if (decoder) {
+        strncpy(s_rtc_crash.last_decoder, decoder, sizeof(s_rtc_crash.last_decoder) - 1);
+        s_rtc_crash.last_decoder[sizeof(s_rtc_crash.last_decoder) - 1] = '\0';
+    }
+}
+
 static std::string s_current_firing_trigger_id = "";
 
 struct LastBleEvent {
@@ -1130,21 +1155,36 @@ void can_rx_task(void* arg) {
             rx_processed++;
             s_last_can_frame_ms = now_ms;
             board_led_can_activity();
+
+            rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 1, "precondition_rx");
             precondition_can_rx_hook(&rx_msg, CAN_BUS_0);
+
+            rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 2, "track_popup_rx");
             track_popup_rx(&rx_msg, CAN_BUS_0);
+
+            rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 3, "hud_nav_rx");
             hud_nav_rx(&rx_msg, CAN_BUS_0);
+
+            rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 4, "uds_engine_rx");
             uds_engine_on_can_rx(&rx_msg);
+
+            rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 5, "mood_light_rx");
             mood_light_rx(&rx_msg, CAN_BUS_0);
 
             // Stream raw frame to connected SavvyCAN/GVRET client
+            rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 6, "gvret_enqueue");
             gvret_enqueue_frame(&rx_msg);
 
-            if (rx_msg.rtr) continue;
+            if (rx_msg.rtr) {
+                rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 999, "rtr_done");
+                continue;
+            }
 
             uint8_t prev_data[8] = {0};
             bool has_prev = get_cached_can_frame(rx_msg.identifier, prev_data);
 
             // 1. Always update state cache
+            rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 7, "update_state_cache");
             update_state_cache(rx_msg.identifier, rx_msg.data);
 
             // Helper: Mask out rolling counter and checksum bytes during MQTT change detection
@@ -1702,6 +1742,7 @@ void can_rx_task(void* arg) {
                     emit_live_entity_state("sunroof_extended", s_state);
                 }
             }
+            rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 900, "frame_done");
         } else {
             rx_processed = 0;
             // Cleanly extinguish yellow CAN activity LED when bus is idle (>200ms)

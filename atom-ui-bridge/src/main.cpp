@@ -10,6 +10,7 @@
 #include <NimBLEDevice.h>
 #include <map>
 #include <vector>
+#include <mutex>
 
 // ============================================================================
 // Hardware Pin Definitions (M5Stack Atom Lite connected to WiCAN)
@@ -34,6 +35,7 @@ AsyncWebSocket ws("/ws");
 
 // State Cache (mirrors latest states from WiCAN)
 std::map<String, String> g_state_cache;
+static std::mutex g_state_cache_mutex;
 unsigned long g_last_wican_rx_ms = 0;
 bool g_wican_online = false;
 
@@ -1264,6 +1266,7 @@ void handle_wican_message(const String& line) {
             const char* entity = doc["entity"];
             const char* state = doc["state"];
             if (entity && state) {
+                std::lock_guard<std::mutex> lock(g_state_cache_mutex);
                 g_state_cache[String(entity)] = String(state);
             }
         }
@@ -1271,11 +1274,14 @@ void handle_wican_message(const String& line) {
         JsonDocument doc;
         if (deserializeJson(doc, line) == DeserializationError::Ok) {
             JsonArray arr = doc["data"].as<JsonArray>();
-            for (JsonObject item : arr) {
-                const char* entity = item["entity"];
-                const char* state = item["state"];
-                if (entity && state) {
-                    g_state_cache[String(entity)] = String(state);
+            {
+                std::lock_guard<std::mutex> lock(g_state_cache_mutex);
+                for (JsonObject item : arr) {
+                    const char* entity = item["entity"];
+                    const char* state = item["state"];
+                    if (entity && state) {
+                        g_state_cache[String(entity)] = String(state);
+                    }
                 }
             }
             Serial.printf("[CACHE] Cached %u vehicle states from WiCAN\n", g_state_cache.size());
@@ -1293,10 +1299,13 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
         // Deliver initial state cache to freshly connected browser client
         JsonDocument doc;
         JsonArray arr = doc.to<JsonArray>();
-        for (const auto& pair : g_state_cache) {
-            JsonObject item = arr.add<JsonObject>();
-            item["entity"] = pair.first;
-            item["state"] = pair.second;
+        {
+            std::lock_guard<std::mutex> lock(g_state_cache_mutex);
+            for (const auto& pair : g_state_cache) {
+                JsonObject item = arr.add<JsonObject>();
+                item["entity"] = pair.first;
+                item["state"] = pair.second;
+            }
         }
         String out;
         serializeJson(doc, out);
@@ -1416,10 +1425,13 @@ void setup() {
     server.on("/api/states", HTTP_GET, [](AsyncWebServerRequest *request) {
         JsonDocument doc;
         JsonArray arr = doc.to<JsonArray>();
-        for (const auto& pair : g_state_cache) {
-            JsonObject item = arr.add<JsonObject>();
-            item["entity"] = pair.first;
-            item["state"] = pair.second;
+        {
+            std::lock_guard<std::mutex> lock(g_state_cache_mutex);
+            for (const auto& pair : g_state_cache) {
+                JsonObject item = arr.add<JsonObject>();
+                item["entity"] = pair.first;
+                item["state"] = pair.second;
+            }
         }
         String out;
         serializeJson(doc, out);

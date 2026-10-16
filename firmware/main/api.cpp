@@ -29,6 +29,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <mutex>
 
 static const char* TAG = "WEB_API";
 extern std::string g_device_id;
@@ -95,13 +96,18 @@ void broadcast_ws_raw(const std::string& json_str) {
 }
 
 static std::unordered_map<std::string, std::string> s_live_state_cache;
+static std::mutex s_state_cache_mutex;
 
-const std::unordered_map<std::string, std::string>& get_live_state_cache(void) {
+std::unordered_map<std::string, std::string> get_live_state_cache(void) {
+    std::lock_guard<std::mutex> lock(s_state_cache_mutex);
     return s_live_state_cache;
 }
 
 void broadcast_ws_state(const std::string& entity_id, const std::string& state) {
-    s_live_state_cache[entity_id] = state;
+    {
+        std::lock_guard<std::mutex> lock(s_state_cache_mutex);
+        s_live_state_cache[entity_id] = state;
+    }
     uart_bridge_send_state(entity_id, state);
     if (!has_active_websocket_clients()) return;
     std::string json = "{\"type\":\"state\",\"entity\":\"" + entity_id + "\",\"state\":\"" + state + "\"}";
@@ -284,12 +290,14 @@ static esp_err_t api_states_handler(httpd_req_t *req) {
     cJSON *root = cJSON_CreateArray();
     std::unordered_set<std::string> included;
 
+    std::unordered_map<std::string, std::string> cache_snapshot = get_live_state_cache();
+
     for (const auto& entity : global_catalog) {
         cJSON *item = cJSON_CreateObject();
         cJSON_AddStringToObject(item, "entity", entity.id.c_str());
         std::string st = entity.current_state;
-        auto it = s_live_state_cache.find(entity.id);
-        if (it != s_live_state_cache.end()) {
+        auto it = cache_snapshot.find(entity.id);
+        if (it != cache_snapshot.end()) {
             st = it->second;
         }
         cJSON_AddStringToObject(item, "state", st.empty() ? "Unknown" : st.c_str());
@@ -297,7 +305,7 @@ static esp_err_t api_states_handler(httpd_req_t *req) {
         included.insert(entity.id);
     }
 
-    for (const auto& pair : s_live_state_cache) {
+    for (const auto& pair : cache_snapshot) {
         if (included.find(pair.first) == included.end()) {
             cJSON *item = cJSON_CreateObject();
             cJSON_AddStringToObject(item, "entity", pair.first.c_str());
@@ -1252,6 +1260,41 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
         cJSON_AddNumberToObject(root, "rx_missed_count", twai_st.rx_missed_count);
         cJSON_AddNumberToObject(root, "rx_overrun_count", twai_st.rx_overrun_count);
         cJSON_AddNumberToObject(root, "bus_error_count", twai_st.bus_error_count);
+    }
+
+    esp_reset_reason_t reason = esp_reset_reason();
+    const char* reason_str = "unknown";
+    switch (reason) {
+        case ESP_RST_POWERON: reason_str = "power_on"; break;
+        case ESP_RST_EXT: reason_str = "external_pin"; break;
+        case ESP_RST_SW: reason_str = "software_restart"; break;
+        case ESP_RST_PANIC: reason_str = "panic_exception"; break;
+        case ESP_RST_INT_WDT: reason_str = "interrupt_wdt"; break;
+        case ESP_RST_TASK_WDT: reason_str = "task_wdt"; break;
+        case ESP_RST_WDT: reason_str = "other_wdt"; break;
+        case ESP_RST_DEEPSLEEP: reason_str = "deep_sleep"; break;
+        case ESP_RST_BROWNOUT: reason_str = "brownout"; break;
+        case ESP_RST_SDIO: reason_str = "sdio"; break;
+        default: break;
+    }
+    cJSON_AddStringToObject(root, "reset_reason", reason_str);
+
+    const RtcCrashInfo* crash = get_rtc_crash_info();
+    if (crash && crash->magic == 0xDEADBEEF) {
+        cJSON *cj_crash = cJSON_CreateObject();
+        char id_str[16];
+        snprintf(id_str, sizeof(id_str), "0x%03lX", (unsigned long)crash->can_id);
+        cJSON_AddStringToObject(cj_crash, "can_id", id_str);
+        cJSON_AddNumberToObject(cj_crash, "dlc", crash->dlc);
+        char hex[17] = {0};
+        int dlc = crash->dlc > 8 ? 8 : crash->dlc;
+        for (int i = 0; i < dlc; i++) {
+            snprintf(&hex[i*2], 3, "%02X", crash->data[i]);
+        }
+        cJSON_AddStringToObject(cj_crash, "data", hex);
+        cJSON_AddNumberToObject(cj_crash, "step_marker", crash->step_marker);
+        cJSON_AddStringToObject(cj_crash, "last_decoder", crash->last_decoder);
+        cJSON_AddItemToObject(root, "last_crash", cj_crash);
     }
 
     char *json_str = cJSON_PrintUnformatted(root);

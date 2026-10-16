@@ -196,10 +196,10 @@ void uds_engine_on_can_rx(const twai_message_t* msg) {
     }
 
     // Process ISO-TP response from BMS
-    if (msg->identifier == BMS_RESP_CAN_ID && msg->data_length_code > 0) {
+    if (msg->identifier == BMS_RESP_CAN_ID && msg->data_length_code >= 2) {
         uint8_t pci = msg->data[0] & 0xF0;
 
-        if (pci == 0x10) {
+        if (pci == 0x10 && msg->data_length_code >= 3) {
             // First Frame (FF): Extract length and data
             s_isotp_expected_len = ((msg->data[0] & 0x0F) << 8) | msg->data[1];
             s_isotp_received_len = 0;
@@ -214,7 +214,7 @@ void uds_engine_on_can_rx(const twai_message_t* msg) {
                 uint8_t fc[8] = { 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
                 send_can_frame(BMS_REQ_CAN_ID, fc, 8);
             }
-        } else if (pci == 0x20) {
+        } else if (pci == 0x20 && msg->data_length_code >= 2) {
             // Consecutive Frame (CF)
             if (s_isotp_expected_len > 0 && s_isotp_received_len < s_isotp_expected_len) {
                 size_t chunk = msg->data_length_code - 1;
