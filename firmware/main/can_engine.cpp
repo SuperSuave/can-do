@@ -730,33 +730,58 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
         return true;
     }
 
-    if (entity_id == "ambient_mood_lamp_color" || entity_id == "mood_lighting" || entity_id == "ambient_light") {
+    if (entity_id == "ambient_mood_lamp_color" || entity_id == "ambient_mood_lighting" || entity_id == "mood_lighting" || entity_id == "ambient_light") {
         std::string cmd_lower = command_label;
         std::transform(cmd_lower.begin(), cmd_lower.end(), cmd_lower.begin(), ::tolower);
         bool ok = false;
         std::string new_state = command_label;
+        uint8_t payload_4ad[8] = {0};
+        bool has_4ad = false;
 
         if (cmd_lower.find("off") != std::string::npos || cmd_lower == "0" || cmd_lower == "false") {
             ok = mood_light_set_rgb(0, 0, 0, 0);
             new_state = "Mood Light Off";
+            has_4ad = true; // All zeros
         } else if (cmd_lower.find("cyan") != std::string::npos) {
             ok = mood_light_set_rgb(0, 255, 255, 1);
             new_state = "Pure Cyan (R:0, G:255, B:255)";
-        } else if (cmd_lower.find("amber") != std::string::npos || cmd_lower.find("orange") != std::string::npos) {
+            payload_4ad[1] = 0x64; payload_4ad[2] = 0x53; payload_4ad[3] = 0x0F;
+            has_4ad = true;
+        } else if (cmd_lower.find("amber") != std::string::npos || cmd_lower.find("orange") != std::string::npos || cmd_lower.find("sunset") != std::string::npos) {
             ok = mood_light_set_rgb(255, 140, 0, 1);
             new_state = "Warm Amber (R:255, G:140, B:0)";
+            payload_4ad[0] = 0xFF; payload_4ad[1] = 0x50; payload_4ad[2] = 0x72; payload_4ad[3] = 0x07;
+            has_4ad = true;
         } else if (cmd_lower.find("violet") != std::string::npos || cmd_lower.find("purple") != std::string::npos) {
             ok = mood_light_set_rgb(180, 0, 255, 1);
             new_state = "Neon Violet (R:180, G:0, B:255)";
-        } else if (cmd_lower.find("white") != std::string::npos) {
+            payload_4ad[0] = 0x80; payload_4ad[2] = 0xF0; payload_4ad[3] = 0x0F;
+            has_4ad = true;
+        } else if (cmd_lower.find("white") != std::string::npos || cmd_lower.find("champagne") != std::string::npos) {
             ok = mood_light_set_rgb(255, 255, 255, 1);
             new_state = "Glacier White (R:255, G:255, B:255)";
-        } else if (cmd_lower.find("red") != std::string::npos) {
+            payload_4ad[0] = 0xFE; payload_4ad[1] = 0xB4; payload_4ad[2] = 0x53; payload_4ad[3] = 0x0A;
+            has_4ad = true;
+        } else if (cmd_lower.find("red") != std::string::npos || cmd_lower.find("crimson") != std::string::npos) {
             ok = mood_light_set_rgb(255, 0, 0, 1);
             new_state = "Racing Red (R:255, G:0, B:0)";
-        } else if (cmd_lower.find("green") != std::string::npos) {
+            payload_4ad[0] = 0xFE; payload_4ad[1] = 0x88;
+            has_4ad = true;
+        } else if (cmd_lower.find("green") != std::string::npos || cmd_lower.find("mint") != std::string::npos || cmd_lower.find("lime") != std::string::npos) {
             ok = mood_light_set_rgb(0, 255, 0, 1);
             new_state = "Electric Green (R:0, G:255, B:0)";
+            payload_4ad[0] = 0xF7; payload_4ad[1] = 0xFC; payload_4ad[2] = 0x63; payload_4ad[3] = 0x0B;
+            has_4ad = true;
+        } else if (cmd_lower.find("blue") != std::string::npos) {
+            ok = mood_light_set_rgb(0, 120, 255, 1);
+            new_state = "Electric Blue";
+            payload_4ad[1] = 0x54; payload_4ad[2] = 0xF1; payload_4ad[3] = 0x0F;
+            has_4ad = true;
+        } else if (cmd_lower.find("pink") != std::string::npos || cmd_lower.find("magenta") != std::string::npos) {
+            ok = mood_light_set_rgb(255, 20, 147, 1);
+            new_state = "Magenta / Neon Pink";
+            payload_4ad[0] = 0xFF; payload_4ad[2] = 0x10; payload_4ad[3] = 0x0F;
+            has_4ad = true;
         } else if (!command_label.empty() && command_label[0] == '{') {
             cJSON* root = cJSON_Parse(command_label.c_str());
             if (root) {
@@ -779,6 +804,24 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
 
                 cJSON_Delete(root);
                 ok = mood_light_set_rgb(r, g, b, mode);
+
+                // Map closest RGB to 0x4AD payload
+                if (r > 200 && g < 80 && b < 80) { // Red
+                    payload_4ad[0] = 0xFE; payload_4ad[1] = 0x88;
+                } else if (r > 200 && g > 80 && b < 80) { // Amber
+                    payload_4ad[0] = 0xFF; payload_4ad[1] = 0x50; payload_4ad[2] = 0x72; payload_4ad[3] = 0x07;
+                } else if (r > 150 && b > 200) { // Violet / Pink
+                    payload_4ad[0] = 0x80; payload_4ad[2] = 0xF0; payload_4ad[3] = 0x0F;
+                } else if (g > 200 && b > 200) { // Cyan
+                    payload_4ad[1] = 0x64; payload_4ad[2] = 0x53; payload_4ad[3] = 0x0F;
+                } else if (b > 200) { // Blue
+                    payload_4ad[1] = 0x54; payload_4ad[2] = 0xF1; payload_4ad[3] = 0x0F;
+                } else if (g > 180) { // Green
+                    payload_4ad[0] = 0xF7; payload_4ad[1] = 0xFC; payload_4ad[2] = 0x63; payload_4ad[3] = 0x0B;
+                } else { // Champagne White
+                    payload_4ad[0] = 0xFE; payload_4ad[1] = 0xB4; payload_4ad[2] = 0x53; payload_4ad[3] = 0x0A;
+                }
+                has_4ad = true;
             }
         } else {
             std::string clean_hex;
@@ -796,7 +839,23 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
             } else {
                 ok = mood_light_set_rgb(0, 255, 255, 1);
                 new_state = "Pure Cyan (R:0, G:255, B:255)";
+                payload_4ad[1] = 0x64; payload_4ad[2] = 0x53; payload_4ad[3] = 0x0F;
+                has_4ad = true;
             }
+        }
+
+        // Transmit 0x4AD hardware CAN burst (5 repeats, 20ms) alongside ISO-TP
+        if (has_4ad) {
+            ActionStep step = {};
+            step.type = ActionType::TRANSMIT_FRAME;
+            step.can_id = 0x4AD;
+            step.repeat = 5;
+            step.delay_ms = 20;
+            step.mask = 0xFF;
+            memcpy(step.payload, payload_4ad, 8);
+            std::vector<ActionStep> steps = { step };
+            queue_action_steps(0x4AD, 20, steps);
+            ok = true;
         }
 
         if (ok) {

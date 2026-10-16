@@ -500,6 +500,9 @@ class CanDoDataCoordinator:
         """Send high-level entity command (e.g. lock/unlock) to ESP32 edge device over MQTT."""
         topic = f"{self.base_topic}/{self.effective_device_id}/set/{entity_id}"
         await mqtt.async_publish(self.hass, topic, command, qos=1)
+        fallback = f"{self.base_topic}/set/{entity_id}"
+        if fallback != topic:
+            await mqtt.async_publish(self.hass, fallback, command, qos=1)
 
     async def async_send_remote_climate(
         self,

@@ -112,8 +112,37 @@ class CanDoSelectEntity(CanDoEntity, SelectEntity):
         base_payload = self.coordinator.get_can_payload(action_can_id)
         if not base_payload and self.state_can_id and self.state_can_id.lower() == action_can_id.lower():
             base_payload = self.coordinator.get_can_payload(self.state_can_id)
-        steps = build_action_steps(self.command, target_opt, base_payload=base_payload)
-        if steps:
+        steps = build_action_steps(self.command, target_opt, base_payload)
+        if self.entity_id_str == "ambient_mood_lamp_color" or net.get("type") == "isotp":
+            _LOGGER.info("Sending ISO-TP entity command '%s' for '%s'", option, self.name)
+            await self.coordinator.async_send_entity_command(self.entity_id_str, option)
+
+            # Map ambient mood lamp presets to corresponding 0x4AD frame bursts
+            hex_map: dict[str, str] = {
+                "cyan": "0064530F00000000",
+                "amber": "FF50720700000000",
+                "orange": "FF50720700000000",
+                "violet": "8000F00F00000000",
+                "purple": "8000F00F00000000",
+                "white": "FEB4530A00000000",
+                "red": "FE88000000000000",
+                "green": "F7FC630B00000000",
+                "blue": "0054F10F00000000",
+                "pink": "FF00100F00000000",
+                "magenta": "FF00100F00000000",
+                "off": "0000000000000000",
+            }
+            opt_lower = option.lower()
+            matched_hex = None
+            for key, hx in hex_map.items():
+                if key in opt_lower:
+                    matched_hex = hx
+                    break
+
+            if matched_hex:
+                burst_steps = [{"payload": matched_hex, "repeat": 5, "delay_ms": 20}]
+                await self.coordinator.async_send_action("0x4AD", 20, burst_steps)
+        elif steps:
             _LOGGER.info("Selecting option '%s' for '%s'", option, self.name)
             await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
 
