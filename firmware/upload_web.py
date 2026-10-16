@@ -314,8 +314,18 @@ def main():
     if not os.path.isfile(cat_file):
         cat_file = os.path.join(data_dir, "catalog.json")
     if os.path.isfile(cat_file):
-        print("\nUploading catalog.json (device will reboot on completion)...")
-        upload_file(ip, cat_file, "/spiffs/catalog.json")
+        print("\nMinifying and uploading catalog.json (device will reboot on completion)...")
+        try:
+            import json
+            with open(cat_file, "r", encoding="utf-8") as jf:
+                cat_obj = json.load(jf)
+            mini_bytes = json.dumps(cat_obj, separators=(",", ":")).encode("utf-8")
+            url = f"http://{ip}/api/upload"
+            req = urllib.request.Request(url, data=mini_bytes, headers={"X-File-Path": "/spiffs/catalog.json"}, method="POST")
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                print(f"Uploaded minified catalog ({len(mini_bytes):,} bytes)... [OK]")
+        except Exception as e:
+            print(f" [FAILED: {e}]")
 
     print("\nWeb deployment complete! Visit: http://" + ip)
 
