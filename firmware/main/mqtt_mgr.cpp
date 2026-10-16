@@ -62,6 +62,12 @@ void mqtt_mgr_publish_can_state(uint32_t can_id, const uint8_t* data, size_t len
     esp_mqtt_client_publish(global_mqtt_client, topic, hex_payload, 0, 1, 1);
 }
 
+void mqtt_mgr_publish_entity_state(const std::string& entity_id, const std::string& state) {
+    if (!global_mqtt_client || !s_mqtt_connected.load()) return;
+    std::string topic = MQTT_BASE_TOPIC + "/state/" + entity_id;
+    esp_mqtt_client_publish(global_mqtt_client, topic.c_str(), state.c_str(), 0, 1, 1);
+}
+
 void mqtt_mgr_set_monitored_ids(const std::vector<uint32_t>& ids) {
     std::lock_guard<std::mutex> lock(s_monitored_mutex);
     s_monitored_ids.clear();
@@ -660,6 +666,7 @@ void mqtt_mgr_start(void) {
 
     // Fast keepalive and short timeouts so network drop is detected quickly
     mqtt_cfg.session.keepalive = 30;
+    mqtt_cfg.session.outbox_limit = 10240; // 10KB cap to prevent heap exhaustion when away from broker
     mqtt_cfg.network.reconnect_timeout_ms = 10000;
     mqtt_cfg.network.timeout_ms = 12500;
     mqtt_cfg.buffer.size = 2048;

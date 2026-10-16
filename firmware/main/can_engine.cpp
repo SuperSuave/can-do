@@ -657,19 +657,13 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
             std::transform(cmd_lower.begin(), cmd_lower.end(), cmd_lower.begin(), ::tolower);
             if (cmd_lower == "off" || cmd_lower == "0" || cmd_lower == "false" || cmd_lower == "disable") {
                 rule.enabled = false;
-                if (global_mqtt_client) {
-                    std::string state_topic = MQTT_BASE_TOPIC + "/state/" + rule.id;
-                    esp_mqtt_client_publish(global_mqtt_client, state_topic.c_str(), "OFF", 0, 1, 1);
-                }
+                mqtt_mgr_publish_entity_state(rule.id, "OFF");
                 broadcast_ws_state(rule.id, "OFF");
                 ESP_LOGI(TAG, "Automation rule '%s' disabled via entity command", rule.id.c_str());
                 return true;
             } else if (cmd_lower == "on" || cmd_lower == "1" || cmd_lower == "true" || cmd_lower == "enable") {
                 rule.enabled = true;
-                if (global_mqtt_client) {
-                    std::string state_topic = MQTT_BASE_TOPIC + "/state/" + rule.id;
-                    esp_mqtt_client_publish(global_mqtt_client, state_topic.c_str(), "ON", 0, 1, 1);
-                }
+                mqtt_mgr_publish_entity_state(rule.id, "ON");
                 broadcast_ws_state(rule.id, "ON");
                 ESP_LOGI(TAG, "Automation rule '%s' enabled via entity command", rule.id.c_str());
                 return true;
@@ -860,10 +854,7 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
 
         if (ok) {
             broadcast_ws_state(entity_id, new_state);
-            if (global_mqtt_client) {
-                std::string topic = MQTT_BASE_TOPIC + "/state/" + entity_id;
-                esp_mqtt_client_publish(global_mqtt_client, topic.c_str(), new_state.c_str(), 0, 1, 1);
-            }
+            mqtt_mgr_publish_entity_state(entity_id, new_state);
         }
         return ok;
     }
@@ -999,20 +990,17 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
     bool ok = queue_action_steps(cid, entity.delay_ms, matched_opt->steps, entity.id);
     if (ok) {
         entity.current_state = matched_opt->label;
-        if (global_mqtt_client) {
-            std::string topic = MQTT_BASE_TOPIC + "/state/" + entity.id;
-            std::string payload = matched_opt->label;
-            if (entity.ha_domain == "switch") {
-                std::string l_lower = matched_opt->label;
-                std::transform(l_lower.begin(), l_lower.end(), l_lower.begin(), ::tolower);
-                if (l_lower.find("off") != std::string::npos || l_lower.find("disable") != std::string::npos || l_lower.find("inactive") != std::string::npos) {
-                    payload = "OFF";
-                } else {
-                    payload = "ON";
-                }
+        std::string payload = matched_opt->label;
+        if (entity.ha_domain == "switch") {
+            std::string l_lower = matched_opt->label;
+            std::transform(l_lower.begin(), l_lower.end(), l_lower.begin(), ::tolower);
+            if (l_lower.find("off") != std::string::npos || l_lower.find("disable") != std::string::npos || l_lower.find("inactive") != std::string::npos) {
+                payload = "OFF";
+            } else {
+                payload = "ON";
             }
-            esp_mqtt_client_publish(global_mqtt_client, topic.c_str(), payload.c_str(), 0, 1, 1);
         }
+        mqtt_mgr_publish_entity_state(entity.id, payload);
         broadcast_ws_state(entity.id, matched_opt->label);
     }
     return ok;
@@ -1089,10 +1077,7 @@ static void emit_live_entity_state(const std::string& entity_id, const std::stri
             break;
         }
     }
-    if (global_mqtt_client) {
-        std::string topic = MQTT_BASE_TOPIC + "/state/" + entity_id;
-        esp_mqtt_client_publish(global_mqtt_client, topic.c_str(), state.c_str(), 0, 1, 1);
-    }
+    mqtt_mgr_publish_entity_state(entity_id, state);
     broadcast_ws_state(entity_id, state);
 }
 
@@ -1353,20 +1338,17 @@ void can_rx_task(void* arg) {
                                 ESP_LOGI(TAG, "State change: %s -> %s", entity.id.c_str(), opt.label.c_str());
 
                                 // MQTT Publish
-                                if (global_mqtt_client) {
-                                    std::string topic = MQTT_BASE_TOPIC + "/state/" + entity.id;
-                                    std::string payload = opt.label;
-                                    if (entity.ha_domain == "switch") {
-                                        std::string l_lower = opt.label;
-                                        std::transform(l_lower.begin(), l_lower.end(), l_lower.begin(), ::tolower);
-                                        if (l_lower.find("off") != std::string::npos || l_lower.find("disable") != std::string::npos || l_lower.find("inactive") != std::string::npos) {
-                                            payload = "OFF";
-                                        } else {
-                                            payload = "ON";
-                                        }
+                                std::string payload = opt.label;
+                                if (entity.ha_domain == "switch") {
+                                    std::string l_lower = opt.label;
+                                    std::transform(l_lower.begin(), l_lower.end(), l_lower.begin(), ::tolower);
+                                    if (l_lower.find("off") != std::string::npos || l_lower.find("disable") != std::string::npos || l_lower.find("inactive") != std::string::npos) {
+                                        payload = "OFF";
+                                    } else {
+                                        payload = "ON";
                                     }
-                                    esp_mqtt_client_publish(global_mqtt_client, topic.c_str(), payload.c_str(), 0, 1, 1);
                                 }
+                                mqtt_mgr_publish_entity_state(entity.id, payload);
 
                                 // WebSocket Broadcast
                                 broadcast_ws_state(entity.id, opt.label);

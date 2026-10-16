@@ -69,12 +69,8 @@ static void pack_tmu_01(uint8_t* data, bool aircon_on, float temp_c, bool defros
 }
 
 static void publish_climate_state(bool active) {
-    if (global_mqtt_client) {
-        std::string topic = MQTT_BASE_TOPIC + "/state/remote_climate";
-        esp_mqtt_client_publish(global_mqtt_client, topic.c_str(), active ? "ON" : "OFF", 0, 1, 1);
-        std::string tmu_topic = MQTT_BASE_TOPIC + "/state/remote_climate_tmu";
-        esp_mqtt_client_publish(global_mqtt_client, tmu_topic.c_str(), active ? "Remote Climate On" : "Remote Climate Off", 0, 1, 1);
-    }
+    mqtt_mgr_publish_entity_state("remote_climate", active ? "ON" : "OFF");
+    mqtt_mgr_publish_entity_state("remote_climate_tmu", active ? "Remote Climate On" : "Remote Climate Off");
     broadcast_ws_state("remote_climate", active ? "ON" : "OFF");
     broadcast_ws_state("remote_climate_tmu", active ? "Remote Climate On" : "Remote Climate Off");
 }
