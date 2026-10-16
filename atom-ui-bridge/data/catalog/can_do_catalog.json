@@ -465,7 +465,8 @@
         "name": "Unknown",
         "github": ""
       },
-      "subcategory": "Steering Wheel"
+      "subcategory": "Steering Wheel",
+      "state_can_id": "0x448"
     },
     {
       "id": "sw_mode",
@@ -494,7 +495,8 @@
         "name": "Unknown",
         "github": ""
       },
-      "subcategory": "Steering Wheel"
+      "subcategory": "Steering Wheel",
+      "state_can_id": "0x448"
     },
     {
       "id": "sw_speak",
@@ -523,7 +525,8 @@
         "name": "Unknown",
         "github": ""
       },
-      "subcategory": "Steering Wheel"
+      "subcategory": "Steering Wheel",
+      "state_can_id": "0x448"
     },
     {
       "id": "sw_call",
@@ -552,7 +555,8 @@
         "name": "Unknown",
         "github": ""
       },
-      "subcategory": "Steering Wheel"
+      "subcategory": "Steering Wheel",
+      "state_can_id": "0x448"
     },
     {
       "id": "sw_volume",
@@ -602,7 +606,8 @@
           "mask": "0x0F"
         }
       ],
-      "subcategory": "Steering Wheel"
+      "subcategory": "Steering Wheel",
+      "state_can_id": "0x448"
     },
     {
       "id": "sw_seek",
@@ -645,7 +650,8 @@
           "mask": "0x0F"
         }
       ],
-      "subcategory": "Steering Wheel"
+      "subcategory": "Steering Wheel",
+      "state_can_id": "0x448"
     },
     {
       "id": "sw_menu",
@@ -695,7 +701,8 @@
           "mask": "0xF0"
         }
       ],
-      "subcategory": "Steering Wheel"
+      "subcategory": "Steering Wheel",
+      "state_can_id": "0x448"
     },
     {
       "id": "steering_paddles",
@@ -739,7 +746,8 @@
           "mask": "0xF0"
         }
       ],
-      "subcategory": "Steering Wheel"
+      "subcategory": "Steering Wheel",
+      "state_can_id": "0x1CF"
     },
     {
       "id": "sw_cruise_cluster",
@@ -803,7 +811,8 @@
           "mask": "0xF0"
         }
       ],
-      "subcategory": "Steering Wheel"
+      "subcategory": "Steering Wheel",
+      "state_can_id": "0x1CF"
     },
     {
       "id": "blinker_stalks",
@@ -861,7 +870,8 @@
           "mask": "0xF0"
         }
       ],
-      "subcategory": "Steering Wheel"
+      "subcategory": "Steering Wheel",
+      "state_can_id": "0x3C1"
     },
     {
       "id": "gear_shifter_dial",
@@ -912,7 +922,8 @@
           "mask": "0xF0"
         }
       ],
-      "subcategory": "Transmission & Shifter"
+      "subcategory": "Transmission & Shifter",
+      "state_can_id": "0x130"
     },
     {
       "id": "hvac_touch_buttons",
@@ -997,7 +1008,8 @@
           "mask": "0xF0"
         }
       ],
-      "subcategory": "Center Console & AVN"
+      "subcategory": "Center Console & AVN",
+      "state_can_id": "0x47F"
     },
     {
       "id": "avn_star",
@@ -1026,7 +1038,8 @@
         "name": "Unknown",
         "github": ""
       },
-      "subcategory": "Center Console & AVN"
+      "subcategory": "Center Console & AVN",
+      "state_can_id": "0x652"
     },
     {
       "id": "avn_knob_buttons",
@@ -1069,7 +1082,8 @@
           "mask": "0xF0"
         }
       ],
-      "subcategory": "Center Console & AVN"
+      "subcategory": "Center Console & AVN",
+      "state_can_id": "0x651"
     },
     {
       "id": "avn_dash_media_buttons",
@@ -1196,7 +1210,9 @@
           ]
         }
       ],
-      "subcategory": "Center Console & AVN"
+      "subcategory": "Center Console & AVN",
+      "action_can_id": "0x652",
+      "state_can_id": "0x652"
     },
     {
       "id": "ev6_mode_strip",
@@ -1226,7 +1242,8 @@
         "name": "Unknown",
         "github": ""
       },
-      "subcategory": "Center Console & AVN"
+      "subcategory": "Center Console & AVN",
+      "state_can_id": "0x652"
     },
     {
       "id": "camera_btn",
@@ -1258,7 +1275,8 @@
         "name": "Unknown",
         "github": ""
       },
-      "subcategory": "Center Console & AVN"
+      "subcategory": "Center Console & AVN",
+      "state_can_id": "0x476"
     },
     {
       "id": "cluster_brightness",
@@ -1307,7 +1325,8 @@
         "name": "SuaveEV",
         "github": "supersuave",
         "notes": "CAN ID 0x474 (Cluster_Brightness_Button) Byte 7 (D8): 0x0A (Idle), 0x4A (Brightness +), 0x8A (Brightness -)."
-      }
+      },
+      "state_can_id": "0x474"
     },
     {
       "id": "cluster_brightness_up",
@@ -1350,7 +1369,8 @@
         "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Injects Instrument Cluster Brightness Up (+) button press on 0x474 Byte 7 (D8: 0x4A active pulse, 0x0A idle release). Steps display/dash illumination up via automation."
-      }
+      },
+      "action_can_id": "0x474"
     },
     {
       "id": "cluster_brightness_down",
@@ -1393,7 +1413,8 @@
         "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Injects Instrument Cluster Brightness Down (-) button press on 0x474 Byte 7 (D8: 0x8A active pulse, 0x0A idle release). Steps display/dash illumination down via automation."
-      }
+      },
+      "action_can_id": "0x474"
     },
     {
       "id": "head_unit_media_source",
@@ -1500,7 +1521,8 @@
           "mask": "0xFF"
         }
       ],
-      "subcategory": "Audio & Media"
+      "subcategory": "Audio & Media",
+      "state_can_id": "0x4CE"
     },
     {
       "id": "audio_sound_focus",
@@ -1610,7 +1632,9 @@
           }
         }
       ],
-      "subcategory": "Audio & Media"
+      "subcategory": "Audio & Media",
+      "action_can_id": "0x60E",
+      "state_can_id": "0x60E"
     },
     {
       "id": "climate_rear_defog",
@@ -1639,7 +1663,8 @@
         "name": "Unknown",
         "github": ""
       },
-      "subcategory": "Defrost & Defog"
+      "subcategory": "Defrost & Defog",
+      "state_can_id": "0x541"
     },
     {
       "id": "climate_driver_temp",
@@ -2122,7 +2147,9 @@
           "default": false
         }
       ],
-      "subcategory": "HVAC Controls"
+      "subcategory": "HVAC Controls",
+      "action_can_id": "0x4A0",
+      "state_can_id": "0x380"
     },
     {
       "id": "climate_passenger_temp",
@@ -2605,7 +2632,9 @@
           "default": false
         }
       ],
-      "subcategory": "HVAC Controls"
+      "subcategory": "HVAC Controls",
+      "action_can_id": "0x4A0",
+      "state_can_id": "0x380"
     },
     {
       "id": "climate_sync_toggle",
@@ -2650,7 +2679,8 @@
           "mask": "0xFF"
         }
       ],
-      "subcategory": "HVAC Controls"
+      "subcategory": "HVAC Controls",
+      "action_can_id": "0x4A0"
     },
     {
       "id": "climate_fan_active",
@@ -2679,7 +2709,8 @@
         "name": "Unknown",
         "github": ""
       },
-      "subcategory": "HVAC Controls"
+      "subcategory": "HVAC Controls",
+      "state_can_id": "0x31B"
     },
     {
       "id": "climate_recirc_on",
@@ -2708,7 +2739,8 @@
         "name": "Unknown",
         "github": ""
       },
-      "subcategory": "HVAC Controls"
+      "subcategory": "HVAC Controls",
+      "state_can_id": "0x31B"
     },
     {
       "id": "remote_climate_state",
@@ -2750,7 +2782,8 @@
           }
         }
       ],
-      "subcategory": "Remote Climate"
+      "subcategory": "Remote Climate",
+      "state_can_id": "0x384"
     },
     {
       "id": "car_ready_state",
@@ -2791,7 +2824,8 @@
         "name": "Unknown",
         "github": ""
       },
-      "subcategory": "Powertrain State"
+      "subcategory": "Powertrain State",
+      "state_can_id": "0x038"
     },
     {
       "id": "doors_status",
@@ -2908,7 +2942,8 @@
           "mask": "0x01"
         }
       ],
-      "subcategory": "Doors & Latches"
+      "subcategory": "Doors & Latches",
+      "state_can_id": "0x411"
     },
     {
       "id": "door_locks",
@@ -3050,7 +3085,9 @@
         "github": "supersuave",
         "tested_vehicle": "Kia EV6 GT-Line (US)",
         "role": "Discovered Unlock"
-      }
+      },
+      "action_can_id": "0x4A2",
+      "state_can_id": "0x411"
     },
     {
       "id": "seatbelts_status",
@@ -3104,7 +3141,8 @@
           }
         }
       ],
-      "subcategory": "Cabin Safety"
+      "subcategory": "Cabin Safety",
+      "state_can_id": "0x411"
     },
     {
       "id": "trunk",
@@ -3146,7 +3184,8 @@
         "name": "Unknown",
         "github": ""
       },
-      "subcategory": "Doors & Latches"
+      "subcategory": "Doors & Latches",
+      "state_can_id": "0x414"
     },
     {
       "id": "charge_port",
@@ -3246,7 +3285,9 @@
         "github": "supersuave",
         "notes": "Charge port door latch telemetry on 0x3AA Byte 3 / D4 (0x01=Open/Unlocked, 0x02=Closed/Locked). Actuation commanded via HU_CDMOpenCmd on 0x4A2 (Byte 6 / D7: 0x02=Open, 0x01=Close). Power pre-wakeup pulse 00 D0 00 00 00 00 00 00 on 0x4F1 powers latch relays if vehicle bus is asleep."
       },
-      "subcategory": "Charging Status"
+      "subcategory": "Charging Status",
+      "action_can_id": "0x4A2",
+      "state_can_id": "0x3AA"
     },
     {
       "id": "hood",
@@ -3289,7 +3330,8 @@
           }
         }
       ],
-      "subcategory": "Doors & Latches"
+      "subcategory": "Doors & Latches",
+      "state_can_id": "0x411"
     },
     {
       "id": "sunroof_extended",
@@ -3351,7 +3393,8 @@
           }
         }
       ],
-      "subcategory": "Windows & Sunroof"
+      "subcategory": "Windows & Sunroof",
+      "state_can_id": "0x442"
     },
     {
       "id": "driver_power_window",
@@ -3475,7 +3518,9 @@
             }
           ]
         }
-      ]
+      ],
+      "action_can_id": "0x4A2",
+      "state_can_id": "0x559"
     },
     {
       "id": "passenger_power_window",
@@ -3599,7 +3644,9 @@
             }
           ]
         }
-      ]
+      ],
+      "action_can_id": "0x4A2",
+      "state_can_id": "0x559"
     },
     {
       "id": "rear_left_power_window",
@@ -3723,7 +3770,9 @@
             }
           ]
         }
-      ]
+      ],
+      "action_can_id": "0x4A2",
+      "state_can_id": "0x559"
     },
     {
       "id": "rear_right_power_window",
@@ -3847,7 +3896,9 @@
             }
           ]
         }
-      ]
+      ],
+      "action_can_id": "0x4A2",
+      "state_can_id": "0x559"
     },
     {
       "id": "all_power_windows",
@@ -4139,7 +4190,9 @@
             }
           ]
         }
-      ]
+      ],
+      "action_can_id": "0x4A2",
+      "state_can_id": "0x559"
     },
     {
       "id": "cabin_windows_status",
@@ -4244,7 +4297,8 @@
           },
           "mask": "0x04"
         }
-      ]
+      ],
+      "state_can_id": "0x559"
     },
     {
       "id": "hazard_lights",
@@ -4302,7 +4356,8 @@
         "github": "commaai/opendbc",
         "notes": "Decoded from 0x413: D4=0x04 Hazard engaged, D2=0x50 lamps illuminated"
       },
-      "subcategory": "Lighting"
+      "subcategory": "Lighting",
+      "state_can_id": "0x413"
     },
     {
       "id": "turn_signal_left",
@@ -4346,7 +4401,8 @@
         "github": "commaai/opendbc",
         "notes": "Decoded from 0x413 D3: 0x10 Active, 0x00 Off (mask 0x10)"
       },
-      "subcategory": "Lighting"
+      "subcategory": "Lighting",
+      "state_can_id": "0x413"
     },
     {
       "id": "turn_signal_right",
@@ -4390,7 +4446,8 @@
         "github": "commaai/opendbc",
         "notes": "Decoded from 0x413 D3: 0x40 Active, 0x00 Off (mask 0x40)"
       },
-      "subcategory": "Lighting"
+      "subcategory": "Lighting",
+      "state_can_id": "0x413"
     },
     {
       "id": "wipers",
@@ -4433,7 +4490,8 @@
         "name": "Unknown",
         "github": ""
       },
-      "subcategory": "Exterior Controls"
+      "subcategory": "Exterior Controls",
+      "state_can_id": "0x541"
     },
     {
       "id": "brake_pedal_state",
@@ -4477,7 +4535,8 @@
           "mask": "0x04"
         }
       ],
-      "subcategory": "Braking & Pedals"
+      "subcategory": "Braking & Pedals",
+      "state_can_id": "0x412"
     },
     {
       "id": "power_state",
@@ -4519,7 +4578,8 @@
           }
         }
       ],
-      "subcategory": "Powertrain State"
+      "subcategory": "Powertrain State",
+      "state_can_id": "0x435"
     },
     {
       "id": "drive_mode_state",
@@ -4570,7 +4630,8 @@
           "mask": "0xF0"
         }
       ],
-      "subcategory": "Driving Dynamics"
+      "subcategory": "Driving Dynamics",
+      "state_can_id": "0x478"
     },
     {
       "id": "drivers_seat_comfort",
@@ -4757,7 +4818,9 @@
             }
           ]
         }
-      ]
+      ],
+      "action_can_id": "0x4A2",
+      "state_can_id": "0x496"
     },
     {
       "id": "passengers_seat_comfort",
@@ -4944,7 +5007,9 @@
             }
           ]
         }
-      ]
+      ],
+      "action_can_id": "0x4A2",
+      "state_can_id": "0x49C"
     },
     {
       "id": "rear_left_seat_comfort",
@@ -5041,7 +5106,9 @@
           ],
           "default": true
         }
-      ]
+      ],
+      "action_can_id": "0x4A2",
+      "state_can_id": "0x438"
     },
     {
       "id": "rear_right_seat_comfort",
@@ -5134,7 +5201,9 @@
             }
           ]
         }
-      ]
+      ],
+      "action_can_id": "0x4A2",
+      "state_can_id": "0x453"
     },
     {
       "id": "heated_steering_wheel_toggle",
@@ -5174,7 +5243,8 @@
         "name": "Unknown",
         "github": ""
       },
-      "subcategory": "Steering Wheel Heat"
+      "subcategory": "Steering Wheel Heat",
+      "action_can_id": "0x418"
     },
     {
       "id": "battery_preconditioning",
@@ -5294,7 +5364,8 @@
         "type": "precondition",
         "action_can_id": "0x0C7"
       },
-      "subcategory": "Preconditioning"
+      "subcategory": "Preconditioning",
+      "action_can_id": "0x0C7"
     },
     {
       "id": "battery_preconditioning_state",
@@ -5346,7 +5417,8 @@
           "mask": "0x1F"
         }
       ],
-      "subcategory": "Preconditioning"
+      "subcategory": "Preconditioning",
+      "state_can_id": "0x2AD"
     },
     {
       "id": "cluster_track_popup_message",
@@ -5450,7 +5522,8 @@
           "popup_message": "Tailgate Open"
         }
       ],
-      "subcategory": "Cluster OSD Popups"
+      "subcategory": "Cluster OSD Popups",
+      "action_can_id": "0x6E0"
     },
     {
       "id": "cluster_nav_osd_countdown",
@@ -5499,7 +5572,8 @@
           }
         }
       ],
-      "subcategory": "Cluster OSD Popups"
+      "subcategory": "Cluster OSD Popups",
+      "action_can_id": "0x4E8"
     },
     {
       "id": "cluster_track_popup_state",
@@ -5543,7 +5617,8 @@
           "default": true
         }
       ],
-      "subcategory": "Cluster OSD Popups"
+      "subcategory": "Cluster OSD Popups",
+      "state_can_id": "0x4CE"
     },
     {
       "id": "ac_charging_limit",
@@ -5711,7 +5786,9 @@
           ]
         }
       ],
-      "subcategory": "Limits & V2L"
+      "subcategory": "Limits & V2L",
+      "action_can_id": "0x4C5",
+      "state_can_id": "0x1F9"
     },
     {
       "id": "dc_charging_limit",
@@ -5879,7 +5956,9 @@
           ]
         }
       ],
-      "subcategory": "Limits & V2L"
+      "subcategory": "Limits & V2L",
+      "action_can_id": "0x4C5",
+      "state_can_id": "0x1F9"
     },
     {
       "id": "deep_sleep_network_wake_pulse",
@@ -5937,7 +6016,8 @@
         "name": "Unknown",
         "github": ""
       },
-      "subcategory": "Access & Wakeup"
+      "subcategory": "Access & Wakeup",
+      "action_can_id": "0x604"
     },
     {
       "id": "active_sound_design_asd_profile",
@@ -6018,7 +6098,8 @@
         "name": "SuaveEV",
         "github": "supersuave"
       },
-      "subcategory": "Audio & Media"
+      "subcategory": "Audio & Media",
+      "action_can_id": "0x658"
     },
     {
       "id": "surround_view_camera",
@@ -6058,7 +6139,8 @@
         "name": "Unknown",
         "github": ""
       },
-      "subcategory": "Center Console & AVN"
+      "subcategory": "Center Console & AVN",
+      "action_can_id": "0x476"
     },
     {
       "id": "keepalive_wakeup_ping",
@@ -6094,7 +6176,8 @@
         "name": "Unknown",
         "github": ""
       },
-      "subcategory": "Access & Wakeup"
+      "subcategory": "Access & Wakeup",
+      "action_can_id": "0x7DF"
     },
     {
       "id": "ambient_mood_lighting",
@@ -6219,7 +6302,8 @@
       "contributor": {
         "name": "Liz",
         "github": "L1Z3"
-      }
+      },
+      "action_can_id": "0x4AD"
     },
     {
       "id": "vehicle_gear_state",
@@ -6367,7 +6451,8 @@
           },
           "mask": "0x70"
         }
-      ]
+      ],
+      "state_can_id": "0x45"
     },
     {
       "id": "cond_charging",
@@ -6415,7 +6500,8 @@
           },
           "mask": "0x02"
         }
-      ]
+      ],
+      "state_can_id": "0x594"
     },
     {
       "id": "cond_ambient_temperature",
@@ -6471,7 +6557,8 @@
           }
         }
       ],
-      "subcategory": "Environment"
+      "subcategory": "Environment",
+      "state_can_id": "0x226"
     },
     {
       "id": "hv_battery_temperatures",
@@ -6530,7 +6617,8 @@
           "mask": "0xFF"
         }
       ],
-      "subcategory": "BMS & Telemetry"
+      "subcategory": "BMS & Telemetry",
+      "state_can_id": "0x152"
     },
     {
       "id": "cond_hv_battery_soc",
@@ -6584,7 +6672,8 @@
           }
         }
       ],
-      "subcategory": "BMS & Telemetry"
+      "subcategory": "BMS & Telemetry",
+      "state_can_id": "0x2FC"
     },
     {
       "id": "cond_aux_12v_battery",
@@ -6627,7 +6716,8 @@
           "voltage_dir": "below"
         }
       ],
-      "subcategory": "12V Aux Battery"
+      "subcategory": "12V Aux Battery",
+      "state_can_id": "0x1CF"
     },
     {
       "id": "cluster_vehicle_speed",
@@ -6691,7 +6781,8 @@
             "value": "0x64"
           }
         }
-      ]
+      ],
+      "state_can_id": "0x1AC"
     },
     {
       "id": "vehicle_odometer",
@@ -6736,7 +6827,8 @@
           },
           "default": true
         }
-      ]
+      ],
+      "state_can_id": "0x227"
     },
     {
       "id": "climate_airflow_direction",
@@ -6802,7 +6894,8 @@
           },
           "mask": "0xF0"
         }
-      ]
+      ],
+      "state_can_id": "0x31B"
     },
     {
       "id": "climate_fan_speed_level",
@@ -6903,7 +6996,8 @@
           },
           "mask": "0x0F"
         }
-      ]
+      ],
+      "state_can_id": "0x31B"
     },
     {
       "id": "v2l_minimum_charge_limit",
@@ -7089,7 +7183,9 @@
           ]
         }
       ],
-      "subcategory": "Limits & V2L"
+      "subcategory": "Limits & V2L",
+      "action_can_id": "0x0C7",
+      "state_can_id": "0x151"
     },
     {
       "id": "bms_hv_power_kw",
@@ -7116,7 +7212,8 @@
         "github": "supersuave",
         "notes": "Live BMS pack net power (positive = discharging, negative = charging / regen)"
       },
-      "subcategory": "BMS & Telemetry"
+      "subcategory": "BMS & Telemetry",
+      "state_can_id": "0x7EC"
     },
     {
       "id": "bms_hv_voltage",
@@ -7143,7 +7240,8 @@
         "github": "supersuave",
         "notes": "Live BMS pack total voltage"
       },
-      "subcategory": "BMS & Telemetry"
+      "subcategory": "BMS & Telemetry",
+      "state_can_id": "0x7EC"
     },
     {
       "id": "bms_hv_current",
@@ -7170,7 +7268,8 @@
         "github": "supersuave",
         "notes": "Live BMS pack total current"
       },
-      "subcategory": "BMS & Telemetry"
+      "subcategory": "BMS & Telemetry",
+      "state_can_id": "0x7EC"
     },
     {
       "id": "bms_cell_delta_mv",
@@ -7197,7 +7296,8 @@
         "github": "supersuave",
         "notes": "Difference between highest and lowest cell voltage in pack"
       },
-      "subcategory": "BMS & Telemetry"
+      "subcategory": "BMS & Telemetry",
+      "state_can_id": "0x7EC"
     },
     {
       "id": "bms_display_soc",
@@ -7224,7 +7324,8 @@
         "github": "supersuave",
         "notes": "High precision BMS internal state of charge"
       },
-      "subcategory": "BMS & Telemetry"
+      "subcategory": "BMS & Telemetry",
+      "state_can_id": "0x7EC"
     },
     {
       "id": "hud_turn_by_turn_maneuver",
@@ -7355,7 +7456,9 @@
           "mask": "0xFF"
         }
       ],
-      "subcategory": "Head-Up Display & Navigation"
+      "subcategory": "Head-Up Display & Navigation",
+      "action_can_id": "0x29B",
+      "state_can_id": "0x29B"
     },
     {
       "id": "hud_display_settings",
@@ -7398,7 +7501,8 @@
           "mask": "0x0F"
         }
       ],
-      "subcategory": "Head-Up Display & Navigation"
+      "subcategory": "Head-Up Display & Navigation",
+      "state_can_id": "0x29C"
     },
     {
       "id": "camera_speed_limit_sign",
@@ -7477,7 +7581,8 @@
           "mask": "0xFF"
         }
       ],
-      "subcategory": "Cluster OSD Popups"
+      "subcategory": "Cluster OSD Popups",
+      "state_can_id": "0x1FA"
     },
     {
       "id": "navigation_precond_status",
@@ -7521,7 +7626,8 @@
           "mask": "0x0F"
         }
       ],
-      "subcategory": "Battery Preconditioning"
+      "subcategory": "Battery Preconditioning",
+      "state_can_id": "0x4ED"
     },
     {
       "id": "remote_climate_tmu",
@@ -7572,7 +7678,9 @@
           }
         }
       ],
-      "subcategory": "Remote Climate Controls"
+      "subcategory": "Remote Climate Controls",
+      "action_can_id": "0x39B",
+      "state_can_id": "0x39B"
     },
     {
       "id": "remaining_charge_time_ac",
@@ -7637,7 +7745,8 @@
           },
           "default": true
         }
-      ]
+      ],
+      "state_can_id": "0x597"
     },
     {
       "id": "remaining_charge_time_dc",
@@ -7702,7 +7811,8 @@
           },
           "default": true
         }
-      ]
+      ],
+      "state_can_id": "0x597"
     },
     {
       "id": "remaining_charge_time_120v",
@@ -7750,7 +7860,8 @@
           },
           "default": true
         }
-      ]
+      ],
+      "state_can_id": "0x4E2"
     },
     {
       "id": "ev_charge_type_active",
@@ -7809,7 +7920,8 @@
           },
           "mask": "0x0E"
         }
-      ]
+      ],
+      "state_can_id": "0x595"
     },
     {
       "id": "ev_charge_port_lock_mode",
@@ -7888,7 +8000,9 @@
             "D1": "0x03"
           }
         }
-      ]
+      ],
+      "action_can_id": "0x30C",
+      "state_can_id": "0x30C"
     },
     {
       "id": "v2l_discharge_remaining_time",
@@ -7937,7 +8051,8 @@
             "value": "0x3C"
           }
         }
-      ]
+      ],
+      "state_can_id": "0x594"
     },
     {
       "id": "bms_cell_extremes_voltage",
@@ -7993,7 +8108,8 @@
             "value": "0xA0"
           }
         }
-      ]
+      ],
+      "state_can_id": "0x5D6"
     },
     {
       "id": "bms_module_extremes_temp",
@@ -8057,7 +8173,8 @@
             "value": "0x28"
           }
         }
-      ]
+      ],
+      "state_can_id": "0x5D7"
     },
     {
       "id": "ev_distance_to_empty",
@@ -8123,7 +8240,8 @@
             "value": "0x14"
           }
         }
-      ]
+      ],
+      "state_can_id": "0x200"
     },
     {
       "id": "ev_system_ready",
@@ -8168,7 +8286,8 @@
           },
           "mask": "0x01"
         }
-      ]
+      ],
+      "state_can_id": "0x200"
     },
     {
       "id": "scheduled_charging_departure",
@@ -8230,7 +8349,9 @@
           },
           "mask": "0xFF"
         }
-      ]
+      ],
+      "action_can_id": "0x321",
+      "state_can_id": "0x321"
     },
     {
       "id": "scheduled_climate_preheat",
@@ -8275,7 +8396,9 @@
           },
           "mask": "0x0F"
         }
-      ]
+      ],
+      "action_can_id": "0x450",
+      "state_can_id": "0x450"
     },
     {
       "id": "active_air_flaps_position",
@@ -8327,7 +8450,8 @@
           },
           "mask": "0xFF"
         }
-      ]
+      ],
+      "state_can_id": "0x584"
     },
     {
       "id": "climate_telemetry_status",
@@ -8394,7 +8518,8 @@
           },
           "mask": "0xFF"
         }
-      ]
+      ],
+      "state_can_id": "0x5F5"
     },
     {
       "id": "climate_blower_fan_status",
@@ -8460,7 +8585,8 @@
           },
           "mask": "0xFE"
         }
-      ]
+      ],
+      "state_can_id": "0x5F7"
     },
     {
       "id": "lkas_steering_status",
@@ -8519,7 +8645,8 @@
           },
           "mask": "0x07"
         }
-      ]
+      ],
+      "state_can_id": "0x340"
     },
     {
       "id": "scc_cruise_status",
@@ -8564,7 +8691,8 @@
           },
           "mask": "0x01"
         }
-      ]
+      ],
+      "state_can_id": "0x420"
     },
     {
       "id": "scc_lead_vehicle_status",
@@ -8608,7 +8736,8 @@
           },
           "mask": "0x01"
         }
-      ]
+      ],
+      "state_can_id": "0x421"
     },
     {
       "id": "aeb_emergency_braking",
@@ -8652,7 +8781,8 @@
           },
           "mask": "0x01"
         }
-      ]
+      ],
+      "state_can_id": "0x38D"
     },
     {
       "id": "telematics_remote_door_locks",
@@ -8724,7 +8854,9 @@
           },
           "mask": "0x0F"
         }
-      ]
+      ],
+      "action_can_id": "0x587",
+      "state_can_id": "0x587"
     },
     {
       "id": "telematics_remote_tailgate",
@@ -8794,7 +8926,9 @@
             "D2": "0x00"
           }
         }
-      ]
+      ],
+      "action_can_id": "0x588",
+      "state_can_id": "0x3A6"
     },
     {
       "id": "infotainment_user_preferences",
@@ -8846,7 +8980,9 @@
           },
           "mask": "0xFF"
         }
-      ]
+      ],
+      "action_can_id": "0x542",
+      "state_can_id": "0x542"
     },
     {
       "id": "electric_parking_brake_status",
@@ -8898,7 +9034,8 @@
           },
           "mask": "0x01"
         }
-      ]
+      ],
+      "state_can_id": "0x490"
     },
     {
       "id": "parking_sensor_beeper",
@@ -8963,7 +9100,8 @@
           },
           "mask": "0x0F"
         }
-      ]
+      ],
+      "state_can_id": "0x436"
     },
     {
       "id": "rspa_smart_parking_ctrl",
@@ -9022,7 +9160,9 @@
           },
           "mask": "0x0F"
         }
-      ]
+      ],
+      "action_can_id": "0x38C",
+      "state_can_id": "0x38C"
     },
     {
       "id": "audio_quiet_mode",
@@ -9126,7 +9266,9 @@
           "default": true
         }
       ],
-      "subcategory": "Audio & Media"
+      "subcategory": "Audio & Media",
+      "action_can_id": "0x60C",
+      "state_can_id": "0x60C"
     },
     {
       "id": "audio_kids_music_mode",
@@ -9232,7 +9374,9 @@
           "default": true
         }
       ],
-      "subcategory": "Audio & Media"
+      "subcategory": "Audio & Media",
+      "action_can_id": "0x60C",
+      "state_can_id": "0x60C"
     },
     {
       "id": "audio_master_mute",
@@ -9322,7 +9466,9 @@
           "default": true
         }
       ],
-      "subcategory": "Audio & Media"
+      "subcategory": "Audio & Media",
+      "action_can_id": "0x60C",
+      "state_can_id": "0x60C"
     },
     {
       "id": "audio_master_volume",
@@ -9399,7 +9545,9 @@
           }
         }
       ],
-      "subcategory": "Audio & Media"
+      "subcategory": "Audio & Media",
+      "action_can_id": "0x60C",
+      "state_can_id": "0x60C"
     },
     {
       "id": "audio_amp_fader",
@@ -9476,7 +9624,9 @@
           }
         }
       ],
-      "subcategory": "Audio & Media"
+      "subcategory": "Audio & Media",
+      "action_can_id": "0x60C",
+      "state_can_id": "0x60C"
     },
     {
       "id": "audio_amp_balance",
@@ -9553,7 +9703,9 @@
           }
         }
       ],
-      "subcategory": "Audio & Media"
+      "subcategory": "Audio & Media",
+      "action_can_id": "0x60C",
+      "state_can_id": "0x60C"
     },
     {
       "id": "audio_bass_band",
@@ -9630,7 +9782,9 @@
           }
         }
       ],
-      "subcategory": "Audio & Media"
+      "subcategory": "Audio & Media",
+      "action_can_id": "0x60C",
+      "state_can_id": "0x60C"
     },
     {
       "id": "audio_midrange_band",
@@ -9707,7 +9861,9 @@
           }
         }
       ],
-      "subcategory": "Audio & Media"
+      "subcategory": "Audio & Media",
+      "action_can_id": "0x60C",
+      "state_can_id": "0x60C"
     },
     {
       "id": "audio_treble_band",
@@ -9784,7 +9940,9 @@
           }
         }
       ],
-      "subcategory": "Audio & Media"
+      "subcategory": "Audio & Media",
+      "action_can_id": "0x60C",
+      "state_can_id": "0x60C"
     },
     {
       "id": "audio_surround_sound",
@@ -9874,7 +10032,9 @@
           "default": true
         }
       ],
-      "subcategory": "Audio & Media"
+      "subcategory": "Audio & Media",
+      "action_can_id": "0x60C",
+      "state_can_id": "0x60C"
     },
     {
       "id": "audio_sdvc",
@@ -9964,7 +10124,9 @@
           "default": true
         }
       ],
-      "subcategory": "Audio & Media"
+      "subcategory": "Audio & Media",
+      "action_can_id": "0x60C",
+      "state_can_id": "0x60C"
     },
     {
       "id": "can_network_wake_keepalive",
@@ -10023,7 +10185,8 @@
           "repeat": 10
         }
       ],
-      "subcategory": "Access & Wakeup"
+      "subcategory": "Access & Wakeup",
+      "action_can_id": "0x4F1"
     },
     {
       "id": "tpms_front_tires",
@@ -10067,7 +10230,8 @@
           },
           "mask": "0x01"
         }
-      ]
+      ],
+      "state_can_id": "0x3A1"
     },
     {
       "id": "tpms_rear_tires",
@@ -10111,7 +10275,8 @@
           },
           "mask": "0x01"
         }
-      ]
+      ],
+      "state_can_id": "0x3A2"
     },
     {
       "id": "ev_scheduled_cabin_climate",
@@ -10183,7 +10348,9 @@
           },
           "default": true
         }
-      ]
+      ],
+      "action_can_id": "0x450",
+      "state_can_id": "0x450"
     },
     {
       "id": "telematics_remote_security",
@@ -10248,7 +10415,9 @@
           },
           "default": true
         }
-      ]
+      ],
+      "action_can_id": "0x502",
+      "state_can_id": "0x502"
     },
     {
       "id": "audio_chime_nav_mix",
@@ -10293,7 +10462,9 @@
           "0x00",
           "0x00"
         ]
-      }
+      },
+      "action_can_id": "0x60D",
+      "state_can_id": "0x60D"
     },
     {
       "id": "audio_amp_diagnostics",
@@ -10344,7 +10515,8 @@
           },
           "mask": "0x01"
         }
-      ]
+      ],
+      "state_can_id": "0x60F"
     },
     {
       "id": "telematics_remote_ig3_relay",
@@ -10409,7 +10581,9 @@
           },
           "default": true
         }
-      ]
+      ],
+      "action_can_id": "0x587",
+      "state_can_id": "0x587"
     },
     {
       "id": "audio_spatial_sound_profile",
@@ -10491,7 +10665,9 @@
             "D8": "0x00"
           }
         }
-      ]
+      ],
+      "action_can_id": "0x60E",
+      "state_can_id": "0x60E"
     },
     {
       "id": "comfort_profile_seats_wheel",
@@ -10661,7 +10837,8 @@
             }
           ]
         }
-      ]
+      ],
+      "action_can_id": "0x4F2"
     },
     {
       "id": "climate_driver_only_toggle",
@@ -10728,7 +10905,9 @@
             }
           ]
         }
-      ]
+      ],
+      "action_can_id": "0x465",
+      "state_can_id": "0x465"
     },
     {
       "id": "climate_blower_speed_direct",
@@ -10920,7 +11099,8 @@
             }
           ]
         }
-      ]
+      ],
+      "action_can_id": "0x146"
     },
     {
       "id": "cgw_smart_proximity_trunk",
@@ -10964,7 +11144,8 @@
           },
           "mask": "0x07"
         }
-      ]
+      ],
+      "state_can_id": "0x410"
     },
     {
       "id": "cgw_ambient_mood_light_status",
@@ -11008,7 +11189,8 @@
           },
           "mask": "0xC0"
         }
-      ]
+      ],
+      "state_can_id": "0x410"
     },
     {
       "id": "cgw_welcome_mirror_light",
@@ -11052,7 +11234,8 @@
           },
           "mask": "0x03"
         }
-      ]
+      ],
+      "state_can_id": "0x410"
     },
     {
       "id": "cgw_vess_speaker_volume",
@@ -11208,7 +11391,9 @@
             }
           ]
         }
-      ]
+      ],
+      "action_can_id": "0x410",
+      "state_can_id": "0x410"
     },
     {
       "id": "ambient_mood_lamp_color",
@@ -11281,7 +11466,8 @@
             "hex": "640000000000000000"
           }
         }
-      ]
+      ],
+      "action_can_id": "0x7A0"
     },
     {
       "id": "ims_driver_memory_recall",
@@ -11451,7 +11637,8 @@
             }
           ]
         }
-      ]
+      ],
+      "action_can_id": "0x559"
     },
     {
       "id": "smart_key_fob_detected",
@@ -11509,7 +11696,8 @@
           },
           "mask": "0x07"
         }
-      ]
+      ],
+      "state_can_id": "0x553"
     },
     {
       "id": "ipedal_one_pedal_driving",
@@ -11594,7 +11782,8 @@
             }
           ]
         }
-      ]
+      ],
+      "action_can_id": "0x410"
     },
     {
       "id": "ev_smart_regenerative_braking",
@@ -11735,7 +11924,8 @@
             }
           ]
         }
-      ]
+      ],
+      "action_can_id": "0x410"
     },
     {
       "id": "ev_charging_power",
@@ -11766,7 +11956,8 @@
         "name": "SuaveEV",
         "github": "supersuave",
         "notes": "Direct live EV charging power reported in integer kW (0 to 255 kW) by the OBC / BMS on CAN ID 0x30E Byte 6 (D7) during AC Level 2 and DC Fast Charging, eliminating the need to calculate Volts * Amps / 1000."
-      }
+      },
+      "state_can_id": "0x30E"
     }
   ],
   "automations": [

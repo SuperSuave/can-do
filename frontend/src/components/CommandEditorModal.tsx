@@ -184,7 +184,14 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
   // Populate when modal opens
   useEffect(() => {
     if (initialCommand) {
-      setFormData({ ...initialCommand });
+      const stateCan = initialCommand.state_can_id || initialCommand.network?.state_can_id || initialCommand.can_id || '';
+      const actionCan = initialCommand.action_can_id || initialCommand.network?.action_can_id || '';
+      setFormData({
+        ...initialCommand,
+        state_can_id: stateCan,
+        action_can_id: actionCan,
+        bus: initialCommand.bus ?? initialCommand.network?.bus ?? 0,
+      });
       setIsIdManuallyEdited(true);
       setTagsInput(initialCommand.tags?.join(', ') || '');
       const contribs = getCommandContributors(initialCommand);
@@ -408,7 +415,21 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
     } else {
       delete cleaned.state_can_id;
     }
+    if (formData.action_can_id && formData.action_can_id.trim() !== '') {
+      cleaned.action_can_id = formData.action_can_id.trim();
+    } else {
+      delete cleaned.action_can_id;
+    }
     delete cleaned.can_id;
+
+    // Ensure network structure is preserved and synchronized
+    cleaned.network = {
+      ...(formData.network || {}),
+      bus: cleaned.bus ?? 0,
+      type: cleaned.type || formData.network?.type || (cleaned.action_can_id ? 'can_rx_tx' : 'can_rx'),
+      ...(cleaned.state_can_id ? { state_can_id: cleaned.state_can_id } : {}),
+      ...(cleaned.action_can_id ? { action_can_id: cleaned.action_can_id } : {}),
+    };
 
     if (activePayloadMode === 'transition') {
       delete cleaned.match_payload;

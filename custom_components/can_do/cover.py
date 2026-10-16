@@ -122,15 +122,23 @@ class CanDoCoverEntity(CanDoEntity, CoverEntity):
                     return True
         return False
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return diagnostic attributes for cover entity."""
+        attrs = super().extra_state_attributes
+        if self.device_class:
+            attrs["device_class"] = str(self.device_class)
+        return attrs
+
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the tailgate / cover."""
         target_opt = None
         for opt in self.command.get("options", []):
             label = opt.get("label", "").lower()
-            if "open" in label and "opening" not in label and opt.get("payload"):
+            if "open" in label and "opening" not in label and (opt.get("payload") or opt.get("steps")):
                 target_opt = opt
                 break
-            elif "open" in label and opt.get("payload"):
+            elif "open" in label and (opt.get("payload") or opt.get("steps")):
                 target_opt = opt
 
         if not target_opt:
@@ -138,7 +146,7 @@ class CanDoCoverEntity(CanDoEntity, CoverEntity):
             return
 
         net = self.command.get("network", {})
-        action_can_id = net.get("action_can_id", self.state_can_id or "0x000")
+        action_can_id = self.action_can_id or net.get("action_can_id", self.state_can_id or "0x000")
         delay_ms = net.get("delay_ms", 20)
         steps = build_action_steps(self.command, target_opt)
         if steps and action_can_id != "0x000":
@@ -149,10 +157,10 @@ class CanDoCoverEntity(CanDoEntity, CoverEntity):
         target_opt = None
         for opt in self.command.get("options", []):
             label = opt.get("label", "").lower()
-            if "close" in label and "closing" not in label and opt.get("payload"):
+            if "close" in label and "closing" not in label and (opt.get("payload") or opt.get("steps")):
                 target_opt = opt
                 break
-            elif "close" in label and opt.get("payload"):
+            elif "close" in label and (opt.get("payload") or opt.get("steps")):
                 target_opt = opt
 
         if not target_opt:
@@ -160,7 +168,7 @@ class CanDoCoverEntity(CanDoEntity, CoverEntity):
             return
 
         net = self.command.get("network", {})
-        action_can_id = net.get("action_can_id", self.state_can_id or "0x000")
+        action_can_id = self.action_can_id or net.get("action_can_id", self.state_can_id or "0x000")
         delay_ms = net.get("delay_ms", 20)
         steps = build_action_steps(self.command, target_opt)
         if steps and action_can_id != "0x000":
@@ -171,7 +179,7 @@ class CanDoCoverEntity(CanDoEntity, CoverEntity):
         target_opt = None
         for opt in self.command.get("options", []):
             label = opt.get("label", "").lower()
-            if ("vent" in label or "tilt" in label) and opt.get("payload"):
+            if ("vent" in label or "tilt" in label) and (opt.get("payload") or opt.get("steps")):
                 target_opt = opt
                 break
 
@@ -180,7 +188,7 @@ class CanDoCoverEntity(CanDoEntity, CoverEntity):
             return
 
         net = self.command.get("network", {})
-        action_can_id = net.get("action_can_id", self.state_can_id or "0x000")
+        action_can_id = self.action_can_id or net.get("action_can_id", self.state_can_id or "0x000")
         delay_ms = net.get("delay_ms", 20)
         steps = build_action_steps(self.command, target_opt)
         if steps and action_can_id != "0x000":

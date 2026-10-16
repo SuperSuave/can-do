@@ -80,8 +80,8 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
   const haYamlSnippet = (() => {
     const domain = command.ha_domain || 'sensor';
     const iconStr = command.icon || command.mdi || 'mdi:car-info';
-    const rxCan = command.state_can_id || command.can_id;
-    const txCan = command.action_can_id;
+    const rxCan = command.state_can_id || command.network?.state_can_id || command.can_id;
+    const txCan = command.action_can_id || command.network?.action_can_id;
     const lines: string[] = [
       `# Home Assistant Entity Configuration for CAN-Do`,
       `# Domain: ${domain}`,
@@ -96,11 +96,11 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
     }
     if (rxCan) {
       lines.push(`    can_id: "${rxCan}"`);
-      lines.push(`    bus: ${command.bus ?? 0}`);
+      lines.push(`    bus: ${command.bus ?? command.network?.bus ?? 0}`);
     }
     if (txCan) {
       lines.push(`    action_can_id: "${txCan}"`);
-      lines.push(`    action_bus: ${command.action_bus ?? command.bus ?? 0}`);
+      lines.push(`    action_bus: ${command.action_bus ?? command.network?.bus ?? command.bus ?? 0}`);
     }
     if (command.from_payload) lines.push(`    from_payload: "${formatPayloadDisplay(command.from_payload)}"`);
     if (command.to_payload) lines.push(`    to_payload: "${formatPayloadDisplay(command.to_payload)}"`);
@@ -178,14 +178,16 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                   {r}
                 </span>
               ))}
-              {(command.state_can_id || command.can_id) && (
+              {(command.state_can_id || command.network?.state_can_id || command.can_id) && (
                 <span className="font-mono text-xs px-2.5 py-0.5 rounded-[6px] bg-[var(--input-bg)] text-cyan-400 border border-[var(--border-color)]">
-                  {command.action_can_id ? `Rx: ${command.state_can_id || command.can_id}` : (command.state_can_id || command.can_id)} • Bus {command.bus ?? 0}
+                  {(command.action_can_id || command.network?.action_can_id)
+                    ? `Rx: ${command.state_can_id || command.network?.state_can_id || command.can_id}`
+                    : (command.state_can_id || command.network?.state_can_id || command.can_id)} • Bus {command.bus ?? command.network?.bus ?? 0}
                 </span>
               )}
-              {command.action_can_id && (
+              {(command.action_can_id || command.network?.action_can_id) && (
                 <span className="font-mono text-xs px-2.5 py-0.5 rounded-[6px] bg-[var(--input-bg)] text-emerald-400 border border-emerald-900/50">
-                  Tx: {command.action_can_id} • Bus {command.action_bus ?? command.bus ?? 0}
+                  Tx: {command.action_can_id || command.network?.action_can_id} • Bus {command.action_bus ?? command.network?.bus ?? command.bus ?? 0}
                 </span>
               )}
               {command.type && (

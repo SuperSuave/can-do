@@ -27,10 +27,23 @@ class CanDoEntity(Entity):
         self._attr_unique_id = f"{coordinator.device_id}_{self.entity_id_str}"
 
         net = command.get("network", {})
-        self.state_can_id: str | None = net.get("state_can_id")
-        self.action_can_id: str | None = net.get("action_can_id")
+        self.state_can_id: str | None = net.get("state_can_id") or command.get("state_can_id") or command.get("can_id")
+        self.action_can_id: str | None = net.get("action_can_id") or command.get("action_can_id")
         self._unsub_listeners: list[Callable[[], None]] = []
         self._last_state_snapshot: Any = object()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return base diagnostic attributes including state and action CAN IDs."""
+        attrs: dict[str, Any] = {
+            "entity_id": self.entity_id_str,
+            "category": self.command.get("category", ""),
+        }
+        if self.state_can_id:
+            attrs["state_can_id"] = self.state_can_id
+        if self.action_can_id:
+            attrs["action_can_id"] = self.action_can_id
+        return attrs
 
     @property
     def available(self) -> bool:
