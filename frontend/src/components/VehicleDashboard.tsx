@@ -1052,19 +1052,19 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       recordLog(idFormatted, canMappings.fanBlowerName, `Fan ${speed}`, hexPayload, now);
     }
 
-    // Charging Limits (Dynamically mapped from catalog, e.g. 0x1F9: AC limit Byte D7, DC limit Byte D4)
-    else if ((normId === canMappings.acLimit || normId === canMappings.dcLimit || normId === '1f9') && bytes.length >= 6) {
-      // AC Limit (catalog: D7): match 0x78=50%, 0xA0=60%, 0xC8=70%, 0xF5=80%, 0x1D=90%, 0x4A=100%
+    // Charging Limits (Dynamically mapped from catalog, e.g. 0x1F9: AC limit Byte D3 [idx 2], DC limit Byte D4 [idx 3])
+    else if ((normId === canMappings.acLimit || normId === canMappings.dcLimit || normId === '1f9') && bytes.length >= 4) {
+      // AC Limit (catalog: D3): match 0x64=50%, 0x78=60%, 0x8C=70%, 0xA0=80%, 0xB4=90%, 0xC8=100%
       let ac: number | null = null;
-      for (const idx of [6, 7]) {
+      for (const idx of [2, 6, 7]) {
         if (bytes.length > idx) {
           const b = bytes[idx];
-          if (b === 0x78) { ac = 50; break; }
-          else if (b === 0xa0) { ac = 60; break; }
-          else if (b === 0xc8) { ac = 70; break; }
-          else if (b === 0xf5) { ac = 80; break; }
-          else if (b === 0x1d) { ac = 90; break; }
-          else if (b === 0x4a) { ac = 100; break; }
+          if (b === 0x64) { ac = 50; break; }
+          else if (b === 0x78 || b === 0xa0 && idx !== 2) { ac = 60; break; }
+          else if (b === 0x8c || b === 0xc8 && idx !== 2) { ac = 70; break; }
+          else if (b === 0xa0 && idx === 2 || b === 0xf5) { ac = 80; break; }
+          else if (b === 0xb4 || b === 0x1d) { ac = 90; break; }
+          else if (b === 0xc8 && idx === 2 || b === 0x4a) { ac = 100; break; }
         }
       }
       if (ac !== null) setAcChargeLimit(ac);

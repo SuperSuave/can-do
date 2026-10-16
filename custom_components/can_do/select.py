@@ -85,7 +85,14 @@ class CanDoSelectEntity(CanDoEntity, SelectEntity):
                     return "Medium Cool"
                 if b in (0x1E, 0x14):
                     return "Low Cool"
-                return "Off"
+            # Fallback for E-GMP charging limits (0x1F9: Byte 2 = AC limit, Byte 3 = DC limit)
+            if self.state_can_id.lower() == "0x1f9" and len(payload) >= 4:
+                idx = 2 if "ac" in self.entity_id_str.lower() else 3
+                raw = payload[idx]
+                val_pct = round(raw * 0.5)
+                lbl = f"{val_pct}%"
+                if lbl in self.options:
+                    return lbl
 
         return self._current_option
 

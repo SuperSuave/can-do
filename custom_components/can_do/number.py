@@ -49,11 +49,26 @@ class CanDoNumberEntity(CanDoEntity, NumberEntity):
     @property
     def native_value(self) -> float | None:
         """Return the current number value."""
+        direct = self.coordinator.get_can_payload(self.entity_id_str)
+        if direct is not None:
+            if isinstance(direct, (int, float)):
+                self._value = max(self._attr_native_min_value, min(self._attr_native_max_value, float(direct)))
+                return self._value
+            if isinstance(direct, str):
+                import re
+                m = re.search(r"[-+]?\d*\.?\d+", direct)
+                if m:
+                    try:
+                        self._value = max(self._attr_native_min_value, min(self._attr_native_max_value, float(m.group(0))))
+                        return self._value
+                    except ValueError:
+                        pass
+
         if not self.state_can_id:
             return self._value
 
         payload = self.coordinator.get_can_payload(self.state_can_id)
-        if not payload:
+        if not payload or not isinstance(payload, list):
             return self._value
 
         idx = get_d_index(self.byte_str)

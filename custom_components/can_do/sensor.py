@@ -329,6 +329,21 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
         if isinstance(payload, (int, float)):
             return round(float(payload), 2)
 
+        # 0A. Direct decoded string telemetry from WiCAN (e.g. "13.4 V", "50%", "88735", "0 km/h")
+        if isinstance(payload, str):
+            for opt in self.command.get("options", []):
+                if opt.get("label", "").lower() == payload.lower():
+                    return opt.get("label")
+            import re
+            m = re.search(r"[-+]?\d*\.?\d+", payload)
+            if m:
+                try:
+                    num_val = float(m.group(0))
+                    return int(num_val) if num_val.is_integer() else round(num_val, 2)
+                except ValueError:
+                    pass
+            return payload
+
         # 1. Specialized Numeric Decoders
         # 1A. V2L Minimum Discharge Limit (0x151 Byte D7: factor 0.5 %)
         if "v2l" in cid or self.state_can_id.lower() == "0x151":

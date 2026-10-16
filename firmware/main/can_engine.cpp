@@ -1672,18 +1672,18 @@ void can_rx_task(void* arg) {
                 }
             }
 
-            // AC / DC Charging Limits (0x1F9: AC limit Byte 6/7, DC limit Byte 3/4)
-            if (rx_msg.identifier == 0x1F9 && rx_msg.data_length_code >= 6) {
+            // AC / DC Charging Limits (0x1F9: AC limit Byte 2 [D3], DC limit Byte 3 [D4])
+            if (rx_msg.identifier == 0x1F9 && rx_msg.data_length_code >= 4) {
                 int ac = -1;
-                for (int idx : {6, 7}) {
+                for (int idx : {2, 6, 7}) {
                     if (rx_msg.data_length_code > idx) {
                         uint8_t b = rx_msg.data[idx];
-                        if (b == 0x78) { ac = 50; break; }
-                        else if (b == 0xA0) { ac = 60; break; }
-                        else if (b == 0xC8) { ac = 70; break; }
-                        else if (b == 0xF5) { ac = 80; break; }
-                        else if (b == 0x1D) { ac = 90; break; }
-                        else if (b == 0x4A) { ac = 100; break; }
+                        if (b == 0x64) { ac = 50; break; }
+                        else if (b == 0x78) { ac = 60; break; }
+                        else if (b == 0x8C) { ac = 70; break; }
+                        else if (b == 0xA0) { ac = 80; break; }
+                        else if (b == 0xB4) { ac = 90; break; }
+                        else if (b == 0xC8 || b == 0x4A) { ac = 100; break; }
                     }
                 }
                 if (ac > 0) {

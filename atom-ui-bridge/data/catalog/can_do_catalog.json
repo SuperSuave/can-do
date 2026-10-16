@@ -5662,7 +5662,7 @@
           "label": "50%",
           "popup": "AC Limit: 50%",
           "match": {
-            "D7": "0x78"
+            "D3": "0x64"
           },
           "steps": [
             {
@@ -5683,7 +5683,7 @@
           "label": "60%",
           "popup": "AC Limit: 60%",
           "match": {
-            "D7": "0xA0"
+            "D3": "0x78"
           },
           "steps": [
             {
@@ -5704,7 +5704,7 @@
           "label": "70%",
           "popup": "AC Limit: 70%",
           "match": {
-            "D7": "0xC8"
+            "D3": "0x8C"
           },
           "steps": [
             {
@@ -5725,7 +5725,7 @@
           "label": "80%",
           "popup": "AC Limit: 80%",
           "match": {
-            "D7": "0xF5"
+            "D3": "0xA0"
           },
           "default": true,
           "steps": [
@@ -5747,7 +5747,7 @@
           "label": "90%",
           "popup": "AC Limit: 90%",
           "match": {
-            "D7": "0x1D"
+            "D3": "0xB4"
           },
           "steps": [
             {
@@ -5768,7 +5768,7 @@
           "label": "100%",
           "popup": "AC Limit: 100%",
           "match": {
-            "D7": "0x4A"
+            "D3": "0xC8"
           },
           "steps": [
             {
