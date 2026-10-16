@@ -339,11 +339,11 @@ bool evaluate_condition(const AutomationCondition& cond) {
                 return !cond.target_bool;
             }
 
-            auto it = can_state_cache.find(cond.can_id);
-            if (it == can_state_cache.end()) return false;
+            uint8_t cached_frame[8];
+            if (!get_cached_can_frame(cond.can_id, cached_frame)) return false;
 
             if (cond.byte_index >= 8) return false;
-            uint8_t actual = it->second[cond.byte_index];
+            uint8_t actual = cached_frame[cond.byte_index];
             uint8_t mask = cond.byte_mask;
 
             uint8_t masked_actual = actual & mask;
@@ -1050,39 +1050,17 @@ void can_rx_task(void* arg) {
             }
         }
 
-        // Auto-recover and watchdog supervisor for TWAI peripheral
+        // Auto-recover supervisor for TWAI peripheral
         twai_status_info_t twai_status;
         uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
 
         if (twai_get_status_info(&twai_status) == ESP_OK) {
             if (twai_status.state == TWAI_STATE_BUS_OFF) {
-                if (s_bus_off_or_recovering_start_ms == 0) {
-                    s_bus_off_or_recovering_start_ms = now_ms;
-                    ESP_LOGW(TAG, "TWAI controller in BUS_OFF! Clearing TX queue and initiating recovery...");
-                    twai_clear_transmit_queue();
-                    twai_initiate_recovery();
-                }
-            } else if (twai_status.state == TWAI_STATE_STOPPED) {
-                ESP_LOGI(TAG, "TWAI recovered from bus-off. Clearing TX queue and restarting controller...");
+                ESP_LOGW(TAG, "TWAI controller in BUS_OFF! Reinstalling hardware driver immediately...");
                 twai_clear_transmit_queue();
-                twai_start();
-                s_bus_off_or_recovering_start_ms = 0;
-            } else if (twai_status.state == TWAI_STATE_RECOVERING) {
-                if (s_bus_off_or_recovering_start_ms == 0) {
-                    s_bus_off_or_recovering_start_ms = now_ms;
-                }
-            } else if (twai_status.state == TWAI_STATE_RUNNING) {
-                s_bus_off_or_recovering_start_ms = 0;
-            }
-
-            // Watchdog: If stuck in BUS_OFF or RECOVERING for > 5000ms, hardware recovery has deadlocked
-            // (e.g. silent bus, disconnected line, transceiver standby). Force a complete hardware reinstall!
-            if (s_bus_off_or_recovering_start_ms > 0 && (now_ms - s_bus_off_or_recovering_start_ms > 5000)) {
-                ESP_LOGE(TAG, "TWAI recovery watchdog timeout (>5000ms). Forcing hardware driver reset...");
-                twai_clear_transmit_queue();
-                twai_stop();
+                // In ESP-IDF, twai_driver_uninstall() is valid directly from TWAI_STATE_BUS_OFF (twai_stop must NOT be called in BUS_OFF)
                 twai_driver_uninstall();
-                vTaskDelay(pdMS_TO_TICKS(50));
+                vTaskDelay(pdMS_TO_TICKS(10));
 
                 twai_mode_t cur_mode = g_hardware_listen_only.load() ? TWAI_MODE_LISTEN_ONLY : TWAI_MODE_NORMAL;
                 twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, cur_mode);
@@ -1095,10 +1073,26 @@ void can_rx_task(void* arg) {
                 esp_err_t err = twai_driver_install(&g_config, &t_config, &f_config);
                 if (err == ESP_OK) {
                     twai_start();
-                    ESP_LOGI(TAG, "TWAI driver re-installed and running after watchdog reset");
+                    ESP_LOGI(TAG, "TWAI driver re-installed and running after BUS_OFF reset");
                 } else {
                     ESP_LOGE(TAG, "TWAI driver reinstall failed (%s)", esp_err_to_name(err));
                 }
+                s_bus_off_or_recovering_start_ms = 0;
+            } else if (twai_status.state == TWAI_STATE_STOPPED) {
+                ESP_LOGI(TAG, "TWAI controller STOPPED. Starting controller...");
+                twai_clear_transmit_queue();
+                twai_start();
+                s_bus_off_or_recovering_start_ms = 0;
+            } else if (twai_status.state == TWAI_STATE_RECOVERING) {
+                if (s_bus_off_or_recovering_start_ms == 0) {
+                    s_bus_off_or_recovering_start_ms = now_ms;
+                }
+                // If hardware is stuck in RECOVERING for > 3000ms, automatic warm restart guarantees recovery
+                if (now_ms - s_bus_off_or_recovering_start_ms > 3000) {
+                    ESP_LOGE(TAG, "TWAI stuck in RECOVERING state (>3000ms). Resetting MCU...");
+                    esp_restart();
+                }
+            } else if (twai_status.state == TWAI_STATE_RUNNING) {
                 s_bus_off_or_recovering_start_ms = 0;
             }
         }
@@ -1119,12 +1113,7 @@ void can_rx_task(void* arg) {
             if (rx_msg.rtr) continue;
 
             uint8_t prev_data[8] = {0};
-            bool has_prev = false;
-            auto it = can_state_cache.find(rx_msg.identifier);
-            if (it != can_state_cache.end()) {
-                memcpy(prev_data, it->second.data(), 8);
-                has_prev = true;
-            }
+            bool has_prev = get_cached_can_frame(rx_msg.identifier, prev_data);
 
             // 1. Always update state cache
             update_state_cache(rx_msg.identifier, rx_msg.data);
@@ -1691,8 +1680,12 @@ void can_rx_task(void* arg) {
                 board_led_can_set(false);
             }
         }
-        precondition_tick();
-        track_popup_tick();
+        static uint32_t s_last_precon_tick_ms = 0;
+        if (now_ms - s_last_precon_tick_ms >= 40) {
+            s_last_precon_tick_ms = now_ms;
+            precondition_tick();
+            track_popup_tick();
+        }
 
         static uint32_t s_last_hud_tick_ms = 0;
         uint32_t now_hud_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);

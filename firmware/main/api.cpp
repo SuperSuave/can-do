@@ -1789,6 +1789,7 @@ static esp_err_t api_notify_handler(httpd_req_t *req) {
 
     cJSON *hold_item = cJSON_GetObjectItem(root, "hold_ms");
     uint32_t hold_ms = (hold_item && cJSON_IsNumber(hold_item)) ? (uint32_t)hold_item->valueint : 5000;
+    (void)hold_ms;
 
     cJSON_Delete(root);
 

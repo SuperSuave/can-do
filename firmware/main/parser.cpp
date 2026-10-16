@@ -454,6 +454,7 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         cJSON* lvl = cJSON_GetObjectItem(a_item, "level");
         if (cJSON_IsString(lvl)) step.popup_level = lvl->valuestring;
         else step.popup_level = "info";
+        return true;
     } else if (strcmp(type_str, "climate_target") == 0 || strcmp(type_str, "climate") == 0 || strcmp(type_str, "remote_climate") == 0) {
         step.type = ActionType::CLIMATE_TARGET;
         cJSON* tc = cJSON_GetObjectItem(a_item, "target_c");
@@ -678,6 +679,7 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         }
         return true;
     }
+    return false;
 }
 
 static void parse_steps(cJSON* steps_array, std::vector<ActionStep>& out_steps) {

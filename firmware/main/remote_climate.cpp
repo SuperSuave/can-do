@@ -42,16 +42,19 @@ static void send_can_frame(uint32_t id, const uint8_t* data, uint8_t dlc) {
 static void pack_tmu_01(uint8_t* data, bool aircon_on, float temp_c, bool defrost, uint8_t alive_cnt) {
     memset(data, 0, 8);
 
+    uint8_t veh_sld_bit = 1; // CF_Tmu_VehSld: 1 = Active / Authorized subscription
     uint8_t aircon_bit = aircon_on ? 1 : 0;
     uint8_t temp_md_bit = 0; // 0 = Celsius
 
-    int temp_code = (int)roundf(temp_c) & 0xFF;
+    // E-GMP DATC Celsius scaling is 0.5 deg C per count (e.g. 22.0 C -> 44)
+    int temp_code = (int)roundf(temp_c / 0.5f) & 0xFF;
 
     // Byte 0:
+    //   Bit 0: CF_Tmu_VehSld (1)
     //   Bit 4: CF_Tmu_AirconCtr (1 = Start, 0 = Stop)
     //   Bit 5: CF_Tmu_TempMd (0 = Celsius, 1 = Fahrenheit)
     //   Bits 6-7: CF_Tmu_TempSet lower 2 bits
-    data[0] = (aircon_bit << 4) | (temp_md_bit << 5) | ((temp_code & 0x03) << 6);
+    data[0] = (veh_sld_bit << 0) | (aircon_bit << 4) | (temp_md_bit << 5) | ((temp_code & 0x03) << 6);
 
     // Byte 1:
     //   Bits 0-5: CF_Tmu_TempSet upper 6 bits

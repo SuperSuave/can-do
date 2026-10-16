@@ -75,17 +75,13 @@ static void power_mgr_task(void* arg) {
             // without draining the car battery (takes ~1 year to drain a 60Ah battery).
             power_mgr_set_tier(POWER_TIER_STANDBY);
 
-            // Tier 3 Deep Sleep is an EMERGENCY fail-safe ONLY if 12V battery is genuinely depleted
-            // (< 11.0V) continuously for 12 consecutive checks (60 seconds debounced).
-            // 11.0V indicates deep discharge where battery health or starting capability is in danger.
-            // 12.0V is a completely normal resting voltage for a healthy parked vehicle!
+            // When vehicle bus is silent and running on 12V battery, maintain Tier 2 Standby
+            // (Modem Sleep: ~18mA @ 3.3V / ~6mA @ 12V). This provides active CAN reception,
+            // Wi-Fi connectivity, and web dashboard responsiveness without draining the 12V battery.
             if (vbat > 5.0f && vbat < 11.0f) {
                 critical_low_vbat_count++;
-                ESP_LOGW(TAG, "12V Battery critically low (%.2fV < 11.0V) [check %d/12]", 
-                         vbat, critical_low_vbat_count);
-                if (critical_low_vbat_count >= 12) {
-                    ESP_LOGE(TAG, "12V Battery critically low for 60s (%.2fV). Entering Emergency Deep Sleep protection.", vbat);
-                    power_mgr_enter_deep_sleep(1800); // 30 min timer check
+                if (critical_low_vbat_count % 12 == 1) {
+                    ESP_LOGW(TAG, "12V Battery low (%.2fV < 11.0V). Maintaining Tier 2 Standby (~6mA).", vbat);
                 }
             } else {
                 critical_low_vbat_count = 0;
