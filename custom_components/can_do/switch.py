@@ -42,6 +42,15 @@ class CanDoSwitchEntity(CanDoEntity, SwitchEntity):
     @property
     def is_on(self) -> bool:
         """Return True if switch is on."""
+        # 1. Direct entity string state from coordinator (e.g. "ON" / "OFF")
+        direct_str = self.coordinator.get_can_payload(self.entity_id_str)
+        if isinstance(direct_str, str):
+            ds = direct_str.strip().upper()
+            if ds in ("ON", "ACTIVE", "TRUE", "1", "HEAT"):
+                return True
+            if ds in ("OFF", "INACTIVE", "FALSE", "0"):
+                return False
+
         if not self.state_can_id:
             return self._is_on
 

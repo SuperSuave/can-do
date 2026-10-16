@@ -239,37 +239,44 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
             wheel_val = p_418[0] & 0x03
             attrs["heated_steering_wheel"] = ["Off", "On"][wheel_val] if wheel_val < 2 else "Unknown"
 
-        # 4. Seat Comfort (0x496 Byte D1)
-        p_496 = self.coordinator.get_can_payload("0x496")
-        if p_496 and len(p_496) >= 1:
-            d_raw = p_496[0]
-            seat_map = {
-                0x16: "Off",
-                0x36: "Low Heat",
-                0x4E: "Medium Heat",
-                0x46: "High Heat",
-                0x1E: "Low Cool",
-                0x26: "Medium Cool",
-                0x2E: "High Cool",
-            }
-            if d_raw in seat_map:
-                attrs["driver_seat_comfort"] = seat_map[d_raw]
+        # 4. Seat Comfort (0x496 Byte D1 / drivers_seat_comfort entity)
+        drv_direct = self.coordinator.get_can_payload("drivers_seat_comfort")
+        if isinstance(drv_direct, str):
+            attrs["driver_seat_comfort"] = drv_direct
+        else:
+            p_496 = self.coordinator.get_can_payload("0x496")
+            if p_496 and len(p_496) >= 1:
+                d_raw = p_496[0]
+                seat_map = {
+                    0x16: "Off",
+                    0x36: "Low Heat", 0x0E: "Low Heat",
+                    0x4E: "Medium Heat", 0x0A: "Medium Heat",
+                    0x46: "High Heat", 0x02: "High Heat",
+                    0x1E: "Low Cool", 0x14: "Low Cool",
+                    0x26: "Medium Cool", 0x12: "Medium Cool",
+                    0x2E: "High Cool", 0x10: "High Cool",
+                }
+                if d_raw in seat_map:
+                    attrs["driver_seat_comfort"] = seat_map[d_raw]
 
-
-        p_475 = self.coordinator.get_can_payload("0x475")
-        if p_475 and len(p_475) >= 1:
-            d_raw = p_475[0]
-            seat_map = {
-                0x16: "Off",
-                0x36: "Low Heat",
-                0x4E: "Medium Heat",
-                0x46: "High Heat",
-                0x1E: "Low Cool",
-                0x26: "Medium Cool",
-                0x2E: "High Cool",
-            }
-            if d_raw in seat_map:
-                attrs["passenger_seat_comfort"] = seat_map[d_raw]
+        pass_direct = self.coordinator.get_can_payload("passengers_seat_comfort")
+        if isinstance(pass_direct, str):
+            attrs["passenger_seat_comfort"] = pass_direct
+        else:
+            p_475 = self.coordinator.get_can_payload("0x475")
+            if p_475 and len(p_475) >= 1:
+                d_raw = p_475[0]
+                seat_map = {
+                    0x16: "Off",
+                    0x36: "Low Heat", 0x0E: "Low Heat",
+                    0x4E: "Medium Heat", 0x0A: "Medium Heat",
+                    0x46: "High Heat", 0x02: "High Heat",
+                    0x1E: "Low Cool", 0x14: "Low Cool",
+                    0x26: "Medium Cool", 0x12: "Medium Cool",
+                    0x2E: "High Cool", 0x10: "High Cool",
+                }
+                if d_raw in seat_map:
+                    attrs["passenger_seat_comfort"] = seat_map[d_raw]
 
         p_438 = self.coordinator.get_can_payload("0x438")
         if p_438 and len(p_438) >= 1:

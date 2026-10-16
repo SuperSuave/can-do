@@ -146,13 +146,19 @@ class CanDoEntity(Entity):
                 state_val = self.is_closed
             except Exception:
                 pass
-        # 4. Numeric / text sensor
+        # 4. Select entity
+        elif hasattr(self, "current_option"):
+            try:
+                state_val = self.current_option
+            except Exception:
+                pass
+        # 5. Numeric / text sensor
         elif hasattr(self, "native_value"):
             try:
                 state_val = self.native_value
             except Exception:
                 pass
-        # 5. Climate entity
+        # 6. Climate entity
         elif hasattr(self, "target_temperature"):
             try:
                 state_val = (
@@ -163,8 +169,15 @@ class CanDoEntity(Entity):
                 )
             except Exception:
                 pass
-        # 6. Switch entity
+        # 7. Switch entity
         elif hasattr(self, "_is_on"):
             state_val = getattr(self, "_is_on", None)
-            
+
+        # Fallback to general entity state if still None
+        if state_val is None and hasattr(self, "state"):
+            try:
+                state_val = self.state
+            except Exception:
+                pass
+
         return state_val
