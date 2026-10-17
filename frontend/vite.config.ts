@@ -117,6 +117,14 @@ export default defineConfig(() => {
               return res.end(JSON.stringify({}));
             }
 
+            // Local development mock for /api/notify
+            if (cleanUrl === '/api/notify') {
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.statusCode = 200;
+              return res.end(JSON.stringify({ status: 'ok' }));
+            }
+
             next();
           });
         },

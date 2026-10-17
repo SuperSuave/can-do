@@ -678,6 +678,36 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
         }
     }
 
+    if (entity_id == "battery_preconditioning" || entity_id == "precondition") {
+        std::string mode = "persistent";
+        std::string act = "start";
+        if (!command_label.empty() && command_label[0] == '{') {
+            cJSON* root = cJSON_Parse(command_label.c_str());
+            if (root) {
+                cJSON* m = cJSON_GetObjectItem(root, "mode");
+                if (m && cJSON_IsString(m)) mode = m->valuestring;
+                cJSON* a = cJSON_GetObjectItem(root, "action");
+                if (a && cJSON_IsString(a)) act = a->valuestring;
+                cJSON_Delete(root);
+            }
+        } else if (!command_label.empty()) {
+            std::string c_lower = command_label;
+            std::transform(c_lower.begin(), c_lower.end(), c_lower.begin(), ::tolower);
+            if (c_lower.find("stop") != std::string::npos || c_lower.find("cancel") != std::string::npos || c_lower.find("off") != std::string::npos) {
+                act = "stop";
+                mode = "cancel";
+            } else if (c_lower.find("continuous") != std::string::npos) {
+                mode = "continuous";
+            } else if (c_lower.find("once") != std::string::npos || c_lower.find("single") != std::string::npos) {
+                mode = "once";
+            } else {
+                mode = "persistent";
+            }
+        }
+        precondition_execute_action(mode.c_str(), act.c_str());
+        return true;
+    }
+
     if (entity_id == "remote_climate" || entity_id == "remote_climate_tmu" || entity_id == "remote_climate_start_smart") {
         float temp_c = 22.0f;
         bool defrost = false;

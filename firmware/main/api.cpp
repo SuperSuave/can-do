@@ -355,7 +355,10 @@ static esp_err_t api_command_handler(httpd_req_t *req) {
             httpd_resp_sendstr(req, "{\"status\": \"queued\"}");
             return ESP_OK;
         }
-    } else if (cJSON_IsString(target_can_id) || cJSON_IsNumber(target_can_id)) {
+    }
+
+    // Direct CAN frame fallback (or fallback if entity was not resolved in catalog)
+    if (cJSON_IsString(target_can_id) || cJSON_IsNumber(target_can_id)) {
         uint32_t cid = 0;
         if (cJSON_IsString(target_can_id)) {
             cid = strtoul(target_can_id->valuestring, nullptr, 0);

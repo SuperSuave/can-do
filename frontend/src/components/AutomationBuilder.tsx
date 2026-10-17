@@ -3773,24 +3773,297 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     };
   }, [espIp]);
 
-  // Handler for testing an individual action manually
+  // Formats any raw payload or ByteMap into clean 8-byte space-separated hex and ByteMap object
+  const formatPayloadForApi = (payload: string | any): { str: string; obj: Record<string, string> } => {
+    const byteMap = compileToByteMap(payload);
+    const obj: Record<string, string> = {};
+    const hexBytes: string[] = [];
+    for (let i = 1; i <= 8; i++) {
+      const key = `D${i}`;
+      const rawVal = byteMap[key] || '0x00';
+      const hexVal = String(rawVal).replace(/^0x/i, '').padStart(2, '0').slice(-2).toUpperCase();
+      obj[key] = `0x${hexVal}`;
+      hexBytes.push(hexVal);
+    }
+    return { str: hexBytes.join(' '), obj };
+  };
+
+  // Handler for testing an individual action manually across all command types and structures
   const handleTestSingleAction = async (act: AutomationAction) => {
     try {
       const base = resolveDeviceBaseUrl(espIp);
 
-      if (act.type === 'can_tx' || (!act.type && act.can_id)) {
-        let payloadStr = '';
-        if (typeof act.payload === 'string') {
-          payloadStr = act.payload;
-        } else if (act.payload && typeof act.payload === 'object') {
-          payloadStr = Object.values(act.payload).map(v => String(v).padStart(2, '0')).join(' ');
+      // Flow 1: Delay
+      if (act.type === 'delay') {
+        const ms = act.delay_ms || act.ms || 1000;
+        setActionTestToast({ message: `Testing delay: waiting ${ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`}...`, type: 'info' });
+        await new Promise(r => setTimeout(r, Math.min(ms, 3000)));
+        setActionTestToast({ message: `Delay test completed (${ms}ms)`, type: 'success' });
+        setTimeout(() => setActionTestToast(null), 3500);
+        return;
+      }
+
+      // Flow 2: Wait For Condition
+      if (act.type === 'wait_for') {
+        const condList = act.conditions || (act.condition ? [act.condition] : []);
+        if (condList.length === 0) {
+          setActionTestToast({ message: 'Wait-for action has no target condition (will proceed immediately)', type: 'info' });
+          setTimeout(() => setActionTestToast(null), 4000);
+          return;
+        }
+        const evalRes = evaluateConditionState(condList[0], liveFrames, entityStates, lastFiredTriggerId, catalog);
+        const isMatched = evalRes.state === 'valid';
+        setActionTestToast({
+          message: `Wait-for condition: ${isMatched ? 'MATCHED' : evalRes.state === 'invalid' ? 'NOT MET' : 'Awaiting telemetry'} (${evalRes.reason || 'live state'})`,
+          type: isMatched ? 'success' : 'info'
+        });
+        setTimeout(() => setActionTestToast(null), 4500);
+        return;
+      }
+
+      // Flow 3: IF-THEN-ELSE
+      if (act.type === 'if_then') {
+        const condList = act.conditions || [];
+        const passed = condList.length === 0 || condList.every(c => evaluateConditionState(c, liveFrames, entityStates, lastFiredTriggerId, catalog).state === 'valid');
+        const branchActs = passed ? (act.then || []) : (act.else || []);
+        setActionTestToast({
+          message: `IF-THEN evaluated to ${passed ? 'TRUE' : 'FALSE'}. Testing ${branchActs.length > 0 ? `action in ${passed ? 'THEN' : 'ELSE'}` : `empty ${passed ? 'THEN' : 'ELSE'} branch`}`,
+          type: 'info'
+        });
+        if (branchActs.length > 0) {
+          await handleTestSingleAction(branchActs[0]);
+        } else {
+          setTimeout(() => setActionTestToast(null), 4000);
+        }
+        return;
+      }
+
+      // Flow 4: CHOOSE
+      if (act.type === 'choose') {
+        const choices = act.choices || [];
+        let matchedBranch: AutomationAction[] | null = null;
+        let matchedIdx = -1;
+        for (let i = 0; i < choices.length; i++) {
+          const ch = choices[i];
+          const conds = ch.conditions || [];
+          if (conds.length > 0 && conds.every(c => evaluateConditionState(c, liveFrames, entityStates, lastFiredTriggerId, catalog).state === 'valid')) {
+            matchedBranch = ch.sequence || [];
+            matchedIdx = i;
+            break;
+          }
+        }
+        if (!matchedBranch) {
+          matchedBranch = act.default || [];
+        }
+        setActionTestToast({
+          message: `CHOOSE branch: ${matchedIdx >= 0 ? `Branch #${matchedIdx + 1}` : 'DEFAULT'}. Testing ${matchedBranch.length > 0 ? 'action' : 'empty sequence'}`,
+          type: 'info'
+        });
+        if (matchedBranch.length > 0) {
+          await handleTestSingleAction(matchedBranch[0]);
+        } else {
+          setTimeout(() => setActionTestToast(null), 4000);
+        }
+        return;
+      }
+
+      // Flow 5: Webhook
+      if (act.type === 'webhook' && act.webhook_url) {
+        await fetch(act.webhook_url, {
+          method: act.webhook_method || 'POST',
+          mode: 'no-cors'
+        });
+        setActionTestToast({ message: `Webhook dispatched to ${act.webhook_url}`, type: 'success' });
+        setTimeout(() => setActionTestToast(null), 4000);
+        return;
+      }
+
+      // Flow 6: Cluster Notification Popup
+      if (act.type === 'track_popup' || act.type === 'popup') {
+        const msg = act.text || act.popup_message || 'Test cluster notification';
+        try {
+          const res = await fetch(`${base}/api/notify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg, level: act.level || 'info' })
+          });
+          if (res.ok) {
+            setActionTestToast({ message: `Triggered cluster popup: "${msg}"`, type: 'success' });
+            setTimeout(() => setActionTestToast(null), 4000);
+            return;
+          }
+        } catch {
+          // If /api/notify endpoint is unavailable on device, fallback to /api/command below
+        }
+      }
+
+      // Flow 7: Resolve Command & Option Details from Catalog if available
+      const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForAction(act, catalog) : { command: undefined, matchedOption: undefined };
+      
+      const targetCanId = act.can_id || catalogCmd?.network?.action_can_id || catalogCmd?.action_can_id || catalogCmd?.network?.state_can_id || catalogCmd?.state_can_id;
+      const targetEntityId = act.entity_id || catalogCmd?.id;
+      const targetCommand = act.command || act.option_label || matchedOption?.label || (catalogCmd?.options && catalogCmd.options[0]?.label);
+      const rawPayload = act.payload || matchedOption?.payload || (matchedOption?.steps && matchedOption.steps[0]?.payload) || catalogCmd?.payload;
+      const { str: cleanPayloadStr, obj: cleanPayloadObj } = formatPayloadForApi(rawPayload);
+      const targetRepeat = act.repeat || matchedOption?.repeat || 1;
+      const targetDelay = act.delay_ms || catalogCmd?.network?.delay_ms || catalogCmd?.delay_ms || 50;
+      const targetBus = act.bus ?? catalogCmd?.network?.bus ?? catalogCmd?.action_bus ?? 0;
+      const targetSteps = act.steps || matchedOption?.steps;
+
+      // Special Flow 8: Battery Preconditioning
+      if (act.type === 'precondition' || targetEntityId === 'battery_preconditioning' || targetEntityId === 'precondition') {
+        const preconMode = act.precon_mode || (matchedOption as any)?.precon_mode || 'persistent';
+        const preconAction = act.precon_action || (preconMode === 'cancel' || preconMode === 'off' ? 'stop' : 'start');
+        
+        const preconSteps = targetSteps || (preconAction === 'stop' ? [{ payload: '00 00 00 00 00 00 00 00', repeat: 3 }] : [
+          { payload: { D4: '0x40', D5: '0x03' }, repeat: 3 },
+          { payload: { D4: '0xE0', D5: '0x07' }, repeat: 3 }
+        ]);
+
+        let sent = false;
+        try {
+          const res = await fetch(`${base}/api/command`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              entity: 'battery_preconditioning',
+              command: targetCommand || preconMode,
+              mode: preconMode,
+              action: preconAction,
+              can_id: targetCanId || '0x0C7',
+              payload: cleanPayloadStr,
+              payload_map: cleanPayloadObj,
+              repeat: 3
+            })
+          });
+          if (res.ok) sent = true;
+        } catch {}
+
+        if (!sent && preconSteps.length > 0) {
+          for (const s of preconSteps) {
+            const { str: sStr, obj: sObj } = formatPayloadForApi(s.payload);
+            await fetch(`${base}/api/command`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                can_id: targetCanId || '0x0C7',
+                payload: sStr,
+                payload_map: sObj,
+                repeat: s.repeat || 3,
+                delay_ms: 25,
+                bus: targetBus
+              })
+            }).catch(() => {});
+          }
         }
 
+        setActionTestToast({
+          message: `Action tested: Triggered Battery Preconditioning (${preconMode} - ${preconAction})`,
+          type: 'success'
+        });
+        setTimeout(() => setActionTestToast(null), 4000);
+        return;
+      }
+
+      // Special Flow 9: Climate Target
+      if (act.type === 'climate_target' || targetEntityId === 'remote_climate') {
+        const targetTemp = act.target_temp_c ?? 22.0;
+        const targetZone = act.zone || 'driver';
+        const res = await fetch(`${base}/api/command`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entity: 'remote_climate',
+            command: JSON.stringify({ action: 'start', temp: targetTemp, zone: targetZone, sync: act.sync_on !== false }),
+            can_id: targetCanId || '0x4A0',
+            payload: cleanPayloadStr,
+            payload_map: cleanPayloadObj,
+            repeat: targetRepeat,
+            delay_ms: targetDelay,
+            bus: targetBus
+          })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        setActionTestToast({
+          message: `Action tested: Set Climate Target ${targetTemp}°C (${targetZone})`,
+          type: 'success'
+        });
+        setTimeout(() => setActionTestToast(null), 4000);
+        return;
+      }
+
+      // Flow 10: Multi-Step Action Execution (e.g. ambient lighting burst + latch commit, seat comfort 2-stage)
+      if (targetSteps && targetSteps.length > 1) {
+        for (let sIdx = 0; sIdx < targetSteps.length; sIdx++) {
+          const stepItem = targetSteps[sIdx];
+          const { str: sStr, obj: sObj } = formatPayloadForApi(stepItem.payload);
+          const sRepeat = stepItem.repeat || targetRepeat;
+          const sDelay = stepItem.delay_ms || targetDelay;
+          const sCid = stepItem.can_id || targetCanId;
+          if (sCid) {
+            await fetch(`${base}/api/command`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                can_id: sCid,
+                payload: sStr,
+                payload_map: sObj,
+                repeat: sRepeat,
+                delay_ms: sDelay,
+                bus: targetBus
+              })
+            }).catch(() => {});
+          }
+        }
+        setActionTestToast({
+          message: `Action tested: Transmitted sequence (${targetSteps.length} steps) on ${targetCanId || 'CAN'}`,
+          type: 'success'
+        });
+        setTimeout(() => setActionTestToast(null), 4000);
+        return;
+      }
+
+      // Flow 11: Standard Command Dispatch (try entity_command with CAN fallback)
+      let dispatched = false;
+      if (targetEntityId && targetCommand) {
+        try {
+          const res = await fetch(`${base}/api/command`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              entity: targetEntityId,
+              command: targetCommand,
+              can_id: targetCanId,
+              payload: cleanPayloadStr,
+              payload_map: cleanPayloadObj,
+              repeat: targetRepeat,
+              delay_ms: targetDelay,
+              bus: targetBus
+            })
+          });
+          if (res.ok) {
+            dispatched = true;
+            setActionTestToast({
+              message: `Dispatched command to ${targetEntityId}: ${targetCommand}`,
+              type: 'success'
+            });
+            setTimeout(() => setActionTestToast(null), 4000);
+            return;
+          }
+        } catch {
+          // If entity dispatch throws, fall back to direct CAN frame below
+        }
+      }
+
+      // Flow 12: Direct CAN Ingress Transmission (via can_id + byte-accurate payload)
+      if (targetCanId) {
         const bodyObj: any = {
-          can_id: act.can_id,
-          payload: payloadStr,
-          repeat: act.repeat || 1,
-          delay_ms: act.delay_ms || 0
+          can_id: targetCanId,
+          payload: cleanPayloadStr,
+          payload_map: cleanPayloadObj,
+          repeat: targetRepeat,
+          delay_ms: targetDelay,
+          bus: targetBus
         };
 
         const res = await fetch(`${base}/api/command`, {
@@ -3804,40 +4077,15 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         }
 
         setActionTestToast({
-          message: `Action tested: Transmitted CAN ${act.can_id} [${payloadStr || 'empty'}]`,
+          message: `Action tested: Transmitted CAN ${targetCanId} [${cleanPayloadStr}]`,
           type: 'success'
         });
         setTimeout(() => setActionTestToast(null), 4000);
         return;
       }
 
-      if (act.type === 'track_popup' || act.type === 'popup') {
-        const msg = act.text || act.popup_message || 'Test cluster notification';
-        const res = await fetch(`${base}/api/notify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: msg, level: act.level || 'info' })
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        setActionTestToast({ message: `Triggered cluster popup: "${msg}"`, type: 'success' });
-        setTimeout(() => setActionTestToast(null), 4000);
-        return;
-      }
-
-      if (act.entity_id && act.command) {
-        const res = await fetch(`${base}/api/command`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ entity: act.entity_id, command: act.command })
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        setActionTestToast({ message: `Dispatched command to ${act.entity_id}: ${act.command}`, type: 'success' });
-        setTimeout(() => setActionTestToast(null), 4000);
-        return;
-      }
-
-      // Fallback: Test via /api/command or report unsupported
-      setActionTestToast({ message: `Simulated action test for type: ${act.type || 'unknown'}`, type: 'info' });
+      // Fallback
+      setActionTestToast({ message: `Simulated action test for: ${act.type || targetEntityId || 'unknown'}`, type: 'info' });
       setTimeout(() => setActionTestToast(null), 4000);
     } catch (err: any) {
       setActionTestToast({ message: `Action test failed: ${err.message}`, type: 'error' });
