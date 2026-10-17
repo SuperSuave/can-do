@@ -26,7 +26,16 @@ _LOGGER = logging.getLogger(__name__)
 
 # Preset colors mapped to RGB references for color wheel snapping and distance matching
 PRESET_RGB_MAP: dict[str, tuple[int, int, int]] = {
+    # Factory Themes
+    "Golden Insight / Orange Delight": (255, 140, 0),
+    "Blue Flight": (79, 41, 54),
+    "Peaceful Forest": (127, 105, 166),
+    "Dreamy Purple": (107, 105, 85),
+    "Violet Cloud": (167, 137, 245),
+    "Refreshing Sea": (50, 105, 230),
+    # Primary Wheel Colors
     "Cyan / Aqua Wave": (0, 255, 255),
+    "Pure Cyan / Aqua Wave": (0, 255, 255),
     "Electric Blue": (0, 120, 255),
     "Deep Purple / Violet": (180, 0, 255),
     "Magenta / Neon Pink": (255, 20, 147),
@@ -132,7 +141,7 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
         """Turn the ambient lighting on."""
         net = self.command.get("network", {})
         action_can_id = net.get("action_can_id", "0x4AD")
-        delay_ms = net.get("delay_ms", 20)
+        delay_ms = net.get("delay_ms", 25)
 
         target_opt = None
         r, g, b = self._rgb_color
@@ -144,7 +153,7 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
             if target_opt:
                 self._effect = target_opt.get("label")
 
-            # 1. Send full 24-bit RGB payload to ISO-TP handler
+            # 1. Send RGB payload to ambient mood lamp command
             rgb_payload = json.dumps({"r": r, "g": g, "b": b, "mode": 1})
             _LOGGER.info("Sending Ambient Light RGB (%d, %d, %d) to coordinator", r, g, b)
             await self.coordinator.async_send_entity_command("ambient_mood_lamp_color", rgb_payload)
@@ -179,10 +188,10 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
             steps = build_action_steps(self.command, target_opt)
             if steps:
                 for s in steps:
-                    if s.get("repeat", 1) < 5:
-                        s["repeat"] = 5
+                    if s.get("repeat", 1) < 3:
+                        s["repeat"] = 3
                     s["delay_ms"] = delay_ms
-                _LOGGER.info("Sending 0x4AD CAN burst (%d steps, repeat 5) for ambient light", len(steps))
+                _LOGGER.info("Sending 0x4AD 2-stage CAN burst (%d steps) for ambient light", len(steps))
                 await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
 
         self._is_on = True
@@ -192,14 +201,17 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
         """Turn the ambient lighting off."""
         net = self.command.get("network", {})
         action_can_id = net.get("action_can_id", "0x4AD")
-        delay_ms = net.get("delay_ms", 20)
+        delay_ms = net.get("delay_ms", 25)
 
         _LOGGER.info("Turning off ambient mood lighting")
-        # 1. Send ISO-TP off command
+        # 1. Send ambient light off command
         await self.coordinator.async_send_entity_command("ambient_mood_lamp_color", "off")
 
-        # 2. Transmit 0x4AD CAN burst with all zeroes to power off lamps
-        off_steps = [{"payload": "0000000000000000", "repeat": 5, "delay_ms": delay_ms}]
+        # 2. Transmit 0x4AD 2-stage CAN burst to power off lamps
+        off_steps = [
+            {"payload": "0000000000000000", "repeat": 3, "delay_ms": delay_ms},
+            {"payload": "0002082000000000", "repeat": 3, "delay_ms": delay_ms},
+        ]
         await self.coordinator.async_send_action(action_can_id, delay_ms, off_steps)
 
         self._is_on = False

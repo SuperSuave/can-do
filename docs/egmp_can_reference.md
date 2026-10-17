@@ -12,7 +12,7 @@ This document provides a comprehensive technical reference for the CAN bus signa
 5. [HVAC, Climate Control & DATC](#5-hvac-climate-control--datc)
 6. [Seats & Steering Wheel Comfort](#6-seats--steering-wheel-comfort)
 7. [Doors, Access & Power Tailgate](#7-doors-access--power-tailgate)
-8. [Ambient Mood Lighting (`MLM` DualLight RGB via ISO-TP)](#8-ambient-mood-lighting-mlm-duallight-rgb-via-iso-tp)
+8. [Ambient Mood Lighting (Native M-CAN 2-Stage Sequence on `0x4AD`)](#8-ambient-mood-lighting-native-m-can-2-stage-sequence-on-0x4ad)
 9. [Transmission & Shifter State](#9-transmission--shifter-state)
 
 ---
@@ -200,21 +200,35 @@ Sends unified commands to driver seat warmer, passenger seat warmer, and heated 
 
 ---
 
-## 8. Ambient Mood Lighting (`MLM` DualLight RGB via ISO-TP)
+## 8. Ambient Mood Lighting (Native M-CAN 2-Stage Sequence on `0x4AD`)
 
-Ambient lighting in E-GMP vehicles uses multi-frame ISO-TP transport over physical diagnostic addressing to the BCM/ICU gateway.
+Ambient lighting in E-GMP vehicles (Kia EV6 GT-Line, Ioniq 5, GV60) operates directly over standard CAN frames on M-CAN using CAN ID **`0x4AD`** via a verified **2-Stage State Machine**. The lighting controller requires the latch/commit frame following the color burst to permanently apply the color.
 
-* **Physical Request ID**: `0x7A0`
-* **Flow Control Response ID**: `0x7A8`
+* **CAN ID**: **`0x4AD`** (Standard 11-bit ID `1197` dec, M-CAN)
+* **Timing**: Spacing of 20–25 ms between frames
 
-### Payload Formats:
-* **9-Byte RGB Control**:
-  * Byte 0: `0x64` (`MLMALL` command)
-  * Bytes 1–2: 16-bit Red level (big-endian)
-  * Bytes 3–4: 16-bit Green level (big-endian)
-  * Bytes 5–6: 16-bit Blue level (big-endian)
-  * Byte 7: Animation Mode (`0x00`=Off, `0x01`=Normal, `0x02`=Welcome, `0x03`=DriveMode Sync)
-  * Byte 8: Reserved (`0x00`)
+### 2-Stage Transmission Protocol:
+1. **Stage 1 (Active Color Burst)**: 3 frames @ 25 ms delay: `[D1, D2, D3, D4, 00, 00, 00, 00]`
+2. **Stage 2 (Latch / Commit Frame)**: 3 frames @ 25 ms delay: `00 02 08 20 00 00 00 00` (Crucial: latches the color change into the controller)
+
+### Factory Dual-Color Theme Presets:
+* **Golden Insight / Orange Delight**: `D0 C1 75 15 00 00 00 00`
+* **Blue Flight**: `4F 29 36 1C 00 00 00 00`
+* **Peaceful Forest**: `7F 69 A6 17 00 00 00 00`
+* **Dreamy Purple**: `6B 69 55 19 00 00 00 00`
+* **Violet Cloud**: `A7 89 F5 17 00 00 00 00`
+* **Refreshing Sea**: `32 69 E6 19 00 00 00 00`
+
+### Standard Color Wheel Presets:
+* **Pure Cyan / Aqua Wave**: `00 64 53 0F 00 00 00 00`
+* **Electric Blue**: `00 54 F1 0F 00 00 00 00`
+* **Deep Purple / Violet**: `80 00 F0 0F 00 00 00 00`
+* **Magenta / Neon Pink**: `FF 00 10 0F 00 00 00 00`
+* **Crimson Red**: `FE 88 00 00 00 00 00 00`
+* **Warm Sunset / Amber**: `FF 50 72 07 00 00 00 00`
+* **Warm White / Champagne**: `FE B4 53 0A 00 00 00 00`
+* **Lime / Mint Glow**: `F7 FC 63 0B 00 00 00 00`
+* **Mood Light Off**: `00 00 00 00 00 00 00 00`
 
 ---
 

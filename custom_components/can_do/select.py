@@ -114,19 +114,32 @@ class CanDoSelectEntity(CanDoEntity, SelectEntity):
             base_payload = self.coordinator.get_can_payload(self.state_can_id)
         steps = build_action_steps(self.command, target_opt, base_payload)
         if self.entity_id_str == "ambient_mood_lamp_color" or net.get("type") == "isotp":
-            _LOGGER.info("Sending ISO-TP entity command '%s' for '%s'", option, self.name)
+            _LOGGER.info("Sending ambient lamp entity command '%s' for '%s'", option, self.name)
             await self.coordinator.async_send_entity_command(self.entity_id_str, option)
 
-            # Map ambient mood lamp presets to corresponding 0x4AD frame bursts
+            # Map ambient mood lamp presets to corresponding 0x4AD 2-stage frame bursts
             hex_map: dict[str, str] = {
+                "golden": "D0C1751500000000",
+                "orange delight": "D0C1751500000000",
+                "blue flight": "4F29361C00000000",
+                "peaceful forest": "7F69A61700000000",
+                "dreamy purple": "6B69551900000000",
+                "violet cloud": "A789F51700000000",
+                "refreshing sea": "3269E61900000000",
                 "cyan": "0064530F00000000",
+                "aqua": "0064530F00000000",
                 "amber": "FF50720700000000",
+                "sunset": "FF50720700000000",
                 "orange": "FF50720700000000",
                 "violet": "8000F00F00000000",
                 "purple": "8000F00F00000000",
                 "white": "FEB4530A00000000",
+                "champagne": "FEB4530A00000000",
                 "red": "FE88000000000000",
+                "crimson": "FE88000000000000",
                 "green": "F7FC630B00000000",
+                "mint": "F7FC630B00000000",
+                "lime": "F7FC630B00000000",
                 "blue": "0054F10F00000000",
                 "pink": "FF00100F00000000",
                 "magenta": "FF00100F00000000",
@@ -140,8 +153,11 @@ class CanDoSelectEntity(CanDoEntity, SelectEntity):
                     break
 
             if matched_hex:
-                burst_steps = [{"payload": matched_hex, "repeat": 5, "delay_ms": 20}]
-                await self.coordinator.async_send_action("0x4AD", 20, burst_steps)
+                burst_steps = [
+                    {"payload": matched_hex, "repeat": 3, "delay_ms": 25},
+                    {"payload": "0002082000000000", "repeat": 3, "delay_ms": 25},
+                ]
+                await self.coordinator.async_send_action("0x4AD", 25, burst_steps)
         elif steps:
             _LOGGER.info("Selecting option '%s' for '%s'", option, self.name)
             await self.coordinator.async_send_action(action_can_id, delay_ms, steps)

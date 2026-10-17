@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.10.6-b006",
+  "can_do_version": "2026.10.6-b007",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -1687,7 +1687,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
       },
       "network": {
         "bus": 0,
@@ -1699,14 +1699,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "°F",
+        "unit": "\u00b0F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62°F",
+          "label": "62\u00b0F",
           "match": {
             "D4": "0x06"
           },
@@ -1727,7 +1727,7 @@
           "default": false
         },
         {
-          "label": "63°F",
+          "label": "63\u00b0F",
           "match": {
             "D4": "0x07"
           },
@@ -1748,7 +1748,7 @@
           "default": false
         },
         {
-          "label": "64°F",
+          "label": "64\u00b0F",
           "match": {
             "D4": "0x08"
           },
@@ -1769,7 +1769,7 @@
           "default": false
         },
         {
-          "label": "65°F",
+          "label": "65\u00b0F",
           "match": {
             "D4": "0x09"
           },
@@ -1790,7 +1790,7 @@
           "default": false
         },
         {
-          "label": "66°F",
+          "label": "66\u00b0F",
           "match": {
             "D4": "0x0A"
           },
@@ -1811,7 +1811,7 @@
           "default": false
         },
         {
-          "label": "67°F",
+          "label": "67\u00b0F",
           "match": {
             "D4": "0x0B"
           },
@@ -1832,7 +1832,7 @@
           "default": false
         },
         {
-          "label": "68°F",
+          "label": "68\u00b0F",
           "match": {
             "D4": "0x0C"
           },
@@ -1853,7 +1853,7 @@
           "default": false
         },
         {
-          "label": "69°F",
+          "label": "69\u00b0F",
           "match": {
             "D4": "0x0D"
           },
@@ -1874,7 +1874,7 @@
           "default": false
         },
         {
-          "label": "70°F",
+          "label": "70\u00b0F",
           "match": {
             "D4": "0x0E"
           },
@@ -1895,7 +1895,7 @@
           "default": true
         },
         {
-          "label": "71°F",
+          "label": "71\u00b0F",
           "match": {
             "D4": "0x0F"
           },
@@ -1916,7 +1916,7 @@
           "default": false
         },
         {
-          "label": "72°F",
+          "label": "72\u00b0F",
           "match": {
             "D4": "0x10"
           },
@@ -1937,7 +1937,7 @@
           "default": false
         },
         {
-          "label": "73°F",
+          "label": "73\u00b0F",
           "match": {
             "D4": "0x11"
           },
@@ -1958,7 +1958,7 @@
           "default": false
         },
         {
-          "label": "74°F",
+          "label": "74\u00b0F",
           "match": {
             "D4": "0x12"
           },
@@ -1979,7 +1979,7 @@
           "default": false
         },
         {
-          "label": "75°F",
+          "label": "75\u00b0F",
           "match": {
             "D4": "0x13"
           },
@@ -2000,7 +2000,7 @@
           "default": false
         },
         {
-          "label": "76°F",
+          "label": "76\u00b0F",
           "match": {
             "D4": "0x14"
           },
@@ -2021,7 +2021,7 @@
           "default": false
         },
         {
-          "label": "77°F",
+          "label": "77\u00b0F",
           "match": {
             "D4": "0x15"
           },
@@ -2042,7 +2042,7 @@
           "default": false
         },
         {
-          "label": "78°F",
+          "label": "78\u00b0F",
           "match": {
             "D4": "0x16"
           },
@@ -2063,7 +2063,7 @@
           "default": false
         },
         {
-          "label": "79°F",
+          "label": "79\u00b0F",
           "match": {
             "D4": "0x17"
           },
@@ -2084,7 +2084,7 @@
           "default": false
         },
         {
-          "label": "80°F",
+          "label": "80\u00b0F",
           "match": {
             "D4": "0x18"
           },
@@ -2105,7 +2105,7 @@
           "default": false
         },
         {
-          "label": "81°F",
+          "label": "81\u00b0F",
           "match": {
             "D4": "0x19"
           },
@@ -2126,7 +2126,7 @@
           "default": false
         },
         {
-          "label": "82°F",
+          "label": "82\u00b0F",
           "match": {
             "D4": "0x1A"
           },
@@ -2172,7 +2172,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
       },
       "network": {
         "bus": 0,
@@ -2184,14 +2184,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "°F",
+        "unit": "\u00b0F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62°F",
+          "label": "62\u00b0F",
           "match": {
             "D6": "0x06"
           },
@@ -2212,7 +2212,7 @@
           "default": false
         },
         {
-          "label": "63°F",
+          "label": "63\u00b0F",
           "match": {
             "D6": "0x07"
           },
@@ -2233,7 +2233,7 @@
           "default": false
         },
         {
-          "label": "64°F",
+          "label": "64\u00b0F",
           "match": {
             "D6": "0x08"
           },
@@ -2254,7 +2254,7 @@
           "default": false
         },
         {
-          "label": "65°F",
+          "label": "65\u00b0F",
           "match": {
             "D6": "0x09"
           },
@@ -2275,7 +2275,7 @@
           "default": false
         },
         {
-          "label": "66°F",
+          "label": "66\u00b0F",
           "match": {
             "D6": "0x0A"
           },
@@ -2296,7 +2296,7 @@
           "default": false
         },
         {
-          "label": "67°F",
+          "label": "67\u00b0F",
           "match": {
             "D6": "0x0B"
           },
@@ -2317,7 +2317,7 @@
           "default": false
         },
         {
-          "label": "68°F",
+          "label": "68\u00b0F",
           "match": {
             "D6": "0x0C"
           },
@@ -2338,7 +2338,7 @@
           "default": false
         },
         {
-          "label": "69°F",
+          "label": "69\u00b0F",
           "match": {
             "D6": "0x0D"
           },
@@ -2359,7 +2359,7 @@
           "default": false
         },
         {
-          "label": "70°F",
+          "label": "70\u00b0F",
           "match": {
             "D6": "0x0E"
           },
@@ -2380,7 +2380,7 @@
           "default": true
         },
         {
-          "label": "71°F",
+          "label": "71\u00b0F",
           "match": {
             "D6": "0x0F"
           },
@@ -2401,7 +2401,7 @@
           "default": false
         },
         {
-          "label": "72°F",
+          "label": "72\u00b0F",
           "match": {
             "D6": "0x10"
           },
@@ -2422,7 +2422,7 @@
           "default": false
         },
         {
-          "label": "73°F",
+          "label": "73\u00b0F",
           "match": {
             "D6": "0x11"
           },
@@ -2443,7 +2443,7 @@
           "default": false
         },
         {
-          "label": "74°F",
+          "label": "74\u00b0F",
           "match": {
             "D6": "0x12"
           },
@@ -2464,7 +2464,7 @@
           "default": false
         },
         {
-          "label": "75°F",
+          "label": "75\u00b0F",
           "match": {
             "D6": "0x13"
           },
@@ -2485,7 +2485,7 @@
           "default": false
         },
         {
-          "label": "76°F",
+          "label": "76\u00b0F",
           "match": {
             "D6": "0x14"
           },
@@ -2506,7 +2506,7 @@
           "default": false
         },
         {
-          "label": "77°F",
+          "label": "77\u00b0F",
           "match": {
             "D6": "0x15"
           },
@@ -2527,7 +2527,7 @@
           "default": false
         },
         {
-          "label": "78°F",
+          "label": "78\u00b0F",
           "match": {
             "D6": "0x16"
           },
@@ -2548,7 +2548,7 @@
           "default": false
         },
         {
-          "label": "79°F",
+          "label": "79\u00b0F",
           "match": {
             "D6": "0x17"
           },
@@ -2569,7 +2569,7 @@
           "default": false
         },
         {
-          "label": "80°F",
+          "label": "80\u00b0F",
           "match": {
             "D6": "0x18"
           },
@@ -2590,7 +2590,7 @@
           "default": false
         },
         {
-          "label": "81°F",
+          "label": "81\u00b0F",
           "match": {
             "D6": "0x19"
           },
@@ -2611,7 +2611,7 @@
           "default": false
         },
         {
-          "label": "82°F",
+          "label": "82\u00b0F",
           "match": {
             "D6": "0x1A"
           },
@@ -5491,18 +5491,18 @@
       },
       "options": [
         {
-          "label": "Info Notification (ⓘ)",
+          "label": "Info Notification (\u24d8)",
           "level": "info",
           "popup_message": "Preconditioning Active",
           "default": true
         },
         {
-          "label": "Warning Notification (⚠)",
+          "label": "Warning Notification (\u26a0)",
           "level": "warning",
           "popup_message": "Battery Cold / Limited"
         },
         {
-          "label": "Fault Notification (‼)",
+          "label": "Fault Notification (\u203c)",
           "level": "error",
           "popup_message": "Charge Interrupted"
         },
@@ -6193,104 +6193,250 @@
         "bus": 0,
         "type": "can_tx",
         "action_can_id": "0x4AD",
-        "delay_ms": 20
+        "delay_ms": 25
       },
       "popup_message": "Ambient Light: {option}",
       "options": [
         {
-          "label": "Electric Blue",
-          "payload": {
-            "D2": "0x54",
-            "D3": "0xF1",
-            "D4": "0x0F"
-          },
-          "popup": "Ambient: Electric Blue"
+          "label": "Golden Insight / Orange Delight",
+          "steps": [
+            {
+              "payload": "D0C1751500000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Golden Insight"
         },
         {
-          "label": "Cyan / Aqua Wave",
-          "payload": {
-            "D2": "0x64",
-            "D3": "0x53",
-            "D4": "0x0F"
-          },
+          "label": "Blue Flight",
+          "steps": [
+            {
+              "payload": "4F29361C00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Blue Flight"
+        },
+        {
+          "label": "Peaceful Forest",
+          "steps": [
+            {
+              "payload": "7F69A61700000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Peaceful Forest"
+        },
+        {
+          "label": "Dreamy Purple",
+          "steps": [
+            {
+              "payload": "6B69551900000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Dreamy Purple"
+        },
+        {
+          "label": "Violet Cloud",
+          "steps": [
+            {
+              "payload": "A789F51700000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Violet Cloud"
+        },
+        {
+          "label": "Refreshing Sea",
+          "steps": [
+            {
+              "payload": "3269E61900000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Refreshing Sea"
+        },
+        {
+          "label": "Pure Cyan / Aqua Wave",
+          "steps": [
+            {
+              "payload": "0064530F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
           "popup": "Ambient: Cyan / Aqua"
         },
         {
+          "label": "Electric Blue",
+          "steps": [
+            {
+              "payload": "0054F10F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Electric Blue"
+        },
+        {
           "label": "Deep Purple / Violet",
-          "payload": {
-            "D1": "0x80",
-            "D3": "0xF0",
-            "D4": "0x0F"
-          },
+          "steps": [
+            {
+              "payload": "8000F00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
           "popup": "Ambient: Violet",
           "default": true
         },
         {
           "label": "Magenta / Neon Pink",
-          "payload": {
-            "D1": "0xFF",
-            "D3": "0x10",
-            "D4": "0x0F"
-          },
+          "steps": [
+            {
+              "payload": "FF00100F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
           "popup": "Ambient: Magenta"
         },
         {
           "label": "Crimson Red",
-          "payload": {
-            "D1": "0xFE",
-            "D2": "0x88"
-          },
+          "steps": [
+            {
+              "payload": "FE88000000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
           "popup": "Ambient: Crimson Red"
         },
         {
           "label": "Warm Sunset / Amber",
-          "payload": {
-            "D1": "0xFF",
-            "D2": "0x50",
-            "D3": "0x72",
-            "D4": "0x07"
-          },
+          "steps": [
+            {
+              "payload": "FF50720700000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
           "popup": "Ambient: Sunset Orange"
         },
         {
           "label": "Lime / Mint Glow",
-          "payload": {
-            "D1": "0xF7",
-            "D2": "0xFC",
-            "D3": "0x63",
-            "D4": "0x0B"
-          },
+          "steps": [
+            {
+              "payload": "F7FC630B00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
           "popup": "Ambient: Mint / Lime"
         },
         {
           "label": "Warm White / Champagne",
-          "payload": {
-            "D1": "0xFE",
-            "D2": "0xB4",
-            "D3": "0x53",
-            "D4": "0x0A"
-          },
+          "steps": [
+            {
+              "payload": "FEB4530A00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
           "popup": "Ambient: Champagne"
         },
         {
-          "label": "Ambient Light Changed",
-          "payload": {
-            "D5": "0x00",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "default": false,
-          "match": {
-            "D1": "!0x00",
-            "D2": "!0x02",
-            "D3": "!0x08",
-            "D4": "!0x20",
-            "D5": "0x00",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          }
+          "label": "Mood Light Off",
+          "steps": [
+            {
+              "payload": "0000000000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Off"
         }
       ],
       "category": "Cockpit & Controls",
@@ -6523,16 +6669,16 @@
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x226",
-        "unit": "°C"
+        "unit": "\u00b0C"
       },
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 °C"
+        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 \u00b0C"
       },
       "options": [
         {
-          "label": "Freezing (<= 0°C / 32°F)",
+          "label": "Freezing (<= 0\u00b0C / 32\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": "less_equal",
@@ -6541,7 +6687,7 @@
           "default": true
         },
         {
-          "label": "Cold (< 15°C / 59°F)",
+          "label": "Cold (< 15\u00b0C / 59\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": "less_than",
@@ -6549,7 +6695,7 @@
           }
         },
         {
-          "label": "Warm (> 25°C / 77°F)",
+          "label": "Warm (> 25\u00b0C / 77\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": "greater_than",
@@ -7372,7 +7518,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Right 90°",
+          "label": "Turn Right 90\u00b0",
           "match": {
             "D1": "0x03"
           },
@@ -7407,7 +7553,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Left 90°",
+          "label": "Turn Left 90\u00b0",
           "match": {
             "D1": "0x08"
           },
@@ -8117,7 +8263,7 @@
         "name": "HV Battery Module Min & Max Temp",
         "domain": "sensor",
         "icon": "mdi:thermometer-chevron-up",
-        "unit_of_measurement": "°C"
+        "unit_of_measurement": "\u00b0C"
       },
       "tags": [
         "all_egmp"
@@ -8131,17 +8277,17 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40°C offset."
+        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40\u00b0C offset."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x5D7",
-        "unit": "°C"
+        "unit": "\u00b0C"
       },
       "options": [
         {
-          "label": "Battery Optimal Warm (20°C - 35°C)",
+          "label": "Battery Optimal Warm (20\u00b0C - 35\u00b0C)",
           "evaluate": {
             "byte": "D1",
             "operator": "greater_equal",
@@ -8150,7 +8296,7 @@
           "default": true
         },
         {
-          "label": "Battery High Temp (> 45°C / 113°F)",
+          "label": "Battery High Temp (> 45\u00b0C / 113\u00b0F)",
           "evaluate": {
             "byte": "D1",
             "operator": "greater_than",
@@ -8158,7 +8304,7 @@
           }
         },
         {
-          "label": "Battery Cold (< 10°C / 50°F)",
+          "label": "Battery Cold (< 10\u00b0C / 50\u00b0F)",
           "evaluate": {
             "byte": "D2",
             "operator": "less_than",
@@ -8166,7 +8312,7 @@
           }
         },
         {
-          "label": "Battery Freezing (< 0°C / 32°F)",
+          "label": "Battery Freezing (< 0\u00b0C / 32\u00b0F)",
           "evaluate": {
             "byte": "D2",
             "operator": "less_than",
@@ -8459,7 +8605,7 @@
         "name": "Cabin Displayed Target Temperature",
         "domain": "sensor",
         "icon": "mdi:thermometer-lines",
-        "unit_of_measurement": "°F"
+        "unit_of_measurement": "\u00b0F"
       },
       "tags": [
         "all_egmp"
@@ -8473,31 +8619,31 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in °C x 0.5, Byte D3 = Driver Temp in °F integer)."
+        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in \u00b0C x 0.5, Byte D3 = Driver Temp in \u00b0F integer)."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x5F5",
-        "unit": "°F"
+        "unit": "\u00b0F"
       },
       "options": [
         {
-          "label": "68°F (20.0°C)",
+          "label": "68\u00b0F (20.0\u00b0C)",
           "match": {
             "D3": "0x44"
           },
           "mask": "0xFF"
         },
         {
-          "label": "70°F (21.0°C)",
+          "label": "70\u00b0F (21.0\u00b0C)",
           "match": {
             "D3": "0x46"
           },
           "mask": "0xFF"
         },
         {
-          "label": "72°F (22.0°C)",
+          "label": "72\u00b0F (22.0\u00b0C)",
           "match": {
             "D3": "0x48"
           },
@@ -8505,14 +8651,14 @@
           "default": true
         },
         {
-          "label": "74°F (23.5°C)",
+          "label": "74\u00b0F (23.5\u00b0C)",
           "match": {
             "D3": "0x4A"
           },
           "mask": "0xFF"
         },
         {
-          "label": "76°F (24.5°C)",
+          "label": "76\u00b0F (24.5\u00b0C)",
           "match": {
             "D3": "0x4C"
           },
@@ -8668,7 +8814,7 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s² signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
+        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s\u00b2 signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
       },
       "network": {
         "bus": 0,
@@ -11412,62 +11558,259 @@
       ],
       "network": {
         "bus": 0,
-        "type": "isotp",
-        "action_can_id": "0x7A0",
-        "flow_control_can_id": "0x7A8",
-        "delay_ms": 20
+        "type": "can_tx",
+        "action_can_id": "0x4AD",
+        "delay_ms": 25
       },
       "contributor": {
-        "name": "SuaveEV",
+        "name": "SuaveEV & L1Z3",
         "github": "supersuave",
-        "notes": "ISO 15765-2 (ISO-TP) multi-frame transport to BCM/ICU gateway on 0x7A0 / 0x7A8 for Mood Lamp Modules (MLM). Byte 0 is 0x64 (MLMALL mode), followed by 16-bit big-endian RGB (Bytes 1-6), animation mode (Byte 7: 1=Normal, 2=Welcome, 3=DriveMode Sync), and reserved Byte 8."
+        "notes": "Native M-CAN 2-stage transmission on 0x4AD. Stage 1 transmits the 4-byte active color code (3 repeats @ 25ms), and Stage 2 transmits the commit latch frame (00 02 08 20 00 00 00 00, 3 repeats @ 25ms) which latches the color in the vehicle lighting controller."
       },
       "options": [
         {
-          "label": "Pure Cyan (R:0, G:255, B:255)",
-          "payload": {
-            "hex": "64000000FF00FF0100"
-          },
+          "label": "Golden Insight / Orange Delight",
+          "steps": [
+            {
+              "payload": "D0C1751500000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Golden Insight"
+        },
+        {
+          "label": "Blue Flight",
+          "steps": [
+            {
+              "payload": "4F29361C00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Blue Flight"
+        },
+        {
+          "label": "Peaceful Forest",
+          "steps": [
+            {
+              "payload": "7F69A61700000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Peaceful Forest"
+        },
+        {
+          "label": "Dreamy Purple",
+          "steps": [
+            {
+              "payload": "6B69551900000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Dreamy Purple"
+        },
+        {
+          "label": "Violet Cloud",
+          "steps": [
+            {
+              "payload": "A789F51700000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Violet Cloud"
+        },
+        {
+          "label": "Refreshing Sea",
+          "steps": [
+            {
+              "payload": "3269E61900000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Refreshing Sea"
+        },
+        {
+          "label": "Pure Cyan / Aqua Wave",
+          "steps": [
+            {
+              "payload": "0064530F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Cyan / Aqua"
+        },
+        {
+          "label": "Electric Blue",
+          "steps": [
+            {
+              "payload": "0054F10F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Electric Blue"
+        },
+        {
+          "label": "Deep Purple / Violet",
+          "steps": [
+            {
+              "payload": "8000F00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Violet",
           "default": true
         },
         {
-          "label": "Warm Amber (R:255, G:140, B:0)",
-          "payload": {
-            "hex": "6400FF008C00000100"
-          }
+          "label": "Magenta / Neon Pink",
+          "steps": [
+            {
+              "payload": "FF00100F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Magenta"
         },
         {
-          "label": "Neon Violet (R:180, G:0, B:255)",
-          "payload": {
-            "hex": "6400B4000000FF0100"
-          }
+          "label": "Crimson Red",
+          "steps": [
+            {
+              "payload": "FE88000000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Crimson Red"
         },
         {
-          "label": "Glacier White (R:255, G:255, B:255)",
-          "payload": {
-            "hex": "6400FF00FF00FF0100"
-          }
+          "label": "Warm Sunset / Amber",
+          "steps": [
+            {
+              "payload": "FF50720700000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Sunset Orange"
         },
         {
-          "label": "Racing Red (R:255, G:0, B:0)",
-          "payload": {
-            "hex": "6400FF000000000100"
-          }
+          "label": "Lime / Mint Glow",
+          "steps": [
+            {
+              "payload": "F7FC630B00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Mint / Lime"
         },
         {
-          "label": "Electric Green (R:0, G:255, B:0)",
-          "payload": {
-            "hex": "64000000FF00000100"
-          }
+          "label": "Warm White / Champagne",
+          "steps": [
+            {
+              "payload": "FEB4530A00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Champagne"
         },
         {
           "label": "Mood Light Off",
-          "payload": {
-            "hex": "640000000000000000"
-          }
+          "steps": [
+            {
+              "payload": "0000000000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Off"
         }
       ],
-      "action_can_id": "0x7A0"
+      "action_can_id": "0x4AD"
     },
     {
       "id": "ims_driver_memory_recall",

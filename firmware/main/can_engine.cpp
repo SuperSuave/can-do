@@ -20,7 +20,6 @@
 #include "uds_engine.h"
 #include "network_mgr.h"
 #include "remote_climate.h"
-#include "mood_light.h"
 
 static bool mac_matches(const std::string& a, const std::string& b) {
     std::string clean_a, clean_b;
@@ -732,123 +731,169 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
         uint8_t payload_4ad[8] = {0};
         bool has_4ad = false;
 
-        if (cmd_lower.find("off") != std::string::npos || cmd_lower == "0" || cmd_lower == "false") {
-            ok = mood_light_set_rgb(0, 0, 0, 0);
+        // Factory Dual-Color Themes (EV6 GT-Line)
+        if (cmd_lower.find("golden") != std::string::npos || cmd_lower.find("orange delight") != std::string::npos) {
+            payload_4ad[0] = 0xD0; payload_4ad[1] = 0xC1; payload_4ad[2] = 0x75; payload_4ad[3] = 0x15;
+            new_state = "Golden Insight / Orange Delight";
+            has_4ad = true;
+        } else if (cmd_lower.find("blue flight") != std::string::npos) {
+            payload_4ad[0] = 0x4F; payload_4ad[1] = 0x29; payload_4ad[2] = 0x36; payload_4ad[3] = 0x1C;
+            new_state = "Blue Flight";
+            has_4ad = true;
+        } else if (cmd_lower.find("peaceful forest") != std::string::npos) {
+            payload_4ad[0] = 0x7F; payload_4ad[1] = 0x69; payload_4ad[2] = 0xA6; payload_4ad[3] = 0x17;
+            new_state = "Peaceful Forest";
+            has_4ad = true;
+        } else if (cmd_lower.find("dreamy purple") != std::string::npos) {
+            payload_4ad[0] = 0x6B; payload_4ad[1] = 0x69; payload_4ad[2] = 0x55; payload_4ad[3] = 0x19;
+            new_state = "Dreamy Purple";
+            has_4ad = true;
+        } else if (cmd_lower.find("violet cloud") != std::string::npos) {
+            payload_4ad[0] = 0xA7; payload_4ad[1] = 0x89; payload_4ad[2] = 0xF5; payload_4ad[3] = 0x17;
+            new_state = "Violet Cloud";
+            has_4ad = true;
+        } else if (cmd_lower.find("refreshing sea") != std::string::npos) {
+            payload_4ad[0] = 0x32; payload_4ad[1] = 0x69; payload_4ad[2] = 0xE6; payload_4ad[3] = 0x19;
+            new_state = "Refreshing Sea";
+            has_4ad = true;
+        }
+        // Standard Color Wheel Presets
+        else if (cmd_lower.find("off") != std::string::npos || cmd_lower == "0" || cmd_lower == "false" || cmd_lower == "disable") {
             new_state = "Mood Light Off";
             has_4ad = true; // All zeros
-        } else if (cmd_lower.find("cyan") != std::string::npos) {
-            ok = mood_light_set_rgb(0, 255, 255, 1);
-            new_state = "Pure Cyan (R:0, G:255, B:255)";
+        } else if (cmd_lower.find("cyan") != std::string::npos || cmd_lower.find("aqua") != std::string::npos) {
             payload_4ad[1] = 0x64; payload_4ad[2] = 0x53; payload_4ad[3] = 0x0F;
+            new_state = "Pure Cyan / Aqua Wave";
             has_4ad = true;
         } else if (cmd_lower.find("amber") != std::string::npos || cmd_lower.find("orange") != std::string::npos || cmd_lower.find("sunset") != std::string::npos) {
-            ok = mood_light_set_rgb(255, 140, 0, 1);
-            new_state = "Warm Amber (R:255, G:140, B:0)";
             payload_4ad[0] = 0xFF; payload_4ad[1] = 0x50; payload_4ad[2] = 0x72; payload_4ad[3] = 0x07;
+            new_state = "Warm Sunset / Amber";
             has_4ad = true;
         } else if (cmd_lower.find("violet") != std::string::npos || cmd_lower.find("purple") != std::string::npos) {
-            ok = mood_light_set_rgb(180, 0, 255, 1);
-            new_state = "Neon Violet (R:180, G:0, B:255)";
             payload_4ad[0] = 0x80; payload_4ad[2] = 0xF0; payload_4ad[3] = 0x0F;
+            new_state = "Deep Purple / Violet";
             has_4ad = true;
         } else if (cmd_lower.find("white") != std::string::npos || cmd_lower.find("champagne") != std::string::npos) {
-            ok = mood_light_set_rgb(255, 255, 255, 1);
-            new_state = "Glacier White (R:255, G:255, B:255)";
             payload_4ad[0] = 0xFE; payload_4ad[1] = 0xB4; payload_4ad[2] = 0x53; payload_4ad[3] = 0x0A;
+            new_state = "Warm White / Champagne";
             has_4ad = true;
         } else if (cmd_lower.find("red") != std::string::npos || cmd_lower.find("crimson") != std::string::npos) {
-            ok = mood_light_set_rgb(255, 0, 0, 1);
-            new_state = "Racing Red (R:255, G:0, B:0)";
             payload_4ad[0] = 0xFE; payload_4ad[1] = 0x88;
+            new_state = "Crimson Red";
             has_4ad = true;
         } else if (cmd_lower.find("green") != std::string::npos || cmd_lower.find("mint") != std::string::npos || cmd_lower.find("lime") != std::string::npos) {
-            ok = mood_light_set_rgb(0, 255, 0, 1);
-            new_state = "Electric Green (R:0, G:255, B:0)";
             payload_4ad[0] = 0xF7; payload_4ad[1] = 0xFC; payload_4ad[2] = 0x63; payload_4ad[3] = 0x0B;
+            new_state = "Lime / Mint Glow";
             has_4ad = true;
         } else if (cmd_lower.find("blue") != std::string::npos) {
-            ok = mood_light_set_rgb(0, 120, 255, 1);
-            new_state = "Electric Blue";
             payload_4ad[1] = 0x54; payload_4ad[2] = 0xF1; payload_4ad[3] = 0x0F;
+            new_state = "Electric Blue";
             has_4ad = true;
         } else if (cmd_lower.find("pink") != std::string::npos || cmd_lower.find("magenta") != std::string::npos) {
-            ok = mood_light_set_rgb(255, 20, 147, 1);
-            new_state = "Magenta / Neon Pink";
             payload_4ad[0] = 0xFF; payload_4ad[2] = 0x10; payload_4ad[3] = 0x0F;
+            new_state = "Magenta / Neon Pink";
             has_4ad = true;
         } else if (!command_label.empty() && command_label[0] == '{') {
             cJSON* root = cJSON_Parse(command_label.c_str());
             if (root) {
-                uint16_t r = 0, g = 0, b = 0;
-                uint8_t mode = 1;
-                cJSON* r_it = cJSON_GetObjectItem(root, "r");
-                if (!r_it) r_it = cJSON_GetObjectItem(root, "red");
-                if (r_it && cJSON_IsNumber(r_it)) r = (uint16_t)r_it->valueint;
+                cJSON* hex_it = cJSON_GetObjectItem(root, "hex");
+                if (!hex_it) hex_it = cJSON_GetObjectItem(root, "payload");
+                if (hex_it && cJSON_IsString(hex_it) && hex_it->valuestring) {
+                    std::string hx = hex_it->valuestring;
+                    std::string clean;
+                    for (char c : hx) { if (isxdigit((unsigned char)c)) clean += c; }
+                    size_t bytes = clean.length() / 2;
+                    if (bytes > 8) bytes = 8;
+                    for (size_t b = 0; b < bytes; b++) {
+                        payload_4ad[b] = (uint8_t)strtoul(clean.substr(b * 2, 2).c_str(), nullptr, 16);
+                    }
+                    has_4ad = true;
+                } else {
+                    uint16_t r = 0, g = 0, b = 0;
+                    cJSON* r_it = cJSON_GetObjectItem(root, "r");
+                    if (!r_it) r_it = cJSON_GetObjectItem(root, "red");
+                    if (r_it && cJSON_IsNumber(r_it)) r = (uint16_t)r_it->valueint;
 
-                cJSON* g_it = cJSON_GetObjectItem(root, "g");
-                if (!g_it) g_it = cJSON_GetObjectItem(root, "green");
-                if (g_it && cJSON_IsNumber(g_it)) g = (uint16_t)g_it->valueint;
+                    cJSON* g_it = cJSON_GetObjectItem(root, "g");
+                    if (!g_it) g_it = cJSON_GetObjectItem(root, "green");
+                    if (g_it && cJSON_IsNumber(g_it)) g = (uint16_t)g_it->valueint;
 
-                cJSON* b_it = cJSON_GetObjectItem(root, "b");
-                if (!b_it) b_it = cJSON_GetObjectItem(root, "blue");
-                if (b_it && cJSON_IsNumber(b_it)) b = (uint16_t)b_it->valueint;
+                    cJSON* b_it = cJSON_GetObjectItem(root, "b");
+                    if (!b_it) b_it = cJSON_GetObjectItem(root, "blue");
+                    if (b_it && cJSON_IsNumber(b_it)) b = (uint16_t)b_it->valueint;
 
-                cJSON* m_it = cJSON_GetObjectItem(root, "mode");
-                if (m_it && cJSON_IsNumber(m_it)) mode = (uint8_t)m_it->valueint;
-
-                cJSON_Delete(root);
-                ok = mood_light_set_rgb(r, g, b, mode);
-
-                // Map closest RGB to 0x4AD payload
-                if (r > 200 && g < 80 && b < 80) { // Red
-                    payload_4ad[0] = 0xFE; payload_4ad[1] = 0x88;
-                } else if (r > 200 && g > 80 && b < 80) { // Amber
-                    payload_4ad[0] = 0xFF; payload_4ad[1] = 0x50; payload_4ad[2] = 0x72; payload_4ad[3] = 0x07;
-                } else if (r > 150 && b > 200) { // Violet / Pink
-                    payload_4ad[0] = 0x80; payload_4ad[2] = 0xF0; payload_4ad[3] = 0x0F;
-                } else if (g > 200 && b > 200) { // Cyan
-                    payload_4ad[1] = 0x64; payload_4ad[2] = 0x53; payload_4ad[3] = 0x0F;
-                } else if (b > 200) { // Blue
-                    payload_4ad[1] = 0x54; payload_4ad[2] = 0xF1; payload_4ad[3] = 0x0F;
-                } else if (g > 180) { // Green
-                    payload_4ad[0] = 0xF7; payload_4ad[1] = 0xFC; payload_4ad[2] = 0x63; payload_4ad[3] = 0x0B;
-                } else { // Champagne White
-                    payload_4ad[0] = 0xFE; payload_4ad[1] = 0xB4; payload_4ad[2] = 0x53; payload_4ad[3] = 0x0A;
+                    // Map closest RGB to 0x4AD payload
+                    if (r < 20 && g < 20 && b < 20) {
+                        new_state = "Mood Light Off";
+                    } else if (r > 200 && g < 80 && b < 80) { // Red
+                        payload_4ad[0] = 0xFE; payload_4ad[1] = 0x88;
+                        new_state = "Crimson Red";
+                    } else if (r > 200 && g > 80 && b < 80) { // Amber
+                        payload_4ad[0] = 0xFF; payload_4ad[1] = 0x50; payload_4ad[2] = 0x72; payload_4ad[3] = 0x07;
+                        new_state = "Warm Sunset / Amber";
+                    } else if (r > 150 && b > 200) { // Violet / Pink
+                        payload_4ad[0] = 0x80; payload_4ad[2] = 0xF0; payload_4ad[3] = 0x0F;
+                        new_state = "Deep Purple / Violet";
+                    } else if (g > 200 && b > 200) { // Cyan
+                        payload_4ad[1] = 0x64; payload_4ad[2] = 0x53; payload_4ad[3] = 0x0F;
+                        new_state = "Pure Cyan / Aqua Wave";
+                    } else if (b > 200) { // Blue
+                        payload_4ad[1] = 0x54; payload_4ad[2] = 0xF1; payload_4ad[3] = 0x0F;
+                        new_state = "Electric Blue";
+                    } else if (g > 180) { // Green
+                        payload_4ad[0] = 0xF7; payload_4ad[1] = 0xFC; payload_4ad[2] = 0x63; payload_4ad[3] = 0x0B;
+                        new_state = "Lime / Mint Glow";
+                    } else { // Champagne White
+                        payload_4ad[0] = 0xFE; payload_4ad[1] = 0xB4; payload_4ad[2] = 0x53; payload_4ad[3] = 0x0A;
+                        new_state = "Warm White / Champagne";
+                    }
+                    has_4ad = true;
                 }
-                has_4ad = true;
+                cJSON_Delete(root);
             }
         } else {
             std::string clean_hex;
             for (char c : command_label) {
                 if (isxdigit((unsigned char)c)) clean_hex += c;
             }
-            if (clean_hex.length() >= 18) {
-                uint8_t raw[16] = {0};
+            if (clean_hex.length() >= 8) {
                 size_t byte_cnt = clean_hex.length() / 2;
-                if (byte_cnt > sizeof(raw)) byte_cnt = sizeof(raw);
+                if (byte_cnt > sizeof(payload_4ad)) byte_cnt = sizeof(payload_4ad);
                 for (size_t i = 0; i < byte_cnt; i++) {
-                    raw[i] = (uint8_t)strtoul(clean_hex.substr(i * 2, 2).c_str(), nullptr, 16);
+                    payload_4ad[i] = (uint8_t)strtoul(clean_hex.substr(i * 2, 2).c_str(), nullptr, 16);
                 }
-                ok = mood_light_send_raw(raw, byte_cnt);
+                has_4ad = true;
             } else {
-                ok = mood_light_set_rgb(0, 255, 255, 1);
-                new_state = "Pure Cyan (R:0, G:255, B:255)";
+                // Default fallback: Pure Cyan
                 payload_4ad[1] = 0x64; payload_4ad[2] = 0x53; payload_4ad[3] = 0x0F;
+                new_state = "Pure Cyan / Aqua Wave";
                 has_4ad = true;
             }
         }
 
-        // Transmit 0x4AD hardware CAN burst (5 repeats, 20ms) alongside ISO-TP
+        // Two-stage transmission on 0x4AD:
+        // Stage 1: Active color burst (3 frames @ 25ms)
+        // Stage 2: Latch commit frame (3 frames @ 25ms, payload 00 02 08 20 00 00 00 00)
         if (has_4ad) {
-            ActionStep step = {};
-            step.type = ActionType::TRANSMIT_FRAME;
-            step.can_id = 0x4AD;
-            step.repeat = 5;
-            step.delay_ms = 20;
-            step.mask = 0xFF;
-            memcpy(step.payload, payload_4ad, 8);
-            std::vector<ActionStep> steps = { step };
-            queue_action_steps(0x4AD, 20, steps);
+            ActionStep step_color = {};
+            step_color.type = ActionType::TRANSMIT_FRAME;
+            step_color.can_id = 0x4AD;
+            step_color.repeat = 3;
+            step_color.delay_ms = 25;
+            step_color.mask = 0xFF;
+            memcpy(step_color.payload, payload_4ad, 8);
+
+            ActionStep step_latch = {};
+            step_latch.type = ActionType::TRANSMIT_FRAME;
+            step_latch.can_id = 0x4AD;
+            step_latch.repeat = 3;
+            step_latch.delay_ms = 25;
+            step_latch.mask = 0xFF;
+            const uint8_t latch_data[8] = {0x00, 0x02, 0x08, 0x20, 0x00, 0x00, 0x00, 0x00};
+            memcpy(step_latch.payload, latch_data, 8);
+
+            std::vector<ActionStep> steps = { step_color, step_latch };
+            queue_action_steps(0x4AD, 25, steps);
             ok = true;
         }
 
@@ -1211,9 +1256,6 @@ void can_rx_task(void* arg) {
 
             rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 4, "uds_engine_rx");
             uds_engine_on_can_rx(&rx_msg);
-
-            rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 5, "mood_light_rx");
-            mood_light_rx(&rx_msg, CAN_BUS_0);
 
             // Stream raw frame to connected SavvyCAN/GVRET client
             rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 6, "gvret_enqueue");

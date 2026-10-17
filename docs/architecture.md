@@ -172,7 +172,6 @@ When generating code, refactoring, or assisting with this repository, you must a
     │   ├── isotp_tx.c/.h     # ISO 15765-2 multi-frame transport worker
     │   ├── track_popup.c/.h  # Cluster media track info banner display
     │   ├── hud_nav.c/.h      # HUD / Cluster turn-by-turn navigation injector
-    │   └── mood_light.c/.h   # DualLight RGB ambient lighting controller
     └── partitions.csv        # Custom 4MB layout (OTA A/B + LittleFS storage)
 ⚙️ Execution & Data Flow
 1. The State Cache (std::unordered_map)
