@@ -72,6 +72,8 @@ const STORAGE_KEY_AUTOMATIONS_RULES = 'can_do_automation_rules';
 const STORAGE_KEY_AUTOMATIONS_SETTINGS = 'can_do_automation_settings';
 const STORAGE_KEY_THEME = 'theme';
 const STORAGE_KEY_CAN_DO_THEME = 'can_do_theme';
+const STORAGE_KEY_ACTIVE_MAIN_TAB = 'can_do_active_main_tab';
+const STORAGE_KEY_CATALOG_SUB_TAB = 'can_do_catalog_sub_tab';
 
 export default function App() {
   // Theme state ('light' | 'dark')
@@ -178,9 +180,71 @@ export default function App() {
   // 3. GitHub repository configuration
   const [repoConfig, setRepoConfig] = useState<GitHubRepoConfig>(() => getSavedRepoConfig());
 
-  // 4. Navigation & Modals state
-  const [activeMainTab, setActiveMainTab] = useState<'dashboard' | 'automations' | 'catalog' | 'device'>('dashboard');
-  const [catalogSubTab, setCatalogSubTab] = useState<'messages' | 'vehicles'>('messages');
+  // 4. Navigation & Modals state with full refresh persistence and URL hash sync
+  const [activeMainTab, setActiveMainTab] = useState<'dashboard' | 'automations' | 'catalog' | 'device'>(() => {
+    try {
+      if (typeof window !== 'undefined' && window.location.hash) {
+        const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+        if (hash === 'vehicles') return 'catalog';
+        if (['dashboard', 'automations', 'catalog', 'device'].includes(hash)) {
+          return hash as 'dashboard' | 'automations' | 'catalog' | 'device';
+        }
+      }
+      const saved = localStorage.getItem(STORAGE_KEY_ACTIVE_MAIN_TAB);
+      if (saved && ['dashboard', 'automations', 'catalog', 'device'].includes(saved)) {
+        return saved as 'dashboard' | 'automations' | 'catalog' | 'device';
+      }
+    } catch (e) {
+      console.error('Failed to load activeMainTab from storage', e);
+    }
+    return 'dashboard';
+  });
+
+  const [catalogSubTab, setCatalogSubTab] = useState<'messages' | 'vehicles'>(() => {
+    try {
+      if (typeof window !== 'undefined' && window.location.hash) {
+        const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+        if (hash === 'vehicles') return 'vehicles';
+      }
+      const saved = localStorage.getItem(STORAGE_KEY_CATALOG_SUB_TAB);
+      if (saved === 'messages' || saved === 'vehicles') {
+        return saved;
+      }
+    } catch (e) {
+      console.error('Failed to load catalogSubTab from storage', e);
+    }
+    return 'messages';
+  });
+
+  // Persist active tab to localStorage and sync to URL hash
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_ACTIVE_MAIN_TAB, activeMainTab);
+      localStorage.setItem(STORAGE_KEY_CATALOG_SUB_TAB, catalogSubTab);
+      if (typeof window !== 'undefined') {
+        const targetHash = activeMainTab === 'catalog' && catalogSubTab === 'vehicles' ? '#vehicles' : `#${activeMainTab}`;
+        if (window.location.hash !== targetHash) {
+          window.history.replaceState(null, '', targetHash);
+        }
+      }
+    } catch {}
+  }, [activeMainTab, catalogSubTab]);
+
+  // Support browser Back/Forward navigation between sections
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (typeof window === 'undefined') return;
+      const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+      if (hash === 'vehicles') {
+        setActiveMainTab('catalog');
+        setCatalogSubTab('vehicles');
+      } else if (['dashboard', 'automations', 'catalog', 'device'].includes(hash)) {
+        setActiveMainTab(hash as 'dashboard' | 'automations' | 'catalog' | 'device');
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   const handleSetMainTab = (tab: 'dashboard' | 'automations' | 'catalog' | 'device' | 'vehicles') => {
     if (tab === 'vehicles') {
@@ -965,28 +1029,23 @@ export default function App() {
       {/* Hero Banner / Header Area */}
       <header className="border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] px-3.5 py-4 sm:px-6 sm:py-5 lg:px-8">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 items-center gap-4 py-1">
-          {/* Left: Stacked title + Version chip underneath */}
-          <div className="flex flex-col items-center md:items-start text-center md:text-left">
-            <h1 className="text-xl sm:text-2xl font-bold text-[var(--text-heading)] tracking-tight leading-tight">
-              <span className="block">CAN Do Automation</span>
-            </h1>
-            <div className="mt-2 flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-[var(--input-bg)] text-cyan-400 border border-[var(--border-color)] shadow-sm">
-                {catalog.can_do_version || 'Loading...'}
-              </span>
-              <span className="text-xs text-[var(--text-muted)]">
-                Community Contribution Hub
-              </span>
-            </div>
+          {/* Left: Version chip */}
+          <div className="flex items-center justify-center md:justify-start order-2 md:order-1">
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-[var(--input-bg)] text-cyan-400 border border-[var(--border-color)] shadow-sm">
+              {catalog.can_do_version || 'Loading...'}
+            </span>
           </div>
 
-          {/* Center: Centered CAN Do Logo */}
-          <div className="flex items-center justify-center">
-            <CanDoLogo className="h-14 sm:h-18 md:h-20 w-auto" />
+          {/* Center: Centered CAN Do Logo with 'CAN Do' text underneath */}
+          <div className="flex flex-col items-center justify-center text-center order-1 md:order-2">
+            <CanDoLogo className="h-12 sm:h-16 md:h-18 w-auto" />
+            <h1 className="mt-1.5 text-lg sm:text-xl font-bold text-white tracking-wide">
+              CAN Do
+            </h1>
           </div>
 
           {/* Right: Consolidated Action Toolbar */}
-          <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 text-xs w-full">
+          <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 text-xs w-full order-3 md:order-3">
             {/* Theme Toggle Button */}
             <button
               type="button"

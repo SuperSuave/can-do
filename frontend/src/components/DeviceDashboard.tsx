@@ -47,14 +47,16 @@ import {
   Sparkles,
   Bell,
   Battery,
-  Moon
+  Moon,
+  RotateCcw
 } from 'lucide-react';
 import { Catalog, Command } from '../types/catalog';
 import { AutomationRule, AutomationTrigger } from '../types/automation';
 import { UserPreferences, getUserPreferences, saveUserPreferences, DEFAULT_USER_PREFERENCES, UpdatePolicy } from '../types/settings';
-import { checkForUpdates, executeUpdateSequence, UpdateCheckResult, UpdateStage, uploadFirmwareOta } from '../services/updateService';
+import { checkForUpdates, executeUpdateSequence, UpdateCheckResult, UpdateStage } from '../services/updateService';
 import { MdiIcon } from './MdiIcon';
 import { BluetoothManager } from './BluetoothManager';
+import { DeviceRebootModal } from './DeviceRebootModal';
 import { STANDARD_TIMEZONES, detectBrowserTimezone, getTimezoneLabel } from '../utils/timezone';
 
 export interface SystemStatus {
@@ -215,9 +217,29 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const [lastPingMs, setLastPingMs] = useState<number | null>(null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [wifi, setWifi] = useState<WifiStatus | null>(null);
-  const [activeTab, setActiveTab] = useState<'automations' | 'mqtt' | 'wifi' | 'bluetooth' | 'ota'>('automations');
+
+  // Active tab state persisted in localStorage
+  const [activeTab, setActiveTab] = useState<'automations' | 'mqtt' | 'wifi' | 'bluetooth' | 'ota'>(() => {
+    try {
+      const saved = localStorage.getItem('cando_device_active_tab');
+      if (saved && ['automations', 'mqtt', 'wifi', 'bluetooth', 'ota'].includes(saved)) {
+        return saved as 'automations' | 'mqtt' | 'wifi' | 'bluetooth' | 'ota';
+      }
+    } catch {}
+    return 'automations';
+  });
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('cando_device_active_tab', activeTab);
+    } catch {}
+  }, [activeTab]);
+
+  // Reboot Popup State
+  const [isRebootModalOpen, setIsRebootModalOpen] = useState<boolean>(false);
+  const [rebootModalInfo, setRebootModalInfo] = useState<{ title?: string; message?: string }>({});
 
   // Automations diag state
   const [automations, setAutomations] = useState<AutomationDiag[]>([]);
@@ -320,6 +342,13 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           setUpdateStage(stage);
           setUpdateProgressPct(pct);
           setUpdateMessage(msg);
+          if (stage === 'rebooting') {
+            setRebootModalInfo({
+              title: 'Updates Applied! Device Rebooting',
+              message: 'Web front-end, catalog, and firmware updates have been installed to flash memory. Hardware is rebooting into the new image...'
+            });
+            setIsRebootModalOpen(true);
+          }
         },
         isAtomBridge ? 'atom' : 'esp32c3'
       );
@@ -327,8 +356,12 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       setUpdateProgressPct(100);
       setUpdateMessage('Updates completed successfully! Rebooting device...');
       showNotice('Updates applied successfully! Device is restarting...', 'success');
-      // Keep completion card visible for 5 seconds so the user clearly sees the result
-      await new Promise((r) => setTimeout(r, 5000));
+      // Trigger the reboot popup to guide the user through reconnection
+      setRebootModalInfo({
+        title: 'Updates Applied! Device Rebooting',
+        message: 'All selected updates have been committed to flash memory. Hardware is restarting and reconnecting...'
+      });
+      setIsRebootModalOpen(true);
       fetchStatus();
       handleCheckForUpdates();
     } catch (e: any) {
@@ -341,44 +374,21 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     }
   };
 
-  const handleManualBinaryUpload = async (file: File) => {
-    if (!file) return;
-    setIsExecutingUpdate(true);
-    setUpdateStage('firmware');
-    setUpdateProgressPct(5);
-    setUpdateMessage(`Reading ${file.name}...`);
-
+  const handleManualReboot = async () => {
+    if (!window.confirm('Are you sure you want to restart the CAN Do hardware processor?')) return;
+    setRebootModalInfo({
+      title: 'Manual Reboot Initiated',
+      message: 'Reboot command sent to processor. Waiting for system re-initialization and Wi-Fi handshake...'
+    });
+    setIsRebootModalOpen(true);
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      if (arrayBuffer.byteLength < 100000) {
-        throw new Error('Selected file is too small to be a valid ESP32 firmware binary.');
-      }
-      const u8 = new Uint8Array(arrayBuffer);
-      if (u8[0] !== 0xE9) {
-        throw new Error('Invalid ESP32 binary format (missing 0xE9 magic byte). Please ensure this is an application .bin file.');
-      }
-
-      setUpdateMessage('Flashing firmware binary to ESP32 OTA partition...');
-      const targetHost = resolveDeviceBaseUrl(deviceHost);
-      await uploadFirmwareOta(targetHost, arrayBuffer, (pct) => {
-        setUpdateProgressPct(pct);
-        setUpdateMessage(`Flashing firmware: ${pct}%`);
+      await fetch(getApiUrl('/api/system/control'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reboot: true }),
       });
-
-      setUpdateStage('rebooting');
-      setUpdateProgressPct(100);
-      setUpdateMessage('Firmware flashed successfully! Device is restarting...');
-      showNotice('Firmware flashed successfully! Restarting...', 'success');
-      await new Promise((r) => setTimeout(r, 6000));
-      fetchStatus();
-      handleCheckForUpdates();
-    } catch (err: any) {
-      setUpdateStage('error');
-      setUpdateMessage(`Manual flash failed: ${err.message || err}`);
-      showNotice(`Flash error: ${err.message || err}`, 'error');
-      await new Promise((r) => setTimeout(r, 4000));
-    } finally {
-      setIsExecutingUpdate(false);
+    } catch (e: any) {
+      console.warn('Reboot request sent (network disconnect expected as device powers cycles):', e);
     }
   };
 
@@ -754,6 +764,11 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
         setOtaStatus('Firmware flashed successfully! Device is rebooting into the new image...');
         showNotice('Firmware flashed! Device rebooting in 5 seconds.', 'success');
         setOtaFile(null);
+        setRebootModalInfo({
+          title: 'Firmware Uploaded Successfully',
+          message: 'The binary image was written to the OTA partition. Hardware is restarting into the new image...'
+        });
+        setIsRebootModalOpen(true);
       } else {
         setOtaStatus(`Update failed: ${xhr.responseText || xhr.statusText}`);
         showNotice('OTA upload failed', 'error');
@@ -1867,6 +1882,16 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 <span>{isCheckingUpdate ? 'Checking...' : 'Check for Updates'}</span>
               </button>
 
+              <button
+                type="button"
+                onClick={handleManualReboot}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium transition border border-slate-700/60"
+                title="Restart CAN Do hardware processor"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                <span>Reboot</span>
+              </button>
+
               {onRerunOnboarding && (
                 <button
                   type="button"
@@ -2053,58 +2078,6 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               </button>
             </div>
           )}
-
-          {/* Direct Firmware Binary (.bin) Upload Card */}
-          <div className="can-do-card p-4 sm:p-5 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h4 className="text-xs sm:text-sm font-bold text-[var(--text-heading)] flex items-center gap-2">
-                  <HardDrive className="w-4 h-4 text-cyan-400" />
-                  Manual Firmware Flashing (.bin)
-                </h4>
-                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                  Flash a pre-compiled firmware image directly to the ESP32 OTA partition over local Wi-Fi without cloud reliance
-                </p>
-              </div>
-
-              {updateResult?.assets.firmware_url && (
-                <a
-                  href={updateResult.assets.firmware_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/60 text-xs font-semibold shrink-0 transition"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>{isAtomBridge ? 'Download Latest Atom .bin' : 'Download Latest WiCAN .bin'}</span>
-                </a>
-              )}
-            </div>
-
-            <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-700/80 hover:border-cyan-500/60 rounded-xl bg-slate-900/40 hover:bg-slate-900/60 cursor-pointer transition group">
-              <Upload className="w-6 h-6 text-slate-400 group-hover:text-cyan-400 transition mb-1.5" />
-              <span className="text-xs font-semibold text-slate-200 group-hover:text-white transition">
-                Select or Drop .bin Firmware File to Flash
-              </span>
-              <span className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                {isAtomBridge
-                  ? 'Accepts can-do-atom-bridge-*.bin (application binary)'
-                  : 'Accepts can-do-esp32c3-*.bin or can-do.bin (application binary)'}
-              </span>
-              <input
-                type="file"
-                accept=".bin"
-                disabled={isExecutingUpdate}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    handleManualBinaryUpload(file);
-                    e.target.value = '';
-                  }
-                }}
-                className="hidden"
-              />
-            </label>
-          </div>
 
           {/* Update Policy & Off-Hours Schedule Settings */}
           <div className="can-do-card p-4 sm:p-5 space-y-4">
@@ -2467,16 +2440,30 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             </div>
           </div>
 
-          {/* Manual Binary Upload (Legacy / Custom Dev Builds) */}
+          {/* Manual Binary Upload */}
           <div className="can-do-card p-4 sm:p-5 space-y-4">
-            <div>
-              <h4 className="text-xs sm:text-sm font-bold text-[var(--text-heading)] flex items-center gap-2">
-                <Upload className="w-4 h-4 text-slate-400" />
-                Manual Firmware Binary Flash (Custom Builds)
-              </h4>
-              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                Flash a custom-compiled ESP32 binary directly without a USB cable
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-[var(--text-heading)] flex items-center gap-2">
+                  <Upload className="w-4 h-4 text-cyan-400" />
+                  Manual Firmware Binary Flash
+                </h4>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                  Flash a custom or release ESP32 binary directly over Wi-Fi without a USB cable
+                </p>
+              </div>
+
+              {updateResult?.assets.firmware_url && (
+                <a
+                  href={updateResult.assets.firmware_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/60 text-xs font-semibold shrink-0 transition"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{isAtomBridge ? 'Download Latest Atom .bin' : 'Download Latest WiCAN .bin'}</span>
+                </a>
+              )}
             </div>
 
             <form onSubmit={handleOtaUpload} className="space-y-4 max-w-lg">
@@ -2530,6 +2517,23 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Rebooting Popup Modal */}
+      <DeviceRebootModal
+        isOpen={isRebootModalOpen}
+        deviceHost={deviceHost}
+        isAtomBridge={isAtomBridge}
+        version={updateResult?.version}
+        customTitle={rebootModalInfo.title}
+        customMessage={rebootModalInfo.message}
+        onClose={() => setIsRebootModalOpen(false)}
+        onReconnected={() => {
+          fetchStatus();
+          handleCheckForUpdates();
+        }}
+      />
     </div>
   );
 };
+
+export default DeviceDashboard;

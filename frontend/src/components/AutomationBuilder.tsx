@@ -4320,9 +4320,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 min-w-0">
       {/* Main Builder Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-w-0">
-        {/* Left Column: Active Rule Editor (8 cols = ~2/3 of area) */}
+        {/* Left Column: Active Rule Editor (8 cols = ~2/3 of area on desktop) */}
         {activeRule ? (
-          <div className="lg:col-span-8 space-y-4 min-w-0">
+          <div className="order-2 lg:order-1 lg:col-span-8 space-y-4 min-w-0">
             {/* Active Rule Action Strip & Properties */}
             <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-900 border border-slate-800 shadow-sm space-y-3 min-w-0 overflow-hidden">
               <div className="flex items-center justify-between gap-2.5">
@@ -4760,15 +4760,15 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             )}
           </div>
         ) : (
-          <div className="lg:col-span-8 flex items-center justify-center p-12 rounded-2xl bg-slate-900 border border-slate-800 text-slate-500 text-sm">
+          <div className="order-2 lg:order-1 lg:col-span-8 flex items-center justify-center p-12 rounded-2xl bg-slate-900 border border-slate-800 text-slate-500 text-sm">
             Select or create an automation rule to start editing.
           </div>
         )}
 
-        {/* Right Column: Automations List & JSON Inspector (4 cols = ~1/3 of area) */}
-        <div className="lg:col-span-4 space-y-4">
-          {/* Card 1: Automations List (Compact) */}
-          <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-3">
+        {/* Right Column: Automations List & JSON Inspector (contents on mobile, 4 cols sidebar on desktop) */}
+        <div className="contents lg:block lg:order-2 lg:col-span-4 lg:space-y-4">
+          {/* Card 1: Automations List (Appears at top on single-column mobile) */}
+          <div className="order-1 lg:order-none p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-3">
             {!isSelectMode ? (
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -4913,8 +4913,8 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             )}
           </div>
 
-          {/* Card 2: Live JSON Inspector & Output (Compact) */}
-          <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-3">
+          {/* Card 2: Live JSON Inspector & Output (Compact, order-3 on single-column) */}
+          <div className="order-3 lg:order-none p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-3">
             <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
               <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-950 border border-slate-800 text-[10px]">
                 <button

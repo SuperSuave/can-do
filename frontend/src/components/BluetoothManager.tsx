@@ -347,7 +347,7 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
         {/* Status Card */}
         <div className="can-do-card p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs text-[var(--text-muted)] mb-1">
-            <span className="font-semibold">Bluetooth Stack (NimBLE)</span>
+            <span className="font-semibold">Bluetooth</span>
             <Bluetooth className="w-4 h-4 text-blue-400" />
           </div>
           <div className="flex items-baseline gap-2 mt-1">
@@ -355,16 +355,12 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
               {status?.enabled ? 'CENTRAL ACTIVE' : 'INITIALIZING'}
             </span>
           </div>
-          <div className="text-[11px] text-[var(--text-muted)] mt-1.5 flex items-center justify-between">
-            <span>Native ESP-IDF HID Client</span>
-            <span className="text-emerald-400 font-mono text-[10px]">Zero Custom Code</span>
-          </div>
         </div>
 
         {/* Connected Controller Card */}
         <div className="can-do-card p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs text-[var(--text-muted)] mb-1">
-            <span className="font-semibold">Paired Button Controller</span>
+            <span className="font-semibold">Paired Device</span>
             <Radio className="w-4 h-4 text-cyan-400" />
           </div>
           <div className="flex items-baseline gap-2 mt-1">
@@ -849,3 +845,5 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
     </div>
   );
 };
+
+export default BluetoothManager;

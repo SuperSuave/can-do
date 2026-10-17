@@ -59,7 +59,7 @@ export interface AutomationTrigger {
 export interface AutomationCondition {
   id: string;
   _clientId?: string;
-  type?: 'can_state' | 'byte_value' | 'time_condition' | 'time' | 'param_range' | 'voltage' | 'and' | 'or' | 'not' | 'and_group' | 'or_group' | 'not_group' | 'triggered_by' | 'trigger' | 'device_state' | 'wifi' | 'wifi_condition' | 'ble_button' | 'ble_device' | 'ble_beacon' | 'ble';
+  type?: 'can_state' | 'byte_value' | 'time_condition' | 'time' | 'param_range' | 'voltage' | 'and' | 'or' | 'not' | 'and_group' | 'or_group' | 'not_group' | 'triggered_by' | 'trigger' | 'device_state' | 'wifi' | 'wifi_condition' | 'ble_button' | 'ble_key' | 'ble_device' | 'ble_beacon' | 'beacon' | 'ble_presence' | 'ble';
   logic?: 'and' | 'or' | 'not' | 'leaf';
   trigger_id?: string;
   can_id?: string;

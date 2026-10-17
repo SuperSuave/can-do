@@ -115,9 +115,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                     {catalog.can_do_version || 'Loading...'}
                   </span>
                 </div>
-                <div className="text-[11px] text-slate-400 font-medium">
-                  Community Contribution Hub
-                </div>
               </div>
             </div>
 
