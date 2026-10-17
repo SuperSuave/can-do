@@ -666,7 +666,6 @@ void mqtt_mgr_start(void) {
 
     // Fast keepalive and short timeouts so network drop is detected quickly
     mqtt_cfg.session.keepalive = 30;
-    mqtt_cfg.session.outbox_limit = 10240; // 10KB cap to prevent heap exhaustion when away from broker
     mqtt_cfg.network.reconnect_timeout_ms = 10000;
     mqtt_cfg.network.timeout_ms = 12500;
     mqtt_cfg.buffer.size = 2048;
