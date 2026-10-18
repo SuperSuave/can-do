@@ -3905,9 +3905,10 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
       const targetCommand = act.command || act.option_label || matchedOption?.label || (catalogCmd?.options && catalogCmd.options[0]?.label);
       const rawPayload = act.payload || matchedOption?.payload || (matchedOption?.steps && matchedOption.steps[0]?.payload) || catalogCmd?.payload;
       const { str: cleanPayloadStr, obj: cleanPayloadObj } = formatPayloadForApi(rawPayload);
-      const targetRepeat = act.repeat || matchedOption?.repeat || 1;
-      const targetDelay = act.delay_ms || catalogCmd?.network?.delay_ms || catalogCmd?.delay_ms || 50;
+      const targetRepeat = act.repeat || matchedOption?.repeat || (matchedOption?.steps && matchedOption.steps[0]?.repeat) || 1;
+      const targetDelay = act.delay_ms || (matchedOption?.steps && matchedOption.steps[0]?.delay_ms) || catalogCmd?.network?.delay_ms || catalogCmd?.delay_ms || 20;
       const targetBus = act.bus ?? catalogCmd?.network?.bus ?? catalogCmd?.action_bus ?? 0;
+      const normBus = typeof targetBus === 'string' && !isNaN(Number(targetBus)) ? Number(targetBus) : targetBus;
       const targetSteps = act.steps || matchedOption?.steps;
 
       // Special Flow 8: Battery Preconditioning
@@ -3932,7 +3933,6 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               action: preconAction,
               can_id: targetCanId || '0x0C7',
               payload: cleanPayloadStr,
-              payload_map: cleanPayloadObj,
               repeat: 3
             })
           });
@@ -3940,20 +3940,24 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         } catch {}
 
         if (!sent && preconSteps.length > 0) {
-          for (const s of preconSteps) {
-            const { str: sStr, obj: sObj } = formatPayloadForApi(s.payload);
-            await fetch(`${base}/api/command`, {
+          for (let sIdx = 0; sIdx < preconSteps.length; sIdx++) {
+            const s = preconSteps[sIdx];
+            const { str: sStr } = formatPayloadForApi(s.payload);
+            const stepRes = await fetch(`${base}/api/command`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 can_id: targetCanId || '0x0C7',
                 payload: sStr,
-                payload_map: sObj,
                 repeat: s.repeat || 3,
                 delay_ms: 25,
-                bus: targetBus
+                bus: normBus
               })
-            }).catch(() => {});
+            });
+            if (!stepRes.ok) throw new Error(`HTTP ${stepRes.status}: ${stepRes.statusText}`);
+            if (sIdx < preconSteps.length - 1) {
+              await new Promise(r => setTimeout(r, 25));
+            }
           }
         }
 
@@ -3977,10 +3981,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             command: JSON.stringify({ action: 'start', temp: targetTemp, zone: targetZone, sync: act.sync_on !== false }),
             can_id: targetCanId || '0x4A0',
             payload: cleanPayloadStr,
-            payload_map: cleanPayloadObj,
             repeat: targetRepeat,
             delay_ms: targetDelay,
-            bus: targetBus
+            bus: normBus
           })
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -3996,23 +3999,28 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
       if (targetSteps && targetSteps.length > 1) {
         for (let sIdx = 0; sIdx < targetSteps.length; sIdx++) {
           const stepItem = targetSteps[sIdx];
-          const { str: sStr, obj: sObj } = formatPayloadForApi(stepItem.payload);
+          const { str: sStr } = formatPayloadForApi(stepItem.payload);
           const sRepeat = stepItem.repeat || targetRepeat;
           const sDelay = stepItem.delay_ms || targetDelay;
           const sCid = stepItem.can_id || targetCanId;
           if (sCid) {
-            await fetch(`${base}/api/command`, {
+            const stepRes = await fetch(`${base}/api/command`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 can_id: sCid,
                 payload: sStr,
-                payload_map: sObj,
                 repeat: sRepeat,
                 delay_ms: sDelay,
-                bus: targetBus
+                bus: normBus
               })
-            }).catch(() => {});
+            });
+            if (!stepRes.ok) {
+              throw new Error(`HTTP ${stepRes.status}: ${stepRes.statusText}`);
+            }
+            if (sIdx < targetSteps.length - 1 && sDelay > 0) {
+              await new Promise(r => setTimeout(r, Math.min(sDelay, 2000)));
+            }
           }
         }
         setActionTestToast({
@@ -4023,53 +4031,42 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         return;
       }
 
-      // Flow 11: Standard Command Dispatch (try entity_command with CAN fallback)
-      let dispatched = false;
-      if (targetEntityId && targetCommand) {
-        try {
-          const res = await fetch(`${base}/api/command`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              entity: targetEntityId,
-              command: targetCommand,
-              can_id: targetCanId,
-              payload: cleanPayloadStr,
-              payload_map: cleanPayloadObj,
-              repeat: targetRepeat,
-              delay_ms: targetDelay,
-              bus: targetBus
-            })
-          });
-          if (res.ok) {
-            dispatched = true;
-            setActionTestToast({
-              message: `Dispatched command to ${targetEntityId}: ${targetCommand}`,
-              type: 'success'
-            });
-            setTimeout(() => setActionTestToast(null), 4000);
-            return;
-          }
-        } catch {
-          // If entity dispatch throws, fall back to direct CAN frame below
-        }
-      }
-
-      // Flow 12: Direct CAN Ingress Transmission (via can_id + byte-accurate payload)
-      if (targetCanId) {
-        const bodyObj: any = {
-          can_id: targetCanId,
-          payload: cleanPayloadStr,
-          payload_map: cleanPayloadObj,
-          repeat: targetRepeat,
-          delay_ms: targetDelay,
-          bus: targetBus
-        };
-
+      // Flow 11: Direct CAN Frame Dispatch (for commands with known CAN ID & payload, e.g. windows, locks, seats)
+      if (targetCanId && cleanPayloadStr) {
         const res = await fetch(`${base}/api/command`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(bodyObj)
+          body: JSON.stringify({
+            can_id: targetCanId,
+            payload: cleanPayloadStr,
+            repeat: targetRepeat,
+            delay_ms: targetDelay,
+            bus: normBus
+          })
+        });
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+
+        const labelText = targetCommand ? ` (${targetCommand})` : '';
+        setActionTestToast({
+          message: `Action tested: Transmitted CAN ${targetCanId} [${cleanPayloadStr}]${labelText}`,
+          type: 'success'
+        });
+        setTimeout(() => setActionTestToast(null), 4000);
+        return;
+      }
+
+      // Flow 12: Entity Command Dispatch (for firmware-handled entities without raw CAN ID)
+      if (targetEntityId && targetCommand) {
+        const res = await fetch(`${base}/api/command`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entity: targetEntityId,
+            command: targetCommand
+          })
         });
 
         if (!res.ok) {
@@ -4077,7 +4074,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         }
 
         setActionTestToast({
-          message: `Action tested: Transmitted CAN ${targetCanId} [${cleanPayloadStr}]`,
+          message: `Dispatched command to ${targetEntityId}: ${targetCommand}`,
           type: 'success'
         });
         setTimeout(() => setActionTestToast(null), 4000);

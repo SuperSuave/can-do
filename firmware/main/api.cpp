@@ -333,7 +333,7 @@ static esp_err_t api_states_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_command_handler(httpd_req_t *req) {
-    char buf[128];
+    char buf[512];
     int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
     if (ret <= 0) return ESP_FAIL;
     buf[ret] = '\0';
@@ -369,6 +369,7 @@ static esp_err_t api_command_handler(httpd_req_t *req) {
         cJSON *payload_item = cJSON_GetObjectItem(root, "payload");
         cJSON *repeat_item = cJSON_GetObjectItem(root, "repeat");
         cJSON *delay_item = cJSON_GetObjectItem(root, "delay_ms");
+        cJSON *bus_item = cJSON_GetObjectItem(root, "bus");
 
         ActionStep step = {};
         step.type = ActionType::TRANSMIT_FRAME;
@@ -376,6 +377,11 @@ static esp_err_t api_command_handler(httpd_req_t *req) {
         step.repeat = cJSON_IsNumber(repeat_item) ? (int)repeat_item->valuedouble : 1;
         step.delay_ms = cJSON_IsNumber(delay_item) ? (uint32_t)delay_item->valuedouble : 0;
         step.mask = 0xFF;
+        if (cJSON_IsNumber(bus_item)) {
+            step.bus = (uint8_t)bus_item->valuedouble;
+        } else if (cJSON_IsString(bus_item)) {
+            step.bus = (uint8_t)strtoul(bus_item->valuestring, nullptr, 0);
+        }
 
         if (cJSON_IsString(payload_item)) {
             // Hex string e.g. "01 02 03 04" or "01020304"
@@ -413,7 +419,7 @@ static esp_err_t api_command_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_test_automation_handler(httpd_req_t *req) {
-    char buf[128];
+    char buf[256];
     int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
     if (ret <= 0) return ESP_FAIL;
     buf[ret] = '\0';
