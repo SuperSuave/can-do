@@ -119,6 +119,7 @@ export interface AutomationActionStep {
   type?: 'transmit_frame' | 'delay' | string;
   can_id?: string;
   action_can_id?: string;
+  bus?: number;
   payload?: string | ByteMap;
   repeat?: number;
   delay_ms?: number;

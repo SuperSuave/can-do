@@ -6,7 +6,8 @@ import {
   Esp32FirmwareRule,
   AutomationTrigger,
   AutomationCondition,
-  AutomationAction
+  AutomationAction,
+  AutomationActionStep
 } from '../types/automation';
 import { Command, CommandOption, Catalog, ByteMap, Vehicle } from '../types/catalog';
 import { DEFAULT_CATALOG } from '../data/defaultCatalog';
@@ -230,8 +231,43 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
     };
   }
 
-  // Handle explicit transmit or raw can_tx: return clean transmit structure without re-inlining
+  // Handle explicit transmit or raw can_tx: inline multiple steps if defined, or return single transmit frame
   if (act.type === 'transmit' || act.type === 'can_tx') {
+    if (act.steps && act.steps.length > 1) {
+      const inlinedSteps: any[] = [];
+      act.steps.forEach((step: any, idx: number) => {
+        if (step.type === 'delay') {
+          inlinedSteps.push({
+            type: 'delay',
+            ms: step.delay_ms || step.dwell_ms || step.ms || 500
+          });
+          return;
+        }
+        const stepPayload = compileToByteMap(step.payload);
+        inlinedSteps.push({
+          type: 'transmit',
+          can_id: step.can_id || act.can_id || '0x000',
+          bus: step.bus ?? act.bus ?? 0,
+          payload: Object.keys(stepPayload).length > 0 ? stepPayload : { D1: '0x01' },
+          repeat: step.repeat ?? act.repeat ?? 1,
+          ...(idx === 0 ? {
+            ...(act.source_command_id ? { source_command_id: act.source_command_id } : {}),
+            ...(act.source_command_name ? { source_command_name: act.source_command_name } : {}),
+            ...(act.option_label ? { option_label: act.option_label } : {}),
+            ...(act.entity_id ? { entity_id: act.entity_id } : {})
+          } : {})
+        });
+        const delayBetween = step.delay_ms ?? act.delay_ms ?? 0;
+        if (idx < act.steps!.length - 1 && delayBetween > 0) {
+          inlinedSteps.push({
+            type: 'delay',
+            ms: delayBetween
+          });
+        }
+      });
+      return inlinedSteps;
+    }
+
     const payload = compileToByteMap(act.payload || act.to_payload);
     return {
       type: 'transmit',
@@ -846,6 +882,17 @@ export function commandToAction(rawCmd: Command, opt?: CommandOption): Automatio
     };
   }
 
+  const rawSteps = chosenOpt?.steps || (chosenOpt?.payload ? undefined : cmd.steps);
+  const cleanSteps: AutomationActionStep[] | undefined = rawSteps && rawSteps.length > 0
+    ? rawSteps.map(s => ({
+        can_id: s.can_id || canId,
+        bus: s.bus ?? (cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? 0),
+        payload: compileToByteMap(s.payload),
+        repeat: s.repeat ?? 1,
+        delay_ms: s.delay_ms ?? 0
+      }))
+    : undefined;
+
   const payload = compileToByteMap(chosenOpt?.payload || (chosenOpt?.steps && chosenOpt?.steps[0]?.payload) || cmd.payload);
   const repeat = chosenOpt?.repeat ?? (chosenOpt?.steps && chosenOpt?.steps[0]?.repeat) ?? cmd.repeat ?? 1;
   const delayMs = chosenOpt?.delay_ms ?? (chosenOpt?.steps && chosenOpt?.steps[0]?.delay_ms) ?? cmd.network?.delay_ms ?? cmd.delay_ms ?? 0;
@@ -858,6 +905,7 @@ export function commandToAction(rawCmd: Command, opt?: CommandOption): Automatio
     payload: Object.keys(payload).length > 0 ? payload : undefined,
     repeat: repeat,
     delay_ms: delayMs,
+    ...(cleanSteps && cleanSteps.length > 1 ? { steps: cleanSteps } : {}),
     entity_id: cmd.id,
     command: chosenOpt?.label || 'Toggle',
     option_label: chosenOpt?.label,
@@ -1201,6 +1249,17 @@ export function applyOptionToAction(act: AutomationAction, rawCmd: Command, opt:
   const cmd = resolveVariant(rawCmd, null);
   const canId = cmd.network?.action_can_id || cmd.action_can_id || cmd.network?.state_can_id || cmd.state_can_id || act.can_id || '0x000';
   const cmdDisplayName = cmd.ha_metadata?.name || cmd.name || cmd.id;
+  const rawSteps = opt.steps || (opt.payload ? undefined : cmd.steps);
+  const cleanSteps: AutomationActionStep[] | undefined = rawSteps && rawSteps.length > 0
+    ? rawSteps.map(s => ({
+        can_id: s.can_id || canId,
+        bus: s.bus ?? (cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? act.bus ?? 0),
+        payload: compileToByteMap(s.payload),
+        repeat: s.repeat ?? 1,
+        delay_ms: s.delay_ms ?? 0
+      }))
+    : undefined;
+
   const payload = compileToByteMap(opt.payload || (opt.steps && opt.steps[0]?.payload) || cmd.payload);
   const repeat = opt.repeat ?? (opt.steps && opt.steps[0]?.repeat) ?? cmd.repeat ?? act.repeat ?? 1;
   const delayMs = opt.delay_ms ?? (opt.steps && opt.steps[0]?.delay_ms) ?? cmd.network?.delay_ms ?? cmd.delay_ms ?? act.delay_ms ?? 0;
@@ -1218,6 +1277,7 @@ export function applyOptionToAction(act: AutomationAction, rawCmd: Command, opt:
     payload: Object.keys(payload).length > 0 ? payload : act.payload,
     repeat: repeat,
     delay_ms: delayMs,
+    steps: cleanSteps && cleanSteps.length > 1 ? cleanSteps : undefined,
     popup_message: opt.popup || `${cmdDisplayName} - ${opt.label}`
   };
 }

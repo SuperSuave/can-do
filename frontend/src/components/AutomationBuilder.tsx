@@ -5,7 +5,8 @@ import {
   AutomationSettings,
   AutomationTrigger,
   AutomationCondition,
-  AutomationAction
+  AutomationAction,
+  AutomationActionStep
 } from '../types/automation';
 import { Catalog, Command, CommandOption } from '../types/catalog';
 import {
@@ -2992,6 +2993,11 @@ function ActionNodeEditor({
             A{index + 1}
           </span>
           <span className="font-semibold text-white text-xs sm:text-sm tracking-tight truncate">{actionName}</span>
+          {act.steps && act.steps.length > 1 && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-900/40 text-emerald-300 border border-emerald-700/60 shrink-0">
+              {act.steps.length} Steps
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
@@ -2999,7 +3005,7 @@ function ActionNodeEditor({
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
-              className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
+              className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-medium border transition cursor-pointer ${
                 showAdvanced
                   ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80 shadow'
                   : 'bg-slate-900 text-slate-300 hover:text-white border-slate-800 hover:bg-slate-850'
@@ -3068,6 +3074,45 @@ function ActionNodeEditor({
         </div>
       )}
 
+      {/* Multi-Step Action Sequence Summary (when not in Details view) */}
+      {act.steps && act.steps.length > 1 && !showAdvanced && (
+        <div className="bg-slate-900/60 rounded-lg p-2 border border-slate-800/80 space-y-1.5 font-mono text-[11px]">
+          <div className="flex items-center justify-between text-slate-400 font-sans text-[10px]">
+            <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+              <Layers className="w-3 h-3 text-emerald-400" />
+              Burst Sequence ({act.steps.length} Steps)
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(true)}
+              className="text-emerald-400 hover:text-emerald-300 text-[10px] underline font-sans cursor-pointer"
+            >
+              View / Edit Details
+            </button>
+          </div>
+          <div className="space-y-1">
+            {act.steps.map((step, sIdx) => {
+              const stepCanId = step.can_id || act.can_id || '0x000';
+              const stepPayloadStr = typeof step.payload === 'object' && step.payload
+                ? JSON.stringify(step.payload)
+                : (typeof step.payload === 'string' && step.payload ? step.payload : '{}');
+              return (
+                <div key={sIdx} className="flex items-center gap-2 text-slate-300 bg-slate-950/80 px-2 py-1 rounded border border-slate-800/60">
+                  <span className="text-[10px] font-bold text-slate-400 font-sans shrink-0">Step {sIdx + 1}</span>
+                  <span className="text-amber-400 font-bold shrink-0">{stepCanId}</span>
+                  <span className="text-slate-500 font-sans text-[10px] shrink-0">Bus {step.bus ?? act.bus ?? 0}</span>
+                  <span className="text-emerald-300 font-bold truncate flex-1">{stepPayloadStr}</span>
+                  <span className="text-slate-400 text-[10px] font-sans shrink-0">
+                    ×{step.repeat ?? act.repeat ?? 1}
+                    {(step.delay_ms ?? act.delay_ms ?? 0) > 0 ? ` @ ${step.delay_ms ?? act.delay_ms}ms` : ''}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Advanced Details View */}
       {(!hasOptions || showAdvanced) && (() => {
         const isCanTx =
@@ -3075,6 +3120,7 @@ function ActionNodeEditor({
           act.type === 'entity_command' ||
           act.type === 'transmit' ||
           !['precondition', 'climate_target', 'track_popup', 'popup', 'delay', 'if_then', 'choose', 'webhook'].includes(act.type);
+        const hasMultipleSteps = isCanTx && !!(act.steps && act.steps.length > 1);
 
         return (
         <div className={`space-y-3 ${hasOptions ? 'pt-2.5 border-t border-slate-850' : ''}`}>
@@ -3201,7 +3247,7 @@ function ActionNodeEditor({
               </>
             )}
 
-            {isCanTx && (
+            {isCanTx && !hasMultipleSteps && (
               <>
                 <div>
                   <label className="block text-[10px] font-sans text-slate-500">Target CAN ID</label>
@@ -3271,8 +3317,8 @@ function ActionNodeEditor({
             </div>
           )}
 
-          {isCanTx && (
-            <div className="space-y-1.5 font-mono text-[11px]">
+          {isCanTx && !hasMultipleSteps && (
+            <div className="space-y-2 font-mono text-[11px]">
               <div>
                 <label className="block text-[10px] font-sans text-slate-500">Payload (1-based D1..D8)</label>
                 <input
@@ -3285,6 +3331,245 @@ function ActionNodeEditor({
                   placeholder='{"D1":"0x02","D2":"0x01"}'
                   className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-emerald-300 font-bold"
                 />
+              </div>
+              <div className="flex items-center justify-between pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentStep: AutomationActionStep = {
+                      can_id: act.can_id || '0x000',
+                      bus: act.bus ?? 0,
+                      repeat: act.repeat !== undefined ? act.repeat : 1,
+                      delay_ms: act.delay_ms !== undefined ? act.delay_ms : 20,
+                      payload: act.payload || ''
+                    };
+                    const secondStep: AutomationActionStep = {
+                      can_id: act.can_id || '0x000',
+                      bus: act.bus ?? 0,
+                      repeat: 1,
+                      delay_ms: 20,
+                      payload: ''
+                    };
+                    onUpdate({
+                      ...act,
+                      type: 'can_tx',
+                      steps: [currentStep, secondStep]
+                    });
+                  }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white border border-slate-800 transition cursor-pointer"
+                >
+                  <Plus className="w-3 h-3 text-emerald-400" />
+                  <span>Add Step (Convert to Sequence)</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Dedicated Multi-Step Sequence Editor */}
+          {hasMultipleSteps && (
+            <div className="space-y-3 pt-1">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-white flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                    Sequence Steps ({act.steps!.length})
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-sans">Frames will transmit sequentially in order</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newStep: AutomationActionStep = {
+                      can_id: act.can_id || '0x000',
+                      bus: act.bus ?? 0,
+                      repeat: 1,
+                      delay_ms: 20,
+                      payload: ''
+                    };
+                    onUpdate({
+                      ...act,
+                      type: 'can_tx',
+                      steps: [...act.steps!, newStep]
+                    });
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800/80 hover:bg-emerald-900 hover:text-white transition cursor-pointer"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Add Step</span>
+                </button>
+              </div>
+
+              <div className="space-y-2.5">
+                {act.steps!.map((step, sIdx) => {
+                  const payloadStr = typeof step.payload === 'object' && step.payload && Object.keys(step.payload).length > 0
+                    ? JSON.stringify(step.payload)
+                    : (typeof step.payload === 'string' ? step.payload : '');
+
+                  const updateStep = (patch: Partial<AutomationActionStep>) => {
+                    const updatedSteps = act.steps!.map((st, i) => (i === sIdx ? { ...st, ...patch } : st));
+                    const isFirstStep = sIdx === 0;
+                    onUpdate({
+                      ...act,
+                      type: 'can_tx',
+                      steps: updatedSteps,
+                      ...(isFirstStep ? {
+                        can_id: patch.can_id !== undefined ? patch.can_id : act.can_id,
+                        bus: patch.bus !== undefined ? patch.bus : act.bus,
+                        repeat: patch.repeat !== undefined ? patch.repeat : act.repeat,
+                        delay_ms: patch.delay_ms !== undefined ? patch.delay_ms : act.delay_ms,
+                        payload: patch.payload !== undefined ? patch.payload : act.payload
+                      } : {})
+                    });
+                  };
+
+                  const removeStep = () => {
+                    const updatedSteps = act.steps!.filter((_, i) => i !== sIdx);
+                    if (updatedSteps.length <= 1) {
+                      const remaining = updatedSteps[0] || { can_id: act.can_id, bus: act.bus, payload: act.payload, repeat: act.repeat, delay_ms: act.delay_ms };
+                      onUpdate({
+                        ...act,
+                        type: 'can_tx',
+                        steps: undefined,
+                        can_id: remaining.can_id || act.can_id,
+                        bus: remaining.bus ?? act.bus ?? 0,
+                        repeat: remaining.repeat ?? act.repeat ?? 1,
+                        delay_ms: remaining.delay_ms ?? act.delay_ms ?? 0,
+                        payload: remaining.payload || act.payload
+                      });
+                    } else {
+                      onUpdate({
+                        ...act,
+                        type: 'can_tx',
+                        steps: updatedSteps,
+                        ...(sIdx === 0 ? {
+                          can_id: updatedSteps[0].can_id,
+                          bus: updatedSteps[0].bus,
+                          repeat: updatedSteps[0].repeat,
+                          delay_ms: updatedSteps[0].delay_ms,
+                          payload: updatedSteps[0].payload
+                        } : {})
+                      });
+                    }
+                  };
+
+                  const moveStep = (direction: -1 | 1) => {
+                    const targetIdx = sIdx + direction;
+                    if (targetIdx < 0 || targetIdx >= act.steps!.length) return;
+                    const reordered = [...act.steps!];
+                    const temp = reordered[sIdx];
+                    reordered[sIdx] = reordered[targetIdx];
+                    reordered[targetIdx] = temp;
+                    onUpdate({
+                      ...act,
+                      type: 'can_tx',
+                      steps: reordered,
+                      can_id: reordered[0].can_id,
+                      bus: reordered[0].bus,
+                      repeat: reordered[0].repeat,
+                      delay_ms: reordered[0].delay_ms,
+                      payload: reordered[0].payload
+                    });
+                  };
+
+                  return (
+                    <div key={sIdx} className="p-2.5 rounded-lg bg-slate-900/70 border border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-emerald-950 text-emerald-300 font-bold text-[10px] flex items-center justify-center border border-emerald-800">
+                            {sIdx + 1}
+                          </span>
+                          <span className="font-semibold text-slate-200 text-[11px] font-sans">Step {sIdx + 1} of {act.steps!.length}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={sIdx === 0}
+                            onClick={() => moveStep(-1)}
+                            className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition cursor-pointer"
+                            title="Move step up"
+                          >
+                            <ArrowUp className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={sIdx === act.steps!.length - 1}
+                            onClick={() => moveStep(1)}
+                            className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition cursor-pointer"
+                            title="Move step down"
+                          >
+                            <ArrowDown className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={removeStep}
+                            className="p-1 text-slate-500 hover:text-rose-400 transition cursor-pointer ml-1"
+                            title="Remove this step"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px]">
+                        <div>
+                          <label className="block text-[10px] font-sans text-slate-500">Target CAN ID</label>
+                          <input
+                            type="text"
+                            value={step.can_id || ''}
+                            onChange={e => updateStep({ can_id: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                            placeholder={act.can_id || "0x524"}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-sans text-slate-500">Bus</label>
+                          <select
+                            value={step.bus ?? 0}
+                            onChange={e => updateStep({ bus: parseInt(e.target.value) || 0 })}
+                            className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+                          >
+                            <option value={0}>Bus 0</option>
+                            <option value={1}>Bus 1</option>
+                            <option value={2}>Bus 2</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-sans text-slate-500">Repeat × Delay</label>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              value={step.repeat !== undefined ? step.repeat : 1}
+                              onChange={e => updateStep({ repeat: parseInt(e.target.value) || 1 })}
+                              className="w-12 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-200"
+                            />
+                            <span className="text-slate-500 font-sans">×</span>
+                            <input
+                              type="number"
+                              value={step.delay_ms !== undefined ? step.delay_ms : 0}
+                              onChange={e => updateStep({ delay_ms: parseInt(e.target.value) || 0 })}
+                              placeholder="ms"
+                              className="w-16 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-200"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 font-mono text-[11px]">
+                        <label className="block text-[10px] font-sans text-slate-500">Step {sIdx + 1} Payload (1-based D1..D8)</label>
+                        <input
+                          type="text"
+                          value={payloadStr}
+                          onChange={e => {
+                            const compiled = compileToByteMap(e.target.value);
+                            updateStep({ payload: Object.keys(compiled).length > 0 ? compiled : e.target.value });
+                          }}
+                          placeholder='{"D1":"0x02","D2":"0x01"}'
+                          className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-emerald-300 font-bold"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -3981,6 +4266,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           const sRepeat = stepItem.repeat || targetRepeat;
           const sDelay = stepItem.delay_ms || targetDelay;
           const sCid = stepItem.can_id || targetCanId;
+          const sBus = stepItem.bus ?? normBus;
           if (sCid) {
             const stepRes = await fetch(`${base}/api/command`, {
               method: 'POST',
@@ -3990,7 +4276,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 payload: sStr,
                 repeat: sRepeat,
                 delay_ms: sDelay,
-                bus: normBus
+                bus: sBus
               })
             });
             if (!stepRes.ok) {
