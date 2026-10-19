@@ -915,6 +915,49 @@ export function commandToAction(rawCmd: Command, opt?: CommandOption): Automatio
   };
 }
 
+interface CatalogCommandIndex {
+  byId: Map<string, Command>;
+  byCanId: Map<string, Command[]>;
+}
+
+const _catalogIndexCache = new WeakMap<Command[], CatalogCommandIndex>();
+
+function getCatalogCommandIndex(commands: Command[]): CatalogCommandIndex {
+  let index = _catalogIndexCache.get(commands);
+  if (!index) {
+    const byId = new Map<string, Command>();
+    const byCanId = new Map<string, Command[]>();
+
+    for (const cmd of commands) {
+      if (cmd.id) {
+        byId.set(cmd.id, cmd);
+      }
+      const stateId = (cmd.network?.state_can_id || cmd.state_can_id || '').toLowerCase();
+      const actionId = (cmd.network?.action_can_id || cmd.action_can_id || '').toLowerCase();
+      if (stateId) {
+        let list = byCanId.get(stateId);
+        if (!list) {
+          list = [];
+          byCanId.set(stateId, list);
+        }
+        list.push(cmd);
+      }
+      if (actionId && actionId !== stateId) {
+        let list = byCanId.get(actionId);
+        if (!list) {
+          list = [];
+          byCanId.set(actionId, list);
+        }
+        list.push(cmd);
+      }
+    }
+
+    index = { byId, byCanId };
+    _catalogIndexCache.set(commands, index);
+  }
+  return index;
+}
+
 /**
  * Resolves the catalog command and matched option for a trigger.
  * Handles explicit source_command_id, name patterns (e.g. trig_menu_ok -> sw_menu),
@@ -926,9 +969,11 @@ export function resolveCatalogCommandForTrigger(
 ): { command?: Command; matchedOption?: CommandOption } {
   if (!catalog?.commands) return {};
 
+  const index = getCatalogCommandIndex(catalog.commands);
+
   // 1. Direct ID match
   if (trig.source_command_id) {
-    const rawCmd = catalog.commands.find(c => c.id === trig.source_command_id);
+    const rawCmd = index.byId.get(trig.source_command_id);
     if (rawCmd) {
       const cmd = resolveVariant(rawCmd, null);
       const opt = findMatchingOptionForTrigger(cmd, trig);
@@ -940,7 +985,7 @@ export function resolveCatalogCommandForTrigger(
   if (trig.id) {
     const lowerId = trig.id.toLowerCase();
     if (lowerId.includes('menu') || lowerId.includes('ok')) {
-      const swMenu = catalog.commands.find(c => c.id === 'sw_menu');
+      const swMenu = index.byId.get('sw_menu');
       if (swMenu) {
         const cmd = resolveVariant(swMenu, null);
         const opt = findMatchingOptionForTrigger(cmd, trig);
@@ -952,11 +997,7 @@ export function resolveCatalogCommandForTrigger(
   // 3. Match by CAN ID
   if (trig.can_id) {
     const normCanId = trig.can_id.toLowerCase();
-    const candidateCmds = catalog.commands.filter(c => {
-      const stateId = (c.network?.state_can_id || c.state_can_id || '').toLowerCase();
-      const actionId = (c.network?.action_can_id || c.action_can_id || '').toLowerCase();
-      return stateId === normCanId || actionId === normCanId;
-    });
+    const candidateCmds = index.byCanId.get(normCanId) ?? [];
 
     if (candidateCmds.length === 1) {
       const cmd = resolveVariant(candidateCmds[0], null);
