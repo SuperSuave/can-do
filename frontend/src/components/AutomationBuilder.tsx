@@ -3073,46 +3073,6 @@ function ActionNodeEditor({
           })}
         </div>
       )}
-
-      {/* Multi-Step Action Sequence Summary (when not in Details view) */}
-      {act.steps && act.steps.length > 1 && !showAdvanced && (
-        <div className="bg-slate-900/60 rounded-lg p-2 border border-slate-800/80 space-y-1.5 font-mono text-[11px]">
-          <div className="flex items-center justify-between text-slate-400 font-sans text-[10px]">
-            <span className="font-semibold text-slate-300 flex items-center gap-1.5">
-              <Layers className="w-3 h-3 text-emerald-400" />
-              Burst Sequence ({act.steps.length} Steps)
-            </span>
-            <button
-              type="button"
-              onClick={() => setShowAdvanced(true)}
-              className="text-emerald-400 hover:text-emerald-300 text-[10px] underline font-sans cursor-pointer"
-            >
-              View / Edit Details
-            </button>
-          </div>
-          <div className="space-y-1">
-            {act.steps.map((step, sIdx) => {
-              const stepCanId = step.can_id || act.can_id || '0x000';
-              const stepPayloadStr = typeof step.payload === 'object' && step.payload
-                ? JSON.stringify(step.payload)
-                : (typeof step.payload === 'string' && step.payload ? step.payload : '{}');
-              return (
-                <div key={sIdx} className="flex items-center gap-2 text-slate-300 bg-slate-950/80 px-2 py-1 rounded border border-slate-800/60">
-                  <span className="text-[10px] font-bold text-slate-400 font-sans shrink-0">Step {sIdx + 1}</span>
-                  <span className="text-amber-400 font-bold shrink-0">{stepCanId}</span>
-                  <span className="text-slate-500 font-sans text-[10px] shrink-0">Bus {step.bus ?? act.bus ?? 0}</span>
-                  <span className="text-emerald-300 font-bold truncate flex-1">{stepPayloadStr}</span>
-                  <span className="text-slate-400 text-[10px] font-sans shrink-0">
-                    ×{step.repeat ?? act.repeat ?? 1}
-                    {(step.delay_ms ?? act.delay_ms ?? 0) > 0 ? ` @ ${step.delay_ms ?? act.delay_ms}ms` : ''}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Advanced Details View */}
       {(!hasOptions || showAdvanced) && (() => {
         const isCanTx =
