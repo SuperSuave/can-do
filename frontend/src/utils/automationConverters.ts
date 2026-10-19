@@ -1154,9 +1154,11 @@ export function resolveCatalogCommandForCondition(
 ): { command?: Command; matchedOption?: CommandOption } {
   if (!catalog?.commands) return {};
 
+  const index = getCatalogCommandIndex(catalog.commands);
+
   // 1. Direct ID match
   if (cond.source_command_id) {
-    const rawCmd = catalog.commands.find(c => c.id === cond.source_command_id);
+    const rawCmd = index.byId.get(cond.source_command_id);
     if (rawCmd) {
       const cmd = resolveVariant(rawCmd, null);
       const opt = findMatchingOptionForCondition(cmd, cond);
@@ -1179,11 +1181,7 @@ export function resolveCatalogCommandForCondition(
   // 3. Match by CAN ID
   if (cond.can_id) {
     const normCanId = cond.can_id.toLowerCase();
-    const candidateCmds = catalog.commands.filter(c => {
-      const stateId = (c.network?.state_can_id || c.state_can_id || '').toLowerCase();
-      const actionId = (c.network?.action_can_id || c.action_can_id || '').toLowerCase();
-      return stateId === normCanId || actionId === normCanId;
-    });
+    const candidateCmds = index.byCanId.get(normCanId) ?? [];
 
     if (candidateCmds.length === 1) {
       const cmd = resolveVariant(candidateCmds[0], null);

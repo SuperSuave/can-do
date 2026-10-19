@@ -3,9 +3,14 @@ import assert from 'node:assert/strict';
 import {
   resolveCatalogCommandForTrigger,
   resolveCatalogCommandForAction,
+  resolveCatalogCommandForCondition,
 } from './automationConverters.js';
 import type { Catalog, Command } from '../types/catalog.js';
-import type { AutomationTrigger, AutomationAction } from '../types/automation.js';
+import type {
+  AutomationTrigger,
+  AutomationAction,
+  AutomationCondition,
+} from '../types/automation.js';
 
 function createMockCatalog(commandCount = 100): Catalog {
   const commands: Command[] = [];
@@ -177,4 +182,60 @@ test('resolveCatalogCommandForAction performance benchmark (10,000 lookups)', ()
   // 10,000 lookups across a 200-command catalog should complete in under 50ms with O(1) Map cache
   assert.ok(duration < 100, `Benchmark took too long: ${duration.toFixed(2)}ms`);
 });
+
+test('resolveCatalogCommandForCondition matches direct source_command_id via O(1) index', () => {
+  const catalog = createMockCatalog(150);
+  const cond: AutomationCondition = {
+    id: 'cond_1',
+    type: 'can_state',
+    source_command_id: 'cmd_60',
+    option_label: 'On',
+  };
+
+  const { command, matchedOption } = resolveCatalogCommandForCondition(cond, catalog);
+  assert.ok(command);
+  assert.strictEqual(command.id, 'cmd_60');
+  assert.strictEqual(matchedOption?.label, 'On');
+});
+
+test('resolveCatalogCommandForCondition matches CAN ID via byCanId index', () => {
+  const catalog = createMockCatalog(100);
+  // Target cmd_40 state_can_id: 0x${(100 + 40).toString(16)} = 0x8c
+  const targetCanId = `0x${(140).toString(16)}`;
+  const cond: AutomationCondition = {
+    id: 'cond_can',
+    type: 'can_state',
+    can_id: targetCanId,
+    byte: 'D1',
+    value: '0x01',
+  };
+
+  const { command, matchedOption } = resolveCatalogCommandForCondition(cond, catalog);
+  assert.ok(command);
+  assert.strictEqual(command.id, 'cmd_40');
+  assert.strictEqual(matchedOption?.label, 'On');
+});
+
+test('resolveCatalogCommandForCondition performance benchmark (10,000 lookups)', () => {
+  const catalog = createMockCatalog(200);
+  const conditions: AutomationCondition[] = [
+    { id: 'c1', type: 'can_state', source_command_id: 'cmd_10' },
+    { id: 'c2', type: 'can_state', source_command_id: 'cmd_110' },
+    { id: 'c3', type: 'can_state', source_command_id: 'cmd_180' },
+    { id: 'c4', type: 'can_state', can_id: `0x${(150).toString(16)}` },
+  ];
+
+  const iterations = 10000;
+  const start = performance.now();
+  for (let i = 0; i < iterations; i++) {
+    const c = conditions[i % conditions.length];
+    const res = resolveCatalogCommandForCondition(c, catalog);
+    assert.ok(res.command);
+  }
+  const duration = performance.now() - start;
+
+  // 10,000 lookups across a 200-command catalog should complete in under 50ms with O(1) Map cache
+  assert.ok(duration < 100, `Benchmark took too long: ${duration.toFixed(2)}ms`);
+});
+
 
