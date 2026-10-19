@@ -153,6 +153,44 @@ class TestBuildActionSteps(unittest.TestCase):
         self.assertEqual(steps[0]["repeat"], 1)
         self.assertEqual(steps[0]["delay_ms"], 20)
 
+    def test_option_single_payload(self) -> None:
+        """Option-level single payload is used when option has no steps array."""
+        command = {"payload": "1111111111111111"}
+        option = {"payload": "2222222222222222", "repeat": 3, "delay_ms": 30}
+        steps = build_action_steps(command, option)
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0]["payload"], "2222222222222222")
+        self.assertEqual(steps[0]["repeat"], 3)
+        self.assertEqual(steps[0]["delay_ms"], 30)
+
+    def test_step_defaults_repeat_and_delay(self) -> None:
+        """Omitted repeat and delay_ms in steps should default to 1 and 20 respectively."""
+        command = {"steps": [{"payload": "AABBCCDDEEFF0011"}]}
+        steps = build_action_steps(command)
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0]["payload"], "AABBCCDDEEFF0011")
+        self.assertEqual(steps[0]["repeat"], 1)
+        self.assertEqual(steps[0]["delay_ms"], 20)
+
+    def test_empty_command_returns_empty_list(self) -> None:
+        """Command with neither steps nor payload should return an empty list."""
+        self.assertEqual(build_action_steps({}), [])
+        self.assertEqual(build_action_steps({"name": "noop"}), [])
+
+    def test_base_payload_propagation_in_steps(self) -> None:
+        """base_payload should be correctly forwarded to format D-indexed step payloads."""
+        base = [0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80]
+        command = {
+            "steps": [
+                {"payload": {"D1": "0xFF"}},
+                {"payload": {"D8": "0xAA"}},
+            ]
+        }
+        steps = build_action_steps(command, base_payload=base)
+        self.assertEqual(len(steps), 2)
+        self.assertEqual(steps[0]["payload"], "FF20304050607080")
+        self.assertEqual(steps[1]["payload"], "10203040506070AA")
+
 
 if __name__ == "__main__":
     unittest.main()
