@@ -288,13 +288,27 @@ export default function App() {
             actions: (rule.actions || []).map(act => {
               const srcId = act.source_command_id || act.entity_id;
               const chosenCommand = act.command || act.option_label;
-              if (act.id === 'act_cool_driver_seat' || act.entity_id === 'drivers_seat_comfort' || srcId) {
+              if (act.id === 'act_cool_driver_seat' || act.entity_id === 'drivers_seat_comfort' || (srcId === 'drivers_seat_comfort')) {
                 return {
                   ...act,
-                  source_command_id: srcId || act.source_command_id,
-                  entity_id: act.entity_id || srcId,
-                  command: chosenCommand,
-                  option_label: act.option_label || chosenCommand
+                  type: 'can_tx',
+                  can_id: act.can_id || '0x4A2',
+                  bus: act.bus ?? 0,
+                  payload: act.payload || { D5: '0x4F' },
+                  repeat: act.repeat || 3,
+                  delay_ms: act.delay_ms !== undefined ? act.delay_ms : 20,
+                  source_command_id: srcId || 'drivers_seat_comfort',
+                  source_command_name: act.source_command_name || 'Driver Seat Comfort',
+                  entity_id: act.entity_id || 'drivers_seat_comfort',
+                  command: chosenCommand || 'Medium Cool',
+                  option_label: act.option_label || chosenCommand || 'Medium Cool',
+                  popup_message: act.popup_message || 'Driver Seat: Cool Med'
+                };
+              }
+              if (act.type === 'entity_command') {
+                return {
+                  ...act,
+                  type: 'can_tx'
                 };
               }
               return act;

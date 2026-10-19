@@ -38,12 +38,18 @@ export const DEFAULT_AUTOMATION_RULES: AutomationRule[] = [
     actions: [
       {
         id: 'act_cool_driver_seat',
-        type: 'entity_command',
+        type: 'can_tx',
+        can_id: '0x4A2',
+        bus: 0,
+        payload: { D5: '0x4F' },
+        repeat: 3,
+        delay_ms: 20,
         entity_id: 'drivers_seat_comfort',
         source_command_id: 'drivers_seat_comfort',
         source_command_name: 'Driver Seat Comfort',
         command: 'Medium Cool',
-        option_label: 'Medium Cool'
+        option_label: 'Medium Cool',
+        popup_message: 'Driver Seat: Cool Med'
       }
     ]
   }

@@ -389,21 +389,8 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         })
       },
       {
-        id: 'entity_command',
-        title: 'Entity Command',
-        desc: 'Trigger high-level vehicle command (e.g. heated seats, mirrors, doors)',
-        icon: Sparkles,
-        color: 'text-emerald-400 bg-emerald-950/40 border-emerald-800/60',
-        create: (): AutomationAction => ({
-          id: `act_ent_${Date.now().toString(36)}`,
-          type: 'entity_command',
-          entity_id: '',
-          command: ''
-        })
-      },
-      {
         id: 'act_can_tx',
-        title: 'Transmit CAN Sequence',
+        title: 'Custom CAN Transmit',
         desc: 'Inject raw or custom CAN frames with repeat and delay timing',
         icon: Radio,
         color: 'text-emerald-400 bg-emerald-950/40 border-emerald-800/60',

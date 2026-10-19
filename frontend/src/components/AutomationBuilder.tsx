@@ -2966,16 +2966,14 @@ function ActionNodeEditor({
     catalogCmd?.ha_metadata?.name ||
     catalogCmd?.name ||
     act.source_command_name ||
-    (act.type === 'entity_command'
-      ? act.entity_id || 'Entity Command'
+    (act.can_id
+      ? `CAN Transmit ${act.can_id}`
       : act.type === 'climate_target'
       ? 'Climate Target'
       : act.type === 'precondition'
       ? 'Battery Preconditioning'
       : act.type === 'track_popup' || act.type === 'popup'
       ? 'Cluster Popup'
-      : act.can_id
-      ? `CAN Ingress ${act.can_id}`
       : `Action ${index + 1}`);
 
   return (
@@ -3071,21 +3069,27 @@ function ActionNodeEditor({
       )}
 
       {/* Advanced Details View */}
-      {(!hasOptions || showAdvanced) && (
+      {(!hasOptions || showAdvanced) && (() => {
+        const isCanTx =
+          act.type === 'can_tx' ||
+          act.type === 'entity_command' ||
+          act.type === 'transmit' ||
+          !['precondition', 'climate_target', 'track_popup', 'popup', 'delay', 'if_then', 'choose', 'webhook'].includes(act.type);
+
+        return (
         <div className={`space-y-3 ${hasOptions ? 'pt-2.5 border-t border-slate-850' : ''}`}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 font-mono text-[11px]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 font-mono text-[11px]">
             <div>
               <label className="block text-[10px] font-sans text-slate-500">Action Type</label>
               <select
-                value={act.type}
+                value={isCanTx ? 'can_tx' : act.type}
                 onChange={e => onUpdate({ ...act, type: e.target.value as any })}
                 className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
               >
-                <option value="entity_command">entity_command</option>
+                <option value="can_tx">can_tx (CAN Transmit)</option>
                 <option value="precondition">precondition (E-GMP)</option>
                 <option value="climate_target">climate_target (HVAC Temp Target)</option>
                 <option value="track_popup">track_popup (Cluster Popup)</option>
-                <option value="can_tx">can_tx (CAN Ingress)</option>
                 <option value="delay">delay</option>
                 <option value="if_then">if_then (Conditional Branch)</option>
                 <option value="choose">choose (Multiple Choices)</option>
@@ -3197,41 +3201,14 @@ function ActionNodeEditor({
               </>
             )}
 
-            {act.type === 'entity_command' && (
-              <>
-                <div>
-                  <label className="block text-[10px] font-sans text-slate-500">Entity ID</label>
-                  <input
-                    type="text"
-                    value={act.entity_id || ''}
-                    onChange={e => onUpdate({ ...act, entity_id: e.target.value })}
-                    placeholder="e.g. drivers_seat_comfort"
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-sans text-slate-500">Command</label>
-                  <input
-                    type="text"
-                    value={act.command || ''}
-                    onChange={e => onUpdate({ ...act, command: e.target.value })}
-                    placeholder="e.g. Medium Cool"
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-cyan-300 font-bold"
-                  />
-                </div>
-              </>
-            )}
-
-
-
-            {act.type === 'can_tx' && (
+            {isCanTx && (
               <>
                 <div>
                   <label className="block text-[10px] font-sans text-slate-500">Target CAN ID</label>
                   <input
                     type="text"
                     value={act.can_id || ''}
-                    onChange={e => onUpdate({ ...act, can_id: e.target.value })}
+                    onChange={e => onUpdate({ ...act, can_id: e.target.value, type: 'can_tx' })}
                     className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
                     placeholder="0x524"
                   />
@@ -3240,7 +3217,7 @@ function ActionNodeEditor({
                   <label className="block text-[10px] font-sans text-slate-500">Bus</label>
                   <select
                     value={act.bus ?? 0}
-                    onChange={e => onUpdate({ ...act, bus: parseInt(e.target.value) || 0 })}
+                    onChange={e => onUpdate({ ...act, bus: parseInt(e.target.value) || 0, type: 'can_tx' })}
                     className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
                   >
                     <option value={0}>Bus 0</option>
@@ -3254,14 +3231,14 @@ function ActionNodeEditor({
                     <input
                       type="number"
                       value={act.repeat !== undefined ? act.repeat : 1}
-                      onChange={e => onUpdate({ ...act, repeat: parseInt(e.target.value) || 1 })}
+                      onChange={e => onUpdate({ ...act, repeat: parseInt(e.target.value) || 1, type: 'can_tx' })}
                       className="w-12 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-200"
                     />
                     <span className="text-slate-500 font-sans">×</span>
                     <input
                       type="number"
                       value={act.delay_ms !== undefined ? act.delay_ms : 0}
-                      onChange={e => onUpdate({ ...act, delay_ms: parseInt(e.target.value) || 0 })}
+                      onChange={e => onUpdate({ ...act, delay_ms: parseInt(e.target.value) || 0, type: 'can_tx' })}
                       placeholder="ms"
                       className="w-16 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-200"
                     />
@@ -3294,16 +3271,16 @@ function ActionNodeEditor({
             </div>
           )}
 
-          {act.type === 'can_tx' && (
+          {isCanTx && (
             <div className="space-y-1.5 font-mono text-[11px]">
               <div>
                 <label className="block text-[10px] font-sans text-slate-500">Payload (1-based D1..D8)</label>
                 <input
                   type="text"
-                  value={typeof act.payload === 'object' && Object.keys(act.payload).length > 0 ? JSON.stringify(act.payload) : (typeof act.payload === 'string' ? act.payload : '')}
+                  value={typeof act.payload === 'object' && act.payload && Object.keys(act.payload).length > 0 ? JSON.stringify(act.payload) : (typeof act.payload === 'string' ? act.payload : '')}
                   onChange={e => {
                     const compiled = compileToByteMap(e.target.value);
-                    onUpdate({ ...act, payload: Object.keys(compiled).length > 0 ? compiled : e.target.value });
+                    onUpdate({ ...act, payload: Object.keys(compiled).length > 0 ? compiled : e.target.value, type: 'can_tx' });
                   }}
                   placeholder='{"D1":"0x02","D2":"0x01"}'
                   className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-emerald-300 font-bold"
@@ -3312,7 +3289,8 @@ function ActionNodeEditor({
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
         </>
       )}
     </div>

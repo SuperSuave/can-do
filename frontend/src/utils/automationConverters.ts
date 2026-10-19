@@ -846,35 +846,24 @@ export function commandToAction(rawCmd: Command, opt?: CommandOption): Automatio
     };
   }
 
-  if ((cmd.options && cmd.options.length > 0) || chosenOpt?.label) {
-    const payload = compileToByteMap(chosenOpt?.payload || (chosenOpt?.steps && chosenOpt?.steps[0]?.payload) || cmd.payload);
-    return {
-      id: actId,
-      type: 'entity_command',
-      entity_id: cmd.id,
-      command: chosenOpt?.label || 'Toggle',
-      can_id: canId,
-      bus: cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? 0,
-      payload: Object.keys(payload).length > 0 ? payload : undefined,
-      popup_message: chosenOpt?.popup || `${cmdDisplayName} - ${chosenOpt?.label || 'Toggle'}`,
-      source_command_id: cmd.id,
-      source_command_name: cmdDisplayName,
-      option_label: chosenOpt?.label
-    };
-  }
+  const payload = compileToByteMap(chosenOpt?.payload || (chosenOpt?.steps && chosenOpt?.steps[0]?.payload) || cmd.payload);
+  const repeat = chosenOpt?.repeat ?? (chosenOpt?.steps && chosenOpt?.steps[0]?.repeat) ?? cmd.repeat ?? 1;
+  const delayMs = chosenOpt?.delay_ms ?? (chosenOpt?.steps && chosenOpt?.steps[0]?.delay_ms) ?? cmd.network?.delay_ms ?? cmd.delay_ms ?? 0;
 
-  const payload = compileToByteMap(chosenOpt?.payload || cmd.payload || (cmd.steps && cmd.steps[0]?.payload));
   return {
     id: actId,
     type: 'can_tx',
     can_id: canId,
     bus: cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? 0,
-    payload: Object.keys(payload).length > 0 ? payload : { D1: '0x01' },
-    repeat: chosenOpt?.repeat || 1,
-    delay_ms: 50,
+    payload: Object.keys(payload).length > 0 ? payload : undefined,
+    repeat: repeat,
+    delay_ms: delayMs,
+    entity_id: cmd.id,
+    command: chosenOpt?.label || 'Toggle',
+    option_label: chosenOpt?.label,
     source_command_id: cmd.id,
     source_command_name: cmdDisplayName,
-    option_label: chosenOpt?.label
+    popup_message: chosenOpt?.popup || (chosenOpt?.label ? `${cmdDisplayName} - ${chosenOpt.label}` : cmdDisplayName)
   };
 }
 
@@ -1213,32 +1202,23 @@ export function applyOptionToAction(act: AutomationAction, rawCmd: Command, opt:
   const canId = cmd.network?.action_can_id || cmd.action_can_id || cmd.network?.state_can_id || cmd.state_can_id || act.can_id || '0x000';
   const cmdDisplayName = cmd.ha_metadata?.name || cmd.name || cmd.id;
   const payload = compileToByteMap(opt.payload || (opt.steps && opt.steps[0]?.payload) || cmd.payload);
-
-  if (act.type === 'entity_command' || (cmd.options && cmd.options.length > 0)) {
-    return {
-      ...act,
-      source_command_id: cmd.id,
-      source_command_name: cmdDisplayName,
-      entity_id: cmd.id,
-      command: opt.label,
-      option_label: opt.label,
-      can_id: canId,
-      bus: cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? act.bus ?? 0,
-      payload: Object.keys(payload).length > 0 ? payload : act.payload,
-      popup_message: opt.popup || `${cmdDisplayName} - ${opt.label}`
-    };
-  }
+  const repeat = opt.repeat ?? (opt.steps && opt.steps[0]?.repeat) ?? cmd.repeat ?? act.repeat ?? 1;
+  const delayMs = opt.delay_ms ?? (opt.steps && opt.steps[0]?.delay_ms) ?? cmd.network?.delay_ms ?? cmd.delay_ms ?? act.delay_ms ?? 0;
 
   return {
     ...act,
+    type: 'can_tx',
     source_command_id: cmd.id,
     source_command_name: cmdDisplayName,
+    entity_id: cmd.id,
     command: opt.label,
     option_label: opt.label,
     can_id: canId,
     bus: cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? act.bus ?? 0,
     payload: Object.keys(payload).length > 0 ? payload : act.payload,
-    popup_message: opt.popup || act.popup_message
+    repeat: repeat,
+    delay_ms: delayMs,
+    popup_message: opt.popup || `${cmdDisplayName} - ${opt.label}`
   };
 }
 

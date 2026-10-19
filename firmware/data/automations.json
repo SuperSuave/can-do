@@ -27,9 +27,14 @@
       "conditions": [],
       "actions": [
         {
-          "type": "entity_command",
-          "entity_id": "drivers_seat_comfort",
-          "command": "Medium Cool"
+          "type": "transmit",
+          "can_id": "0x4A2",
+          "bus": 0,
+          "payload": {
+            "D5": "0x4F"
+          },
+          "repeat": 3,
+          "delay_ms": 20
         },
         {
           "type": "track_popup",

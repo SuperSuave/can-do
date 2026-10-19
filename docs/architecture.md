@@ -218,8 +218,7 @@ Rules are evaluated using explicit numerical checks rather than string matching 
 
 - **Sequential Branching Actions (If-Then-Else & Choose)**:
   Actions execute sequentially and support branching:
-  - **Entity Commands**: `{ "type": "entity_command", "entity_id": "drivers_seat_comfort", "command": "Medium Cool" }`
-  - **Transmit Frames**: `{ "type": "transmit", "can_id": "0x524", "bus": 0, "payload": { "D1": "0x02" }, "repeat": 1 }`
+  - **Transmit Frames**: `{ "type": "can_tx", "can_id": "0x4A2", "bus": 0, "payload": { "D5": "0x4F" }, "repeat": 3 }`
   - **Delay**: `{ "type": "delay", "ms": 500 }`
   - **If-Then-Else**:
     ```json
