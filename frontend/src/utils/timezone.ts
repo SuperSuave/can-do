@@ -25,6 +25,10 @@ export const STANDARD_TIMEZONES: StandardTimezone[] = [
   { id: 'UTC', label: 'UTC / GMT' },
 ];
 
+const TIMEZONE_MAP = new Map<string, StandardTimezone>(
+  STANDARD_TIMEZONES.map(t => [t.id.toLowerCase(), t])
+);
+
 /**
  * Detect browser's local timezone and map to the nearest standard timezone ID.
  */
@@ -36,9 +40,8 @@ export function detectBrowserTimezone(): string {
     const lower = browserTz.toLowerCase();
 
     // Direct matches
-    for (const tz of STANDARD_TIMEZONES) {
-      if (tz.id.toLowerCase() === lower) return tz.id;
-    }
+    const directMatch = TIMEZONE_MAP.get(lower);
+    if (directMatch) return directMatch.id;
 
     // Common regional mappings
     if (lower.includes('los_angeles') || lower.includes('vancouver') || lower.includes('tijuana') || lower.includes('pacific')) {
@@ -103,6 +106,6 @@ export function detectBrowserTimezone(): string {
  */
 export function getTimezoneLabel(tzId?: string): string {
   if (!tzId) return 'UTC / GMT';
-  const found = STANDARD_TIMEZONES.find(t => t.id.toLowerCase() === tzId.toLowerCase());
+  const found = TIMEZONE_MAP.get(tzId.toLowerCase());
   return found ? found.label : tzId;
 }
