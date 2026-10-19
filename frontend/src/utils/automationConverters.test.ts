@@ -1,8 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveCatalogCommandForTrigger } from './automationConverters.js';
+import {
+  resolveCatalogCommandForTrigger,
+  resolveCatalogCommandForAction,
+} from './automationConverters.js';
 import type { Catalog, Command } from '../types/catalog.js';
-import type { AutomationTrigger } from '../types/automation.js';
+import type { AutomationTrigger, AutomationAction } from '../types/automation.js';
 
 function createMockCatalog(commandCount = 100): Catalog {
   const commands: Command[] = [];
@@ -107,3 +110,71 @@ test('resolveCatalogCommandForTrigger performance benchmark (10,000 lookups)', (
   // 10,000 lookups across a 200-command catalog should complete in under 50ms with O(1) Map cache
   assert.ok(duration < 100, `Benchmark took too long: ${duration.toFixed(2)}ms`);
 });
+
+test('resolveCatalogCommandForAction matches direct source_command_id and entity_id via O(1) index', () => {
+  const catalog = createMockCatalog(150);
+
+  // Match via source_command_id
+  const act1: AutomationAction = {
+    id: 'act_1',
+    type: 'can_tx',
+    source_command_id: 'cmd_80',
+    option_label: 'On',
+  };
+  const res1 = resolveCatalogCommandForAction(act1, catalog);
+  assert.ok(res1.command);
+  assert.strictEqual(res1.command.id, 'cmd_80');
+  assert.strictEqual(res1.matchedOption?.label, 'On');
+
+  // Match via entity_id fallback
+  const act2: AutomationAction = {
+    id: 'act_2',
+    type: 'can_tx',
+    entity_id: 'cmd_25',
+    command: 'Off',
+  };
+  const res2 = resolveCatalogCommandForAction(act2, catalog);
+  assert.ok(res2.command);
+  assert.strictEqual(res2.command.id, 'cmd_25');
+  assert.strictEqual(res2.matchedOption?.label, 'Off');
+});
+
+test('resolveCatalogCommandForAction matches CAN ID via byCanId index', () => {
+  const catalog = createMockCatalog(100);
+  // Target cmd_30 action_can_id: 0x${(200 + 30).toString(16)} = 0x${(230).toString(16)}
+  const targetCanId = `0x${(230).toString(16)}`;
+  const act: AutomationAction = {
+    id: 'act_can',
+    type: 'can_tx',
+    can_id: targetCanId,
+    command: 'On',
+  };
+
+  const { command, matchedOption } = resolveCatalogCommandForAction(act, catalog);
+  assert.ok(command);
+  assert.strictEqual(command.id, 'cmd_30');
+  assert.strictEqual(matchedOption?.label, 'On');
+});
+
+test('resolveCatalogCommandForAction performance benchmark (10,000 lookups)', () => {
+  const catalog = createMockCatalog(200);
+  const actions: AutomationAction[] = [
+    { id: 'a1', type: 'can_tx', source_command_id: 'cmd_5' },
+    { id: 'a2', type: 'can_tx', entity_id: 'cmd_120' },
+    { id: 'a3', type: 'can_tx', source_command_id: 'cmd_195' },
+    { id: 'a4', type: 'can_tx', can_id: `0x${(250).toString(16)}` },
+  ];
+
+  const iterations = 10000;
+  const start = performance.now();
+  for (let i = 0; i < iterations; i++) {
+    const a = actions[i % actions.length];
+    const res = resolveCatalogCommandForAction(a, catalog);
+    assert.ok(res.command);
+  }
+  const duration = performance.now() - start;
+
+  // 10,000 lookups across a 200-command catalog should complete in under 50ms with O(1) Map cache
+  assert.ok(duration < 100, `Benchmark took too long: ${duration.toFixed(2)}ms`);
+});
+

@@ -1076,9 +1076,11 @@ export function resolveCatalogCommandForAction(
 ): { command?: Command; matchedOption?: CommandOption } {
   if (!catalog?.commands) return {};
 
+  const index = getCatalogCommandIndex(catalog.commands);
+
   const targetId = act.source_command_id || act.entity_id;
   if (targetId) {
-    const rawCmd = catalog.commands.find(c => c.id === targetId);
+    const rawCmd = index.byId.get(targetId);
     if (rawCmd) {
       const cmd = resolveVariant(rawCmd, null);
       const opt = findMatchingOptionForAction(cmd, act);
@@ -1088,11 +1090,7 @@ export function resolveCatalogCommandForAction(
 
   if (act.can_id) {
     const normCanId = act.can_id.toLowerCase();
-    const candidateCmds = catalog.commands.filter(c => {
-      const actionId = (c.network?.action_can_id || c.action_can_id || '').toLowerCase();
-      const stateId = (c.network?.state_can_id || c.state_can_id || '').toLowerCase();
-      return actionId === normCanId || stateId === normCanId;
-    });
+    const candidateCmds = index.byCanId.get(normCanId) ?? [];
 
     if (candidateCmds.length === 1) {
       const cmd = resolveVariant(candidateCmds[0], null);
