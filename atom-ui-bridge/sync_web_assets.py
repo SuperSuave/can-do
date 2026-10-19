@@ -4,7 +4,6 @@ import gzip
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 FRONTEND_DIST = os.path.join(REPO_ROOT, "frontend", "dist")
-FIRMWARE_WWW = os.path.join(REPO_ROOT, "firmware", "data", "www")
 ATOM_DATA = os.path.join(os.path.dirname(__file__), "data")
 
 def sync():
@@ -12,48 +11,53 @@ def sync():
         print("Frontend dist directory not found!")
         return
 
-    # Clean destination directories
-    for d in [FIRMWARE_WWW, ATOM_DATA]:
-        if os.path.exists(d):
-            shutil.rmtree(d, ignore_errors=True)
-        os.makedirs(d, exist_ok=True)
+    # Clean destination directory
+    if os.path.exists(ATOM_DATA):
+        shutil.rmtree(ATOM_DATA, ignore_errors=True)
+    os.makedirs(ATOM_DATA, exist_ok=True)
 
     for root, dirs, files in os.walk(FRONTEND_DIST):
         for f in files:
-            if f.endswith(".map") or f == ".nojekyll" or f.endswith(".gz.gz"):
+            if f.endswith(".map") or f.endswith(".gz.gz"):
                 continue
             if "catalog" in f or "catalog" in root:
                 continue
 
             rel = os.path.relpath(os.path.join(root, f), FRONTEND_DIST)
             src_path = os.path.join(root, f)
+            dst_path = os.path.join(ATOM_DATA, rel)
+            os.makedirs(os.path.dirname(dst_path), exist_ok=True)
 
             with open(src_path, "rb") as fin:
                 raw = fin.read()
 
-            for dest_dir in [FIRMWARE_WWW, ATOM_DATA]:
-                dst_path = os.path.join(dest_dir, rel)
-                os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+            if f.endswith(".gz"):
+                with open(dst_path, "wb") as fg:
+                    fg.write(raw)
+            else:
+                if f == ".nojekyll":
+                    with open(dst_path, "wb") as fu:
+                        fu.write(raw)
+                    continue
 
-                if f.endswith(".gz"):
-                    with open(dst_path, "wb") as fg:
-                        fg.write(raw)
+                gz_dist = src_path + ".gz"
+                if os.path.exists(gz_dist):
+                    if f in ["index.html", "logo.svg", "frontend_manifest.json"]:
+                        with open(dst_path, "wb") as fu:
+                            fu.write(raw)
                 else:
-                    # If dist already has a .gz version, skip compressing this uncompressed file unless index.html
-                    gz_dist = src_path + ".gz"
-                    if os.path.exists(gz_dist):
-                        if f == "index.html":
-                            with open(dst_path, "wb") as fu:
-                                fu.write(raw)
+                    if f in ["logo.svg", "frontend_manifest.json"]:
+                        with open(dst_path, "wb") as fu:
+                            fu.write(raw)
                     else:
                         gz_path = dst_path + ".gz"
                         with gzip.open(gz_path, "wb", compresslevel=9) as fg:
                             fg.write(raw)
-                        if len(raw) < 4096 or f == "index.html":
+                        if f == "index.html" or len(raw) < 1024:
                             with open(dst_path, "wb") as fu:
                                 fu.write(raw)
 
-    # Also bundle can_do_catalog.json.gz into Atom Lite data so the web SPA can load full catalog offline
+    # Also bundle can_do_catalog.json and can_do_catalog.json.gz into Atom Lite data
     cat_src = os.path.join(REPO_ROOT, "catalog", "can_do_catalog.json")
     if os.path.exists(cat_src):
         atom_cat_dir = os.path.join(ATOM_DATA, "catalog")
@@ -68,8 +72,8 @@ def sync():
             f_out.write(cat_raw)
 
     atom_bytes = sum(os.path.getsize(os.path.join(r, f)) for r, d, fs in os.walk(ATOM_DATA) for f in fs)
-    firmware_bytes = sum(os.path.getsize(os.path.join(r, f)) for r, d, fs in os.walk(FIRMWARE_WWW) for f in fs)
-    print(f"Sync complete! Atom Lite LittleFS: {atom_bytes / 1024:.1f} KB (Partition: 2048 KB), Firmware WWW: {firmware_bytes / 1024:.1f} KB")
+    print(f"Sync complete! Atom Lite LittleFS: {atom_bytes / 1024:.1f} KB (Partition: 2048 KB)")
 
 if __name__ == "__main__":
     sync()
+

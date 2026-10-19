@@ -135,7 +135,7 @@ jobs:
           pio run
           pio run -t buildfs
           cd .pio/build/m5stack-atom
-          esptool.py --chip esp32 merge_bin -o can-do-atom-bridge-merged.bin \
+          esptool --chip esp32 merge-bin -o can-do-atom-bridge-merged.bin \
             0x1000 bootloader.bin \
             0x8000 partitions.bin \
             0x10000 firmware.bin \
