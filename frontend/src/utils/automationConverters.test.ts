@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  compileToByteMap,
   resolveCatalogCommandForTrigger,
   resolveCatalogCommandForAction,
   resolveCatalogCommandForCondition,
@@ -237,5 +238,64 @@ test('resolveCatalogCommandForCondition performance benchmark (10,000 lookups)',
   // 10,000 lookups across a 200-command catalog should complete in under 50ms with O(1) Map cache
   assert.ok(duration < 100, `Benchmark took too long: ${duration.toFixed(2)}ms`);
 });
+
+test('compileToByteMap returns empty object for undefined, null, or empty string', () => {
+  assert.deepStrictEqual(compileToByteMap(undefined), {});
+  assert.deepStrictEqual(compileToByteMap(''), {});
+  assert.deepStrictEqual(compileToByteMap('   '), {});
+});
+
+test('compileToByteMap normalizes object ByteMap input and filters out wildcards', () => {
+  const input = {
+    D1: '0x12',
+    D2: 'ab',
+    D3: '0XCD',
+    D4: '*',
+    D5: '1*',
+    D6: '?',
+  };
+
+  const expected = {
+    D1: '0x12',
+    D2: '0xAB',
+    D3: '0XCD',
+  };
+
+  assert.deepStrictEqual(compileToByteMap(input), expected);
+});
+
+test('compileToByteMap parses space-separated hex payload strings into 1-based ByteMap', () => {
+  const payload = '01 02 03 04 05 06 07 08';
+  assert.deepStrictEqual(compileToByteMap(payload), {
+    D1: '0x01',
+    D2: '0x02',
+    D3: '0x03',
+    D4: '0x04',
+    D5: '0x05',
+    D6: '0x06',
+    D7: '0x07',
+    D8: '0x08',
+  });
+});
+
+test('compileToByteMap skips wildcard tokens and clamps to maximum 8 bytes', () => {
+  // * and ** and ?? are ignored, and tokens beyond 8th byte are ignored
+  const payload = '* 0x20 * ** 0x50 ?? * 0xFF 0x99 0xAA';
+  assert.deepStrictEqual(compileToByteMap(payload), {
+    D2: '0x20',
+    D5: '0x50',
+    D8: '0xFF',
+  });
+});
+
+test('compileToByteMap normalizes partial nibble wildcards by replacing * with 0', () => {
+  // '1*' becomes '10', '0*' becomes '00'
+  const payload = '* * 1* * * * 0* *';
+  assert.deepStrictEqual(compileToByteMap(payload), {
+    D3: '0x10',
+    D7: '0x00',
+  });
+});
+
 
 
