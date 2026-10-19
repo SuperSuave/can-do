@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.10.6-b007",
+  "can_do_version": "2026.10.6-b008",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -1639,9 +1639,9 @@
     {
       "id": "climate_rear_defog",
       "ha_metadata": {
-        "name": "Rear Defogger & Mirrors Active",
-        "domain": "binary_sensor",
-        "icon": "mdi:thermostat"
+        "name": "Rear Defogger & Heated Mirrors",
+        "domain": "switch",
+        "icon": "mdi:car-defrost-rear"
       },
       "tags": [
         "all_egmp"
@@ -1649,22 +1649,117 @@
       "category": "Climate & Comfort",
       "network": {
         "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x541"
-      },
-      "match": {
-        "D5": "0x10"
+        "type": "can_rx_tx",
+        "action_can_id": "0x4A2",
+        "state_can_id": "0x541",
+        "delay_ms": 20
       },
       "roles": [
-        "trigger"
+        "action",
+        "trigger",
+        "condition"
       ],
-      "mask": "0xF0",
       "contributor": {
-        "name": "Unknown",
-        "github": ""
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Rear window defogger grid and heated exterior side mirrors commanded via 0x4A2 (Byte D3: 0xCF=On, 0x0F=Off, followed by 0xFF idle reset). Comfort bytes D5 and D6 are padded with 0xFF to prevent seat heating collisions. Live status read from DATC frame 0x541 Byte D5 (0x10=Active, 0x00=Inactive)."
       },
       "subcategory": "Defrost & Defog",
-      "state_can_id": "0x541"
+      "state_can_id": "0x541",
+      "action_can_id": "0x4A2",
+      "options": [
+        {
+          "label": "Defogger & Mirrors On",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x00",
+            "D3": "0xCF",
+            "D4": "0x03",
+            "D5": "0xFF",
+            "D6": "0xFF",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xCF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ],
+          "match": {
+            "D5": "0x10"
+          },
+          "mask": "0xF0",
+          "default": true
+        },
+        {
+          "label": "Defogger & Mirrors Off",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x00",
+            "D3": "0x0F",
+            "D4": "0x03",
+            "D5": "0xFF",
+            "D6": "0xFF",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0x0F",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ],
+          "match": {
+            "D5": "0x00"
+          },
+          "mask": "0xF0"
+        }
+      ]
     },
     {
       "id": "climate_driver_temp",
@@ -1687,7 +1782,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
+        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
       },
       "network": {
         "bus": 0,
@@ -1699,14 +1794,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "\u00b0F",
+        "unit": "°F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62\u00b0F",
+          "label": "62°F",
           "match": {
             "D4": "0x06"
           },
@@ -1727,7 +1822,7 @@
           "default": false
         },
         {
-          "label": "63\u00b0F",
+          "label": "63°F",
           "match": {
             "D4": "0x07"
           },
@@ -1748,7 +1843,7 @@
           "default": false
         },
         {
-          "label": "64\u00b0F",
+          "label": "64°F",
           "match": {
             "D4": "0x08"
           },
@@ -1769,7 +1864,7 @@
           "default": false
         },
         {
-          "label": "65\u00b0F",
+          "label": "65°F",
           "match": {
             "D4": "0x09"
           },
@@ -1790,7 +1885,7 @@
           "default": false
         },
         {
-          "label": "66\u00b0F",
+          "label": "66°F",
           "match": {
             "D4": "0x0A"
           },
@@ -1811,7 +1906,7 @@
           "default": false
         },
         {
-          "label": "67\u00b0F",
+          "label": "67°F",
           "match": {
             "D4": "0x0B"
           },
@@ -1832,7 +1927,7 @@
           "default": false
         },
         {
-          "label": "68\u00b0F",
+          "label": "68°F",
           "match": {
             "D4": "0x0C"
           },
@@ -1853,7 +1948,7 @@
           "default": false
         },
         {
-          "label": "69\u00b0F",
+          "label": "69°F",
           "match": {
             "D4": "0x0D"
           },
@@ -1874,7 +1969,7 @@
           "default": false
         },
         {
-          "label": "70\u00b0F",
+          "label": "70°F",
           "match": {
             "D4": "0x0E"
           },
@@ -1895,7 +1990,7 @@
           "default": true
         },
         {
-          "label": "71\u00b0F",
+          "label": "71°F",
           "match": {
             "D4": "0x0F"
           },
@@ -1916,7 +2011,7 @@
           "default": false
         },
         {
-          "label": "72\u00b0F",
+          "label": "72°F",
           "match": {
             "D4": "0x10"
           },
@@ -1937,7 +2032,7 @@
           "default": false
         },
         {
-          "label": "73\u00b0F",
+          "label": "73°F",
           "match": {
             "D4": "0x11"
           },
@@ -1958,7 +2053,7 @@
           "default": false
         },
         {
-          "label": "74\u00b0F",
+          "label": "74°F",
           "match": {
             "D4": "0x12"
           },
@@ -1979,7 +2074,7 @@
           "default": false
         },
         {
-          "label": "75\u00b0F",
+          "label": "75°F",
           "match": {
             "D4": "0x13"
           },
@@ -2000,7 +2095,7 @@
           "default": false
         },
         {
-          "label": "76\u00b0F",
+          "label": "76°F",
           "match": {
             "D4": "0x14"
           },
@@ -2021,7 +2116,7 @@
           "default": false
         },
         {
-          "label": "77\u00b0F",
+          "label": "77°F",
           "match": {
             "D4": "0x15"
           },
@@ -2042,7 +2137,7 @@
           "default": false
         },
         {
-          "label": "78\u00b0F",
+          "label": "78°F",
           "match": {
             "D4": "0x16"
           },
@@ -2063,7 +2158,7 @@
           "default": false
         },
         {
-          "label": "79\u00b0F",
+          "label": "79°F",
           "match": {
             "D4": "0x17"
           },
@@ -2084,7 +2179,7 @@
           "default": false
         },
         {
-          "label": "80\u00b0F",
+          "label": "80°F",
           "match": {
             "D4": "0x18"
           },
@@ -2105,7 +2200,7 @@
           "default": false
         },
         {
-          "label": "81\u00b0F",
+          "label": "81°F",
           "match": {
             "D4": "0x19"
           },
@@ -2126,7 +2221,7 @@
           "default": false
         },
         {
-          "label": "82\u00b0F",
+          "label": "82°F",
           "match": {
             "D4": "0x1A"
           },
@@ -2172,7 +2267,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
+        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
       },
       "network": {
         "bus": 0,
@@ -2184,14 +2279,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "\u00b0F",
+        "unit": "°F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62\u00b0F",
+          "label": "62°F",
           "match": {
             "D6": "0x06"
           },
@@ -2212,7 +2307,7 @@
           "default": false
         },
         {
-          "label": "63\u00b0F",
+          "label": "63°F",
           "match": {
             "D6": "0x07"
           },
@@ -2233,7 +2328,7 @@
           "default": false
         },
         {
-          "label": "64\u00b0F",
+          "label": "64°F",
           "match": {
             "D6": "0x08"
           },
@@ -2254,7 +2349,7 @@
           "default": false
         },
         {
-          "label": "65\u00b0F",
+          "label": "65°F",
           "match": {
             "D6": "0x09"
           },
@@ -2275,7 +2370,7 @@
           "default": false
         },
         {
-          "label": "66\u00b0F",
+          "label": "66°F",
           "match": {
             "D6": "0x0A"
           },
@@ -2296,7 +2391,7 @@
           "default": false
         },
         {
-          "label": "67\u00b0F",
+          "label": "67°F",
           "match": {
             "D6": "0x0B"
           },
@@ -2317,7 +2412,7 @@
           "default": false
         },
         {
-          "label": "68\u00b0F",
+          "label": "68°F",
           "match": {
             "D6": "0x0C"
           },
@@ -2338,7 +2433,7 @@
           "default": false
         },
         {
-          "label": "69\u00b0F",
+          "label": "69°F",
           "match": {
             "D6": "0x0D"
           },
@@ -2359,7 +2454,7 @@
           "default": false
         },
         {
-          "label": "70\u00b0F",
+          "label": "70°F",
           "match": {
             "D6": "0x0E"
           },
@@ -2380,7 +2475,7 @@
           "default": true
         },
         {
-          "label": "71\u00b0F",
+          "label": "71°F",
           "match": {
             "D6": "0x0F"
           },
@@ -2401,7 +2496,7 @@
           "default": false
         },
         {
-          "label": "72\u00b0F",
+          "label": "72°F",
           "match": {
             "D6": "0x10"
           },
@@ -2422,7 +2517,7 @@
           "default": false
         },
         {
-          "label": "73\u00b0F",
+          "label": "73°F",
           "match": {
             "D6": "0x11"
           },
@@ -2443,7 +2538,7 @@
           "default": false
         },
         {
-          "label": "74\u00b0F",
+          "label": "74°F",
           "match": {
             "D6": "0x12"
           },
@@ -2464,7 +2559,7 @@
           "default": false
         },
         {
-          "label": "75\u00b0F",
+          "label": "75°F",
           "match": {
             "D6": "0x13"
           },
@@ -2485,7 +2580,7 @@
           "default": false
         },
         {
-          "label": "76\u00b0F",
+          "label": "76°F",
           "match": {
             "D6": "0x14"
           },
@@ -2506,7 +2601,7 @@
           "default": false
         },
         {
-          "label": "77\u00b0F",
+          "label": "77°F",
           "match": {
             "D6": "0x15"
           },
@@ -2527,7 +2622,7 @@
           "default": false
         },
         {
-          "label": "78\u00b0F",
+          "label": "78°F",
           "match": {
             "D6": "0x16"
           },
@@ -2548,7 +2643,7 @@
           "default": false
         },
         {
-          "label": "79\u00b0F",
+          "label": "79°F",
           "match": {
             "D6": "0x17"
           },
@@ -2569,7 +2664,7 @@
           "default": false
         },
         {
-          "label": "80\u00b0F",
+          "label": "80°F",
           "match": {
             "D6": "0x18"
           },
@@ -2590,7 +2685,7 @@
           "default": false
         },
         {
-          "label": "81\u00b0F",
+          "label": "81°F",
           "match": {
             "D6": "0x19"
           },
@@ -2611,7 +2706,7 @@
           "default": false
         },
         {
-          "label": "82\u00b0F",
+          "label": "82°F",
           "match": {
             "D6": "0x1A"
           },
@@ -3397,199 +3492,34 @@
       "state_can_id": "0x442"
     },
     {
-      "id": "driver_power_window",
+      "id": "driver_seat_memory",
       "ha_metadata": {
-        "name": "Driver Power Window",
-        "domain": "cover",
-        "icon": "mdi:car-door"
+        "name": "Driver Seat Position & Easy Access",
+        "domain": "select",
+        "icon": "mdi:car-seat"
       },
-      "device_class": "window",
       "tags": [
         "all_egmp"
       ],
-      "category": "Doors, Access & Security",
-      "subcategory": "Windows & Sunroof",
+      "category": "Cockpit & Controls",
+      "subcategory": "Seats & Comfort",
       "roles": [
-        "action",
-        "sensor"
+        "action"
       ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x4A2",
+        "delay_ms": 20
+      },
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Driver power window control via ALL_HU_CNTL_E_01 on CAN ID 0x4A2 (Byte 0=0x15, Byte 1=Drv, Byte 2=Ast, Byte 3=IMS/0x07, Byte 4=RL, Byte 5=RR). Status broadcast on CGW4 (0x559) Byte 1 bit 0 (CF_Gway_DrvWdwStat)."
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x559",
-        "action_can_id": "0x4A2"
+        "notes": "Commands driver power seat memory recall and easy-access slide via Integrated Memory System (IMS) on CAN ID 0x4A2 (Byte 2 / D3: 0x06=Slide Back/Exit, 0x05=Slide Forward/Entry, 0x01=Profile 1, 0x02=Profile 2)."
       },
       "options": [
         {
-          "label": "Close Window",
-          "match": {
-            "D2": "0x00"
-          },
-          "mask": "0x01",
-          "payload": {
-            "D1": "0x15",
-            "D2": "0x05",
-            "D3": "0x0F",
-            "D4": "0x07",
-            "D5": "0x0F",
-            "D6": "0x0F",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x15",
-                "D2": "0x05",
-                "D3": "0x0F",
-                "D4": "0x07",
-                "D5": "0x0F",
-                "D6": "0x0F",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ],
-          "default": true
-        },
-        {
-          "label": "Open Window",
-          "match": {
-            "D2": "0x01"
-          },
-          "mask": "0x01",
-          "payload": {
-            "D1": "0x15",
-            "D2": "0x06",
-            "D3": "0x0F",
-            "D4": "0x07",
-            "D5": "0x0F",
-            "D6": "0x0F",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x15",
-                "D2": "0x06",
-                "D3": "0x0F",
-                "D4": "0x07",
-                "D5": "0x0F",
-                "D6": "0x0F",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "Vent Window",
-          "payload": {
-            "D1": "0x15",
-            "D2": "0x04",
-            "D3": "0x0F",
-            "D4": "0x07",
-            "D5": "0x0F",
-            "D6": "0x0F",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x15",
-                "D2": "0x04",
-                "D3": "0x0F",
-                "D4": "0x07",
-                "D5": "0x0F",
-                "D6": "0x0F",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ]
-        }
-      ],
-      "action_can_id": "0x4A2",
-      "state_can_id": "0x559"
-    },
-    {
-      "id": "passenger_power_window",
-      "ha_metadata": {
-        "name": "Front Passenger Power Window",
-        "domain": "cover",
-        "icon": "mdi:car-door"
-      },
-      "device_class": "window",
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Doors, Access & Security",
-      "subcategory": "Windows & Sunroof",
-      "roles": [
-        "action",
-        "sensor"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Assistant / Front Passenger window control via 0x4A2 (Byte 2=Ast). Status broadcast on CGW4 (0x559) Byte 1 bit 3 (CF_Gway_AstWdwStat)."
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x559",
-        "action_can_id": "0x4A2"
-      },
-      "options": [
-        {
-          "label": "Close Window",
-          "match": {
-            "D2": "0x00"
-          },
-          "mask": "0x08",
-          "payload": {
-            "D1": "0x15",
-            "D2": "0x0F",
-            "D3": "0x05",
-            "D4": "0x07",
-            "D5": "0x0F",
-            "D6": "0x0F",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x15",
-                "D2": "0x0F",
-                "D3": "0x05",
-                "D4": "0x07",
-                "D5": "0x0F",
-                "D6": "0x0F",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ],
-          "default": true
-        },
-        {
-          "label": "Open Window",
-          "match": {
-            "D2": "0x08"
-          },
-          "mask": "0x08",
+          "label": "Easy Access Exit (Slide All Way Back)",
           "payload": {
             "D1": "0x15",
             "D2": "0x0F",
@@ -3614,447 +3544,14 @@
               },
               "repeat": 3
             }
-          ]
-        },
-        {
-          "label": "Vent Window",
-          "payload": {
-            "D1": "0x15",
-            "D2": "0x0F",
-            "D3": "0x04",
-            "D4": "0x07",
-            "D5": "0x0F",
-            "D6": "0x0F",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x15",
-                "D2": "0x0F",
-                "D3": "0x04",
-                "D4": "0x07",
-                "D5": "0x0F",
-                "D6": "0x0F",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ]
-        }
-      ],
-      "action_can_id": "0x4A2",
-      "state_can_id": "0x559"
-    },
-    {
-      "id": "rear_left_power_window",
-      "ha_metadata": {
-        "name": "Rear Left Power Window",
-        "domain": "cover",
-        "icon": "mdi:car-door"
-      },
-      "device_class": "window",
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Doors, Access & Security",
-      "subcategory": "Windows & Sunroof",
-      "roles": [
-        "action",
-        "sensor"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Rear Left window control via 0x4A2 (Byte 4=RL). Status broadcast on CGW4 (0x559) Byte 1 bit 1 (CF_Gway_RLWdwState)."
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x559",
-        "action_can_id": "0x4A2"
-      },
-      "options": [
-        {
-          "label": "Close Window",
-          "match": {
-            "D2": "0x00"
-          },
-          "mask": "0x02",
-          "payload": {
-            "D1": "0x15",
-            "D2": "0x0F",
-            "D3": "0x0F",
-            "D4": "0x07",
-            "D5": "0x05",
-            "D6": "0x0F",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x15",
-                "D2": "0x0F",
-                "D3": "0x0F",
-                "D4": "0x07",
-                "D5": "0x05",
-                "D6": "0x0F",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
           ],
           "default": true
         },
         {
-          "label": "Open Window",
-          "match": {
-            "D2": "0x02"
-          },
-          "mask": "0x02",
+          "label": "Driving Position Entry (Slide Forward)",
           "payload": {
             "D1": "0x15",
             "D2": "0x0F",
-            "D3": "0x0F",
-            "D4": "0x07",
-            "D5": "0x06",
-            "D6": "0x0F",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x15",
-                "D2": "0x0F",
-                "D3": "0x0F",
-                "D4": "0x07",
-                "D5": "0x06",
-                "D6": "0x0F",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "Vent Window",
-          "payload": {
-            "D1": "0x15",
-            "D2": "0x0F",
-            "D3": "0x0F",
-            "D4": "0x07",
-            "D5": "0x04",
-            "D6": "0x0F",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x15",
-                "D2": "0x0F",
-                "D3": "0x0F",
-                "D4": "0x07",
-                "D5": "0x04",
-                "D6": "0x0F",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ]
-        }
-      ],
-      "action_can_id": "0x4A2",
-      "state_can_id": "0x559"
-    },
-    {
-      "id": "rear_right_power_window",
-      "ha_metadata": {
-        "name": "Rear Right Power Window",
-        "domain": "cover",
-        "icon": "mdi:car-door"
-      },
-      "device_class": "window",
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Doors, Access & Security",
-      "subcategory": "Windows & Sunroof",
-      "roles": [
-        "action",
-        "sensor"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Rear Right window control via 0x4A2 (Byte 5=RR). Status broadcast on CGW4 (0x559) Byte 1 bit 2 (CF_Gway_RRWdwState)."
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x559",
-        "action_can_id": "0x4A2"
-      },
-      "options": [
-        {
-          "label": "Close Window",
-          "match": {
-            "D2": "0x00"
-          },
-          "mask": "0x04",
-          "payload": {
-            "D1": "0x15",
-            "D2": "0x0F",
-            "D3": "0x0F",
-            "D4": "0x07",
-            "D5": "0x0F",
-            "D6": "0x05",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x15",
-                "D2": "0x0F",
-                "D3": "0x0F",
-                "D4": "0x07",
-                "D5": "0x0F",
-                "D6": "0x05",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ],
-          "default": true
-        },
-        {
-          "label": "Open Window",
-          "match": {
-            "D2": "0x04"
-          },
-          "mask": "0x04",
-          "payload": {
-            "D1": "0x15",
-            "D2": "0x0F",
-            "D3": "0x0F",
-            "D4": "0x07",
-            "D5": "0x0F",
-            "D6": "0x06",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x15",
-                "D2": "0x0F",
-                "D3": "0x0F",
-                "D4": "0x07",
-                "D5": "0x0F",
-                "D6": "0x06",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "Vent Window",
-          "payload": {
-            "D1": "0x15",
-            "D2": "0x0F",
-            "D3": "0x0F",
-            "D4": "0x07",
-            "D5": "0x0F",
-            "D6": "0x04",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x15",
-                "D2": "0x0F",
-                "D3": "0x0F",
-                "D4": "0x07",
-                "D5": "0x0F",
-                "D6": "0x04",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ]
-        }
-      ],
-      "action_can_id": "0x4A2",
-      "state_can_id": "0x559"
-    },
-    {
-      "id": "all_power_windows",
-      "ha_metadata": {
-        "name": "All Power Windows (Global)",
-        "domain": "cover",
-        "icon": "mdi:window-closed-variant"
-      },
-      "device_class": "window",
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Doors, Access & Security",
-      "subcategory": "Windows & Sunroof",
-      "roles": [
-        "action",
-        "sensor"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Global and multi-window commands on CAN ID 0x4A2 (ALL_HU_CNTL_E_01). Supports simultaneous roll-up (global close), roll-down (global open), vent all, front pair, and rear pair."
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x559",
-        "action_can_id": "0x4A2"
-      },
-      "options": [
-        {
-          "label": "Close All Windows",
-          "match": {
-            "D2": "0x00"
-          },
-          "mask": "0x0F",
-          "payload": {
-            "D1": "0x15",
-            "D2": "0x05",
-            "D3": "0x05",
-            "D4": "0x07",
-            "D5": "0x05",
-            "D6": "0x05",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x15",
-                "D2": "0x05",
-                "D3": "0x05",
-                "D4": "0x07",
-                "D5": "0x05",
-                "D6": "0x05",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ],
-          "default": true
-        },
-        {
-          "label": "Open All Windows",
-          "match": {
-            "D2": "0x0F"
-          },
-          "mask": "0x0F",
-          "payload": {
-            "D1": "0x15",
-            "D2": "0x06",
-            "D3": "0x06",
-            "D4": "0x07",
-            "D5": "0x06",
-            "D6": "0x06",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x15",
-                "D2": "0x06",
-                "D3": "0x06",
-                "D4": "0x07",
-                "D5": "0x06",
-                "D6": "0x06",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "Vent All Windows",
-          "payload": {
-            "D1": "0x15",
-            "D2": "0x04",
-            "D3": "0x04",
-            "D4": "0x07",
-            "D5": "0x04",
-            "D6": "0x04",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x15",
-                "D2": "0x04",
-                "D3": "0x04",
-                "D4": "0x07",
-                "D5": "0x04",
-                "D6": "0x04",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "Roll Down Front Windows",
-          "payload": {
-            "D1": "0x15",
-            "D2": "0x06",
-            "D3": "0x06",
-            "D4": "0x07",
-            "D5": "0x0F",
-            "D6": "0x0F",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x15",
-                "D2": "0x06",
-                "D3": "0x06",
-                "D4": "0x07",
-                "D5": "0x0F",
-                "D6": "0x0F",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "Roll Up Front Windows",
-          "payload": {
-            "D1": "0x15",
-            "D2": "0x05",
             "D3": "0x05",
             "D4": "0x07",
             "D5": "0x0F",
@@ -4066,7 +3563,7 @@
             {
               "payload": {
                 "D1": "0x15",
-                "D2": "0x05",
+                "D2": "0x0F",
                 "D3": "0x05",
                 "D4": "0x07",
                 "D5": "0x0F",
@@ -4079,68 +3576,12 @@
           ]
         },
         {
-          "label": "Roll Down Rear Windows",
+          "label": "Recall Memory Profile 1",
           "payload": {
             "D1": "0x15",
             "D2": "0x0F",
-            "D3": "0x0F",
-            "D4": "0x07",
-            "D5": "0x06",
-            "D6": "0x06",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x15",
-                "D2": "0x0F",
-                "D3": "0x0F",
-                "D4": "0x07",
-                "D5": "0x06",
-                "D6": "0x06",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "Roll Up Rear Windows",
-          "payload": {
-            "D1": "0x15",
-            "D2": "0x0F",
-            "D3": "0x0F",
-            "D4": "0x07",
-            "D5": "0x05",
-            "D6": "0x05",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x15",
-                "D2": "0x0F",
-                "D3": "0x0F",
-                "D4": "0x07",
-                "D5": "0x05",
-                "D6": "0x05",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "Vent Front Windows",
-          "payload": {
-            "D1": "0x15",
-            "D2": "0x04",
-            "D3": "0x04",
-            "D4": "0x07",
+            "D3": "0x01",
+            "D4": "0x01",
             "D5": "0x0F",
             "D6": "0x0F",
             "D7": "0x00",
@@ -4150,9 +3591,9 @@
             {
               "payload": {
                 "D1": "0x15",
-                "D2": "0x04",
-                "D3": "0x04",
-                "D4": "0x07",
+                "D2": "0x0F",
+                "D3": "0x01",
+                "D4": "0x01",
                 "D5": "0x0F",
                 "D6": "0x0F",
                 "D7": "0x00",
@@ -4163,14 +3604,14 @@
           ]
         },
         {
-          "label": "Vent Rear Windows",
+          "label": "Recall Memory Profile 2",
           "payload": {
             "D1": "0x15",
             "D2": "0x0F",
-            "D3": "0x0F",
-            "D4": "0x07",
-            "D5": "0x04",
-            "D6": "0x04",
+            "D3": "0x02",
+            "D4": "0x02",
+            "D5": "0x0F",
+            "D6": "0x0F",
             "D7": "0x00",
             "D8": "0x00"
           },
@@ -4179,10 +3620,10 @@
               "payload": {
                 "D1": "0x15",
                 "D2": "0x0F",
-                "D3": "0x0F",
-                "D4": "0x07",
-                "D5": "0x04",
-                "D6": "0x04",
+                "D3": "0x02",
+                "D4": "0x02",
+                "D5": "0x0F",
+                "D6": "0x0F",
                 "D7": "0x00",
                 "D8": "0x00"
               },
@@ -4190,115 +3631,7 @@
             }
           ]
         }
-      ],
-      "action_can_id": "0x4A2",
-      "state_can_id": "0x559"
-    },
-    {
-      "id": "cabin_windows_status",
-      "ha_metadata": {
-        "name": "Cabin Windows State",
-        "domain": "binary_sensor",
-        "icon": "mdi:window-closed-variant"
-      },
-      "device_class": "window",
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Doors, Access & Security",
-      "subcategory": "Windows & Sunroof",
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x559"
-      },
-      "roles": [
-        "trigger",
-        "condition"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Decoded from CGW4 (0x559) Byte 1. Tracks open/closed state of all 4 vehicle power windows."
-      },
-      "options": [
-        {
-          "label": "All Windows Closed",
-          "match": {
-            "D2": "0x00"
-          },
-          "mask": {
-            "D2": "0x0F"
-          }
-        },
-        {
-          "label": "All Windows Opened",
-          "match": {
-            "D2": "0x0F"
-          },
-          "mask": {
-            "D2": "0x0F"
-          }
-        },
-        {
-          "label": "Driver Window Opened",
-          "match": {
-            "D2": "0x01"
-          },
-          "mask": "0x01",
-          "default": true
-        },
-        {
-          "label": "Driver Window Closed",
-          "match": {
-            "D2": "0x00"
-          },
-          "mask": "0x01"
-        },
-        {
-          "label": "Passenger Window Opened",
-          "match": {
-            "D2": "0x08"
-          },
-          "mask": "0x08"
-        },
-        {
-          "label": "Passenger Window Closed",
-          "match": {
-            "D2": "0x00"
-          },
-          "mask": "0x08"
-        },
-        {
-          "label": "Rear Left Window Opened",
-          "match": {
-            "D2": "0x02"
-          },
-          "mask": "0x02"
-        },
-        {
-          "label": "Rear Left Window Closed",
-          "match": {
-            "D2": "0x00"
-          },
-          "mask": "0x02"
-        },
-        {
-          "label": "Rear Right Window Opened",
-          "match": {
-            "D2": "0x04"
-          },
-          "mask": "0x04"
-        },
-        {
-          "label": "Rear Right Window Closed",
-          "match": {
-            "D2": "0x00"
-          },
-          "mask": "0x04"
-        }
-      ],
-      "state_can_id": "0x559"
+      ]
     },
     {
       "id": "hazard_lights",
@@ -5208,9 +4541,9 @@
     {
       "id": "heated_steering_wheel_toggle",
       "ha_metadata": {
-        "name": "Heated Steering Wheel Toggle",
+        "name": "Heated Steering Wheel",
         "domain": "switch",
-        "icon": "mdi:car-info"
+        "icon": "mdi:steering"
       },
       "tags": [
         "all_egmp"
@@ -5218,33 +4551,138 @@
       "requires_feature": "heated_wheel",
       "network": {
         "bus": 0,
-        "type": "can_tx",
-        "action_can_id": "0x418",
+        "type": "can_rx_tx",
+        "action_can_id": "0x4A2",
+        "state_can_id": "0x418",
         "delay_ms": 20
       },
       "popup_message": "Heated Wheel Toggle",
-      "steps": [
-        {
-          "payload": {
-            "D3": "0x01"
-          },
-          "repeat": 3
-        },
-        {
-          "payload": {},
-          "repeat": 3
-        }
-      ],
       "category": "Climate & Comfort",
       "roles": [
-        "action"
+        "action",
+        "trigger",
+        "condition"
       ],
       "contributor": {
-        "name": "Unknown",
-        "github": ""
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Commands heated steering wheel via telematics/comfort frame 0x4A2 (Byte D3: 0x1F=On, 0x0F=Off, followed by 0xFF idle reset) or dash button pulse on 0x418. Live state monitored from Steering_Wheel_Heating frame 0x418 Byte D3 (0x01=On, 0x00=Off). D5/D6 padded with 0xFF to prevent seat collisions."
       },
       "subcategory": "Steering Wheel Heat",
-      "action_can_id": "0x418"
+      "action_can_id": "0x4A2",
+      "state_can_id": "0x418",
+      "options": [
+        {
+          "label": "Heated Steering Wheel On",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x00",
+            "D3": "0x1F",
+            "D4": "0x03",
+            "D5": "0xFF",
+            "D6": "0xFF",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0x1F",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ],
+          "match": {
+            "D3": "0x01"
+          },
+          "mask": "0xFF",
+          "default": true
+        },
+        {
+          "label": "Heated Steering Wheel Off",
+          "payload": {
+            "D1": "0x00",
+            "D2": "0x00",
+            "D3": "0x0F",
+            "D4": "0x03",
+            "D5": "0xFF",
+            "D6": "0xFF",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0x0F",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ],
+          "match": {
+            "D3": "0x00"
+          },
+          "mask": "0xFF"
+        },
+        {
+          "label": "Toggle Button Pulse",
+          "steps": [
+            {
+              "can_id": "0x418",
+              "payload": {
+                "D3": "0x01"
+              },
+              "repeat": 3
+            },
+            {
+              "can_id": "0x418",
+              "payload": {
+                "D3": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "battery_preconditioning",
@@ -5491,18 +4929,18 @@
       },
       "options": [
         {
-          "label": "Info Notification (\u24d8)",
+          "label": "Info Notification (ⓘ)",
           "level": "info",
           "popup_message": "Preconditioning Active",
           "default": true
         },
         {
-          "label": "Warning Notification (\u26a0)",
+          "label": "Warning Notification (⚠)",
           "level": "warning",
           "popup_message": "Battery Cold / Limited"
         },
         {
-          "label": "Fault Notification (\u203c)",
+          "label": "Fault Notification (‼)",
           "level": "error",
           "popup_message": "Charge Interrupted"
         },
@@ -6669,16 +6107,16 @@
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x226",
-        "unit": "\u00b0C"
+        "unit": "°C"
       },
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 \u00b0C"
+        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 °C"
       },
       "options": [
         {
-          "label": "Freezing (<= 0\u00b0C / 32\u00b0F)",
+          "label": "Freezing (<= 0°C / 32°F)",
           "evaluate": {
             "byte": "D4",
             "operator": "less_equal",
@@ -6687,7 +6125,7 @@
           "default": true
         },
         {
-          "label": "Cold (< 15\u00b0C / 59\u00b0F)",
+          "label": "Cold (< 15°C / 59°F)",
           "evaluate": {
             "byte": "D4",
             "operator": "less_than",
@@ -6695,7 +6133,7 @@
           }
         },
         {
-          "label": "Warm (> 25\u00b0C / 77\u00b0F)",
+          "label": "Warm (> 25°C / 77°F)",
           "evaluate": {
             "byte": "D4",
             "operator": "greater_than",
@@ -7518,7 +6956,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Right 90\u00b0",
+          "label": "Turn Right 90°",
           "match": {
             "D1": "0x03"
           },
@@ -7553,7 +6991,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Left 90\u00b0",
+          "label": "Turn Left 90°",
           "match": {
             "D1": "0x08"
           },
@@ -8263,7 +7701,7 @@
         "name": "HV Battery Module Min & Max Temp",
         "domain": "sensor",
         "icon": "mdi:thermometer-chevron-up",
-        "unit_of_measurement": "\u00b0C"
+        "unit_of_measurement": "°C"
       },
       "tags": [
         "all_egmp"
@@ -8277,17 +7715,17 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40\u00b0C offset."
+        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40°C offset."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x5D7",
-        "unit": "\u00b0C"
+        "unit": "°C"
       },
       "options": [
         {
-          "label": "Battery Optimal Warm (20\u00b0C - 35\u00b0C)",
+          "label": "Battery Optimal Warm (20°C - 35°C)",
           "evaluate": {
             "byte": "D1",
             "operator": "greater_equal",
@@ -8296,7 +7734,7 @@
           "default": true
         },
         {
-          "label": "Battery High Temp (> 45\u00b0C / 113\u00b0F)",
+          "label": "Battery High Temp (> 45°C / 113°F)",
           "evaluate": {
             "byte": "D1",
             "operator": "greater_than",
@@ -8304,7 +7742,7 @@
           }
         },
         {
-          "label": "Battery Cold (< 10\u00b0C / 50\u00b0F)",
+          "label": "Battery Cold (< 10°C / 50°F)",
           "evaluate": {
             "byte": "D2",
             "operator": "less_than",
@@ -8312,7 +7750,7 @@
           }
         },
         {
-          "label": "Battery Freezing (< 0\u00b0C / 32\u00b0F)",
+          "label": "Battery Freezing (< 0°C / 32°F)",
           "evaluate": {
             "byte": "D2",
             "operator": "less_than",
@@ -8605,7 +8043,7 @@
         "name": "Cabin Displayed Target Temperature",
         "domain": "sensor",
         "icon": "mdi:thermometer-lines",
-        "unit_of_measurement": "\u00b0F"
+        "unit_of_measurement": "°F"
       },
       "tags": [
         "all_egmp"
@@ -8619,31 +8057,31 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in \u00b0C x 0.5, Byte D3 = Driver Temp in \u00b0F integer)."
+        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in °C x 0.5, Byte D3 = Driver Temp in °F integer)."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x5F5",
-        "unit": "\u00b0F"
+        "unit": "°F"
       },
       "options": [
         {
-          "label": "68\u00b0F (20.0\u00b0C)",
+          "label": "68°F (20.0°C)",
           "match": {
             "D3": "0x44"
           },
           "mask": "0xFF"
         },
         {
-          "label": "70\u00b0F (21.0\u00b0C)",
+          "label": "70°F (21.0°C)",
           "match": {
             "D3": "0x46"
           },
           "mask": "0xFF"
         },
         {
-          "label": "72\u00b0F (22.0\u00b0C)",
+          "label": "72°F (22.0°C)",
           "match": {
             "D3": "0x48"
           },
@@ -8651,14 +8089,14 @@
           "default": true
         },
         {
-          "label": "74\u00b0F (23.5\u00b0C)",
+          "label": "74°F (23.5°C)",
           "match": {
             "D3": "0x4A"
           },
           "mask": "0xFF"
         },
         {
-          "label": "76\u00b0F (24.5\u00b0C)",
+          "label": "76°F (24.5°C)",
           "match": {
             "D3": "0x4C"
           },
@@ -8814,7 +8252,7 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s\u00b2 signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
+        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s² signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
       },
       "network": {
         "bus": 0,
@@ -11811,177 +11249,6 @@
         }
       ],
       "action_can_id": "0x4AD"
-    },
-    {
-      "id": "ims_driver_memory_recall",
-      "ha_metadata": {
-        "name": "Driver Memory Seat & Mirror Profile (IMS)",
-        "domain": "select",
-        "icon": "mdi:car-seat"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Climate & Comfort",
-      "subcategory": "Seat Comfort",
-      "roles": [
-        "action"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_tx",
-        "action_can_id": "0x559",
-        "delay_ms": 50
-      },
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Integrated Memory System (IMS) recall on CGW4 (0x559 / 1369 dec). Motorizes driver seat, mirrors, and steering wheel to stored profile positions. Bit 12 (D2 bit 4 / 0x10) is CF_Gway_MemoryEnable. Bit 2 (D1 bit 2 / 0x04) is Driver 1 Recall. Bit 3 (D1 bit 3 / 0x08) is Driver 2 Recall. Bit 14 (D2 bit 6 / 0x40) is Movement Abort/Stop."
-      },
-      "options": [
-        {
-          "label": "Recall Driver 1 Profile",
-          "payload": {
-            "D1": "0x04",
-            "D2": "0x10",
-            "D3": "0x00",
-            "D4": "0x00",
-            "D5": "0x00",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x04",
-                "D2": "0x10",
-                "D3": "0x00",
-                "D4": "0x00",
-                "D5": "0x00",
-                "D6": "0x00",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 4
-            }
-          ],
-          "default": true
-        },
-        {
-          "label": "Recall Driver 2 Profile",
-          "payload": {
-            "D1": "0x08",
-            "D2": "0x10",
-            "D3": "0x00",
-            "D4": "0x00",
-            "D5": "0x00",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x08",
-                "D2": "0x10",
-                "D3": "0x00",
-                "D4": "0x00",
-                "D5": "0x00",
-                "D6": "0x00",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 4
-            }
-          ]
-        },
-        {
-          "label": "Stop Seat Movement",
-          "payload": {
-            "D1": "0x00",
-            "D2": "0x50",
-            "D3": "0x00",
-            "D4": "0x00",
-            "D5": "0x00",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x00",
-                "D2": "0x50",
-                "D3": "0x00",
-                "D4": "0x00",
-                "D5": "0x00",
-                "D6": "0x00",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "Save Current to Driver 1",
-          "payload": {
-            "D1": "0x01",
-            "D2": "0x10",
-            "D3": "0x00",
-            "D4": "0x00",
-            "D5": "0x00",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x01",
-                "D2": "0x10",
-                "D3": "0x00",
-                "D4": "0x00",
-                "D5": "0x00",
-                "D6": "0x00",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 4
-            }
-          ]
-        },
-        {
-          "label": "Save Current to Driver 2",
-          "payload": {
-            "D1": "0x02",
-            "D2": "0x10",
-            "D3": "0x00",
-            "D4": "0x00",
-            "D5": "0x00",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x02",
-                "D2": "0x10",
-                "D3": "0x00",
-                "D4": "0x00",
-                "D5": "0x00",
-                "D6": "0x00",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 4
-            }
-          ]
-        }
-      ],
-      "action_can_id": "0x559"
     },
     {
       "id": "smart_key_fob_detected",

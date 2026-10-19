@@ -3,6 +3,8 @@
 #include <Preferences.h>
 #include <ESPmDNS.h>
 #include <esp_mac.h>
+#include <esp_wifi.h>
+#include <esp_netif.h>
 #include <LittleFS.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
@@ -224,6 +226,10 @@ void persist_beacon_targets() {
 String g_device_id = "can-do";
 String g_ap_ssid = "CAN Do";
 String g_ap_pass = "candorules";
+bool g_softap_active = false;
+
+void start_softap();
+void stop_softap();
 
 void init_device_id() {
     uint8_t mac[6] = {0};
@@ -295,8 +301,33 @@ void persist_saved_wifi() {
     g_wifi_prefs.end();
 }
 
+void start_softap() {
+    if (g_softap_active) return;
+    WiFi.enableAP(true);
+    IPAddress apIP(192, 168, 4, 1);
+    WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
+    WiFi.softAP(g_ap_ssid.c_str(), g_ap_pass.c_str(), 1, 0, 4);
+    WiFi.softAPsetHostname(g_device_id.c_str());
+    g_softap_active = true;
+    Serial.printf("[WIFI] Fallback SoftAP '%s' active (Pass: '%s') at IP: %s\n",
+                  g_ap_ssid.c_str(), g_ap_pass.c_str(), WiFi.softAPIP().toString().c_str());
+    update_led_status();
+}
+
+void stop_softap() {
+    if (!g_softap_active) return;
+    WiFi.softAPdisconnect(true);
+    WiFi.enableAP(false);
+    g_softap_active = false;
+    Serial.println("[WIFI] Station connected -> SoftAP shut down to clear air and free 2.4GHz radio");
+    update_led_status();
+}
+
 void connect_to_best_wifi() {
-    if (g_saved_wifi.empty()) return;
+    if (g_saved_wifi.empty()) {
+        start_softap();
+        return;
+    }
 
     Serial.println("[WIFI] Scanning for known networks in the air...");
     int n = WiFi.scanNetworks(false, false, false, 250);
@@ -323,14 +354,17 @@ void connect_to_best_wifi() {
     }
 
     if (best_saved_idx >= 0) {
-        Serial.printf("[WIFI] Found known network '%s' (RSSI: %d dBm, Prio: %d). Connecting...\n",
-                      g_saved_wifi[best_saved_idx].ssid.c_str(), best_rssi, best_prio);
+        Serial.printf("[WIFI] Found known network '%s' (RSSI: %d dBm, Prio: %d). Connecting as '%s'...\n",
+                      g_saved_wifi[best_saved_idx].ssid.c_str(), best_rssi, best_prio, g_device_id.c_str());
+        WiFi.setHostname(g_device_id.c_str());
+        esp_netif_t* netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+        if (netif) {
+            esp_netif_set_hostname(netif, g_device_id.c_str());
+        }
         WiFi.begin(g_saved_wifi[best_saved_idx].ssid.c_str(), g_saved_wifi[best_saved_idx].password.c_str());
     } else {
-        Serial.println("[WIFI] No known networks detected nearby. Keeping SoftAP stable on Channel 1.");
-        if (WiFi.status() != WL_CONNECTED) {
-            WiFi.disconnect(false, false);
-        }
+        Serial.println("[WIFI] No known networks detected nearby. Keeping fallback SoftAP active.");
+        start_softap();
     }
 }
 
@@ -1366,23 +1400,32 @@ void setup() {
                       LittleFS.totalBytes() / 1024, LittleFS.usedBytes() / 1024);
     }
 
-    // 5. Initialize Wi-Fi (AP + STA)
-    WiFi.mode(WIFI_AP_STA);
+    // 5. Initialize Wi-Fi
+    // Set hostnames BEFORE initializing Wi-Fi modes so DHCP Option 12 reliably advertises can-do-XXXX
     WiFi.setHostname(g_device_id.c_str());
+    WiFi.softAPsetHostname(g_device_id.c_str());
+    WiFi.mode(WIFI_AP_STA);
 
-    IPAddress apIP(192, 168, 4, 1);
-    WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-    WiFi.softAP(g_ap_ssid.c_str(), g_ap_pass.c_str(), 1, 0, 4);
-    Serial.printf("[WIFI] SoftAP '%s' active (Pass: '%s') at IP: %s\n",
-                  g_ap_ssid.c_str(), g_ap_pass.c_str(), WiFi.softAPIP().toString().c_str());
+    esp_netif_t* sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (sta_netif) {
+        esp_netif_set_hostname(sta_netif, g_device_id.c_str());
+    }
+    esp_netif_t* ap_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    if (ap_netif) {
+        esp_netif_set_hostname(ap_netif, g_device_id.c_str());
+    }
+
+    WiFi.setAutoReconnect(true);
 
     WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
         if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
             uint8_t reason = info.wifi_sta_disconnected.reason;
             Serial.printf("[WIFI] Station disconnected, reason: %d\n", reason);
-            WiFi.disconnect(false, false);
+            start_softap();
         } else if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP) {
-            Serial.printf("[WIFI] Station connected successfully! IP: %s\n", WiFi.localIP().toString().c_str());
+            Serial.printf("[WIFI] Station connected successfully! IP: %s (Hostname: %s)\n",
+                          WiFi.localIP().toString().c_str(), g_device_id.c_str());
+            stop_softap();
             broadcast_ble_status();
         }
     });
@@ -1390,6 +1433,8 @@ void setup() {
     load_saved_wifi();
     if (!g_saved_wifi.empty()) {
         connect_to_best_wifi();
+    } else {
+        start_softap();
     }
 
     if (MDNS.begin(g_device_id.c_str())) {
@@ -1504,7 +1549,7 @@ void setup() {
         JsonDocument doc;
         doc["device"] = "M5Stack Atom Lite UI Bridge";
         doc["device_id"] = g_device_id;
-        doc["can_do_version"] = "2026.10.6-b007";
+        doc["can_do_version"] = "2026.10.6-b008";
         doc["wican_online"] = g_wican_online;
         doc["free_heap"] = ESP.getFreeHeap();
         doc["uptime_s"] = millis() / 1000;
@@ -1714,10 +1759,10 @@ void setup() {
         doc["sta_mask"] = connected ? WiFi.subnetMask().toString() : "";
         doc["sta_rssi"] = connected ? WiFi.RSSI() : 0;
 
-        doc["ap_active"] = true;
+        doc["ap_active"] = g_softap_active;
         doc["ap_ssid"] = g_ap_ssid;
-        doc["ap_ip"] = WiFi.softAPIP().toString();
-        doc["ap_clients"] = WiFi.softAPgetStationNum();
+        doc["ap_ip"] = g_softap_active ? WiFi.softAPIP().toString() : "";
+        doc["ap_clients"] = g_softap_active ? WiFi.softAPgetStationNum() : 0;
         doc["ap_mode"] = "auto";
 
         String out;
