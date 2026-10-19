@@ -44,6 +44,9 @@ export function detectBrowserTimezone(): string {
     if (directMatch) return directMatch.id;
 
     // Common regional mappings
+    if (lower.includes('honolulu') || lower.includes('hawaii')) {
+      return 'US/Hawaii';
+    }
     if (lower.includes('los_angeles') || lower.includes('vancouver') || lower.includes('tijuana') || lower.includes('pacific')) {
       return 'US/Pacific';
     }
@@ -61,9 +64,6 @@ export function detectBrowserTimezone(): string {
     }
     if (lower.includes('anchorage') || lower.includes('alaska') || lower.includes('juneau')) {
       return 'US/Alaska';
-    }
-    if (lower.includes('honolulu') || lower.includes('hawaii')) {
-      return 'US/Hawaii';
     }
     if (lower.includes('london') || lower.includes('dublin') || lower.includes('lisbon')) {
       return 'Europe/London';
