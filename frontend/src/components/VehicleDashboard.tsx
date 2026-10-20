@@ -324,6 +324,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       defrostName: findCmd('climate_rear_defog')?.ha_metadata?.name || 'Rear Defroster',
       hazards: getCanId('hazard_lights', '413'),
       hazardsName: findCmd('hazard_lights')?.ha_metadata?.name || 'Hazard Flashers',
+      mirrors: getCanId('power_mirrors', '410'),
+      mirrorsName: findCmd('power_mirrors')?.ha_metadata?.name || 'Exterior Power Mirrors',
       steeringHeat: getCanId('heated_steering_wheel_toggle', '418'),
       steeringHeatName: findCmd('heated_steering_wheel_toggle')?.ha_metadata?.name || 'Steering Wheel Heat',
       driverSeat: getCanId('drivers_seat_comfort', '496'),
@@ -531,7 +533,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         setSteeringWheelHeat('off');
       }
     } else if (entity === 'hazard_lights') {
-      setHazards(normState.includes('active') || normState.includes('on') || normState.includes('engaged'));
+      setHazards((normState.includes('active') || normState.includes('on') || normState.includes('engaged')) && !normState.includes('inactive') && !normState.includes('off'));
+    } else if (entity === 'power_mirrors' || entity === 'mirrors') {
+      setMirrorsFolded(normState.includes('fold') && !normState.includes('unfold') && !normState.includes('extend'));
     } else if (entity === 'turn_signal_left') {
       if (normState.includes('on') || normState.includes('active') || normState.includes('true')) setTurnSignal('left');
       else setTurnSignal(prev => prev === 'left' ? 'off' : prev);
@@ -895,11 +899,11 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       }
     }
 
-    // Cabin Target Temperatures (0x380: Driver on D4/D5, Passenger on D6/D7, values 0x06 to 0x1A)
-    else if ((normId === canMappings.climateTarget || normId === '380') && bytes.length >= 4) {
-      // Driver Side: D4 or D5 (bytes[3] or bytes[4])
+    // Cabin Target Temperatures (0x380: Driver on D2 or D4/D5, Passenger on D3 or D6/D7, values 0x06 to 0x1A)
+    else if ((normId === canMappings.climateTarget || normId === '380') && bytes.length >= 2) {
+      // Driver Side: Prioritize D2 (bytes[1]) matching catalog/MICOM, with fallback to D4/D5 (bytes[3]/bytes[4])
       let rawD: number | null = null;
-      for (const idx of [3, 4, 1]) {
+      for (const idx of [1, 3, 4]) {
         if (bytes.length > idx && bytes[idx] >= 0x06 && bytes[idx] <= 0x1A) {
           rawD = bytes[idx];
           break;
@@ -911,9 +915,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         setDriverTemp(dFinal);
       }
 
-      // Passenger Side: D6 or D7 (bytes[5] or bytes[6])
+      // Passenger Side: Prioritize D3 (bytes[2]) matching catalog/MICOM, with fallback to D6/D7 (bytes[5]/bytes[6])
       let rawP: number | null = null;
-      for (const idx of [5, 6, 2]) {
+      for (const idx of [2, 5, 6]) {
         if (bytes.length > idx && bytes[idx] >= 0x06 && bytes[idx] <= 0x1A) {
           rawP = bytes[idx];
           break;
@@ -953,6 +957,18 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       recordLog(idFormatted, canMappings.sunroofName, `Sunroof State: ${sState.toUpperCase()}`, hexPayload, now);
     }
 
+    // Exterior Power Mirrors & Approach Light (0x410: CGW_USM1 Byte D3 bits 0-1)
+    else if ((normId === canMappings.mirrors || normId === '410') && bytes.length >= 3) {
+      const wlight = bytes[2] & 0x03;
+      if (wlight === 0x00) {
+        setMirrorsFolded(true);
+        recordLog(idFormatted, canMappings.mirrorsName, 'MIRRORS FOLDED', hexPayload, now);
+      } else if (wlight === 0x02) {
+        setMirrorsFolded(false);
+        recordLog(idFormatted, canMappings.mirrorsName, 'MIRRORS UNFOLDED', hexPayload, now);
+      }
+    }
+
     // Lighting, Turn Signals & Hazards (0x413, 0x3C1)
     else if ((normId === '413' || normId === '3c1' || normId === canMappings.hazards || normId === 'turn_signal') && bytes.length >= 1) {
       if (normId === '413' || normId === canMappings.hazards) {
@@ -974,8 +990,11 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
             if (turnSignalTimeoutRef.current) clearTimeout(turnSignalTimeoutRef.current);
             turnSignalTimeoutRef.current = setTimeout(() => {
               setTurnSignal('off');
-            }, 900);
+            }, 1200);
             recordLog(idFormatted, 'Turn Signal Telemetry (0x413)', `Active: ${dir.toUpperCase()}`, hexPayload, now);
+          } else if (!hazards) {
+            setTurnSignal('off');
+            if (turnSignalTimeoutRef.current) clearTimeout(turnSignalTimeoutRef.current);
           }
         }
       } else if (normId === '3c1') {
@@ -1436,14 +1455,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   onClick={() => {
                     const nextHaz = !hazards;
                     setHazards(nextHaz);
-                    dispatchCommand('hazard_lights', nextHaz ? 'on' : 'off', nextHaz ? 'Hazard Lights Blinking' : 'Hazard Lights Deactivated');
+                    dispatchCommand('hazard_lights', nextHaz ? 'Turned ON / Active' : 'Turned OFF / Inactive', nextHaz ? 'Hazard Flashers Active' : 'Hazard Flashers Deactivated');
                   }}
                   className={`p-2 rounded-xl border transition-colors ${
                     hazards
                       ? 'bg-amber-950 text-amber-300 border-amber-600 animate-pulse'
                       : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200'
                   }`}
-                  title="Hazard Flashers"
+                  title="Hazard Flashers (CAN 0x413 / 0x587)"
                 >
                   <AlertTriangle className="w-3.5 h-3.5" />
                 </button>
@@ -1456,7 +1475,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                     onClick={() => {
                       const next = turnSignal === 'left' ? 'off' : 'left';
                       setTurnSignal(next);
-                      dispatchCommand('turn_signal', next, `Turn Signal: ${next.toUpperCase()}`);
+                      dispatchCommand('turn_signal_left', next === 'left' ? 'Left Signal Active / On' : 'Left Signal Off', `Turn Signal: ${next.toUpperCase()}`);
                     }}
                     title="Toggle Left Turn Signal (CAN 0x3C1 / 0x413)"
                     className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -1475,7 +1494,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                     onClick={() => {
                       const next = turnSignal === 'right' ? 'off' : 'right';
                       setTurnSignal(next);
-                      dispatchCommand('turn_signal', next, `Turn Signal: ${next.toUpperCase()}`);
+                      dispatchCommand('turn_signal_right', next === 'right' ? 'Right Signal Active / On' : 'Right Signal Off', `Turn Signal: ${next.toUpperCase()}`);
                     }}
                     title="Toggle Right Turn Signal (CAN 0x3C1 / 0x413)"
                     className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -1496,13 +1515,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   onClick={() => {
                     const nextMirrors = !mirrorsFolded;
                     setMirrorsFolded(nextMirrors);
-                    dispatchCommand('mirrors', nextMirrors ? 'fold' : 'extend', nextMirrors ? 'Mirrors Folded' : 'Mirrors Extended');
+                    dispatchCommand('power_mirrors', nextMirrors ? 'Fold' : 'Unfold', nextMirrors ? 'Mirrors Folded' : 'Mirrors Unfolded');
                   }}
                   className={`px-2.5 py-1.5 rounded-xl border transition-colors text-[11px] font-medium ${
                     mirrorsFolded
                       ? 'bg-indigo-950 text-indigo-300 border-indigo-700'
                       : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200'
                   }`}
+                  title="Exterior Power Mirrors (CAN 0x410 / 0x4A2)"
                 >
                   {mirrorsFolded ? 'Mirrors Folded' : 'Fold Mirrors'}
                 </button>
