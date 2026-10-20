@@ -11,8 +11,6 @@ import {
 import { Catalog, Command, CommandOption } from '../types/catalog';
 import {
   exportToCandoJson,
-  exportToEsp32FirmwareJson,
-  exportToFullCatalogJson,
   commandToTrigger,
   commandToCondition,
   commandToAction,
@@ -36,6 +34,7 @@ import {
   Plus,
   Trash2,
   Copy,
+  CopyPlus,
   Check,
   CheckSquare,
   Download,
@@ -74,7 +73,7 @@ import {
 } from 'lucide-react';
 import { AddElementModal, AddElementTarget } from './AddElementModal';
 import { CommunityAutomationsModal } from './CommunityAutomationsModal';
-import { STANDARD_TIMEZONES, getTimezoneLabel } from '../utils/timezone';
+import { AutomationImportModal } from './AutomationImportModal';
 
 interface AutomationBuilderProps {
   catalog: Catalog;
@@ -3684,6 +3683,7 @@ const SwipeableRuleItem: React.FC<SwipeableRuleItemProps> = ({
   onDelete
 }) => {
   const [dragOffset, setDragOffset] = useState(0);
+  const [copiedRuleJson, setCopiedRuleJson] = useState(false);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef(false);
   const swipingRef = useRef(false);
@@ -3752,6 +3752,18 @@ const SwipeableRuleItem: React.FC<SwipeableRuleItemProps> = ({
     }
   };
 
+  const handleCopyRuleJson = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const json = JSON.stringify(rule, null, 2);
+      navigator.clipboard.writeText(json);
+      setCopiedRuleJson(true);
+      setTimeout(() => setCopiedRuleJson(false), 1800);
+    } catch {
+      // fallback
+    }
+  };
+
   return (
     <div className="relative overflow-hidden rounded-xl group select-none">
       {/* Background action reveal buttons */}
@@ -3766,8 +3778,8 @@ const SwipeableRuleItem: React.FC<SwipeableRuleItemProps> = ({
           className="h-full px-3.5 bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 text-white flex items-center gap-1.5 text-xs font-bold transition shadow-inner"
           title="Duplicate automation"
         >
-          <Copy className="w-4 h-4" />
-          <span className="text-[11px] font-semibold">Copy</span>
+          <CopyPlus className="w-4 h-4" />
+          <span className="text-[11px] font-semibold">Duplicate</span>
         </button>
 
         <button
@@ -3825,14 +3837,30 @@ const SwipeableRuleItem: React.FC<SwipeableRuleItemProps> = ({
             <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition flex-shrink-0">
               <button
                 type="button"
+                onClick={handleCopyRuleJson}
+                title={copiedRuleJson ? 'Copied JSON to clipboard!' : 'Copy rule JSON'}
+                className={`p-1.5 rounded-lg transition ${
+                  copiedRuleJson
+                    ? 'text-emerald-400 bg-emerald-950/60'
+                    : 'text-slate-400 hover:text-cyan-300 hover:bg-slate-700/60 active:bg-slate-700'
+                }`}
+              >
+                {copiedRuleJson ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <Code className="w-3.5 h-3.5" />
+                )}
+              </button>
+              <button
+                type="button"
                 onClick={e => {
                   e.stopPropagation();
                   onDuplicate(rule);
                 }}
-                title="Duplicate rule"
+                title="Duplicate rule in list"
                 className="p-1.5 hover:text-cyan-300 text-slate-400 hover:bg-slate-700/60 active:bg-slate-700 rounded-lg transition"
               >
-                <Copy className="w-3.5 h-3.5" />
+                <CopyPlus className="w-3.5 h-3.5" />
               </button>
               <button
                 type="button"
@@ -3882,7 +3910,8 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   );
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedRuleIdsForDelete, setSelectedRuleIdsForDelete] = useState<Set<string>>(new Set());
-  const [activeJsonTab, setActiveJsonTab] = useState<'catalog' | 'cando' | 'esp32' | 'custom'>('catalog');
+  const [isJsonInspectorOpen, setIsJsonInspectorOpen] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [copied, setCopied] = useState(false);
   const [addElementTarget, setAddElementTarget] = useState<AddElementTarget | null>(null);
   const [showSimulateModal, setShowSimulateModal] = useState(false);
@@ -3908,35 +3937,6 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [collapsedConditions, setCollapsedConditions] = useState(false);
   const [collapsedActions, setCollapsedActions] = useState(false);
   const [collapsedOffActions, setCollapsedOffActions] = useState(false);
-
-  const [customJsonSchema, setCustomJsonSchema] = useState<string>(
-    JSON.stringify(
-      {
-        description: 'New Firmware Schema Sandbox (The Brains)',
-        version: '1.0.0-alpha',
-        target_device: 'ESP32-S3',
-        catalog_sync: {
-          last_synced: new Date().toISOString(),
-          active_rules_count: rules.length
-        },
-        automations: rules.map(r => ({
-          name: r.name,
-          mode: r.exec_mode,
-          triggers: r.triggers.map(t => ({
-            id: t.id,
-            can_id: t.can_id,
-            match: t.to_payload
-          })),
-          actions: r.actions.map(a => ({
-            can_id: a.can_id,
-            payload: a.payload
-          }))
-        }))
-      },
-      null,
-      2
-    )
-  );
 
   // Live CAN frames & Entity states for real-time condition validity evaluation
   const [liveFrames, setLiveFrames] = useState<Map<string, { data: string }>>(new Map());
@@ -4461,43 +4461,19 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   };
 
   const handleCopyJson = () => {
-    let textToCopy = '';
-    if (activeJsonTab === 'catalog') {
-      textToCopy = exportToFullCatalogJson(catalog, rules);
-    } else if (activeJsonTab === 'cando') {
-      textToCopy = exportToCandoJson(rules, settings, catalog);
-    } else if (activeJsonTab === 'esp32') {
-      textToCopy = exportToEsp32FirmwareJson(rules, settings, catalog);
-    } else {
-      textToCopy = customJsonSchema;
-    }
+    const textToCopy = exportToCandoJson(rules, settings, catalog);
     navigator.clipboard.writeText(textToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const handleDownloadJson = () => {
-    let content = '';
-    let filename = '';
-    if (activeJsonTab === 'catalog') {
-      content = exportToFullCatalogJson(catalog, rules);
-      filename = 'can_do_catalog.json';
-    } else if (activeJsonTab === 'cando') {
-      content = exportToCandoJson(rules, settings, catalog);
-      filename = 'automations.json';
-    } else if (activeJsonTab === 'esp32') {
-      content = exportToEsp32FirmwareJson(rules, settings, catalog);
-      filename = 'esp32_automations.json';
-    } else {
-      content = customJsonSchema;
-      filename = 'firmware_schema.json';
-    }
-
+    const content = exportToCandoJson(rules, settings, catalog);
     const blob = new Blob([content], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename;
+    a.download = 'automations.json';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -4687,35 +4663,18 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     }
   }, []);
 
-  const handleImportJson = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = evt => {
-      try {
-        const parsed = JSON.parse(evt.target?.result as string);
-        if (parsed.automations && Array.isArray(parsed.automations)) {
-          onUpdateRules(parsed.automations);
-          if (parsed.automations[0]?.id) setSelectedRuleId(parsed.automations[0].id);
-          alert(`Successfully imported ${parsed.automations.length} automation rules from catalog!`);
-        } else if (parsed.rules && Array.isArray(parsed.rules)) {
-          onUpdateRules(parsed.rules);
-          if (parsed.settings) onUpdateSettings(parsed.settings);
-          if (parsed.rules[0]?.id) setSelectedRuleId(parsed.rules[0].id);
-          alert(`Successfully imported ${parsed.rules.length} automation rules!`);
-        } else if (Array.isArray(parsed)) {
-          onUpdateRules(parsed);
-          if (parsed[0]?.id) setSelectedRuleId(parsed[0].id);
-          alert(`Successfully imported ${parsed.length} automation rules!`);
-        } else {
-          alert('Could not detect an "automations" or "rules" array in this JSON file.');
-        }
-      } catch (err: any) {
-        alert(`Error parsing JSON: ${err.message}`);
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
+  const handleApplyImport = (
+    importedRules: AutomationRule[],
+    mode: 'merge' | 'replace',
+    importedSettings?: AutomationSettings
+  ) => {
+    onUpdateRules(importedRules);
+    if (importedSettings) {
+      onUpdateSettings({ ...settings, ...importedSettings });
+    }
+    if (importedRules.length > 0 && importedRules[0]?.id) {
+      setSelectedRuleId(importedRules[0].id);
+    }
   };
 
   const handleSimulateRule = () => {
@@ -5274,14 +5233,24 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     <Play className="w-3 h-3 fill-current" />
                     <span>Dry Run</span>
                   </button>
-                  <label
-                    title="Import automation JSON"
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer transition"
+                  <button
+                    type="button"
+                    onClick={() => setShowImportModal(true)}
+                    title="Import automations from file or paste JSON"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
                   >
                     <Upload className="w-3 h-3 text-cyan-400" />
                     <span>Import</span>
-                    <input type="file" accept=".json" onChange={handleImportJson} className="hidden" />
-                  </label>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadJson}
+                    title="Export and download automations.json"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                  >
+                    <Download className="w-3 h-3 text-cyan-400" />
+                    <span>Export</span>
+                  </button>
                   <button
                     type="button"
                     onClick={handleAddRule}
@@ -5338,26 +5307,104 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               </div>
             )}
 
-            {/* Automation Timezone Selector */}
-            <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800 text-xs">
-              <div className="flex items-center gap-1.5 text-slate-400">
-                <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                <span className="font-semibold text-slate-300">Schedule Timezone:</span>
+            {/* Device Sync Toolbar */}
+            <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800/90 space-y-1.5">
+              <div className="flex items-center justify-between gap-1.5">
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <select
+                    value={useMqttSync ? 'mqtt' : 'rest'}
+                    onChange={e => setUseMqttSync(e.target.value === 'mqtt')}
+                    className="px-1.5 py-1 text-[10px] font-mono rounded-lg bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    title="Sync Method"
+                  >
+                    <option value="rest">Local (REST)</option>
+                    <option value="mqtt">MQTT (Cloud)</option>
+                  </select>
+
+                  {!useMqttSync ? (
+                    <input
+                      type="text"
+                      value={espIp}
+                      onChange={e => setEspIp(e.target.value)}
+                      placeholder={getDefaultEspIp()}
+                      title="Device IP address or hostname"
+                      className="min-w-0 flex-1 px-2 py-0.5 text-xs font-mono rounded-lg bg-slate-900 border border-slate-700 text-cyan-300 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    />
+                  ) : (
+                    <span className="text-[11px] font-mono text-slate-400 truncate flex-1">
+                      {mqttRemoteConfig.deviceId || 'mqtt-device'}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    type="button"
+                    disabled={syncing}
+                    onClick={handlePullFromEsp}
+                    title="Pull automations from vehicle device"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition disabled:opacity-50"
+                  >
+                    <ArrowDown className="w-3 h-3 text-cyan-400" />
+                    <span>Pull</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={syncing}
+                    onClick={handlePushToEsp}
+                    title="Push automations to vehicle device"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition disabled:opacity-50 shadow-sm"
+                  >
+                    <ArrowUp className="w-3 h-3" />
+                    <span>Push</span>
+                  </button>
+                </div>
               </div>
-              <select
-                value={settings.timezone || 'US/Pacific'}
-                onChange={(e) => onUpdateSettings({ ...settings, timezone: e.target.value })}
-                className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-cyan-300 text-xs focus:outline-none focus:border-cyan-500 max-w-[170px]"
-              >
-                {STANDARD_TIMEZONES.map((tz) => (
-                  <option key={tz.id} value={tz.id}>
-                    {tz.label}
-                  </option>
-                ))}
-              </select>
+
+              {/* MQTT Expanded Credentials if in MQTT mode */}
+              {useMqttSync && (
+                <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-slate-800/80 animate-in fade-in">
+                  <input
+                    type="text"
+                    value={mqttRemoteConfig.wsUrl}
+                    onChange={e => updateMqttConfig({ wsUrl: e.target.value })}
+                    placeholder="wss://broker:port"
+                    className="px-2 py-0.5 text-[11px] font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    title="Broker WS URL (Must be wss:// if on HTTPS domain)"
+                  />
+                  <input
+                    type="text"
+                    value={mqttRemoteConfig.deviceId}
+                    onChange={e => updateMqttConfig({ deviceId: e.target.value })}
+                    placeholder="Device ID (e.g. my_device)"
+                    className="px-2 py-0.5 text-[11px] font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                  <input
+                    type="text"
+                    value={mqttRemoteConfig.user}
+                    onChange={e => updateMqttConfig({ user: e.target.value })}
+                    placeholder="Username (optional)"
+                    className="px-2 py-0.5 text-[11px] font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                  <input
+                    type="password"
+                    value={mqttRemoteConfig.pass}
+                    onChange={e => updateMqttConfig({ pass: e.target.value })}
+                    placeholder="Password (optional)"
+                    className="px-2 py-0.5 text-[11px] font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+              )}
+
+              {syncStatus && (
+                <div className="text-[10px] font-mono text-cyan-300 bg-cyan-950/50 border border-cyan-800/60 rounded-md px-2 py-0.5 flex items-center justify-between">
+                  <span className="truncate">{syncStatus}</span>
+                  {syncing && <RefreshCw className="w-3 h-3 text-cyan-400 animate-spin flex-shrink-0 ml-1" />}
+                </div>
+              )}
             </div>
 
-            <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
+            <div className="space-y-1.5 max-h-[340px] overflow-y-auto pr-1">
               {rules.map((rule, idx) => (
                 <SwipeableRuleItem
                   key={rule.id}
@@ -5382,207 +5429,79 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             )}
           </div>
 
-          {/* Card 2: Live JSON Inspector & Output (Compact, order-3 on single-column) */}
-          <div className="order-3 lg:order-none p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-3">
-            <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
-              <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-950 border border-slate-800 text-[10px]">
-                <button
-                  type="button"
-                  onClick={() => setActiveJsonTab('catalog')}
-                  className={`px-2 py-0.5 rounded font-semibold transition ${
-                    activeJsonTab === 'catalog'
-                      ? 'bg-cyan-500 text-slate-950 shadow'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Full Catalog
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveJsonTab('cando')}
-                  className={`px-2 py-0.5 rounded font-semibold transition ${
-                    activeJsonTab === 'cando'
-                      ? 'bg-cyan-500 text-slate-950 shadow'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  WiCAN Format
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveJsonTab('esp32')}
-                  className={`px-2 py-0.5 rounded font-semibold transition ${
-                    activeJsonTab === 'esp32'
-                      ? 'bg-cyan-500 text-slate-950 shadow'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  ESP32 C-Flat
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveJsonTab('custom')}
-                  className={`px-2 py-0.5 rounded font-semibold transition ${
-                    activeJsonTab === 'custom'
-                      ? 'bg-cyan-500 text-slate-950 shadow'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Custom
-                </button>
-              </div>
-
+          {/* Card 2: Collapsible JSON Inspector & Export (Compact, order-3 on single-column) */}
+          <div className="order-3 lg:order-none rounded-2xl bg-slate-900 border border-slate-800 shadow-lg overflow-hidden transition-all">
+            <div className="flex items-center justify-between gap-2 p-3 bg-slate-950/60 border-b border-slate-800/80">
               <button
                 type="button"
-                onClick={handleCopyJson}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition border border-slate-700"
+                onClick={() => setIsJsonInspectorOpen(!isJsonInspectorOpen)}
+                className="flex items-center gap-2 text-left flex-1 min-w-0 group"
               >
-                {copied ? (
-                  <>
-                    <Check className="w-3 h-3 text-emerald-400" />
-                    <span className="text-emerald-400">Copied!</span>
-                  </>
+                <FileJson className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                <span className="text-xs font-bold text-slate-200 group-hover:text-white transition truncate">
+                  automations.json
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 flex-shrink-0">
+                  {rules.length} {rules.length === 1 ? 'rule' : 'rules'}
+                </span>
+                {isJsonInspectorOpen ? (
+                  <ChevronUp className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition ml-auto" />
                 ) : (
-                  <>
-                    <Copy className="w-3 h-3 text-cyan-400" />
-                    <span>Copy</span>
-                  </>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition ml-auto" />
                 )}
               </button>
-            </div>
 
-            {/* Tab descriptions */}
-            <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-              <FileJson className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
-              <span className="truncate">
-                {activeJsonTab === 'catalog' && 'can_do_catalog.json for LittleFS flash.'}
-                {activeJsonTab === 'cando' && 'WiCAN LittleFS automation format.'}
-                {activeJsonTab === 'esp32' && 'Flat numeric enums for C parsing.'}
-                {activeJsonTab === 'custom' && 'Sandbox schema for testing firmware.'}
-              </span>
-            </div>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={handleCopyJson}
+                  title="Copy automations.json to clipboard"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition border border-slate-700"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-400" />
+                      <span className="text-emerald-400">Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3 text-cyan-400" />
+                      <span>Copy</span>
+                    </>
+                  )}
+                </button>
 
-            {/* Code Output Area (Compact height 190px) */}
-            <div className="relative h-[190px] max-h-[190px] overflow-hidden rounded-xl bg-slate-950 border border-slate-800">
-              {activeJsonTab === 'custom' ? (
-                <textarea
-                  value={customJsonSchema}
-                  onChange={e => setCustomJsonSchema(e.target.value)}
-                  className="w-full h-full p-2.5 font-mono text-[11px] text-cyan-300 bg-transparent resize-none focus:outline-none focus:ring-1 focus:ring-cyan-500 leading-relaxed overflow-y-auto"
-                  spellCheck={false}
-                />
-              ) : (
-                <pre className="w-full h-full p-2.5 font-mono text-[11px] text-slate-300 overflow-auto leading-relaxed select-text">
-                  <code>
-                    {activeJsonTab === 'catalog'
-                      ? exportToFullCatalogJson(catalog, rules)
-                      : activeJsonTab === 'cando'
-                      ? exportToCandoJson(rules, settings, catalog)
-                      : exportToEsp32FirmwareJson(rules, settings, catalog)}
-                  </code>
-                </pre>
-              )}
-            </div>
-
-            {/* Quick Export & ESP32 Direct Sync Footer */}
-            <div className="pt-2 border-t border-slate-800 space-y-2">
-              <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-slate-950/70 border border-slate-800/80">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-semibold text-slate-400">Sync Target:</span>
-                    <select
-                      value={useMqttSync ? 'mqtt' : 'rest'}
-                      onChange={e => setUseMqttSync(e.target.value === 'mqtt')}
-                      className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none"
-                    >
-                      <option value="rest">Local Network (REST API)</option>
-                      <option value="mqtt">Remote Broker (MQTT WSS)</option>
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      disabled={syncing}
-                      onClick={handlePullFromEsp}
-                      className="px-2 py-1 text-[11px] font-semibold rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition disabled:opacity-50"
-                    >
-                      Pull
-                    </button>
-                    <button
-                      type="button"
-                      disabled={syncing}
-                      onClick={handlePushToEsp}
-                      className="px-2.5 py-1 text-[11px] font-semibold rounded bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold transition disabled:opacity-50"
-                    >
-                      Push
-                    </button>
-                  </div>
-                </div>
-
-                {!useMqttSync ? (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-semibold text-slate-400 whitespace-nowrap">ESP IP:</span>
-                    <input
-                      type="text"
-                      value={espIp}
-                      onChange={e => setEspIp(e.target.value)}
-                      placeholder={getDefaultEspIp()}
-                      title="Device IP address or hostname"
-                      className="flex-1 px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                    />
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <input
-                      type="text"
-                      value={mqttRemoteConfig.wsUrl}
-                      onChange={e => updateMqttConfig({ wsUrl: e.target.value })}
-                      placeholder="wss://broker:port"
-                      className="px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                      title="Broker WS URL (Must be wss:// if on HTTPS domain)"
-                    />
-                    <input
-                      type="text"
-                      value={mqttRemoteConfig.deviceId}
-                      onChange={e => updateMqttConfig({ deviceId: e.target.value })}
-                      placeholder="Device ID (e.g. my_device)"
-                      className="px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                    />
-                    <input
-                      type="text"
-                      value={mqttRemoteConfig.user}
-                      onChange={e => updateMqttConfig({ user: e.target.value })}
-                      placeholder="Username (optional)"
-                      className="px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                    />
-                    <input
-                      type="password"
-                      value={mqttRemoteConfig.pass}
-                      onChange={e => updateMqttConfig({ pass: e.target.value })}
-                      placeholder="Password (optional)"
-                      className="px-2 py-0.5 text-xs font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {syncStatus && (
-                <div className="text-[10px] font-mono text-cyan-400 bg-cyan-950/40 border border-cyan-800/60 rounded px-2 py-0.5">
-                  {syncStatus}
-                </div>
-              )}
-
-              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-0.5">
-                <span>{rules.length} automations compiled</span>
                 <button
                   type="button"
                   onClick={handleDownloadJson}
-                  className="hover:text-cyan-400 font-semibold underline underline-offset-2 transition"
+                  title="Download automations.json file"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition border border-slate-700"
                 >
-                  Download .json file
+                  <Download className="w-3 h-3 text-cyan-400" />
+                  <span className="hidden sm:inline">Download</span>
                 </button>
               </div>
             </div>
+
+            {isJsonInspectorOpen && (
+              <div className="p-3 space-y-2 animate-in fade-in">
+                <div className="relative h-[220px] max-h-[220px] overflow-hidden rounded-xl bg-slate-950 border border-slate-800">
+                  <pre className="w-full h-full p-2.5 font-mono text-[11px] text-slate-300 overflow-auto leading-relaxed select-text">
+                    <code>{exportToCandoJson(rules, settings, catalog)}</code>
+                  </pre>
+                </div>
+                <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                  <span>Ready for ESP32 / LittleFS storage</span>
+                  <button
+                    type="button"
+                    onClick={handleDownloadJson}
+                    className="text-cyan-400 hover:underline font-semibold"
+                  >
+                    Download .json file
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -5611,6 +5530,16 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             setSelectedRuleId(ruleToInstall.id);
           }}
           onClose={() => setShowCommunityModal(false)}
+        />
+      )}
+
+      {/* MODAL: Import Automations */}
+      {showImportModal && (
+        <AutomationImportModal
+          isOpen={showImportModal}
+          existingRules={rules}
+          onClose={() => setShowImportModal(false)}
+          onImport={handleApplyImport}
         />
       )}
 
