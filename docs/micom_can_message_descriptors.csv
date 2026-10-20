@@ -1,0 +1,327 @@
+Profile_Index,Vehicle_Profile,Firmware_Memory_Address,CAN_ID_Hex,CAN_ID_Dec,DLC_Bytes,RAM_Buffer_Offset,Transmitting_Node,Subsystem_Category,Functional_Description
+0,Profile_0_EV6_Standard,0x011802,0x044,68,64,0x000A0000,Central Gateway,Body & Power,Central Gateway Power & Network Mode
+0,Profile_0_EV6_Standard,0x0118BC,0x04D,77,8,0x005041F0,EPB / ESC,Braking & Dynamics,Electronic Parking Brake (EPB) Status
+0,Profile_0_EV6_Standard,0x011904,0x02B,43,1,0x002C47F1,SAS / MDPS,Chassis,Steering Sensor / SAS Steering Angle
+0,Profile_0_EV6_Standard,0x01190A,0x02C,44,7,0x056806F1,ESC / ABS,Braking & Dynamics,Braking Dynamics / Wheel Speed Pulsing
+0,Profile_0_EV6_Standard,0x01191C,0x06A,106,4,0x004806F1,Multifunction Stalk,Cockpit & Switches,Lighting & Turn Signal Stalk Switches
+0,Profile_0_EV6_Standard,0x011952,0x055,85,1,0xFF8E04F1,LDC / ICCU,Power & Charging,Low Voltage DC-DC Converter (LDC)
+0,Profile_0_EV6_Standard,0x01198E,0x057,87,1,0xFF9004F1,BMS / PRA,High-Voltage Battery,High Voltage Isolation & Contactor State
+0,Profile_0_EV6_Standard,0x0119C4,0x059,89,1,0xFF9204F1,OBC / ICCU,Power & Charging,On-Board Charger (OBC) AC Line Telemetry
+0,Profile_0_EV6_Standard,0x011A3C,0x096,150,1,0xFF6B05F1,Front Corner/Mid Radar,ADAS & Safety,Front Radar Object Track Target
+0,Profile_0_EV6_Standard,0x011A72,0x098,152,1,0xFF6D05F1,Front View Camera,ADAS & Safety,Front Camera Lane Marker Detection
+0,Profile_0_EV6_Standard,0x011AA8,0x09A,154,1,0xFF6F05F1,DAW / Camera,ADAS & Safety,Driver Attention Warning (DAW)
+0,Profile_0_EV6_Standard,0x011B1A,0x02D,45,5,0xFF6F04F1,SCU / E-Shifter,Transmission,Transmission Shifter / E-Shifter SBW
+0,Profile_0_EV6_Standard,0x011B80,0x01E,30,64,0x003146F1,MDPS / Front Camera,Chassis & ADAS,ADAS / MDPS Dynamics
+0,Profile_0_EV6_Standard,0x011B86,0x031,49,5,0xFF7304F1,ESC / IMU,Chassis,Lateral Acceleration & Yaw Rate Dynamics
+0,Profile_0_EV6_Standard,0x011BFE,0x0B4,180,64,0x00CF46F1,BMS,High-Voltage Battery,High-Voltage Battery Cell Temperatures
+0,Profile_0_EV6_Standard,0x011C04,0x0CF,207,5,0xFFDB05F1,SMK / IBU,Body & Doors,Smart Key / Immobilizer Authorization
+0,Profile_0_EV6_Standard,0x011C28,0x0BE,190,6,0x00D046F1,Door Control Module,Body & Doors,Exterior Mirror Fold & Glass Position
+0,Profile_0_EV6_Standard,0x011C3A,0x0BF,191,4,0x00D146F1,PTGM ECU,Body & Doors,Power Tailgate / Trunk Position
+0,Profile_0_EV6_Standard,0x011C40,0x0D1,209,2,0xFFDD05F1,BCM / IBU,Body & Doors,Door Latch & Central Locking Status
+0,Profile_0_EV6_Standard,0x011C5E,0x0C9,201,6,0x00D246F1,Rear Corner Radar Left,ADAS & Safety,Blind-Spot Detection Left Radar
+0,Profile_0_EV6_Standard,0x011C70,0x0CA,202,4,0x00D346F1,Rear Corner Radar Right,ADAS & Safety,Blind-Spot Detection Right Radar
+0,Profile_0_EV6_Standard,0x011C76,0x0D3,211,5,0xFFDF05F1,ACU / Airbag,Safety & Interior,Seat Belt Buckle & Occupant Classification
+0,Profile_0_EV6_Standard,0x011CCA,0x068,104,3,0x006947F1,Cluster / CLU,Cockpit & Cluster,Instrument Cluster Warning Banners
+0,Profile_0_EV6_Standard,0x011CD6,0x095,149,3,0x009647F1,TPMS ECU,Chassis & Safety,Tire Pressure Monitoring System (TPMS)
+0,Profile_0_EV6_Standard,0x011D00,0x023,35,32,0x005106F1,Inverter / MCU,Powertrain,High-Speed Powertrain / Motor Inverter
+0,Profile_0_EV6_Standard,0x011D06,0x051,81,16,0x007040F0,BMS,High-Voltage Battery,High-Voltage Battery State of Charge (SOC)
+1,Profile_1_EV6_GT_Line,0x011E02,0x044,68,64,0x000A0000,Central Gateway,Body & Power,Central Gateway Power & Network Mode
+1,Profile_1_EV6_GT_Line,0x011EBC,0x0BC,188,8,0x00BF41F0,VESS Module,Acoustic Alert,Virtual Engine Sound System (VESS)
+1,Profile_1_EV6_GT_Line,0x011F04,0x051,81,1,0x005243F2,BMS,High-Voltage Battery,High-Voltage Battery State of Charge (SOC)
+1,Profile_1_EV6_GT_Line,0x011F0A,0x052,82,7,0x055808F2,ECU Node,Vehicle Network,Vehicle Network Controller
+1,Profile_1_EV6_GT_Line,0x011F1C,0x05A,90,4,0x003008F2,ECU Node,Vehicle Network,Vehicle Network Controller
+1,Profile_1_EV6_GT_Line,0x011F52,0x055,85,1,0xFF570BF1,LDC / ICCU,Power & Charging,Low Voltage DC-DC Converter (LDC)
+1,Profile_1_EV6_GT_Line,0x011F8E,0x057,87,1,0xFF590BF1,BMS / PRA,High-Voltage Battery,High Voltage Isolation & Contactor State
+1,Profile_1_EV6_GT_Line,0x011FC4,0x059,89,1,0xFF5B0BF1,OBC / ICCU,Power & Charging,On-Board Charger (OBC) AC Line Telemetry
+1,Profile_1_EV6_GT_Line,0x01203C,0x096,150,1,0xFF760BF1,Front Corner/Mid Radar,ADAS & Safety,Front Radar Object Track Target
+1,Profile_1_EV6_GT_Line,0x012072,0x098,152,1,0xFF780BF1,Front View Camera,ADAS & Safety,Front Camera Lane Marker Detection
+1,Profile_1_EV6_GT_Line,0x0120A8,0x09A,154,1,0xFF7A0BF1,DAW / Camera,ADAS & Safety,Driver Attention Warning (DAW)
+1,Profile_1_EV6_GT_Line,0x01211A,0x02D,45,5,0xFF380BF1,SCU / E-Shifter,Transmission,Transmission Shifter / E-Shifter SBW
+1,Profile_1_EV6_GT_Line,0x012180,0x01E,30,64,0x003149F1,MDPS / Front Camera,Chassis & ADAS,ADAS / MDPS Dynamics
+1,Profile_1_EV6_GT_Line,0x012186,0x031,49,5,0xFF3C0BF1,ESC / IMU,Chassis,Lateral Acceleration & Yaw Rate Dynamics
+1,Profile_1_EV6_GT_Line,0x0121FE,0x0B4,180,64,0x00CF49F1,BMS,High-Voltage Battery,High-Voltage Battery Cell Temperatures
+1,Profile_1_EV6_GT_Line,0x012204,0x0CF,207,5,0xFF940BF1,SMK / IBU,Body & Doors,Smart Key / Immobilizer Authorization
+1,Profile_1_EV6_GT_Line,0x012228,0x0BE,190,6,0x00D049F1,Door Control Module,Body & Doors,Exterior Mirror Fold & Glass Position
+1,Profile_1_EV6_GT_Line,0x01223A,0x0BF,191,4,0x00D149F1,PTGM ECU,Body & Doors,Power Tailgate / Trunk Position
+1,Profile_1_EV6_GT_Line,0x012240,0x0D1,209,2,0xFF960BF1,BCM / IBU,Body & Doors,Door Latch & Central Locking Status
+1,Profile_1_EV6_GT_Line,0x01225E,0x0C9,201,6,0x00D249F1,Rear Corner Radar Left,ADAS & Safety,Blind-Spot Detection Left Radar
+1,Profile_1_EV6_GT_Line,0x012270,0x0CA,202,4,0x00D349F1,Rear Corner Radar Right,ADAS & Safety,Blind-Spot Detection Right Radar
+1,Profile_1_EV6_GT_Line,0x012276,0x0D3,211,5,0xFF980BF1,ACU / Airbag,Safety & Interior,Seat Belt Buckle & Occupant Classification
+1,Profile_1_EV6_GT_Line,0x0122CA,0x030,48,3,0x00314AF1,ECU Node,Vehicle Network,Vehicle Network Controller
+1,Profile_1_EV6_GT_Line,0x0122D6,0x07F,127,3,0x008043F2,ECU Node,Vehicle Network,Vehicle Network Controller
+2,Profile_2_Ioniq5_Standard,0x012402,0x044,68,64,0x000A0000,Central Gateway,Body & Power,Central Gateway Power & Network Mode
+2,Profile_2_Ioniq5_Standard,0x012504,0x02B,43,1,0x002C47F1,SAS / MDPS,Chassis,Steering Sensor / SAS Steering Angle
+2,Profile_2_Ioniq5_Standard,0x01250A,0x02C,44,7,0x056806F1,ESC / ABS,Braking & Dynamics,Braking Dynamics / Wheel Speed Pulsing
+2,Profile_2_Ioniq5_Standard,0x01251C,0x06A,106,4,0x004806F1,Multifunction Stalk,Cockpit & Switches,Lighting & Turn Signal Stalk Switches
+2,Profile_2_Ioniq5_Standard,0x012552,0x055,85,1,0xFF8E04F1,LDC / ICCU,Power & Charging,Low Voltage DC-DC Converter (LDC)
+2,Profile_2_Ioniq5_Standard,0x012588,0x045,69,64,0x005746F1,Shifter / SCU,Transmission,Electronic Transmission Shifter (SBW)
+2,Profile_2_Ioniq5_Standard,0x01258E,0x057,87,1,0xFF9004F1,BMS / PRA,High-Voltage Battery,High Voltage Isolation & Contactor State
+2,Profile_2_Ioniq5_Standard,0x0125BE,0x050,80,64,0x005946F1,Inverter / PE,Powertrain,Motor Torque & Inverter RPM Dynamics
+2,Profile_2_Ioniq5_Standard,0x0125C4,0x059,89,1,0xFF9204F1,OBC / ICCU,Power & Charging,On-Board Charger (OBC) AC Line Telemetry
+2,Profile_2_Ioniq5_Standard,0x01263C,0x096,150,1,0xFF6B05F1,Front Corner/Mid Radar,ADAS & Safety,Front Radar Object Track Target
+2,Profile_2_Ioniq5_Standard,0x012672,0x098,152,1,0xFF6D05F1,Front View Camera,ADAS & Safety,Front Camera Lane Marker Detection
+2,Profile_2_Ioniq5_Standard,0x0126A8,0x09A,154,1,0xFF6F05F1,DAW / Camera,ADAS & Safety,Driver Attention Warning (DAW)
+2,Profile_2_Ioniq5_Standard,0x01271A,0x02D,45,5,0xFF6F04F1,SCU / E-Shifter,Transmission,Transmission Shifter / E-Shifter SBW
+2,Profile_2_Ioniq5_Standard,0x012780,0x01E,30,64,0x003146F1,MDPS / Front Camera,Chassis & ADAS,ADAS / MDPS Dynamics
+2,Profile_2_Ioniq5_Standard,0x012786,0x031,49,5,0xFF7304F1,ESC / IMU,Chassis,Lateral Acceleration & Yaw Rate Dynamics
+2,Profile_2_Ioniq5_Standard,0x0127FE,0x0B4,180,64,0x00CF46F1,BMS,High-Voltage Battery,High-Voltage Battery Cell Temperatures
+2,Profile_2_Ioniq5_Standard,0x012804,0x0CF,207,5,0xFFDB05F1,SMK / IBU,Body & Doors,Smart Key / Immobilizer Authorization
+2,Profile_2_Ioniq5_Standard,0x012828,0x0BE,190,6,0x00D046F1,Door Control Module,Body & Doors,Exterior Mirror Fold & Glass Position
+2,Profile_2_Ioniq5_Standard,0x01283A,0x0BF,191,4,0x00D146F1,PTGM ECU,Body & Doors,Power Tailgate / Trunk Position
+2,Profile_2_Ioniq5_Standard,0x012840,0x0D1,209,2,0xFFDD05F1,BCM / IBU,Body & Doors,Door Latch & Central Locking Status
+2,Profile_2_Ioniq5_Standard,0x012870,0x0CA,202,64,0x00D346F1,Rear Corner Radar Right,ADAS & Safety,Blind-Spot Detection Right Radar
+2,Profile_2_Ioniq5_Standard,0x012876,0x0D3,211,5,0xFFDF05F1,ACU / Airbag,Safety & Interior,Seat Belt Buckle & Occupant Classification
+2,Profile_2_Ioniq5_Standard,0x0128CA,0x068,104,3,0x006947F1,Cluster / CLU,Cockpit & Cluster,Instrument Cluster Warning Banners
+2,Profile_2_Ioniq5_Standard,0x0128D6,0x095,149,3,0x009647F1,TPMS ECU,Chassis & Safety,Tire Pressure Monitoring System (TPMS)
+2,Profile_2_Ioniq5_Standard,0x012900,0x023,35,32,0x005106F1,Inverter / MCU,Powertrain,High-Speed Powertrain / Motor Inverter
+2,Profile_2_Ioniq5_Standard,0x012906,0x051,81,16,0x007040F0,BMS,High-Voltage Battery,High-Voltage Battery State of Charge (SOC)
+3,Profile_3_Ioniq5_AWD_LongRange,0x012A02,0x044,68,64,0x000A0000,Central Gateway,Body & Power,Central Gateway Power & Network Mode
+3,Profile_3_Ioniq5_AWD_LongRange,0x012B04,0x051,81,1,0x005243F2,BMS,High-Voltage Battery,High-Voltage Battery State of Charge (SOC)
+3,Profile_3_Ioniq5_AWD_LongRange,0x012B0A,0x052,82,7,0x055808F2,ECU Node,Vehicle Network,Vehicle Network Controller
+3,Profile_3_Ioniq5_AWD_LongRange,0x012B1C,0x05A,90,4,0x003008F2,ECU Node,Vehicle Network,Vehicle Network Controller
+3,Profile_3_Ioniq5_AWD_LongRange,0x012B52,0x055,85,1,0xFF570BF1,LDC / ICCU,Power & Charging,Low Voltage DC-DC Converter (LDC)
+3,Profile_3_Ioniq5_AWD_LongRange,0x012B88,0x045,69,64,0x005749F1,Shifter / SCU,Transmission,Electronic Transmission Shifter (SBW)
+3,Profile_3_Ioniq5_AWD_LongRange,0x012B8E,0x057,87,1,0xFF590BF1,BMS / PRA,High-Voltage Battery,High Voltage Isolation & Contactor State
+3,Profile_3_Ioniq5_AWD_LongRange,0x012BBE,0x050,80,64,0x005949F1,Inverter / PE,Powertrain,Motor Torque & Inverter RPM Dynamics
+3,Profile_3_Ioniq5_AWD_LongRange,0x012BC4,0x059,89,1,0xFF5B0BF1,OBC / ICCU,Power & Charging,On-Board Charger (OBC) AC Line Telemetry
+3,Profile_3_Ioniq5_AWD_LongRange,0x012C3C,0x096,150,1,0xFF760BF1,Front Corner/Mid Radar,ADAS & Safety,Front Radar Object Track Target
+3,Profile_3_Ioniq5_AWD_LongRange,0x012C72,0x098,152,1,0xFF780BF1,Front View Camera,ADAS & Safety,Front Camera Lane Marker Detection
+3,Profile_3_Ioniq5_AWD_LongRange,0x012CA8,0x09A,154,1,0xFF7A0BF1,DAW / Camera,ADAS & Safety,Driver Attention Warning (DAW)
+3,Profile_3_Ioniq5_AWD_LongRange,0x012D1A,0x02D,45,5,0xFF380BF1,SCU / E-Shifter,Transmission,Transmission Shifter / E-Shifter SBW
+3,Profile_3_Ioniq5_AWD_LongRange,0x012D80,0x01E,30,64,0x003149F1,MDPS / Front Camera,Chassis & ADAS,ADAS / MDPS Dynamics
+3,Profile_3_Ioniq5_AWD_LongRange,0x012D86,0x031,49,5,0xFF3C0BF1,ESC / IMU,Chassis,Lateral Acceleration & Yaw Rate Dynamics
+3,Profile_3_Ioniq5_AWD_LongRange,0x012DFE,0x0B4,180,64,0x00CF49F1,BMS,High-Voltage Battery,High-Voltage Battery Cell Temperatures
+3,Profile_3_Ioniq5_AWD_LongRange,0x012E04,0x0CF,207,5,0xFF940BF1,SMK / IBU,Body & Doors,Smart Key / Immobilizer Authorization
+3,Profile_3_Ioniq5_AWD_LongRange,0x012E28,0x0BE,190,6,0x00D049F1,Door Control Module,Body & Doors,Exterior Mirror Fold & Glass Position
+3,Profile_3_Ioniq5_AWD_LongRange,0x012E3A,0x0BF,191,4,0x00D149F1,PTGM ECU,Body & Doors,Power Tailgate / Trunk Position
+3,Profile_3_Ioniq5_AWD_LongRange,0x012E40,0x0D1,209,2,0xFF960BF1,BCM / IBU,Body & Doors,Door Latch & Central Locking Status
+3,Profile_3_Ioniq5_AWD_LongRange,0x012E70,0x0CA,202,64,0x00D349F1,Rear Corner Radar Right,ADAS & Safety,Blind-Spot Detection Right Radar
+3,Profile_3_Ioniq5_AWD_LongRange,0x012E76,0x0D3,211,5,0xFF980BF1,ACU / Airbag,Safety & Interior,Seat Belt Buckle & Occupant Classification
+3,Profile_3_Ioniq5_AWD_LongRange,0x012ECA,0x030,48,3,0x00314AF1,ECU Node,Vehicle Network,Vehicle Network Controller
+3,Profile_3_Ioniq5_AWD_LongRange,0x012ED6,0x07F,127,3,0x008043F2,ECU Node,Vehicle Network,Vehicle Network Controller
+4,Profile_4_Ioniq6_Sedan,0x013002,0x044,68,64,0x000A0000,Central Gateway,Body & Power,Central Gateway Power & Network Mode
+4,Profile_4_Ioniq6_Sedan,0x013104,0x02B,43,1,0x002C47F1,SAS / MDPS,Chassis,Steering Sensor / SAS Steering Angle
+4,Profile_4_Ioniq6_Sedan,0x01310A,0x02C,44,7,0x056806F1,ESC / ABS,Braking & Dynamics,Braking Dynamics / Wheel Speed Pulsing
+4,Profile_4_Ioniq6_Sedan,0x01311C,0x06A,106,4,0x004806F1,Multifunction Stalk,Cockpit & Switches,Lighting & Turn Signal Stalk Switches
+4,Profile_4_Ioniq6_Sedan,0x013152,0x055,85,1,0xFF8E04F1,LDC / ICCU,Power & Charging,Low Voltage DC-DC Converter (LDC)
+4,Profile_4_Ioniq6_Sedan,0x01318E,0x057,87,1,0xFF9004F1,BMS / PRA,High-Voltage Battery,High Voltage Isolation & Contactor State
+4,Profile_4_Ioniq6_Sedan,0x0131C4,0x059,89,1,0xFF9204F1,OBC / ICCU,Power & Charging,On-Board Charger (OBC) AC Line Telemetry
+4,Profile_4_Ioniq6_Sedan,0x01323C,0x096,150,2,0xFF6B05F1,Front Corner/Mid Radar,ADAS & Safety,Front Radar Object Track Target
+4,Profile_4_Ioniq6_Sedan,0x01331A,0x02D,45,5,0xFF6F04F1,SCU / E-Shifter,Transmission,Transmission Shifter / E-Shifter SBW
+4,Profile_4_Ioniq6_Sedan,0x013386,0x031,49,5,0xFF7304F1,ESC / IMU,Chassis,Lateral Acceleration & Yaw Rate Dynamics
+4,Profile_4_Ioniq6_Sedan,0x0133FE,0x0B4,180,64,0x00CF46F1,BMS,High-Voltage Battery,High-Voltage Battery Cell Temperatures
+4,Profile_4_Ioniq6_Sedan,0x013404,0x0CF,207,5,0xFFDB05F1,SMK / IBU,Body & Doors,Smart Key / Immobilizer Authorization
+4,Profile_4_Ioniq6_Sedan,0x013428,0x0BE,190,6,0x00D046F1,Door Control Module,Body & Doors,Exterior Mirror Fold & Glass Position
+4,Profile_4_Ioniq6_Sedan,0x01343A,0x0BF,191,4,0x00D146F1,PTGM ECU,Body & Doors,Power Tailgate / Trunk Position
+4,Profile_4_Ioniq6_Sedan,0x013440,0x0D1,209,2,0xFFDD05F1,BCM / IBU,Body & Doors,Door Latch & Central Locking Status
+4,Profile_4_Ioniq6_Sedan,0x013476,0x0D3,211,5,0xFFDF05F1,ACU / Airbag,Safety & Interior,Seat Belt Buckle & Occupant Classification
+4,Profile_4_Ioniq6_Sedan,0x0134CA,0x068,104,3,0x006947F1,Cluster / CLU,Cockpit & Cluster,Instrument Cluster Warning Banners
+4,Profile_4_Ioniq6_Sedan,0x0134D6,0x095,149,3,0x009647F1,TPMS ECU,Chassis & Safety,Tire Pressure Monitoring System (TPMS)
+4,Profile_4_Ioniq6_Sedan,0x013500,0x023,35,32,0x005106F1,Inverter / MCU,Powertrain,High-Speed Powertrain / Motor Inverter
+4,Profile_4_Ioniq6_Sedan,0x013506,0x051,81,16,0x007040F0,BMS,High-Voltage Battery,High-Voltage Battery State of Charge (SOC)
+5,Profile_5_GV60_Luxury,0x013602,0x044,68,64,0x000A0000,Central Gateway,Body & Power,Central Gateway Power & Network Mode
+5,Profile_5_GV60_Luxury,0x013704,0x051,81,1,0x005243F2,BMS,High-Voltage Battery,High-Voltage Battery State of Charge (SOC)
+5,Profile_5_GV60_Luxury,0x01370A,0x052,82,7,0x055808F2,ECU Node,Vehicle Network,Vehicle Network Controller
+5,Profile_5_GV60_Luxury,0x01371C,0x05A,90,4,0x003008F2,ECU Node,Vehicle Network,Vehicle Network Controller
+5,Profile_5_GV60_Luxury,0x013752,0x055,85,1,0xFF570BF1,LDC / ICCU,Power & Charging,Low Voltage DC-DC Converter (LDC)
+5,Profile_5_GV60_Luxury,0x01378E,0x057,87,1,0xFF590BF1,BMS / PRA,High-Voltage Battery,High Voltage Isolation & Contactor State
+5,Profile_5_GV60_Luxury,0x0137C4,0x059,89,1,0xFF5B0BF1,OBC / ICCU,Power & Charging,On-Board Charger (OBC) AC Line Telemetry
+5,Profile_5_GV60_Luxury,0x01383C,0x096,150,2,0xFF760BF1,Front Corner/Mid Radar,ADAS & Safety,Front Radar Object Track Target
+5,Profile_5_GV60_Luxury,0x01391A,0x02D,45,5,0xFF380BF1,SCU / E-Shifter,Transmission,Transmission Shifter / E-Shifter SBW
+5,Profile_5_GV60_Luxury,0x013986,0x031,49,5,0xFF3C0BF1,ESC / IMU,Chassis,Lateral Acceleration & Yaw Rate Dynamics
+5,Profile_5_GV60_Luxury,0x0139FE,0x0B4,180,64,0x00CF49F1,BMS,High-Voltage Battery,High-Voltage Battery Cell Temperatures
+5,Profile_5_GV60_Luxury,0x013A04,0x0CF,207,5,0xFF940BF1,SMK / IBU,Body & Doors,Smart Key / Immobilizer Authorization
+5,Profile_5_GV60_Luxury,0x013A28,0x0BE,190,6,0x00D049F1,Door Control Module,Body & Doors,Exterior Mirror Fold & Glass Position
+5,Profile_5_GV60_Luxury,0x013A3A,0x0BF,191,4,0x00D149F1,PTGM ECU,Body & Doors,Power Tailgate / Trunk Position
+5,Profile_5_GV60_Luxury,0x013A40,0x0D1,209,2,0xFF960BF1,BCM / IBU,Body & Doors,Door Latch & Central Locking Status
+5,Profile_5_GV60_Luxury,0x013A76,0x0D3,211,5,0xFF980BF1,ACU / Airbag,Safety & Interior,Seat Belt Buckle & Occupant Classification
+5,Profile_5_GV60_Luxury,0x013ACA,0x030,48,3,0x00314AF1,ECU Node,Vehicle Network,Vehicle Network Controller
+5,Profile_5_GV60_Luxury,0x013AD6,0x07F,127,3,0x008043F2,ECU Node,Vehicle Network,Vehicle Network Controller
+6,Profile_6_EGMP_General_Export,0x013C02,0x044,68,64,0x000A0000,Central Gateway,Body & Power,Central Gateway Power & Network Mode
+6,Profile_6_EGMP_General_Export,0x013CBC,0x04D,77,8,0x005041F0,EPB / ESC,Braking & Dynamics,Electronic Parking Brake (EPB) Status
+6,Profile_6_EGMP_General_Export,0x013D04,0x02B,43,1,0x002C47F1,SAS / MDPS,Chassis,Steering Sensor / SAS Steering Angle
+6,Profile_6_EGMP_General_Export,0x013D0A,0x02C,44,7,0x056806F1,ESC / ABS,Braking & Dynamics,Braking Dynamics / Wheel Speed Pulsing
+6,Profile_6_EGMP_General_Export,0x013D1C,0x06A,106,4,0x004806F1,Multifunction Stalk,Cockpit & Switches,Lighting & Turn Signal Stalk Switches
+6,Profile_6_EGMP_General_Export,0x013D52,0x055,85,1,0xFF8E04F1,LDC / ICCU,Power & Charging,Low Voltage DC-DC Converter (LDC)
+6,Profile_6_EGMP_General_Export,0x013D8E,0x057,87,1,0xFF9004F1,BMS / PRA,High-Voltage Battery,High Voltage Isolation & Contactor State
+6,Profile_6_EGMP_General_Export,0x013DC4,0x059,89,1,0xFF9204F1,OBC / ICCU,Power & Charging,On-Board Charger (OBC) AC Line Telemetry
+6,Profile_6_EGMP_General_Export,0x013E3C,0x096,150,1,0xFF6B05F1,Front Corner/Mid Radar,ADAS & Safety,Front Radar Object Track Target
+6,Profile_6_EGMP_General_Export,0x013E72,0x098,152,1,0xFF6D05F1,Front View Camera,ADAS & Safety,Front Camera Lane Marker Detection
+6,Profile_6_EGMP_General_Export,0x013EA8,0x09A,154,1,0xFF6F05F1,DAW / Camera,ADAS & Safety,Driver Attention Warning (DAW)
+6,Profile_6_EGMP_General_Export,0x013F1A,0x02D,45,5,0xFF6F04F1,SCU / E-Shifter,Transmission,Transmission Shifter / E-Shifter SBW
+6,Profile_6_EGMP_General_Export,0x013F80,0x01E,30,64,0x003146F1,MDPS / Front Camera,Chassis & ADAS,ADAS / MDPS Dynamics
+6,Profile_6_EGMP_General_Export,0x013F86,0x031,49,5,0xFF7304F1,ESC / IMU,Chassis,Lateral Acceleration & Yaw Rate Dynamics
+6,Profile_6_EGMP_General_Export,0x013FFE,0x0B4,180,64,0x00CF46F1,BMS,High-Voltage Battery,High-Voltage Battery Cell Temperatures
+6,Profile_6_EGMP_General_Export,0x014004,0x0CF,207,5,0xFFDB05F1,SMK / IBU,Body & Doors,Smart Key / Immobilizer Authorization
+6,Profile_6_EGMP_General_Export,0x014028,0x0BE,190,6,0x00D046F1,Door Control Module,Body & Doors,Exterior Mirror Fold & Glass Position
+6,Profile_6_EGMP_General_Export,0x01403A,0x0BF,191,4,0x00D146F1,PTGM ECU,Body & Doors,Power Tailgate / Trunk Position
+6,Profile_6_EGMP_General_Export,0x014040,0x0D1,209,2,0xFFDD05F1,BCM / IBU,Body & Doors,Door Latch & Central Locking Status
+6,Profile_6_EGMP_General_Export,0x01405E,0x0C9,201,6,0x00D246F1,Rear Corner Radar Left,ADAS & Safety,Blind-Spot Detection Left Radar
+6,Profile_6_EGMP_General_Export,0x014070,0x0CA,202,4,0x00D346F1,Rear Corner Radar Right,ADAS & Safety,Blind-Spot Detection Right Radar
+6,Profile_6_EGMP_General_Export,0x014076,0x0D3,211,5,0xFFDF05F1,ACU / Airbag,Safety & Interior,Seat Belt Buckle & Occupant Classification
+6,Profile_6_EGMP_General_Export,0x0140CA,0x068,104,3,0x006947F1,Cluster / CLU,Cockpit & Cluster,Instrument Cluster Warning Banners
+6,Profile_6_EGMP_General_Export,0x0140D6,0x095,149,3,0x009647F1,TPMS ECU,Chassis & Safety,Tire Pressure Monitoring System (TPMS)
+6,Profile_6_EGMP_General_Export,0x014100,0x023,35,32,0x005106F1,Inverter / MCU,Powertrain,High-Speed Powertrain / Motor Inverter
+6,Profile_6_EGMP_General_Export,0x014106,0x051,81,16,0x007040F0,BMS,High-Voltage Battery,High-Voltage Battery State of Charge (SOC)
+7,Profile_7_Domestic_Korea_EV,0x014202,0x044,68,64,0x000A0000,Central Gateway,Body & Power,Central Gateway Power & Network Mode
+7,Profile_7_Domestic_Korea_EV,0x0142BC,0x0BC,188,8,0x00BF41F0,VESS Module,Acoustic Alert,Virtual Engine Sound System (VESS)
+7,Profile_7_Domestic_Korea_EV,0x014304,0x051,81,1,0x005243F2,BMS,High-Voltage Battery,High-Voltage Battery State of Charge (SOC)
+7,Profile_7_Domestic_Korea_EV,0x01430A,0x052,82,7,0x055808F2,ECU Node,Vehicle Network,Vehicle Network Controller
+7,Profile_7_Domestic_Korea_EV,0x01431C,0x05A,90,4,0x003008F2,ECU Node,Vehicle Network,Vehicle Network Controller
+7,Profile_7_Domestic_Korea_EV,0x014352,0x055,85,1,0xFF570BF1,LDC / ICCU,Power & Charging,Low Voltage DC-DC Converter (LDC)
+7,Profile_7_Domestic_Korea_EV,0x01438E,0x057,87,1,0xFF590BF1,BMS / PRA,High-Voltage Battery,High Voltage Isolation & Contactor State
+7,Profile_7_Domestic_Korea_EV,0x0143C4,0x059,89,1,0xFF5B0BF1,OBC / ICCU,Power & Charging,On-Board Charger (OBC) AC Line Telemetry
+7,Profile_7_Domestic_Korea_EV,0x01443C,0x096,150,1,0xFF760BF1,Front Corner/Mid Radar,ADAS & Safety,Front Radar Object Track Target
+7,Profile_7_Domestic_Korea_EV,0x014472,0x098,152,1,0xFF780BF1,Front View Camera,ADAS & Safety,Front Camera Lane Marker Detection
+7,Profile_7_Domestic_Korea_EV,0x0144A8,0x09A,154,1,0xFF7A0BF1,DAW / Camera,ADAS & Safety,Driver Attention Warning (DAW)
+7,Profile_7_Domestic_Korea_EV,0x01451A,0x02D,45,5,0xFF380BF1,SCU / E-Shifter,Transmission,Transmission Shifter / E-Shifter SBW
+7,Profile_7_Domestic_Korea_EV,0x014580,0x01E,30,64,0x003149F1,MDPS / Front Camera,Chassis & ADAS,ADAS / MDPS Dynamics
+7,Profile_7_Domestic_Korea_EV,0x014586,0x031,49,5,0xFF3C0BF1,ESC / IMU,Chassis,Lateral Acceleration & Yaw Rate Dynamics
+7,Profile_7_Domestic_Korea_EV,0x0145FE,0x0B4,180,64,0x00CF49F1,BMS,High-Voltage Battery,High-Voltage Battery Cell Temperatures
+7,Profile_7_Domestic_Korea_EV,0x014604,0x0CF,207,5,0xFF940BF1,SMK / IBU,Body & Doors,Smart Key / Immobilizer Authorization
+7,Profile_7_Domestic_Korea_EV,0x014628,0x0BE,190,6,0x00D049F1,Door Control Module,Body & Doors,Exterior Mirror Fold & Glass Position
+7,Profile_7_Domestic_Korea_EV,0x01463A,0x0BF,191,4,0x00D149F1,PTGM ECU,Body & Doors,Power Tailgate / Trunk Position
+7,Profile_7_Domestic_Korea_EV,0x014640,0x0D1,209,2,0xFF960BF1,BCM / IBU,Body & Doors,Door Latch & Central Locking Status
+7,Profile_7_Domestic_Korea_EV,0x01465E,0x0C9,201,6,0x00D249F1,Rear Corner Radar Left,ADAS & Safety,Blind-Spot Detection Left Radar
+7,Profile_7_Domestic_Korea_EV,0x014670,0x0CA,202,4,0x00D349F1,Rear Corner Radar Right,ADAS & Safety,Blind-Spot Detection Right Radar
+7,Profile_7_Domestic_Korea_EV,0x014676,0x0D3,211,5,0xFF980BF1,ACU / Airbag,Safety & Interior,Seat Belt Buckle & Occupant Classification
+7,Profile_7_Domestic_Korea_EV,0x0146CA,0x030,48,3,0x00314AF1,ECU Node,Vehicle Network,Vehicle Network Controller
+7,Profile_7_Domestic_Korea_EV,0x0146D6,0x07F,127,3,0x008043F2,ECU Node,Vehicle Network,Vehicle Network Controller
+8,Profile_8_North_America_EV,0x014802,0x044,68,64,0x000A0000,Central Gateway,Body & Power,Central Gateway Power & Network Mode
+8,Profile_8_North_America_EV,0x014904,0x02B,43,1,0x002C47F1,SAS / MDPS,Chassis,Steering Sensor / SAS Steering Angle
+8,Profile_8_North_America_EV,0x01490A,0x02C,44,7,0x056806F1,ESC / ABS,Braking & Dynamics,Braking Dynamics / Wheel Speed Pulsing
+8,Profile_8_North_America_EV,0x01491C,0x06A,106,4,0x004806F1,Multifunction Stalk,Cockpit & Switches,Lighting & Turn Signal Stalk Switches
+8,Profile_8_North_America_EV,0x014952,0x055,85,1,0xFF8E04F1,LDC / ICCU,Power & Charging,Low Voltage DC-DC Converter (LDC)
+8,Profile_8_North_America_EV,0x014988,0x045,69,64,0x005746F1,Shifter / SCU,Transmission,Electronic Transmission Shifter (SBW)
+8,Profile_8_North_America_EV,0x01498E,0x057,87,1,0xFF9004F1,BMS / PRA,High-Voltage Battery,High Voltage Isolation & Contactor State
+8,Profile_8_North_America_EV,0x0149BE,0x050,80,64,0x005946F1,Inverter / PE,Powertrain,Motor Torque & Inverter RPM Dynamics
+8,Profile_8_North_America_EV,0x0149C4,0x059,89,1,0xFF9204F1,OBC / ICCU,Power & Charging,On-Board Charger (OBC) AC Line Telemetry
+8,Profile_8_North_America_EV,0x014A3C,0x096,150,1,0xFF6B05F1,Front Corner/Mid Radar,ADAS & Safety,Front Radar Object Track Target
+8,Profile_8_North_America_EV,0x014A72,0x098,152,1,0xFF6D05F1,Front View Camera,ADAS & Safety,Front Camera Lane Marker Detection
+8,Profile_8_North_America_EV,0x014AA8,0x09A,154,1,0xFF6F05F1,DAW / Camera,ADAS & Safety,Driver Attention Warning (DAW)
+8,Profile_8_North_America_EV,0x014B1A,0x02D,45,5,0xFF6F04F1,SCU / E-Shifter,Transmission,Transmission Shifter / E-Shifter SBW
+8,Profile_8_North_America_EV,0x014B80,0x01E,30,64,0x003146F1,MDPS / Front Camera,Chassis & ADAS,ADAS / MDPS Dynamics
+8,Profile_8_North_America_EV,0x014B86,0x031,49,5,0xFF7304F1,ESC / IMU,Chassis,Lateral Acceleration & Yaw Rate Dynamics
+8,Profile_8_North_America_EV,0x014BFE,0x0B4,180,64,0x00CF46F1,BMS,High-Voltage Battery,High-Voltage Battery Cell Temperatures
+8,Profile_8_North_America_EV,0x014C04,0x0CF,207,5,0xFFDB05F1,SMK / IBU,Body & Doors,Smart Key / Immobilizer Authorization
+8,Profile_8_North_America_EV,0x014C28,0x0BE,190,6,0x00D046F1,Door Control Module,Body & Doors,Exterior Mirror Fold & Glass Position
+8,Profile_8_North_America_EV,0x014C3A,0x0BF,191,4,0x00D146F1,PTGM ECU,Body & Doors,Power Tailgate / Trunk Position
+8,Profile_8_North_America_EV,0x014C40,0x0D1,209,2,0xFFDD05F1,BCM / IBU,Body & Doors,Door Latch & Central Locking Status
+8,Profile_8_North_America_EV,0x014C70,0x0CA,202,64,0x00D346F1,Rear Corner Radar Right,ADAS & Safety,Blind-Spot Detection Right Radar
+8,Profile_8_North_America_EV,0x014C76,0x0D3,211,5,0xFFDF05F1,ACU / Airbag,Safety & Interior,Seat Belt Buckle & Occupant Classification
+8,Profile_8_North_America_EV,0x014CCA,0x068,104,3,0x006947F1,Cluster / CLU,Cockpit & Cluster,Instrument Cluster Warning Banners
+8,Profile_8_North_America_EV,0x014CD6,0x095,149,3,0x009647F1,TPMS ECU,Chassis & Safety,Tire Pressure Monitoring System (TPMS)
+8,Profile_8_North_America_EV,0x014D00,0x023,35,32,0x005106F1,Inverter / MCU,Powertrain,High-Speed Powertrain / Motor Inverter
+8,Profile_8_North_America_EV,0x014D06,0x051,81,16,0x007040F0,BMS,High-Voltage Battery,High-Voltage Battery State of Charge (SOC)
+9,Profile_9_Europe_EV,0x014E02,0x044,68,64,0x000A0000,Central Gateway,Body & Power,Central Gateway Power & Network Mode
+9,Profile_9_Europe_EV,0x014F04,0x051,81,1,0x005243F2,BMS,High-Voltage Battery,High-Voltage Battery State of Charge (SOC)
+9,Profile_9_Europe_EV,0x014F0A,0x052,82,7,0x055808F2,ECU Node,Vehicle Network,Vehicle Network Controller
+9,Profile_9_Europe_EV,0x014F1C,0x05A,90,4,0x003008F2,ECU Node,Vehicle Network,Vehicle Network Controller
+9,Profile_9_Europe_EV,0x014F52,0x055,85,1,0xFF570BF1,LDC / ICCU,Power & Charging,Low Voltage DC-DC Converter (LDC)
+9,Profile_9_Europe_EV,0x014F88,0x045,69,64,0x005749F1,Shifter / SCU,Transmission,Electronic Transmission Shifter (SBW)
+9,Profile_9_Europe_EV,0x014F8E,0x057,87,1,0xFF590BF1,BMS / PRA,High-Voltage Battery,High Voltage Isolation & Contactor State
+9,Profile_9_Europe_EV,0x014FBE,0x050,80,64,0x005949F1,Inverter / PE,Powertrain,Motor Torque & Inverter RPM Dynamics
+9,Profile_9_Europe_EV,0x014FC4,0x059,89,1,0xFF5B0BF1,OBC / ICCU,Power & Charging,On-Board Charger (OBC) AC Line Telemetry
+9,Profile_9_Europe_EV,0x01503C,0x096,150,1,0xFF760BF1,Front Corner/Mid Radar,ADAS & Safety,Front Radar Object Track Target
+9,Profile_9_Europe_EV,0x015072,0x098,152,1,0xFF780BF1,Front View Camera,ADAS & Safety,Front Camera Lane Marker Detection
+9,Profile_9_Europe_EV,0x0150A8,0x09A,154,1,0xFF7A0BF1,DAW / Camera,ADAS & Safety,Driver Attention Warning (DAW)
+9,Profile_9_Europe_EV,0x01511A,0x02D,45,5,0xFF380BF1,SCU / E-Shifter,Transmission,Transmission Shifter / E-Shifter SBW
+9,Profile_9_Europe_EV,0x015180,0x01E,30,64,0x003149F1,MDPS / Front Camera,Chassis & ADAS,ADAS / MDPS Dynamics
+9,Profile_9_Europe_EV,0x015186,0x031,49,5,0xFF3C0BF1,ESC / IMU,Chassis,Lateral Acceleration & Yaw Rate Dynamics
+9,Profile_9_Europe_EV,0x0151FE,0x0B4,180,64,0x00CF49F1,BMS,High-Voltage Battery,High-Voltage Battery Cell Temperatures
+9,Profile_9_Europe_EV,0x015204,0x0CF,207,5,0xFF940BF1,SMK / IBU,Body & Doors,Smart Key / Immobilizer Authorization
+9,Profile_9_Europe_EV,0x015228,0x0BE,190,6,0x00D049F1,Door Control Module,Body & Doors,Exterior Mirror Fold & Glass Position
+9,Profile_9_Europe_EV,0x01523A,0x0BF,191,4,0x00D149F1,PTGM ECU,Body & Doors,Power Tailgate / Trunk Position
+9,Profile_9_Europe_EV,0x015240,0x0D1,209,2,0xFF960BF1,BCM / IBU,Body & Doors,Door Latch & Central Locking Status
+9,Profile_9_Europe_EV,0x015270,0x0CA,202,64,0x00D349F1,Rear Corner Radar Right,ADAS & Safety,Blind-Spot Detection Right Radar
+9,Profile_9_Europe_EV,0x015276,0x0D3,211,5,0xFF980BF1,ACU / Airbag,Safety & Interior,Seat Belt Buckle & Occupant Classification
+9,Profile_9_Europe_EV,0x0152CA,0x030,48,3,0x00314AF1,ECU Node,Vehicle Network,Vehicle Network Controller
+9,Profile_9_Europe_EV,0x0152D6,0x07F,127,3,0x008043F2,ECU Node,Vehicle Network,Vehicle Network Controller
+10,Profile_10_HEV_Hybrid_P2,0x015402,0x044,68,64,0x000A0000,Central Gateway,Body & Power,Central Gateway Power & Network Mode
+10,Profile_10_HEV_Hybrid_P2,0x015504,0x02B,43,1,0x002C47F1,SAS / MDPS,Chassis,Steering Sensor / SAS Steering Angle
+10,Profile_10_HEV_Hybrid_P2,0x01550A,0x02C,44,7,0x056806F1,ESC / ABS,Braking & Dynamics,Braking Dynamics / Wheel Speed Pulsing
+10,Profile_10_HEV_Hybrid_P2,0x01551C,0x06A,106,4,0x004806F1,Multifunction Stalk,Cockpit & Switches,Lighting & Turn Signal Stalk Switches
+10,Profile_10_HEV_Hybrid_P2,0x015552,0x055,85,1,0xFF8E04F1,LDC / ICCU,Power & Charging,Low Voltage DC-DC Converter (LDC)
+10,Profile_10_HEV_Hybrid_P2,0x01558E,0x057,87,1,0xFF9004F1,BMS / PRA,High-Voltage Battery,High Voltage Isolation & Contactor State
+10,Profile_10_HEV_Hybrid_P2,0x0155C4,0x059,89,1,0xFF9204F1,OBC / ICCU,Power & Charging,On-Board Charger (OBC) AC Line Telemetry
+10,Profile_10_HEV_Hybrid_P2,0x01563C,0x096,150,2,0xFF6B05F1,Front Corner/Mid Radar,ADAS & Safety,Front Radar Object Track Target
+10,Profile_10_HEV_Hybrid_P2,0x01571A,0x02D,45,5,0xFF6F04F1,SCU / E-Shifter,Transmission,Transmission Shifter / E-Shifter SBW
+10,Profile_10_HEV_Hybrid_P2,0x015786,0x031,49,5,0xFF7304F1,ESC / IMU,Chassis,Lateral Acceleration & Yaw Rate Dynamics
+10,Profile_10_HEV_Hybrid_P2,0x0157FE,0x0B4,180,64,0x00CF46F1,BMS,High-Voltage Battery,High-Voltage Battery Cell Temperatures
+10,Profile_10_HEV_Hybrid_P2,0x015804,0x0CF,207,5,0xFFDB05F1,SMK / IBU,Body & Doors,Smart Key / Immobilizer Authorization
+10,Profile_10_HEV_Hybrid_P2,0x015828,0x0BE,190,6,0x00D046F1,Door Control Module,Body & Doors,Exterior Mirror Fold & Glass Position
+10,Profile_10_HEV_Hybrid_P2,0x01583A,0x0BF,191,4,0x00D146F1,PTGM ECU,Body & Doors,Power Tailgate / Trunk Position
+10,Profile_10_HEV_Hybrid_P2,0x015840,0x0D1,209,2,0xFFDD05F1,BCM / IBU,Body & Doors,Door Latch & Central Locking Status
+10,Profile_10_HEV_Hybrid_P2,0x015876,0x0D3,211,5,0xFFDF05F1,ACU / Airbag,Safety & Interior,Seat Belt Buckle & Occupant Classification
+10,Profile_10_HEV_Hybrid_P2,0x0158CA,0x068,104,3,0x006947F1,Cluster / CLU,Cockpit & Cluster,Instrument Cluster Warning Banners
+10,Profile_10_HEV_Hybrid_P2,0x0158D6,0x095,149,3,0x009647F1,TPMS ECU,Chassis & Safety,Tire Pressure Monitoring System (TPMS)
+10,Profile_10_HEV_Hybrid_P2,0x015900,0x023,35,32,0x005106F1,Inverter / MCU,Powertrain,High-Speed Powertrain / Motor Inverter
+10,Profile_10_HEV_Hybrid_P2,0x015906,0x051,81,16,0x007040F0,BMS,High-Voltage Battery,High-Voltage Battery State of Charge (SOC)
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015A02,0x044,68,64,0x000A0000,Central Gateway,Body & Power,Central Gateway Power & Network Mode
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015B04,0x051,81,1,0x005243F2,BMS,High-Voltage Battery,High-Voltage Battery State of Charge (SOC)
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015B0A,0x052,82,7,0x055808F2,ECU Node,Vehicle Network,Vehicle Network Controller
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015B1C,0x05A,90,4,0x003008F2,ECU Node,Vehicle Network,Vehicle Network Controller
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015B52,0x055,85,1,0xFF570BF1,LDC / ICCU,Power & Charging,Low Voltage DC-DC Converter (LDC)
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015B8E,0x057,87,1,0xFF590BF1,BMS / PRA,High-Voltage Battery,High Voltage Isolation & Contactor State
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015BC4,0x059,89,1,0xFF5B0BF1,OBC / ICCU,Power & Charging,On-Board Charger (OBC) AC Line Telemetry
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015C3C,0x096,150,2,0xFF760BF1,Front Corner/Mid Radar,ADAS & Safety,Front Radar Object Track Target
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015D1A,0x02D,45,5,0xFF380BF1,SCU / E-Shifter,Transmission,Transmission Shifter / E-Shifter SBW
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015D86,0x031,49,5,0xFF3C0BF1,ESC / IMU,Chassis,Lateral Acceleration & Yaw Rate Dynamics
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015DFE,0x0B4,180,64,0x00CF49F1,BMS,High-Voltage Battery,High-Voltage Battery Cell Temperatures
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015E04,0x0CF,207,5,0xFF940BF1,SMK / IBU,Body & Doors,Smart Key / Immobilizer Authorization
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015E28,0x0BE,190,6,0x00D049F1,Door Control Module,Body & Doors,Exterior Mirror Fold & Glass Position
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015E3A,0x0BF,191,4,0x00D149F1,PTGM ECU,Body & Doors,Power Tailgate / Trunk Position
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015E40,0x0D1,209,2,0xFF960BF1,BCM / IBU,Body & Doors,Door Latch & Central Locking Status
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015E76,0x0D3,211,5,0xFF980BF1,ACU / Airbag,Safety & Interior,Seat Belt Buckle & Occupant Classification
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015ECA,0x030,48,3,0x00314AF1,ECU Node,Vehicle Network,Vehicle Network Controller
+11,Profile_11_PHEV_PlugIn_Hybrid,0x015ED6,0x07F,127,3,0x008043F2,ECU Node,Vehicle Network,Vehicle Network Controller
+12,Profile_12_ICE_Gasoline_TGDI,0x016002,0x044,68,64,0x000A0000,Central Gateway,Body & Power,Central Gateway Power & Network Mode
+12,Profile_12_ICE_Gasoline_TGDI,0x0160BC,0x04D,77,8,0x005041F0,EPB / ESC,Braking & Dynamics,Electronic Parking Brake (EPB) Status
+12,Profile_12_ICE_Gasoline_TGDI,0x016104,0x02B,43,1,0x002C47F1,SAS / MDPS,Chassis,Steering Sensor / SAS Steering Angle
+12,Profile_12_ICE_Gasoline_TGDI,0x01610A,0x02C,44,7,0x056806F1,ESC / ABS,Braking & Dynamics,Braking Dynamics / Wheel Speed Pulsing
+12,Profile_12_ICE_Gasoline_TGDI,0x01611C,0x06A,106,4,0x004806F1,Multifunction Stalk,Cockpit & Switches,Lighting & Turn Signal Stalk Switches
+12,Profile_12_ICE_Gasoline_TGDI,0x016152,0x055,85,1,0xFF8E04F1,LDC / ICCU,Power & Charging,Low Voltage DC-DC Converter (LDC)
+12,Profile_12_ICE_Gasoline_TGDI,0x01618E,0x057,87,1,0xFF9004F1,BMS / PRA,High-Voltage Battery,High Voltage Isolation & Contactor State
+12,Profile_12_ICE_Gasoline_TGDI,0x0161C4,0x059,89,1,0xFF9204F1,OBC / ICCU,Power & Charging,On-Board Charger (OBC) AC Line Telemetry
+12,Profile_12_ICE_Gasoline_TGDI,0x01623C,0x096,150,1,0xFF6B05F1,Front Corner/Mid Radar,ADAS & Safety,Front Radar Object Track Target
+12,Profile_12_ICE_Gasoline_TGDI,0x016272,0x098,152,1,0xFF6D05F1,Front View Camera,ADAS & Safety,Front Camera Lane Marker Detection
+12,Profile_12_ICE_Gasoline_TGDI,0x0162A8,0x09A,154,1,0xFF6F05F1,DAW / Camera,ADAS & Safety,Driver Attention Warning (DAW)
+12,Profile_12_ICE_Gasoline_TGDI,0x01631A,0x02D,45,5,0xFF6F04F1,SCU / E-Shifter,Transmission,Transmission Shifter / E-Shifter SBW
+12,Profile_12_ICE_Gasoline_TGDI,0x016380,0x01E,30,64,0x003146F1,MDPS / Front Camera,Chassis & ADAS,ADAS / MDPS Dynamics
+12,Profile_12_ICE_Gasoline_TGDI,0x016386,0x031,49,5,0xFF7304F1,ESC / IMU,Chassis,Lateral Acceleration & Yaw Rate Dynamics
+12,Profile_12_ICE_Gasoline_TGDI,0x0163FE,0x0B4,180,64,0x00CF46F1,BMS,High-Voltage Battery,High-Voltage Battery Cell Temperatures
+12,Profile_12_ICE_Gasoline_TGDI,0x016404,0x0CF,207,5,0xFFDB05F1,SMK / IBU,Body & Doors,Smart Key / Immobilizer Authorization
+12,Profile_12_ICE_Gasoline_TGDI,0x016428,0x0BE,190,6,0x00D046F1,Door Control Module,Body & Doors,Exterior Mirror Fold & Glass Position
+12,Profile_12_ICE_Gasoline_TGDI,0x01643A,0x0BF,191,4,0x00D146F1,PTGM ECU,Body & Doors,Power Tailgate / Trunk Position
+12,Profile_12_ICE_Gasoline_TGDI,0x016440,0x0D1,209,2,0xFFDD05F1,BCM / IBU,Body & Doors,Door Latch & Central Locking Status
+12,Profile_12_ICE_Gasoline_TGDI,0x01645E,0x0C9,201,6,0x00D246F1,Rear Corner Radar Left,ADAS & Safety,Blind-Spot Detection Left Radar
+12,Profile_12_ICE_Gasoline_TGDI,0x016470,0x0CA,202,4,0x00D346F1,Rear Corner Radar Right,ADAS & Safety,Blind-Spot Detection Right Radar
+12,Profile_12_ICE_Gasoline_TGDI,0x016476,0x0D3,211,5,0xFFDF05F1,ACU / Airbag,Safety & Interior,Seat Belt Buckle & Occupant Classification
+12,Profile_12_ICE_Gasoline_TGDI,0x0164CA,0x068,104,3,0x006947F1,Cluster / CLU,Cockpit & Cluster,Instrument Cluster Warning Banners
+12,Profile_12_ICE_Gasoline_TGDI,0x0164D6,0x095,149,3,0x009647F1,TPMS ECU,Chassis & Safety,Tire Pressure Monitoring System (TPMS)
+12,Profile_12_ICE_Gasoline_TGDI,0x016500,0x023,35,32,0x005106F1,Inverter / MCU,Powertrain,High-Speed Powertrain / Motor Inverter
+12,Profile_12_ICE_Gasoline_TGDI,0x016506,0x051,81,16,0x007040F0,BMS,High-Voltage Battery,High-Voltage Battery State of Charge (SOC)
+13,Profile_13_Engineering_Diagnostic,0x016602,0x044,68,64,0x000A0000,Central Gateway,Body & Power,Central Gateway Power & Network Mode
+13,Profile_13_Engineering_Diagnostic,0x0166BC,0x0BC,188,8,0x00BF41F0,VESS Module,Acoustic Alert,Virtual Engine Sound System (VESS)
+13,Profile_13_Engineering_Diagnostic,0x016704,0x051,81,1,0x005243F2,BMS,High-Voltage Battery,High-Voltage Battery State of Charge (SOC)
+13,Profile_13_Engineering_Diagnostic,0x01670A,0x052,82,7,0x055808F2,ECU Node,Vehicle Network,Vehicle Network Controller
+13,Profile_13_Engineering_Diagnostic,0x01671C,0x05A,90,4,0x003008F2,ECU Node,Vehicle Network,Vehicle Network Controller
+13,Profile_13_Engineering_Diagnostic,0x016752,0x055,85,1,0xFF570BF1,LDC / ICCU,Power & Charging,Low Voltage DC-DC Converter (LDC)
+13,Profile_13_Engineering_Diagnostic,0x01678E,0x057,87,1,0xFF590BF1,BMS / PRA,High-Voltage Battery,High Voltage Isolation & Contactor State
+13,Profile_13_Engineering_Diagnostic,0x0167C4,0x059,89,1,0xFF5B0BF1,OBC / ICCU,Power & Charging,On-Board Charger (OBC) AC Line Telemetry
+13,Profile_13_Engineering_Diagnostic,0x01683C,0x096,150,1,0xFF760BF1,Front Corner/Mid Radar,ADAS & Safety,Front Radar Object Track Target
+13,Profile_13_Engineering_Diagnostic,0x016872,0x098,152,1,0xFF780BF1,Front View Camera,ADAS & Safety,Front Camera Lane Marker Detection
+13,Profile_13_Engineering_Diagnostic,0x0168A8,0x09A,154,1,0xFF7A0BF1,DAW / Camera,ADAS & Safety,Driver Attention Warning (DAW)
+13,Profile_13_Engineering_Diagnostic,0x01691A,0x02D,45,5,0xFF380BF1,SCU / E-Shifter,Transmission,Transmission Shifter / E-Shifter SBW
+13,Profile_13_Engineering_Diagnostic,0x016980,0x01E,30,64,0x003149F1,MDPS / Front Camera,Chassis & ADAS,ADAS / MDPS Dynamics
+13,Profile_13_Engineering_Diagnostic,0x016986,0x031,49,5,0xFF3C0BF1,ESC / IMU,Chassis,Lateral Acceleration & Yaw Rate Dynamics
+13,Profile_13_Engineering_Diagnostic,0x0169FE,0x0B4,180,64,0x00CF49F1,BMS,High-Voltage Battery,High-Voltage Battery Cell Temperatures
+13,Profile_13_Engineering_Diagnostic,0x016A04,0x0CF,207,5,0xFF940BF1,SMK / IBU,Body & Doors,Smart Key / Immobilizer Authorization
+13,Profile_13_Engineering_Diagnostic,0x016A28,0x0BE,190,6,0x00D049F1,Door Control Module,Body & Doors,Exterior Mirror Fold & Glass Position
+13,Profile_13_Engineering_Diagnostic,0x016A3A,0x0BF,191,4,0x00D149F1,PTGM ECU,Body & Doors,Power Tailgate / Trunk Position
+13,Profile_13_Engineering_Diagnostic,0x016A40,0x0D1,209,2,0xFF960BF1,BCM / IBU,Body & Doors,Door Latch & Central Locking Status
+13,Profile_13_Engineering_Diagnostic,0x016A5E,0x0C9,201,6,0x00D249F1,Rear Corner Radar Left,ADAS & Safety,Blind-Spot Detection Left Radar
+13,Profile_13_Engineering_Diagnostic,0x016A70,0x0CA,202,4,0x00D349F1,Rear Corner Radar Right,ADAS & Safety,Blind-Spot Detection Right Radar
+13,Profile_13_Engineering_Diagnostic,0x016A76,0x0D3,211,5,0xFF980BF1,ACU / Airbag,Safety & Interior,Seat Belt Buckle & Occupant Classification
+13,Profile_13_Engineering_Diagnostic,0x016ACA,0x030,48,3,0x00314AF1,ECU Node,Vehicle Network,Vehicle Network Controller
+13,Profile_13_Engineering_Diagnostic,0x016AD6,0x07F,127,3,0x008043F2,ECU Node,Vehicle Network,Vehicle Network Controller

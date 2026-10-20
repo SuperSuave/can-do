@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.10.6-b010",
+  "can_do_version": "2026.10.6-b011",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -1782,7 +1782,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
       },
       "network": {
         "bus": 0,
@@ -1794,14 +1794,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "°F",
+        "unit": "\u00b0F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62°F",
+          "label": "62\u00b0F",
           "match": {
             "D4": "0x06"
           },
@@ -1822,7 +1822,7 @@
           "default": false
         },
         {
-          "label": "63°F",
+          "label": "63\u00b0F",
           "match": {
             "D4": "0x07"
           },
@@ -1843,7 +1843,7 @@
           "default": false
         },
         {
-          "label": "64°F",
+          "label": "64\u00b0F",
           "match": {
             "D4": "0x08"
           },
@@ -1864,7 +1864,7 @@
           "default": false
         },
         {
-          "label": "65°F",
+          "label": "65\u00b0F",
           "match": {
             "D4": "0x09"
           },
@@ -1885,7 +1885,7 @@
           "default": false
         },
         {
-          "label": "66°F",
+          "label": "66\u00b0F",
           "match": {
             "D4": "0x0A"
           },
@@ -1906,7 +1906,7 @@
           "default": false
         },
         {
-          "label": "67°F",
+          "label": "67\u00b0F",
           "match": {
             "D4": "0x0B"
           },
@@ -1927,7 +1927,7 @@
           "default": false
         },
         {
-          "label": "68°F",
+          "label": "68\u00b0F",
           "match": {
             "D4": "0x0C"
           },
@@ -1948,7 +1948,7 @@
           "default": false
         },
         {
-          "label": "69°F",
+          "label": "69\u00b0F",
           "match": {
             "D4": "0x0D"
           },
@@ -1969,7 +1969,7 @@
           "default": false
         },
         {
-          "label": "70°F",
+          "label": "70\u00b0F",
           "match": {
             "D4": "0x0E"
           },
@@ -1990,7 +1990,7 @@
           "default": true
         },
         {
-          "label": "71°F",
+          "label": "71\u00b0F",
           "match": {
             "D4": "0x0F"
           },
@@ -2011,7 +2011,7 @@
           "default": false
         },
         {
-          "label": "72°F",
+          "label": "72\u00b0F",
           "match": {
             "D4": "0x10"
           },
@@ -2032,7 +2032,7 @@
           "default": false
         },
         {
-          "label": "73°F",
+          "label": "73\u00b0F",
           "match": {
             "D4": "0x11"
           },
@@ -2053,7 +2053,7 @@
           "default": false
         },
         {
-          "label": "74°F",
+          "label": "74\u00b0F",
           "match": {
             "D4": "0x12"
           },
@@ -2074,7 +2074,7 @@
           "default": false
         },
         {
-          "label": "75°F",
+          "label": "75\u00b0F",
           "match": {
             "D4": "0x13"
           },
@@ -2095,7 +2095,7 @@
           "default": false
         },
         {
-          "label": "76°F",
+          "label": "76\u00b0F",
           "match": {
             "D4": "0x14"
           },
@@ -2116,7 +2116,7 @@
           "default": false
         },
         {
-          "label": "77°F",
+          "label": "77\u00b0F",
           "match": {
             "D4": "0x15"
           },
@@ -2137,7 +2137,7 @@
           "default": false
         },
         {
-          "label": "78°F",
+          "label": "78\u00b0F",
           "match": {
             "D4": "0x16"
           },
@@ -2158,7 +2158,7 @@
           "default": false
         },
         {
-          "label": "79°F",
+          "label": "79\u00b0F",
           "match": {
             "D4": "0x17"
           },
@@ -2179,7 +2179,7 @@
           "default": false
         },
         {
-          "label": "80°F",
+          "label": "80\u00b0F",
           "match": {
             "D4": "0x18"
           },
@@ -2200,7 +2200,7 @@
           "default": false
         },
         {
-          "label": "81°F",
+          "label": "81\u00b0F",
           "match": {
             "D4": "0x19"
           },
@@ -2221,7 +2221,7 @@
           "default": false
         },
         {
-          "label": "82°F",
+          "label": "82\u00b0F",
           "match": {
             "D4": "0x1A"
           },
@@ -2267,7 +2267,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
       },
       "network": {
         "bus": 0,
@@ -2279,14 +2279,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "°F",
+        "unit": "\u00b0F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62°F",
+          "label": "62\u00b0F",
           "match": {
             "D6": "0x06"
           },
@@ -2307,7 +2307,7 @@
           "default": false
         },
         {
-          "label": "63°F",
+          "label": "63\u00b0F",
           "match": {
             "D6": "0x07"
           },
@@ -2328,7 +2328,7 @@
           "default": false
         },
         {
-          "label": "64°F",
+          "label": "64\u00b0F",
           "match": {
             "D6": "0x08"
           },
@@ -2349,7 +2349,7 @@
           "default": false
         },
         {
-          "label": "65°F",
+          "label": "65\u00b0F",
           "match": {
             "D6": "0x09"
           },
@@ -2370,7 +2370,7 @@
           "default": false
         },
         {
-          "label": "66°F",
+          "label": "66\u00b0F",
           "match": {
             "D6": "0x0A"
           },
@@ -2391,7 +2391,7 @@
           "default": false
         },
         {
-          "label": "67°F",
+          "label": "67\u00b0F",
           "match": {
             "D6": "0x0B"
           },
@@ -2412,7 +2412,7 @@
           "default": false
         },
         {
-          "label": "68°F",
+          "label": "68\u00b0F",
           "match": {
             "D6": "0x0C"
           },
@@ -2433,7 +2433,7 @@
           "default": false
         },
         {
-          "label": "69°F",
+          "label": "69\u00b0F",
           "match": {
             "D6": "0x0D"
           },
@@ -2454,7 +2454,7 @@
           "default": false
         },
         {
-          "label": "70°F",
+          "label": "70\u00b0F",
           "match": {
             "D6": "0x0E"
           },
@@ -2475,7 +2475,7 @@
           "default": true
         },
         {
-          "label": "71°F",
+          "label": "71\u00b0F",
           "match": {
             "D6": "0x0F"
           },
@@ -2496,7 +2496,7 @@
           "default": false
         },
         {
-          "label": "72°F",
+          "label": "72\u00b0F",
           "match": {
             "D6": "0x10"
           },
@@ -2517,7 +2517,7 @@
           "default": false
         },
         {
-          "label": "73°F",
+          "label": "73\u00b0F",
           "match": {
             "D6": "0x11"
           },
@@ -2538,7 +2538,7 @@
           "default": false
         },
         {
-          "label": "74°F",
+          "label": "74\u00b0F",
           "match": {
             "D6": "0x12"
           },
@@ -2559,7 +2559,7 @@
           "default": false
         },
         {
-          "label": "75°F",
+          "label": "75\u00b0F",
           "match": {
             "D6": "0x13"
           },
@@ -2580,7 +2580,7 @@
           "default": false
         },
         {
-          "label": "76°F",
+          "label": "76\u00b0F",
           "match": {
             "D6": "0x14"
           },
@@ -2601,7 +2601,7 @@
           "default": false
         },
         {
-          "label": "77°F",
+          "label": "77\u00b0F",
           "match": {
             "D6": "0x15"
           },
@@ -2622,7 +2622,7 @@
           "default": false
         },
         {
-          "label": "78°F",
+          "label": "78\u00b0F",
           "match": {
             "D6": "0x16"
           },
@@ -2643,7 +2643,7 @@
           "default": false
         },
         {
-          "label": "79°F",
+          "label": "79\u00b0F",
           "match": {
             "D6": "0x17"
           },
@@ -2664,7 +2664,7 @@
           "default": false
         },
         {
-          "label": "80°F",
+          "label": "80\u00b0F",
           "match": {
             "D6": "0x18"
           },
@@ -2685,7 +2685,7 @@
           "default": false
         },
         {
-          "label": "81°F",
+          "label": "81\u00b0F",
           "match": {
             "D6": "0x19"
           },
@@ -2706,7 +2706,7 @@
           "default": false
         },
         {
-          "label": "82°F",
+          "label": "82\u00b0F",
           "match": {
             "D6": "0x1A"
           },
@@ -4929,18 +4929,18 @@
       },
       "options": [
         {
-          "label": "Info Notification (ⓘ)",
+          "label": "Info Notification (\u24d8)",
           "level": "info",
           "popup_message": "Preconditioning Active",
           "default": true
         },
         {
-          "label": "Warning Notification (⚠)",
+          "label": "Warning Notification (\u26a0)",
           "level": "warning",
           "popup_message": "Battery Cold / Limited"
         },
         {
-          "label": "Fault Notification (‼)",
+          "label": "Fault Notification (\u203c)",
           "level": "error",
           "popup_message": "Charge Interrupted"
         },
@@ -6107,16 +6107,16 @@
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x226",
-        "unit": "°C"
+        "unit": "\u00b0C"
       },
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 °C"
+        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 \u00b0C"
       },
       "options": [
         {
-          "label": "Freezing (<= 0°C / 32°F)",
+          "label": "Freezing (<= 0\u00b0C / 32\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": "less_equal",
@@ -6125,7 +6125,7 @@
           "default": true
         },
         {
-          "label": "Cold (< 15°C / 59°F)",
+          "label": "Cold (< 15\u00b0C / 59\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": "less_than",
@@ -6133,7 +6133,7 @@
           }
         },
         {
-          "label": "Warm (> 25°C / 77°F)",
+          "label": "Warm (> 25\u00b0C / 77\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": "greater_than",
@@ -6601,6 +6601,7 @@
         "action_can_id": "0x0C7",
         "state_byte": "D7",
         "action_byte": "D2",
+        "state_mask": "0xFF",
         "min": 20,
         "max": 80,
         "step": 10,
@@ -6610,12 +6611,14 @@
       "category": "High Voltage & Charging",
       "roles": [
         "action",
-        "condition"
+        "condition",
+        "select",
+        "state"
       ],
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "V2L minimum discharge limit % (frame 0x0C7 D2 command with FF pulse, frame 0x151 D7 state). Raw byte = percentage value directly (0x28=20%, 0x50=40%, 0x64=100%)."
+        "notes": "V2L minimum discharge limit % (frame 0x0C7 D2 command with FF pulse, frame 0x151 D7 state). Scaled byte = percentage * 2 (0x28=20%, 0x3C=30%, 0x50=40%, 0x64=50%, 0x78=60%, 0x8C=70%, 0xA0=80%)."
       },
       "options": [
         {
@@ -6956,7 +6959,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Right 90°",
+          "label": "Turn Right 90\u00b0",
           "match": {
             "D1": "0x03"
           },
@@ -6991,7 +6994,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Left 90°",
+          "label": "Turn Left 90\u00b0",
           "match": {
             "D1": "0x08"
           },
@@ -7701,7 +7704,7 @@
         "name": "HV Battery Module Min & Max Temp",
         "domain": "sensor",
         "icon": "mdi:thermometer-chevron-up",
-        "unit_of_measurement": "°C"
+        "unit_of_measurement": "\u00b0C"
       },
       "tags": [
         "all_egmp"
@@ -7715,17 +7718,17 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40°C offset."
+        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40\u00b0C offset."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x5D7",
-        "unit": "°C"
+        "unit": "\u00b0C"
       },
       "options": [
         {
-          "label": "Battery Optimal Warm (20°C - 35°C)",
+          "label": "Battery Optimal Warm (20\u00b0C - 35\u00b0C)",
           "evaluate": {
             "byte": "D1",
             "operator": "greater_equal",
@@ -7734,7 +7737,7 @@
           "default": true
         },
         {
-          "label": "Battery High Temp (> 45°C / 113°F)",
+          "label": "Battery High Temp (> 45\u00b0C / 113\u00b0F)",
           "evaluate": {
             "byte": "D1",
             "operator": "greater_than",
@@ -7742,7 +7745,7 @@
           }
         },
         {
-          "label": "Battery Cold (< 10°C / 50°F)",
+          "label": "Battery Cold (< 10\u00b0C / 50\u00b0F)",
           "evaluate": {
             "byte": "D2",
             "operator": "less_than",
@@ -7750,7 +7753,7 @@
           }
         },
         {
-          "label": "Battery Freezing (< 0°C / 32°F)",
+          "label": "Battery Freezing (< 0\u00b0C / 32\u00b0F)",
           "evaluate": {
             "byte": "D2",
             "operator": "less_than",
@@ -7994,45 +7997,48 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Vehicle State & Telematics",
-      "subcategory": "Exterior & Aerodynamics",
+      "category": "Powertrain & Performance",
+      "subcategory": "Thermal & Aerodynamics",
       "roles": [
         "sensor",
+        "state",
         "condition",
         "trigger"
       ],
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Front bumper active grille air flaps position command from VCU frame 0x584 (AAF11). Flaps automatically open for radiator cooling and close at highway speeds for aero drag reduction."
+        "notes": "AAF11 (0x584) CF_Aaf_ActFlapStatus on D1 bits 1:0 (mask 0x03) reporting physical bumper shutter aperture state."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x584"
+        "state_can_id": "0x584",
+        "state_byte": "D1",
+        "state_mask": "0x03"
       },
       "options": [
         {
-          "label": "Flaps Fully Closed (0% - Aero Eco)",
+          "label": "Fully Closed (Aerodynamic Drag Minimization)",
           "match": {
             "D1": "0x00"
           },
-          "mask": "0xFF",
+          "mask": "0x03",
           "default": true
         },
         {
-          "label": "Flaps Half Open (50% - Moderate Cooling)",
+          "label": "Intermediate / Partial Open (~50%)",
           "match": {
-            "D1": "0x32"
+            "D1": "0x01"
           },
-          "mask": "0xFF"
+          "mask": "0x03"
         },
         {
-          "label": "Flaps Fully Open (100% - Max Cooling)",
+          "label": "Fully Open (Maximum Radiator Cooling)",
           "match": {
-            "D1": "0x64"
+            "D1": "0x02"
           },
-          "mask": "0xFF"
+          "mask": "0x03"
         }
       ],
       "state_can_id": "0x584"
@@ -8043,7 +8049,7 @@
         "name": "Cabin Displayed Target Temperature",
         "domain": "sensor",
         "icon": "mdi:thermometer-lines",
-        "unit_of_measurement": "°F"
+        "unit_of_measurement": "\u00b0F"
       },
       "tags": [
         "all_egmp"
@@ -8057,31 +8063,31 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in °C x 0.5, Byte D3 = Driver Temp in °F integer)."
+        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in \u00b0C x 0.5, Byte D3 = Driver Temp in \u00b0F integer)."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x5F5",
-        "unit": "°F"
+        "unit": "\u00b0F"
       },
       "options": [
         {
-          "label": "68°F (20.0°C)",
+          "label": "68\u00b0F (20.0\u00b0C)",
           "match": {
             "D3": "0x44"
           },
           "mask": "0xFF"
         },
         {
-          "label": "70°F (21.0°C)",
+          "label": "70\u00b0F (21.0\u00b0C)",
           "match": {
             "D3": "0x46"
           },
           "mask": "0xFF"
         },
         {
-          "label": "72°F (22.0°C)",
+          "label": "72\u00b0F (22.0\u00b0C)",
           "match": {
             "D3": "0x48"
           },
@@ -8089,14 +8095,14 @@
           "default": true
         },
         {
-          "label": "74°F (23.5°C)",
+          "label": "74\u00b0F (23.5\u00b0C)",
           "match": {
             "D3": "0x4A"
           },
           "mask": "0xFF"
         },
         {
-          "label": "76°F (24.5°C)",
+          "label": "76\u00b0F (24.5\u00b0C)",
           "match": {
             "D3": "0x4C"
           },
@@ -8252,7 +8258,7 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s² signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
+        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s\u00b2 signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
       },
       "network": {
         "bus": 0,
@@ -11568,6 +11574,828 @@
         "notes": "Direct live EV charging power reported in integer kW (0 to 255 kW) by the OBC / BMS on CAN ID 0x30E Byte 6 (D7) during AC Level 2 and DC Fast Charging, eliminating the need to calculate Volts * Amps / 1000."
       },
       "state_can_id": "0x30E"
+    },
+    {
+      "id": "tpms_warning_lamp",
+      "ha_metadata": {
+        "name": "TPMS Warning Lamp",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-tire-alert"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Tire Pressure & Wheels",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x593",
+        "state_byte": "D1",
+        "state_mask": "0x03"
+      },
+      "options": [
+        {
+          "label": "Normal",
+          "match": {
+            "D1": "0x00"
+          }
+        },
+        {
+          "label": "Low Pressure Warning",
+          "match": {
+            "D1": "0x01"
+          }
+        },
+        {
+          "label": "Sensor / System Fault",
+          "match": {
+            "D1": "0x02"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Body Control Module (BCM) / TPMS receiver broadcast on CAN ID 0x593 Byte 0 (D1) bits 0-1, indicating master TPMS warning lamp state (0=Off, 1=On, 2=Blinking fault)."
+      },
+      "state_can_id": "0x593"
+    },
+    {
+      "id": "tpms_low_pressure_fl",
+      "ha_metadata": {
+        "name": "TPMS Low Pressure (Front Left)",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-tire-alert"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Tire Pressure & Wheels",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x593",
+        "state_byte": "D1",
+        "state_mask": "0x10"
+      },
+      "options": [
+        {
+          "label": "Normal",
+          "match": {
+            "D1": "0x00"
+          }
+        },
+        {
+          "label": "Low Pressure",
+          "match": {
+            "D1": "0x10"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Direct front-left wheel low-pressure alert bit broadcast on CAN ID 0x593 Byte 0 (D1) bit 4."
+      },
+      "state_can_id": "0x593"
+    },
+    {
+      "id": "tpms_low_pressure_fr",
+      "ha_metadata": {
+        "name": "TPMS Low Pressure (Front Right)",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-tire-alert"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Tire Pressure & Wheels",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x593",
+        "state_byte": "D1",
+        "state_mask": "0x20"
+      },
+      "options": [
+        {
+          "label": "Normal",
+          "match": {
+            "D1": "0x00"
+          }
+        },
+        {
+          "label": "Low Pressure",
+          "match": {
+            "D1": "0x20"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Direct front-right wheel low-pressure alert bit broadcast on CAN ID 0x593 Byte 0 (D1) bit 5."
+      },
+      "state_can_id": "0x593"
+    },
+    {
+      "id": "tpms_low_pressure_rl",
+      "ha_metadata": {
+        "name": "TPMS Low Pressure (Rear Left)",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-tire-alert"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Tire Pressure & Wheels",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x593",
+        "state_byte": "D1",
+        "state_mask": "0x40"
+      },
+      "options": [
+        {
+          "label": "Normal",
+          "match": {
+            "D1": "0x00"
+          }
+        },
+        {
+          "label": "Low Pressure",
+          "match": {
+            "D1": "0x40"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Direct rear-left wheel low-pressure alert bit broadcast on CAN ID 0x593 Byte 0 (D1) bit 6."
+      },
+      "state_can_id": "0x593"
+    },
+    {
+      "id": "tpms_low_pressure_rr",
+      "ha_metadata": {
+        "name": "TPMS Low Pressure (Rear Right)",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-tire-alert"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Tire Pressure & Wheels",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x593",
+        "state_byte": "D1",
+        "state_mask": "0x80"
+      },
+      "options": [
+        {
+          "label": "Normal",
+          "match": {
+            "D1": "0x00"
+          }
+        },
+        {
+          "label": "Low Pressure",
+          "match": {
+            "D1": "0x80"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Direct rear-right wheel low-pressure alert bit broadcast on CAN ID 0x593 Byte 0 (D1) bit 7."
+      },
+      "state_can_id": "0x593"
+    },
+    {
+      "id": "esc_wheel_speed_fl",
+      "ha_metadata": {
+        "name": "Wheel Speed (Front Left)",
+        "domain": "sensor",
+        "icon": "mdi:speedometer"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Driving Dynamics",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x4B0",
+        "unit": "km/h"
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Electronic Stability Control (ESC) / ABS module high-rate wheel speed telemetry broadcast on CAN ID 0x4B0 Bytes 0-1 (D1-D2) as 16-bit big-endian unsigned integer (scaling 0.03125 km/h per count)."
+      },
+      "state_can_id": "0x4B0"
+    },
+    {
+      "id": "ptgm_tailgate_status",
+      "ha_metadata": {
+        "name": "Power Tailgate Position & Motion",
+        "domain": "sensor",
+        "icon": "mdi:car-back"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Trunk & Frunk",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x3A6",
+        "state_byte": "D1",
+        "state_mask": "0x0F"
+      },
+      "options": [
+        {
+          "label": "Fully Opened",
+          "match": {
+            "D1": "0x01"
+          }
+        },
+        {
+          "label": "Fully Closed & Latched",
+          "match": {
+            "D1": "0x02"
+          }
+        },
+        {
+          "label": "Opening in Motion",
+          "match": {
+            "D1": "0x03"
+          }
+        },
+        {
+          "label": "Closing in Motion",
+          "match": {
+            "D1": "0x04"
+          }
+        },
+        {
+          "label": "Stopped at Intermediate Position",
+          "match": {
+            "D1": "0x05"
+          }
+        },
+        {
+          "label": "Obstacle / Pinch Detected",
+          "match": {
+            "D1": "0x08"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Power Tailgate Module (PTGM / 0x3A6) real-time position and motion status reported on Byte 0 (D1) lower nibble."
+      },
+      "state_can_id": "0x3A6"
+    },
+    {
+      "id": "smart_key_proximity_welcome",
+      "ha_metadata": {
+        "name": "Smart Key Proximity Handshake",
+        "domain": "binary_sensor",
+        "icon": "mdi:key-wireless"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Locks & Security",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x553",
+        "state_byte": "D8",
+        "state_mask": "0x01"
+      },
+      "options": [
+        {
+          "label": "Not in Perimeter",
+          "match": {
+            "D8": "0x00"
+          }
+        },
+        {
+          "label": "Key in Proximity Zone",
+          "match": {
+            "D8": "0x01"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Smart Key Unit / Central Gateway (CGW2 / 0x553) welcome handshake active when key fob is detected within 1.5 m perimeter."
+      },
+      "state_can_id": "0x553"
+    },
+    {
+      "id": "auto_hold_status",
+      "ha_metadata": {
+        "name": "Automatic Vehicle Hold (Auto Hold)",
+        "domain": "sensor",
+        "icon": "mdi:car-brake-hold"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Braking & Pedals",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x47F",
+        "state_byte": "D1",
+        "state_mask": "0x03"
+      },
+      "options": [
+        {
+          "label": "Auto Hold Off",
+          "match": {
+            "D1": "0x00"
+          }
+        },
+        {
+          "label": "Standby (White Lamp)",
+          "match": {
+            "D1": "0x01"
+          }
+        },
+        {
+          "label": "Active / Holding (Green Lamp)",
+          "match": {
+            "D1": "0x02"
+          }
+        },
+        {
+          "label": "System Fault (Amber Lamp)",
+          "match": {
+            "D1": "0x03"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Electronic Stability Control (ESC / 0x47F) AVH_STAT Auto Vehicle Hold operational state broadcast on Byte 0 (D1) bits 0-1."
+      },
+      "state_can_id": "0x47F"
+    },
+    {
+      "id": "master_cylinder_brake_pressure",
+      "ha_metadata": {
+        "name": "Master Cylinder Hydraulic Brake Pressure",
+        "domain": "sensor",
+        "icon": "mdi:gauge"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Braking & Pedals",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x220",
+        "unit": "bar",
+        "min": 0,
+        "max": 400
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Electronic Stability Control (ESC / 0x220) CYL_PRES 12-bit master cylinder hydraulic pressure (factor 0.1 bar per count)."
+      },
+      "state_can_id": "0x220"
+    },
+    {
+      "id": "lfa_steering_status",
+      "ha_metadata": {
+        "name": "Lane Following Assist (LFA) Steering Status",
+        "domain": "sensor",
+        "icon": "mdi:steering"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Driving Dynamics",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x203",
+        "state_byte": "D4",
+        "state_mask": "0x0F"
+      },
+      "options": [
+        {
+          "label": "LFA Off",
+          "match": {
+            "D4": "0x00"
+          }
+        },
+        {
+          "label": "LFA Standby (White Lane)",
+          "match": {
+            "D4": "0x01"
+          }
+        },
+        {
+          "label": "LFA Active Steering (Green Lane)",
+          "match": {
+            "D4": "0x02"
+          }
+        },
+        {
+          "label": "Hands-Off Warning",
+          "match": {
+            "D4": "0x03"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Front camera ADAS_ActvACISta in LFA_ALT (0x203) reporting active lane centering and hands-off warning states on Byte 3 (D4) lower nibble."
+      },
+      "state_can_id": "0x203"
+    },
+    {
+      "id": "blind_spot_warning_left",
+      "ha_metadata": {
+        "name": "Left Blind-Spot Warning Status",
+        "domain": "sensor",
+        "icon": "mdi:car-side"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "ADAS & Safety",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x1BA",
+        "state_byte": "D4",
+        "state_mask": "0x03"
+      },
+      "options": [
+        {
+          "label": "Clear",
+          "match": {
+            "D4": "0x00"
+          }
+        },
+        {
+          "label": "Vehicle Detected (Mirror LED Solid)",
+          "match": {
+            "D4": "0x01"
+          }
+        },
+        {
+          "label": "Flashing Warning (Turn Signal Active)",
+          "match": {
+            "D4": "0x02"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Rear Corner Radar BCW_LtIndSta on 0x1BA (D4, bits 1:0) indicating left mirror amber LED detection and warning flasher states."
+      },
+      "state_can_id": "0x1BA"
+    },
+    {
+      "id": "blind_spot_warning_right",
+      "ha_metadata": {
+        "name": "Right Blind-Spot Warning Status",
+        "domain": "sensor",
+        "icon": "mdi:car-side"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "ADAS & Safety",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x1BA",
+        "state_byte": "D5",
+        "state_mask": "0x03"
+      },
+      "options": [
+        {
+          "label": "Clear",
+          "match": {
+            "D5": "0x00"
+          }
+        },
+        {
+          "label": "Vehicle Detected (Mirror LED Solid)",
+          "match": {
+            "D5": "0x01"
+          }
+        },
+        {
+          "label": "Flashing Warning (Turn Signal Active)",
+          "match": {
+            "D5": "0x02"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Rear Corner Radar BCW_RtIndSta on 0x1BA (D5, bits 1:0) indicating right mirror amber LED detection and warning flasher states."
+      },
+      "state_can_id": "0x1BA"
+    },
+    {
+      "id": "svm_camera_view_status",
+      "ha_metadata": {
+        "name": "Surround View Monitor (SVM) Camera Perspective",
+        "domain": "sensor",
+        "icon": "mdi:camera-control"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Cameras & Vision",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x477",
+        "state_byte": "D1",
+        "state_mask": "0xFF"
+      },
+      "options": [
+        {
+          "label": "Camera Standby / Off",
+          "match": {
+            "D1": "0x00"
+          }
+        },
+        {
+          "label": "Rear View Active (Reverse + 360 Top-Down)",
+          "match": {
+            "D1": "0x41"
+          }
+        },
+        {
+          "label": "Front View Active (Forward + 360 Top-Down)",
+          "match": {
+            "D1": "0x42"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Surround View Camera ECU SVC_ActiveViewStatus on 0x477 (D1) reporting active camera video feed and 360 top-down perspective."
+      },
+      "state_can_id": "0x477"
+    },
+    {
+      "id": "pdw_sensor_front_center",
+      "ha_metadata": {
+        "name": "Front Center Parking Sensor Distance Zone",
+        "domain": "sensor",
+        "icon": "mdi:radar"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Cameras & Vision",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x436",
+        "state_byte": "D2",
+        "state_mask": "0x07"
+      },
+      "options": [
+        {
+          "label": "Clear (No Obstacle)",
+          "match": {
+            "D2": "0x00"
+          }
+        },
+        {
+          "label": "Zone 1 (Far ~100cm)",
+          "match": {
+            "D2": "0x01"
+          }
+        },
+        {
+          "label": "Zone 2 (Mid ~60cm)",
+          "match": {
+            "D2": "0x02"
+          }
+        },
+        {
+          "label": "Zone 3 (Close ~30cm / Critical)",
+          "match": {
+            "D2": "0x03"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "PDW/PAS ultrasonic sensor CF_Gway_PASDisplayFCTR on 0x436 (D2 bits 2:0) indicating obstacle proximity."
+      },
+      "state_can_id": "0x436"
+    },
+    {
+      "id": "pdw_sensor_rear_center",
+      "ha_metadata": {
+        "name": "Rear Center Parking Sensor Distance Zone",
+        "domain": "sensor",
+        "icon": "mdi:radar"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Vehicle State & Telematics",
+      "subcategory": "Cameras & Vision",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x436",
+        "state_byte": "D2",
+        "state_mask": "0x38"
+      },
+      "options": [
+        {
+          "label": "Clear (No Obstacle)",
+          "match": {
+            "D2": "0x00"
+          }
+        },
+        {
+          "label": "Zone 1 (Far ~100cm)",
+          "match": {
+            "D2": "0x08"
+          }
+        },
+        {
+          "label": "Zone 2 (Mid ~60cm)",
+          "match": {
+            "D2": "0x10"
+          }
+        },
+        {
+          "label": "Zone 3 (Close ~30cm / Critical)",
+          "match": {
+            "D2": "0x18"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "PDW/PAS ultrasonic sensor CF_Gway_PASDisplayRCTR on 0x436 (D2 bits 5:3) indicating obstacle proximity."
+      },
+      "state_can_id": "0x436"
+    },
+    {
+      "id": "ac_charging_current_limit",
+      "ha_metadata": {
+        "name": "AC Charging Current Limit Level",
+        "domain": "select",
+        "icon": "mdi:ev-plug-type2"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Charging & Battery",
+      "subcategory": "AC Charging",
+      "roles": [
+        "select",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x578",
+        "state_byte": "D3",
+        "state_mask": "0x03"
+      },
+      "options": [
+        {
+          "label": "Minimum (60% Current Draw)",
+          "match": {
+            "D3": "0x00"
+          }
+        },
+        {
+          "label": "Reduced (90% Current Draw)",
+          "match": {
+            "D3": "0x01"
+          }
+        },
+        {
+          "label": "Maximum (100% Full Rating)",
+          "match": {
+            "D3": "0x02"
+          }
+        }
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "EV_CP5 (0x578) Byte 2 (D3 bits 1:0) setting maximum continuous current draw during Level 2 AC charging."
+      },
+      "state_can_id": "0x578"
     }
   ],
   "automations": [

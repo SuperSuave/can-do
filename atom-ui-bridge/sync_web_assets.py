@@ -71,6 +71,21 @@ def sync():
         with open(atom_cat_dst, "wb") as f_out:
             f_out.write(cat_raw)
 
+    # Ensure CAN_DO_VERSION in atom-ui-bridge/src/main.cpp matches firmware/version.txt
+    ver_txt = os.path.join(REPO_ROOT, "firmware", "version.txt")
+    main_cpp = os.path.join(REPO_ROOT, "atom-ui-bridge", "src", "main.cpp")
+    if os.path.exists(ver_txt) and os.path.exists(main_cpp):
+        with open(ver_txt, "r", encoding="utf-8") as vf:
+            ver = vf.read().strip()
+        with open(main_cpp, "r", encoding="utf-8") as mf:
+            content = mf.read()
+        import re
+        new_content = re.sub(r'#define CAN_DO_VERSION "[^"]*"', f'#define CAN_DO_VERSION "{ver}"', content)
+        if new_content != content:
+            with open(main_cpp, "w", encoding="utf-8") as mf:
+                mf.write(new_content)
+            print(f"Synchronized CAN_DO_VERSION in atom-ui-bridge/src/main.cpp -> {ver}")
+
     atom_bytes = sum(os.path.getsize(os.path.join(r, f)) for r, d, fs in os.walk(ATOM_DATA) for f in fs)
     print(f"Sync complete! Atom Lite LittleFS: {atom_bytes / 1024:.1f} KB (Partition: 2048 KB)")
 

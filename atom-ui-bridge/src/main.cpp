@@ -13,6 +13,7 @@
 #include <map>
 #include <vector>
 #include <mutex>
+#include <Update.h>
 
 // ============================================================================
 // Hardware Pin Definitions (M5Stack Atom Lite connected to WiCAN)
@@ -40,6 +41,12 @@ std::map<String, String> g_state_cache;
 static std::mutex g_state_cache_mutex;
 unsigned long g_last_wican_rx_ms = 0;
 bool g_wican_online = false;
+
+#ifndef CAN_DO_VERSION
+#define CAN_DO_VERSION "2026.10.6-b011"
+#endif
+
+String g_can_do_version = CAN_DO_VERSION;
 
 // ============================================================================
 // BLE Subsystem Data Structures & State
@@ -1398,6 +1405,19 @@ void setup() {
     } else {
         Serial.printf("[FS] LittleFS mounted successfully. Total: %u KB, Used: %u KB\n",
                       LittleFS.totalBytes() / 1024, LittleFS.usedBytes() / 1024);
+
+        // Synchronize CAN Do version dynamically from LittleFS manifest if present
+        if (LittleFS.exists("/frontend_manifest.json")) {
+            File mf = LittleFS.open("/frontend_manifest.json", "r");
+            if (mf) {
+                JsonDocument mDoc;
+                if (deserializeJson(mDoc, mf) == DeserializationError::Ok && mDoc["version"].is<const char*>()) {
+                    g_can_do_version = mDoc["version"].as<String>();
+                    Serial.printf("[SYSTEM] Synchronized CAN Do version from LittleFS manifest: %s\n", g_can_do_version.c_str());
+                }
+                mf.close();
+            }
+        }
     }
 
     // 5. Initialize Wi-Fi
@@ -1549,7 +1569,7 @@ void setup() {
         JsonDocument doc;
         doc["device"] = "M5Stack Atom Lite UI Bridge";
         doc["device_id"] = g_device_id;
-        doc["can_do_version"] = "2026.10.6-b010";
+        doc["can_do_version"] = g_can_do_version;
         doc["wican_online"] = g_wican_online;
         doc["free_heap"] = ESP.getFreeHeap();
         doc["uptime_s"] = millis() / 1000;
@@ -1559,6 +1579,102 @@ void setup() {
         serializeJson(doc, out);
         request->send(200, "application/json", out);
     });
+
+    // REST: POST /api/system/control (reboot support for Web UI updates)
+    server.on("/api/system/control", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+            String body = "";
+            for (size_t i = 0; i < len; i++) body += (char)data[i];
+            JsonDocument doc;
+            bool rebootReq = false;
+            if (deserializeJson(doc, body) == DeserializationError::Ok) {
+                if (doc["reboot"].as<bool>() || doc["action"] == "reboot") {
+                    rebootReq = true;
+                }
+            }
+            request->send(200, "application/json", "{\"status\":\"ok\",\"rebooting\":true}");
+            if (rebootReq) {
+                Serial.println("[SYSTEM] Reboot requested via Web API...");
+                delay(500);
+                ESP.restart();
+            }
+        }
+    );
+
+    // REST: POST /api/ota (Firmware OTA flash from Web UI)
+    server.on("/api/ota", HTTP_POST,
+        [](AsyncWebServerRequest *request) {
+            bool success = !Update.hasError();
+            AsyncWebServerResponse *response = request->beginResponse(
+                success ? 200 : 500,
+                "application/json",
+                success ? "{\"status\":\"success\",\"message\":\"Firmware flashed. Rebooting...\"}"
+                        : "{\"status\":\"error\",\"message\":\"OTA flash failed\"}"
+            );
+            response->addHeader("Connection", "close");
+            request->send(response);
+            if (success) {
+                Serial.println("[OTA] Firmware write complete. Restarting ESP32 in 1s...");
+                delay(1000);
+                ESP.restart();
+            }
+        },
+        [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+            if (!index) {
+                Serial.printf("[OTA] Firmware update started (file: %s)\n", filename.c_str());
+                if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
+                    Update.printError(Serial);
+                }
+            }
+            if (!Update.hasError()) {
+                if (Update.write(data, len) != len) {
+                    Update.printError(Serial);
+                }
+            }
+            if (final) {
+                if (Update.end(true)) {
+                    Serial.printf("[OTA] Firmware flash completed: %u bytes written\n", index + len);
+                } else {
+                    Update.printError(Serial);
+                }
+            }
+        }
+    );
+
+    // REST: POST /api/upload (LittleFS file staging from Web UI)
+    server.on("/api/upload", HTTP_POST,
+        [](AsyncWebServerRequest *request) {
+            request->send(200, "application/json", "{\"status\":\"success\",\"message\":\"File saved successfully.\"}");
+        },
+        [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+            static File s_upload_file;
+            if (!index) {
+                String path = "";
+                if (request->hasHeader("X-File-Path")) {
+                    path = request->getHeader("X-File-Path")->value();
+                } else {
+                    path = "/" + filename;
+                }
+                if (!path.startsWith("/")) path = "/" + path;
+                int lastSlash = path.lastIndexOf('/');
+                if (lastSlash > 0) {
+                    String dirPath = path.substring(0, lastSlash);
+                    LittleFS.mkdir(dirPath);
+                }
+                s_upload_file = LittleFS.open(path, "w");
+                Serial.printf("[UPLOAD] Staging file: %s\n", path.c_str());
+            }
+            if (s_upload_file && len > 0) {
+                s_upload_file.write(data, len);
+            }
+            if (final) {
+                if (s_upload_file) {
+                    s_upload_file.close();
+                    Serial.printf("[UPLOAD] Finished: %s (%u bytes)\n", filename.c_str(), index + len);
+                }
+            }
+        }
+    );
 
     // REST: BLE API for BluetoothManager.tsx
     // GET /api/ble/status
