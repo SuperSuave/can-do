@@ -1,0 +1,30 @@
+name: Validate CAN Do Catalog
+
+on:
+  push:
+    paths:
+      - 'catalog/can_do_catalog.json'
+      - 'scripts/optimize_catalog.py'
+      - '.github/workflows/validate_catalog.yml'
+  pull_request:
+    paths:
+      - 'catalog/can_do_catalog.json'
+      - 'scripts/optimize_catalog.py'
+
+jobs:
+  validate-catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run Strict Catalog Schema & Integrity Check
+        run: python3 scripts/optimize_catalog.py catalog/can_do_catalog.json --check
+
+      - name: Run Unit Test Suite
+        run: python3 -m unittest discover -s tests

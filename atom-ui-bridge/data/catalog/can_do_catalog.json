@@ -1107,7 +1107,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x652",
         "action_can_id": "0x652"
       },
@@ -1265,9 +1265,7 @@
       "match": {
         "D3": "0x40"
       },
-      "mask": {
-        "D3": "0x40"
-      },
+      "mask": "0x40",
       "roles": [
         "trigger"
       ],
@@ -1548,7 +1546,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x60E",
         "action_can_id": "0x60E"
       },
@@ -1786,7 +1784,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x380",
         "action_can_id": "0x4A0",
         "state_byte": "D2",
@@ -1803,7 +1801,7 @@
         {
           "label": "62°F",
           "match": {
-            "D4": "0x06"
+            "D2": "0x06"
           },
           "steps": [
             {
@@ -1818,13 +1816,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "63°F",
           "match": {
-            "D4": "0x07"
+            "D2": "0x07"
           },
           "steps": [
             {
@@ -1839,13 +1836,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "64°F",
           "match": {
-            "D4": "0x08"
+            "D2": "0x08"
           },
           "steps": [
             {
@@ -1860,13 +1856,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "65°F",
           "match": {
-            "D4": "0x09"
+            "D2": "0x09"
           },
           "steps": [
             {
@@ -1881,13 +1876,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "66°F",
           "match": {
-            "D4": "0x0A"
+            "D2": "0x0A"
           },
           "steps": [
             {
@@ -1902,13 +1896,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "67°F",
           "match": {
-            "D4": "0x0B"
+            "D2": "0x0B"
           },
           "steps": [
             {
@@ -1923,13 +1916,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "68°F",
           "match": {
-            "D4": "0x0C"
+            "D2": "0x0C"
           },
           "steps": [
             {
@@ -1944,13 +1936,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "69°F",
           "match": {
-            "D4": "0x0D"
+            "D2": "0x0D"
           },
           "steps": [
             {
@@ -1965,13 +1956,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "70°F",
           "match": {
-            "D4": "0x0E"
+            "D2": "0x0E"
           },
           "steps": [
             {
@@ -1992,7 +1982,7 @@
         {
           "label": "71°F",
           "match": {
-            "D4": "0x0F"
+            "D2": "0x0F"
           },
           "steps": [
             {
@@ -2007,13 +1997,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "72°F",
           "match": {
-            "D4": "0x10"
+            "D2": "0x10"
           },
           "steps": [
             {
@@ -2028,13 +2017,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "73°F",
           "match": {
-            "D4": "0x11"
+            "D2": "0x11"
           },
           "steps": [
             {
@@ -2049,13 +2037,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "74°F",
           "match": {
-            "D4": "0x12"
+            "D2": "0x12"
           },
           "steps": [
             {
@@ -2070,13 +2057,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "75°F",
           "match": {
-            "D4": "0x13"
+            "D2": "0x13"
           },
           "steps": [
             {
@@ -2091,13 +2077,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "76°F",
           "match": {
-            "D4": "0x14"
+            "D2": "0x14"
           },
           "steps": [
             {
@@ -2112,13 +2097,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "77°F",
           "match": {
-            "D4": "0x15"
+            "D2": "0x15"
           },
           "steps": [
             {
@@ -2133,13 +2117,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "78°F",
           "match": {
-            "D4": "0x16"
+            "D2": "0x16"
           },
           "steps": [
             {
@@ -2154,13 +2137,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "79°F",
           "match": {
-            "D4": "0x17"
+            "D2": "0x17"
           },
           "steps": [
             {
@@ -2175,13 +2157,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "80°F",
           "match": {
-            "D4": "0x18"
+            "D2": "0x18"
           },
           "steps": [
             {
@@ -2196,13 +2177,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "81°F",
           "match": {
-            "D4": "0x19"
+            "D2": "0x19"
           },
           "steps": [
             {
@@ -2217,13 +2197,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "82°F",
           "match": {
-            "D4": "0x1A"
+            "D2": "0x1A"
           },
           "steps": [
             {
@@ -2238,8 +2217,7 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         }
       ],
       "subcategory": "HVAC Controls",
@@ -2271,7 +2249,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x380",
         "action_can_id": "0x4A0",
         "state_byte": "D3",
@@ -2288,7 +2266,7 @@
         {
           "label": "62°F",
           "match": {
-            "D6": "0x06"
+            "D3": "0x06"
           },
           "steps": [
             {
@@ -2303,13 +2281,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "63°F",
           "match": {
-            "D6": "0x07"
+            "D3": "0x07"
           },
           "steps": [
             {
@@ -2324,13 +2301,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "64°F",
           "match": {
-            "D6": "0x08"
+            "D3": "0x08"
           },
           "steps": [
             {
@@ -2345,13 +2321,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "65°F",
           "match": {
-            "D6": "0x09"
+            "D3": "0x09"
           },
           "steps": [
             {
@@ -2366,13 +2341,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "66°F",
           "match": {
-            "D6": "0x0A"
+            "D3": "0x0A"
           },
           "steps": [
             {
@@ -2387,13 +2361,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "67°F",
           "match": {
-            "D6": "0x0B"
+            "D3": "0x0B"
           },
           "steps": [
             {
@@ -2408,13 +2381,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "68°F",
           "match": {
-            "D6": "0x0C"
+            "D3": "0x0C"
           },
           "steps": [
             {
@@ -2429,13 +2401,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "69°F",
           "match": {
-            "D6": "0x0D"
+            "D3": "0x0D"
           },
           "steps": [
             {
@@ -2450,13 +2421,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "70°F",
           "match": {
-            "D6": "0x0E"
+            "D3": "0x0E"
           },
           "steps": [
             {
@@ -2477,7 +2447,7 @@
         {
           "label": "71°F",
           "match": {
-            "D6": "0x0F"
+            "D3": "0x0F"
           },
           "steps": [
             {
@@ -2492,13 +2462,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "72°F",
           "match": {
-            "D6": "0x10"
+            "D3": "0x10"
           },
           "steps": [
             {
@@ -2513,13 +2482,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "73°F",
           "match": {
-            "D6": "0x11"
+            "D3": "0x11"
           },
           "steps": [
             {
@@ -2534,13 +2502,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "74°F",
           "match": {
-            "D6": "0x12"
+            "D3": "0x12"
           },
           "steps": [
             {
@@ -2555,13 +2522,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "75°F",
           "match": {
-            "D6": "0x13"
+            "D3": "0x13"
           },
           "steps": [
             {
@@ -2576,13 +2542,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "76°F",
           "match": {
-            "D6": "0x14"
+            "D3": "0x14"
           },
           "steps": [
             {
@@ -2597,13 +2562,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "77°F",
           "match": {
-            "D6": "0x15"
+            "D3": "0x15"
           },
           "steps": [
             {
@@ -2618,13 +2582,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "78°F",
           "match": {
-            "D6": "0x16"
+            "D3": "0x16"
           },
           "steps": [
             {
@@ -2639,13 +2602,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "79°F",
           "match": {
-            "D6": "0x17"
+            "D3": "0x17"
           },
           "steps": [
             {
@@ -2660,13 +2622,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "80°F",
           "match": {
-            "D6": "0x18"
+            "D3": "0x18"
           },
           "steps": [
             {
@@ -2681,13 +2642,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "81°F",
           "match": {
-            "D6": "0x19"
+            "D3": "0x19"
           },
           "steps": [
             {
@@ -2702,13 +2662,12 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         },
         {
           "label": "82°F",
           "match": {
-            "D6": "0x1A"
+            "D3": "0x1A"
           },
           "steps": [
             {
@@ -2723,8 +2682,7 @@
               },
               "repeat": 3
             }
-          ],
-          "default": false
+          ]
         }
       ],
       "subcategory": "HVAC Controls",
@@ -3059,7 +3017,7 @@
       ],
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x411",
         "action_can_id": "0x4A2"
       },
@@ -3502,7 +3460,7 @@
         "all_egmp"
       ],
       "category": "Cockpit & Controls",
-      "subcategory": "Seats & Comfort",
+      "subcategory": "Seat Comfort",
       "roles": [
         "action"
       ],
@@ -3631,13 +3589,14 @@
             }
           ]
         }
-      ]
+      ],
+      "action_can_id": "0x4A2"
     },
     {
       "id": "hazard_lights",
       "ha_metadata": {
         "name": "Hazard Warning Lights",
-        "domain": "binary_sensor",
+        "domain": "switch",
         "icon": "mdi:car-light-dimmed"
       },
       "tags": [
@@ -3646,12 +3605,16 @@
       "category": "Cockpit & Controls",
       "network": {
         "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x413"
+        "type": "can_rx_tx",
+        "state_can_id": "0x413",
+        "action_can_id": "0x587",
+        "delay_ms": 20
       },
       "roles": [
         "trigger",
-        "condition"
+        "condition",
+        "state",
+        "action"
       ],
       "options": [
         {
@@ -3660,7 +3623,22 @@
             "D4": "0x04"
           },
           "mask": "0x04",
-          "default": true
+          "default": true,
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x01",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
         },
         {
           "label": "Flash Pulse (Lamps Lit)",
@@ -3681,7 +3659,22 @@
           "match": {
             "D4": "0x00"
           },
-          "mask": "0x04"
+          "mask": "0x04",
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0x00",
+                "D4": "0x00",
+                "D5": "0x00",
+                "D6": "0x00",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            }
+          ]
         }
       ],
       "contributor": {
@@ -3690,7 +3683,8 @@
         "notes": "Decoded from 0x413: D4=0x04 Hazard engaged, D2=0x50 lamps illuminated"
       },
       "subcategory": "Lighting",
-      "state_can_id": "0x413"
+      "state_can_id": "0x413",
+      "action_can_id": "0x587"
     },
     {
       "id": "turn_signal_left",
@@ -3982,7 +3976,7 @@
       ],
       "network": {
         "bus": 0,
-        "type": "can_tx",
+        "type": "can_rx_tx",
         "state_can_id": "0x496",
         "action_can_id": "0x4A2",
         "delay_ms": 20
@@ -3990,7 +3984,6 @@
       "tags": [
         "all_egmp"
       ],
-      "popup_message": "",
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
@@ -4171,7 +4164,7 @@
       ],
       "network": {
         "bus": 0,
-        "type": "can_tx",
+        "type": "can_rx_tx",
         "state_can_id": "0x49C",
         "action_can_id": "0x4A2",
         "delay_ms": 20
@@ -4179,7 +4172,6 @@
       "tags": [
         "all_egmp"
       ],
-      "popup_message": "",
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
@@ -4360,7 +4352,7 @@
       ],
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x438",
         "action_can_id": "0x4A2",
         "delay_ms": 20
@@ -4459,7 +4451,7 @@
       ],
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x453",
         "action_can_id": "0x4A2",
         "delay_ms": 20
@@ -5070,7 +5062,7 @@
       ],
       "network": {
         "bus": 0,
-        "type": "can_tx",
+        "type": "can_rx_tx",
         "state_can_id": "0x1F9",
         "action_can_id": "0x4C5",
         "delay_ms": 20
@@ -5240,7 +5232,7 @@
       ],
       "network": {
         "bus": 0,
-        "type": "can_tx",
+        "type": "can_rx_tx",
         "state_can_id": "0x1F9",
         "action_can_id": "0x4C5",
         "delay_ms": 20
@@ -6003,7 +5995,7 @@
         "type": "can_rx",
         "state_can_id": "0x45",
         "state_byte": "D6",
-        "mask": "0x70"
+        "state_mask": "0x70"
       },
       "options": [
         {
@@ -6119,7 +6111,7 @@
           "label": "Freezing (<= 0°C / 32°F)",
           "evaluate": {
             "byte": "D4",
-            "operator": "less_equal",
+            "operator": "<=",
             "value": "0x28"
           },
           "default": true
@@ -6128,7 +6120,7 @@
           "label": "Cold (< 15°C / 59°F)",
           "evaluate": {
             "byte": "D4",
-            "operator": "less_than",
+            "operator": "<",
             "value": "0x37"
           }
         },
@@ -6136,7 +6128,7 @@
           "label": "Warm (> 25°C / 77°F)",
           "evaluate": {
             "byte": "D4",
-            "operator": "greater_than",
+            "operator": ">",
             "value": "0x41"
           }
         }
@@ -6234,7 +6226,7 @@
           "label": "Safe for Preconditioning (SOC >= 20%)",
           "evaluate": {
             "byte": "D8",
-            "operator": "greater_equal",
+            "operator": ">=",
             "value": "0x28"
           },
           "default": true
@@ -6243,7 +6235,7 @@
           "label": "High Battery (SOC >= 50%)",
           "evaluate": {
             "byte": "D8",
-            "operator": "greater_equal",
+            "operator": ">=",
             "value": "0x64"
           }
         },
@@ -6251,7 +6243,7 @@
           "label": "Low Battery (SOC < 20%)",
           "evaluate": {
             "byte": "D8",
-            "operator": "less_than",
+            "operator": "<",
             "value": "0x28"
           }
         }
@@ -6345,7 +6337,7 @@
           "label": "Vehicle In Motion (> 0 kph)",
           "evaluate": {
             "byte": "D1",
-            "operator": "greater_than",
+            "operator": ">",
             "value": "0x00"
           }
         },
@@ -6353,7 +6345,7 @@
           "label": "City Speed (> 40 kph / ~25 mph)",
           "evaluate": {
             "byte": "D1",
-            "operator": "greater_than",
+            "operator": ">",
             "value": "0x28"
           }
         },
@@ -6361,7 +6353,7 @@
           "label": "Highway Speed (> 100 kph / ~62 mph)",
           "evaluate": {
             "byte": "D1",
-            "operator": "greater_than",
+            "operator": ">",
             "value": "0x64"
           }
         }
@@ -6406,7 +6398,7 @@
           "label": "Odometer Telemetry Active",
           "evaluate": {
             "byte": "D2",
-            "operator": "greater_than",
+            "operator": ">",
             "value": "0x00"
           },
           "default": true
@@ -6503,11 +6495,11 @@
         "type": "can_rx",
         "state_can_id": "0x31B",
         "state_byte": "D4",
-        "mask": "0x0F",
         "min": 0,
         "max": 8,
         "step": 1,
-        "unit": ""
+        "unit": "",
+        "state_mask": "0x0F"
       },
       "notes": "Decoded from E-GMP CLIMATE_STATUS frame 795 (0x31B) Start Bit 24, Length 4 (bits 24-27 = low nibble of Byte D4, mask 0x0F). Values: 0: Off, 2-9: Speeds 1 to 8. Raw values are non-contiguous (0=Off, 2-9=Speed 1-8); all steps are listed explicitly.",
       "contributor": {
@@ -7213,7 +7205,7 @@
           "mask": "0x0F"
         }
       ],
-      "subcategory": "Battery Preconditioning",
+      "subcategory": "Preconditioning",
       "state_can_id": "0x4ED"
     },
     {
@@ -7238,7 +7230,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x39B",
         "action_can_id": "0x39B"
       },
@@ -7265,7 +7257,7 @@
           }
         }
       ],
-      "subcategory": "Remote Climate Controls",
+      "subcategory": "Remote Climate",
       "action_can_id": "0x39B",
       "state_can_id": "0x39B"
     },
@@ -7304,7 +7296,7 @@
           "label": "Under 30 Minutes",
           "evaluate": {
             "byte": "D2",
-            "operator": "less_equal",
+            "operator": "<=",
             "value": "0x1E"
           }
         },
@@ -7312,7 +7304,7 @@
           "label": "Under 1 Hour",
           "evaluate": {
             "byte": "D2",
-            "operator": "less_equal",
+            "operator": "<=",
             "value": "0x3C"
           }
         },
@@ -7320,7 +7312,7 @@
           "label": "Over 2 Hours",
           "evaluate": {
             "byte": "D2",
-            "operator": "greater_than",
+            "operator": ">",
             "value": "0x78"
           }
         },
@@ -7370,7 +7362,7 @@
           "label": "Under 10 Minutes (Near 80%)",
           "evaluate": {
             "byte": "D4",
-            "operator": "less_equal",
+            "operator": "<=",
             "value": "0x0A"
           }
         },
@@ -7378,7 +7370,7 @@
           "label": "Under 20 Minutes",
           "evaluate": {
             "byte": "D4",
-            "operator": "less_equal",
+            "operator": "<=",
             "value": "0x14"
           }
         },
@@ -7386,7 +7378,7 @@
           "label": "Over 20 Minutes",
           "evaluate": {
             "byte": "D4",
-            "operator": "greater_than",
+            "operator": ">",
             "value": "0x14"
           }
         },
@@ -7435,7 +7427,7 @@
           "label": "Over 12 Hours",
           "evaluate": {
             "byte": "D4",
-            "operator": "greater_than",
+            "operator": ">",
             "value": "0x02"
           }
         },
@@ -7534,7 +7526,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x30C",
         "action_can_id": "0x30C"
       },
@@ -7625,7 +7617,7 @@
           "label": "Over 5 Hours Remaining",
           "evaluate": {
             "byte": "D5",
-            "operator": "greater_than",
+            "operator": ">",
             "value": "0x01"
           },
           "default": true
@@ -7634,7 +7626,7 @@
           "label": "Low V2L Runtime (< 1 Hour)",
           "evaluate": {
             "byte": "D4",
-            "operator": "less_equal",
+            "operator": "<=",
             "value": "0x3C"
           }
         }
@@ -7674,7 +7666,7 @@
           "label": "Cell Voltage Nominal (> 3.7V)",
           "evaluate": {
             "byte": "D1",
-            "operator": "greater_than",
+            "operator": ">",
             "value": "0xB9"
           },
           "default": true
@@ -7683,7 +7675,7 @@
           "label": "Cell Voltage High (> 4.15V)",
           "evaluate": {
             "byte": "D1",
-            "operator": "greater_than",
+            "operator": ">",
             "value": "0xCF"
           }
         },
@@ -7691,7 +7683,7 @@
           "label": "Cell Voltage Low (< 3.2V)",
           "evaluate": {
             "byte": "D3",
-            "operator": "less_than",
+            "operator": "<",
             "value": "0xA0"
           }
         }
@@ -7731,7 +7723,7 @@
           "label": "Battery Optimal Warm (20°C - 35°C)",
           "evaluate": {
             "byte": "D1",
-            "operator": "greater_equal",
+            "operator": ">=",
             "value": "0x3C"
           },
           "default": true
@@ -7740,7 +7732,7 @@
           "label": "Battery High Temp (> 45°C / 113°F)",
           "evaluate": {
             "byte": "D1",
-            "operator": "greater_than",
+            "operator": ">",
             "value": "0x55"
           }
         },
@@ -7748,7 +7740,7 @@
           "label": "Battery Cold (< 10°C / 50°F)",
           "evaluate": {
             "byte": "D2",
-            "operator": "less_than",
+            "operator": "<",
             "value": "0x32"
           }
         },
@@ -7756,7 +7748,7 @@
           "label": "Battery Freezing (< 0°C / 32°F)",
           "evaluate": {
             "byte": "D2",
-            "operator": "less_than",
+            "operator": "<",
             "value": "0x28"
           }
         }
@@ -7798,7 +7790,7 @@
           "label": "Range Plentiful (> 200 km / 125 mi)",
           "evaluate": {
             "byte": "D5",
-            "operator": "greater_than",
+            "operator": ">",
             "value": "0xC8"
           },
           "default": true
@@ -7807,7 +7799,7 @@
           "label": "Range Medium (> 100 km / 62 mi)",
           "evaluate": {
             "byte": "D5",
-            "operator": "greater_than",
+            "operator": ">",
             "value": "0x64"
           }
         },
@@ -7815,7 +7807,7 @@
           "label": "Low Range Warning (< 50 km / 31 mi)",
           "evaluate": {
             "byte": "D5",
-            "operator": "less_than",
+            "operator": "<",
             "value": "0x32"
           }
         },
@@ -7823,7 +7815,7 @@
           "label": "Critical Range (< 20 km / 12 mi)",
           "evaluate": {
             "byte": "D5",
-            "operator": "less_than",
+            "operator": "<",
             "value": "0x14"
           }
         }
@@ -7841,7 +7833,7 @@
         "all_egmp"
       ],
       "category": "Vehicle State & Telematics",
-      "subcategory": "Powertrain & Motor",
+      "subcategory": "Powertrain State",
       "roles": [
         "sensor",
         "condition",
@@ -7899,7 +7891,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x321",
         "action_can_id": "0x321"
       },
@@ -7951,7 +7943,7 @@
         "all_egmp"
       ],
       "category": "Climate & Comfort",
-      "subcategory": "Remote Climate Controls",
+      "subcategory": "Remote Climate",
       "roles": [
         "sensor",
         "action"
@@ -7963,7 +7955,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x450",
         "action_can_id": "0x450"
       },
@@ -8385,7 +8377,7 @@
         "all_egmp"
       ],
       "category": "Doors, Access & Security",
-      "subcategory": "Central Locking",
+      "subcategory": "Locks & Security",
       "roles": [
         "action",
         "sensor"
@@ -8397,7 +8389,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x587",
         "action_can_id": "0x587"
       },
@@ -8459,7 +8451,7 @@
         "all_egmp"
       ],
       "category": "Doors, Access & Security",
-      "subcategory": "Trunk & Frunk",
+      "subcategory": "Doors & Latches",
       "roles": [
         "action",
         "sensor"
@@ -8471,7 +8463,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x3A6",
         "action_can_id": "0x588"
       },
@@ -8543,7 +8535,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x542",
         "action_can_id": "0x542"
       },
@@ -8716,7 +8708,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x38C",
         "action_can_id": "0x38C"
       },
@@ -8778,7 +8770,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x60C",
         "action_can_id": "0x60C",
         "base_payload": [
@@ -8884,7 +8876,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x60C",
         "action_can_id": "0x60C",
         "base_payload": [
@@ -8992,7 +8984,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x60C",
         "action_can_id": "0x60C",
         "base_payload": [
@@ -9084,10 +9076,9 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x60C",
         "action_can_id": "0x60C",
-        "byte": "D1",
         "offset": 0,
         "min": 0,
         "max": 75,
@@ -9101,7 +9092,9 @@
           "0x0A",
           "0x0A",
           "0x00"
-        ]
+        ],
+        "state_byte": "D1",
+        "action_byte": "D1"
       },
       "variants": [
         {
@@ -9163,10 +9156,9 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x60C",
         "action_can_id": "0x60C",
-        "byte": "D3",
         "offset": 10,
         "min": -10,
         "max": 10,
@@ -9180,7 +9172,9 @@
           "0x0A",
           "0x0A",
           "0x00"
-        ]
+        ],
+        "state_byte": "D3",
+        "action_byte": "D3"
       },
       "variants": [
         {
@@ -9242,10 +9236,9 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x60C",
         "action_can_id": "0x60C",
-        "byte": "D4",
         "offset": 10,
         "min": -10,
         "max": 10,
@@ -9259,7 +9252,9 @@
           "0x0A",
           "0x0A",
           "0x00"
-        ]
+        ],
+        "state_byte": "D4",
+        "action_byte": "D4"
       },
       "variants": [
         {
@@ -9321,10 +9316,9 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x60C",
         "action_can_id": "0x60C",
-        "byte": "D5",
         "offset": 10,
         "min": -10,
         "max": 10,
@@ -9338,7 +9332,9 @@
           "0x0A",
           "0x0A",
           "0x00"
-        ]
+        ],
+        "state_byte": "D5",
+        "action_byte": "D5"
       },
       "variants": [
         {
@@ -9400,10 +9396,9 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x60C",
         "action_can_id": "0x60C",
-        "byte": "D6",
         "offset": 10,
         "min": -10,
         "max": 10,
@@ -9417,7 +9412,9 @@
           "0x0A",
           "0x0A",
           "0x00"
-        ]
+        ],
+        "state_byte": "D6",
+        "action_byte": "D6"
       },
       "variants": [
         {
@@ -9479,10 +9476,9 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x60C",
         "action_can_id": "0x60C",
-        "byte": "D7",
         "offset": 10,
         "min": -10,
         "max": 10,
@@ -9496,7 +9492,9 @@
           "0x0A",
           "0x0A",
           "0x00"
-        ]
+        ],
+        "state_byte": "D7",
+        "action_byte": "D7"
       },
       "variants": [
         {
@@ -9558,7 +9556,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x60C",
         "action_can_id": "0x60C",
         "base_payload": [
@@ -9650,7 +9648,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x60C",
         "action_can_id": "0x60C",
         "base_payload": [
@@ -9891,7 +9889,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x450",
         "action_can_id": "0x450"
       },
@@ -9965,7 +9963,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x502",
         "action_can_id": "0x502"
       },
@@ -10034,10 +10032,9 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x60D",
         "action_can_id": "0x60D",
-        "byte": "D1",
         "offset": 0,
         "min": 0,
         "max": 15,
@@ -10051,7 +10048,9 @@
           "0x00",
           "0x00",
           "0x00"
-        ]
+        ],
+        "state_byte": "D1",
+        "action_byte": "D1"
       },
       "action_can_id": "0x60D",
       "state_can_id": "0x60D"
@@ -10131,7 +10130,7 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x60E",
         "action_can_id": "0x60E"
       },
@@ -10382,7 +10381,7 @@
       ],
       "network": {
         "bus": 0,
-        "type": "can_tx",
+        "type": "can_rx_tx",
         "state_can_id": "0x465",
         "action_can_id": "0x465",
         "delay_ms": 20
@@ -10636,7 +10635,7 @@
         "all_egmp"
       ],
       "category": "Doors, Access & Security",
-      "subcategory": "Trunk & Frunk",
+      "subcategory": "Doors & Latches",
       "roles": [
         "sensor",
         "state"
@@ -10771,7 +10770,7 @@
         "all_egmp"
       ],
       "category": "Vehicle State & Telematics",
-      "subcategory": "Drive Mode & Performance",
+      "subcategory": "Driving Dynamics",
       "roles": [
         "sensor",
         "state",
@@ -10779,7 +10778,7 @@
       ],
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x410",
         "action_can_id": "0x410"
       },
@@ -10919,277 +10918,6 @@
       "state_can_id": "0x410"
     },
     {
-      "id": "ambient_mood_lamp_color",
-      "ha_metadata": {
-        "name": "Ambient Mood Lamp RGB Color",
-        "domain": "select",
-        "icon": "mdi:palette"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Cockpit & Controls",
-      "subcategory": "Ambient Lighting",
-      "roles": [
-        "action"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_tx",
-        "action_can_id": "0x4AD",
-        "delay_ms": 25
-      },
-      "contributor": {
-        "name": "SuaveEV & L1Z3",
-        "github": "supersuave",
-        "notes": "Native M-CAN 2-stage transmission on 0x4AD. Stage 1 transmits the 4-byte active color code (3 repeats @ 25ms), and Stage 2 transmits the commit latch frame (00 02 08 20 00 00 00 00, 3 repeats @ 25ms) which latches the color in the vehicle lighting controller."
-      },
-      "options": [
-        {
-          "label": "Golden Insight / Orange Delight",
-          "steps": [
-            {
-              "payload": "D0C1751500000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Golden Insight"
-        },
-        {
-          "label": "Blue Flight",
-          "steps": [
-            {
-              "payload": "4F29361C00000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Blue Flight"
-        },
-        {
-          "label": "Peaceful Forest",
-          "steps": [
-            {
-              "payload": "7F69A61700000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Peaceful Forest"
-        },
-        {
-          "label": "Dreamy Purple",
-          "steps": [
-            {
-              "payload": "6B69551900000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Dreamy Purple"
-        },
-        {
-          "label": "Violet Cloud",
-          "steps": [
-            {
-              "payload": "A789F51700000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Violet Cloud"
-        },
-        {
-          "label": "Refreshing Sea",
-          "steps": [
-            {
-              "payload": "3269E61900000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Refreshing Sea"
-        },
-        {
-          "label": "Pure Cyan / Aqua Wave",
-          "steps": [
-            {
-              "payload": "0064530F00000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Cyan / Aqua"
-        },
-        {
-          "label": "Electric Blue",
-          "steps": [
-            {
-              "payload": "0054F10F00000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Electric Blue"
-        },
-        {
-          "label": "Deep Purple / Violet",
-          "steps": [
-            {
-              "payload": "8000F00F00000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Violet",
-          "default": true
-        },
-        {
-          "label": "Magenta / Neon Pink",
-          "steps": [
-            {
-              "payload": "FF00100F00000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Magenta"
-        },
-        {
-          "label": "Crimson Red",
-          "steps": [
-            {
-              "payload": "FE88000000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Crimson Red"
-        },
-        {
-          "label": "Warm Sunset / Amber",
-          "steps": [
-            {
-              "payload": "FF50720700000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Sunset Orange"
-        },
-        {
-          "label": "Lime / Mint Glow",
-          "steps": [
-            {
-              "payload": "F7FC630B00000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Mint / Lime"
-        },
-        {
-          "label": "Warm White / Champagne",
-          "steps": [
-            {
-              "payload": "FEB4530A00000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Champagne"
-        },
-        {
-          "label": "Mood Light Off",
-          "steps": [
-            {
-              "payload": "0000000000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Off"
-        }
-      ],
-      "action_can_id": "0x4AD"
-    },
-    {
       "id": "smart_key_fob_detected",
       "ha_metadata": {
         "name": "Active Smart Key Fob / Driver ID",
@@ -11258,8 +10986,8 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Powertrain & Battery",
-      "subcategory": "Drive Modes & Performance",
+      "category": "Powertrain & Performance",
+      "subcategory": "Driving Dynamics",
       "roles": [
         "action"
       ],
@@ -11344,8 +11072,8 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Powertrain & Battery",
-      "subcategory": "Drive Modes & Performance",
+      "category": "Powertrain & Performance",
+      "subcategory": "Driving Dynamics",
       "roles": [
         "action"
       ],
@@ -11519,7 +11247,7 @@
         "all_egmp"
       ],
       "category": "Vehicle State & Telematics",
-      "subcategory": "Tire Pressure & Wheels",
+      "subcategory": "Tire Pressure (TPMS)",
       "roles": [
         "sensor",
         "state"
@@ -11569,7 +11297,7 @@
         "all_egmp"
       ],
       "category": "Vehicle State & Telematics",
-      "subcategory": "Tire Pressure & Wheels",
+      "subcategory": "Tire Pressure (TPMS)",
       "roles": [
         "sensor",
         "state"
@@ -11613,7 +11341,7 @@
         "all_egmp"
       ],
       "category": "Vehicle State & Telematics",
-      "subcategory": "Tire Pressure & Wheels",
+      "subcategory": "Tire Pressure (TPMS)",
       "roles": [
         "sensor",
         "state"
@@ -11657,7 +11385,7 @@
         "all_egmp"
       ],
       "category": "Vehicle State & Telematics",
-      "subcategory": "Tire Pressure & Wheels",
+      "subcategory": "Tire Pressure (TPMS)",
       "roles": [
         "sensor",
         "state"
@@ -11701,7 +11429,7 @@
         "all_egmp"
       ],
       "category": "Vehicle State & Telematics",
-      "subcategory": "Tire Pressure & Wheels",
+      "subcategory": "Tire Pressure (TPMS)",
       "roles": [
         "sensor",
         "state"
@@ -11774,7 +11502,7 @@
         "all_egmp"
       ],
       "category": "Doors, Access & Security",
-      "subcategory": "Trunk & Frunk",
+      "subcategory": "Doors & Latches",
       "roles": [
         "sensor",
         "state"
@@ -12290,7 +12018,7 @@
       "tags": [
         "all_egmp"
       ],
-      "category": "Charging & Battery",
+      "category": "High Voltage & Charging",
       "subcategory": "AC Charging",
       "roles": [
         "select",
@@ -12329,6 +12057,114 @@
         "notes": "EV_CP5 (0x578) Byte 2 (D3 bits 1:0) setting maximum continuous current draw during Level 2 AC charging."
       },
       "state_can_id": "0x578"
+    },
+    {
+      "id": "power_mirrors",
+      "ha_metadata": {
+        "name": "Exterior Power Mirrors",
+        "domain": "cover",
+        "icon": "mdi:car-side"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "subcategory": "Doors & Latches",
+      "roles": [
+        "trigger",
+        "condition",
+        "state",
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx_tx",
+        "state_can_id": "0x410",
+        "action_can_id": "0x4A2",
+        "delay_ms": 20
+      },
+      "state_can_id": "0x410",
+      "action_can_id": "0x4A2",
+      "contributors": [
+        {
+          "name": "SuaveEV",
+          "github": "supersuave",
+          "notes": "Commands exterior power mirror fold/unfold via BCM frame 0x4A2 Byte D7 and monitors state via CGW_USM1 (0x410) Byte D3."
+        }
+      ],
+      "options": [
+        {
+          "label": "Fold",
+          "match": {
+            "D3": "0x00"
+          },
+          "mask": "0x03",
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x10",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 2
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "Unfold",
+          "match": {
+            "D3": "0x02"
+          },
+          "mask": "0x03",
+          "steps": [
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x20",
+                "D8": "0x00"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
+              },
+              "repeat": 2
+            }
+          ]
+        }
+      ]
     }
   ],
   "automations": [
@@ -12339,9 +12175,9 @@
       "category": "Comfort & Climate",
       "tags": [
         "all_egmp",
-        "ioniq5",
-        "ev6",
-        "gv60"
+        "hyundai_ioniq5",
+        "kia_ev6",
+        "genesis_gv60"
       ],
       "enabled": true,
       "ha_expose": true,
@@ -12389,9 +12225,9 @@
       "category": "Battery & Preconditioning",
       "tags": [
         "all_egmp",
-        "ioniq5",
-        "ev6",
-        "gv60"
+        "hyundai_ioniq5",
+        "kia_ev6",
+        "genesis_gv60"
       ],
       "enabled": true,
       "ha_expose": true,
@@ -12449,9 +12285,9 @@
       "category": "Closures & Security",
       "tags": [
         "all_egmp",
-        "ioniq5",
-        "ev6",
-        "gv60"
+        "hyundai_ioniq5",
+        "kia_ev6",
+        "genesis_gv60"
       ],
       "enabled": true,
       "ha_expose": true,
@@ -12469,10 +12305,10 @@
           "type": "byte_transition",
           "can_id": "0x411",
           "bus": 0,
-          "byte": "D1",
-          "mask": "0x01",
-          "from": "0x00",
-          "to": "0x01"
+          "byte": "D3",
+          "mask": "0x40",
+          "from": "0x40",
+          "to": "0x00"
         }
       ],
       "conditions": [
@@ -12493,7 +12329,7 @@
             "D7": "0x10",
             "D8": "0x01"
           },
-          "operator": "equal",
+          "operator": "==",
           "source_command_id": "doors_status",
           "option_label": "All Doors Closed"
         }
@@ -12514,9 +12350,9 @@
       "category": "Convenience & Driving",
       "tags": [
         "all_egmp",
-        "ioniq5",
-        "ev6",
-        "gv60"
+        "hyundai_ioniq5",
+        "kia_ev6",
+        "genesis_gv60"
       ],
       "enabled": true,
       "ha_expose": true,
@@ -12532,11 +12368,11 @@
           "id": "trig_gear_park",
           "source": "can",
           "type": "byte_transition",
-          "can_id": "0x2C0",
+          "can_id": "0x45",
           "bus": 0,
-          "byte": "D3",
-          "mask": "0x0F",
-          "from": "0x05",
+          "byte": "D6",
+          "mask": "0x70",
+          "from": "0x50",
           "to": "0x00"
         }
       ],
@@ -12546,7 +12382,7 @@
           "id": "act_unlock_doors",
           "type": "entity_command",
           "entity_id": "door_locks",
-          "command": "Unlock"
+          "command": "Unlocked / Unlock"
         }
       ]
     },
@@ -12557,9 +12393,9 @@
       "category": "Safety & Alerts",
       "tags": [
         "all_egmp",
-        "ioniq5",
-        "ev6",
-        "gv60"
+        "hyundai_ioniq5",
+        "kia_ev6",
+        "genesis_gv60"
       ],
       "enabled": false,
       "ha_expose": true,
@@ -12577,7 +12413,7 @@
           "type": "byte_transition",
           "can_id": "0x411",
           "bus": 0,
-          "byte": "D2",
+          "byte": "D4",
           "mask": "0x01",
           "from": "0x00",
           "to": "0x01"
@@ -12587,9 +12423,9 @@
         {
           "id": "cond_in_park",
           "type": "can_state",
-          "can_id": "0x2C0",
+          "can_id": "0x45",
           "bus": 0,
-          "byte": "D3",
+          "byte": "D6",
           "operator": "==",
           "value": "0x00"
         }
@@ -12599,7 +12435,7 @@
           "id": "act_flash_hazards",
           "type": "entity_command",
           "entity_id": "hazard_lights",
-          "command": "On"
+          "command": "Turned ON / Active"
         },
         {
           "id": "act_hazard_delay",
@@ -12610,7 +12446,7 @@
           "id": "act_hazards_off",
           "type": "entity_command",
           "entity_id": "hazard_lights",
-          "command": "Off"
+          "command": "Turned OFF / Inactive"
         }
       ]
     }
