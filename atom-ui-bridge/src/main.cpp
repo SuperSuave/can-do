@@ -45,7 +45,7 @@ unsigned long g_last_wican_rx_ms = 0;
 bool g_wican_online = false;
 
 #ifndef CAN_DO_VERSION
-#define CAN_DO_VERSION "2026.10.6-b012"
+#define CAN_DO_VERSION "2026.10.6-b013"
 #endif
 
 String g_can_do_version = CAN_DO_VERSION;
