@@ -760,6 +760,13 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
     xhr.onload = () => {
       if (xhr.status === 200) {
+        const respText = (xhr.responseText || '').trim();
+        if (respText.startsWith('<') || respText.toLowerCase().includes('<!doctype') || respText.toLowerCase().includes('<html')) {
+          setOtaStatus('Update failed: Device served web page instead of OTA handler. Flash firmware via USB to enable OTA.');
+          showNotice('OTA upload failed: Device returned web page', 'error');
+          setOtaUploading(false);
+          return;
+        }
         setOtaProgress(100);
         setOtaStatus('Firmware flashed successfully! Device is rebooting into the new image...');
         showNotice('Firmware flashed! Device rebooting in 5 seconds.', 'success');

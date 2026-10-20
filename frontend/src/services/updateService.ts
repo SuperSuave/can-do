@@ -326,6 +326,11 @@ export function uploadFirmwareOta(
 
     xhr.onload = () => {
       if (xhr.status === 200) {
+        const respText = (xhr.responseText || '').trim();
+        if (respText.startsWith('<') || respText.toLowerCase().includes('<!doctype') || respText.toLowerCase().includes('<html')) {
+          reject(new Error('OTA failed: Device served web page instead of OTA endpoint. Flash firmware via USB.'));
+          return;
+        }
         resolve(true);
       } else {
         reject(new Error(`OTA Flash failed: HTTP ${xhr.status} ${xhr.responseText}`));
@@ -641,6 +646,7 @@ export async function executeUpdateSequence(
         ? [
             selectedFwUrl,
             `https://${pagesHost}/can-do-atom-bridge.bin`,
+            `https://raw.githubusercontent.com/${GITHUB_REPO}/main/atom-ui-bridge/can-do-atom-bridge.bin`,
             `https://raw.githubusercontent.com/${GITHUB_REPO}/main/atom-ui-bridge/.pio/build/m5stack-atom/firmware.bin`,
           ].filter(Boolean) as string[]
         : [

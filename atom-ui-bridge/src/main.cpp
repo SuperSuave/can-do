@@ -14,6 +14,8 @@
 #include <vector>
 #include <mutex>
 #include <Update.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 
 // ============================================================================
 // Hardware Pin Definitions (M5Stack Atom Lite connected to WiCAN)
@@ -43,7 +45,7 @@ unsigned long g_last_wican_rx_ms = 0;
 bool g_wican_online = false;
 
 #ifndef CAN_DO_VERSION
-#define CAN_DO_VERSION "2026.10.6-b011"
+#define CAN_DO_VERSION "2026.10.6-b012"
 #endif
 
 String g_can_do_version = CAN_DO_VERSION;
@@ -261,6 +263,7 @@ struct SavedWifiNetwork {
 };
 
 std::vector<SavedWifiNetwork> g_saved_wifi;
+void persist_saved_wifi();
 
 void load_saved_wifi() {
     g_saved_wifi.clear();
@@ -285,6 +288,10 @@ void load_saved_wifi() {
                 g_saved_wifi.push_back(net);
             }
         }
+    }
+    if (g_saved_wifi.empty()) {
+        g_saved_wifi.push_back({"THE Internet of Things", "kinetic@doorbell@residence", 100});
+        persist_saved_wifi();
     }
     Serial.printf("[WIFI] Loaded %u saved roaming networks from NVS:\n", g_saved_wifi.size());
     for (size_t i = 0; i < g_saved_wifi.size(); i++) {
@@ -360,9 +367,13 @@ void connect_to_best_wifi() {
         WiFi.scanDelete();
     }
 
+    if (best_saved_idx < 0 && !g_saved_wifi.empty()) {
+        best_saved_idx = 0;
+    }
+
     if (best_saved_idx >= 0) {
-        Serial.printf("[WIFI] Found known network '%s' (RSSI: %d dBm, Prio: %d). Connecting as '%s'...\n",
-                      g_saved_wifi[best_saved_idx].ssid.c_str(), best_rssi, best_prio, g_device_id.c_str());
+        Serial.printf("[WIFI] Connecting to '%s' as '%s'...\n",
+                      g_saved_wifi[best_saved_idx].ssid.c_str(), g_device_id.c_str());
         WiFi.setHostname(g_device_id.c_str());
         esp_netif_t* netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
         if (netif) {
@@ -1376,6 +1387,14 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
 // ============================================================================
 // Setup
 // ============================================================================
+struct AtomOtaState {
+    bool in_progress = false;
+    int progress_pct = 0;
+    bool success = false;
+    String error_msg = "";
+};
+static AtomOtaState g_atom_ota_state;
+
 void setup() {
     Serial.begin(115200);
     delay(200);
@@ -1601,10 +1620,10 @@ void setup() {
         }
     );
 
-    // REST: POST /api/ota (Firmware OTA flash from Web UI)
+    // REST: POST /api/ota (Firmware OTA flash from Web UI - supports raw binary or multipart)
     server.on("/api/ota", HTTP_POST,
         [](AsyncWebServerRequest *request) {
-            bool success = !Update.hasError();
+            bool success = !Update.hasError() && Update.isFinished();
             AsyncWebServerResponse *response = request->beginResponse(
                 success ? 200 : 500,
                 "application/json",
@@ -1612,6 +1631,7 @@ void setup() {
                         : "{\"status\":\"error\",\"message\":\"OTA flash failed\"}"
             );
             response->addHeader("Connection", "close");
+            response->addHeader("Access-Control-Allow-Origin", "*");
             request->send(response);
             if (success) {
                 Serial.println("[OTA] Firmware write complete. Restarting ESP32 in 1s...");
@@ -1620,8 +1640,9 @@ void setup() {
             }
         },
         [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+            // Multipart upload handler
             if (!index) {
-                Serial.printf("[OTA] Firmware update started (file: %s)\n", filename.c_str());
+                Serial.printf("[OTA] Multipart firmware update started (file: %s)\n", filename.c_str());
                 if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
                     Update.printError(Serial);
                 }
@@ -1638,15 +1659,137 @@ void setup() {
                     Update.printError(Serial);
                 }
             }
+        },
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+            // Raw binary stream handler (used by XMLHttpRequest.send(blob) & fetch)
+            if (!index) {
+                Serial.printf("[OTA] Raw binary firmware update started: %u bytes\n", total);
+                if (!Update.begin(total > 0 ? total : UPDATE_SIZE_UNKNOWN, U_FLASH)) {
+                    Update.printError(Serial);
+                }
+            }
+            if (!Update.hasError()) {
+                if (Update.write(data, len) != len) {
+                    Update.printError(Serial);
+                }
+            }
+            if (index + len >= total) {
+                if (Update.end(true)) {
+                    Serial.printf("[OTA] Raw firmware flash completed: %u bytes written\n", total);
+                } else {
+                    Update.printError(Serial);
+                }
+            }
         }
     );
 
-    // REST: POST /api/upload (LittleFS file staging from Web UI)
+    // REST: GET /api/ota/status
+    server.on("/api/ota/status", HTTP_GET, [](AsyncWebServerRequest *request) {
+        JsonDocument doc;
+        doc["in_progress"] = g_atom_ota_state.in_progress;
+        doc["progress"] = g_atom_ota_state.progress_pct;
+        doc["success"] = g_atom_ota_state.success;
+        doc["error"] = g_atom_ota_state.error_msg;
+        String out;
+        serializeJson(doc, out);
+        AsyncWebServerResponse *resp = request->beginResponse(200, "application/json", out);
+        resp->addHeader("Access-Control-Allow-Origin", "*");
+        request->send(resp);
+    });
+
+    // REST: POST /api/ota/cloud_pull
+    server.on("/api/ota/cloud_pull", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+            String body = "";
+            for (size_t i = 0; i < len; i++) body += (char)data[i];
+            JsonDocument doc;
+            String download_url = "";
+            if (deserializeJson(doc, body) == DeserializationError::Ok) {
+                download_url = doc["url"] | "";
+            }
+            if (download_url.isEmpty()) {
+                request->send(400, "application/json", "{\"error\":\"Missing url\"}");
+                return;
+            }
+            if (g_atom_ota_state.in_progress) {
+                request->send(409, "application/json", "{\"error\":\"OTA already in progress\"}");
+                return;
+            }
+
+            g_atom_ota_state.in_progress = true;
+            g_atom_ota_state.progress_pct = 0;
+            g_atom_ota_state.success = false;
+            g_atom_ota_state.error_msg = "";
+
+            AsyncWebServerResponse *resp = request->beginResponse(200, "application/json", "{\"status\":\"started\"}");
+            resp->addHeader("Access-Control-Allow-Origin", "*");
+            request->send(resp);
+
+            String *urlAlloc = new String(download_url);
+            xTaskCreate([](void* param) {
+                String* targetUrl = static_cast<String*>(param);
+                Serial.printf("[OTA] Starting Cloud Pull from %s\n", targetUrl->c_str());
+                WiFiClientSecure client;
+                client.setInsecure();
+                HTTPClient http;
+                http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+                http.setTimeout(30000);
+
+                if (http.begin(client, *targetUrl)) {
+                    int httpCode = http.GET();
+                    if (httpCode == HTTP_CODE_OK) {
+                        int totalLen = http.getSize();
+                        WiFiClient *stream = http.getStreamPtr();
+                        if (Update.begin(totalLen > 0 ? totalLen : UPDATE_SIZE_UNKNOWN, U_FLASH)) {
+                            size_t written = 0;
+                            uint8_t buff[1024];
+                            while (http.connected() && (totalLen < 0 || written < (size_t)totalLen)) {
+                                size_t avail = stream->available();
+                                if (avail) {
+                                    int c = stream->readBytes(buff, std::min(avail, sizeof(buff)));
+                                    Update.write(buff, c);
+                                    written += c;
+                                    if (totalLen > 0) {
+                                        g_atom_ota_state.progress_pct = (written * 100) / totalLen;
+                                    }
+                                }
+                                vTaskDelay(1);
+                            }
+                            if (Update.end(true)) {
+                                g_atom_ota_state.success = true;
+                                g_atom_ota_state.progress_pct = 100;
+                                Serial.println("[OTA] Cloud pull success! Rebooting in 1s...");
+                                vTaskDelay(pdMS_TO_TICKS(1000));
+                                ESP.restart();
+                            } else {
+                                g_atom_ota_state.error_msg = "Flash write failed";
+                            }
+                        } else {
+                            g_atom_ota_state.error_msg = "Update.begin failed";
+                        }
+                    } else {
+                        g_atom_ota_state.error_msg = String("HTTP error ") + httpCode;
+                    }
+                    http.end();
+                } else {
+                    g_atom_ota_state.error_msg = "Connection failed";
+                }
+                g_atom_ota_state.in_progress = false;
+                delete targetUrl;
+                vTaskDelete(NULL);
+            }, "atom_ota_task", 8192, urlAlloc, 2, NULL);
+        }
+    );
+
+    // REST: POST /api/upload (LittleFS file staging from Web UI - supports raw binary or multipart)
     server.on("/api/upload", HTTP_POST,
         [](AsyncWebServerRequest *request) {
-            request->send(200, "application/json", "{\"status\":\"success\",\"message\":\"File saved successfully.\"}");
+            AsyncWebServerResponse *response = request->beginResponse(200, "application/json", "{\"status\":\"success\",\"message\":\"File saved successfully.\"}");
+            response->addHeader("Access-Control-Allow-Origin", "*");
+            request->send(response);
         },
         [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+            // Multipart staging
             static File s_upload_file;
             if (!index) {
                 String path = "";
@@ -1671,6 +1814,35 @@ void setup() {
                 if (s_upload_file) {
                     s_upload_file.close();
                     Serial.printf("[UPLOAD] Finished: %s (%u bytes)\n", filename.c_str(), index + len);
+                }
+            }
+        },
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+            // Raw binary staging
+            static File s_raw_file;
+            if (!index) {
+                String path = "";
+                if (request->hasHeader("X-File-Path")) {
+                    path = request->getHeader("X-File-Path")->value();
+                } else {
+                    path = "/upload.bin";
+                }
+                if (!path.startsWith("/")) path = "/" + path;
+                int lastSlash = path.lastIndexOf('/');
+                if (lastSlash > 0) {
+                    String dirPath = path.substring(0, lastSlash);
+                    LittleFS.mkdir(dirPath);
+                }
+                s_raw_file = LittleFS.open(path, "w");
+                Serial.printf("[UPLOAD] Staging raw file: %s (%u bytes)\n", path.c_str(), total);
+            }
+            if (s_raw_file && len > 0) {
+                s_raw_file.write(data, len);
+            }
+            if (index + len >= total) {
+                if (s_raw_file) {
+                    s_raw_file.close();
+                    Serial.printf("[UPLOAD] Finished raw file (%u bytes)\n", total);
                 }
             }
         }
@@ -2034,8 +2206,14 @@ void setup() {
     // Serve Static SPA files from LittleFS
     server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html").setCacheControl("max-age=600");
 
-    // SPA Fallback for client-side routing
+    // SPA Fallback for client-side routing (strictly never for /api/ routes)
     server.onNotFound([](AsyncWebServerRequest *request) {
+        if (request->url().startsWith("/api/")) {
+            AsyncWebServerResponse *response = request->beginResponse(404, "application/json", "{\"status\":\"error\",\"message\":\"Endpoint not found\"}");
+            response->addHeader("Access-Control-Allow-Origin", "*");
+            request->send(response);
+            return;
+        }
         if (request->method() == HTTP_OPTIONS) {
             request->send(204);
         } else if (LittleFS.exists("/index.html.gz")) {
@@ -2195,6 +2373,41 @@ void loop() {
                 } else if (console_line.equalsIgnoreCase("btn")) {
                     Serial.println("[BTN] Atom button triggered via CLI -> sending precon_toggle to WiCAN");
                     send_to_wican("{\"type\":\"trigger\",\"action\":\"precon_toggle\"}");
+                } else if (console_line.startsWith("wifi ")) {
+                    String rest = console_line.substring(5);
+                    rest.trim();
+                    String s = "", p = "";
+                    if (rest.startsWith("\"")) {
+                        int q2 = rest.indexOf('"', 1);
+                        if (q2 > 1) {
+                            s = rest.substring(1, q2);
+                            p = rest.substring(q2 + 1);
+                            p.trim();
+                        }
+                    } else {
+                        int spaceIdx = rest.indexOf(' ');
+                        if (spaceIdx > 0) {
+                            s = rest.substring(0, spaceIdx);
+                            p = rest.substring(spaceIdx + 1);
+                            p.trim();
+                        }
+                    }
+                    if (!s.isEmpty()) {
+                        bool found = false;
+                        for (auto& net : g_saved_wifi) {
+                            if (net.ssid.equalsIgnoreCase(s)) {
+                                net.password = p;
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            g_saved_wifi.insert(g_saved_wifi.begin(), {s, p, 100});
+                        }
+                        persist_saved_wifi();
+                        Serial.printf("[WIFI] Saved network '%s' -> connecting...\n", s.c_str());
+                        connect_to_best_wifi();
+                    }
                 } else if (console_line.equalsIgnoreCase("status")) {
                     Serial.printf("[STATUS] Device: %s, WiCAN Online: %d, Free Heap: %u, WS Clients: %u\n",
                                   g_device_id.c_str(), g_wican_online, ESP.getFreeHeap(), ws.count());
