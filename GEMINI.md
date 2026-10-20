@@ -84,10 +84,19 @@ idf.py -p <PORT> flash monitor
 
 ## 💡 Guidelines for AI Assistants
 
-1. **Preserve Integrity & References**:
-   - Check `docs/architecture.md` and `docs/egmp_can_reference.md` before inventing CAN IDs, byte patterns, or altering state-machine conventions.
-   - When adding entities or automations, adhere to existing schemas in `catalog/can_do_catalog.json`.
-2. **Flash Budget Awareness**:
+1. **Strict E-GMP Focus (No Legacy Carryover)**:
+   - This project strictly targets **E-GMP vehicles (Kia EV6, Hyundai Ioniq 5/6, Genesis GV60)**.
+   - Discard older Gen 1 / Gen 2 / pre-E-GMP information (e.g., analog IG3 relays, older ICE/HEV/PHEV schemas) unless empirically verified to still apply to E-GMP.
+2. **Strict Ground-Truth Verification (Do Not Trust Unverified Scripts)**:
+   - **Never rely on unverified documentation, scratch scripts, or third-party snippets** outside of what we have directly verified and updated ourselves. Many older/community scripts in the workspace contain guesswork, non-working payloads, or incorrect assumptions.
+   - Ground truth must come exclusively from:
+     - Real, empirical E-GMP vehicle CAN bus logs (e.g., user-captured CSVs).
+     - Verified Mobis STD5W Head Unit MICOM firmware disassembly (`dec_micom_sw.bin`).
+     - Directly verified documentation ([`docs/egmp_can_reference.md`](file:///d:/Documents/can-do/docs/egmp_can_reference.md)) and test suite ([`tests/test_remote_climate.py`](file:///d:/Documents/can-do/tests/test_remote_climate.py)).
+3. **Preserve Integrity & References**:
+   - Check [`docs/architecture.md`](file:///d:/Documents/can-do/docs/architecture.md) and [`docs/egmp_can_reference.md`](file:///d:/Documents/can-do/docs/egmp_can_reference.md) before inventing CAN IDs, byte patterns, or altering state-machine conventions.
+   - When adding entities or automations, adhere to existing schemas in [`catalog/can_do_catalog.json`](file:///d:/Documents/can-do/catalog/can_do_catalog.json).
+4. **Flash Budget Awareness**:
    - Embedded LittleFS storage is constrained (e.g., 2MB on Atom Lite). Static frontend assets must remain lean and be gzip-compressed where appropriate.
-3. **Thread Context Handoff**:
+5. **Thread Context Handoff**:
    - When finishing complex or multi-step tasks, summarize modified files, current state, and the logical next action so new threads can resume without loss of context.
