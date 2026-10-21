@@ -410,13 +410,20 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
       delete cleaned.subcategory;
     }
 
+    const formatCanId = (id?: string) => {
+      if (!id) return undefined;
+      const t = id.trim();
+      if (!t) return undefined;
+      return t.toLowerCase().startsWith('0x') ? `0x${t.slice(2).toUpperCase()}` : `0x${t.toUpperCase()}`;
+    };
+
     if (formData.state_can_id && formData.state_can_id.trim() !== '') {
-      cleaned.state_can_id = formData.state_can_id.trim();
+      cleaned.state_can_id = formatCanId(formData.state_can_id);
     } else {
       delete cleaned.state_can_id;
     }
     if (formData.action_can_id && formData.action_can_id.trim() !== '') {
-      cleaned.action_can_id = formData.action_can_id.trim();
+      cleaned.action_can_id = formatCanId(formData.action_can_id);
     } else {
       delete cleaned.action_can_id;
     }

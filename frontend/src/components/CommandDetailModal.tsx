@@ -448,6 +448,9 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                       toPayload={command.to_payload}
                       matchPayload={command.match_payload || (command.from_payload || command.to_payload ? undefined : (defaultOpt?.match || defaultOpt?.match_payload))}
                       payload={command.payload || (command.from_payload || command.to_payload || command.match_payload ? undefined : (defaultOpt?.payload as any))}
+                      basePayload={(command.network as any)?.base_payload}
+                      targetByte={command.network?.state_byte || command.network?.action_byte || (command.network as any)?.byte}
+                      numericRange={command.network?.min !== undefined && command.network?.max !== undefined ? { min: command.network.min, max: command.network.max, unit: (command.network as any)?.unit || (command.subcategory === 'Audio & Media' ? ' dB' : '') } : undefined}
                     />
                   );
                 })()}

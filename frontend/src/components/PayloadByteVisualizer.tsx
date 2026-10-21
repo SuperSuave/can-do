@@ -8,6 +8,9 @@ interface PayloadByteVisualizerProps {
   toPayload?: ByteInput;
   matchPayload?: ByteInput;
   compact?: boolean;
+  basePayload?: (string | number)[];
+  targetByte?: string;
+  numericRange?: { min: number; max: number; unit?: string };
 }
 
 export const PayloadByteVisualizer: React.FC<PayloadByteVisualizerProps> = ({
@@ -15,7 +18,10 @@ export const PayloadByteVisualizer: React.FC<PayloadByteVisualizerProps> = ({
   fromPayload,
   toPayload,
   matchPayload,
-  compact = false
+  compact = false,
+  basePayload,
+  targetByte,
+  numericRange
 }) => {
   const parseTokens = (input?: ByteInput): string[] => {
     if (!input) return [];
@@ -38,6 +44,9 @@ export const PayloadByteVisualizer: React.FC<PayloadByteVisualizerProps> = ({
   const getByteStyle = (token: string) => {
     if (token === '*') {
       return 'bg-slate-800 text-slate-400 border-slate-700/60 font-mono';
+    }
+    if (token === 'VAR') {
+      return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/60 font-mono font-bold ring-1 ring-cyan-500/30';
     }
     if (token.startsWith('!')) {
       return 'bg-rose-950/50 text-rose-300 border-rose-600/40 font-mono font-semibold';
@@ -127,6 +136,27 @@ export const PayloadByteVisualizer: React.FC<PayloadByteVisualizerProps> = ({
     return (
       <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
         {renderByteRow(tokens, 'TX Payload')}
+      </div>
+    );
+  }
+
+  // Case 4: Base payload with dynamic target byte (continuous numeric range)
+  if (basePayload && basePayload.length === 8) {
+    const tokens = basePayload.map((val, idx) => {
+      const dKey = `D${idx + 1}`;
+      if (dKey === targetByte) return 'VAR';
+      if (typeof val === 'string') return val.startsWith('0x') || val.startsWith('0X') ? val : `0x${val}`;
+      return `0x${(Number(val) & 0xFF).toString(16).toUpperCase().padStart(2, '0')}`;
+    });
+    return (
+      <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800 space-y-2">
+        {numericRange && (
+          <div className="flex items-center justify-between text-xs font-mono text-cyan-300 px-1">
+            <span>Range: {numericRange.min}{numericRange.unit || ''} to {numericRange.max}{numericRange.unit || ''}</span>
+            <span className="text-slate-400">Target: <strong className="text-cyan-400 font-bold">{targetByte || 'D1'}</strong></span>
+          </div>
+        )}
+        {renderByteRow(tokens, 'Base Frame (Dynamic VAR Byte)')}
       </div>
     );
   }

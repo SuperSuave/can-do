@@ -33,10 +33,26 @@ ALLOWED_ROLES = {"trigger", "condition", "state", "action", "sensor", "select"}
 ALLOWED_NET_TYPES = {"can_rx", "can_tx", "can_rx_tx", "precondition", "track_popup", "hud_nav"}
 ALLOWED_OPERATORS = {"<=", "<", ">=", ">", "=="}
 
-HEX_CAN_ID_RE = re.compile(r"^0x[0-9A-Fa-f]{1,8}$")
-HEX_BYTE_RE = re.compile(r"^0x[0-9A-Fa-f]{2}$")
+HEX_CAN_ID_RE = re.compile(r"^0[xX][0-9A-Fa-f]{1,8}$")
+HEX_BYTE_RE = re.compile(r"^0[xX][0-9A-Fa-f]{2}$")
 HEX_RAW_PAYLOAD_RE = re.compile(r"^[0-9A-Fa-f]{2,16}$")
 BYTE_KEY_RE = re.compile(r"^D[1-8]$")
+
+
+def normalize_hex_str(val: Any) -> Any:
+    """Normalizes any hex string (e.g. '0X4A', '0x4a', '0X474') to canonical lowercase '0x' with uppercase digits ('0x4A', '0x474')."""
+    if isinstance(val, str):
+        v = val.strip()
+        if re.match(r"^0[xX][0-9A-Fa-f]+$", v):
+            return f"0x{v[2:].upper()}"
+    return val
+
+
+def normalize_payload_dict(payload: Any) -> Any:
+    """Recursively normalizes all hex byte values in a byte map or payload dict."""
+    if isinstance(payload, dict):
+        return {k: normalize_hex_str(v) for k, v in payload.items()}
+    return payload
 
 # --- Normalization Maps ---
 CATEGORY_MAP = {
@@ -157,6 +173,19 @@ def clean_network_block(cmd: Dict[str, Any]) -> None:
         elif key in net:
             cmd[key] = net[key]
 
+    # Normalize CAN IDs and masks to canonical 0x..
+    for key in ("state_can_id", "action_can_id", "flow_control_can_id", "trigger_frame_can_id", "control_can_id"):
+        if key in cmd:
+            cmd[key] = normalize_hex_str(cmd[key])
+        if key in net:
+            net[key] = normalize_hex_str(net[key])
+    if "state_mask" in net:
+        net["state_mask"] = normalize_hex_str(net["state_mask"])
+    if "action_mask" in net:
+        net["action_mask"] = normalize_hex_str(net["action_mask"])
+    if "mask" in cmd and isinstance(cmd["mask"], str):
+        cmd["mask"] = normalize_hex_str(cmd["mask"])
+
     # Normalize network.byte -> state_byte / action_byte
     if "byte" in net:
         b = net.pop("byte")
@@ -169,7 +198,7 @@ def clean_network_block(cmd: Dict[str, Any]) -> None:
     if "mask" in net:
         m = net.pop("mask")
         if "state_mask" not in net:
-            net["state_mask"] = m
+            net["state_mask"] = normalize_hex_str(m)
 
     # Fix network.type where both state_can_id and action_can_id exist
     if net.get("state_can_id") and net.get("action_can_id"):
@@ -199,6 +228,16 @@ def clean_options(cmd: Dict[str, Any], shrink_linear: bool = False) -> None:
     net = cmd.get("network", {})
     options = cmd.get("options", [])
 
+    if "match" in cmd:
+        cmd["match"] = normalize_payload_dict(cmd["match"])
+    if "payload" in cmd:
+        cmd["payload"] = normalize_payload_dict(cmd["payload"])
+    for step in cmd.get("steps", []):
+        if "payload" in step:
+            step["payload"] = normalize_payload_dict(step["payload"])
+        if "can_id" in step:
+            step["can_id"] = normalize_hex_str(step["can_id"])
+
     # Fix climate temperature match byte bugs (D4->D2 for driver, D6->D3 for passenger)
     if cid in ("climate_driver_temp", "climate_passenger_temp"):
         correct_state_byte = net.get("state_byte")
@@ -206,7 +245,7 @@ def clean_options(cmd: Dict[str, Any], shrink_linear: bool = False) -> None:
             if "match" in opt and correct_state_byte:
                 old_vals = list(opt["match"].values())
                 if old_vals:
-                    opt["match"] = {correct_state_byte: old_vals[0]}
+                    opt["match"] = {correct_state_byte: normalize_hex_str(old_vals[0])}
         if shrink_linear and cmd.get("type") == "linear_scale":
             cmd.pop("options", None)
             return
@@ -214,6 +253,17 @@ def clean_options(cmd: Dict[str, Any], shrink_linear: bool = False) -> None:
     for opt in options:
         if opt.get("default") is False:
             opt.pop("default")
+        if "match" in opt:
+            opt["match"] = normalize_payload_dict(opt["match"])
+        if "payload" in opt:
+            opt["payload"] = normalize_payload_dict(opt["payload"])
+        if "mask" in opt and isinstance(opt["mask"], str):
+            opt["mask"] = normalize_hex_str(opt["mask"])
+        for step in opt.get("steps", []):
+            if "payload" in step:
+                step["payload"] = normalize_payload_dict(step["payload"])
+            if "can_id" in step:
+                step["can_id"] = normalize_hex_str(step["can_id"])
         if "evaluate" in opt:
             op = opt["evaluate"].get("operator")
             if op in OPERATOR_MAP:
@@ -221,17 +271,39 @@ def clean_options(cmd: Dict[str, Any], shrink_linear: bool = False) -> None:
         if isinstance(opt.get("mask"), dict) and len(opt["mask"]) == 1:
             mask_byte, mask_val = next(iter(opt["mask"].items()))
             if isinstance(opt.get("match"), dict) and list(opt["match"].keys()) == [mask_byte]:
-                opt["mask"] = mask_val
+                opt["mask"] = normalize_hex_str(mask_val)
 
 
 def fix_automations(automations: List[Dict[str, Any]]) -> None:
     for auto in automations:
         if "tags" in auto:
             auto["tags"] = [TAG_MAP.get(t, t) for t in auto["tags"]]
+        for trig in auto.get("triggers", []):
+            for k in ("can_id", "mask", "from", "to"):
+                if k in trig and isinstance(trig[k], str):
+                    trig[k] = normalize_hex_str(trig[k])
+            if "match" in trig:
+                trig["match"] = normalize_payload_dict(trig["match"])
         for cond in auto.get("conditions", []):
+            for k in ("can_id", "mask", "from", "to"):
+                if k in cond and isinstance(cond[k], str):
+                    cond[k] = normalize_hex_str(cond[k])
+            if "match" in cond:
+                cond["match"] = normalize_payload_dict(cond["match"])
             op = cond.get("operator")
             if op in OPERATOR_MAP:
                 cond["operator"] = OPERATOR_MAP[op]
+        for act in auto.get("actions", []):
+            for k in ("can_id", "mask", "from", "to"):
+                if k in act and isinstance(act[k], str):
+                    act[k] = normalize_hex_str(act[k])
+            if "payload" in act:
+                act["payload"] = normalize_payload_dict(act["payload"])
+            for step in act.get("steps", []):
+                if "payload" in step:
+                    step["payload"] = normalize_payload_dict(step["payload"])
+                if "can_id" in step:
+                    step["can_id"] = normalize_hex_str(step["can_id"])
 
         aid = auto.get("id")
         if aid == "auto_fold_mirrors_on_lock":
@@ -422,6 +494,8 @@ def validate_catalog(catalog: Dict[str, Any]) -> Tuple[List[str], List[str]]:
                     step["payload"], f"commands[{cid}].steps[{s_idx}].payload",
                     errors, allow_raw_hex=True
                 )
+            if "can_id" in step and not HEX_CAN_ID_RE.match(str(step["can_id"])):
+                errors.append(f"commands[{cid}].steps[{s_idx}].can_id: invalid CAN ID '{step['can_id']}'")
 
         state_byte = net.get("state_byte")
         for o_idx, opt in enumerate(cmd.get("options", [])):
@@ -442,6 +516,8 @@ def validate_catalog(catalog: Dict[str, Any]) -> Tuple[List[str], List[str]]:
                         step["payload"], f"{o_ctx}.steps[{s_idx}].payload",
                         errors, allow_raw_hex=True
                     )
+                if "can_id" in step and not HEX_CAN_ID_RE.match(str(step["can_id"])):
+                    errors.append(f"{o_ctx}.steps[{s_idx}].can_id: invalid CAN ID '{step['can_id']}'")
             if "evaluate" in opt:
                 ev = opt["evaluate"]
                 if ev.get("operator") not in ALLOWED_OPERATORS:

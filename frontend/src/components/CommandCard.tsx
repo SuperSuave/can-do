@@ -431,6 +431,61 @@ export const CommandCard: React.FC<CommandCardProps> = ({
                 {command.steps.length} Steps {command.delay_ms ? `(${command.delay_ms}ms)` : ''}
               </span>
             </div>
+          ) : (command.network?.min !== undefined && command.network?.max !== undefined) || command.ha_metadata?.domain === 'number' || (command as any).type === 'linear_scale' ? (
+            <div className="bg-slate-950/70 rounded-lg p-2.5 border border-slate-800 text-xs flex flex-col gap-2 min-w-0">
+              <div className="flex items-center justify-between gap-1 text-[11px] font-medium min-w-0">
+                <span className="flex items-center gap-1 text-cyan-300 truncate">
+                  <Sliders className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                  <span>Continuous Numeric Range</span>
+                </span>
+                <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800/60 shrink-0">
+                  Target: {command.network?.state_byte || command.network?.action_byte || (command.network as any)?.byte || 'D1'}
+                </span>
+              </div>
+              
+              {/* Range & Slider Visual */}
+              <div className="flex items-center justify-between text-slate-400 font-mono text-[11px] px-0.5">
+                <span className="font-semibold text-slate-300">
+                  {command.network?.min ?? 0}{(command.network as any)?.unit || (command.subcategory === 'Audio & Media' ? ' dB' : '')}
+                </span>
+                <div className="flex-1 mx-2 h-1.5 rounded-full bg-slate-800 overflow-hidden relative">
+                  <div 
+                    className="absolute top-0 bottom-0 left-0 bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full"
+                    style={{ width: '50%' }}
+                  />
+                </div>
+                <span className="font-semibold text-slate-300">
+                  +{command.network?.max ?? 100}{(command.network as any)?.unit || (command.subcategory === 'Audio & Media' ? ' dB' : '')}
+                </span>
+              </div>
+
+              {/* Base Frame Hex Preview if available */}
+              {Array.isArray((command.network as any)?.base_payload) && (command.network as any).base_payload.length === 8 && (
+                <div className="grid grid-cols-8 gap-0.5 pt-0.5">
+                  {(command.network as any).base_payload.map((byteVal: any, idx: number) => {
+                    const dKey = `D${idx + 1}`;
+                    const isTarget = dKey === (command.network?.state_byte || command.network?.action_byte || (command.network as any)?.byte);
+                    const hexStr = typeof byteVal === 'string' 
+                      ? byteVal.replace(/^0x/i, '').toUpperCase().padStart(2, '0')
+                      : (Number(byteVal) & 0xFF).toString(16).toUpperCase().padStart(2, '0');
+                    return (
+                      <div 
+                        key={idx}
+                        className={`flex flex-col items-center justify-center p-0.5 rounded text-[9.5px] font-mono ${
+                          isTarget 
+                            ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 font-bold ring-1 ring-cyan-500/30' 
+                            : 'bg-slate-900/60 text-slate-500 border border-slate-800/40'
+                        }`}
+                        title={`${dKey}: 0x${hexStr}${isTarget ? ' (Dynamic Value Byte)' : ' (Static Base Frame)'}`}
+                      >
+                        <span className="text-[7.5px] text-slate-400">{dKey}</span>
+                        <span>{isTarget ? 'VAR' : hexStr}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           ) : (
             <div className="text-xs text-slate-500 bg-slate-950/40 p-2 rounded border border-slate-800/60 italic truncate">
               {command.popup_message

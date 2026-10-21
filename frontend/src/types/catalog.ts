@@ -25,7 +25,20 @@ export interface CommandNetwork {
   delay_ms?: number;
   flow_control_can_id?: string;
   trigger_frame_can_id?: string;
+  control_can_id?: string;
   transports?: Record<string, { tx_id: string; flow_control_id: string }>;
+  byte?: string;
+  state_byte?: string;
+  action_byte?: string;
+  mask?: string;
+  state_mask?: string;
+  action_mask?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  offset?: number;
+  unit?: string;
+  base_payload?: (string | number)[];
 }
 
 /**

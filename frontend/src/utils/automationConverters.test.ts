@@ -258,7 +258,7 @@ test('compileToByteMap normalizes object ByteMap input and filters out wildcards
   const expected = {
     D1: '0x12',
     D2: '0xAB',
-    D3: '0XCD',
+    D3: '0xCD',
   };
 
   assert.deepStrictEqual(compileToByteMap(input), expected);

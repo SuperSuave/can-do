@@ -43,8 +43,14 @@ export const PayloadByteEditor: React.FC<PayloadByteEditorProps> = ({
 
   const handleByteChange = (index: number, val: string) => {
     const newTokens = [...tokens];
-    // Clean up input: uppercase, take first word or token
-    const cleaned = val.trim().toUpperCase().split(/\s+/)[0] || '*';
+    let cleaned = val.trim().split(/\s+/)[0] || '*';
+    if (cleaned !== '*' && cleaned !== '') {
+      if (cleaned.toLowerCase().startsWith('0x')) {
+        cleaned = `0x${cleaned.slice(2).toUpperCase()}`;
+      } else {
+        cleaned = cleaned.toUpperCase();
+      }
+    }
     newTokens[index] = cleaned === '' ? '*' : cleaned;
     
     // Build space-separated string

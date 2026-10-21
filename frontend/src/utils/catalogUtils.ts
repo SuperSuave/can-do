@@ -169,7 +169,8 @@ export function cleanToByteMap(input: string | ByteMap | undefined): ByteMap {
     const cleanMap: ByteMap = {};
     for (const [k, v] of Object.entries(input)) {
       if (v && typeof v === 'string' && !v.includes('*') && v !== '?') {
-        cleanMap[k] = v.startsWith('0x') || v.startsWith('0X') ? v : `0x${v.toUpperCase()}`;
+        const cleanHex = v.replace(/^0x/i, '').trim().toUpperCase();
+        cleanMap[k] = cleanHex ? `0x${cleanHex}` : v;
       }
     }
     return cleanMap;
@@ -186,8 +187,8 @@ export function cleanToByteMap(input: string | ByteMap | undefined): ByteMap {
 
     const hexClean = clean.replace(/\*/g, '0');
     if (hexClean) {
-      const val = hexClean.startsWith('0x') || hexClean.startsWith('0X') ? hexClean : `0x${hexClean.toUpperCase()}`;
-      result[dKey] = val;
+      const cleanHex = hexClean.replace(/^0x/i, '').trim().toUpperCase();
+      result[dKey] = cleanHex ? `0x${cleanHex}` : hexClean;
     }
   });
 

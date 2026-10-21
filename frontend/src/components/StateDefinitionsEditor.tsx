@@ -74,7 +74,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
       let stepCanId: string | undefined = undefined;
       const canIdMatch = rawLine.match(/\b(0x[0-9A-Fa-f]{3,8})\b/i);
       if (canIdMatch) {
-        stepCanId = canIdMatch[1].toUpperCase();
+        stepCanId = `0x${canIdMatch[1].replace(/^0x/i, '').toUpperCase()}`;
       }
 
       // Check post-burst dwell delay, e.g. "500 ms dwell" or "500ms delay"
@@ -915,12 +915,18 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                             type="text"
                                             placeholder={actionCanId || "0x..."}
                                             value={step.can_id || ''}
-                                            onChange={e =>
+                                            onChange={e => {
+                                              const rawVal = e.target.value.trim();
+                                              const formatted = rawVal
+                                                ? (rawVal.toLowerCase().startsWith('0x')
+                                                    ? `0x${rawVal.slice(2).toUpperCase()}`
+                                                    : `0x${rawVal.toUpperCase()}`)
+                                                : undefined;
                                               handleUpdateOptionStep(idx, sIdx, {
-                                                can_id: e.target.value.trim().toUpperCase() || undefined
-                                              })
-                                            }
-                                            className="w-20 px-1.5 py-0.5 rounded bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-cyan-300 placeholder:text-slate-600 font-bold uppercase"
+                                                can_id: formatted
+                                              });
+                                            }}
+                                            className="w-20 px-1.5 py-0.5 rounded bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-cyan-300 placeholder:text-slate-600 font-bold"
                                           />
                                         </div>
 
