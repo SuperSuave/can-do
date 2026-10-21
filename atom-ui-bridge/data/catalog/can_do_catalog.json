@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.10.6-b013",
+  "can_do_version": "2026.10.7-b001",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -1288,35 +1288,72 @@
       ],
       "category": "Cockpit & Controls",
       "subcategory": "Instrument Cluster",
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x474"
-      },
       "roles": [
         "trigger",
         "sensor",
         "state"
       ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x474"
+      },
       "options": [
         {
           "label": "Idle",
           "match": {
             "D8": "0x0A"
-          }
+          },
+          "default": true
         },
         {
           "label": "Brightness Up (+)",
           "match": {
             "D8": "0x4A"
           },
-          "default": true
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x4A"
+              },
+              "repeat": 3,
+              "can_id": "0x474",
+              "delay_ms": 20
+            },
+            {
+              "payload": {
+                "D8": "0x0A"
+              },
+              "repeat": 3,
+              "can_id": "0x474",
+              "delay_ms": 20
+            }
+          ]
         },
         {
           "label": "Brightness Down (-)",
           "match": {
             "D8": "0x8A"
-          }
+          },
+          "steps": [
+            {
+              "payload": {
+                "D8": "0x8A"
+              },
+              "repeat": 3,
+              "can_id": "0x474",
+              "delay_ms": 20
+            },
+            {
+              "type": "transmit_frame",
+              "payload": {
+                "D8": "0x0A"
+              },
+              "repeat": 3,
+              "can_id": "0x474",
+              "delay_ms": 20
+            }
+          ]
         }
       ],
       "contributor": {
@@ -1780,7 +1817,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
       },
       "network": {
         "bus": 0,
@@ -1792,14 +1829,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "°F",
+        "unit": "\u00b0F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62°F",
+          "label": "62\u00b0F",
           "match": {
             "D2": "0x06"
           },
@@ -1819,7 +1856,7 @@
           ]
         },
         {
-          "label": "63°F",
+          "label": "63\u00b0F",
           "match": {
             "D2": "0x07"
           },
@@ -1839,7 +1876,7 @@
           ]
         },
         {
-          "label": "64°F",
+          "label": "64\u00b0F",
           "match": {
             "D2": "0x08"
           },
@@ -1859,7 +1896,7 @@
           ]
         },
         {
-          "label": "65°F",
+          "label": "65\u00b0F",
           "match": {
             "D2": "0x09"
           },
@@ -1879,7 +1916,7 @@
           ]
         },
         {
-          "label": "66°F",
+          "label": "66\u00b0F",
           "match": {
             "D2": "0x0A"
           },
@@ -1899,7 +1936,7 @@
           ]
         },
         {
-          "label": "67°F",
+          "label": "67\u00b0F",
           "match": {
             "D2": "0x0B"
           },
@@ -1919,7 +1956,7 @@
           ]
         },
         {
-          "label": "68°F",
+          "label": "68\u00b0F",
           "match": {
             "D2": "0x0C"
           },
@@ -1939,7 +1976,7 @@
           ]
         },
         {
-          "label": "69°F",
+          "label": "69\u00b0F",
           "match": {
             "D2": "0x0D"
           },
@@ -1959,7 +1996,7 @@
           ]
         },
         {
-          "label": "70°F",
+          "label": "70\u00b0F",
           "match": {
             "D2": "0x0E"
           },
@@ -1980,7 +2017,7 @@
           "default": true
         },
         {
-          "label": "71°F",
+          "label": "71\u00b0F",
           "match": {
             "D2": "0x0F"
           },
@@ -2000,7 +2037,7 @@
           ]
         },
         {
-          "label": "72°F",
+          "label": "72\u00b0F",
           "match": {
             "D2": "0x10"
           },
@@ -2020,7 +2057,7 @@
           ]
         },
         {
-          "label": "73°F",
+          "label": "73\u00b0F",
           "match": {
             "D2": "0x11"
           },
@@ -2040,7 +2077,7 @@
           ]
         },
         {
-          "label": "74°F",
+          "label": "74\u00b0F",
           "match": {
             "D2": "0x12"
           },
@@ -2060,7 +2097,7 @@
           ]
         },
         {
-          "label": "75°F",
+          "label": "75\u00b0F",
           "match": {
             "D2": "0x13"
           },
@@ -2080,7 +2117,7 @@
           ]
         },
         {
-          "label": "76°F",
+          "label": "76\u00b0F",
           "match": {
             "D2": "0x14"
           },
@@ -2100,7 +2137,7 @@
           ]
         },
         {
-          "label": "77°F",
+          "label": "77\u00b0F",
           "match": {
             "D2": "0x15"
           },
@@ -2120,7 +2157,7 @@
           ]
         },
         {
-          "label": "78°F",
+          "label": "78\u00b0F",
           "match": {
             "D2": "0x16"
           },
@@ -2140,7 +2177,7 @@
           ]
         },
         {
-          "label": "79°F",
+          "label": "79\u00b0F",
           "match": {
             "D2": "0x17"
           },
@@ -2160,7 +2197,7 @@
           ]
         },
         {
-          "label": "80°F",
+          "label": "80\u00b0F",
           "match": {
             "D2": "0x18"
           },
@@ -2180,7 +2217,7 @@
           ]
         },
         {
-          "label": "81°F",
+          "label": "81\u00b0F",
           "match": {
             "D2": "0x19"
           },
@@ -2200,7 +2237,7 @@
           ]
         },
         {
-          "label": "82°F",
+          "label": "82\u00b0F",
           "match": {
             "D2": "0x1A"
           },
@@ -2245,7 +2282,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
       },
       "network": {
         "bus": 0,
@@ -2257,14 +2294,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "°F",
+        "unit": "\u00b0F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62°F",
+          "label": "62\u00b0F",
           "match": {
             "D3": "0x06"
           },
@@ -2284,7 +2321,7 @@
           ]
         },
         {
-          "label": "63°F",
+          "label": "63\u00b0F",
           "match": {
             "D3": "0x07"
           },
@@ -2304,7 +2341,7 @@
           ]
         },
         {
-          "label": "64°F",
+          "label": "64\u00b0F",
           "match": {
             "D3": "0x08"
           },
@@ -2324,7 +2361,7 @@
           ]
         },
         {
-          "label": "65°F",
+          "label": "65\u00b0F",
           "match": {
             "D3": "0x09"
           },
@@ -2344,7 +2381,7 @@
           ]
         },
         {
-          "label": "66°F",
+          "label": "66\u00b0F",
           "match": {
             "D3": "0x0A"
           },
@@ -2364,7 +2401,7 @@
           ]
         },
         {
-          "label": "67°F",
+          "label": "67\u00b0F",
           "match": {
             "D3": "0x0B"
           },
@@ -2384,7 +2421,7 @@
           ]
         },
         {
-          "label": "68°F",
+          "label": "68\u00b0F",
           "match": {
             "D3": "0x0C"
           },
@@ -2404,7 +2441,7 @@
           ]
         },
         {
-          "label": "69°F",
+          "label": "69\u00b0F",
           "match": {
             "D3": "0x0D"
           },
@@ -2424,7 +2461,7 @@
           ]
         },
         {
-          "label": "70°F",
+          "label": "70\u00b0F",
           "match": {
             "D3": "0x0E"
           },
@@ -2445,7 +2482,7 @@
           "default": true
         },
         {
-          "label": "71°F",
+          "label": "71\u00b0F",
           "match": {
             "D3": "0x0F"
           },
@@ -2465,7 +2502,7 @@
           ]
         },
         {
-          "label": "72°F",
+          "label": "72\u00b0F",
           "match": {
             "D3": "0x10"
           },
@@ -2485,7 +2522,7 @@
           ]
         },
         {
-          "label": "73°F",
+          "label": "73\u00b0F",
           "match": {
             "D3": "0x11"
           },
@@ -2505,7 +2542,7 @@
           ]
         },
         {
-          "label": "74°F",
+          "label": "74\u00b0F",
           "match": {
             "D3": "0x12"
           },
@@ -2525,7 +2562,7 @@
           ]
         },
         {
-          "label": "75°F",
+          "label": "75\u00b0F",
           "match": {
             "D3": "0x13"
           },
@@ -2545,7 +2582,7 @@
           ]
         },
         {
-          "label": "76°F",
+          "label": "76\u00b0F",
           "match": {
             "D3": "0x14"
           },
@@ -2565,7 +2602,7 @@
           ]
         },
         {
-          "label": "77°F",
+          "label": "77\u00b0F",
           "match": {
             "D3": "0x15"
           },
@@ -2585,7 +2622,7 @@
           ]
         },
         {
-          "label": "78°F",
+          "label": "78\u00b0F",
           "match": {
             "D3": "0x16"
           },
@@ -2605,7 +2642,7 @@
           ]
         },
         {
-          "label": "79°F",
+          "label": "79\u00b0F",
           "match": {
             "D3": "0x17"
           },
@@ -2625,7 +2662,7 @@
           ]
         },
         {
-          "label": "80°F",
+          "label": "80\u00b0F",
           "match": {
             "D3": "0x18"
           },
@@ -2645,7 +2682,7 @@
           ]
         },
         {
-          "label": "81°F",
+          "label": "81\u00b0F",
           "match": {
             "D3": "0x19"
           },
@@ -2665,7 +2702,7 @@
           ]
         },
         {
-          "label": "82°F",
+          "label": "82\u00b0F",
           "match": {
             "D3": "0x1A"
           },
@@ -4921,18 +4958,18 @@
       },
       "options": [
         {
-          "label": "Info Notification (ⓘ)",
+          "label": "Info Notification (\u24d8)",
           "level": "info",
           "popup_message": "Preconditioning Active",
           "default": true
         },
         {
-          "label": "Warning Notification (⚠)",
+          "label": "Warning Notification (\u26a0)",
           "level": "warning",
           "popup_message": "Battery Cold / Limited"
         },
         {
-          "label": "Fault Notification (‼)",
+          "label": "Fault Notification (\u203c)",
           "level": "error",
           "popup_message": "Charge Interrupted"
         },
@@ -6099,16 +6136,16 @@
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x226",
-        "unit": "°C"
+        "unit": "\u00b0C"
       },
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 °C"
+        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 \u00b0C"
       },
       "options": [
         {
-          "label": "Freezing (<= 0°C / 32°F)",
+          "label": "Freezing (<= 0\u00b0C / 32\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": "<=",
@@ -6117,7 +6154,7 @@
           "default": true
         },
         {
-          "label": "Cold (< 15°C / 59°F)",
+          "label": "Cold (< 15\u00b0C / 59\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": "<",
@@ -6125,7 +6162,7 @@
           }
         },
         {
-          "label": "Warm (> 25°C / 77°F)",
+          "label": "Warm (> 25\u00b0C / 77\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": ">",
@@ -6951,7 +6988,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Right 90°",
+          "label": "Turn Right 90\u00b0",
           "match": {
             "D1": "0x03"
           },
@@ -6986,7 +7023,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Left 90°",
+          "label": "Turn Left 90\u00b0",
           "match": {
             "D1": "0x08"
           },
@@ -7696,7 +7733,7 @@
         "name": "HV Battery Module Min & Max Temp",
         "domain": "sensor",
         "icon": "mdi:thermometer-chevron-up",
-        "unit_of_measurement": "°C"
+        "unit_of_measurement": "\u00b0C"
       },
       "tags": [
         "all_egmp"
@@ -7710,17 +7747,17 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40°C offset."
+        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40\u00b0C offset."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x5D7",
-        "unit": "°C"
+        "unit": "\u00b0C"
       },
       "options": [
         {
-          "label": "Battery Optimal Warm (20°C - 35°C)",
+          "label": "Battery Optimal Warm (20\u00b0C - 35\u00b0C)",
           "evaluate": {
             "byte": "D1",
             "operator": ">=",
@@ -7729,7 +7766,7 @@
           "default": true
         },
         {
-          "label": "Battery High Temp (> 45°C / 113°F)",
+          "label": "Battery High Temp (> 45\u00b0C / 113\u00b0F)",
           "evaluate": {
             "byte": "D1",
             "operator": ">",
@@ -7737,7 +7774,7 @@
           }
         },
         {
-          "label": "Battery Cold (< 10°C / 50°F)",
+          "label": "Battery Cold (< 10\u00b0C / 50\u00b0F)",
           "evaluate": {
             "byte": "D2",
             "operator": "<",
@@ -7745,7 +7782,7 @@
           }
         },
         {
-          "label": "Battery Freezing (< 0°C / 32°F)",
+          "label": "Battery Freezing (< 0\u00b0C / 32\u00b0F)",
           "evaluate": {
             "byte": "D2",
             "operator": "<",
@@ -8041,7 +8078,7 @@
         "name": "Cabin Displayed Target Temperature",
         "domain": "sensor",
         "icon": "mdi:thermometer-lines",
-        "unit_of_measurement": "°F"
+        "unit_of_measurement": "\u00b0F"
       },
       "tags": [
         "all_egmp"
@@ -8055,31 +8092,31 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in °C x 0.5, Byte D3 = Driver Temp in °F integer)."
+        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in \u00b0C x 0.5, Byte D3 = Driver Temp in \u00b0F integer)."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x5F5",
-        "unit": "°F"
+        "unit": "\u00b0F"
       },
       "options": [
         {
-          "label": "68°F (20.0°C)",
+          "label": "68\u00b0F (20.0\u00b0C)",
           "match": {
             "D3": "0x44"
           },
           "mask": "0xFF"
         },
         {
-          "label": "70°F (21.0°C)",
+          "label": "70\u00b0F (21.0\u00b0C)",
           "match": {
             "D3": "0x46"
           },
           "mask": "0xFF"
         },
         {
-          "label": "72°F (22.0°C)",
+          "label": "72\u00b0F (22.0\u00b0C)",
           "match": {
             "D3": "0x48"
           },
@@ -8087,14 +8124,14 @@
           "default": true
         },
         {
-          "label": "74°F (23.5°C)",
+          "label": "74\u00b0F (23.5\u00b0C)",
           "match": {
             "D3": "0x4A"
           },
           "mask": "0xFF"
         },
         {
-          "label": "76°F (24.5°C)",
+          "label": "76\u00b0F (24.5\u00b0C)",
           "match": {
             "D3": "0x4C"
           },
@@ -8250,7 +8287,7 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s² signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
+        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s\u00b2 signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
       },
       "network": {
         "bus": 0,
@@ -8784,33 +8821,6 @@
           "0x00"
         ]
       },
-      "variants": [
-        {
-          "targets": [
-            "all_egmp",
-            "hyundai_ioniq5",
-            "hyundai_ioniq6",
-            "kia_ev6",
-            "genesis_gv60"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x60C",
-            "action_can_id": "0x60C",
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
-        }
-      ],
       "options": [
         {
           "label": "Quiet Mode On",
@@ -8890,33 +8900,6 @@
           "0x00"
         ]
       },
-      "variants": [
-        {
-          "targets": [
-            "all_egmp",
-            "hyundai_ioniq5",
-            "hyundai_ioniq6",
-            "kia_ev6",
-            "genesis_gv60"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x60C",
-            "action_can_id": "0x60C",
-            "base_payload": [
-              "0x16",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
-        }
-      ],
       "options": [
         {
           "label": "Kids Music Mode On",
@@ -8998,33 +8981,6 @@
           "0x00"
         ]
       },
-      "variants": [
-        {
-          "targets": [
-            "all_egmp",
-            "hyundai_ioniq5",
-            "hyundai_ioniq6",
-            "kia_ev6",
-            "genesis_gv60"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x60C",
-            "action_can_id": "0x60C",
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
-        }
-      ],
       "options": [
         {
           "label": "Mute On",
@@ -9096,38 +9052,6 @@
         "state_byte": "D1",
         "action_byte": "D1"
       },
-      "variants": [
-        {
-          "targets": [
-            "all_egmp",
-            "hyundai_ioniq5",
-            "hyundai_ioniq6",
-            "kia_ev6",
-            "genesis_gv60"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x60C",
-            "action_can_id": "0x60C",
-            "byte": "D1",
-            "offset": 0,
-            "min": 0,
-            "max": 75,
-            "step": 1,
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
-        }
-      ],
       "subcategory": "Audio & Media",
       "action_can_id": "0x60C",
       "state_can_id": "0x60C"
@@ -9176,38 +9100,6 @@
         "state_byte": "D3",
         "action_byte": "D3"
       },
-      "variants": [
-        {
-          "targets": [
-            "all_egmp",
-            "hyundai_ioniq5",
-            "hyundai_ioniq6",
-            "kia_ev6",
-            "genesis_gv60"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x60C",
-            "action_can_id": "0x60C",
-            "byte": "D3",
-            "offset": 10,
-            "min": -10,
-            "max": 10,
-            "step": 1,
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
-        }
-      ],
       "subcategory": "Audio & Media",
       "action_can_id": "0x60C",
       "state_can_id": "0x60C"
@@ -9256,38 +9148,6 @@
         "state_byte": "D4",
         "action_byte": "D4"
       },
-      "variants": [
-        {
-          "targets": [
-            "all_egmp",
-            "hyundai_ioniq5",
-            "hyundai_ioniq6",
-            "kia_ev6",
-            "genesis_gv60"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x60C",
-            "action_can_id": "0x60C",
-            "byte": "D4",
-            "offset": 10,
-            "min": -10,
-            "max": 10,
-            "step": 1,
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
-        }
-      ],
       "subcategory": "Audio & Media",
       "action_can_id": "0x60C",
       "state_can_id": "0x60C"
@@ -9336,38 +9196,6 @@
         "state_byte": "D5",
         "action_byte": "D5"
       },
-      "variants": [
-        {
-          "targets": [
-            "all_egmp",
-            "hyundai_ioniq5",
-            "hyundai_ioniq6",
-            "kia_ev6",
-            "genesis_gv60"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x60C",
-            "action_can_id": "0x60C",
-            "byte": "D5",
-            "offset": 10,
-            "min": -10,
-            "max": 10,
-            "step": 1,
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
-        }
-      ],
       "subcategory": "Audio & Media",
       "action_can_id": "0x60C",
       "state_can_id": "0x60C"
@@ -9416,38 +9244,6 @@
         "state_byte": "D6",
         "action_byte": "D6"
       },
-      "variants": [
-        {
-          "targets": [
-            "all_egmp",
-            "hyundai_ioniq5",
-            "hyundai_ioniq6",
-            "kia_ev6",
-            "genesis_gv60"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x60C",
-            "action_can_id": "0x60C",
-            "byte": "D6",
-            "offset": 10,
-            "min": -10,
-            "max": 10,
-            "step": 1,
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
-        }
-      ],
       "subcategory": "Audio & Media",
       "action_can_id": "0x60C",
       "state_can_id": "0x60C"
@@ -9496,38 +9292,6 @@
         "state_byte": "D7",
         "action_byte": "D7"
       },
-      "variants": [
-        {
-          "targets": [
-            "all_egmp",
-            "hyundai_ioniq5",
-            "hyundai_ioniq6",
-            "kia_ev6",
-            "genesis_gv60"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x60C",
-            "action_can_id": "0x60C",
-            "byte": "D7",
-            "offset": 10,
-            "min": -10,
-            "max": 10,
-            "step": 1,
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
-        }
-      ],
       "subcategory": "Audio & Media",
       "action_can_id": "0x60C",
       "state_can_id": "0x60C"
@@ -9570,33 +9334,6 @@
           "0x00"
         ]
       },
-      "variants": [
-        {
-          "targets": [
-            "all_egmp",
-            "hyundai_ioniq5",
-            "hyundai_ioniq6",
-            "kia_ev6",
-            "genesis_gv60"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x60C",
-            "action_can_id": "0x60C",
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
-        }
-      ],
       "options": [
         {
           "label": "Surround Sound On",
@@ -9662,33 +9399,6 @@
           "0x00"
         ]
       },
-      "variants": [
-        {
-          "targets": [
-            "all_egmp",
-            "hyundai_ioniq5",
-            "hyundai_ioniq6",
-            "kia_ev6",
-            "genesis_gv60"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x60C",
-            "action_can_id": "0x60C",
-            "base_payload": [
-              "0x19",
-              "0x00",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x0A",
-              "0x00"
-            ]
-          }
-        }
-      ],
       "options": [
         {
           "label": "SDVC On",
