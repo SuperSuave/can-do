@@ -821,8 +821,8 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                             <span className="text-[11px] text-slate-300">Duration:</span>
                                             <input
                                               type="number"
-                                              min="10"
-                                              step="50"
+                                              min="0"
+                                              step="1"
                                               value={step.delay_ms ?? step.dwell_ms ?? step.ms ?? 500}
                                               onChange={e =>
                                                 handleUpdateOptionStep(idx, sIdx, {
@@ -946,7 +946,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                           <input
                                             type="number"
                                             min="0"
-                                            step="50"
+                                            step="1"
                                             value={step.delay_ms || 0}
                                             onChange={e =>
                                               handleUpdateOptionStep(idx, sIdx, { delay_ms: parseInt(e.target.value) || 0 })

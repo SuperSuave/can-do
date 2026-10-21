@@ -4831,7 +4831,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   <input
                     type="number"
                     min="0"
-                    step="50"
+                    step="1"
                     value={activeRule.cooldown_ms !== undefined ? activeRule.cooldown_ms : 0}
                     onChange={e => handleUpdateActiveRule({ cooldown_ms: parseInt(e.target.value) || 0 })}
                     placeholder="0"
