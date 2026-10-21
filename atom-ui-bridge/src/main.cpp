@@ -28,7 +28,7 @@
 // WiCAN RX (Corner pad GPIO 20) -> Atom Lite G25 (TX)
 #define BRIDGE_RX_PIN    21      // Connect to WiCAN TX
 #define BRIDGE_TX_PIN    25      // Connect to WiCAN RX
-#define UART_BAUD        921600  // High-speed UART link
+#define UART_BAUD        460800  // High-speed, zero-error UART link
 
 CRGB leds[1];
 
@@ -45,7 +45,7 @@ unsigned long g_last_wican_rx_ms = 0;
 bool g_wican_online = false;
 
 #ifndef CAN_DO_VERSION
-#define CAN_DO_VERSION "2026.10.6-b013"
+#define CAN_DO_VERSION "2026.10.7-b001"
 #endif
 
 String g_can_do_version = CAN_DO_VERSION;
@@ -126,6 +126,7 @@ String g_connected_device_addr = "";
 void set_led_color(CRGB color);
 void update_led_status();
 void send_to_wican(const String& line);
+void request_wican_states_throttled();
 void handle_wican_message(const String& line);
 void fire_ble_button_event(const String& addr, const String& name, const String& button, const String& action = "press", const String& combo = "");
 void connect_ble_device(const String& address, uint8_t addr_type = 0xFF, NimBLEAdvertisedDevice* pAdvDev = nullptr);
@@ -1201,24 +1202,32 @@ class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
 // WiCAN UART Communication Link
 // ============================================================================
 void send_to_wican(const String& line) {
+    if (line.isEmpty()) return;
     Serial2.print(line);
     if (!line.endsWith("\n")) {
         Serial2.print("\n");
     }
-    Serial.printf("[ATOM UART TX: %s]\n", line.c_str());
+}
+
+void request_wican_states_throttled() {
+    static unsigned long s_last_req_ms = 0;
+    if (millis() - s_last_req_ms >= 2500) {
+        s_last_req_ms = millis();
+        send_to_wican("{\"type\":\"get_states\"}");
+    }
 }
 
 void handle_wican_message(const String& line) {
     g_last_wican_rx_ms = millis();
-    Serial.printf("[ATOM UART RX: %s]\n", line.c_str());
     if (!g_wican_online) {
         g_wican_online = true;
         Serial.println("[UART] WiCAN link established!");
         update_led_status();
-        broadcast_ble_status();
+        request_wican_states_throttled();
     }
 
-    if (line.indexOf("\"type\":\"pong\"") >= 0) {
+    // Consume heartbeat messages without forwarding to WebSockets or echoing
+    if (line.indexOf("\"type\":\"pong\"") >= 0 || line.indexOf("\"type\":\"ping\"") >= 0) {
         return;
     }
 
@@ -1364,7 +1373,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
         client->text(out);
 
         // Request fresh state sync from WiCAN
-        send_to_wican("{\"type\":\"get_states\"}");
+        request_wican_states_throttled();
         update_led_status();
 
     } else if (type == WS_EVT_DISCONNECT) {
@@ -1413,6 +1422,8 @@ void setup() {
     pinMode(BUTTON_PIN, INPUT_PULLUP);
 
     // 3. Hardware Serial2 link to WiCAN (Corner Pad TX -> Atom G21 RX, Corner Pad RX -> Atom G25 TX)
+    Serial2.setRxBufferSize(4096);
+    Serial2.setTxBufferSize(2048);
     Serial2.begin(UART_BAUD, SERIAL_8N1, BRIDGE_RX_PIN, BRIDGE_TX_PIN);
     Serial.printf("[UART] Serial2 initialized at %d baud (RX: GPIO%d, TX: GPIO%d)\n",
                   UART_BAUD, BRIDGE_RX_PIN, BRIDGE_TX_PIN);
@@ -1520,7 +1531,7 @@ void setup() {
         String out;
         serializeJson(doc, out);
         request->send(200, "application/json", out);
-        send_to_wican("{\"type\":\"get_states\"}");
+        request_wican_states_throttled();
     });
 
     // REST: POST /api/command
@@ -2232,7 +2243,7 @@ void setup() {
 
     // Initial ping to WiCAN
     send_to_wican("{\"type\":\"ping\"}");
-    send_to_wican("{\"type\":\"get_states\"}");
+    request_wican_states_throttled();
 
     update_led_status();
 }
