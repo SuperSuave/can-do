@@ -106,18 +106,23 @@ std::unordered_map<std::string, std::string> get_live_state_cache(void) {
 void broadcast_ws_state(const std::string& entity_id, const std::string& state) {
     {
         std::lock_guard<std::mutex> lock(s_state_cache_mutex);
+        auto it = s_live_state_cache.find(entity_id);
+        if (it != s_live_state_cache.end() && it->second == state) {
+            return; // Deduplicate identical state updates
+        }
         s_live_state_cache[entity_id] = state;
     }
-    uart_bridge_send_state(entity_id, state);
+    if (uart_bridge_is_online()) {
+        uart_bridge_send_state(entity_id, state);
+    }
     if (!has_active_websocket_clients()) return;
     std::string json = "{\"type\":\"state\",\"entity\":\"" + entity_id + "\",\"state\":\"" + state + "\"}";
     broadcast_ws_raw(json);
 }
 
 void broadcast_ws_can_frame(const twai_message_t* msg) {
-    if (!msg) return;
-    uart_bridge_send_can_frame(msg);
-    // Raw WebSocket frame streaming removed to eliminate socket churn and prioritize real-time state telemetry
+    (void)msg;
+    // Raw CAN frame streaming over WebSocket and UART disabled to protect real-time telemetry
 }
 
 void broadcast_ws_automation_event(const std::string& id, const std::string& name) {

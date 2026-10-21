@@ -1270,7 +1270,7 @@ void can_rx_task(void* arg) {
             }
         }
 
-        if (twai_receive(&rx_msg, pdMS_TO_TICKS(10)) == ESP_OK) {
+        if (twai_receive(&rx_msg, pdMS_TO_TICKS(5)) == ESP_OK) {
             rx_processed++;
             s_last_can_frame_ms = now_ms;
             board_led_can_activity();
@@ -1407,7 +1407,7 @@ void can_rx_task(void* arg) {
                         if (is_match(rx_msg.data, opt)) {
                             if (entity.current_state != opt.label) {
                                 entity.current_state = opt.label;
-                                ESP_LOGI(TAG, "State change: %s -> %s", entity.id.c_str(), opt.label.c_str());
+                                ESP_LOGD(TAG, "State change: %s -> %s", entity.id.c_str(), opt.label.c_str());
 
                                 // MQTT Publish
                                 std::string payload = opt.label;
@@ -1877,7 +1877,7 @@ void can_rx_task(void* arg) {
             hud_nav_tick_100ms();
         }
 
-        if (rx_processed >= 20) {
+        if (rx_processed >= 10) {
             vTaskDelay(pdMS_TO_TICKS(1));
             rx_processed = 0;
         }

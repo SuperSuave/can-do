@@ -3,6 +3,7 @@
 #include "cJSON.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include "parser.h"
 #include "can_engine.h"
 #include "vbat_sensor.h"
@@ -11,114 +12,195 @@
 #include "track_popup.h"
 #include "api.h"
 #include "esp_timer.h"
+#include "driver/gpio.h"
 #include <cstring>
 #include <vector>
 #include <cctype>
 #include <unordered_set>
+#include <atomic>
+#include <mutex>
 
 static const char* TAG = "UART_BRIDGE";
-static const int RX_BUF_SIZE = 2048;
+static const int RX_BUF_SIZE = 4096;
+static const int TX_BUF_SIZE = 4096;
+static const size_t MAX_TX_MSG_LEN = 384;
+static const size_t TX_QUEUE_DEPTH = 32;
 
+struct UartTxMsg {
+    uint16_t len;
+    char data[MAX_TX_MSG_LEN];
+};
+
+static QueueHandle_t s_uart_tx_queue = nullptr;
+static std::atomic<int64_t> s_last_bridge_rx_us{0};
+static std::atomic<bool> s_dump_states_requested{false};
+static std::atomic<int64_t> s_last_states_dump_us{0};
+static std::atomic<uint32_t> s_tx_dropped_count{0};
+
+static std::mutex s_ble_status_mutex;
+static std::string s_cached_ble_status = "{\"enabled\":true,\"scanning\":false,\"connected_device\":null,\"paired_devices\":[],\"discovered_devices\":[]}";
+
+bool uart_bridge_is_online(void) {
+    int64_t last = s_last_bridge_rx_us.load(std::memory_order_relaxed);
+    if (last == 0) return false;
+    return (esp_timer_get_time() - last) < 8000000; // 8 seconds timeout
+}
+
+// Non-blocking enqueue: NEVER stalls CAN RX, HTTP, or timer tasks
 void uart_bridge_send_raw(const std::string& line) {
     if (line.empty()) return;
-    std::string out = line;
-    if (out.back() != '\n') {
-        out += '\n';
+
+    // Fast-path for oversized payloads (e.g., states_dump batch): use non-blocking uart_tx_chars
+    if (line.length() + 2 > MAX_TX_MSG_LEN) {
+        uart_tx_chars(UART_BRIDGE_PORT, line.data(), line.length());
+        if (line.back() != '\n') {
+            uart_tx_chars(UART_BRIDGE_PORT, "\n", 1);
+        }
+        return;
     }
-    uart_write_bytes(UART_BRIDGE_PORT, out.data(), out.length());
+
+    if (!s_uart_tx_queue) return;
+
+    UartTxMsg msg;
+    size_t copy_len = line.length();
+    memcpy(msg.data, line.data(), copy_len);
+    if (msg.data[copy_len - 1] != '\n') {
+        msg.data[copy_len++] = '\n';
+    }
+    msg.len = static_cast<uint16_t>(copy_len);
+
+    // 0-tick non-blocking send: drop if queue is full rather than stalling caller
+    if (xQueueSend(s_uart_tx_queue, &msg, 0) != pdTRUE) {
+        s_tx_dropped_count.fetch_add(1, std::memory_order_relaxed);
+    }
 }
 
 void uart_bridge_send_state(const std::string& entity_id, const std::string& state) {
-    std::string json = "{\"type\":\"state\",\"entity\":\"" + entity_id + "\",\"state\":\"" + state + "\"}";
-    uart_bridge_send_raw(json);
+    // Do not flood UART TX if Atom Lite is powered off or offline
+    if (!uart_bridge_is_online()) return;
+
+    char buf[256];
+    int n = snprintf(buf, sizeof(buf), "{\"type\":\"state\",\"entity\":\"%s\",\"state\":\"%s\"}\n",
+                     entity_id.c_str(), state.c_str());
+    if (n > 0 && n < (int)sizeof(buf)) {
+        uart_bridge_send_raw(std::string(buf, n));
+    }
 }
 
 void uart_bridge_send_can_frame(const twai_message_t* msg) {
-    if (!msg) return;
-    char hex_data[17] = {0};
-    uint8_t dlc = msg->data_length_code > 8 ? 8 : msg->data_length_code;
-    for (int i = 0; i < dlc; i++) {
-        snprintf(&hex_data[i * 2], 3, "%02X", msg->data[i]);
-    }
-    char buf[128];
-    snprintf(buf, sizeof(buf),
-             "{\"type\":\"can_frame\",\"id\":\"0x%lX\",\"dlc\":%d,\"data\":\"%s\"}",
-             (unsigned long)msg->identifier, msg->data_length_code, hex_data);
-    uart_bridge_send_raw(buf);
+    // Raw CAN frame streaming over UART disabled during normal operation to protect bandwidth
+    (void)msg;
+}
+
+void uart_bridge_request_all_states(void) {
+    s_dump_states_requested.store(true, std::memory_order_relaxed);
 }
 
 void uart_bridge_send_all_states(void) {
+    int64_t now_us = esp_timer_get_time();
+    int64_t last_dump = s_last_states_dump_us.load(std::memory_order_relaxed);
+    // Rate-limit full state dumps to at most once every 2 seconds
+    if (last_dump != 0 && (now_us - last_dump) < 2000000) {
+        return;
+    }
+    s_last_states_dump_us.store(now_us, std::memory_order_relaxed);
+
     std::unordered_set<std::string> included;
-    cJSON *batch = cJSON_CreateArray();
+    const auto cache = get_live_state_cache(); // Single mutex snapshot, instead of locking inside loop
+
+    std::string batch_payload;
+    batch_payload.reserve(1024);
     int batch_count = 0;
 
-    auto flush_batch = [&batch, &batch_count]() {
-        if (batch_count == 0) return;
-        char *json_str = cJSON_PrintUnformatted(batch);
-        if (json_str) {
-            std::string payload = "{\"type\":\"states_dump\",\"data\":";
-            payload += json_str;
-            payload += "}";
-            uart_bridge_send_raw(payload);
-            free(json_str);
-        }
-        cJSON_Delete(batch);
-        batch = cJSON_CreateArray();
+    auto start_batch = [&]() {
+        batch_payload = "{\"type\":\"states_dump\",\"data\":[";
         batch_count = 0;
     };
 
+    auto flush_batch = [&]() {
+        if (batch_count == 0) return;
+        batch_payload += "]}\n";
+        uart_tx_chars(UART_BRIDGE_PORT, batch_payload.data(), batch_payload.length());
+        // Yield to feed IDLE0 watchdog and allow UART hardware FIFO to drain
+        vTaskDelay(pdMS_TO_TICKS(5));
+        start_batch();
+    };
+
+    auto append_escaped = [&](const std::string& eid, const std::string& st) {
+        if (batch_count > 0) batch_payload += ",";
+        batch_payload += "{\"entity\":\"";
+        batch_payload += eid;
+        batch_payload += "\",\"state\":\"";
+        for (char c : st) {
+            if (c == '"' || c == '\\') batch_payload += '\\';
+            batch_payload += c;
+        }
+        batch_payload += "\"}";
+        batch_count++;
+        if (batch_count >= 12) {
+            flush_batch();
+        }
+    };
+
+    start_batch();
+
     for (const auto& entity : global_catalog) {
-        cJSON *item = cJSON_CreateObject();
-        cJSON_AddStringToObject(item, "entity", entity.id.c_str());
         std::string st = entity.current_state;
-        const auto& cache = get_live_state_cache();
         auto it = cache.find(entity.id);
         if (it != cache.end()) {
             st = it->second;
         }
-        cJSON_AddStringToObject(item, "state", st.empty() ? "Unknown" : st.c_str());
-        cJSON_AddItemToArray(batch, item);
+        append_escaped(entity.id, st.empty() ? "Unknown" : st);
         included.insert(entity.id);
-        batch_count++;
-        if (batch_count >= 20) {
-            flush_batch();
-        }
     }
 
-    const auto& cache = get_live_state_cache();
     for (const auto& pair : cache) {
         if (included.find(pair.first) == included.end()) {
-            cJSON *item = cJSON_CreateObject();
-            cJSON_AddStringToObject(item, "entity", pair.first.c_str());
-            cJSON_AddStringToObject(item, "state", pair.second.c_str());
-            cJSON_AddItemToArray(batch, item);
+            append_escaped(pair.first, pair.second);
             included.insert(pair.first);
-            batch_count++;
-            if (batch_count >= 20) {
-                flush_batch();
-            }
         }
     }
 
     if (included.find("cond_aux_12v_battery") == included.end()) {
-        cJSON *item = cJSON_CreateObject();
-        cJSON_AddStringToObject(item, "entity", "cond_aux_12v_battery");
-        cJSON_AddStringToObject(item, "state", vbat_sensor_get_last_str());
-        cJSON_AddItemToArray(batch, item);
-        batch_count++;
+        append_escaped("cond_aux_12v_battery", vbat_sensor_get_last_str());
     }
 
     flush_batch();
-    cJSON_Delete(batch);
 }
 
-static std::string s_cached_ble_status = "{\"enabled\":true,\"scanning\":false,\"connected_device\":null,\"paired_devices\":[],\"discovered_devices\":[]}";
-static int64_t s_last_bridge_rx_us = 0;
+static void handle_incoming_command(const char* json_str, size_t len) {
+    if (!json_str || len < 2) return;
 
-static void handle_incoming_command(const char* json_str) {
+    // 1. Zero-allocation fast paths for high-frequency control messages
+    if (strstr(json_str, "\"type\":\"ping\"") != nullptr) {
+        uart_bridge_send_raw("{\"type\":\"pong\"}");
+        return;
+    }
+    if (strstr(json_str, "\"type\":\"pong\"") != nullptr) {
+        return;
+    }
+    if (strstr(json_str, "\"type\":\"get_states\"") != nullptr) {
+        uart_bridge_request_all_states();
+        return;
+    }
+
+    // 2. Fast-path extraction for large ble_status payloads without full cJSON re-serialization
+    if (strstr(json_str, "\"type\":\"ble_status\"") != nullptr) {
+        const char* data_pos = strstr(json_str, "\"data\":");
+        if (data_pos) {
+            data_pos += 7; // skip `"data":`
+            while (*data_pos == ' ') data_pos++;
+            size_t rem_len = len - (data_pos - json_str);
+            if (rem_len > 1 && data_pos[rem_len - 1] == '}') {
+                std::lock_guard<std::mutex> lock(s_ble_status_mutex);
+                s_cached_ble_status.assign(data_pos, rem_len - 1);
+            }
+        }
+        return;
+    }
+
     cJSON *root = cJSON_Parse(json_str);
     if (!root) {
-        ESP_LOGW(TAG, "Malformed JSON from UART: %s", json_str);
         return;
     }
 
@@ -132,20 +214,12 @@ static void handle_incoming_command(const char* json_str) {
     cJSON *cmd_item = cJSON_GetObjectItem(root, "command");
     cJSON *can_id_item = cJSON_GetObjectItem(root, "can_id");
 
-    if (strcmp(type, "get_states") == 0) {
-        ESP_LOGI(TAG, "Bridge requested all states -> sending states dump");
-        uart_bridge_send_all_states();
-    } else if (strcmp(type, "ping") == 0) {
-        ESP_LOGI(TAG, "Bridge ping received -> sending pong");
-        uart_bridge_send_raw("{\"type\":\"pong\"}");
-    } else if (strcmp(type, "lock") == 0 || strcmp(type, "unlock") == 0) {
+    if (strcmp(type, "lock") == 0 || strcmp(type, "unlock") == 0) {
         bool is_lock = (strcmp(type, "lock") == 0);
         bool ok = queue_entity_command("door_locks", is_lock ? "lock" : "unlock");
         if (!ok) ok = queue_entity_command("doors_lock_state", is_lock ? "lock" : "unlock");
         if (!ok) ok = queue_entity_command("bridge_door_lock_ctrl", is_lock ? "lock" : "unlock");
         uart_bridge_send_raw(ok ? "{\"type\":\"ack\",\"status\":\"queued\"}" : "{\"type\":\"nack\",\"error\":\"lock_failed\"}");
-        cJSON_Delete(root);
-        return;
     } else if (strcmp(type, "notify") == 0 || (msg_item && cJSON_IsString(msg_item) && strlen(type) == 0)) {
         std::string msg = (msg_item && cJSON_IsString(msg_item)) ? msg_item->valuestring : "";
         cJSON *lvl_item = cJSON_GetObjectItem(root, "level");
@@ -160,19 +234,11 @@ static void handle_incoming_command(const char* json_str) {
             sent = track_popup_show_info(msg.c_str());
         }
         uart_bridge_send_raw(sent ? "{\"type\":\"ack\",\"status\":\"notified\"}" : "{\"type\":\"nack\",\"error\":\"notify_failed\"}");
-        cJSON_Delete(root);
-        return;
     } else if (strcmp(type, "cmd") == 0 || entity_item != nullptr || can_id_item != nullptr) {
         if (cJSON_IsString(entity_item)) {
             const char* entity = entity_item->valuestring;
             const char* cmd = cJSON_IsString(cmd_item) ? cmd_item->valuestring : "";
-            if (strcmp(entity, "hvac_direct_climate_cmd") == 0) {
-                bool ok = queue_entity_command("hvac_direct_climate_cmd", cmd);
-                uart_bridge_send_raw(ok ? "{\"type\":\"ack\",\"status\":\"queued\"}" : "{\"type\":\"nack\",\"error\":\"entity_failed\"}");
-                return;
-            }
             bool ok = queue_entity_command(entity, cmd);
-            ESP_LOGI(TAG, "Entity command '%s' -> '%s' (queued: %d)", entity, cmd, ok);
             uart_bridge_send_raw(ok ? "{\"type\":\"ack\",\"status\":\"queued\"}" : "{\"type\":\"nack\",\"error\":\"entity_failed\"}");
         } else if (can_id_item) {
             uint32_t cid = 0;
@@ -260,8 +326,6 @@ static void handle_incoming_command(const char* json_str) {
             if (!ok) ok = queue_entity_command("doors_lock_state", "toggle");
             if (!ok) ok = queue_entity_command("bridge_door_lock_ctrl", "toggle");
             uart_bridge_send_raw(ok ? "{\"type\":\"ack\",\"action\":\"lock_toggled\"}" : "{\"type\":\"nack\",\"error\":\"toggle_failed\"}");
-        } else {
-            ESP_LOGW(TAG, "Unknown trigger action: %s", action);
         }
     } else if (strcmp(type, "wifi_save") == 0) {
         cJSON *ssid_item = cJSON_GetObjectItem(root, "ssid");
@@ -272,22 +336,11 @@ static void handle_incoming_command(const char* json_str) {
             const char* pass = cJSON_IsString(pass_item) ? pass_item->valuestring : "";
             int prio = cJSON_IsNumber(prio_item) ? prio_item->valueint : 50;
             network_mgr_add_known_network(ssid, pass, prio);
-            ESP_LOGI(TAG, "Saved Wi-Fi network '%s' from bridge", ssid);
         }
     } else if (strcmp(type, "wifi_delete") == 0) {
         cJSON *ssid_item = cJSON_GetObjectItem(root, "ssid");
         if (cJSON_IsString(ssid_item) && strlen(ssid_item->valuestring) > 0) {
             network_mgr_remove_known_network(ssid_item->valuestring);
-            ESP_LOGI(TAG, "Removed Wi-Fi network '%s' from bridge", ssid_item->valuestring);
-        }
-    } else if (strcmp(type, "ble_status") == 0) {
-        cJSON *data_item = cJSON_GetObjectItem(root, "data");
-        if (data_item) {
-            char *d_str = cJSON_PrintUnformatted(data_item);
-            if (d_str) {
-                s_cached_ble_status = d_str;
-                free(d_str);
-            }
         }
     } else if (strcmp(type, "ble_event") == 0) {
         broadcast_ws_raw(json_str);
@@ -336,52 +389,76 @@ static void handle_incoming_command(const char* json_str) {
     cJSON_Delete(root);
 }
 
-bool uart_bridge_is_online(void) {
-    if (s_last_bridge_rx_us == 0) return false;
-    return (esp_timer_get_time() - s_last_bridge_rx_us) < 6000000;
-}
-
 std::string uart_bridge_get_ble_status(void) {
-    uart_bridge_send_raw("{\"type\":\"ble_get_status\"}");
+    if (uart_bridge_is_online()) {
+        uart_bridge_send_raw("{\"type\":\"ble_get_status\"}");
+    }
+    std::lock_guard<std::mutex> lock(s_ble_status_mutex);
     return s_cached_ble_status;
 }
 
-static void uart_bridge_rx_task(void* pvParameters) {
-    uint8_t* dtmp = (uint8_t*)malloc(RX_BUF_SIZE);
+static void uart_bridge_worker_task(void* pvParameters) {
+    uint8_t* dtmp = (uint8_t*)malloc(1024);
     if (!dtmp) {
         ESP_LOGE(TAG, "Failed to allocate UART RX buffer");
         vTaskDelete(NULL);
         return;
     }
 
-    std::string line_buffer = "";
-    ESP_LOGI(TAG, "UART Bridge RX task active (Corner TX=GPIO%d, RX=GPIO%d, %d baud)", 
-             UART_BRIDGE_TX_PIN, UART_BRIDGE_RX_PIN, UART_BRIDGE_BAUD_RATE);
+    std::string line_buffer;
+    line_buffer.reserve(2048);
+
+    UartTxMsg tx_msg;
+    int64_t last_heartbeat_us = esp_timer_get_time();
 
     while (true) {
-        int len = uart_read_bytes(UART_BRIDGE_PORT, dtmp, RX_BUF_SIZE - 1, pdMS_TO_TICKS(100));
+        // 1. Drain outbound UART TX queue using non-blocking uart_tx_chars
+        int tx_drained = 0;
+        while (tx_drained < 16 && xQueueReceive(s_uart_tx_queue, &tx_msg, 0) == pdTRUE) {
+            uart_tx_chars(UART_BRIDGE_PORT, tx_msg.data, tx_msg.len);
+            tx_drained++;
+        }
+
+        // 2. Service deferred state dump requests with watchdog-friendly yields
+        if (s_dump_states_requested.exchange(false)) {
+            uart_bridge_send_all_states();
+        }
+
+        // 3. Read incoming UART bytes with short 20ms timeout so IDLE0 and lower tasks run freely
+        int len = uart_read_bytes(UART_BRIDGE_PORT, dtmp, 1024 - 1, pdMS_TO_TICKS(20));
         if (len > 0) {
-            s_last_bridge_rx_us = esp_timer_get_time();
+            s_last_bridge_rx_us.store(esp_timer_get_time(), std::memory_order_relaxed);
+            int lines_processed = 0;
+
             for (int i = 0; i < len; i++) {
                 char c = (char)dtmp[i];
                 if (c == '\n' || c == '\r') {
                     if (!line_buffer.empty()) {
-                        handle_incoming_command(line_buffer.c_str());
+                        handle_incoming_command(line_buffer.c_str(), line_buffer.length());
                         line_buffer.clear();
+                        lines_processed++;
+                        // Yield every 4 commands during bursts to prevent starving IDLE0 / CAN RX
+                        if (lines_processed % 4 == 0) {
+                            vTaskDelay(pdMS_TO_TICKS(1));
+                        }
                     }
-                } else {
-                    if (line_buffer.length() < 8192) {
+                } else if ((uint8_t)c >= 0x20 && (uint8_t)c <= 0x7E) {
+                    // Filter out boot ROM / electrical glitch garbage bytes
+                    if (line_buffer.length() < 4096) {
                         line_buffer += c;
                     } else {
                         line_buffer.clear();
                     }
+                } else {
+                    // Non-printable noise byte: reset partial corrupt line
+                    line_buffer.clear();
                 }
             }
         }
 
-        static int64_t last_heartbeat_us = 0;
+        // 4. Periodic heartbeat (every 4 seconds)
         int64_t now_us = esp_timer_get_time();
-        if (now_us - last_heartbeat_us >= 3000000) {
+        if (now_us - last_heartbeat_us >= 4000000) {
             last_heartbeat_us = now_us;
             uart_bridge_send_raw("{\"type\":\"ping\"}");
         }
@@ -392,6 +469,13 @@ static void uart_bridge_rx_task(void* pvParameters) {
 }
 
 void uart_bridge_init(void) {
+    s_uart_tx_queue = xQueueCreate(TX_QUEUE_DEPTH, sizeof(UartTxMsg));
+
+    // Detach GPIO 20/21 from any default UART0 console routing before binding UART1
+    gpio_reset_pin(UART_BRIDGE_TX_PIN);
+    gpio_reset_pin(UART_BRIDGE_RX_PIN);
+    gpio_set_pull_mode(UART_BRIDGE_RX_PIN, GPIO_PULLUP_ONLY);
+
     uart_config_t uart_config = {};
     uart_config.baud_rate = UART_BRIDGE_BAUD_RATE;
     uart_config.data_bits = UART_DATA_8_BITS;
@@ -401,11 +485,18 @@ void uart_bridge_init(void) {
     uart_config.rx_flow_ctrl_thresh = 0;
     uart_config.source_clk = UART_SCLK_DEFAULT;
 
+    // Place UART1 ISR in IRAM if supported
+    int intr_alloc_flags = 0;
+#if defined(CONFIG_UART_ISR_IN_IRAM)
+    intr_alloc_flags = ESP_INTR_FLAG_IRAM;
+#endif
+
+    ESP_ERROR_CHECK(uart_driver_install(UART_BRIDGE_PORT, RX_BUF_SIZE, TX_BUF_SIZE, 0, NULL, intr_alloc_flags));
     ESP_ERROR_CHECK(uart_param_config(UART_BRIDGE_PORT, &uart_config));
     ESP_ERROR_CHECK(uart_set_pin(UART_BRIDGE_PORT, UART_BRIDGE_TX_PIN, UART_BRIDGE_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
-    ESP_ERROR_CHECK(uart_driver_install(UART_BRIDGE_PORT, RX_BUF_SIZE * 2, RX_BUF_SIZE * 2, 0, NULL, 0));
 
-    xTaskCreate(uart_bridge_rx_task, "UART_BRIDGE_RX", 4096, NULL, 5, NULL);
-    ESP_LOGI(TAG, "UART Bridge initialized on port %d (TX: GPIO%d, RX: GPIO%d)", 
-             UART_BRIDGE_PORT, UART_BRIDGE_TX_PIN, UART_BRIDGE_RX_PIN);
+    // Priority 3 (below CAN RX/TX at Priority 5) so UART parsing never preempts CAN frame processing
+    xTaskCreate(uart_bridge_worker_task, "UART_BRIDGE_WK", 6144, NULL, 3, NULL);
+    ESP_LOGI(TAG, "UART Bridge initialized on port %d (TX: GPIO%d, RX: GPIO%d @ %d baud)", 
+             UART_BRIDGE_PORT, UART_BRIDGE_TX_PIN, UART_BRIDGE_RX_PIN, UART_BRIDGE_BAUD_RATE);
 }
