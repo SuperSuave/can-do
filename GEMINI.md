@@ -25,6 +25,7 @@ This file (`GEMINI.md`) is automatically loaded as context into every conversati
      - `catalog/can_do_catalog.json` (`can_do_version`)
      - `frontend/package.json` (`version`)
      - `custom_components/can_do/manifest.json` (`version`) and `const.py` (`VERSION`)
+   - **Always Confirm Before Tagging/Releasing**: Never create, update, or push a git tag or bump release versions without asking and receiving explicit confirmation from the user on the exact tag name first.
 
 ---
 
