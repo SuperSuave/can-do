@@ -592,7 +592,7 @@ export function compileAutomationRule(
           wifi_event: trig.wifi_event || 'ap_client_connected',
           ...(trig.ssid ? { ssid: trig.ssid } : {}),
           ...(trig.client_mac ? { client_mac: trig.client_mac } : {}),
-          ...(trig.target_rssi ? { target_rssi: trig.target_rssi } : {})
+          ...(trig.target_rssi !== undefined && trig.target_rssi !== 0 ? { target_rssi: trig.target_rssi } : {})
         };
       }
 

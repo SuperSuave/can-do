@@ -231,9 +231,41 @@ bool evaluate_condition(const AutomationCondition& cond) {
                     if (cond.op == ConditionOperator::NOT_EQUAL) {
                         return strcasecmp(net_status.sta_ssid.c_str(), cond.target_string.c_str()) != 0;
                     }
-                    return strcasecmp(net_status.sta_ssid.c_str(), cond.target_string.c_str()) == 0;
+                    if (strcasecmp(net_status.sta_ssid.c_str(), cond.target_string.c_str()) != 0) return false;
+                    if (cond.target_rssi != 0) {
+                        switch (cond.op) {
+                            case ConditionOperator::GREATER_THAN: return net_status.sta_rssi > cond.target_rssi;
+                            case ConditionOperator::LESS_THAN:    return net_status.sta_rssi < cond.target_rssi;
+                            case ConditionOperator::EQUAL:        return net_status.sta_rssi == cond.target_rssi;
+                            case ConditionOperator::NOT_EQUAL:    return net_status.sta_rssi != cond.target_rssi;
+                            default: return net_status.sta_rssi >= cond.target_rssi;
+                        }
+                    }
+                    return true;
                 } else if (cond.device_property == "wifi_connected" || cond.device_property == "connected") {
-                    return net_status.sta_connected == cond.target_bool;
+                    if (net_status.sta_connected != cond.target_bool) return false;
+                    if (cond.target_bool && cond.target_rssi != 0) {
+                        switch (cond.op) {
+                            case ConditionOperator::GREATER_THAN: return net_status.sta_rssi > cond.target_rssi;
+                            case ConditionOperator::LESS_THAN:    return net_status.sta_rssi < cond.target_rssi;
+                            case ConditionOperator::EQUAL:        return net_status.sta_rssi == cond.target_rssi;
+                            case ConditionOperator::NOT_EQUAL:    return net_status.sta_rssi != cond.target_rssi;
+                            default: return net_status.sta_rssi >= cond.target_rssi;
+                        }
+                    }
+                    return true;
+                } else if (cond.device_property == "wifi_rssi" || cond.device_property == "wifi_station_rssi" || cond.device_property == "sta_rssi") {
+                    if (!net_status.sta_connected) return false;
+                    if (!cond.target_string.empty() && strcasecmp(net_status.sta_ssid.c_str(), cond.target_string.c_str()) != 0) {
+                        return false;
+                    }
+                    switch (cond.op) {
+                        case ConditionOperator::GREATER_THAN: return net_status.sta_rssi > cond.target_rssi;
+                        case ConditionOperator::LESS_THAN:    return net_status.sta_rssi < cond.target_rssi;
+                        case ConditionOperator::EQUAL:        return net_status.sta_rssi == cond.target_rssi;
+                        case ConditionOperator::NOT_EQUAL:    return net_status.sta_rssi != cond.target_rssi;
+                        default: return net_status.sta_rssi >= cond.target_rssi;
+                    }
                 } else if (cond.device_property == "wifi_mode" || cond.device_property == "ap_mode") {
                     if (cond.target_string == "ap") return net_status.ap_active && !net_status.sta_connected;
                     if (cond.target_string == "sta") return net_status.sta_connected && !net_status.ap_active;
@@ -2002,7 +2034,7 @@ void can_engine_on_device_event(const std::string& event_type, const std::string
                 }
 
                 // Match target RSSI if specified
-                if (trig.target_rssi != 0 && event_type == "ap_client_connected") {
+                if (trig.target_rssi != 0 && (event_type == "ap_client_connected" || event_type == "wifi_connected")) {
                     if (rssi < trig.target_rssi) {
                         continue;
                     }

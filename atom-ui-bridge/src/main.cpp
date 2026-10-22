@@ -45,7 +45,7 @@ unsigned long g_last_wican_rx_ms = 0;
 bool g_wican_online = false;
 
 #ifndef CAN_DO_VERSION
-#define CAN_DO_VERSION "2026.10.7-b003"
+#define CAN_DO_VERSION "2026.10.7-b004"
 #endif
 
 String g_can_do_version = CAN_DO_VERSION;
@@ -313,7 +313,11 @@ void load_saved_wifi() {
     String custom_ap_ssid = g_wifi_prefs.getString("ap_ssid", "");
     String custom_ap_pass = g_wifi_prefs.getString("ap_pass", "");
     if (!custom_ap_ssid.isEmpty()) g_ap_ssid = custom_ap_ssid;
-    if (!custom_ap_pass.isEmpty()) g_ap_pass = custom_ap_pass;
+    if (!custom_ap_pass.isEmpty() && custom_ap_pass.length() >= 8) {
+        g_ap_pass = custom_ap_pass;
+    } else {
+        g_ap_pass = "candorules";
+    }
 
     String json_str = g_wifi_prefs.getString("networks", "[]");
     g_wifi_prefs.end();
@@ -330,10 +334,6 @@ void load_saved_wifi() {
                 g_saved_wifi.push_back(net);
             }
         }
-    }
-    if (g_saved_wifi.empty()) {
-        g_saved_wifi.push_back({"THE Internet of Things", "kinetic@doorbell@residence", 100});
-        persist_saved_wifi();
     }
     Serial.printf("[WIFI] Loaded %u saved roaming networks from NVS:\n", g_saved_wifi.size());
     for (size_t i = 0; i < g_saved_wifi.size(); i++) {
@@ -1516,10 +1516,9 @@ void setup() {
     });
 
     load_saved_wifi();
+    start_softap();
     if (!g_saved_wifi.empty()) {
         connect_to_best_wifi();
-    } else {
-        start_softap();
     }
 
     if (MDNS.begin(g_device_id.c_str())) {

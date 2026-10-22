@@ -481,6 +481,12 @@ esp_err_t network_mgr_init(void) {
 NetworkStatusInfo network_mgr_get_status(void) {
     NetworkStatusInfo info;
     info.sta_connected = s_sta_connected;
+    if (s_sta_connected) {
+        wifi_ap_record_t ap_info;
+        if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+            s_cur_sta_rssi = ap_info.rssi;
+        }
+    }
     info.sta_ssid = s_cur_sta_ssid;
     info.sta_ip = s_cur_sta_ip;
     info.sta_gw = s_cur_sta_gw;

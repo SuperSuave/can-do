@@ -65,6 +65,10 @@ import {
   Radio,
   Wifi,
   Bluetooth,
+  Signal,
+  SignalHigh,
+  SignalMedium,
+  SignalLow,
   X,
   Share2,
   Users,
@@ -311,14 +315,16 @@ export function isOptionCurrentlyValid(
 }
 
 /**
- * Evaluates any condition node (group or leaf) against live CAN frames, entity states, system time, or triggers.
+ * Evaluates any condition node (group or leaf) against live CAN frames, entity states, system time, Wi-Fi status, or BLE beacons.
  */
 export function evaluateConditionState(
   cond: AutomationCondition,
   liveFrames?: Map<string, { data: string }>,
   entityStates?: Map<string, string>,
   lastFiredTriggerId?: string,
-  catalog?: Catalog
+  catalog?: Catalog,
+  liveWifiStatus?: LiveWifiStatus | null,
+  liveBleMap?: Map<string, LiveBleItem>
 ): EvaluatedConditionResult {
   const isGroup =
     cond.logic === 'and' ||
@@ -339,7 +345,7 @@ export function evaluateConditionState(
     }
 
     const subResults = children.map(c =>
-      evaluateConditionState(c, liveFrames, entityStates, lastFiredTriggerId, catalog)
+      evaluateConditionState(c, liveFrames, entityStates, lastFiredTriggerId, catalog, liveWifiStatus, liveBleMap)
     );
 
     if (groupLogic === 'and') {
@@ -413,6 +419,128 @@ export function evaluateConditionState(
     }
 
     return { state: 'valid', reason: 'Time window guardrail active' };
+  }
+
+  // Wi-Fi and Device State condition
+  if (cond.type === 'device_state' || cond.type === 'wifi' || cond.type === 'wifi_condition') {
+    if (!liveWifiStatus) {
+      return { state: 'unknown', reason: 'Waiting for Wi-Fi telemetry' };
+    }
+    const prop = cond.device_property || 'wifi_ssid';
+    if (prop === 'wifi_ssid' || prop === 'ssid') {
+      const isNot = cond.operator === 'not_equal';
+      const matchesSsid = isNot
+        ? liveWifiStatus.sta_ssid.toLowerCase() !== (cond.target_string || '').toLowerCase()
+        : liveWifiStatus.sta_ssid.toLowerCase() === (cond.target_string || '').toLowerCase();
+      if (!matchesSsid) {
+        return { state: 'invalid', reason: `SSID '${liveWifiStatus.sta_ssid}' does not match '${cond.target_string}'` };
+      }
+      if (cond.target_rssi !== undefined && cond.target_rssi !== 0) {
+        const op = cond.operator || 'greater_than';
+        const passed = op === 'less_than' ? liveWifiStatus.sta_rssi < cond.target_rssi : liveWifiStatus.sta_rssi >= cond.target_rssi;
+        return passed
+          ? { state: 'valid', reason: `SSID matches and RSSI (${liveWifiStatus.sta_rssi} dBm) meets threshold` }
+          : { state: 'invalid', reason: `RSSI (${liveWifiStatus.sta_rssi} dBm) does not meet threshold (${cond.target_rssi} dBm)` };
+      }
+      return { state: 'valid', reason: `SSID matches: ${liveWifiStatus.sta_ssid}` };
+    }
+    if (prop === 'wifi_connected' || prop === 'connected') {
+      const expected = cond.target_bool !== false;
+      if (liveWifiStatus.sta_connected !== expected) {
+        return { state: 'invalid', reason: `Station is ${liveWifiStatus.sta_connected ? 'Connected' : 'Disconnected'} (expected ${expected ? 'Connected' : 'Disconnected'})` };
+      }
+      if (expected && cond.target_rssi !== undefined && cond.target_rssi !== 0) {
+        const passed = liveWifiStatus.sta_rssi >= cond.target_rssi;
+        return passed
+          ? { state: 'valid', reason: `Connected with RSSI ${liveWifiStatus.sta_rssi} dBm >= ${cond.target_rssi} dBm` }
+          : { state: 'invalid', reason: `Connected but RSSI (${liveWifiStatus.sta_rssi} dBm) < ${cond.target_rssi} dBm` };
+      }
+      return { state: 'valid', reason: `Station is ${expected ? 'Connected' : 'Disconnected'}` };
+    }
+    if (prop === 'wifi_rssi' || prop === 'wifi_station_rssi' || prop === 'sta_rssi') {
+      if (!liveWifiStatus.sta_connected) {
+        return { state: 'invalid', reason: 'Station is not connected' };
+      }
+      if (cond.target_string && liveWifiStatus.sta_ssid.toLowerCase() !== cond.target_string.toLowerCase()) {
+        return { state: 'invalid', reason: `Connected to '${liveWifiStatus.sta_ssid}' (expected '${cond.target_string}')` };
+      }
+      const targetRssi = cond.target_rssi ?? -65;
+      const op = cond.operator || 'greater_than';
+      const passed = op === 'less_than' ? liveWifiStatus.sta_rssi < targetRssi : liveWifiStatus.sta_rssi >= targetRssi;
+      return passed
+        ? { state: 'valid', reason: `Station RSSI (${liveWifiStatus.sta_rssi} dBm) ${op === 'less_than' ? '<' : '>='} ${targetRssi} dBm` }
+        : { state: 'invalid', reason: `Station RSSI (${liveWifiStatus.sta_rssi} dBm) failed threshold ${targetRssi} dBm` };
+    }
+    if (prop === 'wifi_mode' || prop === 'ap_mode') {
+      if (cond.target_string === 'ap') {
+        const ok = liveWifiStatus.ap_active && !liveWifiStatus.sta_connected;
+        return ok ? { state: 'valid', reason: 'In standalone SoftAP mode' } : { state: 'invalid', reason: 'Not in standalone SoftAP mode' };
+      }
+      if (cond.target_string === 'sta') {
+        const ok = liveWifiStatus.sta_connected && !liveWifiStatus.ap_active;
+        return ok ? { state: 'valid', reason: 'In standalone Station mode' } : { state: 'invalid', reason: 'Not in standalone Station mode' };
+      }
+      if (cond.target_string === 'both' || cond.target_string === 'ap_sta') {
+        const ok = liveWifiStatus.ap_active && liveWifiStatus.sta_connected;
+        return ok ? { state: 'valid', reason: 'Both SoftAP and Station active' } : { state: 'invalid', reason: 'Both AP and STA not active' };
+      }
+      const expected = cond.target_bool !== false;
+      return liveWifiStatus.ap_active === expected
+        ? { state: 'valid', reason: `AP active: ${liveWifiStatus.ap_active}` }
+        : { state: 'invalid', reason: `AP active is ${liveWifiStatus.ap_active} (expected ${expected})` };
+    }
+  }
+
+  // Bluetooth Presence / Proximity condition
+  if (cond.type === 'ble_presence' || cond.type === 'ble_beacon' || cond.type === 'beacon' || cond.type === 'ble_device') {
+    if (!liveBleMap) {
+      return { state: 'unknown', reason: 'Waiting for Bluetooth telemetry' };
+    }
+    const targetKey = (cond.beacon_uuid || cond.ble_device || cond.target_string || '').toLowerCase().trim();
+    let matchedItem: LiveBleItem | undefined;
+    if (targetKey) {
+      for (const [k, v] of liveBleMap.entries()) {
+        if (
+          k.toLowerCase() === targetKey ||
+          (v.mac && v.mac.toLowerCase() === targetKey) ||
+          (v.uuid && v.uuid.toLowerCase() === targetKey) ||
+          (v.name && v.name.toLowerCase() === targetKey)
+        ) {
+          matchedItem = v;
+          break;
+        }
+      }
+    } else {
+      for (const v of liveBleMap.values()) {
+        if (v.is_present || v.connected) {
+          matchedItem = v;
+          break;
+        }
+      }
+    }
+
+    const isPresent = Boolean(matchedItem?.is_present || matchedItem?.connected);
+    const expected = cond.target_bool !== false;
+    if (isPresent !== expected) {
+      return {
+        state: 'invalid',
+        reason: `Target is ${isPresent ? 'Present' : 'Absent'} (expected ${expected ? 'Present' : 'Absent'})`
+      };
+    }
+
+    if (expected && cond.target_rssi !== undefined && cond.target_rssi !== 0) {
+      const curRssi = matchedItem?.rssi;
+      if (curRssi === undefined) {
+        return { state: 'unknown', reason: 'No live RSSI recorded for device' };
+      }
+      const op = cond.operator || 'greater_than';
+      const passed = op === 'less_than' ? curRssi < cond.target_rssi : curRssi >= cond.target_rssi;
+      return passed
+        ? { state: 'valid', reason: `Present with RSSI ${curRssi} dBm ${op === 'less_than' ? '<' : '>='} ${cond.target_rssi} dBm` }
+        : { state: 'invalid', reason: `Present but RSSI (${curRssi} dBm) failed threshold (${cond.target_rssi} dBm)` };
+    }
+
+    return { state: 'valid', reason: `Target is ${expected ? 'Present' : 'Absent'}` };
   }
 
   // Leaf CAN / Catalog command condition
@@ -520,6 +648,25 @@ export function evaluateConditionState(
     : { state: 'invalid', reason: `D${byteIndex + 1} (${hexActual} & 0x${mask.toString(16).toUpperCase()}) ${op} ${hexTarget} failed` };
 }
 
+export interface LiveWifiStatus {
+  sta_connected: boolean;
+  sta_ssid: string;
+  sta_rssi: number;
+  sta_ip?: string;
+  ap_active?: boolean;
+  ap_clients: number;
+}
+
+export interface LiveBleItem {
+  address?: string;
+  uuid?: string;
+  mac?: string;
+  name?: string;
+  rssi?: number;
+  connected?: boolean;
+  is_present?: boolean;
+}
+
 interface ConditionNodeEditorProps {
   key?: React.Key;
   cond: AutomationCondition;
@@ -530,6 +677,8 @@ interface ConditionNodeEditorProps {
   liveFrames?: Map<string, { data: string }>;
   entityStates?: Map<string, string>;
   lastFiredTriggerId?: string;
+  liveWifiStatus?: LiveWifiStatus | null;
+  liveBleMap?: Map<string, LiveBleItem>;
   onUpdate: (updated: AutomationCondition) => void;
   onDelete: () => void;
   onDuplicate?: () => void;
@@ -550,6 +699,8 @@ interface ConditionListEditorProps {
   liveFrames?: Map<string, { data: string }>;
   entityStates?: Map<string, string>;
   lastFiredTriggerId?: string;
+  liveWifiStatus?: LiveWifiStatus | null;
+  liveBleMap?: Map<string, LiveBleItem>;
   onUpdate: (conditions: AutomationCondition[]) => void;
   onOpenAddConditionDialog?: (onAdd: (cond: AutomationCondition) => void) => void;
 }
@@ -644,6 +795,8 @@ function ConditionNodeEditor({
   liveFrames,
   entityStates,
   lastFiredTriggerId,
+  liveWifiStatus,
+  liveBleMap,
   onUpdate,
   onDelete,
   onDuplicate,
@@ -672,7 +825,7 @@ function ConditionNodeEditor({
   const [collapsed, setCollapsed] = useState(false);
 
   // Evaluate current condition state against live telemetry
-  const evalResult = evaluateConditionState(cond, liveFrames, entityStates, lastFiredTriggerId, catalog);
+  const evalResult = evaluateConditionState(cond, liveFrames, entityStates, lastFiredTriggerId, catalog, liveWifiStatus, liveBleMap);
 
   const validityBadge = (
     <div
@@ -798,6 +951,8 @@ function ConditionNodeEditor({
               liveFrames={liveFrames}
               entityStates={entityStates}
               lastFiredTriggerId={lastFiredTriggerId}
+              liveWifiStatus={liveWifiStatus}
+              liveBleMap={liveBleMap}
               emptyText="Empty group. Add conditions below."
               onUpdate={updatedSubs => onUpdate({ ...cond, conditions: updatedSubs })}
               onOpenAddConditionDialog={onOpenAddConditionDialog}
@@ -982,6 +1137,7 @@ function ConditionNodeEditor({
                 >
                   <option value="wifi_ssid">Connected Wi-Fi SSID</option>
                   <option value="wifi_connected">Wi-Fi Station Connection Status</option>
+                  <option value="wifi_rssi">Wi-Fi Station Signal (RSSI Threshold)</option>
                   <option value="wifi_mode">Wi-Fi Mode (AP / Station / Both)</option>
                   <option value="ap_client_connected">AP Client Connected (MAC Presence)</option>
                   <option value="ap_client_rssi">AP Client Proximity (Signal RSSI)</option>
@@ -990,7 +1146,19 @@ function ConditionNodeEditor({
 
               {prop === 'wifi_ssid' && (
                 <div>
-                  <label className="block text-[10px] font-sans text-slate-400 mb-1">Target Network SSID</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-sans text-slate-400">Target Network SSID</label>
+                    {liveWifiStatus?.sta_connected && (
+                      <button
+                        type="button"
+                        onClick={() => onUpdate({ ...cond, target_string: liveWifiStatus.sta_ssid })}
+                        className="text-[10px] text-sky-400 hover:text-sky-300 underline font-mono flex items-center gap-0.5 cursor-pointer"
+                        title="Use current connected SSID"
+                      >
+                        📍 Use '{liveWifiStatus.sta_ssid}'
+                      </button>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1">
                     <select
                       value={cond.operator || 'equal'}
@@ -1022,6 +1190,53 @@ function ConditionNodeEditor({
                     <option value="true">Connected to a Wi-Fi Network</option>
                     <option value="false">Disconnected (No Network)</option>
                   </select>
+                </div>
+              )}
+
+              {prop === 'wifi_rssi' && (
+                <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-sans text-slate-400 mb-1">Target Network SSID (Optional)</label>
+                    <input
+                      type="text"
+                      value={cond.target_string || ''}
+                      onChange={e => onUpdate({ ...cond, target_string: e.target.value })}
+                      placeholder="e.g. Home_WiFi (blank = any connected network)"
+                      className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-sans text-slate-400">Signal RSSI Threshold</label>
+                      {liveWifiStatus?.sta_connected && (
+                        <button
+                          type="button"
+                          onClick={() => onUpdate({ ...cond, target_rssi: liveWifiStatus.sta_rssi })}
+                          className="text-[10px] text-sky-400 hover:text-sky-300 underline font-mono flex items-center gap-0.5 cursor-pointer"
+                          title="Populate with current live station RSSI"
+                        >
+                          📍 Use {liveWifiStatus.sta_rssi} dBm
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <select
+                        value={cond.operator || 'greater_than'}
+                        onChange={e => onUpdate({ ...cond, operator: e.target.value })}
+                        className="bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 font-mono w-28 shrink-0"
+                      >
+                        <option value="greater_than">&gt; (Stronger than)</option>
+                        <option value="less_than">&lt; (Weaker than)</option>
+                      </select>
+                      <input
+                        type="number"
+                        value={cond.target_rssi ?? -65}
+                        onChange={e => onUpdate({ ...cond, target_rssi: parseInt(e.target.value) || 0 })}
+                        className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-sky-300 font-mono font-bold text-center"
+                      />
+                      <span className="text-[10px] text-slate-500 shrink-0">dBm</span>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1086,6 +1301,60 @@ function ConditionNodeEditor({
                     </div>
                   </div>
                 </div>
+              )}
+            </div>
+
+            {/* Optional RSSI Filter for wifi_connected or wifi_ssid */}
+            {(prop === 'wifi_connected' || prop === 'wifi_ssid') && (
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-900/60 font-mono text-[11px] flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-sans text-slate-400">Signal RSSI Filter (Optional):</span>
+                  <input
+                    type="number"
+                    value={cond.target_rssi ?? 0}
+                    onChange={e => onUpdate({ ...cond, target_rssi: parseInt(e.target.value) || 0 })}
+                    placeholder="0 = ignore, e.g. -65"
+                    className="w-20 bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-sky-300 font-mono font-bold text-center text-[11px]"
+                  />
+                  <span className="text-[10px] text-slate-500 font-mono">dBm</span>
+                  <span className="text-[10px] text-slate-500 font-sans hidden sm:inline">(0 = check connection only)</span>
+                </div>
+                {liveWifiStatus?.sta_connected && (
+                  <button
+                    type="button"
+                    onClick={() => onUpdate({ ...cond, target_rssi: liveWifiStatus.sta_rssi })}
+                    className="px-2 py-0.5 rounded bg-sky-950 hover:bg-sky-900 text-sky-300 border border-sky-800 text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                    title="Populate with current live station signal"
+                  >
+                    📍 Set to Current ({liveWifiStatus.sta_rssi} dBm)
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Live Station Telemetry Bar */}
+            <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-900/60 font-mono text-[11px] flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <Wifi className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <span className="text-[10px] font-sans text-slate-400">Live Station Status:</span>
+                {liveWifiStatus?.sta_connected ? (
+                  <span className="px-1.5 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-800/80 font-bold flex items-center gap-1 text-[10px]">
+                    <Signal className="w-3 h-3 text-sky-400 animate-pulse" />
+                    {liveWifiStatus.sta_rssi} dBm ({liveWifiStatus.sta_ssid})
+                  </span>
+                ) : (
+                  <span className="text-slate-500 text-[10px]">Disconnected</span>
+                )}
+              </div>
+              {liveWifiStatus?.sta_connected && prop === 'wifi_rssi' && (
+                <button
+                  type="button"
+                  onClick={() => onUpdate({ ...cond, target_rssi: liveWifiStatus.sta_rssi })}
+                  className="px-2 py-0.5 rounded bg-sky-950 hover:bg-sky-900 text-sky-300 border border-sky-800 text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                  title="Autopopulate RSSI threshold with current station signal"
+                >
+                  📍 Auto-Populate Current ({liveWifiStatus.sta_rssi} dBm)
+                </button>
               )}
             </div>
           </div>
@@ -1205,18 +1474,67 @@ function ConditionNodeEditor({
             </div>
 
             {/* Optional RSSI threshold */}
-            <div className="flex items-center gap-2 pt-1 border-t border-slate-900/60 font-mono text-[11px]">
-              <span className="text-[10px] font-sans text-slate-400">Min RSSI Filter (Optional):</span>
-              <input
-                type="number"
-                value={cond.target_rssi ?? 0}
-                onChange={e => onUpdate({ ...cond, target_rssi: parseInt(e.target.value) || 0 })}
-                placeholder="0 = ignore, -70 = in car"
-                className="w-24 bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-purple-300 font-mono font-bold text-center text-[11px]"
-              />
-              <span className="text-[10px] text-slate-500 font-mono">dBm</span>
-              <span className="text-[10px] text-slate-500 font-sans ml-2">(Set to 0 to check presence only)</span>
-            </div>
+            {(() => {
+              const targetKey = (cond.beacon_uuid || cond.ble_device || cond.target_string || '').toLowerCase().trim();
+              let matchedBle: LiveBleItem | undefined;
+              if (liveBleMap) {
+                if (targetKey) {
+                  for (const [k, v] of liveBleMap.entries()) {
+                    if (
+                      k.toLowerCase() === targetKey ||
+                      (v.mac && v.mac.toLowerCase() === targetKey) ||
+                      (v.uuid && v.uuid.toLowerCase() === targetKey) ||
+                      (v.name && v.name.toLowerCase() === targetKey)
+                    ) {
+                      matchedBle = v;
+                      break;
+                    }
+                  }
+                } else {
+                  for (const v of liveBleMap.values()) {
+                    if (v.is_present || v.connected) {
+                      matchedBle = v;
+                      break;
+                    }
+                  }
+                }
+              }
+              const liveRssi = matchedBle?.rssi;
+
+              return (
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-900/60 font-mono text-[11px] flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-sans text-slate-400">Min RSSI Filter:</span>
+                    <input
+                      type="number"
+                      value={cond.target_rssi ?? 0}
+                      onChange={e => onUpdate({ ...cond, target_rssi: parseInt(e.target.value) || 0 })}
+                      placeholder="0 = ignore, -70 = in car"
+                      className="w-20 bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-purple-300 font-mono font-bold text-center text-[11px]"
+                    />
+                    <span className="text-[10px] text-slate-500 font-mono">dBm</span>
+                    {liveRssi !== undefined && liveRssi !== 0 ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 text-[10px] font-bold">
+                        <Signal className="w-3 h-3 text-purple-400 animate-pulse" />
+                        Live: {liveRssi} dBm
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-500 font-sans hidden sm:inline">(0 = presence only)</span>
+                    )}
+                  </div>
+                  {liveRssi !== undefined && liveRssi !== 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onUpdate({ ...cond, target_rssi: liveRssi })}
+                      className="px-2 py-0.5 rounded bg-purple-950 hover:bg-purple-900 text-purple-300 border border-purple-800 text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                      title="Set condition threshold to current live RSSI"
+                    >
+                      📍 Set to Current ({liveRssi} dBm)
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
@@ -1568,6 +1886,8 @@ function ConditionListEditor({
   liveFrames,
   entityStates,
   lastFiredTriggerId,
+  liveWifiStatus,
+  liveBleMap,
   onUpdate,
   onOpenAddConditionDialog
 }: ConditionListEditorProps) {
@@ -1615,6 +1935,8 @@ function ConditionListEditor({
                         liveFrames={liveFrames}
                         entityStates={entityStates}
                         lastFiredTriggerId={lastFiredTriggerId}
+                        liveWifiStatus={liveWifiStatus}
+                        liveBleMap={liveBleMap}
                         onUpdate={updated => {
                           const next = [...conditions];
                           next[idx] = { ...updated, _clientId: stableKey };
@@ -1678,6 +2000,8 @@ interface TriggerNodeEditorProps {
   trig: AutomationTrigger;
   tIdx: number;
   catalog?: Catalog;
+  liveWifiStatus?: LiveWifiStatus | null;
+  liveBleMap?: Map<string, LiveBleItem>;
   onUpdate: (updated: AutomationTrigger) => void;
   onDelete: () => void;
   onDuplicate?: () => void;
@@ -1691,6 +2015,8 @@ function TriggerNodeEditor({
   trig,
   tIdx,
   catalog,
+  liveWifiStatus,
+  liveBleMap,
   onUpdate,
   onDelete,
   onDuplicate,
@@ -2001,55 +2327,101 @@ function TriggerNodeEditor({
             </div>
 
             {/* RSSI Proximity threshold settings */}
-            <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-sans text-slate-400">Proximity Threshold:</span>
-                <input
-                  type="number"
-                  value={trig.target_rssi ?? -70}
-                  onChange={e => onUpdate({ ...trig, target_rssi: parseInt(e.target.value) || -70 })}
-                  placeholder="-70"
-                  className="w-20 bg-slate-950 border border-slate-700 rounded px-2 py-0.5 text-purple-300 font-mono font-bold text-center text-[11px]"
-                />
-                <span className="text-[10px] font-mono text-slate-500">dBm</span>
-              </div>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] font-sans text-slate-500">Quick Presets:</span>
-                <button
-                  type="button"
-                  onClick={() => onUpdate({ ...trig, target_rssi: -60 })}
-                  className={`px-2 py-0.5 text-[10px] font-sans rounded border transition ${
-                    (trig.target_rssi ?? -70) === -60
-                      ? 'bg-purple-900 text-purple-100 border-purple-500'
-                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-                  }`}
-                >
-                  Inside Vehicle (-60 dBm)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onUpdate({ ...trig, target_rssi: -75 })}
-                  className={`px-2 py-0.5 text-[10px] font-sans rounded border transition ${
-                    (trig.target_rssi ?? -70) === -75
-                      ? 'bg-purple-900 text-purple-100 border-purple-500'
-                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-                  }`}
-                >
-                  Near Doors (-75 dBm)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onUpdate({ ...trig, target_rssi: -85 })}
-                  className={`px-2 py-0.5 text-[10px] font-sans rounded border transition ${
-                    (trig.target_rssi ?? -70) === -85
-                      ? 'bg-purple-900 text-purple-100 border-purple-500'
-                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-                  }`}
-                >
-                  Perimeter / Walk-Up (-85 dBm)
-                </button>
-              </div>
-            </div>
+            {(() => {
+              const targetKey = (trig.beacon_uuid || trig.ble_device || '').toLowerCase().trim();
+              let matchedBle: LiveBleItem | undefined;
+              if (liveBleMap) {
+                if (targetKey) {
+                  for (const [k, v] of liveBleMap.entries()) {
+                    if (
+                      k.toLowerCase() === targetKey ||
+                      (v.mac && v.mac.toLowerCase() === targetKey) ||
+                      (v.uuid && v.uuid.toLowerCase() === targetKey) ||
+                      (v.name && v.name.toLowerCase() === targetKey)
+                    ) {
+                      matchedBle = v;
+                      break;
+                    }
+                  }
+                } else {
+                  for (const v of liveBleMap.values()) {
+                    if (v.is_present || v.connected) {
+                      matchedBle = v;
+                      break;
+                    }
+                  }
+                }
+              }
+              const liveRssi = matchedBle?.rssi;
+
+              return (
+                <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-sans text-slate-400">Proximity Threshold:</span>
+                    <input
+                      type="number"
+                      value={trig.target_rssi ?? -70}
+                      onChange={e => onUpdate({ ...trig, target_rssi: parseInt(e.target.value) || -70 })}
+                      placeholder="-70"
+                      className="w-20 bg-slate-950 border border-slate-700 rounded px-2 py-0.5 text-purple-300 font-mono font-bold text-center text-[11px]"
+                    />
+                    <span className="text-[10px] font-mono text-slate-500">dBm</span>
+                    {liveRssi !== undefined && liveRssi !== 0 && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 text-[10px] font-bold">
+                        <Signal className="w-3 h-3 text-purple-400 animate-pulse" />
+                        Live: {liveRssi} dBm
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {liveRssi !== undefined && liveRssi !== 0 && (
+                      <button
+                        type="button"
+                        onClick={() => onUpdate({ ...trig, target_rssi: liveRssi })}
+                        className="px-2 py-0.5 text-[10px] font-sans rounded bg-purple-950 hover:bg-purple-900 text-purple-300 border border-purple-800 font-bold transition flex items-center gap-1 cursor-pointer"
+                        title="Auto-populate trigger threshold with current live signal"
+                      >
+                        📍 Set to Current ({liveRssi} dBm)
+                      </button>
+                    )}
+                    <span className="text-[10px] font-sans text-slate-500">Presets:</span>
+                    <button
+                      type="button"
+                      onClick={() => onUpdate({ ...trig, target_rssi: -60 })}
+                      className={`px-2 py-0.5 text-[10px] font-sans rounded border transition ${
+                        (trig.target_rssi ?? -70) === -60
+                          ? 'bg-purple-900 text-purple-100 border-purple-500'
+                          : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                      }`}
+                    >
+                      In-Car (-60)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onUpdate({ ...trig, target_rssi: -75 })}
+                      className={`px-2 py-0.5 text-[10px] font-sans rounded border transition ${
+                        (trig.target_rssi ?? -70) === -75
+                          ? 'bg-purple-900 text-purple-100 border-purple-500'
+                          : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                      }`}
+                    >
+                      Doors (-75)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onUpdate({ ...trig, target_rssi: -85 })}
+                      className={`px-2 py-0.5 text-[10px] font-sans rounded border transition ${
+                        (trig.target_rssi ?? -70) === -85
+                          ? 'bg-purple-900 text-purple-100 border-purple-500'
+                          : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                      }`}
+                    >
+                      Walk-Up (-85)
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
@@ -2081,6 +2453,7 @@ function TriggerNodeEditor({
                 {trig.wifi_event || 'ap_client_connected'}
                 {trig.ssid ? ` • SSID: ${trig.ssid}` : ''}
                 {trig.client_mac ? ` • MAC: ${trig.client_mac}` : ''}
+                {trig.target_rssi ? ` • RSSI: ≥${trig.target_rssi} dBm` : ''}
               </span>
             </div>
           </div>
@@ -2103,7 +2476,56 @@ function TriggerNodeEditor({
               </select>
             </div>
 
-            {(trig.wifi_event === 'wifi_connected' || trig.wifi_event === 'wifi_disconnected') ? (
+            {trig.wifi_event === 'wifi_connected' ? (
+              <>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-sans text-slate-400">Network SSID Filter</label>
+                    {liveWifiStatus?.sta_connected && liveWifiStatus.sta_ssid && (
+                      <button
+                        type="button"
+                        onClick={() => onUpdate({ ...trig, ssid: liveWifiStatus.sta_ssid })}
+                        className="text-[9px] text-sky-400 hover:underline cursor-pointer"
+                        title="Set to currently connected SSID"
+                      >
+                        Use Current ({liveWifiStatus.sta_ssid})
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={trig.ssid || ''}
+                    onChange={e => onUpdate({ ...trig, ssid: e.target.value })}
+                    placeholder="e.g. Home_Garage_WiFi (or blank for any)"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-sans text-slate-400 mb-1">Min Station RSSI Threshold (dBm)</label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      value={trig.target_rssi || 0}
+                      onChange={e => onUpdate({ ...trig, target_rssi: parseInt(e.target.value) || 0 })}
+                      placeholder="0 = any, e.g. -75"
+                      className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-sky-300 font-mono font-bold"
+                    />
+                    {liveWifiStatus?.sta_connected && liveWifiStatus.sta_rssi !== undefined && (
+                      <button
+                        type="button"
+                        onClick={() => onUpdate({ ...trig, target_rssi: liveWifiStatus.sta_rssi })}
+                        className="shrink-0 px-2 py-1 bg-sky-950 hover:bg-sky-900 text-sky-300 border border-sky-800 rounded text-[10px] font-sans font-bold transition flex items-center gap-1 cursor-pointer"
+                        title="Auto-populate with current station RSSI"
+                      >
+                        <Signal className="w-3 h-3 text-sky-400" />
+                        <span>Set Current ({liveWifiStatus.sta_rssi} dBm)</span>
+                      </button>
+                    )}
+                  </div>
+                  <span className="text-[9px] text-slate-500 font-sans block mt-0.5">0 = trigger on any signal level</span>
+                </div>
+              </>
+            ) : trig.wifi_event === 'wifi_disconnected' ? (
               <div className="sm:col-span-2">
                 <label className="block text-[10px] font-sans text-slate-400 mb-1">Network SSID Filter (Optional)</label>
                 <input
@@ -2135,6 +2557,7 @@ function TriggerNodeEditor({
                     placeholder="0 = any, e.g. -60 for close"
                     className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-mono"
                   />
+                  <span className="text-[9px] text-slate-500 font-sans block mt-0.5">0 = trigger on any signal level</span>
                 </div>
               </>
             )}
@@ -2389,6 +2812,8 @@ interface ActionNodeEditorProps {
   liveFrames?: Map<string, { data: string }>;
   entityStates?: Map<string, string>;
   lastFiredTriggerId?: string;
+  liveWifiStatus?: LiveWifiStatus | null;
+  liveBleMap?: Map<string, LiveBleItem>;
   onUpdate: (updated: AutomationAction) => void;
   onDelete: () => void;
   onDuplicate?: () => void;
@@ -2411,6 +2836,8 @@ interface ActionListEditorProps {
   liveFrames?: Map<string, { data: string }>;
   entityStates?: Map<string, string>;
   lastFiredTriggerId?: string;
+  liveWifiStatus?: LiveWifiStatus | null;
+  liveBleMap?: Map<string, LiveBleItem>;
   onUpdate: (actions: AutomationAction[]) => void;
   onPullCatalog?: () => void;
   onOpenAddConditionDialog?: (onAdd: (cond: AutomationCondition) => void) => void;
@@ -2427,6 +2854,8 @@ function ActionNodeEditor({
   liveFrames,
   entityStates,
   lastFiredTriggerId,
+  liveWifiStatus,
+  liveBleMap,
   onUpdate,
   onDelete,
   onDuplicate,
@@ -2550,6 +2979,8 @@ function ActionNodeEditor({
                 liveFrames={liveFrames}
                 entityStates={entityStates}
                 lastFiredTriggerId={lastFiredTriggerId}
+                liveWifiStatus={liveWifiStatus}
+                liveBleMap={liveBleMap}
                 onUpdate={updatedConds => onUpdate({ ...act, conditions: updatedConds })}
                 onOpenAddConditionDialog={onOpenAddConditionDialog}
               />
@@ -2567,6 +2998,8 @@ function ActionNodeEditor({
                 liveFrames={liveFrames}
                 entityStates={entityStates}
                 lastFiredTriggerId={lastFiredTriggerId}
+                liveWifiStatus={liveWifiStatus}
+                liveBleMap={liveBleMap}
                 onTestSingleAction={onTestSingleAction}
                 onUpdate={updatedThen => onUpdate({ ...act, then: updatedThen })}
                 onOpenAddConditionDialog={onOpenAddConditionDialog}
@@ -2586,6 +3019,8 @@ function ActionNodeEditor({
                 liveFrames={liveFrames}
                 entityStates={entityStates}
                 lastFiredTriggerId={lastFiredTriggerId}
+                liveWifiStatus={liveWifiStatus}
+                liveBleMap={liveBleMap}
                 onTestSingleAction={onTestSingleAction}
                 onUpdate={updatedElse => onUpdate({ ...act, else: updatedElse })}
                 onOpenAddConditionDialog={onOpenAddConditionDialog}
@@ -2654,6 +3089,8 @@ function ActionNodeEditor({
                       liveFrames={liveFrames}
                       entityStates={entityStates}
                       lastFiredTriggerId={lastFiredTriggerId}
+                      liveWifiStatus={liveWifiStatus}
+                      liveBleMap={liveBleMap}
                       onUpdate={updatedConds => {
                         const choices = [...(act.choices || [])];
                         choices[chIdx].conditions = updatedConds;
@@ -2675,6 +3112,8 @@ function ActionNodeEditor({
                       liveFrames={liveFrames}
                       entityStates={entityStates}
                       lastFiredTriggerId={lastFiredTriggerId}
+                      liveWifiStatus={liveWifiStatus}
+                      liveBleMap={liveBleMap}
                       onTestSingleAction={onTestSingleAction}
                       onUpdate={updatedSeq => {
                         const choices = [...(act.choices || [])];
@@ -2717,6 +3156,8 @@ function ActionNodeEditor({
                 liveFrames={liveFrames}
                 entityStates={entityStates}
                 lastFiredTriggerId={lastFiredTriggerId}
+                liveWifiStatus={liveWifiStatus}
+                liveBleMap={liveBleMap}
                 onTestSingleAction={onTestSingleAction}
                 onUpdate={updatedDef => onUpdate({ ...act, default: updatedDef })}
                 onOpenAddConditionDialog={onOpenAddConditionDialog}
@@ -2941,6 +3382,8 @@ function ActionNodeEditor({
                     liveFrames={liveFrames}
                     entityStates={entityStates}
                     lastFiredTriggerId={lastFiredTriggerId}
+                    liveWifiStatus={liveWifiStatus}
+                    liveBleMap={liveBleMap}
                     onUpdate={updatedConds => {
                       onUpdate({
                         ...act,
@@ -3551,6 +3994,8 @@ function ActionListEditor({
   liveFrames,
   entityStates,
   lastFiredTriggerId,
+  liveWifiStatus,
+  liveBleMap,
   onUpdate,
   onOpenAddConditionDialog,
   onOpenAddActionDialog,
@@ -3599,6 +4044,8 @@ function ActionListEditor({
                         liveFrames={liveFrames}
                         entityStates={entityStates}
                         lastFiredTriggerId={lastFiredTriggerId}
+                        liveWifiStatus={liveWifiStatus}
+                        liveBleMap={liveBleMap}
                         onTestSingleAction={onTestSingleAction}
                         onUpdate={updated => {
                           const next = [...actions];
@@ -3944,13 +4391,16 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [lastFiredTriggerId, setLastFiredTriggerId] = useState<string | undefined>();
   const [actionTestToast, setActionTestToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
+  // Live Wi-Fi & BLE status for condition validity & threshold auto-population
+  const [liveWifiStatus, setLiveWifiStatus] = useState<LiveWifiStatus | null>(null);
+  const [liveBleMap, setLiveBleMap] = useState<Map<string, LiveBleItem>>(new Map());
+  const bleMapRef = useRef<Map<string, LiveBleItem>>(new Map());
+
   const framesRef = useRef<Map<string, { data: string }>>(new Map());
   const entityStatesRef = useRef<Map<string, string>>(new Map());
 
-  // WebSocket connection to ESP32 for live CAN bus frames & state updates
+  // WebSocket connection & background polling for live telemetry
   React.useEffect(() => {
-    let ws: WebSocket | null = null;
-    let reconnectTimeout: any = null;
     let isCancelled = false;
 
     // Fetch initial entity states via REST
@@ -3972,7 +4422,86 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
       }
     };
 
+    // Fetch live Wi-Fi and BLE status
+    const fetchLiveNetworkAndBle = async () => {
+      try {
+        const base = resolveDeviceBaseUrl(espIp);
+        // Wi-Fi Status
+        const wifiRes = await fetch(`${base}/api/wifi/status`);
+        if (wifiRes.ok) {
+          const wData = await wifiRes.json();
+          if (wData && typeof wData === 'object') {
+            setLiveWifiStatus({
+              sta_connected: !!wData.sta_connected,
+              sta_ssid: wData.sta_ssid || '',
+              sta_ip: wData.sta_ip || '',
+              sta_rssi: typeof wData.sta_rssi === 'number' ? wData.sta_rssi : -65,
+              ap_clients: typeof wData.ap_clients === 'number' ? wData.ap_clients : 0
+            });
+          }
+        }
+        // BLE Status
+        const bleRes = await fetch(`${base}/api/ble/status`);
+        if (bleRes.ok) {
+          const bData = await bleRes.json();
+          if (bData && typeof bData === 'object') {
+            if (Array.isArray(bData.beacons)) {
+              for (const b of bData.beacons) {
+                const item: LiveBleItem = {
+                  name: b.name,
+                  uuid: b.uuid,
+                  mac: b.mac,
+                  rssi: b.rssi,
+                  is_present: b.is_present,
+                  connected: false
+                };
+                if (b.uuid) bleMapRef.current.set(b.uuid.toLowerCase(), item);
+                if (b.mac) bleMapRef.current.set(b.mac.toLowerCase(), item);
+                if (b.name) bleMapRef.current.set(b.name.toLowerCase(), item);
+              }
+            }
+            if (Array.isArray(bData.discovered_beacons)) {
+              for (const b of bData.discovered_beacons) {
+                const item: LiveBleItem = {
+                  name: b.name,
+                  uuid: b.uuid,
+                  mac: b.mac,
+                  rssi: b.rssi,
+                  is_present: true,
+                  connected: false
+                };
+                if (b.uuid && !bleMapRef.current.has(b.uuid.toLowerCase())) bleMapRef.current.set(b.uuid.toLowerCase(), item);
+                if (b.mac && !bleMapRef.current.has(b.mac.toLowerCase())) bleMapRef.current.set(b.mac.toLowerCase(), item);
+                if (b.name && !bleMapRef.current.has(b.name.toLowerCase())) bleMapRef.current.set(b.name.toLowerCase(), item);
+              }
+            }
+            if (bData.connected_device) {
+              const cd = bData.connected_device;
+              const item: LiveBleItem = {
+                name: cd.name,
+                mac: cd.address,
+                rssi: cd.rssi,
+                is_present: true,
+                connected: true
+              };
+              if (cd.address) bleMapRef.current.set(cd.address.toLowerCase(), item);
+              if (cd.name) bleMapRef.current.set(cd.name.toLowerCase(), item);
+              bleMapRef.current.set('connected_device', item);
+            }
+            setLiveBleMap(new Map(bleMapRef.current));
+          }
+        }
+      } catch {
+        // Offline / simulator mode
+      }
+    };
+
     fetchInitialStates();
+    fetchLiveNetworkAndBle();
+    const pollInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      fetchLiveNetworkAndBle();
+    }, 4000);
 
     const unsubscribeMsgs = deviceWs.subscribe((msg) => {
       if (isCancelled) return;
@@ -3987,11 +4516,34 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         if ((msg as any).trigger_id) {
           setLastFiredTriggerId((msg as any).trigger_id);
         }
+      } else if (msg.type === 'wifi_status') {
+        const wData = msg as any;
+        setLiveWifiStatus({
+          sta_connected: !!wData.sta_connected,
+          sta_ssid: wData.sta_ssid || '',
+          sta_ip: wData.sta_ip || '',
+          sta_rssi: typeof wData.sta_rssi === 'number' ? wData.sta_rssi : -65,
+          ap_clients: typeof wData.ap_clients === 'number' ? wData.ap_clients : 0
+        });
+      } else if (msg.type === 'ble_beacon' || msg.type === 'ble_proximity') {
+        const item: LiveBleItem = {
+          name: (msg as any).name,
+          uuid: (msg as any).uuid,
+          mac: (msg as any).mac || (msg as any).address,
+          rssi: (msg as any).rssi,
+          is_present: (msg as any).is_present ?? true,
+          connected: false
+        };
+        if (item.uuid) bleMapRef.current.set(item.uuid.toLowerCase(), item);
+        if (item.mac) bleMapRef.current.set(item.mac.toLowerCase(), item);
+        if (item.name) bleMapRef.current.set(item.name.toLowerCase(), item);
+        setLiveBleMap(new Map(bleMapRef.current));
       }
     });
 
     return () => {
       isCancelled = true;
+      clearInterval(pollInterval);
       unsubscribeMsgs();
     };
   }, [espIp]);
@@ -4930,6 +5482,8 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                             trig={trig}
                             tIdx={tIdx}
                             catalog={catalog}
+                            liveWifiStatus={liveWifiStatus}
+                            liveBleMap={liveBleMap}
                             onUpdate={updated => {
                               const next = [...activeRule.triggers];
                               next[tIdx] = { ...updated, _clientId: stableKey };
@@ -5043,7 +5597,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       liveFrames,
                       entityStates,
                       lastFiredTriggerId,
-                      catalog
+                      catalog,
+                      liveWifiStatus,
+                      liveBleMap
                     );
                     if (gateEval.state === 'valid') {
                       return (
@@ -5094,6 +5650,8 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   liveFrames={liveFrames}
                   entityStates={entityStates}
                   lastFiredTriggerId={lastFiredTriggerId}
+                  liveWifiStatus={liveWifiStatus}
+                  liveBleMap={liveBleMap}
                   emptyText="No conditions set. Rule will always execute when triggers match."
                   onUpdate={conds => handleUpdateActiveRule({ conditions: conds })}
                   onOpenAddConditionDialog={openAddConditionDialog}
@@ -5134,6 +5692,8 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   liveFrames={liveFrames}
                   entityStates={entityStates}
                   lastFiredTriggerId={lastFiredTriggerId}
+                  liveWifiStatus={liveWifiStatus}
+                  liveBleMap={liveBleMap}
                   emptyText="No actions defined."
                   onUpdate={acts => handleUpdateActiveRule({ actions: acts })}
                   onOpenAddConditionDialog={openAddConditionDialog}
@@ -5177,6 +5737,8 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     liveFrames={liveFrames}
                     entityStates={entityStates}
                     lastFiredTriggerId={lastFiredTriggerId}
+                    liveWifiStatus={liveWifiStatus}
+                    liveBleMap={liveBleMap}
                     emptyText="No off-actions defined. Specify actions to run when toggled off."
                     onUpdate={acts => handleUpdateActiveRule({ off_actions: acts })}
                     onOpenAddConditionDialog={openAddConditionDialog}

@@ -139,7 +139,7 @@ jobs:
             0x1000 bootloader.bin \
             0x8000 partitions.bin \
             0x10000 firmware.bin \
-            0x1F0000 littlefs.bin
+            0x310000 littlefs.bin
 
       - name: Upload Atom Lite firmware artifacts
         uses: actions/upload-artifact@v4

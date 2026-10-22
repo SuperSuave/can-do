@@ -502,27 +502,20 @@ class TestRemoteClimate(unittest.TestCase):
         self.assertEqual(copts["Brightness Up (+)"]["match"]["D8"], "0x4A")
         self.assertEqual(copts["Brightness Down (-)"]["match"]["D8"], "0x8A")
 
-        # 2. Action button: cluster_brightness_up (0x474)
-        self.assertIn("cluster_brightness_up", cmds)
-        cb_up = cmds["cluster_brightness_up"]
-        self.assertEqual(cb_up.get("action_can_id"), "0x474")
+        # 2. Action stepping on cluster_brightness options (0x474)
+        up_steps = copts["Brightness Up (+)"]["steps"]
         # Step 1: 3x active pulse 0x4A
-        self.assertEqual(cb_up["steps"][0]["payload"]["D8"], "0x4A")
-        self.assertEqual(cb_up["steps"][0]["repeat"], 3)
-        # Step 2: 2x idle release 0x0A
-        self.assertEqual(cb_up["steps"][1]["payload"]["D8"], "0x0A")
-        self.assertEqual(cb_up["steps"][1]["repeat"], 2)
+        self.assertEqual(up_steps[0]["payload"]["D8"], "0x4A")
+        self.assertEqual(up_steps[0]["repeat"], 3)
+        # Step 2: idle release 0x0A
+        self.assertEqual(up_steps[1]["payload"]["D8"], "0x0A")
 
-        # 3. Action button: cluster_brightness_down (0x474)
-        self.assertIn("cluster_brightness_down", cmds)
-        cb_down = cmds["cluster_brightness_down"]
-        self.assertEqual(cb_down.get("action_can_id"), "0x474")
+        down_steps = copts["Brightness Down (-)"]["steps"]
         # Step 1: 3x active pulse 0x8A
-        self.assertEqual(cb_down["steps"][0]["payload"]["D8"], "0x8A")
-        self.assertEqual(cb_down["steps"][0]["repeat"], 3)
-        # Step 2: 2x idle release 0x0A
-        self.assertEqual(cb_down["steps"][1]["payload"]["D8"], "0x0A")
-        self.assertEqual(cb_down["steps"][1]["repeat"], 2)
+        self.assertEqual(down_steps[0]["payload"]["D8"], "0x8A")
+        self.assertEqual(down_steps[0]["repeat"], 3)
+        # Step 2: idle release 0x0A
+        self.assertEqual(down_steps[1]["payload"]["D8"], "0x0A")
 
     def test_uds_diagnostics_and_flashing_0x7df_0x7ec_0x7e4(self) -> None:
         """Verify UDS diagnostic sessions, communication control, routine control, and NRC framing."""

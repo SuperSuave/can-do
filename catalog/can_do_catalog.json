@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.10.7-b003",
+  "can_do_version": "2026.10.7-b004",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -1362,94 +1362,6 @@
         "notes": "CAN ID 0x474 (Cluster_Brightness_Button) Byte 7 (D8): 0x0A (Idle), 0x4A (Brightness +), 0x8A (Brightness -)."
       },
       "state_can_id": "0x474"
-    },
-    {
-      "id": "cluster_brightness_up",
-      "ha_metadata": {
-        "name": "Cluster Brightness Up (+)",
-        "domain": "button",
-        "icon": "mdi:brightness-5"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Cockpit & Controls",
-      "subcategory": "Instrument Cluster",
-      "roles": [
-        "action"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_tx",
-        "action_can_id": "0x474",
-        "delay_ms": 20
-      },
-      "steps": [
-        {
-          "payload": {
-            "D8": "0x4A"
-          },
-          "repeat": 3,
-          "delay_ms": 20
-        },
-        {
-          "payload": {
-            "D8": "0x0A"
-          },
-          "repeat": 2,
-          "delay_ms": 20
-        }
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Injects Instrument Cluster Brightness Up (+) button press on 0x474 Byte 7 (D8: 0x4A active pulse, 0x0A idle release). Steps display/dash illumination up via automation."
-      },
-      "action_can_id": "0x474"
-    },
-    {
-      "id": "cluster_brightness_down",
-      "ha_metadata": {
-        "name": "Cluster Brightness Down (-)",
-        "domain": "button",
-        "icon": "mdi:brightness-4"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Cockpit & Controls",
-      "subcategory": "Instrument Cluster",
-      "roles": [
-        "action"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_tx",
-        "action_can_id": "0x474",
-        "delay_ms": 20
-      },
-      "steps": [
-        {
-          "payload": {
-            "D8": "0x8A"
-          },
-          "repeat": 3,
-          "delay_ms": 20
-        },
-        {
-          "payload": {
-            "D8": "0x0A"
-          },
-          "repeat": 2,
-          "delay_ms": 20
-        }
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Injects Instrument Cluster Brightness Down (-) button press on 0x474 Byte 7 (D8: 0x8A active pulse, 0x0A idle release). Steps display/dash illumination down via automation."
-      },
-      "action_can_id": "0x474"
     },
     {
       "id": "head_unit_media_source",

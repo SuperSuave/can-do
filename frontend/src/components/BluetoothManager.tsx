@@ -25,7 +25,7 @@ import {
   Zap,
   Info
 } from 'lucide-react';
-import { BleStatus, BleDeviceInfo, BleButtonEvent, BeaconTarget } from '../types/ble';
+import { BleStatus, BleDeviceInfo, BleButtonEvent, BeaconTarget, DiscoveredBeacon } from '../types/ble';
 import { AutomationTrigger } from '../types/automation';
 import { deviceWs } from '../services/deviceWs';
 
@@ -281,6 +281,31 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
     }
   };
 
+  const handleCalibrateBeacon = async (beacon: BeaconTarget, newRssi: number) => {
+    try {
+      const payload = {
+        name: beacon.name,
+        uuid: beacon.uuid || '',
+        mac: beacon.mac || '',
+        enter_rssi: newRssi,
+        exit_timeout_s: beacon.exit_timeout_s || 10
+      };
+      const res = await fetch(resolveUrl('/api/ble/beacons'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        showNotice(`Calibrated '${beacon.name}' threshold to ${newRssi} dBm!`, 'success');
+        fetchStatus();
+      } else {
+        showNotice('Failed to calibrate beacon threshold', 'error');
+      }
+    } catch {
+      showNotice('Error connecting to device', 'error');
+    }
+  };
+
   const handleCreateAutomationForBeacon = (beacon: BeaconTarget) => {
     if (onSelectTriggerForAutomation) {
       onSelectTriggerForAutomation({
@@ -292,6 +317,34 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
         target_rssi: beacon.enter_rssi
       });
       showNotice(`Created proximity trigger for '${beacon.name}'! Switch to Automations tab to complete rule.`, 'success');
+    }
+  };
+
+  const handleCreateAutomationForDevice = (device: BleDeviceInfo) => {
+    if (onSelectTriggerForAutomation) {
+      onSelectTriggerForAutomation({
+        id: `trig_ble_${Date.now().toString(36)}`,
+        source: 'ble',
+        type: 'ble_presence',
+        ble_event: 'connected',
+        ble_device: device.address,
+        target_rssi: device.rssi || -75
+      });
+      showNotice(`Created proximity trigger for '${device.name || device.address}' (${device.rssi || -75} dBm)!`, 'success');
+    }
+  };
+
+  const handleCreateAutomationForDiscoveredBeacon = (beacon: DiscoveredBeacon) => {
+    if (onSelectTriggerForAutomation) {
+      onSelectTriggerForAutomation({
+        id: `trig_beacon_${Date.now().toString(36)}`,
+        source: 'ble',
+        type: 'ble_beacon',
+        ble_event: 'enter',
+        beacon_uuid: beacon.uuid || beacon.mac,
+        target_rssi: beacon.rssi || -75
+      });
+      showNotice(`Created proximity trigger for iBeacon (${beacon.rssi} dBm)! Switch to Automations tab to complete rule.`, 'success');
     }
   };
 
@@ -406,9 +459,20 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
               </span>
             )}
           </div>
-          <div className="text-[11px] text-[var(--text-muted)] mt-1.5 flex items-center justify-between">
+          <div className="text-[11px] text-[var(--text-muted)] mt-1.5 flex items-center justify-between flex-wrap gap-1">
             <span>Automations Hook</span>
-            <span className="text-cyan-400 font-mono text-[10px]">HA Auto-Discovery Ready</span>
+            {connectedDev && onSelectTriggerForAutomation ? (
+              <button
+                type="button"
+                onClick={() => handleCreateAutomationForDevice(connectedDev)}
+                className="text-purple-300 hover:text-purple-200 bg-purple-950/60 hover:bg-purple-900 border border-purple-800/60 rounded px-1.5 py-0.5 text-[10px] font-semibold transition flex items-center gap-1 cursor-pointer"
+                title="Create an automation triggered by this connected controller / keypad"
+              >
+                + Proximity Rule ({connectedDev.rssi || -75} dBm)
+              </button>
+            ) : (
+              <span className="text-cyan-400 font-mono text-[10px]">HA Auto-Discovery Ready</span>
+            )}
           </div>
         </div>
       </div>
@@ -601,54 +665,121 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
         </div>
 
         {/* Add Beacon Target Form */}
-        <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
-          <span className="text-xs font-bold text-purple-300 uppercase tracking-wider block">
-            Add or Track a Phone Beacon / Key Fob
-          </span>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
-            <div>
-              <label className="block text-[10px] text-slate-400 mb-1">Friendly Name</label>
-              <input
-                type="text"
-                value={beaconName}
-                onChange={e => setBeaconName(e.target.value)}
-                placeholder="e.g. My iPhone"
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-white"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-[10px] text-slate-400 mb-1">
-                iBeacon UUID (Phone) or BLE MAC (Fob)
-              </label>
-              <input
-                type="text"
-                value={beaconUuid}
-                onChange={e => setBeaconUuid(e.target.value)}
-                placeholder="e.g. 2F234454-CF6D-4A0F-ADF2-F4911BA9FFA6"
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-white font-mono text-[11px]"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] text-slate-400 mb-1">Enter Threshold (RSSI)</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  value={beaconEnterRssi}
-                  onChange={e => setBeaconEnterRssi(parseInt(e.target.value) || -75)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-white font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddBeacon}
-                  disabled={savingBeacon}
-                  className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs whitespace-nowrap transition"
-                >
-                  {savingBeacon ? 'Saving...' : 'Add'}
-                </button>
+        {(() => {
+          const heardBeacon = beaconUuid.trim() ? (
+            status?.discovered_beacons?.find(b =>
+              (b.uuid && b.uuid.toLowerCase() === beaconUuid.trim().toLowerCase()) ||
+              (b.mac && b.mac.toLowerCase() === beaconUuid.trim().toLowerCase())
+            ) ||
+            status?.beacon_targets?.find(t =>
+              (t.uuid && t.uuid.toLowerCase() === beaconUuid.trim().toLowerCase()) ||
+              (t.mac && t.mac.toLowerCase() === beaconUuid.trim().toLowerCase())
+            ) ||
+            status?.paired_devices?.find(d =>
+              d.address && d.address.toLowerCase() === beaconUuid.trim().toLowerCase()
+            ) ||
+            (status?.connected_device && status.connected_device.address?.toLowerCase() === beaconUuid.trim().toLowerCase()
+              ? status.connected_device
+              : undefined)
+          ) : undefined;
+          const liveHeardRssi = heardBeacon?.rssi;
+
+          return (
+            <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-xs font-bold text-purple-300 uppercase tracking-wider block">
+                  Add or Track a Phone Beacon / Key Fob
+                </span>
+                {liveHeardRssi !== undefined && liveHeardRssi !== 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-950 text-purple-300 border border-purple-800 animate-pulse">
+                    <Signal className="w-3 h-3 text-purple-400" />
+                    Live Heard: {liveHeardRssi} dBm
+                  </span>
+                )}
               </div>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1">Friendly Name</label>
+                  <input
+                    type="text"
+                    value={beaconName}
+                    onChange={e => setBeaconName(e.target.value)}
+                    placeholder="e.g. My iPhone"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-white"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-[10px] text-slate-400 mb-1">
+                    iBeacon UUID (Phone) or BLE MAC (Fob)
+                  </label>
+                  <input
+                    type="text"
+                    value={beaconUuid}
+                    onChange={e => setBeaconUuid(e.target.value)}
+                    placeholder="e.g. 2F234454-CF6D-4A0F-ADF2-F4911BA9FFA6"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-white font-mono text-[11px]"
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] text-slate-400">Enter Threshold (RSSI)</label>
+                    {liveHeardRssi !== undefined && liveHeardRssi !== 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setBeaconEnterRssi(liveHeardRssi)}
+                        className="text-[10px] text-purple-300 hover:text-purple-200 underline font-mono flex items-center gap-0.5 cursor-pointer"
+                        title="Auto-fill with live RSSI"
+                      >
+                        📍 Use {liveHeardRssi} dBm
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={beaconEnterRssi}
+                      onChange={e => setBeaconEnterRssi(parseInt(e.target.value) || -75)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-white font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddBeacon}
+                      disabled={savingBeacon}
+                      className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs whitespace-nowrap transition cursor-pointer"
+                    >
+                      {savingBeacon ? 'Saving...' : 'Add'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stand-and-Calibrate Banner */}
+              {liveHeardRssi !== undefined && liveHeardRssi !== 0 && (
+                <div className="p-2.5 rounded-lg bg-purple-950/40 border border-purple-800/60 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Signal className="w-4 h-4 text-purple-400 animate-pulse shrink-0" />
+                    <div>
+                      <div className="text-purple-200 font-semibold text-[11px]">
+                        Live Signal Strength: <strong className="font-mono text-white text-xs">{liveHeardRssi} dBm</strong>
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        Stand where you want the beacon to trigger, then click Auto-Populate.
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBeaconEnterRssi(liveHeardRssi)}
+                    className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-bold text-xs shrink-0 transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  >
+                    <span>📍 Auto-Populate</span>
+                    <span className="font-mono text-[11px] opacity-90">({liveHeardRssi} dBm)</span>
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Configured Target Beacons List */}
         <div className="space-y-2">
@@ -677,16 +808,27 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
                     <div className="text-[11px] font-mono text-slate-400 truncate">
                       {tgt.uuid ? `UUID: ${tgt.uuid}` : `MAC: ${tgt.mac}`}
                     </div>
-                    <div className="text-[10px] text-slate-500 flex items-center gap-2">
+                    <div className="text-[10px] text-slate-500 flex items-center gap-2 flex-wrap">
                       <span>Threshold: {tgt.enter_rssi} dBm</span>
-                      {tgt.is_present && (
-                        <span className="text-emerald-400 font-bold">
-                          Current RSSI: {tgt.rssi} dBm
+                      {tgt.is_present && tgt.rssi ? (
+                        <span className="text-emerald-400 font-bold flex items-center gap-1 font-mono">
+                          <Signal className="w-3 h-3 text-emerald-400 animate-pulse" />
+                          Live: {tgt.rssi} dBm
                         </span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                    {tgt.is_present && tgt.rssi ? (
+                      <button
+                        type="button"
+                        onClick={() => handleCalibrateBeacon(tgt, tgt.rssi!)}
+                        className="px-2 py-1 rounded bg-purple-950/80 hover:bg-purple-900 text-purple-300 border border-purple-800/80 text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                        title="Calibrate threshold to current live distance"
+                      >
+                        📍 Set Current ({tgt.rssi} dBm)
+                      </button>
+                    ) : null}
                     {onSelectTriggerForAutomation && (
                       <button
                         type="button"
@@ -724,20 +866,36 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
                 <div key={idx} className="p-2 rounded bg-slate-900 border border-slate-800 flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <div className="text-white text-[11px] truncate">{b.uuid}</div>
-                    <div className="text-slate-400 text-[10px]">
-                      RSSI: {b.rssi} dBm {b.major ? `• Major: ${b.major}` : ''}
+                    <div className="text-slate-400 text-[10px] flex items-center gap-1.5">
+                      <span className="text-purple-300 font-bold">RSSI: {b.rssi} dBm</span>
+                      {b.major ? <span>• Major: {b.major}</span> : null}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBeaconUuid(b.uuid);
-                      setBeaconName('Phone Beacon');
-                    }}
-                    className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-500 text-white font-sans text-[10px] font-bold shrink-0 transition"
-                  >
-                    Track
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {onSelectTriggerForAutomation && (
+                      <button
+                        type="button"
+                        onClick={() => handleCreateAutomationForDiscoveredBeacon(b)}
+                        className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-purple-300 font-sans text-[10px] font-bold transition cursor-pointer"
+                        title="Create automation rule with this beacon and live RSSI"
+                      >
+                        + Rule
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBeaconUuid(b.uuid || b.mac);
+                        setBeaconName(b.major ? `iBeacon ${b.major}` : 'Phone Beacon');
+                        if (b.rssi) setBeaconEnterRssi(b.rssi);
+                      }}
+                      className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-500 text-white font-sans text-[10px] font-bold shrink-0 transition flex items-center gap-1 cursor-pointer"
+                      title={`Track with current live RSSI (${b.rssi} dBm)`}
+                    >
+                      <span>Track</span>
+                      <span className="opacity-90 font-mono text-[9px]">({b.rssi} dBm)</span>
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
