@@ -78,7 +78,7 @@ bool has_active_websocket_clients(void) {
 }
 
 void broadcast_ws_raw(const std::string& json_str) {
-    if (!global_web_server) return;
+    if (!global_web_server || is_serving_static_page()) return;
     size_t max_clients = 8;
     int client_fds[8];
     size_t clients = max_clients;
@@ -86,9 +86,11 @@ void broadcast_ws_raw(const std::string& json_str) {
     if (httpd_get_client_list(global_web_server, &clients, client_fds) == ESP_OK) {
         for (size_t i = 0; i < clients; ++i) {
             if (httpd_ws_get_fd_info(global_web_server, client_fds[i]) == HTTPD_WS_CLIENT_WEBSOCKET) {
-                ws_msg_t *msg = new ws_msg_t{client_fds[i], json_str};
-                if (httpd_queue_work(global_web_server, ws_async_send, msg) != ESP_OK) {
-                    delete msg;
+                ws_msg_t *msg = new (std::nothrow) ws_msg_t{client_fds[i], json_str};
+                if (msg) {
+                    if (httpd_queue_work(global_web_server, ws_async_send, msg) != ESP_OK) {
+                        delete msg;
+                    }
                 }
             }
         }
@@ -122,7 +124,7 @@ void broadcast_ws_state(const std::string& entity_id, const std::string& state) 
 
 void broadcast_ws_can_frame(const twai_message_t* msg) {
     (void)msg;
-    // Raw CAN frame streaming over WebSocket and UART disabled to protect real-time telemetry
+    // Raw CAN frame streaming disabled on WebSocket & UART to guarantee deterministic latency
 }
 
 void broadcast_ws_automation_event(const std::string& id, const std::string& name) {
@@ -131,34 +133,45 @@ void broadcast_ws_automation_event(const std::string& id, const std::string& nam
     snprintf(buf, sizeof(buf),
              "{\"type\":\"automation_fired\",\"id\":\"%s\",\"name\":\"%s\",\"ts\":%lu}",
              id.c_str(), name.c_str(), (unsigned long)now_ms);
-    uart_bridge_send_raw(buf);
+    if (uart_bridge_is_online()) {
+        uart_bridge_send_raw(buf);
+    }
     if (!has_active_websocket_clients()) return;
     broadcast_ws_raw(buf);
 }
 
 int custom_websocket_logger(const char *fmt, va_list args) {
-    char log_buffer[256];
-    va_list args_copy;
-    va_copy(args_copy, args);
-    int len = vsnprintf(log_buffer, sizeof(log_buffer), fmt, args_copy);
-    va_end(args_copy);
+    static std::atomic<bool> s_in_logger{false};
 
-    if (len > 0 && global_web_server) {
-        std::string json = "{\"type\":\"log\",\"msg\":\"";
-        for (int i = 0; i < len; i++) {
-            if (log_buffer[i] == '\n' || log_buffer[i] == '\r') continue;
-            else if (log_buffer[i] == '"') json += "\\\"";
-            else if (log_buffer[i] == '\\') json += "\\\\";
-            else json += log_buffer[i];
+    // Atomic re-entrancy guard + fast exit if no WS clients are actively listening
+    if (!s_in_logger.exchange(true, std::memory_order_acquire)) {
+        if (global_web_server && !is_serving_static_page() && has_active_websocket_clients()) {
+            char log_buffer[256];
+            va_list args_copy;
+            va_copy(args_copy, args);
+            int len = vsnprintf(log_buffer, sizeof(log_buffer), fmt, args_copy);
+            va_end(args_copy);
+
+            if (len > 0) {
+                std::string json = "{\"type\":\"log\",\"msg\":\"";
+                json.reserve(len + 32);
+                for (int i = 0; i < len && log_buffer[i] != '\0'; i++) {
+                    if (log_buffer[i] == '\n' || log_buffer[i] == '\r') continue;
+                    else if (log_buffer[i] == '"') json += "\\\"";
+                    else if (log_buffer[i] == '\\') json += "\\\\";
+                    else if ((uint8_t)log_buffer[i] >= 0x20) json += log_buffer[i];
+                }
+                json += "\"}";
+                broadcast_ws_raw(json);
+            }
         }
-        json += "\"}";
-        broadcast_ws_raw(json);
+        s_in_logger.store(false, std::memory_order_release);
     }
 
     if (original_log_vprintf) {
         return original_log_vprintf(fmt, args);
     }
-    return len;
+    return 0;
 }
 
 static void restart_task(void *arg) {
@@ -1481,9 +1494,11 @@ static esp_err_t api_system_control_handler(httpd_req_t *req) {
             free(resp);
             return ESP_OK;
         } else if (strcmp(act, "reload_catalog") == 0) {
+            bool prev_auto = g_automations_enabled.exchange(false);
             struct stat st;
             int stat_res = stat("/spiffs/catalog.json", &st);
             bool ok = load_catalog_from_fs("/spiffs/catalog.json");
+            g_automations_enabled.store(prev_auto);
             char resp_buf[256];
             snprintf(resp_buf, sizeof(resp_buf), 
                      "{\"status\":\"%s\",\"stat_res\":%d,\"size\":%ld,\"entities\":%zu,\"automations\":%zu}",
