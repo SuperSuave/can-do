@@ -580,6 +580,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     });
 
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       fetchStatus();
     }, 4000);
 

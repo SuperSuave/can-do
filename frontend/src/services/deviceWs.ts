@@ -72,19 +72,54 @@ class DeviceWebSocketService {
 
       this.ws.onmessage = (event: MessageEvent) => {
         const raw = String(event.data || '');
-        let parsed: DeviceWsMessage;
+        let parsed: any;
         try {
           parsed = JSON.parse(raw);
         } catch {
           parsed = { type: 'log', msg: raw };
         }
-        this.listeners.forEach((listener) => {
-          try {
-            listener(parsed, raw);
-          } catch (err) {
-            console.error('Error in WS listener:', err);
-          }
-        });
+
+        const dispatch = (msg: DeviceWsMessage) => {
+          this.listeners.forEach((listener) => {
+            try {
+              listener(msg, raw);
+            } catch (err) {
+              console.error('Error in WS listener:', err);
+            }
+          });
+        };
+
+        // 1. Bare JSON array from Atom Lite initial connect: [{"entity":"...","state":"..."}]
+        if (Array.isArray(parsed)) {
+          dispatch({ type: 'states_dump', data: parsed });
+          parsed.forEach((item: any) => {
+            if (item && item.entity && item.state !== undefined) {
+              dispatch({ type: 'state', entity: item.entity, state: String(item.state) });
+            }
+          });
+          return;
+        }
+
+        // 2. WiCAN batch dump: {"type":"states_dump","data":[{"entity":"...","state":"..."}]}
+        if (parsed && parsed.type === 'states_dump' && Array.isArray(parsed.data)) {
+          dispatch(parsed);
+          parsed.data.forEach((item: any) => {
+            if (item && item.entity && item.state !== undefined) {
+              dispatch({ type: 'state', entity: item.entity, state: String(item.state) });
+            }
+          });
+          return;
+        }
+
+        // 3. BLE events: normalize button / button_name so listeners on WiCAN and Atom Lite work identically
+        if (parsed && parsed.type === 'ble_event') {
+          const btn = parsed.button || parsed.button_name || '';
+          parsed.button = btn;
+          parsed.button_name = btn;
+        }
+
+        // 4. Standard message dispatch
+        dispatch(parsed);
       };
 
       this.ws.onclose = () => {

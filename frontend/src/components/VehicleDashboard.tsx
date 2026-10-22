@@ -421,18 +421,31 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     }
   };
 
-  // Hardware command dispatcher (sends to CAN Do ESP32 device if connected)
-  const dispatchCommand = async (entity: string, cmd: string, fallbackDesc: string) => {
+  // Hardware command dispatcher with per-entity debouncing (prevents slider/rapid-click HTTP flooding)
+  const commandTimersRef = useRef<Record<string, any>>({});
+  const dispatchCommand = (entity: string, cmd: string, fallbackDesc: string, debounceMs = 150) => {
     triggerNotice(fallbackDesc);
-    try {
-      const baseUrl = resolveDeviceBaseUrl(localStorage.getItem('cando_device_host'));
-      await fetch(`${baseUrl}/api/command`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entity, command: cmd })
-      });
-    } catch {
-      // Offline / standalone browser preview mode
+    if (commandTimersRef.current[entity]) {
+      clearTimeout(commandTimersRef.current[entity]);
+      delete commandTimersRef.current[entity];
+    }
+    const send = async () => {
+      delete commandTimersRef.current[entity];
+      try {
+        const baseUrl = resolveDeviceBaseUrl(localStorage.getItem('cando_device_host'));
+        await fetch(`${baseUrl}/api/command`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entity, command: cmd })
+        });
+      } catch {
+        // Offline / standalone browser preview mode
+      }
+    };
+    if (debounceMs > 0) {
+      commandTimersRef.current[entity] = setTimeout(send, debounceMs);
+    } else {
+      send();
     }
   };
 
@@ -636,6 +649,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   useEffect(() => {
     let cancelled = false;
     const fetchCurrentStates = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (deviceWs.getConnected()) return;
       try {
         const baseUrl = resolveDeviceBaseUrl(localStorage.getItem('cando_device_host'));
         const res = await fetch(`${baseUrl}/api/states`);
@@ -710,21 +725,21 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     if ((normId === canMappings.speed || normId === '1ac') && bytes.length >= 1) {
       const kph = bytes[0];
       const mph = Math.round(kph * 0.621371);
-      setSpeedKph(kph);
-      setSpeedMph(mph);
+      setSpeedKph(prev => (prev === kph ? prev : kph));
+      setSpeedMph(prev => (prev === mph ? prev : mph));
       recordLog(idFormatted, canMappings.speedName, `${kph} km/h (${mph} mph)`, hexPayload, now);
     } else if ((normId === canMappings.wheelSpeeds || normId === '0a2' || normId === 'a2') && bytes.length >= 2) {
       const rawW1 = bytes[0] | (bytes[1] << 8);
       const kph = Math.round(rawW1 * 0.03125 * 10) / 10;
       const mph = Math.round(kph * 0.621371);
-      setSpeedKph(kph);
-      setSpeedMph(mph);
+      setSpeedKph(prev => (prev === kph ? prev : kph));
+      setSpeedMph(prev => (prev === mph ? prev : mph));
       recordLog(idFormatted, 'Wheel Speed Telemetry', `${kph} km/h (${mph} mph)`, hexPayload, now);
     } else if (normId === '1a0' && bytes.length >= 2) {
       const kph = Math.round(((bytes[0] | (bytes[1] << 8)) * 0.03125) * 10) / 10;
       const mph = Math.round(kph * 0.621371);
-      setSpeedKph(kph);
-      setSpeedMph(mph);
+      setSpeedKph(prev => (prev === kph ? prev : kph));
+      setSpeedMph(prev => (prev === mph ? prev : mph));
       recordLog(idFormatted, 'ESC Road Speed', `${kph} km/h (${mph} mph)`, hexPayload, now);
     }
 
@@ -733,7 +748,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       const raw = bytes[3];
       if (raw > 0 && raw < 255) {
         const c = raw - 40;
-        setAmbientTempC(c);
+        setAmbientTempC(prev => (prev === c ? prev : c));
         recordLog(idFormatted, canMappings.ambientTempName, `${c}°C (${Math.round(c * 1.8 + 32)}°F)`, hexPayload, now);
       }
     }
@@ -743,7 +758,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       const raw = bytes[7];
       const newSoc = Math.round(raw * 0.5 * 10) / 10;
       if (newSoc >= 0 && newSoc <= 100) {
-        setSoc(newSoc);
+        setSoc(prev => (prev === newSoc ? prev : newSoc));
         try { localStorage.setItem('cando_last_soc', String(newSoc)); } catch {}
         recordLog(idFormatted, canMappings.hvSocName, `${newSoc}%`, hexPayload, now);
       }
@@ -754,7 +769,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       const vByte = bytes.length >= 6 ? bytes[5] : bytes[4];
       const v = Math.round(vByte * 0.1 * 10) / 10;
       if (v >= 8.0 && v <= 16.5) {
-        setAux12V(v);
+        setAux12V(prev => (prev === v ? prev : v));
         try { localStorage.setItem('cando_last_aux12v', String(v)); } catch {}
         recordLog(idFormatted, canMappings.aux12vName, `${v} V`, hexPayload, now);
       }
@@ -764,8 +779,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     else if ((normId === canMappings.hvTemps || normId === '152') && bytes.length >= 2) {
       const minT = bytes[0];
       const maxT = bytes[1];
-      setBatteryMinTempC(minT);
-      setBatteryMaxTempC(maxT);
+      setBatteryMinTempC(prev => (prev === minT ? prev : minT));
+      setBatteryMaxTempC(prev => (prev === maxT ? prev : maxT));
       recordLog(idFormatted, canMappings.hvTempsName, `Min: ${minT}°C / Max: ${maxT}°C`, hexPayload, now);
     }
 

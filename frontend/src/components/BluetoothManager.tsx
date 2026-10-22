@@ -116,7 +116,10 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 3000);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      fetchStatus();
+    }, 3000);
     return () => clearInterval(interval);
   }, [deviceHost]);
 

@@ -564,6 +564,9 @@ export async function executeUpdateSequence(
           if (!uploaded) {
             throw new Error(`Device failed to store ${fileInfo.name} to LittleFS (LittleFS partition may be out of space). Please reboot the device and retry.`);
           }
+
+          // Pacing breather to allow LittleFS flash sector erases/writes and Wi-Fi TCP ACKs breathing room
+          await new Promise((r) => setTimeout(r, 60));
         }
         onProgress('frontend', 35, 'Web Front-End successfully updated on LittleFS');
       } else {

@@ -45,7 +45,7 @@ unsigned long g_last_wican_rx_ms = 0;
 bool g_wican_online = false;
 
 #ifndef CAN_DO_VERSION
-#define CAN_DO_VERSION "2026.10.7-b002"
+#define CAN_DO_VERSION "2026.10.7-b003"
 #endif
 
 String g_can_do_version = CAN_DO_VERSION;
@@ -479,6 +479,7 @@ void fire_ble_button_event(const String& addr, const String& name, const String&
     ws_doc["address"] = addr;
     ws_doc["name"] = name;
     ws_doc["button_name"] = button;
+    ws_doc["button"] = button;
     ws_doc["action"] = action;
     if (combo.length() > 0) {
         ws_doc["combo"] = combo;
@@ -1392,7 +1393,8 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
 
         // Deliver initial state cache to freshly connected browser client
         JsonDocument doc;
-        JsonArray arr = doc.to<JsonArray>();
+        doc["type"] = "states_dump";
+        JsonArray arr = doc["data"].to<JsonArray>();
         {
             std::lock_guard<std::mutex> lock(g_state_cache_mutex);
             for (const auto& pair : g_state_cache) {
@@ -1928,13 +1930,36 @@ void setup() {
         }
     );
 
-    // REST: GET /api/automations & /automations.json (Avoids UI loading alerts when browsing Atom Lite bridge directly)
-    server.on("/api/automations", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send(200, "application/json", "{\"settings\":{\"vehicle_model\":\"all_egmp\",\"unit_system\":\"imperial\"},\"rules\":[]}");
-    });
-    server.on("/automations.json", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send(200, "application/json", "{\"settings\":{\"vehicle_model\":\"all_egmp\",\"unit_system\":\"imperial\"},\"rules\":[]}");
-    });
+    // REST: GET /api/automations & /automations.json (LittleFS-backed with fallback to avoid UI loading alerts)
+    auto serveAutomations = [](AsyncWebServerRequest *request) {
+        if (LittleFS.exists("/automations.json")) {
+            request->send(LittleFS, "/automations.json", "application/json");
+        } else {
+            request->send(200, "application/json", "{\"settings\":{\"vehicle_model\":\"all_egmp\",\"unit_system\":\"imperial\"},\"rules\":[]}");
+        }
+    };
+    server.on("/api/automations", HTTP_GET, serveAutomations);
+    server.on("/automations.json", HTTP_GET, serveAutomations);
+
+    // POST /api/automations (Allows Automation Builder to save rules directly when connected to Atom Lite)
+    server.on("/api/automations", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+            static File s_auto_file;
+            if (index == 0) {
+                s_auto_file = LittleFS.open("/automations.json", "w");
+            }
+            if (s_auto_file && len > 0) {
+                s_auto_file.write(data, len);
+            }
+            if (index + len >= total) {
+                if (s_auto_file) {
+                    s_auto_file.close();
+                    Serial.printf("[AUTOMATIONS] Saved automations.json (%u bytes)\n", total);
+                }
+                request->send(200, "application/json", "{\"status\":\"success\",\"message\":\"Automations saved to Atom Lite LittleFS\"}");
+            }
+        }
+    );
 
     // POST /api/ble/unpair
     server.on("/api/ble/unpair", HTTP_POST, [](AsyncWebServerRequest *request) {

@@ -113,6 +113,21 @@ export default function App() {
     setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
   };
 
+  // Page visibility state (suspends background tasks and polling when tab is hidden)
+  const [isPageVisible, setIsPageVisible] = useState<boolean>(() => {
+    return typeof document !== 'undefined' ? !document.hidden : true;
+  });
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsPageVisible(!document.hidden);
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
   // 1. Core catalog state (Strictly from /catalog/can_do_catalog.json)
   const [catalog, setCatalog] = useState<Catalog>(() => {
     try {
@@ -445,9 +460,10 @@ export default function App() {
   }, []);
 
   // Synchronize User Preferences directly from CAN Do device storage (resolves cross-device & force-refresh loss)
+  // Defer slightly (250ms) to ensure catalog fetch & WS handshake complete without socket contention
   useEffect(() => {
     let cancelled = false;
-    const syncFromDevice = async () => {
+    const timer = setTimeout(async () => {
       try {
         const devicePrefs = await fetchDevicePreferences();
         if (!cancelled && devicePrefs) {
@@ -462,10 +478,10 @@ export default function App() {
       } catch {
         // Device offline or unreachable
       }
-    };
-    syncFromDevice();
+    }, 250);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, []);
 
@@ -476,6 +492,7 @@ export default function App() {
     }
 
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       const now = new Date();
       const currentHhMm = now.toTimeString().slice(0, 5);
       if (currentHhMm === userPreferences.update_schedule.time) {

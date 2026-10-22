@@ -32,7 +32,7 @@ interface CommandCardProps {
   onAddToAutomation?: (cmd: Command, role?: CommandRole, option?: CommandOption) => void;
 }
 
-export const CommandCard: React.FC<CommandCardProps> = ({
+const CommandCardComponent: React.FC<CommandCardProps> = ({
   command,
   onSelect,
   onEdit,
@@ -719,3 +719,5 @@ export const CommandCard: React.FC<CommandCardProps> = ({
   </div>
   );
 };
+
+export const CommandCard = React.memo(CommandCardComponent);

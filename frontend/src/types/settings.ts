@@ -139,6 +139,8 @@ export async function savePreferencesToDevice(prefs: UserPreferences): Promise<b
   }
 }
 
+let savePrefsDebounceTimer: any = null;
+
 export function saveUserPreferences(prefs: Partial<UserPreferences>): UserPreferences {
   const current = getUserPreferences();
   const updated: UserPreferences = {
@@ -160,8 +162,14 @@ export function saveUserPreferences(prefs: Partial<UserPreferences>): UserPrefer
     console.error('Failed to save user preferences to localStorage', e);
   }
 
-  // Push directly to CAN Do hardware device flash/spiffs storage asynchronously
-  savePreferencesToDevice(updated).catch(() => {});
+  // Debounce push to CAN Do hardware device flash/spiffs storage asynchronously (250ms)
+  if (savePrefsDebounceTimer) {
+    clearTimeout(savePrefsDebounceTimer);
+  }
+  savePrefsDebounceTimer = setTimeout(() => {
+    savePrefsDebounceTimer = null;
+    savePreferencesToDevice(updated).catch(() => {});
+  }, 250);
 
   return updated;
 }

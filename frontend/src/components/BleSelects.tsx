@@ -45,7 +45,10 @@ export function useBleStatus() {
     };
 
     fetchStatus();
-    const interval = setInterval(fetchStatus, 4000);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      fetchStatus();
+    }, 4000);
 
     return () => {
       mounted = false;
