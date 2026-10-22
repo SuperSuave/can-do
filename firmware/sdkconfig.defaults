@@ -53,5 +53,8 @@ CONFIG_LWIP_LOCAL_HOSTNAME="can-do"
 # Native Bluetooth Low Energy (BLE) & NimBLE Configuration
 # CONFIG_BT_ENABLED is not set
 
+# Drop MQTT publishes immediately when disconnected to preserve heap/outbox
+CONFIG_MQTT_SKIP_PUBLISH_IF_DISCONNECTED=y
+
 
 

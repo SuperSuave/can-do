@@ -175,18 +175,6 @@ class CanDoDataCoordinator:
         # 4. Inform ESP32 edge device of the state CAN IDs we want it to publish
         if self.monitored_can_ids:
             await self.async_publish_monitored_ids()
-            # Also publish to known hardware MAC topic if different
-            if self.effective_device_id != "can-do-6C84":
-                try:
-                    await mqtt.async_publish(
-                        self.hass,
-                        f"{self.base_topic}/can-do-6C84/subscribe_ids",
-                        json.dumps(self.monitored_can_ids),
-                        qos=1,
-                        retain=True,
-                    )
-                except Exception as err:
-                    _LOGGER.warning("Could not publish initial subscribe_ids: %s", err)
 
     async def async_stop(self) -> None:
         """Unsubscribe all MQTT handlers."""
@@ -197,15 +185,17 @@ class CanDoDataCoordinator:
     async def async_publish_monitored_ids(self) -> None:
         """Publish list of monitored CAN IDs to ESP32."""
         payload = json.dumps(self.monitored_can_ids)
-        _LOGGER.debug(
-            "Publishing %d monitored CAN IDs to %s: %s",
-            len(self.monitored_can_ids),
-            self.sub_ids_topic,
-            payload,
+        target_topic = (
+            f"{self.base_topic}/{self.active_device_id}/subscribe_ids"
+            if self.active_device_id
+            else f"{self.base_topic}/subscribe_ids"
         )
-        await mqtt.async_publish(self.hass, self.sub_ids_topic, payload, qos=1, retain=True)
-        if self.sub_ids_topic != f"{self.base_topic}/subscribe_ids":
-            await mqtt.async_publish(self.hass, f"{self.base_topic}/subscribe_ids", payload, qos=1, retain=True)
+        _LOGGER.debug(
+            "Publishing %d monitored CAN IDs to %s",
+            len(self.monitored_can_ids),
+            target_topic,
+        )
+        await mqtt.async_publish(self.hass, target_topic, payload, qos=1, retain=True)
 
     @callback
     def _handle_status_message(self, msg: mqtt.ReceiveMessage) -> None:
@@ -263,16 +253,16 @@ class CanDoDataCoordinator:
             return
 
         # Handle direct decimal float telemetry (e.g. MeatPi WiCAN 12V battery ADC: "12.6", BMS telemetry)
-        if can_id in ("vbat", "cond_aux_12v_battery", "0x1cf") or can_id.startswith("bms_") or "." in hex_payload:
+        if can_id in ("vbat", "cond_aux_12v_battery") or can_id.startswith("bms_") or "." in hex_payload:
             try:
                 clean_num = hex_payload.split()[0]
                 val = float(clean_num)
                 prev_val = self.can_states.get(can_id)
                 self.can_states[can_id] = val
-                if prev_val is None or abs(prev_val - val) >= 0.05:
+                if not isinstance(prev_val, (int, float)) or abs(prev_val - val) >= 0.05:
                     self._notify_can_listeners(can_id)
                     if can_id in ("vbat", "cond_aux_12v_battery", "0x1cf"):
-                        for k in ("vbat", "cond_aux_12v_battery", "0x1cf"):
+                        for k in ("vbat", "cond_aux_12v_battery"):
                             self.can_states[k] = val
                             self._notify_can_listeners(k)
                     elif can_id.startswith("bms_"):
@@ -297,11 +287,11 @@ class CanDoDataCoordinator:
                 self.can_states[can_id] = byte_vals
 
                 # Skip duplicate identical frames
-                if prev_vals is not None and prev_vals == byte_vals:
+                if isinstance(prev_vals, list) and prev_vals == byte_vals:
                     return
 
                 # Filter out alive counter / checksum changes (E-GMP Byte 7 / D8) on known telemetry IDs
-                if can_id in _CRC_CAN_IDS and prev_vals is not None and len(prev_vals) == len(byte_vals) == 8:
+                if can_id in _CRC_CAN_IDS and isinstance(prev_vals, list) and len(prev_vals) == len(byte_vals) == 8:
                     if prev_vals[:7] == byte_vals[:7]:
                         return
 
@@ -498,11 +488,12 @@ class CanDoDataCoordinator:
 
     async def async_send_entity_command(self, entity_id: str, command: str) -> None:
         """Send high-level entity command (e.g. lock/unlock) to ESP32 edge device over MQTT."""
-        topic = f"{self.base_topic}/{self.effective_device_id}/set/{entity_id}"
+        topic = (
+            f"{self.base_topic}/{self.active_device_id}/set/{entity_id}"
+            if self.active_device_id
+            else f"{self.base_topic}/set/{entity_id}"
+        )
         await mqtt.async_publish(self.hass, topic, command, qos=1)
-        fallback = f"{self.base_topic}/set/{entity_id}"
-        if fallback != topic:
-            await mqtt.async_publish(self.hass, fallback, command, qos=1)
 
     async def async_send_remote_climate(
         self,
@@ -519,10 +510,13 @@ class CanDoDataCoordinator:
             "duration": duration_sec,
         }
         json_payload = json.dumps(payload_obj)
-        _LOGGER.info("Sending remote climate command to %s: %s", self.climate_topic, json_payload)
-        await mqtt.async_publish(self.hass, self.climate_topic, json_payload, qos=1)
-        if self.climate_topic != f"{self.base_topic}/set/remote_climate":
-            await mqtt.async_publish(self.hass, f"{self.base_topic}/set/remote_climate", json_payload, qos=1)
+        topic = (
+            f"{self.base_topic}/{self.active_device_id}/set/remote_climate"
+            if self.active_device_id
+            else f"{self.base_topic}/set/remote_climate"
+        )
+        _LOGGER.info("Sending remote climate command to %s: %s", topic, json_payload)
+        await mqtt.async_publish(self.hass, topic, json_payload, qos=1)
 
     async def async_send_notification(
         self,
