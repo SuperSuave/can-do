@@ -122,6 +122,47 @@ NimBLEClient* g_ble_client = nullptr;
 bool g_ble_client_connected = false;
 String g_connected_device_addr = "";
 
+// Deferred BLE Connection State (prevents deadlocking NimBLE Host task inside onResult)
+static std::mutex g_ble_pending_mutex;
+static String g_pending_ble_connect_addr = "";
+static uint8_t g_pending_ble_connect_type = 0xFF;
+static bool g_pending_ble_connect_req = false;
+
+// Thread-Safe WebSocket Outbox Queue (marshals NimBLE & async_tcp events safely into loop())
+static std::mutex g_ws_outbox_mutex;
+static std::vector<String> g_ws_outbox;
+
+void safe_ws_broadcast(const String& payload) {
+    if (ws.count() == 0 || payload.isEmpty()) return;
+    std::lock_guard<std::mutex> lock(g_ws_outbox_mutex);
+    if (g_ws_outbox.size() < 24) {
+        g_ws_outbox.push_back(payload);
+    }
+}
+
+void flush_ws_outbox() {
+    if (ws.count() == 0) {
+        std::lock_guard<std::mutex> lock(g_ws_outbox_mutex);
+        g_ws_outbox.clear();
+        return;
+    }
+    if (!ws.availableForWriteAll()) return;
+
+    std::vector<String> batch;
+    {
+        std::lock_guard<std::mutex> lock(g_ws_outbox_mutex);
+        if (g_ws_outbox.empty()) return;
+        batch.swap(g_ws_outbox);
+    }
+    for (const auto& msg : batch) {
+        if (ws.availableForWriteAll()) {
+            ws.textAll(msg);
+        } else {
+            break; // Drop remaining if client TCP window filled mid-batch
+        }
+    }
+}
+
 // Forward Declarations
 void set_led_color(CRGB color);
 void update_led_status();
@@ -449,7 +490,7 @@ void fire_ble_button_event(const String& addr, const String& name, const String&
     ws_doc["timestamp_ms"] = g_last_ble_event.timestamp_ms;
     String ws_str;
     serializeJson(ws_doc, ws_str);
-    ws.textAll(ws_str);
+    safe_ws_broadcast(ws_str);
 
     // 2. Forward BLE event and trigger to WiCAN over high-speed UART link
     String uart_msg = "{\"type\":\"ble_event\",\"address\":\"" + addr + "\",\"button\":\"" + button + "\",\"action\":\"" + action + "\"";
@@ -649,7 +690,7 @@ class ClientCallbacks : public NimBLEClientCallbacks {
         int cur_rssi = pClient->getRssi();
         String uart_ev = "{\"type\":\"ble_device_event\",\"event\":\"connected\",\"address\":\"" + g_connected_device_addr + "\",\"name\":\"" + dev_name + "\",\"rssi\":" + String(cur_rssi) + "}";
         send_to_wican(uart_ev);
-        ws.textAll(uart_ev);
+        safe_ws_broadcast(uart_ev);
     }
 
     void onDisconnect(NimBLEClient* pClient) override {
@@ -666,7 +707,7 @@ class ClientCallbacks : public NimBLEClientCallbacks {
         g_connected_device_addr = "";
         String uart_ev = "{\"type\":\"ble_device_event\",\"event\":\"disconnected\",\"address\":\"" + disc_addr + "\"}";
         send_to_wican(uart_ev);
-        ws.textAll(uart_ev);
+        safe_ws_broadcast(uart_ev);
         broadcast_ble_status();
         // Resume continuous background scan to listen for button press wakeups
         NimBLEDevice::getScan()->start(0, nullptr, false);
@@ -923,11 +964,15 @@ String get_ble_status_json() {
 }
 
 void broadcast_ble_status() {
+    static unsigned long s_last_ble_bcast_ms = 0;
+    // Throttle automatic BLE status dumps to max 2Hz to protect UART and WS queues
+    if (millis() - s_last_ble_bcast_ms < 500) return;
+    s_last_ble_bcast_ms = millis();
+
     String st = get_ble_status_json();
-    send_to_wican("{\"type\":\"ble_status\",\"data\":" + st + "}");
-    if (ws.count() > 0) {
-        ws.textAll("{\"type\":\"ble_status\",\"data\":" + st + "}");
-    }
+    String wrapped = "{\"type\":\"ble_status\",\"data\":" + st + "}";
+    send_to_wican(wrapped);
+    safe_ws_broadcast(wrapped);
 }
 
 void on_scan_complete(NimBLEScanResults results) {
@@ -1071,7 +1116,6 @@ class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
                 nd.is_connectable = true;
                 nd.addr_type = a_type;
                 g_discovered_devices.push_back(nd);
-                Serial.printf("[BLE ADV] Discovered in-car: %s (%s) %d dBm type=%d\n", addr.c_str(), name.c_str(), rssi, a_type);
             }
         }
 
@@ -1091,17 +1135,15 @@ class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
                     send_to_wican(uart_prox);
                 }
 
-                // If not connected as GATT client, attempt connection with failure backoff
+                // CRITICAL FIX: Never call connect_ble_device() inside NimBLE Host callback!
+                // Defer the connection request to loop() to prevent NimBLE Host task deadlock.
                 static unsigned long last_adv_connect_attempt = 0;
-                static bool s_last_connect_failed = false;
-                unsigned long backoff_ms = s_last_connect_failed ? 45000 : 15000;
-                if (!g_ble_client_connected && (millis() - last_adv_connect_attempt > backoff_ms)) {
+                if (!g_ble_client_connected && !g_pending_ble_connect_req && (millis() - last_adv_connect_attempt > 15000)) {
                     last_adv_connect_attempt = millis();
-                    Serial.printf("[BLE ADV] Paired device %s seen advertising -> auto-connecting (type=%d)...\n",
-                                  addr.c_str(), a_type);
-                    NimBLEDevice::getScan()->stop();
-                    connect_ble_device(addr, a_type, advertisedDevice);
-                    s_last_connect_failed = !g_ble_client_connected;
+                    std::lock_guard<std::mutex> lock(g_ble_pending_mutex);
+                    g_pending_ble_connect_addr = addr;
+                    g_pending_ble_connect_type = a_type;
+                    g_pending_ble_connect_req = true;
                 }
                 break;
             }
@@ -1116,11 +1158,10 @@ class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
 
         if (advertisedDevice->haveManufacturerData()) {
             std::string mfg = advertisedDevice->getManufacturerData();
-            // Apple iBeacon: 0x4C, 0x00, 0x02, 0x15, [16-byte UUID], [2-byte Major], [2-byte Minor], [1-byte TxPower]
             if (mfg.length() >= 25 &&
                 (uint8_t)mfg[0] == 0x4C && (uint8_t)mfg[1] == 0x00 &&
                 (uint8_t)mfg[2] == 0x02 && (uint8_t)mfg[3] == 0x15) {
-                
+
                 char uuid_buf[37];
                 snprintf(uuid_buf, sizeof(uuid_buf),
                          "%02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X",
@@ -1133,7 +1174,6 @@ class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
                 adv_major = ((uint8_t)mfg[20] << 8) | (uint8_t)mfg[21];
                 adv_minor = ((uint8_t)mfg[22] << 8) | (uint8_t)mfg[23];
 
-                // Record into recent discovered beacons table
                 bool b_exists = false;
                 for (auto& b : g_discovered_beacons) {
                     if (b.uuid.equalsIgnoreCase(adv_uuid)) {
@@ -1156,13 +1196,10 @@ class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
                     nb.minor = adv_minor;
                     nb.last_seen_ms = millis();
                     g_discovered_beacons.push_back(nb);
-                    Serial.printf("[BLE ADV] iBeacon detected: UUID %s (Major: %u, Minor: %u, RSSI: %d dBm)\n",
-                                  adv_uuid.c_str(), adv_major, adv_minor, rssi);
                 }
             }
         }
 
-        // Match against configured target beacons
         for (auto& target : g_beacon_targets) {
             bool match = false;
             if (!adv_uuid.isEmpty() && !target.uuid.isEmpty() && target.uuid.equalsIgnoreCase(adv_uuid)) {
@@ -1182,16 +1219,14 @@ class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
                 if (!target.is_present && rssi >= target.enter_rssi) {
                     target.is_present = true;
                     target.last_prox_send_ms = millis();
-                    Serial.printf("[BEACON] Target '%s' ENTERED (RSSI: %d dBm >= %d dBm)\n",
-                                  target.name.c_str(), rssi, target.enter_rssi);
                     String uart_msg = "{\"type\":\"ble_beacon\",\"event\":\"enter\",\"uuid\":\"" + target.uuid + "\",\"mac\":\"" + addr + "\",\"name\":\"" + target.name + "\",\"rssi\":" + String(rssi) + ",\"major\":" + String(target.major) + ",\"minor\":" + String(target.minor) + "}";
                     send_to_wican(uart_msg);
-                    ws.textAll(uart_msg);
+                    safe_ws_broadcast(uart_msg);
                 } else if (target.is_present && (millis() - target.last_prox_send_ms > 2500)) {
                     target.last_prox_send_ms = millis();
                     String uart_msg = "{\"type\":\"ble_beacon\",\"event\":\"proximity\",\"uuid\":\"" + target.uuid + "\",\"mac\":\"" + addr + "\",\"name\":\"" + target.name + "\",\"rssi\":" + String(rssi) + ",\"major\":" + String(target.major) + ",\"minor\":" + String(target.minor) + "}";
                     send_to_wican(uart_msg);
-                    ws.textAll(uart_msg);
+                    safe_ws_broadcast(uart_msg);
                 }
             }
         }
@@ -1316,9 +1351,7 @@ void handle_wican_message(const String& line) {
     }
 
     // Forward raw JSON directly to connected WebSockets
-    if (ws.count() > 0) {
-        ws.textAll(line);
-    }
+    safe_ws_broadcast(line);
 
     // Inspect for state caching
     if (line.indexOf("\"type\":\"state\"") >= 0) {
@@ -2252,24 +2285,48 @@ void setup() {
 // Main Loop
 // ============================================================================
 void loop() {
-    // 1. Clean up stale WebSocket clients
+    // 1. Clean up stale WebSocket clients & flush thread-safe WS outbox
     ws.cleanupClients();
+    flush_ws_outbox();
 
-    // 2. Read incoming UART from WiCAN
+    // 1b. Service deferred BLE connection requests outside NimBLE Host callback context
+    if (g_pending_ble_connect_req) {
+        String target_addr;
+        uint8_t target_type;
+        {
+            std::lock_guard<std::mutex> lock(g_ble_pending_mutex);
+            target_addr = g_pending_ble_connect_addr;
+            target_type = g_pending_ble_connect_type;
+            g_pending_ble_connect_req = false;
+        }
+        if (!target_addr.isEmpty() && !g_ble_client_connected) {
+            NimBLEDevice::getScan()->stop();
+            connect_ble_device(target_addr, target_type, nullptr);
+            if (!g_ble_client_connected && !g_ble_scanning) {
+                NimBLEDevice::getScan()->start(0, nullptr, false);
+            }
+        }
+    }
+
+    // 2. Bounded UART read from WiCAN (max 16 lines per loop pass so HTTP/WS never starve)
     static String rx_line = "";
-    while (Serial2.available()) {
+    int lines_read = 0;
+    while (Serial2.available() && lines_read < 16) {
         char c = (char)Serial2.read();
         if (c == '\n' || c == '\r') {
             if (rx_line.length() > 0) {
                 handle_wican_message(rx_line);
                 rx_line = "";
+                lines_read++;
             }
-        } else {
+        } else if ((uint8_t)c >= 0x20 && (uint8_t)c <= 0x7E) {
             if (rx_line.length() < 8192) {
                 rx_line += c;
             } else {
-                rx_line = ""; // Guard buffer overflow
+                rx_line = "";
             }
+        } else {
+            rx_line = "";
         }
     }
 
@@ -2338,7 +2395,7 @@ void loop() {
                               target.name.c_str(), target.exit_timeout_s);
                 String uart_msg = "{\"type\":\"ble_beacon\",\"event\":\"exit\",\"uuid\":\"" + target.uuid + "\",\"mac\":\"" + target.mac + "\",\"name\":\"" + target.name + "\",\"rssi\":" + String(target.last_rssi) + "}";
                 send_to_wican(uart_msg);
-                ws.textAll(uart_msg);
+                safe_ws_broadcast(uart_msg);
             }
         }
     }
