@@ -23,11 +23,14 @@ class TestCheckMatch(unittest.TestCase):
     """Test suite for check_match condition evaluator."""
 
     def test_empty_or_none_inputs(self) -> None:
-        """Empty or None payloads and match dictionaries should return False."""
+        """Empty, None, or non-sequence payloads and match dictionaries should return False."""
         self.assertFalse(check_match([], {"D1": "0x01"}))
         self.assertFalse(check_match([0] * 8, {}))
         self.assertFalse(check_match(None, {"D1": "0x01"}))
         self.assertFalse(check_match([0] * 8, None))
+        self.assertFalse(check_match(12.6, {"D1": "0x01"}))
+        self.assertFalse(check_match("12.6", {"D1": "0x01"}))
+        self.assertFalse(check_match(100, {"D1": "0x01"}))
 
     def test_exact_single_byte_matches(self) -> None:
         """1-based D1..D8 payload matching should verify correct byte indexes."""

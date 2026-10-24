@@ -226,7 +226,7 @@ def parse_hex_val(val: Any) -> tuple[int, bool]:
 
 def check_match(data: list[int], match_dict: dict[str, Any], mask_spec: Any = None) -> bool:
     """Check whether raw 8-byte CAN payload matches the condition."""
-    if not match_dict or not data:
+    if not match_dict or not data or not isinstance(data, (list, tuple)):
         return False
 
     for k, v in match_dict.items():

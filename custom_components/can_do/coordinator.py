@@ -252,8 +252,8 @@ class CanDoDataCoordinator:
         if not hex_payload:
             return
 
-        # Handle direct decimal float telemetry (e.g. MeatPi WiCAN 12V battery ADC: "12.6", BMS telemetry)
-        if can_id in ("vbat", "cond_aux_12v_battery") or can_id.startswith("bms_") or "." in hex_payload:
+        # Handle direct decimal float telemetry (never overwrite raw 0x... CAN ID byte arrays with floats!)
+        if can_id in ("vbat", "cond_aux_12v_battery") or can_id.startswith("bms_") or (not can_id.startswith("0x") and "." in hex_payload):
             try:
                 clean_num = hex_payload.split()[0]
                 val = float(clean_num)
@@ -261,7 +261,7 @@ class CanDoDataCoordinator:
                 self.can_states[can_id] = val
                 if not isinstance(prev_val, (int, float)) or abs(prev_val - val) >= 0.05:
                     self._notify_can_listeners(can_id)
-                    if can_id in ("vbat", "cond_aux_12v_battery", "0x1cf"):
+                    if can_id in ("vbat", "cond_aux_12v_battery"):
                         for k in ("vbat", "cond_aux_12v_battery"):
                             self.can_states[k] = val
                             self._notify_can_listeners(k)
@@ -471,7 +471,14 @@ class CanDoDataCoordinator:
         """Retrieve current cached 8-byte payload for a CAN ID."""
         if not can_id:
             return None
-        return self.can_states.get(can_id.lower())
+        val = self.can_states.get(can_id.lower())
+        return val if isinstance(val, list) else None
+
+    def get_can_state(self, key: str | None) -> Any:
+        """Retrieve any cached state (list, float, str) for an entity or CAN ID."""
+        if not key:
+            return None
+        return self.can_states.get(key.lower())
 
     async def async_send_action(
         self, can_id: str, delay_ms: int, steps: list[dict[str, Any]]

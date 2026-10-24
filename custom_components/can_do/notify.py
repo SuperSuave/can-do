@@ -95,7 +95,7 @@ class CanDoClusterMasterNotifyEntity(NotifyEntity):
 
         from .catalog_loader import get_vehicle_definition
 
-        parent_id = self.coordinator.device_id
+        parent_id = self.coordinator.effective_device_id
         v_def = get_vehicle_definition(self.coordinator.vehicle_id)
         if v_def:
             make = v_def.get("make", "")
@@ -105,12 +105,11 @@ class CanDoClusterMasterNotifyEntity(NotifyEntity):
             v_name = self.coordinator.vehicle_id.upper()
 
         return DeviceInfo(
-            identifiers={(DOMAIN, f"{parent_id}_cockpit_and_controls")},
-            name=f"{v_name} Cockpit & Controls",
+            identifiers={(DOMAIN, parent_id)},
+            name=f"CAN Do {v_name} ({parent_id})",
             manufacturer="CAN Do",
             model=self.coordinator.vehicle_id,
             sw_version=VERSION,
-            via_device=(DOMAIN, parent_id),
         )
 
     async def async_send_message(self, message: str, title: str | None = None, **kwargs: Any) -> None:

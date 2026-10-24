@@ -33,13 +33,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
-    # Register the parent ESP32 Bridge device in the HA device registry
+    # Register the main CAN Do device in the HA device registry
     from homeassistant.helpers import device_registry as dr
     dev_reg = dr.async_get(hass)
     dev_reg.async_get_or_create(
         config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, coordinator.device_id)},
-        name=f"CAN Do Bridge ({coordinator.device_id})",
+        identifiers={(DOMAIN, coordinator.effective_device_id)},
+        name=f"CAN Do Bridge ({coordinator.effective_device_id})",
         manufacturer="CAN Do",
         model="ESP32 Bridge",
         sw_version=VERSION,

@@ -64,8 +64,8 @@ class CanDoBleBeaconPresenceSensor(BinarySensorEntity):
         from homeassistant.helpers.entity import DeviceInfo
         from .const import VERSION
         return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator.device_id)},
-            name=f"CAN Do Bridge ({self.coordinator.device_id})",
+            identifiers={(DOMAIN, self.coordinator.effective_device_id)},
+            name=f"CAN Do Bridge ({self.coordinator.effective_device_id})",
             manufacturer="CAN Do",
             model="ESP32 Bridge",
             sw_version=VERSION,
@@ -133,8 +133,8 @@ class CanDoBleDeviceConnectedSensor(BinarySensorEntity):
         from homeassistant.helpers.entity import DeviceInfo
         from .const import VERSION
         return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator.device_id)},
-            name=f"CAN Do Bridge ({self.coordinator.device_id})",
+            identifiers={(DOMAIN, self.coordinator.effective_device_id)},
+            name=f"CAN Do Bridge ({self.coordinator.effective_device_id})",
             manufacturer="CAN Do",
             model="ESP32 Bridge",
             sw_version=VERSION,

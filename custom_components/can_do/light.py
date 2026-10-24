@@ -64,12 +64,14 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
     """Light entity controlling vehicle ambient mood lighting."""
 
     _attr_color_mode = ColorMode.RGB
-    _attr_supported_color_modes = {ColorMode.RGB, ColorMode.ONOFF}
+    _attr_supported_color_modes = {ColorMode.RGB}
     _attr_supported_features = LightEntityFeature.EFFECT
 
     def __init__(self, coordinator: CanDoDataCoordinator, command: dict[str, Any]) -> None:
         """Initialize light entity."""
         super().__init__(coordinator, command)
+        self._attr_color_mode = ColorMode.RGB
+        self._attr_supported_color_modes = {ColorMode.RGB}
         self._is_on: bool = False
         self._rgb_color: tuple[int, int, int] = (180, 0, 255)  # Default Deep Purple
         self._brightness: int = 255

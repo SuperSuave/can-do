@@ -52,8 +52,8 @@ class CanDoEntity(Entity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Return device information to group entities by subsystem child devices."""
-        parent_id = self.coordinator.device_id
+        """Return device information attaching entity to the vehicle / bridge device."""
+        parent_id = self.coordinator.effective_device_id
         category = self.command.get("category", "")
 
         # If entity belongs to Bridge/Gateway or has no category, attach to parent Bridge device
@@ -66,7 +66,7 @@ class CanDoEntity(Entity):
                 sw_version=VERSION,
             )
 
-        # Vehicle Subsystem Child Device
+        # Vehicle Subsystem Device
         v_def = get_vehicle_definition(self.coordinator.vehicle_id)
         if v_def:
             make = v_def.get("make", "")
@@ -75,17 +75,12 @@ class CanDoEntity(Entity):
         else:
             vehicle_name = self.coordinator.vehicle_id.upper()
 
-        cat_slug = re.sub(
-            r"[^a-z0-9_]+", "", category.lower().replace("&", "and").replace(",", "").replace(" ", "_")
-        ).strip("_")
-
         return DeviceInfo(
-            identifiers={(DOMAIN, f"{parent_id}_{cat_slug}")},
-            name=f"{vehicle_name} {category}",
+            identifiers={(DOMAIN, parent_id)},
+            name=f"CAN Do {vehicle_name} ({parent_id})",
             manufacturer="CAN Do",
-            model=self.coordinator.vehicle_id,
+            model=vehicle_name,
             sw_version=VERSION,
-            via_device=(DOMAIN, parent_id),
         )
 
     async def async_added_to_hass(self) -> None:
@@ -141,8 +136,19 @@ class CanDoEntity(Entity):
     def _get_state_snapshot(self) -> Any:
         """Capture the current state of this entity to detect real changes."""
         state_val = None
-        # 1. Binary sensor
-        if hasattr(self, "is_on"):
+        # 1. Light entity (capture on/off, brightness, color, and effect)
+        if hasattr(self, "rgb_color") or hasattr(self, "brightness"):
+            try:
+                state_val = (
+                    getattr(self, "is_on", None),
+                    getattr(self, "brightness", None),
+                    getattr(self, "rgb_color", None),
+                    getattr(self, "effect", None),
+                )
+            except Exception:
+                pass
+        # 2. Binary sensor
+        elif hasattr(self, "is_on"):
             try:
                 state_val = self.is_on
             except Exception:

@@ -73,8 +73,8 @@ class CanDoBleLastButtonSensor(SensorEntity):
         from homeassistant.helpers.entity import DeviceInfo
         from .const import VERSION
         return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator.device_id)},
-            name=f"CAN Do Bridge ({self.coordinator.device_id})",
+            identifiers={(DOMAIN, self.coordinator.effective_device_id)},
+            name=f"CAN Do Bridge ({self.coordinator.effective_device_id})",
             manufacturer="CAN Do",
             model="ESP32 Bridge",
             sw_version=VERSION,
@@ -141,8 +141,8 @@ class CanDoBleBeaconRssiSensor(SensorEntity):
         from homeassistant.helpers.entity import DeviceInfo
         from .const import VERSION
         return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator.device_id)},
-            name=f"CAN Do Bridge ({self.coordinator.device_id})",
+            identifiers={(DOMAIN, self.coordinator.effective_device_id)},
+            name=f"CAN Do Bridge ({self.coordinator.effective_device_id})",
             manufacturer="CAN Do",
             model="ESP32 Bridge",
             sw_version=VERSION,
@@ -206,8 +206,8 @@ class CanDoBleDeviceRssiSensor(SensorEntity):
         from homeassistant.helpers.entity import DeviceInfo
         from .const import VERSION
         return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator.device_id)},
-            name=f"CAN Do Bridge ({self.coordinator.device_id})",
+            identifiers={(DOMAIN, self.coordinator.effective_device_id)},
+            name=f"CAN Do Bridge ({self.coordinator.effective_device_id})",
             manufacturer="CAN Do",
             model="ESP32 Bridge",
             sw_version=VERSION,
@@ -296,13 +296,13 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
         if self.state_can_id:
             payload = self.coordinator.get_can_payload(self.state_can_id)
         if payload is None:
-            payload = self.coordinator.get_can_payload(self.entity_id_str)
+            payload = self.coordinator.get_can_state(self.entity_id_str)
 
         cid = self.entity_id_str.lower()
         if payload is None and ("12v" in cid or "aux" in cid):
             payload = (
-                self.coordinator.get_can_payload("cond_aux_12v_battery")
-                or self.coordinator.get_can_payload("vbat")
+                self.coordinator.get_can_state("cond_aux_12v_battery")
+                or self.coordinator.get_can_state("vbat")
                 or self.coordinator.get_can_payload("0x1cf")
             )
         elif payload is None and "bms" in cid:
@@ -318,7 +318,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
             }
             alias = bms_aliases.get(cid)
             if alias:
-                payload = self.coordinator.get_can_payload(alias)
+                payload = self.coordinator.get_can_state(alias)
 
         if not payload and payload != 0:
             return self._last_native_val
@@ -500,7 +500,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
         attrs: dict[str, Any] = {}
         if self.state_can_id:
             payload = self.coordinator.get_can_payload(self.state_can_id)
-            if payload:
+            if isinstance(payload, list):
                 attrs["raw_hex"] = "".join(f"{b:02X}" for b in payload)
                 for i, b in enumerate(payload):
                     attrs[f"D{i+1}"] = f"0x{b:02X}"
