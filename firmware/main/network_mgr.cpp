@@ -38,18 +38,24 @@ static std::string s_ap_ssid = "CAN Do";
 static std::string s_ap_pass = "candorules";
 
 static std::string s_cur_sta_ssid = "";
+static std::string s_last_connected_ssid = "";
+static int s_last_connected_prio = 0;
 static std::string s_cur_sta_ip = "0.0.0.0";
 static std::string s_cur_sta_gw = "0.0.0.0";
 static std::string s_cur_sta_mask = "0.0.0.0";
-static int8_t s_cur_sta_rssi = 0;
+static std::atomic<int8_t> s_cur_sta_rssi{0};
 
 static EventGroupHandle_t s_wifi_event_group;
-static const int WIFI_CONNECTED_BIT = BIT0;
-static const int WIFI_FAIL_BIT      = BIT1;
-static const int WIFI_SCAN_DONE_BIT = BIT2;
+static const int WIFI_CONNECTED_BIT    = BIT0;
+static const int WIFI_FAIL_BIT         = BIT1;
+static const int WIFI_SCAN_DONE_BIT    = BIT2;
+// Deferred worker bits so sys_evt task NEVER runs heavy MQTT/CAN/SoftAP logic
+static const int DEFER_GOT_IP_BIT      = BIT3;
+static const int DEFER_DISCONN_BIT     = BIT4;
+static const int DEFER_AP_STACONN_BIT  = BIT5;
+static const int DEFER_AP_STADISC_BIT  = BIT6;
 
-static int s_retry_num = 0;
-static const int MAXIMUM_RETRY = 3;
+static char s_deferred_ap_mac[18] = {0};
 
 // Forward declarations
 static void load_settings_from_fs(void);
@@ -140,21 +146,23 @@ static void load_settings_from_fs(void) {
 
 static void save_settings_to_fs(void) {
     cJSON* root = cJSON_CreateObject();
+    {
+        std::lock_guard<std::mutex> lock(s_net_mutex);
+        const char* ap_mode_str = "auto";
+        if (s_ap_mode == AP_MODE_ALWAYS_ON) ap_mode_str = "always_on";
+        else if (s_ap_mode == AP_MODE_DISABLED) ap_mode_str = "disabled";
+        cJSON_AddStringToObject(root, "ap_mode", ap_mode_str);
+        cJSON_AddStringToObject(root, "ap_ssid", s_ap_ssid.c_str());
+        cJSON_AddStringToObject(root, "ap_password", s_ap_pass.c_str());
 
-    const char* ap_mode_str = "auto";
-    if (s_ap_mode == AP_MODE_ALWAYS_ON) ap_mode_str = "always_on";
-    else if (s_ap_mode == AP_MODE_DISABLED) ap_mode_str = "disabled";
-    cJSON_AddStringToObject(root, "ap_mode", ap_mode_str);
-    cJSON_AddStringToObject(root, "ap_ssid", s_ap_ssid.c_str());
-    cJSON_AddStringToObject(root, "ap_password", s_ap_pass.c_str());
-
-    cJSON* arr = cJSON_AddArrayToObject(root, "known_networks");
-    for (const auto& net : s_known_networks) {
-        cJSON* item = cJSON_CreateObject();
-        cJSON_AddStringToObject(item, "ssid", net.ssid.c_str());
-        cJSON_AddStringToObject(item, "password", net.password.c_str());
-        cJSON_AddNumberToObject(item, "priority", net.priority);
-        cJSON_AddItemToArray(arr, item);
+        cJSON* arr = cJSON_AddArrayToObject(root, "known_networks");
+        for (const auto& net : s_known_networks) {
+            cJSON* item = cJSON_CreateObject();
+            cJSON_AddStringToObject(item, "ssid", net.ssid.c_str());
+            cJSON_AddStringToObject(item, "password", net.password.c_str());
+            cJSON_AddNumberToObject(item, "priority", net.priority);
+            cJSON_AddItemToArray(arr, item);
+        }
     }
 
     char* rendered = cJSON_Print(root);
@@ -177,14 +185,17 @@ static void start_softap(void) {
     if (s_ap_mode == AP_MODE_DISABLED) return;
 
     wifi_config_t ap_config = {};
-    strncpy(reinterpret_cast<char*>(ap_config.ap.ssid), s_ap_ssid.c_str(), sizeof(ap_config.ap.ssid));
-    strncpy(reinterpret_cast<char*>(ap_config.ap.password), s_ap_pass.c_str(), sizeof(ap_config.ap.password));
-    ap_config.ap.authmode = s_ap_pass.empty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
+    {
+        std::lock_guard<std::mutex> lock(s_net_mutex);
+        strncpy(reinterpret_cast<char*>(ap_config.ap.ssid), s_ap_ssid.c_str(), sizeof(ap_config.ap.ssid) - 1);
+        strncpy(reinterpret_cast<char*>(ap_config.ap.password), s_ap_pass.c_str(), sizeof(ap_config.ap.password) - 1);
+        ap_config.ap.authmode = s_ap_pass.empty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
+    }
     ap_config.ap.max_connection = 4;
     ap_config.ap.channel = 1;
     ap_config.ap.ssid_hidden = 0;
 
-    wifi_mode_t mode;
+    wifi_mode_t mode = WIFI_MODE_NULL;
     esp_wifi_get_mode(&mode);
     if (mode == WIFI_MODE_STA) {
         esp_wifi_set_mode(WIFI_MODE_APSTA);
@@ -195,13 +206,13 @@ static void start_softap(void) {
     esp_wifi_set_config(WIFI_IF_AP, &ap_config);
     s_ap_active = true;
     board_led_wifi(true);
-    ESP_LOGI(TAG, "SoftAP active: SSID='%s', Pass='%s', Gateway=192.168.4.1", s_ap_ssid.c_str(), s_ap_pass.c_str());
+    ESP_LOGI(TAG, "SoftAP active: Gateway=192.168.4.1");
 }
 
 static void stop_softap(void) {
     if (!s_ap_active) return;
 
-    wifi_mode_t mode;
+    wifi_mode_t mode = WIFI_MODE_NULL;
     esp_wifi_get_mode(&mode);
     if (mode == WIFI_MODE_APSTA) {
         esp_wifi_set_mode(WIFI_MODE_STA);
@@ -213,57 +224,48 @@ static void stop_softap(void) {
     ESP_LOGI(TAG, "SoftAP disabled to save power and eliminate 2.4GHz RF contention");
 }
 
+// Lightweight, non-blocking event handler: NEVER call MQTT, LittleFS, or CAN engine directly on sys_evt stack!
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     if (event_base == WIFI_EVENT) {
-        if (event_id == WIFI_EVENT_STA_START) {
-            esp_wifi_set_ps(WIFI_PS_NONE);
-            ESP_LOGI(TAG, "Wi-Fi STA started (modem sleep disabled)");
-        } else if (event_id == WIFI_EVENT_STA_CONNECTED) {
+        if (event_id == WIFI_EVENT_STA_START || event_id == WIFI_EVENT_STA_CONNECTED) {
             esp_wifi_set_ps(WIFI_PS_NONE);
         } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
-            s_sta_connected = false;
-            s_cur_sta_ip = "0.0.0.0";
+            bool was_connected = s_sta_connected.exchange(false);
+            {
+                std::lock_guard<std::mutex> lock(s_net_mutex);
+                s_cur_sta_ip = "0.0.0.0";
+            }
             if (!s_ap_active) board_led_wifi(false);
-            auto* disc = static_cast<wifi_event_sta_disconnected_t*>(event_data);
-            ESP_LOGW(TAG, "Wi-Fi disconnected from '%s' (reason %d)", s_cur_sta_ssid.c_str(), disc ? disc->reason : -1);
-            mqtt_mgr_on_wifi_disconnect();
-            can_engine_on_device_event("wifi_disconnected", s_cur_sta_ssid, 0);
 
-            // Don't retry here: instant retries race the roam task's set_config/connect
-            // and hammer the AP with back-to-back handshakes. The roam task owns reconnects.
-            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+            auto* disc = static_cast<wifi_event_sta_disconnected_t*>(event_data);
+            ESP_LOGW(TAG, "Wi-Fi disconnected (reason %d)", disc ? disc->reason : -1);
+
+            if (was_connected) {
+                xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT | DEFER_DISCONN_BIT);
+            } else {
+                xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+            }
         } else if (event_id == WIFI_EVENT_AP_STACONNECTED) {
             auto* event = static_cast<wifi_event_ap_staconnected_t*>(event_data);
-            char mac_str[18];
-            snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
-                     event->mac[0], event->mac[1], event->mac[2],
-                     event->mac[3], event->mac[4], event->mac[5]);
-            ESP_LOGI(TAG, "Device connected to SoftAP: MAC %s (AID: %d)", mac_str, event->aid);
-            
-            // Retrieve station RSSI if available
-            int8_t sta_rssi = 0;
-            wifi_sta_list_t sta_list = {};
-            if (esp_wifi_ap_get_sta_list(&sta_list) == ESP_OK) {
-                for (int i = 0; i < sta_list.num; i++) {
-                    if (memcmp(sta_list.sta[i].mac, event->mac, 6) == 0) {
-                        sta_rssi = sta_list.sta[i].rssi;
-                        break;
-                    }
-                }
+            {
+                std::lock_guard<std::mutex> lock(s_net_mutex);
+                snprintf(s_deferred_ap_mac, sizeof(s_deferred_ap_mac), "%02X:%02X:%02X:%02X:%02X:%02X",
+                         event->mac[0], event->mac[1], event->mac[2],
+                         event->mac[3], event->mac[4], event->mac[5]);
             }
-            can_engine_on_device_event("ap_client_connected", mac_str, sta_rssi);
+            xEventGroupSetBits(s_wifi_event_group, DEFER_AP_STACONN_BIT);
         } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
             auto* event = static_cast<wifi_event_ap_stadisconnected_t*>(event_data);
-            char mac_str[18];
-            snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
-                     event->mac[0], event->mac[1], event->mac[2],
-                     event->mac[3], event->mac[4], event->mac[5]);
-            ESP_LOGW(TAG, "Device disconnected from SoftAP: MAC %s (AID: %d)", mac_str, event->aid);
-            can_engine_on_device_event("ap_client_disconnected", mac_str, 0);
+            {
+                std::lock_guard<std::mutex> lock(s_net_mutex);
+                snprintf(s_deferred_ap_mac, sizeof(s_deferred_ap_mac), "%02X:%02X:%02X:%02X:%02X:%02X",
+                         event->mac[0], event->mac[1], event->mac[2],
+                         event->mac[3], event->mac[4], event->mac[5]);
+            }
+            xEventGroupSetBits(s_wifi_event_group, DEFER_AP_STADISC_BIT);
         } else if (event_id == WIFI_EVENT_SCAN_DONE) {
             s_is_scanning = false;
             xEventGroupSetBits(s_wifi_event_group, WIFI_SCAN_DONE_BIT);
-            ESP_LOGI(TAG, "Wi-Fi scan completed");
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         esp_wifi_set_ps(WIFI_PS_NONE);
@@ -273,57 +275,129 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         esp_ip4addr_ntoa(&event->ip_info.gw, gw_str, sizeof(gw_str));
         esp_ip4addr_ntoa(&event->ip_info.netmask, mask_str, sizeof(mask_str));
 
-        s_cur_sta_ip = ip_str;
-        s_cur_sta_gw = gw_str;
-        s_cur_sta_mask = mask_str;
+        {
+            std::lock_guard<std::mutex> lock(s_net_mutex);
+            s_cur_sta_ip = ip_str;
+            s_cur_sta_gw = gw_str;
+            s_cur_sta_mask = mask_str;
+        }
         s_sta_connected = true;
         board_led_wifi(true);
-        s_retry_num = 0;
 
         wifi_ap_record_t ap_info;
         if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
-            s_cur_sta_rssi = ap_info.rssi;
+            s_cur_sta_rssi.store(ap_info.rssi);
         }
 
-        ESP_LOGI(TAG, "Associated with '%s'. Got IP: %s (GW: %s, power-save: NONE, RSSI: %d dBm)", s_cur_sta_ssid.c_str(), ip_str, gw_str, (int)s_cur_sta_rssi);
-        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT | DEFER_GOT_IP_BIT);
+    }
+}
 
-        mqtt_mgr_on_wifi_connect();
-        can_engine_on_device_event("wifi_connected", s_cur_sta_ssid, s_cur_sta_rssi);
+static void process_deferred_network_events(void) {
+    EventBits_t bits = xEventGroupClearBits(s_wifi_event_group,
+        DEFER_GOT_IP_BIT | DEFER_DISCONN_BIT | DEFER_AP_STACONN_BIT | DEFER_AP_STADISC_BIT);
 
-        if (s_ap_mode == AP_MODE_AUTO) {
+    if (bits & DEFER_DISCONN_BIT) {
+        std::string ssid_copy;
+        {
+            std::lock_guard<std::mutex> lock(s_net_mutex);
+            ssid_copy = s_cur_sta_ssid;
+        }
+        mqtt_mgr_on_wifi_disconnect();
+        can_engine_on_device_event("wifi_disconnected", ssid_copy, 0);
+    }
+
+    if (bits & DEFER_GOT_IP_BIT) {
+        std::string ssid_copy, ip_copy;
+        {
+            std::lock_guard<std::mutex> lock(s_net_mutex);
+            ssid_copy = s_cur_sta_ssid;
+            ip_copy = s_cur_sta_ip;
+            s_last_connected_ssid = s_cur_sta_ssid;
+            for (const auto& kn : s_known_networks) {
+                if (kn.ssid == s_cur_sta_ssid) {
+                    s_last_connected_prio = kn.priority;
+                    break;
+                }
+            }
+        }
+        int8_t rssi = s_cur_sta_rssi.load();
+        ESP_LOGI(TAG, "Connected to '%s' (IP: %s, RSSI: %d dBm)", ssid_copy.c_str(), ip_copy.c_str(), (int)rssi);
+
+        if (s_ap_mode == AP_MODE_AUTO && s_ap_active) {
+            vTaskDelay(pdMS_TO_TICKS(250));
             stop_softap();
         }
+        mqtt_mgr_on_wifi_connect();
+        can_engine_on_device_event("wifi_connected", ssid_copy, rssi);
+    }
+
+    if (bits & DEFER_AP_STACONN_BIT) {
+        char mac_copy[18];
+        {
+            std::lock_guard<std::mutex> lock(s_net_mutex);
+            memcpy(mac_copy, s_deferred_ap_mac, sizeof(mac_copy));
+        }
+        int8_t sta_rssi = -50;
+        wifi_sta_list_t sta_list = {};
+        if (esp_wifi_ap_get_sta_list(&sta_list) == ESP_OK && sta_list.num > 0) {
+            sta_rssi = sta_list.sta[sta_list.num - 1].rssi;
+        }
+        can_engine_on_device_event("ap_client_connected", mac_copy, sta_rssi);
+    }
+
+    if (bits & DEFER_AP_STADISC_BIT) {
+        char mac_copy[18];
+        {
+            std::lock_guard<std::mutex> lock(s_net_mutex);
+            memcpy(mac_copy, s_deferred_ap_mac, sizeof(mac_copy));
+        }
+        can_engine_on_device_event("ap_client_disconnected", mac_copy, 0);
     }
 }
 
 static void network_roam_task(void* pvParameters) {
     ESP_LOGI(TAG, "Network roaming & watchdog task started");
+    uint8_t high_prio_hold_retries = 0;
 
     while (true) {
+        process_deferred_network_events();
+
         if (!s_sta_connected) {
             std::vector<KnownNetwork> targets;
+            std::string prev_ssid;
+            int prev_prio = 0;
             {
                 std::lock_guard<std::mutex> lock(s_net_mutex);
                 targets = s_known_networks;
+                prev_ssid = s_last_connected_ssid;
+                prev_prio = s_last_connected_prio;
             }
 
-            if (!targets.empty()) {
-                // 1. Trigger non-blocking scan
+            if (!targets.empty() && !s_is_scanning) {
+                // Ensure STA is cleanly idle before starting an active scan
+                esp_wifi_disconnect();
+                vTaskDelay(pdMS_TO_TICKS(100));
+
                 s_is_scanning = true;
                 xEventGroupClearBits(s_wifi_event_group, WIFI_SCAN_DONE_BIT);
+
+                // Active probe scan with 150-300ms dwell so mobile hotspots respond reliably
                 wifi_scan_config_t scan_cfg = {};
                 scan_cfg.show_hidden = false;
-                esp_err_t scan_err = esp_wifi_scan_start(&scan_cfg, false); // Asynchronous!
+                scan_cfg.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+                scan_cfg.scan_time.active.min = 120;
+                scan_cfg.scan_time.active.max = 250;
 
-                if (scan_err == ESP_OK) {
-                    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group, WIFI_SCAN_DONE_BIT, pdTRUE, pdFALSE, pdMS_TO_TICKS(5000));
+                if (esp_wifi_scan_start(&scan_cfg, false) == ESP_OK) {
+                    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group, WIFI_SCAN_DONE_BIT, pdTRUE, pdFALSE, pdMS_TO_TICKS(6000));
                     if (bits & WIFI_SCAN_DONE_BIT) {
                         uint16_t ap_count = 0;
                         esp_wifi_scan_get_ap_num(&ap_count);
-                        if (ap_count > 16) ap_count = 16;
-                        wifi_ap_record_t ap_records[16];
-                        if (ap_count > 0 && esp_wifi_scan_get_ap_records(&ap_count, ap_records) == ESP_OK) {
+                        if (ap_count > 32) ap_count = 32;
+                        std::vector<wifi_ap_record_t> ap_records(ap_count);
+
+                        if (ap_count > 0 && esp_wifi_scan_get_ap_records(&ap_count, ap_records.data()) == ESP_OK) {
                             std::lock_guard<std::mutex> lock(s_net_mutex);
                             s_scan_results.clear();
                             for (uint16_t i = 0; i < ap_count; i++) {
@@ -333,6 +407,19 @@ static void network_roam_task(void* pvParameters) {
                                 if (clean_ssid[0] == '\0') continue;
 
                                 std::string ssid(clean_ssid);
+                                // Deduplicate multiple BSSIDs for the same SSID (keep strongest RSSI)
+                                bool updated_existing = false;
+                                for (auto& existing : s_scan_results) {
+                                    if (existing.ssid == ssid) {
+                                        if (ap_records[i].rssi > existing.rssi) {
+                                            existing.rssi = ap_records[i].rssi;
+                                        }
+                                        updated_existing = true;
+                                        break;
+                                    }
+                                }
+                                if (updated_existing) continue;
+
                                 bool in_known = false;
                                 for (const auto& kn : targets) {
                                     if (kn.ssid == ssid) {
@@ -351,6 +438,8 @@ static void network_roam_task(void* pvParameters) {
                             for (const auto& scan_ap : s_scan_results) {
                                 for (const auto& kn : targets) {
                                     if (kn.ssid == scan_ap.ssid) {
+                                        // Ignore very weak low-priority guest networks (<-82 dBm)
+                                        if (scan_ap.rssi < -82 && kn.priority < 50) continue;
                                         candidates.push_back({kn, scan_ap.rssi});
                                         break;
                                     }
@@ -366,23 +455,53 @@ static void network_roam_task(void* pvParameters) {
                             return a.second > b.second;
                         });
 
-                        // 3. Attempt association with best ranked candidates
+                        // 3. Sticky Hotspot Hold: if we just dropped from a priority >= 50 network (e.g. mobile hotspot)
+                        // and only low-priority (< 50) networks are visible in this scan pass, wait 2 scan cycles
+                        // and directly probe the hotspot SSID before falling back to a priority 25 guest network!
+                        if (!prev_ssid.empty() && prev_prio >= 50 && high_prio_hold_retries < 2) {
+                            bool high_prio_seen = false;
+                            for (const auto& c : candidates) {
+                                if (c.first.priority >= 50) {
+                                    high_prio_seen = true;
+                                    break;
+                                }
+                            }
+                            if (!high_prio_seen) {
+                                for (const auto& kn : targets) {
+                                    if (kn.ssid == prev_ssid) {
+                                        high_prio_hold_retries++;
+                                        ESP_LOGI(TAG, "Holding for priority %d network '%s' (attempt %u/2) before falling back to lower priority",
+                                                 prev_prio, prev_ssid.c_str(), (unsigned)high_prio_hold_retries);
+                                        candidates.insert(candidates.begin(), {kn, -70});
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        // 4. Attempt association with best ranked candidates
                         bool connected = false;
                         for (const auto& cand : candidates) {
+                            // If holding for high-priority network, skip low-priority candidates during hold window
+                            if (high_prio_hold_retries > 0 && high_prio_hold_retries <= 2 && cand.first.priority < 50) {
+                                continue;
+                            }
+
                             ESP_LOGI(TAG, "Attempting connection to '%s' (Priority=%d, RSSI=%d)",
                                      cand.first.ssid.c_str(), cand.first.priority, cand.second);
 
                             wifi_config_t sta_config = {};
-                            strncpy(reinterpret_cast<char*>(sta_config.sta.ssid), cand.first.ssid.c_str(), sizeof(sta_config.sta.ssid));
-                            strncpy(reinterpret_cast<char*>(sta_config.sta.password), cand.first.password.c_str(), sizeof(sta_config.sta.password));
+                            strncpy(reinterpret_cast<char*>(sta_config.sta.ssid), cand.first.ssid.c_str(), sizeof(sta_config.sta.ssid) - 1);
+                            strncpy(reinterpret_cast<char*>(sta_config.sta.password), cand.first.password.c_str(), sizeof(sta_config.sta.password) - 1);
                             sta_config.sta.pmf_cfg.capable = true;
 
-                            s_cur_sta_ssid = cand.first.ssid;
-                            s_retry_num = 0;
+                            {
+                                std::lock_guard<std::mutex> lock(s_net_mutex);
+                                s_cur_sta_ssid = cand.first.ssid;
+                            }
 
-                            // Ensure supplicant is idle before swapping config (stale 4-way state otherwise)
                             esp_wifi_disconnect();
-                            vTaskDelay(pdMS_TO_TICKS(200));
+                            vTaskDelay(pdMS_TO_TICKS(150));
                             xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
 
                             esp_wifi_set_config(WIFI_IF_STA, &sta_config);
@@ -390,20 +509,31 @@ static void network_roam_task(void* pvParameters) {
 
                             EventBits_t conn_bits = xEventGroupWaitBits(s_wifi_event_group,
                                 WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-                                pdTRUE, pdFALSE, pdMS_TO_TICKS(10000));
+                                pdTRUE, pdFALSE, pdMS_TO_TICKS(8000));
 
                             if (conn_bits & WIFI_CONNECTED_BIT) {
                                 connected = true;
+                                high_prio_hold_retries = 0;
                                 break;
+                            } else {
+                                // Cleanly abort in-flight association before moving on
+                                esp_wifi_disconnect();
+                                vTaskDelay(pdMS_TO_TICKS(100));
                             }
                         }
 
-                        if (!connected) {
-                            ESP_LOGW(TAG, "Failed connecting to any candidate network");
+                        if (!connected && high_prio_hold_retries >= 2) {
+                            high_prio_hold_retries = 0; // Release hold so next cycle allows low-priority fallback
                         }
+                    } else {
+                        s_is_scanning = false;
                     }
+                } else {
+                    s_is_scanning = false;
                 }
             }
+
+            process_deferred_network_events();
 
             // Fallback SoftAP if disconnected and mode permits
             if (!s_sta_connected && (s_ap_mode == AP_MODE_AUTO || s_ap_mode == AP_MODE_ALWAYS_ON)) {
@@ -413,11 +543,18 @@ static void network_roam_task(void* pvParameters) {
             }
         }
 
-        // Periodic roaming / watchdog tick every 10 seconds
+        // Wait up to 5 seconds, waking immediately if any deferred network event bit fires
+        EventBits_t wake_bits = xEventGroupWaitBits(s_wifi_event_group,
+            DEFER_GOT_IP_BIT | DEFER_DISCONN_BIT | DEFER_AP_STACONN_BIT | DEFER_AP_STADISC_BIT,
+            pdFALSE, pdFALSE, pdMS_TO_TICKS(5000));
+
+        if (wake_bits != 0) {
+            process_deferred_network_events();
+        }
+
         if (s_sta_connected) {
             mqtt_mgr_watchdog();
         }
-        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }
 
@@ -431,13 +568,11 @@ esp_err_t network_mgr_init(void) {
     s_netif_sta = esp_netif_create_default_wifi_sta();
     s_netif_ap = esp_netif_create_default_wifi_ap();
 
-    // Set network hostname for DHCP Option 12 (Router / UniFi client name)
     if (!g_device_id.empty()) {
         esp_netif_set_hostname(s_netif_sta, g_device_id.c_str());
         esp_netif_set_hostname(s_netif_ap, g_device_id.c_str());
         ESP_LOGI(TAG, "Network hostname configured: %s", g_device_id.c_str());
 
-        // Update default AP SSID with device suffix if not customized
         if (s_ap_ssid == "CAN Do") {
             auto dash = g_device_id.find_last_of('-');
             if (dash != std::string::npos) {
@@ -452,14 +587,12 @@ esp_err_t network_mgr_init(void) {
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, nullptr, nullptr));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, nullptr, nullptr));
 
-    // Default mode: APSTA so both interfaces are ready
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
 
-    // Set AP config before starting Wi-Fi
     if (s_ap_mode != AP_MODE_DISABLED) {
         wifi_config_t ap_config = {};
-        strncpy(reinterpret_cast<char*>(ap_config.ap.ssid), s_ap_ssid.c_str(), sizeof(ap_config.ap.ssid));
-        strncpy(reinterpret_cast<char*>(ap_config.ap.password), s_ap_pass.c_str(), sizeof(ap_config.ap.password));
+        strncpy(reinterpret_cast<char*>(ap_config.ap.ssid), s_ap_ssid.c_str(), sizeof(ap_config.ap.ssid) - 1);
+        strncpy(reinterpret_cast<char*>(ap_config.ap.password), s_ap_pass.c_str(), sizeof(ap_config.ap.password) - 1);
         ap_config.ap.authmode = s_ap_pass.empty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
         ap_config.ap.max_connection = 4;
         ap_config.ap.channel = 1;
@@ -473,33 +606,36 @@ esp_err_t network_mgr_init(void) {
     esp_wifi_set_ps(WIFI_PS_NONE);
     ESP_LOGI(TAG, "Wi-Fi started. SoftAP '%s' ready (modem sleep disabled).", s_ap_ssid.c_str());
 
-    xTaskCreate(network_roam_task, "net_roam", 4096, nullptr, 3, nullptr);
+    // 6144 stack size so deferred MQTT/CAN automation callbacks have plenty of headroom
+    xTaskCreate(network_roam_task, "net_roam", 6144, nullptr, 3, nullptr);
 
     return ESP_OK;
 }
 
 NetworkStatusInfo network_mgr_get_status(void) {
     NetworkStatusInfo info;
-    info.sta_connected = s_sta_connected;
-    if (s_sta_connected) {
+    info.sta_connected = s_sta_connected.load();
+    if (info.sta_connected) {
         wifi_ap_record_t ap_info;
         if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
-            s_cur_sta_rssi = ap_info.rssi;
+            s_cur_sta_rssi.store(ap_info.rssi);
         }
     }
-    info.sta_ssid = s_cur_sta_ssid;
-    info.sta_ip = s_cur_sta_ip;
-    info.sta_gw = s_cur_sta_gw;
-    info.sta_mask = s_cur_sta_mask;
-    info.sta_rssi = s_cur_sta_rssi;
-
-    info.ap_active = s_ap_active;
-    info.ap_ssid = s_ap_ssid;
+    {
+        std::lock_guard<std::mutex> lock(s_net_mutex);
+        info.sta_ssid = s_cur_sta_ssid;
+        info.sta_ip = s_cur_sta_ip;
+        info.sta_gw = s_cur_sta_gw;
+        info.sta_mask = s_cur_sta_mask;
+        info.ap_ssid = s_ap_ssid;
+        info.ap_mode = s_ap_mode;
+    }
+    info.sta_rssi = s_cur_sta_rssi.load();
+    info.ap_active = s_ap_active.load();
     info.ap_ip = "192.168.4.1";
-    info.ap_mode = s_ap_mode;
 
     wifi_sta_list_t sta_list;
-    if (s_ap_active && esp_wifi_ap_get_sta_list(&sta_list) == ESP_OK) {
+    if (info.ap_active && esp_wifi_ap_get_sta_list(&sta_list) == ESP_OK) {
         info.ap_clients = sta_list.num;
     } else {
         info.ap_clients = 0;
@@ -553,7 +689,6 @@ bool network_mgr_remove_known_network(const std::string& ssid) {
         save_settings_to_fs();
         if (is_current) {
             ESP_LOGI(TAG, "Active network '%s' removed; disconnecting STA", ssid.c_str());
-            s_retry_num = MAXIMUM_RETRY; // Prevent infinite retries to the deleted network
             esp_wifi_disconnect();
         }
     }
@@ -561,7 +696,10 @@ bool network_mgr_remove_known_network(const std::string& ssid) {
 }
 
 void network_mgr_set_ap_mode(ApFallbackMode mode) {
-    s_ap_mode = mode;
+    {
+        std::lock_guard<std::mutex> lock(s_net_mutex);
+        s_ap_mode = mode;
+    }
     save_settings_to_fs();
     if (mode == AP_MODE_DISABLED) {
         stop_softap();
@@ -571,25 +709,31 @@ void network_mgr_set_ap_mode(ApFallbackMode mode) {
 }
 
 ApFallbackMode network_mgr_get_ap_mode(void) {
+    std::lock_guard<std::mutex> lock(s_net_mutex);
     return s_ap_mode;
 }
 
 void network_mgr_set_ap_credentials(const std::string& ssid, const std::string& password) {
     if (ssid.empty()) return;
-    s_ap_ssid = ssid;
-    s_ap_pass = password;
+    {
+        std::lock_guard<std::mutex> lock(s_net_mutex);
+        s_ap_ssid = ssid;
+        s_ap_pass = password;
+    }
     save_settings_to_fs();
     if (s_ap_active) {
-        start_softap(); // reloads with new credentials
+        start_softap();
     }
 }
 
 bool network_mgr_start_scan(void) {
-    if (s_is_scanning) return false;
-    s_is_scanning = true;
+    if (s_is_scanning.exchange(true)) return false;
     wifi_scan_config_t scan_cfg = {};
     scan_cfg.show_hidden = false;
-    esp_err_t err = esp_wifi_scan_start(&scan_cfg, false); // non-blocking!
+    scan_cfg.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+    scan_cfg.scan_time.active.min = 120;
+    scan_cfg.scan_time.active.max = 250;
+    esp_err_t err = esp_wifi_scan_start(&scan_cfg, false);
     if (err != ESP_OK) {
         s_is_scanning = false;
         return false;
@@ -598,7 +742,7 @@ bool network_mgr_start_scan(void) {
 }
 
 bool network_mgr_is_scanning(void) {
-    return s_is_scanning;
+    return s_is_scanning.load();
 }
 
 std::vector<WifiScanResult> network_mgr_get_scan_results(void) {

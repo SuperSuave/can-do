@@ -660,6 +660,7 @@ void mqtt_mgr_stop(void) {
 
 void mqtt_mgr_on_wifi_disconnect(void) {
     s_mqtt_connected = false;
+    std::lock_guard<std::mutex> lock(s_mqtt_mutex);
     if (global_mqtt_client) {
         esp_mqtt_client_disconnect(global_mqtt_client);
     }
@@ -674,9 +675,12 @@ void mqtt_mgr_watchdog(void) {
         if (!global_mqtt_client) {
             mqtt_mgr_start();
         } else {
-            esp_err_t err = esp_mqtt_client_reconnect(global_mqtt_client);
-            if (err != ESP_OK) {
-                esp_mqtt_client_disconnect(global_mqtt_client);
+            std::lock_guard<std::mutex> lock(s_mqtt_mutex);
+            if (global_mqtt_client) {
+                esp_err_t err = esp_mqtt_client_reconnect(global_mqtt_client);
+                if (err != ESP_OK) {
+                    esp_mqtt_client_disconnect(global_mqtt_client);
+                }
             }
         }
     }
