@@ -358,6 +358,20 @@ export async function executeUpdateSequence(
   const deviceBaseUrl = resolveDeviceBaseUrl(targetDeviceHost);
   const pagesHost = `${GITHUB_REPO.split('/')[0].toLowerCase()}.github.io/${GITHUB_REPO.split('/')[1]}`;
 
+  let effectiveTarget = targetDevice;
+  try {
+    const stRes = await fetch(`${deviceBaseUrl}/api/system/status`, { cache: 'no-cache' });
+    if (stRes.ok) {
+      const st = await stRes.json();
+      const dev = (st.device || '').toLowerCase();
+      if (dev.includes('atom') || dev.includes('bridge')) {
+        effectiveTarget = 'atom';
+      } else if (dev.includes('wican') || dev.includes('esp32c3')) {
+        effectiveTarget = 'esp32c3';
+      }
+    }
+  } catch {}
+
   try {
     // -------------------------------------------------------------
     // STAGE 1: FRONT-END ASSETS (Real LittleFS OTA)
@@ -635,7 +649,7 @@ export async function executeUpdateSequence(
     // -------------------------------------------------------------
     // STAGE 3: FIRMWARE BINARY (Final step, triggers reboot)
     // -------------------------------------------------------------
-    const isAtom = (targetDevice || '').toLowerCase().includes('atom') || (targetDevice || '').toLowerCase().includes('bridge');
+    const isAtom = (effectiveTarget || '').toLowerCase().includes('atom') || (effectiveTarget || '').toLowerCase().includes('bridge');
     const selectedFwUrl = isAtom
       ? (updateData.assets.atom_firmware_url || updateData.assets.firmware_url)
       : (updateData.assets.wican_firmware_url || updateData.assets.firmware_url);
@@ -650,6 +664,7 @@ export async function executeUpdateSequence(
             selectedFwUrl,
             `https://${pagesHost}/can-do-atom-bridge.bin`,
             `https://raw.githubusercontent.com/${GITHUB_REPO}/main/atom-ui-bridge/can-do-atom-bridge.bin`,
+            `https://raw.githubusercontent.com/${GITHUB_REPO}/${updateData.version}/atom-ui-bridge/can-do-atom-bridge.bin`,
             `https://raw.githubusercontent.com/${GITHUB_REPO}/main/atom-ui-bridge/.pio/build/m5stack-atom/firmware.bin`,
           ].filter(Boolean) as string[]
         : [
@@ -657,6 +672,7 @@ export async function executeUpdateSequence(
             `https://${pagesHost}/can-do-esp32c3.bin`,
             `https://${pagesHost}/can-do.bin`,
             `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/can-do-esp32c3.bin`,
+            `https://raw.githubusercontent.com/${GITHUB_REPO}/${updateData.version}/firmware/can-do-esp32c3.bin`,
             `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/build/can-do.bin`,
           ].filter(Boolean) as string[];
 

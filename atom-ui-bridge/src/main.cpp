@@ -13,6 +13,7 @@
 #include <map>
 #include <vector>
 #include <mutex>
+#include <unordered_set>
 #include <Update.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
@@ -1644,19 +1645,148 @@ void setup() {
         request->send(200, "application/json", out);
     });
 
-    // REST: POST /api/system/control (reboot support for Web UI updates)
+    // Helper to normalize LittleFS file paths uploaded from frontend manifest
+    auto normalize_fs_path = [](String p) -> String {
+        if (p.startsWith("/spiffs/www/")) {
+            p = "/" + p.substring(12);
+        } else if (p.startsWith("/spiffs/")) {
+            p = "/" + p.substring(8);
+        }
+        if (!p.startsWith("/")) {
+            p = "/" + p;
+        }
+        if (p == "/catalog.json") {
+            p = "/catalog/can_do_catalog.json";
+        }
+        return p;
+    };
+
+    // Helper to collect LittleFS files recursively
+    struct FsCollector {
+        static void collect(const String& dirPath, JsonArray& arr) {
+            File root = LittleFS.open(dirPath);
+            if (!root || !root.isDirectory()) return;
+            File file = root.openNextFile();
+            while (file) {
+                if (file.isDirectory()) {
+                    String subDir = file.path() ? String(file.path()) : (dirPath == "/" ? ("/" + String(file.name())) : (dirPath + "/" + String(file.name())));
+                    collect(subDir, arr);
+                } else {
+                    JsonObject obj = arr.add<JsonObject>();
+                    String fname = file.name();
+                    if (fname.startsWith("/")) fname = fname.substring(1);
+                    int lastSlash = fname.lastIndexOf('/');
+                    if (lastSlash >= 0) fname = fname.substring(lastSlash + 1);
+
+                    String fullPath = file.path() ? String(file.path()) : (dirPath == "/" ? ("/" + fname) : (dirPath + "/" + fname));
+                    if (!fullPath.startsWith("/")) fullPath = "/" + fullPath;
+
+                    obj["name"] = fname;
+                    obj["path"] = fullPath;
+                    obj["size"] = file.size();
+                }
+                file = root.openNextFile();
+            }
+        }
+    };
+
+    // REST: POST /api/system/control (reboot, list_files, clean_stale_web)
     server.on("/api/system/control", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
         [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
             String body = "";
             for (size_t i = 0; i < len; i++) body += (char)data[i];
             JsonDocument doc;
-            bool rebootReq = false;
-            if (deserializeJson(doc, body) == DeserializationError::Ok) {
-                if (doc["reboot"].as<bool>() || doc["action"] == "reboot") {
-                    rebootReq = true;
-                }
+            DeserializationError err = deserializeJson(doc, body);
+            if (err != DeserializationError::Ok) {
+                AsyncWebServerResponse *resp = request->beginResponse(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+                resp->addHeader("Access-Control-Allow-Origin", "*");
+                request->send(resp);
+                return;
             }
-            request->send(200, "application/json", "{\"status\":\"ok\",\"rebooting\":true}");
+
+            const char* act = doc["action"] | "";
+            if (strcmp(act, "list_files") == 0) {
+                JsonDocument respDoc;
+                size_t total_bytes = LittleFS.totalBytes();
+                size_t used_bytes = LittleFS.usedBytes();
+                respDoc["total"] = total_bytes;
+                respDoc["used"] = used_bytes;
+                respDoc["free"] = total_bytes > used_bytes ? total_bytes - used_bytes : 0;
+                JsonArray arr = respDoc["files"].to<JsonArray>();
+                FsCollector::collect("/", arr);
+                String out;
+                serializeJson(respDoc, out);
+                AsyncWebServerResponse *resp = request->beginResponse(200, "application/json", out);
+                resp->addHeader("Access-Control-Allow-Origin", "*");
+                request->send(resp);
+                return;
+            }
+
+            if (strcmp(act, "clean_stale_web") == 0 || strcmp(act, "clean_www") == 0) {
+                std::unordered_set<std::string> keep_set;
+                JsonArray keepArr = doc["keep"].as<JsonArray>();
+                for (JsonVariant v : keepArr) {
+                    if (v.is<const char*>()) {
+                        String s = v.as<const char*>();
+                        int lastSlash = s.lastIndexOf('/');
+                        if (lastSlash >= 0) s = s.substring(lastSlash + 1);
+                        keep_set.insert(s.c_str());
+                    }
+                }
+
+                // Protected core files
+                keep_set.insert("automations.json");
+                keep_set.insert("preferences.json");
+                keep_set.insert("can_do_catalog.json");
+                keep_set.insert("can_do_catalog.json.gz");
+                keep_set.insert("frontend_manifest.json");
+
+                int deleted_count = 0;
+                size_t bytes_freed = 0;
+
+                File rootDir = LittleFS.open("/");
+                if (rootDir && rootDir.isDirectory()) {
+                    File f = rootDir.openNextFile();
+                    while (f) {
+                        if (!f.isDirectory()) {
+                            String fname = f.name();
+                            if (fname.startsWith("/")) fname = fname.substring(1);
+                            int lastSlash = fname.lastIndexOf('/');
+                            if (lastSlash >= 0) fname = fname.substring(lastSlash + 1);
+
+                            String fpath = f.path() ? String(f.path()) : ("/" + fname);
+                            if (!fpath.startsWith("/")) fpath = "/" + fpath;
+
+                            bool isWebAsset = fname.endsWith(".gz") || fname.endsWith(".js") || fname.endsWith(".css") || fname.endsWith(".html") || fname.endsWith(".svg");
+                            if (isWebAsset && keep_set.find(fname.c_str()) == keep_set.end()) {
+                                size_t fsize = f.size();
+                                f.close();
+                                if (LittleFS.remove(fpath)) {
+                                    bytes_freed += fsize;
+                                    deleted_count++;
+                                }
+                            }
+                        }
+                        f = rootDir.openNextFile();
+                    }
+                }
+
+                JsonDocument respDoc;
+                respDoc["status"] = "ok";
+                respDoc["deleted_count"] = deleted_count;
+                respDoc["bytes_freed"] = bytes_freed;
+                String out;
+                serializeJson(respDoc, out);
+                AsyncWebServerResponse *resp = request->beginResponse(200, "application/json", out);
+                resp->addHeader("Access-Control-Allow-Origin", "*");
+                request->send(resp);
+                return;
+            }
+
+            bool rebootReq = doc["reboot"].as<bool>() || strcmp(act, "reboot") == 0 || strcmp(act, "restart") == 0;
+            AsyncWebServerResponse *resp = request->beginResponse(200, "application/json", "{\"status\":\"ok\",\"rebooting\":true}");
+            resp->addHeader("Access-Control-Allow-Origin", "*");
+            request->send(resp);
             if (rebootReq) {
                 Serial.println("[SYSTEM] Reboot requested via Web API...");
                 delay(500);
@@ -1787,27 +1917,38 @@ void setup() {
                         WiFiClient *stream = http.getStreamPtr();
                         if (Update.begin(totalLen > 0 ? totalLen : UPDATE_SIZE_UNKNOWN, U_FLASH)) {
                             size_t written = 0;
-                            uint8_t buff[1024];
-                            while (http.connected() && (totalLen < 0 || written < (size_t)totalLen)) {
-                                size_t avail = stream->available();
-                                if (avail) {
-                                    int c = stream->readBytes(buff, std::min(avail, sizeof(buff)));
-                                    Update.write(buff, c);
-                                    written += c;
-                                    if (totalLen > 0) {
-                                        g_atom_ota_state.progress_pct = (written * 100) / totalLen;
-                                    }
-                                }
-                                vTaskDelay(1);
-                            }
-                            if (Update.end(true)) {
-                                g_atom_ota_state.success = true;
-                                g_atom_ota_state.progress_pct = 100;
-                                Serial.println("[OTA] Cloud pull success! Rebooting in 1s...");
-                                vTaskDelay(pdMS_TO_TICKS(1000));
-                                ESP.restart();
+                            uint8_t *buff = (uint8_t*)malloc(2048);
+                            if (!buff) {
+                                g_atom_ota_state.error_msg = "Out of memory for buffer";
                             } else {
-                                g_atom_ota_state.error_msg = "Flash write failed";
+                                while ((http.connected() || stream->available() > 0) && (totalLen < 0 || written < (size_t)totalLen)) {
+                                    size_t avail = stream->available();
+                                    if (avail) {
+                                        int c = stream->readBytes(buff, std::min(avail, (size_t)2048));
+                                        if (c > 0) {
+                                            Update.write(buff, c);
+                                            written += c;
+                                            if (totalLen > 0) {
+                                                g_atom_ota_state.progress_pct = (written * 100) / totalLen;
+                                            }
+                                        }
+                                    }
+                                    vTaskDelay(1);
+                                }
+                                free(buff);
+                            }
+                            if (g_atom_ota_state.error_msg.isEmpty()) {
+                                if (totalLen > 0 && written != (size_t)totalLen) {
+                                    g_atom_ota_state.error_msg = "Download truncated";
+                                } else if (Update.end(true)) {
+                                    g_atom_ota_state.success = true;
+                                    g_atom_ota_state.progress_pct = 100;
+                                    Serial.println("[OTA] Cloud pull success! Rebooting in 1s...");
+                                    vTaskDelay(pdMS_TO_TICKS(1000));
+                                    ESP.restart();
+                                } else {
+                                    g_atom_ota_state.error_msg = "Flash write failed";
+                                }
                             }
                         } else {
                             g_atom_ota_state.error_msg = "Update.begin failed";
@@ -1822,7 +1963,7 @@ void setup() {
                 g_atom_ota_state.in_progress = false;
                 delete targetUrl;
                 vTaskDelete(NULL);
-            }, "atom_ota_task", 8192, urlAlloc, 2, NULL);
+            }, "atom_ota_task", 16384, urlAlloc, 2, NULL);
         }
     );
 
@@ -1833,24 +1974,38 @@ void setup() {
             response->addHeader("Access-Control-Allow-Origin", "*");
             request->send(response);
         },
-        [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+        [normalize_fs_path](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
             // Multipart staging
             static File s_upload_file;
+            static String s_upload_path;
             if (!index) {
-                String path = "";
-                if (request->hasHeader("X-File-Path")) {
-                    path = request->getHeader("X-File-Path")->value();
+                String rawPath = request->hasHeader("X-File-Path") ? request->getHeader("X-File-Path")->value() : ("/" + filename);
+                s_upload_path = normalize_fs_path(rawPath);
+
+                // If this is a deletion request (0-byte payload)
+                if (len == 0 && final) {
+                    LittleFS.remove(s_upload_path);
+                    LittleFS.remove(s_upload_path + ".gz");
+                    if (s_upload_path.endsWith(".gz")) {
+                        LittleFS.remove(s_upload_path.substring(0, s_upload_path.length() - 3));
+                    }
+                    Serial.printf("[UPLOAD] Truncated/Removed: %s\n", s_upload_path.c_str());
+                    return;
+                }
+
+                // If uploading a .gz file, remove any existing uncompressed file of the same name to avoid stale serve
+                if (s_upload_path.endsWith(".gz")) {
+                    LittleFS.remove(s_upload_path.substring(0, s_upload_path.length() - 3));
                 } else {
-                    path = "/" + filename;
+                    LittleFS.remove(s_upload_path + ".gz");
                 }
-                if (!path.startsWith("/")) path = "/" + path;
-                int lastSlash = path.lastIndexOf('/');
+
+                int lastSlash = s_upload_path.lastIndexOf('/');
                 if (lastSlash > 0) {
-                    String dirPath = path.substring(0, lastSlash);
-                    LittleFS.mkdir(dirPath);
+                    LittleFS.mkdir(s_upload_path.substring(0, lastSlash));
                 }
-                s_upload_file = LittleFS.open(path, "w");
-                Serial.printf("[UPLOAD] Staging file: %s\n", path.c_str());
+                s_upload_file = LittleFS.open(s_upload_path, "w");
+                Serial.printf("[UPLOAD] Staging file: %s\n", s_upload_path.c_str());
             }
             if (s_upload_file && len > 0) {
                 s_upload_file.write(data, len);
@@ -1858,28 +2013,42 @@ void setup() {
             if (final) {
                 if (s_upload_file) {
                     s_upload_file.close();
-                    Serial.printf("[UPLOAD] Finished: %s (%u bytes)\n", filename.c_str(), index + len);
+                    Serial.printf("[UPLOAD] Finished: %s (%u bytes)\n", s_upload_path.c_str(), index + len);
                 }
             }
         },
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        [normalize_fs_path](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
             // Raw binary staging
             static File s_raw_file;
+            static String s_raw_path;
             if (!index) {
-                String path = "";
-                if (request->hasHeader("X-File-Path")) {
-                    path = request->getHeader("X-File-Path")->value();
+                String rawPath = request->hasHeader("X-File-Path") ? request->getHeader("X-File-Path")->value() : "/upload.bin";
+                s_raw_path = normalize_fs_path(rawPath);
+
+                // If this is a deletion/truncation request
+                if (total == 0) {
+                    LittleFS.remove(s_raw_path);
+                    LittleFS.remove(s_raw_path + ".gz");
+                    if (s_raw_path.endsWith(".gz")) {
+                        LittleFS.remove(s_raw_path.substring(0, s_raw_path.length() - 3));
+                    }
+                    Serial.printf("[UPLOAD] Truncated/Removed raw: %s\n", s_raw_path.c_str());
+                    return;
+                }
+
+                // If uploading a .gz file, remove any existing uncompressed file of the same name to avoid stale serve
+                if (s_raw_path.endsWith(".gz")) {
+                    LittleFS.remove(s_raw_path.substring(0, s_raw_path.length() - 3));
                 } else {
-                    path = "/upload.bin";
+                    LittleFS.remove(s_raw_path + ".gz");
                 }
-                if (!path.startsWith("/")) path = "/" + path;
-                int lastSlash = path.lastIndexOf('/');
+
+                int lastSlash = s_raw_path.lastIndexOf('/');
                 if (lastSlash > 0) {
-                    String dirPath = path.substring(0, lastSlash);
-                    LittleFS.mkdir(dirPath);
+                    LittleFS.mkdir(s_raw_path.substring(0, lastSlash));
                 }
-                s_raw_file = LittleFS.open(path, "w");
-                Serial.printf("[UPLOAD] Staging raw file: %s (%u bytes)\n", path.c_str(), total);
+                s_raw_file = LittleFS.open(s_raw_path, "w");
+                Serial.printf("[UPLOAD] Staging raw file: %s (%u bytes)\n", s_raw_path.c_str(), total);
             }
             if (s_raw_file && len > 0) {
                 s_raw_file.write(data, len);
