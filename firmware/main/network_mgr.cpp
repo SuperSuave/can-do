@@ -493,7 +493,9 @@ static void network_roam_task(void* pvParameters) {
                             wifi_config_t sta_config = {};
                             strncpy(reinterpret_cast<char*>(sta_config.sta.ssid), cand.first.ssid.c_str(), sizeof(sta_config.sta.ssid) - 1);
                             strncpy(reinterpret_cast<char*>(sta_config.sta.password), cand.first.password.c_str(), sizeof(sta_config.sta.password) - 1);
+                            sta_config.sta.threshold.authmode = cand.first.password.empty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
                             sta_config.sta.pmf_cfg.capable = true;
+                            sta_config.sta.pmf_cfg.required = false;
 
                             {
                                 std::lock_guard<std::mutex> lock(s_net_mutex);

@@ -264,38 +264,56 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     auto event = static_cast<esp_mqtt_event_handle_t>(event_data);
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED: {
-            s_mqtt_connected = true;
+            s_mqtt_connected.store(true, std::memory_order_relaxed);
             ESP_LOGI(TAG, "MQTT connected to broker (%s)", s_mqtt_cfg.broker_url.c_str());
 
             // 1. Publish LWT online status
             std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/status";
-            mqtt_enqueue_nonblocking(status_topic.c_str(), "online", 6, 1, 1);
+            mqtt_enqueue_nonblocking(status_topic.c_str(), "online", 6, 0, 1);
 
-            // 2. Subscribe ONLY to device-specific and direct fallback topics (NO + wildcard overlap!)
-            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/tx").c_str(), 1);
-            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/tx").c_str(), 1);
+            // 2. Pack all 14 control topics into a SINGLE MQTT SUBSCRIBE packet (QoS 0)
+            // Avoids 14 separate WebSocket frames AND avoids # wildcard broker echo on /state/*
+            std::string t_dev_tx       = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/tx";
+            std::string t_base_tx      = MQTT_BASE_TOPIC + "/tx";
+            std::string t_dev_notify   = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/notify";
+            std::string t_base_notify  = MQTT_BASE_TOPIC + "/notify";
+            std::string t_dev_nav      = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/nav/set";
+            std::string t_base_nav     = MQTT_BASE_TOPIC + "/nav/set";
+            std::string t_dev_sub_ids  = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/subscribe_ids";
+            std::string t_base_sub_ids = MQTT_BASE_TOPIC + "/subscribe_ids";
+            std::string t_dev_cfg_set  = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/set";
+            std::string t_base_cfg_set = MQTT_BASE_TOPIC + "/config/automations/set";
+            std::string t_dev_cfg_get  = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/get";
+            std::string t_base_cfg_get = MQTT_BASE_TOPIC + "/config/automations/get";
+            std::string t_dev_set_all  = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/set/#";
+            std::string t_base_set_all = MQTT_BASE_TOPIC + "/set/#";
 
-            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/notify").c_str(), 1);
-            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/notify").c_str(), 1);
+            const esp_mqtt_topic_t sub_list[] = {
+                { .filter = t_dev_tx.c_str(),       .qos = 0 },
+                { .filter = t_base_tx.c_str(),      .qos = 0 },
+                { .filter = t_dev_notify.c_str(),   .qos = 0 },
+                { .filter = t_base_notify.c_str(),  .qos = 0 },
+                { .filter = t_dev_nav.c_str(),      .qos = 0 },
+                { .filter = t_base_nav.c_str(),     .qos = 0 },
+                { .filter = t_dev_sub_ids.c_str(),  .qos = 0 },
+                { .filter = t_base_sub_ids.c_str(), .qos = 0 },
+                { .filter = t_dev_cfg_set.c_str(),  .qos = 0 },
+                { .filter = t_base_cfg_set.c_str(), .qos = 0 },
+                { .filter = t_dev_cfg_get.c_str(),  .qos = 0 },
+                { .filter = t_base_cfg_get.c_str(), .qos = 0 },
+                { .filter = t_dev_set_all.c_str(),  .qos = 0 },
+                { .filter = t_base_set_all.c_str(), .qos = 0 },
+            };
 
-            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/nav/set").c_str(), 1);
-            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/nav/set").c_str(), 1);
+            esp_mqtt_client_subscribe_multiple(
+                global_mqtt_client,
+                sub_list,
+                sizeof(sub_list) / sizeof(sub_list[0])
+            );
 
-            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/subscribe_ids").c_str(), 1);
-            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/subscribe_ids").c_str(), 1);
-
-            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/set").c_str(), 1);
-            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/config/automations/set").c_str(), 1);
-
-            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/get").c_str(), 1);
-            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/config/automations/get").c_str(), 1);
-
-            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/set/#").c_str(), 1);
-            esp_mqtt_client_subscribe(global_mqtt_client, (MQTT_BASE_TOPIC + "/set/#").c_str(), 1);
-
-            // 3. Defer state dump & HA discovery to single background worker task
+            // 3. Defer state dump & HA discovery to single background worker task (6144-byte stack)
             if (!s_sync_task_running.exchange(true)) {
-                if (xTaskCreate(mqtt_post_connect_sync_task, "mqtt_sync", 4096, nullptr, 2, nullptr) != pdPASS) {
+                if (xTaskCreate(mqtt_post_connect_sync_task, "mqtt_sync", 6144, nullptr, 2, nullptr) != pdPASS) {
                     s_sync_task_running.store(false);
                 }
             }
@@ -606,11 +624,7 @@ void mqtt_mgr_start(void) {
     if (!s_mqtt_cfg.enabled || s_mqtt_cfg.broker_url.empty()) return;
 
     if (global_mqtt_client) {
-        s_mqtt_connected = false;
-        esp_err_t err = esp_mqtt_client_reconnect(global_mqtt_client);
-        if (err != ESP_OK) {
-            esp_mqtt_client_disconnect(global_mqtt_client);
-        }
+        esp_mqtt_client_reconnect(global_mqtt_client);
         return;
     }
 
@@ -628,15 +642,17 @@ void mqtt_mgr_start(void) {
     mqtt_cfg.session.last_will.topic = s_lwt_topic.c_str();
     mqtt_cfg.session.last_will.msg = "offline";
     mqtt_cfg.session.last_will.msg_len = 7;
-    mqtt_cfg.session.last_will.qos = 1;
+    mqtt_cfg.session.last_will.qos = 0; // QoS 0 avoids broker session state buildup on network drops
     mqtt_cfg.session.last_will.retain = 1;
 
-    // Hardened timeouts & bounded outbox so degraded Wi-Fi never exhausts ESP32-C3 heap
-    mqtt_cfg.session.keepalive = 20;
-    mqtt_cfg.network.reconnect_timeout_ms = 10000;
-    mqtt_cfg.network.timeout_ms = 3000;
+    // Hardened timeouts & bounded outbox for ws:// & cellular roaming
+    mqtt_cfg.session.keepalive = 30;
+    mqtt_cfg.network.reconnect_timeout_ms = 5000;
+    mqtt_cfg.network.timeout_ms = 7500;
     mqtt_cfg.buffer.size = 2048;
-    mqtt_cfg.outbox.limit = 16384;
+    mqtt_cfg.buffer.out_size = 2048;
+    mqtt_cfg.outbox.limit = 4096;
+    mqtt_cfg.task.stack_size = 6144;
 
     global_mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
     if (global_mqtt_client) {
@@ -659,30 +675,20 @@ void mqtt_mgr_stop(void) {
 }
 
 void mqtt_mgr_on_wifi_disconnect(void) {
-    s_mqtt_connected = false;
-    std::lock_guard<std::mutex> lock(s_mqtt_mutex);
-    if (global_mqtt_client) {
-        esp_mqtt_client_disconnect(global_mqtt_client);
-    }
+    s_mqtt_connected.store(false, std::memory_order_relaxed);
 }
 
 void mqtt_mgr_on_wifi_connect(void) {
-    mqtt_mgr_start();
+    if (!global_mqtt_client) {
+        mqtt_mgr_start();
+    } else {
+        esp_mqtt_client_reconnect(global_mqtt_client);
+    }
 }
 
 void mqtt_mgr_watchdog(void) {
-    if (!s_mqtt_connected.load()) {
-        if (!global_mqtt_client) {
-            mqtt_mgr_start();
-        } else {
-            std::lock_guard<std::mutex> lock(s_mqtt_mutex);
-            if (global_mqtt_client) {
-                esp_err_t err = esp_mqtt_client_reconnect(global_mqtt_client);
-                if (err != ESP_OK) {
-                    esp_mqtt_client_disconnect(global_mqtt_client);
-                }
-            }
-        }
+    if (!global_mqtt_client) {
+        mqtt_mgr_start();
     }
 }
 
