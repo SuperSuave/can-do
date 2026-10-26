@@ -92,152 +92,185 @@ static void pack_can_frame(uint8_t* dest, size_t& offset, const twai_message_t* 
     dest[offset++] = 0x00; // Checksum / trailing byte
 }
 
+static uint8_t s_rx_accum[1024];
+static size_t s_accum_len = 0;
+
 static bool handle_client_rx(int sock) {
-    uint8_t rx_buf[256];
-    int r = recv(sock, rx_buf, sizeof(rx_buf), MSG_DONTWAIT);
+    if (sizeof(s_rx_accum) - s_accum_len < 256) {
+        s_accum_len = 0;
+    }
+
+    int r = recv(sock, s_rx_accum + s_accum_len, sizeof(s_rx_accum) - s_accum_len, MSG_DONTWAIT);
     if (r == 0) {
+        s_accum_len = 0;
         return false; // Client closed connection
     }
     if (r < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             return true; // No data available
         }
+        s_accum_len = 0;
         return false; // Fatal socket error
     }
 
-    int idx = 0;
-    while (idx < r) {
-        uint8_t b = rx_buf[idx++];
+    s_accum_len += r;
+    size_t idx = 0;
+
+    while (idx < s_accum_len) {
+        uint8_t b = s_rx_accum[idx];
 
         if (b == 0xE7) {
             // Binary mode toggle
+            idx++;
             continue;
         }
 
-        if (b == 0xF1 && idx < r) {
-            uint8_t cmd = rx_buf[idx++];
+        if (b != 0xF1) {
+            // Desynced, advance to next byte
+            idx++;
+            continue;
+        }
 
-            if (cmd == 0x00) {
-                // SavvyCAN TX frame: 4 bytes ID, 1 byte bus, 1 byte len, len bytes data, 1 byte checksum
-                if (idx + 6 <= r) {
-                    uint32_t id = rx_buf[idx] | (rx_buf[idx+1] << 8) | (rx_buf[idx+2] << 16) | (rx_buf[idx+3] << 24);
-                    idx += 4;
-                    uint8_t bus = rx_buf[idx++];
-                    uint8_t len = rx_buf[idx++];
-                    (void)bus;
+        if (idx + 1 >= s_accum_len) {
+            // Incomplete command, wait for next recv
+            break;
+        }
 
-                    if (len <= 8 && idx + len <= r) {
-                        twai_message_t tx_msg = {};
-                        tx_msg.extd = (id & 0x80000000) ? 1 : 0;
-                        tx_msg.identifier = id & 0x1FFFFFFF;
-                        tx_msg.data_length_code = len;
-                        for (int i = 0; i < len; i++) {
-                            tx_msg.data[i] = rx_buf[idx++];
-                        }
-                        if (idx < r) idx++; // checksum byte
+        uint8_t cmd = s_rx_accum[idx + 1];
 
-                        if (!g_sniffer_mode.load()) {
-                            twai_status_info_t info;
-                            if (twai_get_status_info(&info) == ESP_OK && info.state == TWAI_STATE_RUNNING) {
-                                tx_msg.ss = 1; // Single-Shot mode: prevent infinite hardware retry loop on bus error
-                                twai_transmit(&tx_msg, pdMS_TO_TICKS(10));
-                            }
-                        } else {
-                            ESP_LOGD(TAG, "Sniffer mode active: GVRET client TX 0x%03lX suppressed", (unsigned long)tx_msg.identifier);
-                        }
-                    } else {
-                        idx += (len <= (size_t)(r - idx)) ? len : (r - idx);
-                    }
-                }
-            } else if (cmd == 0x01) {
-                // Time sync: reply 0xF1 0x01 + 4 bytes us
-                uint32_t now_us = (uint32_t)esp_timer_get_time();
-                uint8_t reply[6] = {
-                    0xF1, 0x01,
-                    (uint8_t)(now_us & 0xFF),
-                    (uint8_t)((now_us >> 8) & 0xFF),
-                    (uint8_t)((now_us >> 16) & 0xFF),
-                    (uint8_t)((now_us >> 24) & 0xFF)
-                };
-                send(sock, reply, sizeof(reply), MSG_DONTWAIT);
-            } else if (cmd == 0x02) {
-                // Digital inputs
-                uint8_t reply[3] = { 0xF1, 0x02, 0x00 };
-                send(sock, reply, sizeof(reply), MSG_DONTWAIT);
-            } else if (cmd == 0x03) {
-                // Analog inputs: 8 zeros
-                uint8_t reply[10] = { 0xF1, 0x03, 0, 0, 0, 0, 0, 0, 0, 0 };
-                send(sock, reply, sizeof(reply), MSG_DONTWAIT);
-            } else if (cmd == 0x04) {
-                // Set digital outputs: 1 byte
-                if (idx < r) idx++;
-            } else if (cmd == 0x05) {
-                // Setup CAN bus: 8 bytes (4 bytes bus0 baud/flags, 4 bytes bus1 baud/flags)
-                if (idx + 8 <= r) {
-                    uint32_t bus0_cfg = rx_buf[idx] | (rx_buf[idx+1] << 8) | (rx_buf[idx+2] << 16) | (rx_buf[idx+3] << 24);
-                    idx += 8;
-                    uint32_t speed = bus0_cfg & 0xFFFFF;
-                    if (speed > 1000000) {
-                        speed = 1000000; // Cap at 1 Mbps
-                    } else if (speed == 0) {
-                        speed = 500000;  // Default to 500 kbps
-                    }
-                    bool listen_only = (bus0_cfg & 0x20000000) != 0;
-                    ESP_LOGI(TAG, "GVRET bus setup: speed=%lu, listen_only=%d", (unsigned long)speed, listen_only ? 1 : 0);
-                    if (listen_only != g_hardware_listen_only.load()) {
-                        set_sniffer_mode(g_sniffer_mode.load(), listen_only);
-                    }
-                } else {
-                    idx = r;
-                }
-            } else if (cmd == 0x06) {
-                // Bus configuration (GVRET PROTO_GET_CANBUS_PARAMS):
-                // 0xF1 0x06 + bus0_flags (1 byte) + bus0_speed (4 bytes LE) + bus1_flags (1 byte) + bus1_speed (4 bytes LE)
-                uint8_t bus0_flags = 0x01; // bit 0: enabled
-                if (g_hardware_listen_only.load()) {
-                    bus0_flags |= 0x10; // bit 4: listen only
-                }
-                uint32_t bus0_speed = 500000; // default 500k
-                uint8_t bus1_flags = 0x00;   // disabled
-                uint32_t bus1_speed = 0;
-                uint8_t reply[12] = {
-                    0xF1, 0x06,
-                    bus0_flags,
-                    (uint8_t)(bus0_speed & 0xFF),
-                    (uint8_t)((bus0_speed >> 8) & 0xFF),
-                    (uint8_t)((bus0_speed >> 16) & 0xFF),
-                    (uint8_t)((bus0_speed >> 24) & 0xFF),
-                    bus1_flags,
-                    (uint8_t)(bus1_speed & 0xFF),
-                    (uint8_t)((bus1_speed >> 8) & 0xFF),
-                    (uint8_t)((bus1_speed >> 16) & 0xFF),
-                    (uint8_t)((bus1_speed >> 24) & 0xFF)
-                };
-                send(sock, reply, sizeof(reply), MSG_DONTWAIT);
-            } else if (cmd == 0x07) {
-                // Device Info: reply 0xF1 0x07 + build_lo, build_hi, eeprom_ver, file_ver, num_buses
-                uint8_t reply[7] = { 0xF1, 0x07, 0x20, 0x00, 0x01, 0x01, 0x01 };
-                send(sock, reply, sizeof(reply), MSG_DONTWAIT);
-            } else if (cmd == 0x08) {
-                // Single wire mode
-                if (idx < r) idx++;
-            } else if (cmd == 0x09) {
-                // Keepalive
-                uint8_t reply[4] = { 0xF1, 0x09, 0xDE, 0xAD };
-                send(sock, reply, sizeof(reply), MSG_DONTWAIT);
-            } else if (cmd == 0x0A) {
-                // System type
-                if (idx < r) idx++;
-            } else if (cmd == 0x0C) {
-                // Num buses: 1
-                uint8_t reply[3] = { 0xF1, 0x0C, 0x01 };
-                send(sock, reply, sizeof(reply), MSG_DONTWAIT);
-            } else if (cmd == 0x0D) {
-                // Extended buses
-                idx += (idx + 12 <= r) ? 12 : (r - idx);
+        if (cmd == 0x00) {
+            // SavvyCAN TX frame: 0xF1 0x00 + 4B ID + 1B bus + 1B len + len data + 1B checksum
+            if (idx + 8 > s_accum_len) {
+                break; // Header not fully received yet
             }
+            uint8_t len = s_rx_accum[idx + 7];
+            if (len > 8) len = 8;
+            size_t total_frame_len = 8 + len + 1;
+
+            if (idx + total_frame_len > s_accum_len) {
+                break; // Payload not fully received yet
+            }
+
+            size_t frame_pos = idx + 2;
+            uint32_t id = s_rx_accum[frame_pos] | (s_rx_accum[frame_pos+1] << 8) | 
+                          (s_rx_accum[frame_pos+2] << 16) | (s_rx_accum[frame_pos+3] << 24);
+            frame_pos += 4;
+            uint8_t bus = s_rx_accum[frame_pos++];
+            (void)bus;
+            frame_pos++; // skip len
+
+            twai_message_t tx_msg = {};
+            tx_msg.extd = (id & 0x80000000) ? 1 : 0;
+            tx_msg.identifier = id & 0x1FFFFFFF;
+            tx_msg.data_length_code = len;
+            for (int i = 0; i < len; i++) {
+                tx_msg.data[i] = s_rx_accum[frame_pos++];
+            }
+
+            // Feed into internal CAN engine parser (enables bench log playback & SavvyCAN simulation)
+            can_engine_inject_frame(&tx_msg);
+
+            if (!g_sniffer_mode.load()) {
+                twai_status_info_t info;
+                if (twai_get_status_info(&info) == ESP_OK && info.state == TWAI_STATE_RUNNING) {
+                    tx_msg.ss = 1; // Single-Shot mode
+                    twai_transmit(&tx_msg, pdMS_TO_TICKS(10));
+                }
+            } else {
+                ESP_LOGD(TAG, "Sniffer mode active: GVRET client TX 0x%03lX suppressed", (unsigned long)tx_msg.identifier);
+            }
+
+            idx += total_frame_len;
+        } else if (cmd == 0x01) {
+            uint32_t now_us = (uint32_t)esp_timer_get_time();
+            uint8_t reply[6] = {
+                0xF1, 0x01,
+                (uint8_t)(now_us & 0xFF),
+                (uint8_t)((now_us >> 8) & 0xFF),
+                (uint8_t)((now_us >> 16) & 0xFF),
+                (uint8_t)((now_us >> 24) & 0xFF)
+            };
+            send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            idx += 2;
+        } else if (cmd == 0x02) {
+            uint8_t reply[3] = { 0xF1, 0x02, 0x00 };
+            send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            idx += 2;
+        } else if (cmd == 0x03) {
+            uint8_t reply[10] = { 0xF1, 0x03, 0, 0, 0, 0, 0, 0, 0, 0 };
+            send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            idx += 2;
+        } else if (cmd == 0x04) {
+            if (idx + 3 > s_accum_len) break;
+            idx += 3;
+        } else if (cmd == 0x05) {
+            if (idx + 10 > s_accum_len) break;
+            size_t pos = idx + 2;
+            uint32_t bus0_cfg = s_rx_accum[pos] | (s_rx_accum[pos+1] << 8) | (s_rx_accum[pos+2] << 16) | (s_rx_accum[pos+3] << 24);
+            uint32_t speed = bus0_cfg & 0xFFFFF;
+            if (speed > 1000000) speed = 1000000;
+            else if (speed == 0) speed = 500000;
+            bool listen_only = (bus0_cfg & 0x20000000) != 0;
+            if (listen_only != g_hardware_listen_only.load()) {
+                set_sniffer_mode(g_sniffer_mode.load(), listen_only);
+            }
+            idx += 10;
+        } else if (cmd == 0x06) {
+            uint8_t bus0_flags = 0x01;
+            if (g_hardware_listen_only.load()) bus0_flags |= 0x10;
+            uint32_t bus0_speed = 500000;
+            uint8_t bus1_flags = 0x00;
+            uint32_t bus1_speed = 0;
+            uint8_t reply[12] = {
+                0xF1, 0x06,
+                bus0_flags,
+                (uint8_t)(bus0_speed & 0xFF),
+                (uint8_t)((bus0_speed >> 8) & 0xFF),
+                (uint8_t)((bus0_speed >> 16) & 0xFF),
+                (uint8_t)((bus0_speed >> 24) & 0xFF),
+                bus1_flags,
+                (uint8_t)(bus1_speed & 0xFF),
+                (uint8_t)((bus1_speed >> 8) & 0xFF),
+                (uint8_t)((bus1_speed >> 16) & 0xFF),
+                (uint8_t)((bus1_speed >> 24) & 0xFF)
+            };
+            send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            idx += 2;
+        } else if (cmd == 0x07) {
+            uint8_t reply[7] = { 0xF1, 0x07, 0x20, 0x00, 0x01, 0x01, 0x01 };
+            send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            idx += 2;
+        } else if (cmd == 0x08) {
+            if (idx + 3 > s_accum_len) break;
+            idx += 3;
+        } else if (cmd == 0x09) {
+            uint8_t reply[4] = { 0xF1, 0x09, 0xDE, 0xAD };
+            send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            idx += 2;
+        } else if (cmd == 0x0A) {
+            if (idx + 3 > s_accum_len) break;
+            idx += 3;
+        } else if (cmd == 0x0C) {
+            uint8_t reply[3] = { 0xF1, 0x0C, 0x01 };
+            send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            idx += 2;
+        } else if (cmd == 0x0D) {
+            if (idx + 14 > s_accum_len) break;
+            idx += 14;
+        } else {
+            idx += 2;
         }
     }
+
+    if (idx > 0) {
+        if (idx < s_accum_len) {
+            memmove(s_rx_accum, s_rx_accum + idx, s_accum_len - idx);
+            s_accum_len -= idx;
+        } else {
+            s_accum_len = 0;
+        }
+    }
+
     return true;
 }
 
@@ -381,6 +414,7 @@ static void gvret_server_task(void* pvParameters) {
         close(client_sock);
         s_active_client_fd = -1;
         s_client_count.store(0);
+        s_accum_len = 0;
         // Clear queue on disconnect
         xQueueReset(s_gvret_queue);
 

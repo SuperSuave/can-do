@@ -160,9 +160,19 @@ bool can_state_cache_get(uint32_t can_id, uint8_t byte_index, uint32_t* out_val)
     return false;
 }
 
+static QueueHandle_t s_can_inject_queue = nullptr;
+
+bool can_engine_inject_frame(const twai_message_t* msg) {
+    if (!s_can_inject_queue || !msg) return false;
+    return xQueueSend(s_can_inject_queue, msg, 0) == pdTRUE;
+}
+
 void init_can_engine(void) {
     if (!tx_command_queue) {
         tx_command_queue = xQueueCreate(16, sizeof(CanBurstCmd*));
+    }
+    if (!s_can_inject_queue) {
+        s_can_inject_queue = xQueueCreate(128, sizeof(twai_message_t));
     }
     hud_nav_init(HUD_PLATFORM_EGMP_CANFD);
 }
@@ -1302,7 +1312,14 @@ void can_rx_task(void* arg) {
             }
         }
 
-        if (twai_receive(&rx_msg, pdMS_TO_TICKS(5)) == ESP_OK) {
+        bool has_frame = false;
+        if (twai_receive(&rx_msg, 0) == ESP_OK) {
+            has_frame = true;
+        } else if (s_can_inject_queue && xQueueReceive(s_can_inject_queue, &rx_msg, pdMS_TO_TICKS(5)) == pdTRUE) {
+            has_frame = true;
+        }
+
+        if (has_frame) {
             rx_processed++;
             s_last_can_frame_ms = now_ms;
             board_led_can_activity();

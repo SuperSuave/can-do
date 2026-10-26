@@ -30,6 +30,7 @@
 #include "uart_bridge.h"
 #include "timezone_mgr.h"
 #include "remote_climate.h"
+#include "usb_can.h"
 
 #include "esp_mac.h"
 #include "esp_wifi.h"
@@ -189,6 +190,7 @@ extern "C" void app_main(void) {
     init_can_engine();
     uds_engine_init();
     power_mgr_init();
+    usb_can_init();
     xTaskCreate(can_rx_task, "CAN_RX", 8192, nullptr, 5, nullptr);
     xTaskCreate(can_tx_task, "CAN_TX", 3072, nullptr, 4, nullptr);
     xTaskCreate(time_scheduler_task, "TIME_SCHED", 2048, nullptr, 3, nullptr);

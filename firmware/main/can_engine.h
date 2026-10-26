@@ -23,6 +23,7 @@ void set_automations_enabled(bool enabled);
 void set_sniffer_mode(bool enabled, bool hardware_listen_only);
 
 void init_can_engine(void);
+bool can_engine_inject_frame(const twai_message_t* msg);
 void update_state_cache(uint32_t can_id, const uint8_t* data);
 bool evaluate_condition(const AutomationCondition& cond);
 bool is_match(const uint8_t* incoming_data, const EntityOption& option);
