@@ -50,7 +50,7 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
   const [beaconName, setBeaconName] = useState('My Phone');
   const [beaconUuid, setBeaconUuid] = useState('');
   const [beaconEnterRssi, setBeaconEnterRssi] = useState(-75);
-  const [beaconExitTimeout, setBeaconExitTimeout] = useState(10);
+  const [beaconExitTimeout, setBeaconExitTimeout] = useState(45);
   const [savingBeacon, setSavingBeacon] = useState(false);
 
   const resolveUrl = (path: string) => {
@@ -109,6 +109,27 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
           timestamp_ms: Date.now()
         };
         setRecentEvents(prev => [eventItem, ...prev.slice(0, 49)]);
+      } else if (msg && msg.type === 'ble_beacon') {
+        setStatus(prev => {
+          if (!prev || !prev.beacon_targets) return prev;
+          const updatedTargets = prev.beacon_targets.map(tgt => {
+            const matchUuid = msg.uuid && tgt.uuid && tgt.uuid.toLowerCase() === msg.uuid.toLowerCase();
+            const matchMac = msg.mac && tgt.mac && tgt.mac.toLowerCase() === msg.mac.toLowerCase();
+            if (matchUuid || matchMac) {
+              return {
+                ...tgt,
+                is_present: msg.event === 'enter' || msg.event === 'proximity',
+                rssi: typeof msg.rssi === 'number' ? msg.rssi : tgt.rssi,
+                mac: msg.mac || tgt.mac,
+                major: msg.major || tgt.major,
+                minor: msg.minor || tgt.minor,
+                last_seen_ms: Date.now()
+              };
+            }
+            return tgt;
+          });
+          return { ...prev, beacon_targets: updatedTargets };
+        });
       }
     });
     return () => unsub();
@@ -288,7 +309,7 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
         uuid: beacon.uuid || '',
         mac: beacon.mac || '',
         enter_rssi: newRssi,
-        exit_timeout_s: beacon.exit_timeout_s || 10
+        exit_timeout_s: beacon.exit_timeout_s || 45
       };
       const res = await fetch(resolveUrl('/api/ble/beacons'), {
         method: 'POST',
@@ -810,16 +831,20 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
                     </div>
                     <div className="text-[10px] text-slate-500 flex items-center gap-2 flex-wrap">
                       <span>Threshold: {tgt.enter_rssi} dBm</span>
-                      {tgt.is_present && tgt.rssi ? (
-                        <span className="text-emerald-400 font-bold flex items-center gap-1 font-mono">
-                          <Signal className="w-3 h-3 text-emerald-400 animate-pulse" />
-                          Live: {tgt.rssi} dBm
+                      {tgt.rssi && tgt.rssi !== -100 ? (
+                        <span className={`font-bold flex items-center gap-1 font-mono ${
+                          tgt.is_present ? 'text-emerald-400' : 'text-amber-400'
+                        }`}>
+                          <Signal className={`w-3 h-3 ${tgt.is_present ? 'animate-pulse' : ''}`} />
+                          {tgt.is_present ? `Live: ${tgt.rssi} dBm` : `Last Heard: ${tgt.rssi} dBm ${tgt.rssi < tgt.enter_rssi ? '(Below Threshold)' : '(Timed Out)'}`}
                         </span>
-                      ) : null}
+                      ) : (
+                        <span className="text-slate-600 italic">Not heard yet</span>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-                    {tgt.is_present && tgt.rssi ? (
+                    {tgt.rssi && tgt.rssi !== -100 ? (
                       <button
                         type="button"
                         onClick={() => handleCalibrateBeacon(tgt, tgt.rssi!)}

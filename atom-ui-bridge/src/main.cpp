@@ -46,7 +46,7 @@ unsigned long g_last_wican_rx_ms = 0;
 bool g_wican_online = false;
 
 #ifndef CAN_DO_VERSION
-#define CAN_DO_VERSION "2026.10.7-b004"
+#define CAN_DO_VERSION "2026.10.7-b006"
 #endif
 
 String g_can_do_version = CAN_DO_VERSION;
@@ -98,7 +98,7 @@ struct BeaconTarget {
     String mac;
     String name = "Phone Beacon";
     int enter_rssi = -75;
-    int exit_timeout_s = 10;
+    int exit_timeout_s = 20;
     bool is_present = false;
     unsigned long last_seen_ms = 0;
     int last_rssi = -100;
@@ -712,7 +712,12 @@ class ClientCallbacks : public NimBLEClientCallbacks {
         safe_ws_broadcast(uart_ev);
         broadcast_ble_status();
         // Resume continuous background scan to listen for button press wakeups
-        NimBLEDevice::getScan()->start(0, nullptr, false);
+        NimBLEScan* pScan = NimBLEDevice::getScan();
+        pScan->clearResults();
+        pScan->setMaxResults(0);
+        pScan->setDuplicateFilter(false);
+        pScan->setActiveScan(false);
+        pScan->start(0, nullptr, false);
     }
 };
 
@@ -840,7 +845,15 @@ void connect_ble_device(const String& address, uint8_t addr_type, NimBLEAdvertis
             }
         }
     } else {
-        Serial.printf("[BLE] Connection to %s failed (will listen via advertisements)\n", address.c_str());
+        Serial.printf("[BLE] Connection to %s failed (resuming continuous scan)\n", address.c_str());
+        if (!g_ble_scanning) {
+            NimBLEScan* pScan = NimBLEDevice::getScan();
+            pScan->clearResults();
+            pScan->setMaxResults(0);
+            pScan->setDuplicateFilter(false);
+            pScan->setActiveScan(false);
+            pScan->start(0, nullptr, false);
+        }
     }
 
     broadcast_ble_status();
@@ -1016,7 +1029,12 @@ void on_scan_complete(NimBLEScanResults results) {
     Serial.printf("[BLE] Total discovered in-car devices: %u\n", g_discovered_devices.size());
     broadcast_ble_status();
     if (!g_ble_client_connected) {
-        NimBLEDevice::getScan()->start(0, nullptr, false);
+        NimBLEScan* pScan = NimBLEDevice::getScan();
+        pScan->clearResults();
+        pScan->setMaxResults(0);
+        pScan->setDuplicateFilter(false);
+        pScan->setActiveScan(false);
+        pScan->start(0, nullptr, false);
     }
 }
 
@@ -1030,6 +1048,9 @@ void start_ble_scan(uint32_t dur) {
     NimBLEScan* pScan = NimBLEDevice::getScan();
     pScan->stop();
     pScan->clearResults();
+    pScan->setMaxResults(0);
+    pScan->setDuplicateFilter(true);
+    pScan->setActiveScan(true);
     pScan->start(dur, on_scan_complete, false);
     Serial.printf("[BLE] Started async %u second in-car scan (min RSSI: %d dBm)...\n", dur, BLE_MIN_RSSI_DISCOVERY);
     broadcast_ble_status();
@@ -1216,14 +1237,23 @@ class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
                 target.last_rssi = rssi;
                 if (adv_major != 0) target.major = adv_major;
                 if (adv_minor != 0) target.minor = adv_minor;
-                if (target.mac.isEmpty() && addr.length() > 0) target.mac = addr;
+                target.mac = addr; // Dynamically track latest randomized MAC for this beacon
 
                 if (!target.is_present && rssi >= target.enter_rssi) {
                     target.is_present = true;
                     target.last_prox_send_ms = millis();
+                    Serial.printf("[BEACON] >>> Target '%s' ENTERED (RSSI %d dBm >= %d dBm) <<<\n",
+                                  target.name.c_str(), rssi, target.enter_rssi);
                     String uart_msg = "{\"type\":\"ble_beacon\",\"event\":\"enter\",\"uuid\":\"" + target.uuid + "\",\"mac\":\"" + addr + "\",\"name\":\"" + target.name + "\",\"rssi\":" + String(rssi) + ",\"major\":" + String(target.major) + ",\"minor\":" + String(target.minor) + "}";
                     send_to_wican(uart_msg);
                     safe_ws_broadcast(uart_msg);
+                } else if (!target.is_present) {
+                    static unsigned long s_last_below_thresh_log = 0;
+                    if (millis() - s_last_below_thresh_log > 4000) {
+                        s_last_below_thresh_log = millis();
+                        Serial.printf("[BEACON] Target '%s' heard at %d dBm (Below threshold: %d dBm)\n",
+                                      target.name.c_str(), rssi, target.enter_rssi);
+                    }
                 } else if (target.is_present && (millis() - target.last_prox_send_ms > 2500)) {
                     target.last_prox_send_ms = millis();
                     String uart_msg = "{\"type\":\"ble_beacon\",\"event\":\"proximity\",\"uuid\":\"" + target.uuid + "\",\"mac\":\"" + addr + "\",\"name\":\"" + target.name + "\",\"rssi\":" + String(rssi) + ",\"major\":" + String(target.major) + ",\"minor\":" + String(target.minor) + "}";
@@ -1536,12 +1566,13 @@ void setup() {
 
     NimBLEScan* pScan = NimBLEDevice::getScan();
     pScan->setAdvertisedDeviceCallbacks(new AdvertisedDeviceCallbacks(), true);
-    pScan->setActiveScan(true);
+    pScan->setActiveScan(false); // Passive scan: captures all ADV packets immediately, no SCAN_REQ transmission, no scan-response drops
     pScan->setInterval(160); // 100ms interval
-    pScan->setWindow(40);    // 25ms window (25% duty cycle: reserves 75% airtime for Wi-Fi coex)
-    pScan->setMaxResults(50);
+    pScan->setWindow(80);    // 50ms window (50% duty cycle for fast, reliable beacon acquisition)
+    pScan->setMaxResults(0); // 0 = do not buffer results in RAM; always invoke onResult for continuous scanning
+    pScan->setDuplicateFilter(false); // CRITICAL: Disable duplicate filtering so live beacon packets are received continuously!
     pScan->start(0, nullptr, false);
-    Serial.println("[BLE] Continuous background scan active (25% coex duty cycle)");
+    Serial.println("[BLE] Continuous background scan active (50% coex duty cycle, passive, no dup filter)");
 
     // 7. Configure Web Server Routes
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
@@ -2496,7 +2527,12 @@ void loop() {
             NimBLEDevice::getScan()->stop();
             connect_ble_device(target_addr, target_type, nullptr);
             if (!g_ble_client_connected && !g_ble_scanning) {
-                NimBLEDevice::getScan()->start(0, nullptr, false);
+                NimBLEScan* pScan = NimBLEDevice::getScan();
+                pScan->clearResults();
+                pScan->setMaxResults(0);
+                pScan->setDuplicateFilter(false);
+                pScan->setActiveScan(false);
+                pScan->start(0, nullptr, false);
             }
         }
     }
@@ -2568,13 +2604,17 @@ void loop() {
         }
     }
 
-    // 7. Auto-reconnect to paired BLE device if disconnected and not scanning
-    static unsigned long last_ble_reconnect_ms = 0;
-    if (!g_ble_scanning && !g_ble_client_connected && !g_paired_devices.empty() && (millis() - last_ble_reconnect_ms > 45000)) {
-        last_ble_reconnect_ms = millis();
-        Serial.printf("[BLE] Auto-reconnecting to paired device %s (type=%d)...\n",
-                      g_paired_devices[0].address.c_str(), g_paired_devices[0].addr_type);
-        connect_ble_device(g_paired_devices[0].address, g_paired_devices[0].addr_type);
+    // 7. Continuous background BLE scan watchdog: ensures scan is always active
+    if (!g_ble_scanning && !g_ble_client_connected && !g_pending_ble_connect_req) {
+        NimBLEScan* pScan = NimBLEDevice::getScan();
+        if (!pScan->isScanning()) {
+            pScan->clearResults();
+            pScan->setMaxResults(0);
+            pScan->setDuplicateFilter(false);
+            pScan->setActiveScan(false);
+            pScan->start(0, nullptr, false);
+            Serial.println("[BLE] Scan watchdog: restarted continuous background scan");
+        }
     }
 
     // 8. Beacon Exit Timeout Watchdog
