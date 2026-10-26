@@ -2,14 +2,14 @@
   "version": "2026.10.7-b006",
   "files": [
     {
-      "name": "By4nX1mD.js.gz",
-      "path": "/spiffs/www/By4nX1mD.js.gz",
-      "size": 20801
-    },
-    {
       "name": "BZ-r2ho0.js.gz",
       "path": "/spiffs/www/BZ-r2ho0.js.gz",
       "size": 4039
+    },
+    {
+      "name": "By4nX1mD.js.gz",
+      "path": "/spiffs/www/By4nX1mD.js.gz",
+      "size": 20801
     },
     {
       "name": "BzhFaikk.js.gz",
@@ -32,6 +32,11 @@
       "size": 149284
     },
     {
+      "name": "DVfeyWbo.js.gz",
+      "path": "/spiffs/www/DVfeyWbo.js.gz",
+      "size": 352
+    },
+    {
       "name": "Dl8GY0Wd.js.gz",
       "path": "/spiffs/www/Dl8GY0Wd.js.gz",
       "size": 3879
@@ -42,11 +47,6 @@
       "size": 3824
     },
     {
-      "name": "DVfeyWbo.js.gz",
-      "path": "/spiffs/www/DVfeyWbo.js.gz",
-      "size": 352
-    },
-    {
       "name": "EdLM8TM4.js.gz",
       "path": "/spiffs/www/EdLM8TM4.js.gz",
       "size": 2174
@@ -55,6 +55,16 @@
       "name": "HWC8ztfH.js.gz",
       "path": "/spiffs/www/HWC8ztfH.js.gz",
       "size": 976
+    },
+    {
+      "name": "O9XZrU50.js.gz",
+      "path": "/spiffs/www/O9XZrU50.js.gz",
+      "size": 3313
+    },
+    {
+      "name": "SnVBpojM.js.gz",
+      "path": "/spiffs/www/SnVBpojM.js.gz",
+      "size": 310
     },
     {
       "name": "index-BfYfRC.css.gz",
@@ -69,32 +79,22 @@
     {
       "name": "index.html",
       "path": "/spiffs/www/index.html",
-      "size": 4149
+      "size": 4093
     },
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 1766
+      "size": 1757
     },
     {
       "name": "logo.svg",
       "path": "/spiffs/www/logo.svg",
-      "size": 8221
-    },
-    {
-      "name": "O9XZrU50.js.gz",
-      "path": "/spiffs/www/O9XZrU50.js.gz",
-      "size": 3313
+      "size": 8217
     },
     {
       "name": "rlPiF1UP.js.gz",
       "path": "/spiffs/www/rlPiF1UP.js.gz",
       "size": 333
-    },
-    {
-      "name": "SnVBpojM.js.gz",
-      "path": "/spiffs/www/SnVBpojM.js.gz",
-      "size": 310
     }
   ]
 }
