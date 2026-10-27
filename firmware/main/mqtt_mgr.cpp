@@ -29,6 +29,7 @@ static std::mutex s_mqtt_mutex;
 static MqttConfig s_mqtt_cfg;
 static std::atomic<bool> s_mqtt_connected{false};
 static std::atomic<bool> s_sync_task_running{false};
+static std::atomic<bool> s_need_clear_discovery{false};
 static std::string s_lwt_topic;
 
 static FILE* s_automations_tmp_file = nullptr;
@@ -242,7 +243,7 @@ static void mqtt_post_connect_sync_task(void* arg) {
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 
-    // 3. Publish or clear HA discovery
+    // 3. Publish HA discovery if enabled (or clear once if explicitly disabled via settings)
     if (s_mqtt_connected.load()) {
         bool disco_en = false;
         {
@@ -250,8 +251,9 @@ static void mqtt_post_connect_sync_task(void* arg) {
             disco_en = s_mqtt_cfg.ha_discovery_enabled;
         }
         if (disco_en) {
+            s_need_clear_discovery.store(false);
             mqtt_mgr_publish_discovery();
-        } else {
+        } else if (s_need_clear_discovery.exchange(false)) {
             mqtt_mgr_clear_discovery();
         }
     }
@@ -681,7 +683,7 @@ void mqtt_mgr_on_wifi_disconnect(void) {
 void mqtt_mgr_on_wifi_connect(void) {
     if (!global_mqtt_client) {
         mqtt_mgr_start();
-    } else {
+    } else if (!s_mqtt_connected.load(std::memory_order_relaxed)) {
         esp_mqtt_client_reconnect(global_mqtt_client);
     }
 }
@@ -704,6 +706,9 @@ MqttConfig mqtt_mgr_get_config(void) {
 bool mqtt_mgr_save_config(const MqttConfig& cfg) {
     {
         std::lock_guard<std::mutex> lock(s_mqtt_mutex);
+        if (s_mqtt_cfg.ha_discovery_enabled && !cfg.ha_discovery_enabled) {
+            s_need_clear_discovery.store(true);
+        }
         s_mqtt_cfg = cfg;
 
         cJSON* root = cJSON_CreateObject();

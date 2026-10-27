@@ -729,6 +729,10 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
     // Options array
     cJSON* options_array = cJSON_GetObjectItem(entity_json, "options");
     if (cJSON_IsArray(options_array)) {
+        int opt_count = cJSON_GetArraySize(options_array);
+        if (opt_count > 0) {
+            out_entity.options.reserve(opt_count);
+        }
         cJSON* opt_json = nullptr;
         cJSON_ArrayForEach(opt_json, options_array) {
             EntityOption opt;
@@ -782,7 +786,7 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
                 opt.steps.push_back(step);
             }
 
-            out_entity.options.push_back(opt);
+            out_entity.options.push_back(std::move(opt));
         }
     } else {
         // Flat command: treat root match/steps/payload as a default option
@@ -1077,6 +1081,9 @@ static bool stream_parse_array_from_file(FILE* f, const char* target_key, Handle
         escape = false;
 
         while ((c = fgetc(f)) != EOF) {
+            if (!in_str && (c == ' ' || c == '\n' || c == '\r' || c == '\t')) {
+                continue;
+            }
             obj_buf += static_cast<char>(c);
             if (escape) {
                 escape = false;
@@ -1098,6 +1105,12 @@ static bool stream_parse_array_from_file(FILE* f, const char* target_key, Handle
 
         if (depth == 0) {
             cJSON* item_json = cJSON_Parse(obj_buf.c_str());
+            if (obj_buf.capacity() > 4096) {
+                std::string().swap(obj_buf);
+                obj_buf.reserve(2048);
+            } else {
+                obj_buf.clear();
+            }
             if (item_json) {
                 bool keep_going = true;
                 if constexpr (std::is_same_v<std::invoke_result_t<Handler, cJSON*>, bool>) {
@@ -1114,7 +1127,6 @@ static bool stream_parse_array_from_file(FILE* f, const char* target_key, Handle
                     vTaskDelay(pdMS_TO_TICKS(1)); // Feed FreeRTOS watchdog & allow network stack to breathe
                 }
             }
-            obj_buf.clear();
         }
     }
 
@@ -1307,16 +1319,38 @@ bool find_entity_in_catalog(const std::string& entity_id, CanEntity& out_entity)
         }
     }
 
-    // 3. Search catalog file on LittleFS
+    // 3. Search catalog file on LittleFS without constructing CanEntity for non-matching items
+    const char* paths[] = {"/spiffs/catalog.json", "/spiffs/can_do_catalog.json"};
+    FILE* f = nullptr;
+    for (const char* p : paths) {
+        f = fopen(p, "r");
+        if (f) break;
+    }
+    if (!f) {
+        return false;
+    }
+
+    setvbuf(f, nullptr, _IOFBF, 2048);
+
     bool found = false;
-    stream_catalog_entities([&](const CanEntity& ent) -> bool {
-        if (ent.id == entity_id) {
-            out_entity = ent;
-            found = true;
-            return false;
+    auto match_handler = [&](cJSON* cmd_json) -> bool {
+        cJSON* id_item = cJSON_GetObjectItem(cmd_json, "id");
+        if (cJSON_IsString(id_item) && id_item->valuestring && entity_id == id_item->valuestring) {
+            if (parse_entity(cmd_json, out_entity)) {
+                found = true;
+                return false; // Stop streaming
+            }
         }
-        return true;
-    });
+        return true; // Continue
+    };
+
+    bool ok = stream_parse_array_from_file(f, "commands", match_handler);
+    if (!ok && !found) {
+        fseek(f, 0, SEEK_SET);
+        clearerr(f);
+        stream_parse_array_from_file(f, "entities", match_handler);
+    }
+    fclose(f);
 
     if (found) {
         if (s_dynamic_entities.size() >= 32) {
@@ -1416,9 +1450,6 @@ bool load_automations_from_fs(const char* filepath) {
     };
 
     for (const auto& rule : global_automations) {
-        for (const auto& trig : rule.triggers) {
-            if (!trig.id.empty()) referenced_entities.insert(trig.id);
-        }
         collect_from_steps(rule.actions);
     }
 
