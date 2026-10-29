@@ -7,41 +7,107 @@ import {
   AutomationTrigger,
   AutomationCondition,
   AutomationAction,
-  AutomationActionStep
+  AutomationActionStep,
+  ChoiceBranch
 } from '../types/automation';
 import { Command, CommandOption, Catalog, ByteMap, Vehicle } from '../types/catalog';
 import { DEFAULT_CATALOG } from '../data/defaultCatalog';
 import { resolveVariant, getEffectiveOptions } from './catalogUtils';
 
 /**
- * Cleanly compiles any payload or glob into a strict 1-based ByteMap ({ D1: "0x.." })
+ * Converts any numeric integer or hex/decimal string into canonical 2-digit uppercase hex (e.g. "0xFF", "0x00", "0x3F").
+ * Returns undefined for wildcards, empty values, or invalid inputs.
  */
-export function compileToByteMap(input: string | ByteMap | undefined): ByteMap {
+export function formatHexByte(val: unknown): string | undefined {
+  if (val === undefined || val === null) return undefined;
+  if (typeof val === 'number') {
+    if (isNaN(val)) return undefined;
+    return `0x${(val & 0xFF).toString(16).padStart(2, '0').toUpperCase()}`;
+  }
+  const str = String(val).trim();
+  if (!str || str === '*' || str === '**' || str === '?' || str === '??') return undefined;
+
+  // Hex prefixed with 0x / 0X
+  if (/^0x/i.test(str)) {
+    const raw = str.slice(2).trim();
+    if (!raw) return undefined;
+    const num = parseInt(raw, 16);
+    if (isNaN(num)) return undefined;
+    return `0x${(num & 0xFF).toString(16).padStart(2, '0').toUpperCase()}`;
+  }
+
+  // Pure decimal digits
+  if (/^\d+$/.test(str)) {
+    const num = parseInt(str, 10);
+    if (!isNaN(num) && num >= 0 && num <= 255) {
+      if (str.length >= 3) {
+        return `0x${num.toString(16).padStart(2, '0').toUpperCase()}`;
+      }
+      if (str.length === 1) {
+        return `0x0${str}`;
+      }
+      // 2 digits: standard in CAN payloads as 2 hex chars
+      return `0x${str.toUpperCase()}`;
+    }
+  }
+
+  // Bare hex string (1-2 chars e.g. "3F", "FF", "a")
+  if (/^[0-9a-fA-F]{1,2}$/.test(str)) {
+    return `0x${str.padStart(2, '0').toUpperCase()}`;
+  }
+
+  return undefined;
+}
+
+/**
+ * Cleanly compiles any payload, ByteMap, or string into a strict 1-based ByteMap ({ D1: "0x.." }).
+ * Supports both hex ("0xFF", "3F") and numeric decimal integers (255, 63, 0) seamlessly.
+ */
+export function compileToByteMap(input: string | ByteMap | Record<string, unknown> | undefined): ByteMap {
   if (!input) return {};
+
   if (typeof input === 'object') {
     const cleanMap: ByteMap = {};
     for (const [k, v] of Object.entries(input)) {
-      if (v && typeof v === 'string' && !v.includes('*') && v !== '?') {
-        const cleanHex = v.replace(/^0x/i, '').trim().toUpperCase();
-        cleanMap[k] = cleanHex ? `0x${cleanHex}` : v;
+      const match = k.match(/^D?([1-8])$/i);
+      if (!match) continue;
+      const dKey = `D${match[1]}`;
+      const formatted = formatHexByte(v);
+      if (formatted !== undefined) {
+        cleanMap[dKey] = formatted;
       }
     }
     return cleanMap;
   }
 
-  const parts = input.trim().split(/\s+/);
+  const trimmed = String(input).trim();
+  if (!trimmed) return {};
+
+  // If string starts with JSON object, parse it
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsedObj = JSON.parse(trimmed);
+      if (parsedObj && typeof parsedObj === 'object' && !Array.isArray(parsedObj)) {
+        return compileToByteMap(parsedObj);
+      }
+    } catch {
+      // Fall through to whitespace splitting
+    }
+  }
+
+  const parts = trimmed.split(/\s+/);
   const result: ByteMap = {};
 
   parts.forEach((part, idx) => {
     if (idx >= 8) return;
     const dKey = `D${idx + 1}`;
     const clean = part.trim();
-    if (!clean || clean === '*' || clean === '**' || clean === '??') return;
+    if (!clean || clean === '*' || clean === '**' || clean === '??' || clean === '?') return;
 
     const hexClean = clean.replace(/\*/g, '0');
-    if (hexClean) {
-      const cleanHex = hexClean.replace(/^0x/i, '').trim().toUpperCase();
-      result[dKey] = cleanHex ? `0x${cleanHex}` : hexClean;
+    const formatted = formatHexByte(hexClean);
+    if (formatted !== undefined) {
+      result[dKey] = formatted;
     }
   });
 
@@ -247,7 +313,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
         const stepPayload = compileToByteMap(step.payload);
         inlinedSteps.push({
           type: 'transmit',
-          can_id: step.can_id || act.can_id || '0x000',
+          can_id: formatCanId(step.can_id || act.can_id || '0x000'),
           bus: step.bus ?? act.bus ?? 0,
           payload: Object.keys(stepPayload).length > 0 ? stepPayload : { D1: '0x01' },
           repeat: step.repeat ?? act.repeat ?? 1,
@@ -272,7 +338,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
     const payload = compileToByteMap(act.payload || act.to_payload);
     return {
       type: 'transmit',
-      can_id: act.can_id || '0x000',
+      can_id: formatCanId(act.can_id || '0x000'),
       bus: act.bus ?? 0,
       payload: Object.keys(payload).length > 0 ? payload : { D1: '0x01' },
       repeat: act.repeat || 1,
@@ -916,6 +982,62 @@ export function commandToAction(rawCmd: Command, opt?: CommandOption): Automatio
   };
 }
 
+/**
+ * Safely normalizes any CAN ID representation (number, hex string, decimal string)
+ * into a standard lowercase representation (e.g. "0x4a2") for lookup and comparison.
+ */
+export function normalizeCanId(canId: unknown): string {
+  if (canId === undefined || canId === null) return '';
+  if (typeof canId === 'number') {
+    if (isNaN(canId)) return '';
+    return `0x${canId.toString(16).toUpperCase()}`.toLowerCase();
+  }
+  const str = String(canId).trim();
+  if (!str) return '';
+  if (/^0x/i.test(str)) {
+    return str.toLowerCase();
+  }
+  // If pure decimal digits (e.g. "1186")
+  if (/^\d+$/.test(str)) {
+    const num = parseInt(str, 10);
+    if (!isNaN(num)) {
+      return `0x${num.toString(16).toUpperCase()}`.toLowerCase();
+    }
+  }
+  // If bare hex string without 0x (e.g. "4A2" or "4a2")
+  if (/^[0-9a-fA-F]+$/.test(str)) {
+    return `0x${str.toUpperCase()}`.toLowerCase();
+  }
+  return str.toLowerCase();
+}
+
+/**
+ * Formats a CAN ID into standard canonical representation (e.g. "0x4A2")
+ */
+export function formatCanId(canId: unknown): string {
+  if (canId === undefined || canId === null) return '';
+  if (typeof canId === 'number') {
+    if (isNaN(canId)) return '';
+    return `0x${canId.toString(16).toUpperCase()}`;
+  }
+  const str = String(canId).trim();
+  if (!str) return '';
+  if (/^0x/i.test(str)) {
+    const hex = str.slice(2).toUpperCase();
+    return `0x${hex}`;
+  }
+  if (/^\d+$/.test(str)) {
+    const num = parseInt(str, 10);
+    if (!isNaN(num)) {
+      return `0x${num.toString(16).toUpperCase()}`;
+    }
+  }
+  if (/^[0-9a-fA-F]+$/.test(str)) {
+    return `0x${str.toUpperCase()}`;
+  }
+  return str;
+}
+
 interface CatalogCommandIndex {
   byId: Map<string, Command>;
   byCanId: Map<string, Command[]>;
@@ -933,8 +1055,8 @@ function getCatalogCommandIndex(commands: Command[]): CatalogCommandIndex {
       if (cmd.id) {
         byId.set(cmd.id, cmd);
       }
-      const stateId = (cmd.network?.state_can_id || cmd.state_can_id || '').toLowerCase();
-      const actionId = (cmd.network?.action_can_id || cmd.action_can_id || '').toLowerCase();
+      const stateId = normalizeCanId(cmd.network?.state_can_id || cmd.state_can_id);
+      const actionId = normalizeCanId(cmd.network?.action_can_id || cmd.action_can_id);
       if (stateId) {
         let list = byCanId.get(stateId);
         if (!list) {
@@ -997,20 +1119,22 @@ export function resolveCatalogCommandForTrigger(
 
   // 3. Match by CAN ID
   if (trig.can_id) {
-    const normCanId = trig.can_id.toLowerCase();
-    const candidateCmds = index.byCanId.get(normCanId) ?? [];
+    const normCanId = normalizeCanId(trig.can_id);
+    const rawCands = index.byCanId.get(normCanId) ?? [];
+    const stateMatching = rawCands.filter(c => normalizeCanId(c.network?.state_can_id || c.state_can_id) === normCanId);
+    const candidateCmds = stateMatching.length > 0 ? stateMatching : rawCands;
 
     if (candidateCmds.length === 1) {
       const cmd = resolveVariant(candidateCmds[0], null);
-      const opt = findMatchingOptionForTrigger(cmd, trig);
+      const opt = findMatchingOptionForTrigger(cmd, trig, true);
       return { command: cmd, matchedOption: opt };
     }
 
     if (candidateCmds.length > 1) {
-      // Find candidate whose options match byte/value
+      // Find candidate whose options match byte/value (strict - no blind fallback)
       for (const raw of candidateCmds) {
         const cmd = resolveVariant(raw, null);
-        const opt = findMatchingOptionForTrigger(cmd, trig);
+        const opt = findMatchingOptionForTrigger(cmd, trig, false);
         if (opt) {
           return { command: cmd, matchedOption: opt };
         }
@@ -1022,15 +1146,111 @@ export function resolveCatalogCommandForTrigger(
           return { command: cmd, matchedOption: cmd.options?.[0] };
         }
       }
-      const cmd = resolveVariant(candidateCmds[0], null);
-      return { command: cmd, matchedOption: cmd.options?.[0] };
+      return {};
     }
   }
 
   return {};
 }
 
-function findMatchingOptionForTrigger(cmd: Command, trig: AutomationTrigger): CommandOption | undefined {
+function toHexByte(val: any): string | undefined {
+  const formatted = formatHexByte(val);
+  return formatted ? formatted.toLowerCase() : undefined;
+}
+
+function isSignificantByte(byteHex: string | undefined): boolean {
+  if (!byteHex) return false;
+  const b = String(byteHex).toLowerCase().replace(/^0x/, '');
+  return b !== 'ff' && b !== '00' && b !== '0';
+}
+
+/**
+ * Common entity ID aliases and variations (e.g. singular vs plural, common shorthand)
+ */
+const ENTITY_ALIASES: Record<string, string> = {
+  driver_seat_comfort: 'drivers_seat_comfort',
+  driver_seat_heat: 'drivers_seat_comfort',
+  driver_seat_heater: 'drivers_seat_comfort',
+  driver_seat_warmer: 'drivers_seat_comfort',
+  driver_seat_vent: 'drivers_seat_comfort',
+  driver_seat_ventilation: 'drivers_seat_comfort',
+  driver_seat_cool: 'drivers_seat_comfort',
+  driver_seat: 'drivers_seat_comfort',
+  drivers_seat: 'drivers_seat_comfort',
+  drivers_seat_heat: 'drivers_seat_comfort',
+  drivers_seat_heater: 'drivers_seat_comfort',
+  drivers_seat_warmer: 'drivers_seat_comfort',
+  drivers_seat_vent: 'drivers_seat_comfort',
+  drivers_seat_cool: 'drivers_seat_comfort',
+  seat_heat: 'drivers_seat_comfort',
+  seat_heater: 'drivers_seat_comfort',
+  seat_warmer: 'drivers_seat_comfort',
+  seat_vent: 'drivers_seat_comfort',
+  seat_ventilation: 'drivers_seat_comfort',
+  passenger_seat_comfort: 'passengers_seat_comfort',
+  passenger_seat_heat: 'passengers_seat_comfort',
+  passenger_seat_heater: 'passengers_seat_comfort',
+  passenger_seat_warmer: 'passengers_seat_comfort',
+  passenger_seat_vent: 'passengers_seat_comfort',
+  passenger_seat_cool: 'passengers_seat_comfort',
+  passenger_seat: 'passengers_seat_comfort',
+  passengers_seat: 'passengers_seat_comfort',
+  passengers_seat_heat: 'passengers_seat_comfort',
+  passengers_seat_heater: 'passengers_seat_comfort',
+  passengers_seat_warmer: 'passengers_seat_comfort',
+  passengers_seat_vent: 'passengers_seat_comfort',
+  passengers_seat_cool: 'passengers_seat_comfort',
+  rear_left_seat: 'rear_left_seat_comfort',
+  rear_right_seat: 'rear_right_seat_comfort',
+  steering_wheel_heat: 'heated_steering_wheel_toggle',
+  heated_wheel: 'heated_steering_wheel_toggle',
+  heated_steering_wheel: 'heated_steering_wheel_toggle',
+  rear_defog: 'climate_rear_defog',
+  rear_defogger: 'climate_rear_defog',
+  defogger: 'climate_rear_defog',
+};
+
+function extractActionPayload(act: AutomationAction): ByteMap | undefined {
+  // 1. Prefer steps with a significant byte (e.g. Low Cool 0x3F before latch 0xFF)
+  if (Array.isArray(act.steps) && act.steps.length > 0) {
+    for (const step of act.steps) {
+      if (step && step.payload) {
+        const map = compileToByteMap(step.payload);
+        if (Object.keys(map).length > 0 && Object.values(map).some(isSignificantByte)) {
+          return map;
+        }
+      }
+    }
+  }
+
+  // 2. Check act.payload for a significant byte
+  if (act.payload) {
+    const map = compileToByteMap(act.payload);
+    if (Object.keys(map).length > 0 && Object.values(map).some(isSignificantByte)) {
+      return map;
+    }
+  }
+
+  // 3. Fall back to first step payload if present
+  if (Array.isArray(act.steps) && act.steps.length > 0) {
+    for (const step of act.steps) {
+      if (step && step.payload) {
+        const map = compileToByteMap(step.payload);
+        if (Object.keys(map).length > 0) return map;
+      }
+    }
+  }
+
+  // 4. Fall back to act.payload
+  if (act.payload) {
+    const map = compileToByteMap(act.payload);
+    if (Object.keys(map).length > 0) return map;
+  }
+
+  return undefined;
+}
+
+function findMatchingOptionForTrigger(cmd: Command, trig: AutomationTrigger, allowFallback = true): CommandOption | undefined {
   if (!cmd.options || cmd.options.length === 0) return undefined;
   if (trig.option_label) {
     const target = trig.option_label.toLowerCase().trim();
@@ -1043,11 +1263,9 @@ function findMatchingOptionForTrigger(cmd: Command, trig: AutomationTrigger): Co
     if (byPartial) return byPartial;
   }
   const byteKey = trig.byte || (trig.byte_index !== undefined ? `D${trig.byte_index + 1}` : undefined);
-  const trigValHex = trig.to
-    ? (trig.to.startsWith('0x') ? trig.to : `0x${trig.to}`).toLowerCase()
-    : trig.to_value !== undefined
+  const trigValHex = toHexByte(trig.to) ?? (trig.to_value !== undefined
     ? `0x${trig.to_value.toString(16).padStart(2, '0')}`.toLowerCase()
-    : undefined;
+    : undefined);
 
   for (const opt of cmd.options) {
     if (opt.match && byteKey && opt.match[byteKey]) {
@@ -1065,11 +1283,102 @@ function findMatchingOptionForTrigger(cmd: Command, trig: AutomationTrigger): Co
       }
     }
   }
-  return cmd.options.find(o => o.default) || cmd.options[0];
+  return allowFallback ? (cmd.options.find(o => o.default) || cmd.options[0]) : undefined;
+}
+
+function findBestScoredOptionForAction(
+  cmd: Command,
+  act: AutomationAction,
+  actPayload?: ByteMap
+): { opt: CommandOption; score: number } | null {
+  if (!cmd.options || cmd.options.length === 0) return null;
+
+  let bestOpt: CommandOption | null = null;
+  let highestScore = 0;
+
+  const rawLabel = act.option_label || act.command || '';
+  const labelToMatch = rawLabel.toLowerCase().trim();
+
+  for (const opt of cmd.options) {
+    let score = 0;
+    const optLabel = opt.label.toLowerCase().trim();
+
+    // 1. Label / Command matching
+    if (labelToMatch) {
+      if (optLabel === labelToMatch) {
+        score += 100;
+      } else if (optLabel.startsWith(labelToMatch) || labelToMatch.startsWith(optLabel)) {
+        score += 60;
+      } else if (optLabel.includes(labelToMatch) || labelToMatch.includes(optLabel)) {
+        score += 40;
+      }
+    }
+
+    // 2. Payload byte matching
+    if (actPayload && Object.keys(actPayload).length > 0) {
+      const optMap = compileToByteMap(opt.payload || (opt.steps && opt.steps[0]?.payload) || opt.match);
+      const optKeys = Object.keys(optMap);
+      const actKeys = Object.keys(actPayload);
+
+      if (optKeys.length > 0) {
+        let hasMismatch = false;
+        let matchCount = 0;
+        let significantMatchCount = 0;
+
+        for (const k of actKeys) {
+          if (optMap[k] !== undefined) {
+            const aVal = String(actPayload[k]).toLowerCase();
+            const oVal = String(optMap[k]).toLowerCase();
+            if (aVal === oVal) {
+              matchCount++;
+              if (isSignificantByte(aVal)) {
+                significantMatchCount++;
+              }
+            } else {
+              hasMismatch = true;
+              break;
+            }
+          }
+        }
+
+        if (hasMismatch) {
+          // If overlapping bytes mismatch, this option cannot be active
+          score = 0;
+        } else if (significantMatchCount > 0) {
+          // At least one non-idle/non-padding byte matched!
+          score += matchCount * 25 + significantMatchCount * 50;
+        } else if (matchCount > 0 && labelToMatch) {
+          score += matchCount * 10;
+        }
+      }
+    }
+
+    if (score > highestScore) {
+      highestScore = score;
+      bestOpt = opt;
+    }
+  }
+
+  return bestOpt && highestScore > 0 ? { opt: bestOpt, score: highestScore } : null;
+}
+
+function findMatchingOptionForAction(cmd: Command, act: AutomationAction, allowFallback = true): CommandOption | undefined {
+  if (!cmd.options || cmd.options.length === 0) return undefined;
+  // Fast path: if no label, command, payload, or steps to match against, return default/first option immediately
+  const hasCriteria = !!(act.option_label || act.command || act.payload || (act.steps && act.steps.length > 0));
+  if (!hasCriteria) {
+    return allowFallback ? (cmd.options.find(o => o.default) || cmd.options[0]) : undefined;
+  }
+  const actPayload = extractActionPayload(act);
+  const scored = findBestScoredOptionForAction(cmd, act, actPayload);
+  if (scored) return scored.opt;
+  return allowFallback ? (cmd.options.find(o => o.default) || cmd.options[0]) : undefined;
 }
 
 /**
  * Resolves the catalog command and matched option for an action.
+ * Handles explicit ID, common aliases (e.g. driver_seat_comfort -> drivers_seat_comfort),
+ * name patterns, and multi-candidate CAN ID disambiguation without falsely collapsing to Defogger.
  */
 export function resolveCatalogCommandForAction(
   act: AutomationAction,
@@ -1079,70 +1388,90 @@ export function resolveCatalogCommandForAction(
 
   const index = getCatalogCommandIndex(catalog.commands);
 
-  const targetId = act.source_command_id || act.entity_id;
-  if (targetId) {
-    const rawCmd = index.byId.get(targetId);
-    if (rawCmd) {
-      const cmd = resolveVariant(rawCmd, null);
-      const opt = findMatchingOptionForAction(cmd, act);
-      return { command: cmd, matchedOption: opt };
+  // 1. Direct ID or Alias match
+  const rawTargetId = act.source_command_id || act.entity_id;
+  if (rawTargetId) {
+    const normTarget = rawTargetId.toLowerCase().trim();
+    const resolvedId = index.byId.has(rawTargetId)
+      ? rawTargetId
+      : index.byId.has(normTarget)
+      ? normTarget
+      : ENTITY_ALIASES[normTarget];
+
+    if (resolvedId) {
+      const rawCmd = index.byId.get(resolvedId);
+      if (rawCmd) {
+        const cmd = resolveVariant(rawCmd, null);
+        const opt = findMatchingOptionForAction(cmd, act, true);
+        return { command: cmd, matchedOption: opt };
+      }
     }
   }
 
+  // 2. Command Name / ID hint match (e.g. act.id contains 'drivers_seat_comfort', or source_command_name has 'Driver Seat')
+  const nameHint = `${act.source_command_name || ''} ${act.id || ''}`.toLowerCase();
+  if (nameHint.trim()) {
+    for (const [alias, canonicalId] of Object.entries(ENTITY_ALIASES)) {
+      if (nameHint.includes(alias.replace(/_/g, ' ')) || nameHint.includes(alias)) {
+        const rawCmd = index.byId.get(canonicalId);
+        if (rawCmd) {
+          const cmd = resolveVariant(rawCmd, null);
+          const opt = findMatchingOptionForAction(cmd, act, true);
+          return { command: cmd, matchedOption: opt };
+        }
+      }
+    }
+  }
+
+  // 3. Match by CAN ID
   if (act.can_id) {
-    const normCanId = act.can_id.toLowerCase();
-    const candidateCmds = index.byCanId.get(normCanId) ?? [];
+    const normCanId = normalizeCanId(act.can_id);
+    const rawCands = index.byCanId.get(normCanId) ?? [];
+    const actionMatching = rawCands.filter(c => normalizeCanId(c.network?.action_can_id || c.action_can_id) === normCanId);
+    const candidateCmds = actionMatching.length > 0 ? actionMatching : rawCands;
 
     if (candidateCmds.length === 1) {
       const cmd = resolveVariant(candidateCmds[0], null);
-      const opt = findMatchingOptionForAction(cmd, act);
+      const opt = findMatchingOptionForAction(cmd, act, true);
       return { command: cmd, matchedOption: opt };
     }
 
     if (candidateCmds.length > 1) {
+      const actPayload = extractActionPayload(act);
+      let bestCandidate: { cmd: Command; opt: CommandOption; score: number } | null = null;
+
       for (const raw of candidateCmds) {
         const cmd = resolveVariant(raw, null);
-        const opt = findMatchingOptionForAction(cmd, act);
-        if (opt) return { command: cmd, matchedOption: opt };
+        const matchResult = findBestScoredOptionForAction(cmd, act, actPayload);
+        if (matchResult && matchResult.score > (bestCandidate?.score ?? 0)) {
+          bestCandidate = { cmd, opt: matchResult.opt, score: matchResult.score };
+        }
       }
-      const cmd = resolveVariant(candidateCmds[0], null);
-      return { command: cmd, matchedOption: cmd.options?.[0] };
+
+      if (bestCandidate && bestCandidate.score > 0) {
+        return { command: bestCandidate.cmd, matchedOption: bestCandidate.opt };
+      }
+
+      // Check if candidate command name or id is mentioned in nameHint
+      if (nameHint.trim()) {
+        for (const raw of candidateCmds) {
+          const cmd = resolveVariant(raw, null);
+          const cName = (cmd.ha_metadata?.name || cmd.name || cmd.id).toLowerCase();
+          if (nameHint.includes(cName) || (cName.length > 5 && nameHint.includes(cName.slice(0, 8)))) {
+            const opt = findMatchingOptionForAction(cmd, act, false) || cmd.options?.[0];
+            return { command: cmd, matchedOption: opt };
+          }
+        }
+      }
+
+      // If multiple candidates share the CAN ID and none matched specifically,
+      // DO NOT blindly return candidateCmds[0] (which is Defogger for 0x4A2).
+      // Return empty so it renders faithfully as custom CAN transmit.
+      return {};
     }
   }
 
   return {};
-}
-
-function findMatchingOptionForAction(cmd: Command, act: AutomationAction): CommandOption | undefined {
-  if (!cmd.options || cmd.options.length === 0) return undefined;
-  const labelToMatch = act.option_label || act.command;
-  if (labelToMatch) {
-    const target = labelToMatch.toLowerCase().trim();
-    const byExact = cmd.options.find(o => o.label.toLowerCase().trim() === target);
-    if (byExact) return byExact;
-    const byPartial = cmd.options.find(o => {
-      const l = o.label.toLowerCase().trim();
-      return l === target || l.startsWith(target) || target.startsWith(l);
-    });
-    if (byPartial) return byPartial;
-  }
-  if (act.payload && typeof act.payload === 'object') {
-    for (const opt of cmd.options) {
-      const optMap = compileToByteMap(opt.payload || (opt.steps && opt.steps[0]?.payload) || opt.match);
-      const optKeys = Object.keys(optMap);
-      if (optKeys.length > 0 && optKeys.every(k => {
-        const aVal = String((act.payload as any)[k] || '').toLowerCase();
-        const oVal = String(optMap[k] || '').toLowerCase();
-        return aVal === oVal;
-      })) {
-        return opt;
-      }
-    }
-    // If we tried to match a payload and none matched perfectly, don't guess the default option.
-    // This prevents trailing sequence steps (like D5: 0xFF) from falsely rendering as "Off".
-    return undefined;
-  }
-  return cmd.options.find(o => o.default) || cmd.options[0];
 }
 
 /**
@@ -1162,7 +1491,7 @@ export function resolveCatalogCommandForCondition(
     const rawCmd = index.byId.get(cond.source_command_id);
     if (rawCmd) {
       const cmd = resolveVariant(rawCmd, null);
-      const opt = findMatchingOptionForCondition(cmd, cond);
+      const opt = findMatchingOptionForCondition(cmd, cond, true);
       return { command: cmd, matchedOption: opt };
     }
   }
@@ -1173,7 +1502,7 @@ export function resolveCatalogCommandForCondition(
     for (const c of catalog.commands) {
       if (lowerId.includes(c.id.toLowerCase())) {
         const cmd = resolveVariant(c, null);
-        const opt = findMatchingOptionForCondition(cmd, cond);
+        const opt = findMatchingOptionForCondition(cmd, cond, true);
         return { command: cmd, matchedOption: opt };
       }
     }
@@ -1181,30 +1510,31 @@ export function resolveCatalogCommandForCondition(
 
   // 3. Match by CAN ID
   if (cond.can_id) {
-    const normCanId = cond.can_id.toLowerCase();
-    const candidateCmds = index.byCanId.get(normCanId) ?? [];
+    const normCanId = normalizeCanId(cond.can_id);
+    const rawCands = index.byCanId.get(normCanId) ?? [];
+    const stateMatching = rawCands.filter(c => normalizeCanId(c.network?.state_can_id || c.state_can_id) === normCanId);
+    const candidateCmds = stateMatching.length > 0 ? stateMatching : rawCands;
 
     if (candidateCmds.length === 1) {
       const cmd = resolveVariant(candidateCmds[0], null);
-      const opt = findMatchingOptionForCondition(cmd, cond);
+      const opt = findMatchingOptionForCondition(cmd, cond, true);
       return { command: cmd, matchedOption: opt };
     }
 
     if (candidateCmds.length > 1) {
       for (const raw of candidateCmds) {
         const cmd = resolveVariant(raw, null);
-        const opt = findMatchingOptionForCondition(cmd, cond);
+        const opt = findMatchingOptionForCondition(cmd, cond, false);
         if (opt) return { command: cmd, matchedOption: opt };
       }
-      const cmd = resolveVariant(candidateCmds[0], null);
-      return { command: cmd, matchedOption: cmd.options?.[0] };
+      return {};
     }
   }
 
   return {};
 }
 
-function findMatchingOptionForCondition(cmd: Command, cond: AutomationCondition): CommandOption | undefined {
+function findMatchingOptionForCondition(cmd: Command, cond: AutomationCondition, allowFallback = true): CommandOption | undefined {
   if (!cmd.options || cmd.options.length === 0) return undefined;
   if (cond.option_label) {
     const target = cond.option_label.toLowerCase().trim();
@@ -1218,9 +1548,7 @@ function findMatchingOptionForCondition(cmd: Command, cond: AutomationCondition)
   }
   const byteKey = cond.byte || cond.evaluate?.byte || (cond.match ? Object.keys(cond.match)[0] : undefined);
   const targetVal = cond.value || cond.evaluate?.value || (byteKey && cond.match ? cond.match[byteKey] : undefined);
-  const targetHex = targetVal
-    ? (targetVal.startsWith('0x') || targetVal.startsWith('0X') ? targetVal : `0x${targetVal}`).toLowerCase()
-    : undefined;
+  const targetHex = toHexByte(targetVal);
 
   if (byteKey && targetHex) {
     for (const opt of cmd.options) {
@@ -1231,7 +1559,7 @@ function findMatchingOptionForCondition(cmd: Command, cond: AutomationCondition)
     }
   }
 
-  return cmd.options.find(o => o.default) || cmd.options[0];
+  return allowFallback ? (cmd.options.find(o => o.default) || cmd.options[0]) : undefined;
 }
 
 /**
@@ -1459,3 +1787,190 @@ export function applyOptionsToCondition(
     invert: false
   };
 }
+
+/**
+ * Generates a unique short ID with a given prefix (e.g. 'act_', 'cond_', 'trg_', 'br_')
+ */
+export function generateBlockId(prefix: string = 'blk'): string {
+  const rand = Math.random().toString(36).substring(2, 8);
+  const time = Date.now().toString(36).slice(-4);
+  return `${prefix}_${time}${rand}`;
+}
+
+/**
+ * Deep-clones an object without retaining references.
+ */
+export function deepClone<T>(obj: T): T {
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(obj);
+    } catch {
+      // fallback
+    }
+  }
+  return JSON.parse(JSON.stringify(obj)) as T;
+}
+
+/**
+ * Recursively regenerates IDs for a Trigger node.
+ */
+export function regenerateTriggerIds(trigger: AutomationTrigger): AutomationTrigger {
+  const clone = deepClone(trigger) as AutomationTrigger & { _clientId?: string; id?: string };
+  clone._clientId = generateBlockId('trg');
+  clone.id = generateBlockId('trg');
+  return clone;
+}
+
+/**
+ * Recursively regenerates IDs for a Condition node and any nested condition children.
+ */
+export function regenerateConditionIds(condition: AutomationCondition): AutomationCondition {
+  const clone = deepClone(condition) as AutomationCondition & {
+    _clientId?: string;
+    id?: string;
+    conditions?: AutomationCondition[];
+    and?: AutomationCondition[];
+    or?: AutomationCondition[];
+    not?: AutomationCondition[] | AutomationCondition;
+  };
+  clone._clientId = generateBlockId('cond');
+  clone.id = generateBlockId('cond');
+  // Handle nested AND / OR / NOT condition groups if present
+  if (Array.isArray(clone.conditions)) {
+    clone.conditions = clone.conditions.map(c => regenerateConditionIds(c));
+  }
+  if (Array.isArray(clone.and)) {
+    clone.and = clone.and.map(c => regenerateConditionIds(c));
+  }
+  if (Array.isArray(clone.or)) {
+    clone.or = clone.or.map(c => regenerateConditionIds(c));
+  }
+  if (Array.isArray(clone.not)) {
+    clone.not = clone.not.map(c => regenerateConditionIds(c));
+  } else if (clone.not && typeof clone.not === 'object') {
+    clone.not = regenerateConditionIds(clone.not as AutomationCondition);
+  }
+  return clone;
+}
+
+/**
+ * Recursively regenerates IDs for a ChoiceBranch and all nested conditions/actions.
+ */
+export function regenerateBranchIds(branch: ChoiceBranch, markAsCopy = false): ChoiceBranch {
+  const clone = deepClone(branch);
+  clone._clientId = generateBlockId('br');
+  if (markAsCopy && clone.label) {
+    clone.label = clone.label.endsWith('(Copy)') ? clone.label : `${clone.label} (Copy)`;
+  }
+  clone.conditions = Array.isArray(clone.conditions)
+    ? clone.conditions.map(c => regenerateConditionIds(c))
+    : [];
+  clone.sequence = Array.isArray(clone.sequence)
+    ? clone.sequence.map(a => regenerateActionIds(a))
+    : [];
+  return clone;
+}
+
+/**
+ * Recursively regenerates IDs for an Action node, including nested Choose branches,
+ * If/Then/Else sequences, and Repeat blocks.
+ */
+export function regenerateActionIds(action: AutomationAction): AutomationAction {
+  const clone = deepClone(action) as AutomationAction & {
+    _clientId?: string;
+    id?: string;
+    choices?: ChoiceBranch[];
+    default?: AutomationAction[];
+    conditions?: AutomationCondition[];
+    if?: AutomationCondition[];
+    then?: AutomationAction[];
+    else?: AutomationAction[];
+    sequence?: AutomationAction[];
+  };
+  clone._clientId = generateBlockId('act');
+  if (clone.id) {
+    clone.id = generateBlockId('act');
+  }
+
+  // 1. Nested 'choose' branches & default sequence
+  if (Array.isArray(clone.choices)) {
+    clone.choices = clone.choices.map(b => regenerateBranchIds(b, false));
+  }
+  if (Array.isArray(clone.default)) {
+    clone.default = clone.default.map(a => regenerateActionIds(a));
+  }
+
+  // 2. Nested 'if_then' blocks
+  if (Array.isArray(clone.conditions)) {
+    clone.conditions = clone.conditions.map(c => regenerateConditionIds(c));
+  }
+  if (Array.isArray(clone.if)) {
+    clone.if = clone.if.map(c => regenerateConditionIds(c));
+  }
+  if (Array.isArray(clone.then)) {
+    clone.then = clone.then.map(a => regenerateActionIds(a));
+  }
+  if (Array.isArray(clone.else)) {
+    clone.else = clone.else.map(a => regenerateActionIds(a));
+  }
+
+  // 3. Nested 'repeat' or group sequences
+  if (Array.isArray(clone.sequence)) {
+    clone.sequence = clone.sequence.map(a => regenerateActionIds(a));
+  }
+
+  return clone;
+}
+
+/**
+ * Clones an entire AutomationRule with fresh IDs across all triggers, conditions, and actions.
+ */
+export function cloneRuleWithNewIds(rule: AutomationRule): AutomationRule {
+  const clone = deepClone(rule);
+  clone.id = generateBlockId('rule');
+  clone.name = `${clone.name || 'Automation'} (Copy)`;
+  if (Array.isArray(clone.triggers)) {
+    clone.triggers = clone.triggers.map(t => regenerateTriggerIds(t));
+  }
+  if (Array.isArray(clone.conditions)) {
+    clone.conditions = clone.conditions.map(c => regenerateConditionIds(c));
+  }
+  if (Array.isArray(clone.actions)) {
+    clone.actions = clone.actions.map(a => regenerateActionIds(a));
+  }
+  if (Array.isArray(clone.off_actions)) {
+    clone.off_actions = clone.off_actions.map(a => regenerateActionIds(a));
+  }
+  return clone;
+}
+
+/**
+ * Converts a Trigger into a Condition (or vice-versa) when cross-pasting between
+ * Trigger and Condition sections.
+ */
+export function convertTriggerToCondition(trigger: AutomationTrigger): AutomationCondition {
+  const raw = deepClone(trigger) as Record<string, any>;
+  delete raw.id;
+  delete raw._clientId;
+  return regenerateConditionIds({
+    ...raw,
+    type: raw.type === 'ble_button' ? 'ble_button' : (raw.type === 'wifi' || raw.type === 'wifi_event' ? 'wifi' : (raw.can_id ? 'can_state' : 'can_state')),
+    operator: 'equal',
+    value: raw.to ?? raw.value ?? raw.to_value ?? raw.match_payload,
+    match: raw.to_payload ?? raw.match ?? raw.match_payload,
+  } as AutomationCondition);
+}
+
+export function convertConditionToTrigger(condition: AutomationCondition): AutomationTrigger {
+  const raw = deepClone(condition) as Record<string, any>;
+  delete raw.id;
+  delete raw._clientId;
+  return regenerateTriggerIds({
+    ...raw,
+    source: raw.type === 'ble_button' ? 'ble' : (raw.type === 'wifi' ? 'wifi' : 'can'),
+    type: raw.type === 'ble_button' ? 'ble_button' : 'byte_transition',
+    to: raw.value ?? raw.state ?? (typeof raw.match === 'string' ? raw.match : undefined),
+    to_payload: raw.match ?? raw.match_payload
+  } as AutomationTrigger);
+}
+

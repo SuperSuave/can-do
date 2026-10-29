@@ -1,0 +1,620 @@
+{
+  "id": "rule_mvsyr27n",
+  "name": "New Automation Rule #2",
+  "description": "Custom CAN Do automation rule",
+  "category": "Custom",
+  "tags": [
+    "all_egmp"
+  ],
+  "enabled": true,
+  "ha_expose": true,
+  "ha_icon": "mdi:car-cog",
+  "exec_mode": "one_shot",
+  "cooldown_ms": 0,
+  "triggers": [
+    {
+      "id": "trig_ble_mvsyr5tj",
+      "source": "ble",
+      "type": "ble_button",
+      "ble_button": "key_1",
+      "ble_action": "release",
+      "_clientId": "trig_client_0_mvsyr5tl_hgg2"
+    },
+    {
+      "id": "trg_4fcs8ha113",
+      "source": "ble",
+      "type": "ble_button",
+      "ble_button": "key_1+key_2",
+      "ble_action": "release",
+      "_clientId": "trg_4fcs4tug5e"
+    },
+    {
+      "id": "trg_rjml7h60yz",
+      "source": "ble",
+      "type": "ble_button",
+      "ble_button": "key_2",
+      "ble_action": "release",
+      "_clientId": "trg_rjmlxzv0w5"
+    },
+    {
+      "id": "trg_4p692xhe84",
+      "source": "ble",
+      "type": "ble_button",
+      "ble_button": "key_2+key_3",
+      "ble_action": "release",
+      "_clientId": "trg_4p699t8xi7"
+    }
+  ],
+  "conditions": [],
+  "actions": [
+    {
+      "id": "act_choose_mvsysafm",
+      "type": "choose",
+      "choices": [
+        {
+          "conditions": [
+            {
+              "id": "cond_trig_mvsyskau",
+              "type": "triggered_by",
+              "trigger_id": "trig_ble_mvsyr5tj",
+              "_clientId": "cond_client_0_mvsyskb4_zedt"
+            }
+          ],
+          "sequence": [
+            {
+              "id": "act_wait_mvsz7rwy",
+              "type": "wait_for",
+              "timeout_ms": 10000,
+              "delay_ms": 2000,
+              "interval_ms": 50,
+              "condition": {
+                "id": "cond_or_mvszd107",
+                "logic": "or",
+                "conditions": [
+                  {
+                    "id": "cond_ble_btn_mvszd65n",
+                    "type": "ble_button",
+                    "ble_button": "key_1",
+                    "ble_action": "release",
+                    "_clientId": "cond_client_0_mvszd660_usbn",
+                    "target_string": "key_1"
+                  },
+                  {
+                    "id": "cond_djr9nb4glq",
+                    "type": "ble_button",
+                    "ble_button": "key_2",
+                    "ble_action": "release",
+                    "_clientId": "cond_djr9zt6a7g",
+                    "target_string": "key_2"
+                  },
+                  {
+                    "id": "cond_dmqepxacbo",
+                    "type": "ble_button",
+                    "ble_button": "key_3",
+                    "ble_action": "release",
+                    "_clientId": "cond_dmqekpcjx3",
+                    "target_string": "key_3"
+                  }
+                ],
+                "_clientId": "cond_client_0_mvszd10j_koku"
+              },
+              "_clientId": "act_client_0_mvsz7rx8_2qif",
+              "conditions": [
+                {
+                  "id": "cond_or_mvszd107",
+                  "logic": "or",
+                  "conditions": [
+                    {
+                      "id": "cond_ble_btn_mvszd65n",
+                      "type": "ble_button",
+                      "ble_button": "key_1",
+                      "ble_action": "release",
+                      "_clientId": "cond_client_0_mvszd660_usbn",
+                      "target_string": "key_1"
+                    },
+                    {
+                      "id": "cond_djr9nb4glq",
+                      "type": "ble_button",
+                      "ble_button": "key_2",
+                      "ble_action": "release",
+                      "_clientId": "cond_djr9zt6a7g",
+                      "target_string": "key_2"
+                    },
+                    {
+                      "id": "cond_dmqepxacbo",
+                      "type": "ble_button",
+                      "ble_button": "key_3",
+                      "ble_action": "release",
+                      "_clientId": "cond_dmqekpcjx3",
+                      "target_string": "key_3"
+                    }
+                  ],
+                  "_clientId": "cond_client_0_mvszd10j_koku"
+                }
+              ]
+            },
+            {
+              "id": "act_choose_mvsz8sn7",
+              "type": "choose",
+              "choices": [
+                {
+                  "conditions": [
+                    {
+                      "id": "cond_ble_btn_mvsz8z5y",
+                      "type": "ble_button",
+                      "ble_button": "key_1",
+                      "ble_action": "release",
+                      "_clientId": "cond_client_0_mvsz8z6a_gpu1",
+                      "target_string": "key_1"
+                    }
+                  ],
+                  "sequence": [
+                    {
+                      "id": "act_drivers_seat_comfort_9hd1",
+                      "type": "can_tx",
+                      "can_id": "0x4A2",
+                      "bus": 0,
+                      "payload": {
+                        "D5": "0x3F"
+                      },
+                      "repeat": 3,
+                      "delay_ms": 20,
+                      "steps": [
+                        {
+                          "can_id": "0x4A2",
+                          "bus": 0,
+                          "payload": {
+                            "D5": "0x3F"
+                          },
+                          "repeat": 3,
+                          "delay_ms": 0
+                        },
+                        {
+                          "can_id": "0x4A2",
+                          "bus": 0,
+                          "payload": {
+                            "D5": "0xFF"
+                          },
+                          "repeat": 3,
+                          "delay_ms": 0
+                        }
+                      ],
+                      "entity_id": "drivers_seat_comfort",
+                      "command": "Low Cool",
+                      "option_label": "Low Cool",
+                      "source_command_id": "drivers_seat_comfort",
+                      "source_command_name": "Driver Seat Comfort",
+                      "popup_message": "Driver Seat: Cool Low",
+                      "_clientId": "act_client_0_mvsz9hde_uatz"
+                    },
+                    {
+                      "id": "act_pop_mvsz9uz8",
+                      "type": "track_popup",
+                      "level": "info",
+                      "text": "Driver Seat: Vent Low",
+                      "_clientId": "act_client_1_mvsz9uzm_8a8v",
+                      "popup_message": "Driver Seat: Vent Low"
+                    }
+                  ],
+                  "label": "Driver Low Cool"
+                },
+                {
+                  "conditions": [
+                    {
+                      "id": "cond_eeim1hbf58",
+                      "type": "ble_button",
+                      "ble_button": "key_2",
+                      "ble_action": "release",
+                      "_clientId": "cond_eeim6laji0",
+                      "target_string": "key_2"
+                    }
+                  ],
+                  "sequence": [
+                    {
+                      "id": "act_eeineieaq1",
+                      "type": "can_tx",
+                      "can_id": "0x4A2",
+                      "bus": 0,
+                      "payload": {
+                        "D5": "0x4F"
+                      },
+                      "repeat": 3,
+                      "delay_ms": 20,
+                      "steps": [
+                        {
+                          "can_id": "0x4A2",
+                          "bus": 0,
+                          "payload": {
+                            "D5": "0x4F"
+                          },
+                          "repeat": 3,
+                          "delay_ms": 0
+                        },
+                        {
+                          "can_id": "0x4A2",
+                          "bus": 0,
+                          "payload": {
+                            "D5": "0xFF"
+                          },
+                          "repeat": 3,
+                          "delay_ms": 0
+                        }
+                      ],
+                      "entity_id": "drivers_seat_comfort",
+                      "command": "Medium Cool",
+                      "option_label": "Medium Cool",
+                      "source_command_id": "drivers_seat_comfort",
+                      "source_command_name": "Driver Seat Comfort",
+                      "popup_message": "Driver Seat: Cool Med",
+                      "_clientId": "act_eeinl2hmda"
+                    },
+                    {
+                      "id": "act_eeinrnvslp",
+                      "type": "track_popup",
+                      "level": "info",
+                      "text": "Driver Seat: Vent Med",
+                      "_clientId": "act_eeinr7pc39",
+                      "popup_message": "Driver Seat: Vent Med"
+                    }
+                  ],
+                  "label": "Driver Med Cool",
+                  "_clientId": "br_eeimh2l7ti"
+                },
+                {
+                  "conditions": [
+                    {
+                      "id": "cond_f736h99tru",
+                      "type": "ble_button",
+                      "ble_button": "key_3",
+                      "ble_action": "release",
+                      "_clientId": "cond_f736lrkm70",
+                      "target_string": "key_3"
+                    }
+                  ],
+                  "sequence": [
+                    {
+                      "id": "act_f73626oxx6",
+                      "type": "can_tx",
+                      "can_id": "0x4A2",
+                      "bus": 0,
+                      "payload": {
+                        "D5": "0x5F"
+                      },
+                      "repeat": 3,
+                      "delay_ms": 20,
+                      "steps": [
+                        {
+                          "can_id": "0x4A2",
+                          "bus": 0,
+                          "payload": {
+                            "D5": "0x5F"
+                          },
+                          "repeat": 3,
+                          "delay_ms": 0
+                        },
+                        {
+                          "can_id": "0x4A2",
+                          "bus": 0,
+                          "payload": {
+                            "D5": "0xFF"
+                          },
+                          "repeat": 3,
+                          "delay_ms": 0
+                        }
+                      ],
+                      "entity_id": "drivers_seat_comfort",
+                      "command": "High Cool",
+                      "option_label": "High Cool",
+                      "source_command_id": "drivers_seat_comfort",
+                      "source_command_name": "Driver Seat Comfort",
+                      "popup_message": "Driver Seat: Cool High",
+                      "_clientId": "act_f736qtf8vq"
+                    },
+                    {
+                      "id": "act_f736r6hobx",
+                      "type": "track_popup",
+                      "level": "info",
+                      "text": "Driver Seat: Vent High",
+                      "_clientId": "act_f736q24osd",
+                      "popup_message": "Driver Seat: Vent High"
+                    }
+                  ],
+                  "label": "Driver High Cool",
+                  "_clientId": "br_f736wtch4w"
+                }
+              ],
+              "default": [],
+              "_clientId": "act_client_1_mvsz8sng_dy4u"
+            }
+          ],
+          "label": "Driver's Seat Vent"
+        },
+        {
+          "conditions": [
+            {
+              "id": "cond_gkc22aest8",
+              "type": "triggered_by",
+              "trigger_id": "trg_4fcs8ha113",
+              "_clientId": "cond_gkc2idr1bf"
+            }
+          ],
+          "sequence": [
+            {
+              "id": "act_gkc2dr0h8l",
+              "type": "wait_for",
+              "timeout_ms": 10000,
+              "delay_ms": 2000,
+              "interval_ms": 50,
+              "condition": {
+                "id": "cond_or_mvszd107",
+                "logic": "or",
+                "conditions": [
+                  {
+                    "id": "cond_ble_btn_mvszd65n",
+                    "type": "ble_button",
+                    "ble_button": "key_1",
+                    "ble_action": "release",
+                    "_clientId": "cond_client_0_mvszd660_usbn",
+                    "target_string": "key_1"
+                  },
+                  {
+                    "id": "cond_djr9nb4glq",
+                    "type": "ble_button",
+                    "ble_button": "key_2",
+                    "ble_action": "release",
+                    "_clientId": "cond_djr9zt6a7g",
+                    "target_string": "key_2"
+                  },
+                  {
+                    "id": "cond_dmqepxacbo",
+                    "type": "ble_button",
+                    "ble_button": "key_3",
+                    "ble_action": "release",
+                    "_clientId": "cond_dmqekpcjx3",
+                    "target_string": "key_3"
+                  }
+                ],
+                "_clientId": "cond_client_0_mvszd10j_koku"
+              },
+              "_clientId": "act_gkc2p7hrqd",
+              "conditions": [
+                {
+                  "id": "cond_gkc2yw65oi",
+                  "logic": "or",
+                  "conditions": [
+                    {
+                      "id": "cond_gkc20s7203",
+                      "type": "ble_button",
+                      "ble_button": "key_1",
+                      "ble_action": "release",
+                      "_clientId": "cond_gkc2hsyvh4",
+                      "target_string": "key_1"
+                    },
+                    {
+                      "id": "cond_gkc2d4cx40",
+                      "type": "ble_button",
+                      "ble_button": "key_2",
+                      "ble_action": "release",
+                      "_clientId": "cond_gkc2p392on",
+                      "target_string": "key_2"
+                    },
+                    {
+                      "id": "cond_gkc2f8dbuw",
+                      "type": "ble_button",
+                      "ble_button": "key_3",
+                      "ble_action": "release",
+                      "_clientId": "cond_gkc21gaegl",
+                      "target_string": "key_3"
+                    }
+                  ],
+                  "_clientId": "cond_gkc2snzu8u"
+                }
+              ]
+            },
+            {
+              "id": "act_gkc2o89axn",
+              "type": "choose",
+              "choices": [
+                {
+                  "conditions": [
+                    {
+                      "id": "cond_gkc24vn272",
+                      "type": "ble_button",
+                      "ble_button": "key_1",
+                      "ble_action": "release",
+                      "_clientId": "cond_gkc2kqds5o",
+                      "target_string": "key_1"
+                    }
+                  ],
+                  "sequence": [
+                    {
+                      "id": "act_gkc2w4eids",
+                      "type": "can_tx",
+                      "can_id": "0x4A2",
+                      "bus": 0,
+                      "payload": {
+                        "D5": "0x6F"
+                      },
+                      "repeat": 3,
+                      "delay_ms": 20,
+                      "steps": [
+                        {
+                          "can_id": "0x4A2",
+                          "bus": 0,
+                          "payload": {
+                            "D5": "0x6F"
+                          },
+                          "repeat": 3,
+                          "delay_ms": 0
+                        },
+                        {
+                          "can_id": "0x4A2",
+                          "bus": 0,
+                          "payload": {
+                            "D5": "0xFF"
+                          },
+                          "repeat": 3,
+                          "delay_ms": 0
+                        }
+                      ],
+                      "entity_id": "drivers_seat_comfort",
+                      "command": "Low Heat",
+                      "option_label": "Low Heat",
+                      "source_command_id": "drivers_seat_comfort",
+                      "source_command_name": "Driver Seat Comfort",
+                      "popup_message": "Driver Seat: Heat Low",
+                      "_clientId": "act_gkc2axh2iy"
+                    },
+                    {
+                      "id": "act_gkc2mgffhj",
+                      "type": "track_popup",
+                      "level": "info",
+                      "text": "Driver Seat: Low Heat",
+                      "_clientId": "act_gkc2otw2ld",
+                      "popup_message": "Driver Seat: Low Heat"
+                    }
+                  ],
+                  "label": "Driver Low Heat",
+                  "_clientId": "br_gkc2v52gma"
+                },
+                {
+                  "conditions": [
+                    {
+                      "id": "cond_gkc2d9pxxn",
+                      "type": "ble_button",
+                      "ble_button": "key_2",
+                      "ble_action": "release",
+                      "_clientId": "cond_gkc2t4pd2a",
+                      "target_string": "key_2"
+                    }
+                  ],
+                  "sequence": [
+                    {
+                      "id": "act_gkc2cbvq3b",
+                      "type": "can_tx",
+                      "can_id": "0x4A2",
+                      "bus": 0,
+                      "payload": {
+                        "D5": "0x7F"
+                      },
+                      "repeat": 3,
+                      "delay_ms": 20,
+                      "steps": [
+                        {
+                          "can_id": "0x4A2",
+                          "bus": 0,
+                          "payload": {
+                            "D5": "0x7F"
+                          },
+                          "repeat": 3,
+                          "delay_ms": 0
+                        },
+                        {
+                          "can_id": "0x4A2",
+                          "bus": 0,
+                          "payload": {
+                            "D5": "0xFF"
+                          },
+                          "repeat": 3,
+                          "delay_ms": 0
+                        }
+                      ],
+                      "entity_id": "drivers_seat_comfort",
+                      "command": "Medium Heat",
+                      "option_label": "Medium Heat",
+                      "source_command_id": "drivers_seat_comfort",
+                      "source_command_name": "Driver Seat Comfort",
+                      "popup_message": "Driver Seat: Heat Med",
+                      "_clientId": "act_gkc2nbqy6u"
+                    },
+                    {
+                      "id": "act_gkc23z07mj",
+                      "type": "track_popup",
+                      "level": "info",
+                      "text": "Driver Seat: Med Heat",
+                      "_clientId": "act_gkc280upqz",
+                      "popup_message": "Driver Seat: Med Heat"
+                    }
+                  ],
+                  "label": "Driver Med Heat",
+                  "_clientId": "br_gkc2lqghvg"
+                },
+                {
+                  "conditions": [
+                    {
+                      "id": "cond_gkc2vhvu02",
+                      "type": "ble_button",
+                      "ble_button": "key_3",
+                      "ble_action": "release",
+                      "_clientId": "cond_gkc2wrcode",
+                      "target_string": "key_3"
+                    }
+                  ],
+                  "sequence": [
+                    {
+                      "id": "act_gkc2p9koue",
+                      "type": "can_tx",
+                      "can_id": "0x4A2",
+                      "bus": 0,
+                      "payload": {
+                        "D5": "0x8F"
+                      },
+                      "repeat": 3,
+                      "delay_ms": 20,
+                      "steps": [
+                        {
+                          "can_id": "0x4A2",
+                          "bus": 0,
+                          "payload": {
+                            "D5": "0x8F"
+                          },
+                          "repeat": 3,
+                          "delay_ms": 0
+                        },
+                        {
+                          "can_id": "0x4A2",
+                          "bus": 0,
+                          "payload": {
+                            "D5": "0xFF"
+                          },
+                          "repeat": 3,
+                          "delay_ms": 0
+                        }
+                      ],
+                      "entity_id": "drivers_seat_comfort",
+                      "command": "High Heat",
+                      "option_label": "High Heat",
+                      "source_command_id": "drivers_seat_comfort",
+                      "source_command_name": "Driver Seat Comfort",
+                      "popup_message": "Driver Seat: Heat High",
+                      "_clientId": "act_gkc2bd6bw9"
+                    },
+                    {
+                      "id": "act_gkc2tbalo1",
+                      "type": "track_popup",
+                      "level": "info",
+                      "text": "Driver Seat: High Heat",
+                      "_clientId": "act_gkc2yh523a",
+                      "popup_message": "Driver Seat: High Heat"
+                    }
+                  ],
+                  "label": "Driver High Heat",
+                  "_clientId": "br_gkc20d1qgn"
+                }
+              ],
+              "default": [],
+              "_clientId": "act_gkc2irchaj"
+            }
+          ],
+          "label": "Driver's Seat Heat",
+          "_clientId": "br_gkc2jpek4x"
+        }
+      ],
+      "default": [],
+      "_clientId": "act_client_0_mvsysaft_lu7d"
+    }
+  ],
+  "contributor": {
+    "name": "Community Contributor"
+  }
+}

@@ -29,7 +29,8 @@ import {
   X,
   ChevronRight,
   Shield,
-  Send
+  Send,
+  RotateCw
 } from 'lucide-react';
 
 export interface AddElementTarget {
@@ -428,6 +429,23 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           type: 'climate_target',
           zone: 'driver',
           sync_on: true
+        })
+      },
+      {
+        id: 'cycle_entity',
+        title: 'Cycle Entity State (Stepper)',
+        desc: 'Cycle through levels/states (e.g. Off -> Low -> Med -> High) with optional HUD toast feedback',
+        icon: RotateCw,
+        color: 'text-amber-400 bg-amber-950/40 border-amber-800/60',
+        create: (): AutomationAction => ({
+          id: `act_cycle_${Date.now().toString(36)}`,
+          type: 'cycle_entity',
+          entity_id: 'drivers_seat_comfort',
+          states: ['Off', 'Low Heat', 'Medium Heat', 'High Heat'],
+          direction: 'forward',
+          wrap: true,
+          show_popup: true,
+          popup_prefix: 'Driver Seat: '
         })
       },
       {

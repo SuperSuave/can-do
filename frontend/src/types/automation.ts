@@ -51,6 +51,9 @@ export interface AutomationTrigger {
   beacon_minor?: number;
   // Wi-Fi / Device trigger fields
   wifi_event?: 'wifi_connected' | 'wifi_disconnected' | 'ap_client_connected' | 'ap_client_disconnected' | string;
+  device_property?: string;
+  command_name?: string;
+  name?: string;
   ssid?: string;
   client_mac?: string;
   target_rssi?: number;
@@ -110,9 +113,37 @@ export interface AutomationCondition {
   beacon_minor?: number;
 }
 
-export interface AutomationActionChoice {
+export interface ChoiceBranch {
+  _clientId?: string;
+  label?: string; // Friendly custom branch name (e.g., "Low Heat ➔ Med Heat")
   conditions: AutomationCondition[];
   sequence: AutomationAction[];
+}
+
+export type AutomationActionChoice = ChoiceBranch;
+
+export interface CycleEntityAction {
+  id?: string;
+  _clientId?: string;
+  type: 'cycle_entity';
+  entity_id: string;
+  states: string[];
+  direction?: 'forward' | 'reverse';
+  wrap?: boolean;
+  fallback_state?: string;
+  show_popup?: boolean;
+  popup_prefix?: string;
+}
+
+export type ClipboardBlockType = 'action' | 'condition' | 'branch' | 'choice_branch' | 'trigger';
+
+export interface AutomationClipboardItem {
+  type: ClipboardBlockType;
+  payload: any;
+  data?: any;
+  label: string;
+  timestamp?: number;
+  copiedAt?: number;
 }
 
 export interface AutomationActionStep {
@@ -132,7 +163,7 @@ export type PopupLevel = 'info' | 'warning' | 'error';
 export interface AutomationAction {
   id: string;
   _clientId?: string;
-  type: 'can_tx' | 'transmit' | 'entity_command' | 'delay' | 'precondition' | 'climate_target' | 'webhook' | 'choose' | 'if_then' | 'track_popup' | 'popup' | 'repeat_until' | 'wait_for' | string;
+  type: 'can_tx' | 'transmit' | 'entity_command' | 'delay' | 'precondition' | 'climate_target' | 'webhook' | 'choose' | 'if_then' | 'track_popup' | 'popup' | 'repeat_until' | 'wait_for' | 'cycle_entity' | string;
   level?: PopupLevel;
   text?: string;
   popup_message?: string;
@@ -145,6 +176,7 @@ export interface AutomationAction {
   can_id?: string;
   bus?: number;
   entity_id?: string;
+  target_command_id?: string;
   command?: string;
   payload?: string | ByteMap;
   to_payload?: string | ByteMap;
@@ -158,6 +190,13 @@ export interface AutomationAction {
   source_command_id?: string;
   source_command_name?: string;
   option_label?: string;
+  // For cycle_entity
+  states?: string[];
+  direction?: 'forward' | 'reverse';
+  wrap?: boolean;
+  fallback_state?: string;
+  show_popup?: boolean;
+  popup_prefix?: string;
   webhook_url?: string;
   webhook_method?: 'GET' | 'POST';
 

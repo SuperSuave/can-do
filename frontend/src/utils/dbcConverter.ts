@@ -185,7 +185,7 @@ export function exportToDbc(catalog: Catalog, options: DbcExportOptions = {}): s
   // Group commands by can_id
   const messageGroups = new Map<string, Command[]>();
   commands.forEach(cmd => {
-    const canId = cmd.state_can_id ? cmd.state_can_id.toLowerCase().trim() : '0x000';
+    const canId = cmd.state_can_id ? String(cmd.state_can_id).toLowerCase().trim() : '0x000';
     if (!messageGroups.has(canId)) {
       messageGroups.set(canId, []);
     }

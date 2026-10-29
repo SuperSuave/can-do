@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { AutomationRule, AutomationSettings } from '../types/automation';
+import { AutomationRule, AutomationSettings, AutomationTrigger, AutomationCondition, AutomationAction } from '../types/automation';
+import { formatCanId, formatHexByte, compileToByteMap } from '../utils/automationConverters';
 import {
   X,
   Upload,
@@ -38,6 +39,124 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
 
   if (!isOpen) return null;
 
+  const sanitizeTrigger = (t: any): AutomationTrigger => {
+    if (!t || typeof t !== 'object') return t;
+    const clone = { ...t };
+    if (clone.can_id !== undefined && clone.can_id !== null) {
+      clone.can_id = formatCanId(clone.can_id);
+    }
+    if (clone.from !== undefined && clone.from !== null) {
+      clone.from = formatHexByte(clone.from) || clone.from;
+    }
+    if (clone.to !== undefined && clone.to !== null) {
+      clone.to = formatHexByte(clone.to) || clone.to;
+    }
+    if (clone.mask !== undefined && clone.mask !== null) {
+      clone.mask = typeof clone.mask === 'object' ? compileToByteMap(clone.mask) : (formatHexByte(clone.mask) || clone.mask);
+    }
+    if (clone.match && typeof clone.match === 'object') {
+      clone.match = compileToByteMap(clone.match);
+    }
+    if (clone.to_payload && typeof clone.to_payload === 'object') {
+      clone.to_payload = compileToByteMap(clone.to_payload);
+    }
+    return clone;
+  };
+
+  const sanitizeCondition = (c: any): AutomationCondition => {
+    if (!c || typeof c !== 'object') return c;
+    const clone = { ...c };
+    if (clone.can_id !== undefined && clone.can_id !== null) {
+      clone.can_id = formatCanId(clone.can_id);
+    }
+    if (clone.value !== undefined && clone.value !== null) {
+      clone.value = formatHexByte(clone.value) || clone.value;
+    }
+    if (clone.mask !== undefined && clone.mask !== null) {
+      clone.mask = typeof clone.mask === 'object' ? compileToByteMap(clone.mask) : (formatHexByte(clone.mask) || clone.mask);
+    }
+    if (clone.match && typeof clone.match === 'object') {
+      clone.match = compileToByteMap(clone.match);
+    }
+    if (clone.evaluate && typeof clone.evaluate === 'object') {
+      clone.evaluate = {
+        ...clone.evaluate,
+        value: clone.evaluate.value !== undefined ? (formatHexByte(clone.evaluate.value) || clone.evaluate.value) : clone.evaluate.value,
+        mask: clone.evaluate.mask !== undefined ? (typeof clone.evaluate.mask === 'object' ? compileToByteMap(clone.evaluate.mask) : (formatHexByte(clone.evaluate.mask) || clone.evaluate.mask)) : clone.evaluate.mask
+      };
+    }
+    if (Array.isArray(clone.conditions)) {
+      clone.conditions = clone.conditions.map(sanitizeCondition);
+    }
+    if (Array.isArray(clone.and)) {
+      clone.and = clone.and.map(sanitizeCondition);
+    }
+    if (Array.isArray(clone.or)) {
+      clone.or = clone.or.map(sanitizeCondition);
+    }
+    if (Array.isArray(clone.not)) {
+      clone.not = clone.not.map(sanitizeCondition);
+    } else if (clone.not && typeof clone.not === 'object') {
+      clone.not = sanitizeCondition(clone.not);
+    }
+    return clone;
+  };
+
+  const sanitizeAction = (a: any): AutomationAction => {
+    if (!a || typeof a !== 'object') return a;
+    const clone = { ...a };
+    if (clone.can_id !== undefined && clone.can_id !== null) {
+      clone.can_id = formatCanId(clone.can_id);
+    }
+    if (clone.payload !== undefined && clone.payload !== null) {
+      const c = compileToByteMap(clone.payload);
+      if (Object.keys(c).length > 0) clone.payload = c;
+    }
+    if (Array.isArray(clone.steps)) {
+      clone.steps = clone.steps.map((s: any) => {
+        if (!s || typeof s !== 'object') return s;
+        const sClone = { ...s };
+        if (sClone.can_id !== undefined && sClone.can_id !== null) {
+          sClone.can_id = formatCanId(sClone.can_id);
+        }
+        if (sClone.payload !== undefined && sClone.payload !== null) {
+          const sc = compileToByteMap(sClone.payload);
+          if (Object.keys(sc).length > 0) sClone.payload = sc;
+        }
+        return sClone;
+      });
+    }
+    if (Array.isArray(clone.choices)) {
+      clone.choices = clone.choices.map((ch: any) => ({
+        ...ch,
+        conditions: Array.isArray(ch.conditions) ? ch.conditions.map(sanitizeCondition) : [],
+        sequence: Array.isArray(ch.sequence) ? ch.sequence.map(sanitizeAction) : []
+      }));
+    }
+    if (Array.isArray(clone.default)) {
+      clone.default = clone.default.map(sanitizeAction);
+    }
+    if (Array.isArray(clone.conditions)) {
+      clone.conditions = clone.conditions.map(sanitizeCondition);
+    }
+    if (clone.condition && typeof clone.condition === 'object') {
+      clone.condition = sanitizeCondition(clone.condition);
+    }
+    if (Array.isArray(clone.if)) {
+      clone.if = clone.if.map(sanitizeCondition);
+    }
+    if (Array.isArray(clone.then)) {
+      clone.then = clone.then.map(sanitizeAction);
+    }
+    if (Array.isArray(clone.else)) {
+      clone.else = clone.else.map(sanitizeAction);
+    }
+    if (Array.isArray(clone.sequence)) {
+      clone.sequence = clone.sequence.map(sanitizeAction);
+    }
+    return clone;
+  };
+
   const normalizeImportedRule = (rawRule: any, idx: number): AutomationRule => {
     return {
       id:
@@ -55,10 +174,10 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
       trigger_mode: rawRule.trigger_mode || 'any',
       cooldown_ms: Number(rawRule.cooldown_ms) || 0,
       timeout_reset_ms: Number(rawRule.timeout_reset_ms) || 0,
-      triggers: Array.isArray(rawRule.triggers) ? rawRule.triggers : [],
-      conditions: Array.isArray(rawRule.conditions) ? rawRule.conditions : [],
-      actions: Array.isArray(rawRule.actions) ? rawRule.actions : [],
-      off_actions: Array.isArray(rawRule.off_actions) ? rawRule.off_actions : undefined
+      triggers: Array.isArray(rawRule.triggers) ? rawRule.triggers.map(sanitizeTrigger) : [],
+      conditions: Array.isArray(rawRule.conditions) ? rawRule.conditions.map(sanitizeCondition) : [],
+      actions: Array.isArray(rawRule.actions) ? rawRule.actions.map(sanitizeAction) : [],
+      off_actions: Array.isArray(rawRule.off_actions) ? rawRule.off_actions.map(sanitizeAction) : undefined
     };
   };
 

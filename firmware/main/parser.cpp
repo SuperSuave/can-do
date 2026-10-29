@@ -632,8 +632,36 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         if (cJSON_IsNumber(timeout)) step.timeout_ms = static_cast<uint32_t>(timeout->valueint);
 
         cJSON* cond_obj = cJSON_GetObjectItem(a_item, "condition");
+        cJSON* conds_arr = cJSON_GetObjectItem(a_item, "conditions");
         if (cond_obj && cJSON_IsObject(cond_obj)) {
             parse_single_condition(cond_obj, step.condition);
+            // If condition was a leaf but conditions array contains multiple items, treat as OR group
+            if (step.condition.logic == ConditionLogic::LEAF && cJSON_IsArray(conds_arr) && cJSON_GetArraySize(conds_arr) > 1) {
+                step.condition.logic = ConditionLogic::OR_GROUP;
+                step.condition.type = "or_group";
+                step.condition.sub_conditions.clear();
+                cJSON* sub = nullptr;
+                cJSON_ArrayForEach(sub, conds_arr) {
+                    AutomationCondition sub_cond;
+                    if (parse_single_condition(sub, sub_cond)) {
+                        step.condition.sub_conditions.push_back(sub_cond);
+                    }
+                }
+            }
+        } else if (cJSON_IsArray(conds_arr)) {
+            if (cJSON_GetArraySize(conds_arr) == 1) {
+                parse_single_condition(cJSON_GetArrayItem(conds_arr, 0), step.condition);
+            } else if (cJSON_GetArraySize(conds_arr) > 1) {
+                step.condition.logic = ConditionLogic::OR_GROUP;
+                step.condition.type = "or_group";
+                cJSON* sub = nullptr;
+                cJSON_ArrayForEach(sub, conds_arr) {
+                    AutomationCondition sub_cond;
+                    if (parse_single_condition(sub, sub_cond)) {
+                        step.condition.sub_conditions.push_back(sub_cond);
+                    }
+                }
+            }
         }
 
         cJSON* seq_arr = cJSON_GetObjectItem(a_item, "sequence");

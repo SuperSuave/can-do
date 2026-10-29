@@ -315,7 +315,11 @@ bool evaluate_condition(const AutomationCondition& cond) {
             if (cond.type == "ble_button" || cond.type == "ble" || cond.type == "bluetooth") {
                 uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
                 uint32_t threshold_ms = (s_wait_for_start_ms > 0) ? s_wait_for_start_ms : (now_ms > 2500 ? now_ms - 2500 : 0);
-                if (s_last_ble_event.timestamp_ms < threshold_ms) {
+                if (s_wait_for_start_ms > 0) {
+                    if (s_last_ble_event.timestamp_ms <= s_wait_for_start_ms) {
+                        return false;
+                    }
+                } else if (s_last_ble_event.timestamp_ms < threshold_ms) {
                     return false;
                 }
 

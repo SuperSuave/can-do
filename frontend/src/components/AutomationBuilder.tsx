@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback, useContext, createContext } from 'react';
 import mqtt from 'mqtt';
 import {
   AutomationRule,
@@ -6,7 +6,11 @@ import {
   AutomationTrigger,
   AutomationCondition,
   AutomationAction,
-  AutomationActionStep
+  AutomationActionStep,
+  ChoiceBranch,
+  CycleEntityAction,
+  ClipboardBlockType,
+  AutomationClipboardItem
 } from '../types/automation';
 import { Catalog, Command, CommandOption } from '../types/catalog';
 import {
@@ -21,7 +25,17 @@ import {
   applyOptionToTrigger,
   applyOptionToCondition,
   applyOptionsToCondition,
-  applyOptionToAction
+  applyOptionToAction,
+  regenerateActionIds,
+  regenerateConditionIds,
+  regenerateTriggerIds,
+  regenerateBranchIds,
+  cloneRuleWithNewIds,
+  convertTriggerToCondition,
+  convertConditionToTrigger,
+  deepClone,
+  normalizeCanId,
+  formatCanId
 } from '../utils/automationConverters';
 import { getDefaultEspIp, resolveDeviceBaseUrl, isRunningOnDevice } from '../utils/hostUtils';
 import { deviceWs } from '../services/deviceWs';
@@ -73,7 +87,11 @@ import {
   Share2,
   Users,
   HelpCircle,
-  XCircle
+  XCircle,
+  Clipboard,
+  ClipboardCopy,
+  ClipboardPaste,
+  ClipboardCheck
 } from 'lucide-react';
 import { AddElementModal, AddElementTarget } from './AddElementModal';
 import { CommunityAutomationsModal } from './CommunityAutomationsModal';
@@ -100,6 +118,22 @@ interface OptionGridGroup {
     origIndex: number;
   }[];
 }
+
+export const CLIPBOARD_STORAGE_KEY = 'can_do_automation_clipboard_v1';
+
+export interface AutomationClipboardContextType {
+  clipboard: AutomationClipboardItem | null;
+  copyToClipboard: (type: ClipboardBlockType, data: any, label: string) => void;
+  clearClipboard: () => void;
+  pastePayload: (targetType: ClipboardBlockType) => any;
+}
+
+export const AutomationClipboardContext = createContext<AutomationClipboardContextType>({
+  clipboard: null,
+  copyToClipboard: () => {},
+  clearClipboard: () => {},
+  pastePayload: () => null
+});
 
 /**
  * Groups command options into rows/grids based on common words (e.g. "Heat", "Cool", "Vent", "Front", "Rear").
@@ -264,7 +298,7 @@ export function isOptionCurrentlyValid(
 
   // 2. Check byte/payload match against live frame
   if (!canId || !liveFrames) return false;
-  const normCanId = canId.trim().toLowerCase();
+  const normCanId = normalizeCanId(canId);
   const frame = liveFrames.get(normCanId);
   if (!frame || !frame.data) return false;
 
@@ -544,7 +578,7 @@ export function evaluateConditionState(
   }
 
   // Leaf CAN / Catalog command condition
-  const cid = (cond.can_id || '').trim().toLowerCase();
+  const cid = normalizeCanId(cond.can_id);
   if (!cid) {
     return { state: 'unknown', reason: 'No CAN ID defined' };
   }
@@ -806,6 +840,7 @@ function ConditionNodeEditor({
   isLast,
   onOpenAddConditionDialog
 }: ConditionNodeEditorProps) {
+  const { copyToClipboard } = useContext(AutomationClipboardContext);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [multiSelectMode, setMultiSelectMode] = useState<boolean>(() => {
     return !!(cond.selected_options && cond.selected_options.length > 1) ||
@@ -844,6 +879,8 @@ function ConditionNodeEditor({
     </div>
   );
 
+  const condDisplayName = cond.source_command_name || cond.option_label || cond.type || 'Condition';
+
   const actionButtons = (
     <div className="flex items-center gap-1 shrink-0 flex-wrap">
       {validityBadge}
@@ -879,6 +916,14 @@ function ConditionNodeEditor({
           <Copy className="w-3.5 h-3.5" />
         </button>
       )}
+      <button
+        type="button"
+        onClick={() => copyToClipboard('condition', cond, condDisplayName)}
+        className="p-1 text-slate-500 hover:text-purple-400 transition shrink-0"
+        title="Copy condition to clipboard"
+      >
+        <ClipboardCopy className="w-3.5 h-3.5" />
+      </button>
       <button
         type="button"
         onClick={onDelete}
@@ -1891,6 +1936,8 @@ function ConditionListEditor({
   onUpdate,
   onOpenAddConditionDialog
 }: ConditionListEditorProps) {
+  const { clipboard, pastePayload } = useContext(AutomationClipboardContext);
+
   const addDefaultCondition = () => {
     const next = [...conditions];
     next.push({
@@ -1947,9 +1994,7 @@ function ConditionListEditor({
                           onUpdate(next);
                         }}
                         onDuplicate={() => {
-                          const dup: AutomationCondition = JSON.parse(JSON.stringify(c));
-                          dup.id = `cond_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-                          delete dup._clientId;
+                          const dup = regenerateConditionIds(c);
                           const next = [...conditions];
                           next.splice(idx + 1, 0, dup);
                           onUpdate(next);
@@ -1977,20 +2022,52 @@ function ConditionListEditor({
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => {
-          if (onOpenAddConditionDialog) {
-            onOpenAddConditionDialog(newCond => onUpdate([...conditions, newCond]));
-          } else {
-            addDefaultCondition();
-          }
-        }}
-        className="ha-section-add-btn accent-cond"
-      >
-        <Plus className="w-4 h-4" />
-        <span>Add Condition</span>
-      </button>
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={() => {
+            if (onOpenAddConditionDialog) {
+              onOpenAddConditionDialog(newCond => onUpdate([...conditions, newCond]));
+            } else {
+              addDefaultCondition();
+            }
+          }}
+          className="ha-section-add-btn accent-cond"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Add Condition</span>
+        </button>
+
+        {clipboard?.type === 'condition' && (
+          <button
+            type="button"
+            onClick={() => {
+              const pasted = pastePayload('condition');
+              if (pasted) onUpdate([...conditions, pasted]);
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-950/60 hover:bg-purple-900/60 text-purple-200 border border-purple-700/60 transition cursor-pointer"
+            title={`Paste copied condition "${clipboard.label}"`}
+          >
+            <ClipboardPaste className="w-3.5 h-3.5 text-purple-300" />
+            <span>Paste Condition ({clipboard.label})</span>
+          </button>
+        )}
+
+        {clipboard?.type === 'trigger' && (
+          <button
+            type="button"
+            onClick={() => {
+              const pasted = pastePayload('condition');
+              if (pasted) onUpdate([...conditions, pasted]);
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-950/50 hover:bg-amber-900/50 text-amber-200 border border-amber-700/60 transition cursor-pointer"
+            title={`Convert & paste copied trigger "${clipboard.label}" as condition`}
+          >
+            <ClipboardPaste className="w-3.5 h-3.5 text-amber-300" />
+            <span>Paste as Condition ({clipboard.label})</span>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -2027,6 +2104,26 @@ function TriggerNodeEditor({
 }: TriggerNodeEditorProps) {
   const [showAdvanced, setShowAdvanced] = useState(Boolean((trig as any)._showAdvanced));
   const [collapsed, setCollapsed] = useState(false);
+  const { copyToClipboard } = useContext(AutomationClipboardContext);
+
+  const getTriggerLabel = (): string => {
+    if (trig.type === 'time_schedule' || trig.source === 'time') {
+      return `Time: ${trig.time || '--:--'}`;
+    }
+    if (trig.type === 'ble_button' || trig.type === 'ble_key' || (!trig.type && trig.source === 'ble' && trig.ble_button)) {
+      return `BLE: ${trig.ble_button || 'button'} (${trig.ble_action || 'press'})`;
+    }
+    if (trig.type === 'ble_presence' || trig.type === 'ble_beacon' || trig.type === 'beacon') {
+      return `BLE Presence: ${trig.ble_event || 'enter'}`;
+    }
+    if (trig.type === 'wifi' || trig.type === 'wifi_status') {
+      return `Wi-Fi: ${trig.device_property || 'status'}`;
+    }
+    if (trig.command_name || trig.name) {
+      return trig.command_name || trig.name || 'CAN Trigger';
+    }
+    return `CAN ${trig.can_id || 'Trigger'}`;
+  };
 
   const toggleAdvanced = () => {
     const nextVal = !showAdvanced;
@@ -2068,6 +2165,14 @@ function TriggerNodeEditor({
           <Copy className="w-3.5 h-3.5" />
         </button>
       )}
+      <button
+        type="button"
+        onClick={() => copyToClipboard('trigger', trig, getTriggerLabel())}
+        className="p-1 text-slate-500 hover:text-amber-400 transition shrink-0"
+        title="Copy trigger to clipboard"
+      >
+        <ClipboardCopy className="w-3.5 h-3.5" />
+      </button>
       <button
         type="button"
         onClick={onDelete}
@@ -2867,9 +2972,20 @@ function ActionNodeEditor({
   onOpenAddActionDialog,
   onTestSingleAction
 }: ActionNodeEditorProps) {
+  const { clipboard, copyToClipboard, pastePayload } = useContext(AutomationClipboardContext);
   const [collapsed, setCollapsed] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [testFiring, setTestFiring] = useState(false);
+  const [collapsedBranches, setCollapsedBranches] = useState<Set<number>>(new Set());
+
+  const toggleBranchCollapse = (idx: number) => {
+    setCollapsedBranches(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
 
   const handleTestTrigger = async () => {
     if (!onTestSingleAction || testFiring) return;
@@ -2880,6 +2996,35 @@ function ActionNodeEditor({
       setTimeout(() => setTestFiring(false), 600);
     }
   };
+
+  // Action naming & catalog resolution (available to all action types and actionButtons)
+  const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForAction(act, catalog) : { command: undefined, matchedOption: undefined };
+  const hasOptions = !!(catalogCmd?.options && catalogCmd.options.length > 0);
+  const actionName =
+    catalogCmd?.ha_metadata?.name ||
+    catalogCmd?.name ||
+    act.source_command_name ||
+    (act.can_id
+      ? `CAN Transmit ${formatCanId(act.can_id)}`
+      : act.type === 'if_then'
+      ? 'IF-THEN-ELSE'
+      : act.type === 'choose'
+      ? 'CHOOSE'
+      : act.type === 'wait_for'
+      ? 'Wait For'
+      : act.type === 'repeat_until'
+      ? 'Repeat Until'
+      : act.type === 'cycle_entity'
+      ? `Cycle ${act.entity_id || 'Entity'}`
+      : act.type === 'climate_target'
+      ? 'Climate Target'
+      : act.type === 'precondition'
+      ? 'Battery Preconditioning'
+      : act.type === 'track_popup' || act.type === 'popup'
+      ? 'Cluster Popup'
+      : act.type === 'delay'
+      ? `Delay ${act.delay_ms || act.ms || 0}ms`
+      : `Action ${index + 1}`);
 
   const actionButtons = (
     <div className="flex items-center gap-1 shrink-0 flex-wrap">
@@ -2931,6 +3076,14 @@ function ActionNodeEditor({
           <Copy className="w-3.5 h-3.5" />
         </button>
       )}
+      <button
+        type="button"
+        onClick={() => copyToClipboard('action', act, actionName)}
+        className="p-1 text-slate-500 hover:text-emerald-400 transition shrink-0"
+        title="Copy action to clipboard"
+      >
+        <ClipboardCopy className="w-3.5 h-3.5" />
+      </button>
       <button
         type="button"
         onClick={onDelete}
@@ -3060,89 +3213,207 @@ function ActionNodeEditor({
           <div className="space-y-3 min-w-0">
             {/* BRANCHES */}
             <div className="space-y-2.5 min-w-0">
-              {(act.choices || []).map((ch, chIdx) => (
-                <div key={chIdx} className="p-2 sm:p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2 min-w-0 overflow-hidden">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-blue-300 text-[11px] truncate">Branch #{chIdx + 1}</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const choices = (act.choices || []).filter((_, i) => i !== chIdx);
-                        onUpdate({ ...act, choices });
-                      }}
-                      className="p-1 text-slate-500 hover:text-rose-400 transition shrink-0"
-                      title="Delete Branch"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
+              {(act.choices || []).map((ch, chIdx) => {
+                const isBranchCollapsed = collapsedBranches.has(chIdx);
+                const condCount = ch.conditions?.length || 0;
+                const actCount = ch.sequence?.length || 0;
+                const branchTitle = ch.label || `Branch #${chIdx + 1}`;
 
-                  {/* Conditions in Choice */}
-                  <div className="pl-1.5 sm:pl-2 border-l border-slate-800 min-w-0">
-                    <ConditionListEditor
-                      conditions={ch.conditions || []}
-                      depth={depth + 1}
-                      label="Branch Conditions"
-                      emptyText="No conditions in this branch."
-                      availableTriggers={availableTriggers}
-                      catalog={catalog}
-                      liveFrames={liveFrames}
-                      entityStates={entityStates}
-                      lastFiredTriggerId={lastFiredTriggerId}
-                      liveWifiStatus={liveWifiStatus}
-                      liveBleMap={liveBleMap}
-                      onUpdate={updatedConds => {
-                        const choices = [...(act.choices || [])];
-                        choices[chIdx].conditions = updatedConds;
-                        onUpdate({ ...act, choices });
-                      }}
-                      onOpenAddConditionDialog={onOpenAddConditionDialog}
-                    />
-                  </div>
+                const moveBranch = (direction: -1 | 1) => {
+                  const targetIdx = chIdx + direction;
+                  const list = [...(act.choices || [])];
+                  if (targetIdx < 0 || targetIdx >= list.length) return;
+                  const temp = list[chIdx];
+                  list[chIdx] = list[targetIdx];
+                  list[targetIdx] = temp;
+                  onUpdate({ ...act, choices: list });
+                };
 
-                  {/* Sequence in Choice */}
-                  <div className="pl-1.5 sm:pl-2 border-l border-slate-800 pt-2 min-w-0">
-                    <ActionListEditor
-                      actions={ch.sequence || []}
-                      depth={depth + 1}
-                      label="Branch Sequence Actions"
-                      emptyText="No actions in branch sequence."
-                      availableTriggers={availableTriggers}
-                      catalog={catalog}
-                      liveFrames={liveFrames}
-                      entityStates={entityStates}
-                      lastFiredTriggerId={lastFiredTriggerId}
-                      liveWifiStatus={liveWifiStatus}
-                      liveBleMap={liveBleMap}
-                      onTestSingleAction={onTestSingleAction}
-                      onUpdate={updatedSeq => {
-                        const choices = [...(act.choices || [])];
-                        choices[chIdx].sequence = updatedSeq;
-                        onUpdate({ ...act, choices });
-                      }}
-                      onOpenAddConditionDialog={onOpenAddConditionDialog}
-                      onOpenAddActionDialog={onOpenAddActionDialog}
-                    />
+                const duplicateBranch = () => {
+                  const list = [...(act.choices || [])];
+                  const clonedBranch = regenerateBranchIds(ch, true);
+                  list.splice(chIdx + 1, 0, clonedBranch);
+                  onUpdate({ ...act, choices: list });
+                };
+
+                const copyBranch = () => {
+                  copyToClipboard('choice_branch', ch, branchTitle);
+                };
+
+                return (
+                  <div key={ch._clientId || chIdx} className="p-2 sm:p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2 min-w-0 overflow-hidden">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => toggleBranchCollapse(chIdx)}
+                          className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
+                          title={isBranchCollapsed ? "Expand branch" : "Collapse branch"}
+                        >
+                          {isBranchCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+                        </button>
+                        <span className="w-5 h-5 rounded-full bg-blue-950 text-blue-300 font-bold text-[10px] flex items-center justify-center border border-blue-800 shrink-0">
+                          #{chIdx + 1}
+                        </span>
+                        <input
+                          type="text"
+                          value={ch.label || ''}
+                          onChange={e => {
+                            const choices = [...(act.choices || [])];
+                            choices[chIdx] = { ...ch, label: e.target.value };
+                            onUpdate({ ...act, choices });
+                          }}
+                          placeholder={`Branch #${chIdx + 1} (e.g. Low Heat ➔ Med Heat)`}
+                          className="bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-blue-200 text-xs font-semibold focus:outline-none focus:border-blue-500 flex-1 min-w-0 truncate"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          disabled={chIdx === 0}
+                          onClick={() => moveBranch(-1)}
+                          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition shrink-0 cursor-pointer"
+                          title="Move branch up (higher priority)"
+                        >
+                          <ArrowUp className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={chIdx === (act.choices || []).length - 1}
+                          onClick={() => moveBranch(1)}
+                          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition shrink-0 cursor-pointer"
+                          title="Move branch down (lower priority)"
+                        >
+                          <ArrowDown className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={duplicateBranch}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-900 hover:bg-slate-850 text-cyan-300 border border-slate-700 hover:border-cyan-500 transition shrink-0 cursor-pointer"
+                          title="Duplicate this branch and all its conditions & sequence actions"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span className="hidden sm:inline">Duplicate</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={copyBranch}
+                          className="p-1 text-slate-500 hover:text-blue-300 transition shrink-0 cursor-pointer"
+                          title="Copy branch to universal clipboard"
+                        >
+                          <ClipboardCopy className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const choices = (act.choices || []).filter((_, i) => i !== chIdx);
+                            onUpdate({ ...act, choices });
+                          }}
+                          className="p-1 text-slate-500 hover:text-rose-400 transition shrink-0 cursor-pointer"
+                          title="Delete Branch"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {isBranchCollapsed ? (
+                      <div className="text-[11px] text-slate-400 pl-7 font-mono flex items-center gap-2">
+                        <span>
+                          {condCount === 0 ? 'No conditions (always matches)' : `${condCount} condition(s)`} ➔ {actCount} action(s)
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Conditions in Choice */}
+                        <div className="pl-1.5 sm:pl-2 border-l border-slate-800 min-w-0">
+                          <ConditionListEditor
+                            conditions={ch.conditions || []}
+                            depth={depth + 1}
+                            label="Branch Conditions"
+                            emptyText="No conditions in this branch."
+                            availableTriggers={availableTriggers}
+                            catalog={catalog}
+                            liveFrames={liveFrames}
+                            entityStates={entityStates}
+                            lastFiredTriggerId={lastFiredTriggerId}
+                            liveWifiStatus={liveWifiStatus}
+                            liveBleMap={liveBleMap}
+                            onUpdate={updatedConds => {
+                              const choices = [...(act.choices || [])];
+                              choices[chIdx].conditions = updatedConds;
+                              onUpdate({ ...act, choices });
+                            }}
+                            onOpenAddConditionDialog={onOpenAddConditionDialog}
+                          />
+                        </div>
+
+                        {/* Sequence in Choice */}
+                        <div className="pl-1.5 sm:pl-2 border-l border-slate-800 pt-2 min-w-0">
+                          <ActionListEditor
+                            actions={ch.sequence || []}
+                            depth={depth + 1}
+                            label="Branch Sequence Actions"
+                            emptyText="No actions in branch sequence."
+                            availableTriggers={availableTriggers}
+                            catalog={catalog}
+                            liveFrames={liveFrames}
+                            entityStates={entityStates}
+                            lastFiredTriggerId={lastFiredTriggerId}
+                            liveWifiStatus={liveWifiStatus}
+                            liveBleMap={liveBleMap}
+                            onTestSingleAction={onTestSingleAction}
+                            onUpdate={updatedSeq => {
+                              const choices = [...(act.choices || [])];
+                              choices[chIdx].sequence = updatedSeq;
+                              onUpdate({ ...act, choices });
+                            }}
+                            onOpenAddConditionDialog={onOpenAddConditionDialog}
+                            onOpenAddActionDialog={onOpenAddActionDialog}
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                const choices = [...(act.choices || [])];
-                choices.push({
-                  conditions: [],
-                  sequence: []
-                });
-                onUpdate({ ...act, choices });
-              }}
-              className="ha-section-add-btn accent-act mt-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Choice Branch</span>
-            </button>
+            <div className="flex items-center gap-2 flex-wrap pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const choices = [...(act.choices || [])];
+                  choices.push({
+                    conditions: [],
+                    sequence: []
+                  });
+                  onUpdate({ ...act, choices });
+                }}
+                className="ha-section-add-btn accent-act"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Choice Branch</span>
+              </button>
+
+              {clipboard?.type === 'choice_branch' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const pasted = pastePayload('choice_branch');
+                    if (pasted) {
+                      onUpdate({ ...act, choices: [...(act.choices || []), pasted] });
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-950/60 hover:bg-blue-900/60 text-blue-200 border border-blue-700/60 transition cursor-pointer"
+                  title={`Paste copied choice branch "${clipboard.label}"`}
+                >
+                  <ClipboardPaste className="w-3.5 h-3.5 text-blue-300" />
+                  <span>Paste Branch ({clipboard.label})</span>
+                </button>
+              )}
+            </div>
 
             {/* DEFAULT SEQUENCE */}
             <div className="p-2 sm:p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2 min-w-0 overflow-hidden">
@@ -3402,22 +3673,7 @@ function ActionNodeEditor({
     );
   }
 
-  // Regular action step
-  const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForAction(act, catalog) : {};
-  const hasOptions = !!(catalogCmd?.options && catalogCmd.options.length > 0);
-  const actionName =
-    catalogCmd?.ha_metadata?.name ||
-    catalogCmd?.name ||
-    act.source_command_name ||
-    (act.can_id
-      ? `CAN Transmit ${act.can_id}`
-      : act.type === 'climate_target'
-      ? 'Climate Target'
-      : act.type === 'precondition'
-      ? 'Battery Preconditioning'
-      : act.type === 'track_popup' || act.type === 'popup'
-      ? 'Cluster Popup'
-      : `Action ${index + 1}`);
+  // Regular action step rendering uses catalogCmd, matchedOption, hasOptions, and actionName declared above
 
   return (
     <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 hover:border-slate-700/80 space-y-2.5 text-xs transition-all shadow-sm min-w-0 overflow-hidden">
@@ -3647,6 +3903,107 @@ function ActionNodeEditor({
                   />
                 </div>
               </>
+            )}
+
+            {act.type === 'cycle_entity' && (
+              <div className="col-span-full space-y-2.5 p-3 rounded-lg bg-slate-900/90 border border-amber-900/60 font-sans">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
+                    <RotateCw className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Cyclic Stepper Configuration</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {act.direction === 'reverse' ? 'Reverse ◀' : 'Forward ▶'} · {act.wrap !== false ? 'Wrap: ON' : 'Wrap: OFF'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-1">Target Entity ID</label>
+                    <input
+                      type="text"
+                      value={act.entity_id || 'drivers_seat_comfort'}
+                      onChange={e => onUpdate({ ...act, entity_id: e.target.value })}
+                      placeholder="drivers_seat_comfort"
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-amber-300 font-mono font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-1">Step Direction</label>
+                    <select
+                      value={act.direction || 'forward'}
+                      onChange={e => onUpdate({ ...act, direction: e.target.value as any })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                    >
+                      <option value="forward">Forward (Increment)</option>
+                      <option value="reverse">Reverse (Decrement)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-1">Wrap on Overflow</label>
+                    <select
+                      value={act.wrap !== false ? 'true' : 'false'}
+                      onChange={e => onUpdate({ ...act, wrap: e.target.value === 'true' })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                    >
+                      <option value="true">Yes (High ➔ Off)</option>
+                      <option value="false">No (Clamp at High)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-1">Fallback State (Unknown State)</label>
+                    <input
+                      type="text"
+                      value={act.fallback_state || (act.states && act.states[0]) || 'Off'}
+                      onChange={e => onUpdate({ ...act, fallback_state: e.target.value })}
+                      placeholder="Off"
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* State Options Sequence */}
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1">
+                    Cycle Sequence States (Comma-separated):
+                  </label>
+                  <input
+                    type="text"
+                    value={(act.states || ['Off', 'Low Heat', 'Medium Heat', 'High Heat']).join(', ')}
+                    onChange={e => {
+                      const parsed = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                      onUpdate({ ...act, states: parsed });
+                    }}
+                    placeholder="Off, Low Heat, Medium Heat, High Heat"
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-amber-200 font-mono text-xs"
+                  />
+                </div>
+
+                {/* In-Cabin Confirmation Popup */}
+                <div className="pt-2 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] items-center">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={act.show_popup ?? true}
+                      onChange={e => onUpdate({ ...act, show_popup: e.target.checked })}
+                      className="rounded bg-slate-900 border-slate-700 text-amber-500 focus:ring-0"
+                    />
+                    <span className="text-slate-300">Auto-show Cluster / HUD Popup Toast</span>
+                  </label>
+                  {act.show_popup !== false && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-slate-500 shrink-0">Popup Prefix:</span>
+                      <input
+                        type="text"
+                        value={act.popup_prefix !== undefined ? act.popup_prefix : 'Driver Seat: '}
+                        onChange={e => onUpdate({ ...act, popup_prefix: e.target.value })}
+                        placeholder="Driver Seat: "
+                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-amber-300 font-medium text-[11px]"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
 
             {isCanTx && !hasMultipleSteps && (
@@ -4001,6 +4358,8 @@ function ActionListEditor({
   onOpenAddActionDialog,
   onTestSingleAction
 }: ActionListEditorProps) {
+  const { clipboard, pastePayload } = useContext(AutomationClipboardContext);
+
   const addDefaultAction = () => {
     const next = [...actions];
     next.push({
@@ -4057,9 +4416,7 @@ function ActionListEditor({
                           onUpdate(next);
                         }}
                         onDuplicate={() => {
-                          const dup: AutomationAction = JSON.parse(JSON.stringify(act));
-                          dup.id = `act_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-                          delete dup._clientId;
+                          const dup = regenerateActionIds(act);
                           const next = [...actions];
                           next.splice(idx + 1, 0, dup);
                           onUpdate(next);
@@ -4088,20 +4445,37 @@ function ActionListEditor({
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => {
-          if (onOpenAddActionDialog) {
-            onOpenAddActionDialog(newAct => onUpdate([...actions, newAct]));
-          } else {
-            addDefaultAction();
-          }
-        }}
-        className="ha-section-add-btn accent-act"
-      >
-        <Plus className="w-4 h-4" />
-        <span>Add Action</span>
-      </button>
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={() => {
+            if (onOpenAddActionDialog) {
+              onOpenAddActionDialog(newAct => onUpdate([...actions, newAct]));
+            } else {
+              addDefaultAction();
+            }
+          }}
+          className="ha-section-add-btn accent-act"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Add Action</span>
+        </button>
+
+        {clipboard?.type === 'action' && (
+          <button
+            type="button"
+            onClick={() => {
+              const pasted = pastePayload('action');
+              if (pasted) onUpdate([...actions, pasted]);
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-200 border border-emerald-700/60 transition cursor-pointer"
+            title={`Paste copied action: "${clipboard.label}"`}
+          >
+            <ClipboardPaste className="w-3.5 h-3.5 text-emerald-300" />
+            <span>Paste Action ({clipboard.label})</span>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -4367,6 +4741,64 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [espIp, setEspIp] = useState<string>(() => getDefaultEspIp());
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
+
+  // Global Automation Clipboard state
+  const [clipboard, setClipboard] = useState<AutomationClipboardItem | null>(() => {
+    try {
+      const saved = sessionStorage.getItem(CLIPBOARD_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const copyToClipboard = useCallback((type: ClipboardBlockType, payload: any, label: string) => {
+    const item: AutomationClipboardItem = {
+      type,
+      payload: deepClone(payload),
+      timestamp: Date.now(),
+      label
+    };
+    setClipboard(item);
+    try {
+      sessionStorage.setItem(CLIPBOARD_STORAGE_KEY, JSON.stringify(item));
+    } catch {
+      // Storage quota or disabled
+    }
+  }, []);
+
+  const clearClipboard = useCallback(() => {
+    setClipboard(null);
+    try {
+      sessionStorage.removeItem(CLIPBOARD_STORAGE_KEY);
+    } catch {}
+  }, []);
+
+  const pastePayload = useCallback((targetType?: ClipboardBlockType): any | null => {
+    if (!clipboard) return null;
+    const cloned = deepClone(clipboard.payload);
+    if (clipboard.type === 'trigger') {
+      if (targetType === 'condition') {
+        const cond = convertTriggerToCondition(cloned);
+        return regenerateConditionIds(cond);
+      }
+      return regenerateTriggerIds(cloned);
+    }
+    if (clipboard.type === 'condition') {
+      if (targetType === 'trigger') {
+        const trig = convertConditionToTrigger(cloned);
+        return regenerateTriggerIds(trig);
+      }
+      return regenerateConditionIds(cloned);
+    }
+    if (clipboard.type === 'action') {
+      return regenerateActionIds(cloned);
+    }
+    if (clipboard.type === 'branch') {
+      return regenerateBranchIds(cloned, true);
+    }
+    return cloned;
+  }, [clipboard]);
 
   const [useMqttSync, setUseMqttSync] = useState(false);
   const [mqttRemoteConfig, setMqttRemoteConfig] = useState({
@@ -4834,6 +5266,34 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         return;
       }
 
+      // Flow: Cycle Entity State Stepper
+      if (act.type === 'cycle_entity') {
+        const entId = act.entity_id || act.target_command_id || 'seat_heater_driver';
+        const states = act.states && act.states.length > 0 ? act.states : ['off', 'low', 'medium', 'high'];
+        const curState = entityStates.get(entId.toLowerCase()) || act.fallback_state || states[0];
+        const curIdx = states.findIndex(s => s.toLowerCase() === curState.toLowerCase());
+        const dir = act.direction || 'forward';
+        let nextIdx = 0;
+        if (dir === 'forward') {
+          nextIdx = curIdx >= 0 ? curIdx + 1 : 0;
+          if (nextIdx >= states.length) {
+            nextIdx = act.wrap !== false ? 0 : states.length - 1;
+          }
+        } else {
+          nextIdx = curIdx >= 0 ? curIdx - 1 : 0;
+          if (nextIdx < 0) {
+            nextIdx = act.wrap !== false ? states.length - 1 : 0;
+          }
+        }
+        const nextState = states[nextIdx];
+        setActionTestToast({
+          message: `Cycle ${entId}: ${curState} ➔ ${nextState} (${dir}, wrap=${act.wrap !== false})`,
+          type: 'success'
+        });
+        setTimeout(() => setActionTestToast(null), 4000);
+        return;
+      }
+
       // Flow 12: Entity Command Dispatch (for firmware-handled entities without raw CAN ID)
       if (targetEntityId && targetCommand) {
         const res = await fetch(`${base}/api/command`, {
@@ -4931,14 +5391,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   };
 
   const handleDuplicateRule = (ruleToDup: AutomationRule) => {
-    const newId = `rule_${Date.now().toString(36)}`;
-    const duplicated: AutomationRule = {
-      ...JSON.parse(JSON.stringify(ruleToDup)),
-      id: newId,
-      name: `${ruleToDup.name} (Copy)`
-    };
+    const duplicated = cloneRuleWithNewIds(ruleToDup);
     onUpdateRules([...rules, duplicated]);
-    setSelectedRuleId(newId);
+    setSelectedRuleId(duplicated.id);
   };
 
   const handleDeleteRule = (ruleId: string) => {
@@ -5297,7 +5752,8 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 min-w-0">
+    <AutomationClipboardContext.Provider value={{ clipboard, copyToClipboard, clearClipboard, pastePayload }}>
+      <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 min-w-0">
       {/* Main Builder Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-w-0">
         {/* Left Column: Active Rule Editor (8 cols = ~2/3 of area on desktop) */}
@@ -5494,9 +5950,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                               handleUpdateActiveRule({ triggers: next });
                             }}
                             onDuplicate={() => {
-                              const dup: AutomationTrigger = JSON.parse(JSON.stringify(trig));
-                              dup.id = `trig_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-                              delete dup._clientId;
+                              const dup = regenerateTriggerIds(trig);
                               const next = [...activeRule.triggers];
                               next.splice(tIdx + 1, 0, dup);
                               handleUpdateActiveRule({ triggers: next });
@@ -5523,18 +5977,54 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     </div>
                   )}
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openAddTriggerDialog(newTrig =>
-                        handleUpdateActiveRule({ triggers: [...activeRule.triggers, newTrig] })
-                      )
-                    }
-                    className="ha-section-add-btn accent-trig"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Add Trigger</span>
-                  </button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openAddTriggerDialog(newTrig =>
+                          handleUpdateActiveRule({ triggers: [...activeRule.triggers, newTrig] })
+                        )
+                      }
+                      className="ha-section-add-btn accent-trig"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Trigger</span>
+                    </button>
+
+                    {clipboard?.type === 'trigger' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const pasted = pastePayload('trigger');
+                          if (pasted) {
+                            handleUpdateActiveRule({ triggers: [...activeRule.triggers, pasted] });
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-950/60 hover:bg-amber-900/60 text-amber-200 border border-amber-700/60 transition cursor-pointer"
+                        title={`Paste copied trigger "${clipboard.label}"`}
+                      >
+                        <ClipboardPaste className="w-3.5 h-3.5 text-amber-300" />
+                        <span>Paste Trigger ({clipboard.label})</span>
+                      </button>
+                    )}
+
+                    {clipboard?.type === 'condition' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const pasted = pastePayload('trigger');
+                          if (pasted) {
+                            handleUpdateActiveRule({ triggers: [...activeRule.triggers, pasted] });
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-950/50 hover:bg-sky-900/50 text-sky-200 border border-sky-700/60 transition cursor-pointer"
+                        title={`Convert & paste copied condition "${clipboard.label}" as trigger`}
+                      >
+                        <ClipboardPaste className="w-3.5 h-3.5 text-sky-300" />
+                        <span>Paste as Trigger ({clipboard.label})</span>
+                      </button>
+                    )}
+                  </div>
                 </>
               )}
             </div>
@@ -6150,6 +6640,32 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           </div>
         </div>
       )}
+
+      {/* Floating Clipboard Indicator */}
+      {clipboard && (
+        <div className="fixed bottom-5 right-5 z-40 max-w-sm flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-slate-900/95 border border-cyan-500/40 shadow-2xl backdrop-blur-md text-xs animate-in fade-in slide-in-from-bottom-2">
+          <div className="p-1.5 rounded-lg bg-cyan-500/20 text-cyan-400 shrink-0">
+            <ClipboardCheck className="w-4 h-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+              Clipboard ({clipboard.type})
+            </div>
+            <div className="text-white font-medium truncate" title={clipboard.label}>
+              {clipboard.label}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={clearClipboard}
+            className="p-1 text-slate-400 hover:text-rose-400 rounded transition shrink-0"
+            title="Clear clipboard"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
+    </AutomationClipboardContext.Provider>
   );
 };
