@@ -6,7 +6,7 @@
  * 3. Firmware Binary (final OTA write + device reboot)
  */
 
-import { UpdateComponentSelection, UserPreferences } from '../types/settings';
+import { UpdateComponentSelection } from '../types/settings';
 import { resolveDeviceBaseUrl } from '../utils/hostUtils';
 
 export interface UpdateCheckResult {
@@ -37,6 +37,27 @@ export interface UpdateProgressCallback {
 }
 
 const GITHUB_REPO = 'SuperSuave/can-do';
+
+/**
+ * Verify whether an ESP32 firmware binary (.bin) contains the expected version string in ASCII.
+ * Prevents flashing a stale cached binary from a secondary CDN when a release is newly published.
+ */
+function binaryContainsVersion(buf: ArrayBuffer, expectedVersion: string): boolean {
+  const cleanVer = (expectedVersion || '').replace(/^v/, '').replace(/^catalog-v/, '').trim();
+  if (!cleanVer) return true;
+  const needle = new TextEncoder().encode(cleanVer);
+  if (needle.length === 0) return true;
+  const hay = new Uint8Array(buf);
+  const limit = hay.length - needle.length;
+  outer: for (let i = 0; i <= limit; i++) {
+    if (hay[i] !== needle[0]) continue;
+    for (let j = 1; j < needle.length; j++) {
+      if (hay[i + j] !== needle[j]) continue outer;
+    }
+    return true;
+  }
+  return false;
+}
 
 /**
  * Compare two version strings (CalVer e.g. 2026.9.1 or SemVer 1.0.0 or CalVer with build tags e.g. 2026.10.1-b001)
@@ -103,7 +124,7 @@ export async function checkForUpdates(
 
     if (!res.ok) {
       // If no formal GitHub release exists yet or rate-limited, query catalog version directly
-      return await checkFallbackCatalogUpdate(currentCatalogVersion);
+      return await checkFallbackCatalogUpdate(currentCatalogVersion, currentFirmwareVersion, currentFrontendVersion, targetDevice);
     }
 
     const release = await res.json();
@@ -170,6 +191,14 @@ export async function checkForUpdates(
       }
     }
 
+    // Fallback to raw main repository binaries if release assets are still uploading or missing
+    if (!wicanFirmwareUrl) {
+      wicanFirmwareUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/can-do-esp32c3.bin`;
+    }
+    if (!atomFirmwareUrl) {
+      atomFirmwareUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/atom-ui-bridge/can-do-atom-bridge.bin`;
+    }
+
     // Select the firmware URL for the active device target (WiCAN vs Atom bridge)
     const isAtom = (targetDevice || '').toLowerCase().includes('atom') || (targetDevice || '').toLowerCase().includes('bridge');
     const firmwareUrl = isAtom
@@ -213,11 +242,16 @@ export async function checkForUpdates(
       },
     };
   } catch {
-    return await checkFallbackCatalogUpdate(currentCatalogVersion);
+    return await checkFallbackCatalogUpdate(currentCatalogVersion, currentFirmwareVersion, currentFrontendVersion, targetDevice);
   }
 }
 
-async function checkFallbackCatalogUpdate(currentCatalogVersion: string): Promise<UpdateCheckResult> {
+async function checkFallbackCatalogUpdate(
+  currentCatalogVersion: string,
+  currentFirmwareVersion = '',
+  currentFrontendVersion = '',
+  targetDevice = 'esp32c3'
+): Promise<UpdateCheckResult> {
   try {
     const res = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/catalog/can_do_catalog.json`, {
       cache: 'no-cache',
@@ -225,20 +259,29 @@ async function checkFallbackCatalogUpdate(currentCatalogVersion: string): Promis
     if (res.ok) {
       const data = await res.json();
       const remoteVersion = data.can_do_version || '';
-      const hasCatalogUpdate = Boolean(remoteVersion && currentCatalogVersion && isVersionNewer(remoteVersion, currentCatalogVersion));
+      const hasCatalogUpdate = Boolean(remoteVersion && (!currentCatalogVersion || currentCatalogVersion === 'unknown' || isVersionNewer(remoteVersion, currentCatalogVersion)));
+      const hasFirmwareUpdate = Boolean(remoteVersion && (!currentFirmwareVersion || currentFirmwareVersion === 'unknown' || isVersionNewer(remoteVersion, currentFirmwareVersion)));
+      const hasFrontendUpdate = Boolean(remoteVersion && (!currentFrontendVersion || currentFrontendVersion === 'unknown' || isVersionNewer(remoteVersion, currentFrontendVersion)));
+      const wicanFirmwareUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/can-do-esp32c3.bin`;
+      const atomFirmwareUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/atom-ui-bridge/can-do-atom-bridge.bin`;
+      const isAtom = (targetDevice || '').toLowerCase().includes('atom') || (targetDevice || '').toLowerCase().includes('bridge');
 
       return {
-        has_update: hasCatalogUpdate,
-        version: `v${remoteVersion}`,
-        release_name: `Message Catalog Update v${remoteVersion}`,
-        notes: 'Latest community CAN bus message decoders and vehicle definitions.',
+        has_update: hasCatalogUpdate || hasFirmwareUpdate || hasFrontendUpdate,
+        version: remoteVersion,
+        release_name: `CAN Do Update v${remoteVersion}`,
+        notes: 'Latest community CAN bus message decoders, firmware, and vehicle definitions.',
         components: {
-          frontend: false,
+          frontend: hasFrontendUpdate,
           catalog: hasCatalogUpdate,
-          firmware: false,
+          firmware: hasFirmwareUpdate,
         },
         assets: {
+          firmware_url: isAtom ? atomFirmwareUrl : wicanFirmwareUrl,
+          wican_firmware_url: wicanFirmwareUrl,
+          atom_firmware_url: atomFirmwareUrl,
           catalog_url: `https://raw.githubusercontent.com/${GITHUB_REPO}/main/catalog/can_do_catalog.json`,
+          frontend_manifest_url: `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/data/www/frontend_manifest.json`,
         },
       };
     }
@@ -314,15 +357,18 @@ export function uploadFirmwareOta(
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${deviceBaseUrl}/api/ota`);
+    let uploadCompleted = false;
 
-    if (onProgress) {
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          const pct = Math.round((e.loaded / e.total) * 100);
-          onProgress(pct);
-        }
-      };
-    }
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        if (pct >= 100) uploadCompleted = true;
+        if (onProgress) onProgress(pct);
+      }
+    };
+    xhr.upload.onload = () => {
+      uploadCompleted = true;
+    };
 
     xhr.onload = () => {
       if (xhr.status === 200) {
@@ -337,7 +383,15 @@ export function uploadFirmwareOta(
       }
     };
 
-    xhr.onerror = () => reject(new Error('Network error during firmware OTA upload'));
+    xhr.onerror = () => {
+      // If 100% of bytes were transmitted and the ESP32 reset its TCP stack during immediate reboot,
+      // treat as success rather than an upload failure.
+      if (uploadCompleted) {
+        resolve(true);
+        return;
+      }
+      reject(new Error('Network error during firmware OTA upload'));
+    };
     xhr.send(binaryData);
   });
 }
@@ -380,12 +434,12 @@ export async function executeUpdateSequence(
       onProgress('frontend', 10, 'Fetching frontend release manifest...');
 
       // Manifest sources in priority order:
-      // 1. GitHub Pages build (CORS-enabled static CDN)
-      // 2. Main branch raw repository (synced by CI)
+      // 1. Main branch raw repository (updated by CI build commit)
+      // 2. GitHub Pages build (CORS-enabled static CDN)
       // 3. Specific release tag raw repository
       const manifestCandidates = [
-        `https://${pagesHost}/frontend_manifest.json`,
         `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/data/www/frontend_manifest.json`,
+        `https://${pagesHost}/frontend_manifest.json`,
         `https://raw.githubusercontent.com/${GITHUB_REPO}/${updateData.version}/firmware/data/www/frontend_manifest.json`,
       ];
 
@@ -420,6 +474,7 @@ export async function executeUpdateSequence(
         onProgress('frontend', 15, 'Scanning device and purging stale web assets...');
 
         const newFileNames = new Set(manifest.files.map((f) => f.name));
+        newFileNames.add('frontend_manifest.json');
         const staleFilesToDelete = new Set<string>();
 
         // 1a. Attempt hardware-side purge via /api/system/control clean_stale_web
@@ -535,8 +590,8 @@ export async function executeUpdateSequence(
 
           const downloadCandidates = [
             `${manifestBaseUrl}/${fileInfo.name}`,
-            `https://${pagesHost}/${fileInfo.name}`,
             `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/data/www/${fileInfo.name}`,
+            `https://${pagesHost}/${fileInfo.name}`,
             `https://raw.githubusercontent.com/${GITHUB_REPO}/${updateData.version}/firmware/data/www/${fileInfo.name}`,
           ];
 
@@ -582,6 +637,12 @@ export async function executeUpdateSequence(
           // Pacing breather to allow LittleFS flash sector erases/writes and Wi-Fi TCP ACKs breathing room
           await new Promise((r) => setTimeout(r, 60));
         }
+
+        // Persist updated frontend_manifest.json on device so subsequent cleanups and status checks reflect the installed web version
+        try {
+          await uploadToDevice(deviceBaseUrl, '/spiffs/www/frontend_manifest.json', JSON.stringify(manifest), true);
+        } catch {}
+
         onProgress('frontend', 35, 'Web Front-End successfully updated on LittleFS');
       } else {
         onProgress('frontend', 35, 'Frontend manifest not found, skipping LittleFS web sync');
@@ -638,7 +699,7 @@ export async function executeUpdateSequence(
 
       onProgress('catalog', 60, 'Writing catalog.json to LittleFS storage...');
       // If firmware is also being updated, do not reboot yet!
-      const deferReboot = !!(componentsToUpdate.firmware && updateData.assets.firmware_url);
+      const deferReboot = Boolean(componentsToUpdate.firmware);
       const ok = await uploadToDevice(deviceBaseUrl, '/spiffs/catalog.json', catalogText, deferReboot);
       if (!ok) {
         throw new Error('Failed to save catalog.json to device LittleFS storage.');
@@ -650,31 +711,49 @@ export async function executeUpdateSequence(
     // STAGE 3: FIRMWARE BINARY (Final step, triggers reboot)
     // -------------------------------------------------------------
     const isAtom = (effectiveTarget || '').toLowerCase().includes('atom') || (effectiveTarget || '').toLowerCase().includes('bridge');
+    const defaultRawFwUrl = isAtom
+      ? `https://raw.githubusercontent.com/${GITHUB_REPO}/main/atom-ui-bridge/can-do-atom-bridge.bin`
+      : `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/can-do-esp32c3.bin`;
     const selectedFwUrl = isAtom
-      ? (updateData.assets.atom_firmware_url || updateData.assets.firmware_url)
-      : (updateData.assets.wican_firmware_url || updateData.assets.firmware_url);
+      ? (updateData.assets.atom_firmware_url || updateData.assets.firmware_url || defaultRawFwUrl)
+      : (updateData.assets.wican_firmware_url || updateData.assets.firmware_url || defaultRawFwUrl);
 
-    if (componentsToUpdate.firmware && selectedFwUrl) {
+    if (componentsToUpdate.firmware) {
       let browserStreamSuccess = false;
       onProgress('firmware', 80, 'Downloading firmware binary...');
 
       // Priority list of binary sources based on target:
+      // 1. Raw main branch (CORS-enabled AND updated by CI release commit with compiled binary)
+      // 2. GitHub Pages CDN (CORS-enabled)
+      // 3. GitHub Release asset URL
+      // 4. Release tag raw repository
       const fwCandidates = isAtom
-        ? [
-            selectedFwUrl,
-            `https://${pagesHost}/can-do-atom-bridge.bin`,
-            `https://raw.githubusercontent.com/${GITHUB_REPO}/main/atom-ui-bridge/can-do-atom-bridge.bin`,
-            `https://raw.githubusercontent.com/${GITHUB_REPO}/${updateData.version}/atom-ui-bridge/can-do-atom-bridge.bin`,
-            `https://raw.githubusercontent.com/${GITHUB_REPO}/main/atom-ui-bridge/.pio/build/m5stack-atom/firmware.bin`,
-          ].filter(Boolean) as string[]
-        : [
-            selectedFwUrl,
-            `https://${pagesHost}/can-do-esp32c3.bin`,
-            `https://${pagesHost}/can-do.bin`,
-            `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/can-do-esp32c3.bin`,
-            `https://raw.githubusercontent.com/${GITHUB_REPO}/${updateData.version}/firmware/can-do-esp32c3.bin`,
-            `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/build/can-do.bin`,
-          ].filter(Boolean) as string[];
+        ? Array.from(
+            new Set(
+              [
+                `https://raw.githubusercontent.com/${GITHUB_REPO}/main/atom-ui-bridge/can-do-atom-bridge.bin`,
+                `https://${pagesHost}/can-do-atom-bridge.bin`,
+                selectedFwUrl,
+                `https://raw.githubusercontent.com/${GITHUB_REPO}/${updateData.version}/atom-ui-bridge/can-do-atom-bridge.bin`,
+                `https://raw.githubusercontent.com/${GITHUB_REPO}/main/atom-ui-bridge/.pio/build/m5stack-atom/firmware.bin`,
+              ].filter(Boolean) as string[]
+            )
+          )
+        : Array.from(
+            new Set(
+              [
+                `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/can-do-esp32c3.bin`,
+                `https://${pagesHost}/can-do-esp32c3.bin`,
+                `https://${pagesHost}/can-do.bin`,
+                selectedFwUrl,
+                `https://raw.githubusercontent.com/${GITHUB_REPO}/${updateData.version}/firmware/can-do-esp32c3.bin`,
+                `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/build/can-do.bin`,
+              ].filter(Boolean) as string[]
+            )
+          );
+
+      let verifiedFwBuf: ArrayBuffer | null = null;
+      let fallbackFwBuf: ArrayBuffer | null = null;
 
       for (const fwUrl of fwCandidates) {
         try {
@@ -685,29 +764,42 @@ export async function executeUpdateSequence(
             if (fwBuf.byteLength > 100000) {
               const u8 = new Uint8Array(fwBuf);
               if (u8[0] === 0xE9) {
-                onProgress('firmware', 85, 'Flashing firmware to device OTA partition...');
-                await uploadFirmwareOta(deviceBaseUrl, fwBuf, (pct) => {
-                  onProgress('firmware', 85 + Math.round(pct * 0.12), `Flashing firmware: ${pct}%`);
-                });
-                browserStreamSuccess = true;
-                recordUpdateInstalledTime(updateData.published_at || new Date().toISOString());
-                onProgress('rebooting', 100, 'Firmware flash complete! Device is rebooting...');
-                break;
+                if (binaryContainsVersion(fwBuf, updateData.version)) {
+                  verifiedFwBuf = fwBuf;
+                  break;
+                }
+                if (!fallbackFwBuf) {
+                  console.warn(`[UpdateService] Candidate ${fwUrl} did not contain expected version ${updateData.version}; continuing search...`);
+                  fallbackFwBuf = fwBuf;
+                }
               }
             }
           }
-        } catch (e) {
+        } catch {
           // Expected for URLs with CORS restrictions or not yet deployed
         }
+      }
+
+      const targetFwBuf = verifiedFwBuf || fallbackFwBuf;
+      if (targetFwBuf) {
+        onProgress('firmware', 85, 'Flashing firmware to device OTA partition...');
+        await uploadFirmwareOta(deviceBaseUrl, targetFwBuf, (pct) => {
+          onProgress('firmware', 85 + Math.round(pct * 0.12), `Flashing firmware: ${pct}%`);
+        });
+        browserStreamSuccess = true;
+        recordUpdateInstalledTime(updateData.published_at || new Date().toISOString());
+        onProgress('rebooting', 100, 'Firmware flash complete! Device is rebooting...');
       }
 
       // If browser direct download was blocked by CORS or network, fall back to device-side Cloud OTA pull
       if (!browserStreamSuccess) {
         onProgress('firmware', 82, 'Requesting device-side Cloud OTA pull...');
+        // Prefer direct raw.githubusercontent.com URL over GitHub Releases URL to avoid 302 redirect header overflow on ESP32
+        const cloudPullUrl = defaultRawFwUrl || selectedFwUrl;
         const cloudPullRes = await fetch(`${deviceBaseUrl}/api/ota/cloud_pull`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: selectedFwUrl }),
+          body: JSON.stringify({ url: cloudPullUrl }),
         });
 
         if (!cloudPullRes.ok) {

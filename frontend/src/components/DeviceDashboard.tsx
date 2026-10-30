@@ -298,16 +298,27 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const handleCheckForUpdates = async () => {
     setIsCheckingUpdate(true);
     try {
-      const currentFront = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__ !== 'unknown') ? __APP_VERSION__ : (status?.can_do_version || catalog?.can_do_version || '');
-      const currentFw = status?.can_do_version || currentFront;
+      let liveStatus = status;
+      if (!liveStatus) {
+        try {
+          const stRes = await fetch(getApiUrl('/api/system/status'), { cache: 'no-cache' });
+          if (stRes.ok) {
+            liveStatus = await stRes.json();
+            setStatus(liveStatus);
+          }
+        } catch {}
+      }
+      const currentFront = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__ !== 'unknown') ? __APP_VERSION__ : (liveStatus?.can_do_version || catalog?.can_do_version || '');
+      const currentFw = liveStatus?.can_do_version || '';
       const currentCat = catalog?.can_do_version || currentFront;
-      const targetDev = isAtomBridge ? 'atom' : 'esp32c3';
+      const devName = (liveStatus?.device || '').toLowerCase();
+      const targetDev = (devName.includes('atom') || devName.includes('bridge')) ? 'atom' : 'esp32c3';
       const res = await checkForUpdates(currentCat, currentFw, currentFront, targetDev);
       setUpdateResult(res);
       if (res.has_update) {
         showNotice(`Update available: ${res.release_name || res.version}`);
       } else {
-        showNotice(`All components are up to date (${currentFw || 'Current'})`);
+        showNotice(`All components are up to date (${currentFw || currentFront || 'Current'})`);
       }
     } catch (e: any) {
       showNotice(`Failed to check updates: ${e.message || e}`, 'error');
@@ -334,9 +345,13 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     setUpdateMessage('Initiating update sequence...');
 
     try {
+      const effectiveComponents = {
+        ...localPrefs.update_components,
+        firmware: localPrefs.update_components.firmware || Boolean(updateResult.components.firmware),
+      };
       await executeUpdateSequence(
         deviceHost,
-        localPrefs.update_components,
+        effectiveComponents,
         updateResult,
         (stage, pct, msg) => {
           setUpdateStage(stage);

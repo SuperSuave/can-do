@@ -798,22 +798,53 @@ static esp_err_t api_ota_handler(httpd_req_t *req) {
         return ESP_FAIL;
     }
 
+    s_active_static_transfers.fetch_add(1, std::memory_order_relaxed);
     esp_err_t err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &update_handle);
-    if (err != ESP_OK) return ESP_FAIL;
-
-    char buf[1024];
-    int remaining = req->content_len;
-    while (remaining > 0) {
-        int recv_len = httpd_req_recv(req, buf, std::min(remaining, static_cast<int>(sizeof(buf))));
-        if (recv_len <= 0) {
-            esp_ota_abort(update_handle);
-            return ESP_FAIL;
-        }
-        esp_ota_write(update_handle, buf, recv_len);
-        remaining -= recv_len;
+    if (err != ESP_OK) {
+        s_active_static_transfers.fetch_sub(1, std::memory_order_relaxed);
+        ESP_LOGE(TAG, "esp_ota_begin failed: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA begin failed");
+        return ESP_FAIL;
     }
 
+    const size_t kChunkSize = 4096;
+    char *buf = static_cast<char *>(malloc(kChunkSize));
+    if (!buf) {
+        esp_ota_abort(update_handle);
+        s_active_static_transfers.fetch_sub(1, std::memory_order_relaxed);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory for OTA buffer");
+        return ESP_FAIL;
+    }
+
+    int remaining = req->content_len;
+    while (remaining > 0) {
+        int recv_len = httpd_req_recv(req, buf, std::min(remaining, static_cast<int>(kChunkSize)));
+        if (recv_len == HTTPD_SOCK_ERR_TIMEOUT) {
+            continue;
+        }
+        if (recv_len <= 0) {
+            free(buf);
+            esp_ota_abort(update_handle);
+            s_active_static_transfers.fetch_sub(1, std::memory_order_relaxed);
+            ESP_LOGE(TAG, "OTA socket receive failed (remaining=%d)", remaining);
+            return ESP_FAIL;
+        }
+        err = esp_ota_write(update_handle, buf, recv_len);
+        if (err != ESP_OK) {
+            free(buf);
+            esp_ota_abort(update_handle);
+            s_active_static_transfers.fetch_sub(1, std::memory_order_relaxed);
+            ESP_LOGE(TAG, "esp_ota_write failed: %s", esp_err_to_name(err));
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA write failed");
+            return ESP_FAIL;
+        }
+        remaining -= recv_len;
+    }
+    free(buf);
+    s_active_static_transfers.fetch_sub(1, std::memory_order_relaxed);
+
     if (esp_ota_end(update_handle) == ESP_OK && esp_ota_set_boot_partition(update_partition) == ESP_OK) {
+        httpd_resp_set_type(req, "application/json");
         httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"Firmware flashed. Rebooting...\"}");
         xTaskCreate(restart_task, "restart_task", 2048, nullptr, 5, nullptr);
         return ESP_OK;
@@ -857,7 +888,7 @@ static void cloud_ota_task(void *pvParameter) {
     config.crt_bundle_attach = esp_crt_bundle_attach;
     config.timeout_ms = 30000;
     config.buffer_size = 4096;
-    config.buffer_size_tx = 1024;
+    config.buffer_size_tx = 2048;
     config.max_redirection_count = 10;
     config.keep_alive_enable = true;
 
@@ -1246,6 +1277,7 @@ static esp_err_t api_post_preferences_handler(httpd_req_t *req) {
 
 static esp_err_t api_system_status_handler(httpd_req_t *req) {
     cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "device", "WiCAN ESP32-C3");
     cJSON_AddStringToObject(root, "device_id", DEVICE_ID.c_str());
     cJSON_AddBoolToObject(root, "automations_enabled", g_automations_enabled.load());
     cJSON_AddBoolToObject(root, "sniffer_mode", g_sniffer_mode.load());

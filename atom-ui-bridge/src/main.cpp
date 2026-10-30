@@ -1501,19 +1501,6 @@ void setup() {
     } else {
         Serial.printf("[FS] LittleFS mounted successfully. Total: %u KB, Used: %u KB\n",
                       LittleFS.totalBytes() / 1024, LittleFS.usedBytes() / 1024);
-
-        // Synchronize CAN Do version dynamically from LittleFS manifest if present
-        if (LittleFS.exists("/frontend_manifest.json")) {
-            File mf = LittleFS.open("/frontend_manifest.json", "r");
-            if (mf) {
-                JsonDocument mDoc;
-                if (deserializeJson(mDoc, mf) == DeserializationError::Ok && mDoc["version"].is<const char*>()) {
-                    g_can_do_version = mDoc["version"].as<String>();
-                    Serial.printf("[SYSTEM] Synchronized CAN Do version from LittleFS manifest: %s\n", g_can_do_version.c_str());
-                }
-                mf.close();
-            }
-        }
     }
 
     // 5. Initialize Wi-Fi
@@ -1820,8 +1807,7 @@ void setup() {
             request->send(resp);
             if (rebootReq) {
                 Serial.println("[SYSTEM] Reboot requested via Web API...");
-                delay(500);
-                ESP.restart();
+                xTaskCreate([](void*) { vTaskDelay(pdMS_TO_TICKS(600)); ESP.restart(); vTaskDelete(NULL); }, "reboot_task", 2048, NULL, 5, NULL);
             }
         }
     );
@@ -1830,6 +1816,8 @@ void setup() {
     server.on("/api/ota", HTTP_POST,
         [](AsyncWebServerRequest *request) {
             bool success = !Update.hasError() && Update.isFinished();
+            g_atom_ota_state.in_progress = false;
+            g_atom_ota_state.success = success;
             AsyncWebServerResponse *response = request->beginResponse(
                 success ? 200 : 500,
                 "application/json",
@@ -1841,14 +1829,16 @@ void setup() {
             request->send(response);
             if (success) {
                 Serial.println("[OTA] Firmware write complete. Restarting ESP32 in 1s...");
-                delay(1000);
-                ESP.restart();
+                xTaskCreate([](void*) { vTaskDelay(pdMS_TO_TICKS(1000)); ESP.restart(); vTaskDelete(NULL); }, "ota_reboot", 2048, NULL, 5, NULL);
             }
         },
         [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
             // Multipart upload handler
             if (!index) {
                 Serial.printf("[OTA] Multipart firmware update started (file: %s)\n", filename.c_str());
+                g_atom_ota_state.in_progress = true;
+                g_atom_ota_state.success = false;
+                NimBLEDevice::getScan()->stop();
                 if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
                     Update.printError(Serial);
                 }
@@ -1870,6 +1860,9 @@ void setup() {
             // Raw binary stream handler (used by XMLHttpRequest.send(blob) & fetch)
             if (!index) {
                 Serial.printf("[OTA] Raw binary firmware update started: %u bytes\n", total);
+                g_atom_ota_state.in_progress = true;
+                g_atom_ota_state.success = false;
+                NimBLEDevice::getScan()->stop();
                 if (!Update.begin(total > 0 ? total : UPDATE_SIZE_UNKNOWN, U_FLASH)) {
                     Update.printError(Serial);
                 }
@@ -2627,7 +2620,7 @@ void loop() {
     }
 
     // 7. Continuous background BLE scan watchdog: ensures scan is always active
-    if (!g_ble_scanning && !g_ble_client_connected && !g_pending_ble_connect_req) {
+    if (!g_ble_scanning && !g_ble_client_connected && !g_pending_ble_connect_req && !g_atom_ota_state.in_progress) {
         NimBLEScan* pScan = NimBLEDevice::getScan();
         if (!pScan->isScanning()) {
             pScan->clearResults();
