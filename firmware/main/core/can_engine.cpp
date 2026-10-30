@@ -21,6 +21,7 @@
 #include "network_mgr.h"
 #include "remote_climate.h"
 #include "ambient_anim.h"
+#include "vbat_sensor.h"
 
 static bool mac_matches(const std::string& a, const std::string& b) {
     std::string clean_a, clean_b;
@@ -415,6 +416,17 @@ bool evaluate_condition(const AutomationCondition& cond) {
                 return !cond.target_bool;
             }
 
+            if (cond.type == "voltage" || cond.type == "vbat") {
+                float vbat = vbat_sensor_get_last();
+                switch (cond.op) {
+                    case ConditionOperator::GREATER_THAN: return vbat > cond.target_float;
+                    case ConditionOperator::LESS_THAN:    return vbat < cond.target_float;
+                    case ConditionOperator::EQUAL:        return std::abs(vbat - cond.target_float) < 0.1f;
+                    case ConditionOperator::NOT_EQUAL:    return std::abs(vbat - cond.target_float) >= 0.1f;
+                    default: return vbat >= cond.target_float;
+                }
+            }
+
             uint8_t cached_frame[8];
             if (!get_cached_can_frame(cond.can_id, cached_frame)) return false;
 
@@ -557,7 +569,9 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
         }
 
         if (step.type == ActionType::CLIMATE_TARGET) {
-            remote_climate_start(22.0f, false, 900);
+            float temp_c = step.target_temp_c > 0 ? step.target_temp_c : 22.0f;
+            uint32_t dur_sec = step.duration_minutes > 0 ? step.duration_minutes * 60 : 900;
+            remote_climate_start(temp_c, step.defrost, dur_sec);
             continue;
         }
 

@@ -46,7 +46,7 @@ unsigned long g_last_wican_rx_ms = 0;
 bool g_wican_online = false;
 
 #ifndef CAN_DO_VERSION
-#define CAN_DO_VERSION "2026.10.8-b001"
+#define CAN_DO_VERSION "2026.10.8-b002"
 #endif
 
 String g_can_do_version = CAN_DO_VERSION;
@@ -2154,8 +2154,30 @@ void setup() {
                 if (s_auto_file) {
                     s_auto_file.close();
                     Serial.printf("[AUTOMATIONS] Saved automations.json (%u bytes)\n", total);
+
+                    // Forward automations to WiCAN coprocessor via UART link
+                    File auto_read = LittleFS.open("/automations.json", "r");
+                    if (auto_read) {
+                        send_to_wican("{\"type\":\"auto_begin\",\"size\":" + String(auto_read.size()) + "}");
+                        uint8_t chunk_buf[128];
+                        while (auto_read.available()) {
+                            size_t n = auto_read.read(chunk_buf, sizeof(chunk_buf));
+                            String hex_chunk = "";
+                            hex_chunk.reserve(n * 2);
+                            for (size_t i = 0; i < n; i++) {
+                                char h[3];
+                                snprintf(h, sizeof(h), "%02X", chunk_buf[i]);
+                                hex_chunk += h;
+                            }
+                            send_to_wican("{\"type\":\"auto_chunk\",\"hex\":\"" + hex_chunk + "\"}");
+                            delay(5);
+                        }
+                        auto_read.close();
+                        send_to_wican("{\"type\":\"auto_end\"}");
+                        Serial.println("[AUTOMATIONS] Streamed automations to WiCAN coprocessor");
+                    }
                 }
-                request->send(200, "application/json", "{\"status\":\"success\",\"message\":\"Automations saved to Atom Lite LittleFS\"}");
+                request->send(200, "application/json", "{\"status\":\"success\",\"message\":\"Automations saved & synchronized to CAN coprocessor\"}");
             }
         }
     );

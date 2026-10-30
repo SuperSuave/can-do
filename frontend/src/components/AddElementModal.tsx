@@ -230,20 +230,6 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           })
         },
         {
-          id: 'param_range',
-          title: 'Parameter / Range Comparison',
-          desc: 'Compare speed, battery SOC, temperatures, or gear positions',
-          icon: Sliders,
-          color: 'text-blue-400 bg-blue-950/40 border-blue-800/60',
-          create: (): AutomationCondition => ({
-            id: `cond_param_${Date.now().toString(36)}`,
-            type: 'param_range',
-            can_id: '',
-            operator: 'equal',
-            value: ''
-          })
-        },
-        {
           id: 'voltage_check',
           title: '12V Battery Voltage Check',
           desc: 'Confirm auxiliary 12V system is above or below threshold voltage',
@@ -253,7 +239,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
             id: `cond_volt_${Date.now().toString(36)}`,
             type: 'voltage',
             voltage_dir: 'above',
-            voltage_val: ''
+            voltage_val: '12.4'
           })
         },
         {

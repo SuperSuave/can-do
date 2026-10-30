@@ -2,8 +2,6 @@ import {
   AutomationRule,
   AutomationSettings,
   CandoRulesExport,
-  Esp32FirmwareConfig,
-  Esp32FirmwareRule,
   AutomationTrigger,
   AutomationCondition,
   AutomationAction,
@@ -117,12 +115,39 @@ export function compileToByteMap(input: string | ByteMap | Record<string, unknow
 /**
  * Compiles a condition into standard CAN Do schema
  */
-export function compileCondition(cond: AutomationCondition): any {
+export function compileCondition(cond: AutomationCondition, catalog: Catalog = DEFAULT_CATALOG): any {
   if (cond.logic === 'and' || cond.logic === 'or' || cond.logic === 'not') {
-    const subConds = (cond.conditions || []).map(compileCondition);
+    const subConds = (cond.conditions || []).map(c => compileCondition(c, catalog));
     if (cond.logic === 'and') return { and: subConds };
     if (cond.logic === 'or') return { or: subConds };
     if (cond.logic === 'not') return { not: subConds[0] || {} };
+  }
+
+  // Multi-option state check: if multiple options on the same entity touch the same byte, desugar to OR group
+  if (cond.source_command_id && cond.selected_options && cond.selected_options.length > 1) {
+    const cmd = catalog.commands?.find(c => c.id === cond.source_command_id);
+    if (cmd && cmd.options) {
+      const matchedOpts = cmd.options.filter(o => cond.selected_options!.some(sel => sel.toLowerCase() === o.label.toLowerCase()));
+      if (matchedOpts.length > 1) {
+        const byteMapSeen: Record<string, string> = {};
+        let hasConflict = false;
+        for (const opt of matchedOpts) {
+          const m = compileToByteMap(opt.match || opt.payload);
+          for (const [k, v] of Object.entries(m)) {
+            if (byteMapSeen[k] !== undefined && byteMapSeen[k] !== v) {
+              hasConflict = true;
+              break;
+            }
+            byteMapSeen[k] = v;
+          }
+          if (hasConflict) break;
+        }
+        if (hasConflict) {
+          const subConds = matchedOpts.map(opt => compileCondition(commandToCondition(cmd, opt), catalog));
+          return { or: subConds };
+        }
+      }
+    }
   }
 
   if (cond.type === 'triggered_by' || cond.type === 'trigger' || cond.trigger_id !== undefined) {
@@ -175,7 +200,17 @@ export function compileCondition(cond: AutomationCondition): any {
     };
   }
 
-  if (cond.type === 'param_range' || cond.type === 'voltage') {
+  if (cond.type === 'voltage') {
+    const rawVal = cond.value || cond.voltage_val || '12.4';
+    const numVal = parseFloat(String(rawVal)) || 12.4;
+    return {
+      type: 'voltage',
+      operator: cond.operator || (cond.voltage_dir === 'below' ? 'less' : 'greater'),
+      value: numVal
+    };
+  }
+
+  if (cond.type === 'param_range') {
     return {
       type: 'param_range',
       can_id: cond.can_id || '0x100',
@@ -233,7 +268,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
   if (act.type === 'if_then') {
     return {
       type: 'if_then',
-      conditions: (act.conditions || []).map(compileCondition),
+      conditions: (act.conditions || []).map(c => compileCondition(c, catalog)),
       then: compileActionList(act.then || [], catalog),
       else: compileActionList(act.else || [], catalog)
     };
@@ -243,7 +278,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
     return {
       type: 'choose',
       choices: (act.choices || []).map(c => ({
-        conditions: (c.conditions || []).map(compileCondition),
+        conditions: (c.conditions || []).map(cond => compileCondition(cond, catalog)),
         sequence: compileActionList(c.sequence || [], catalog)
       })),
       default: compileActionList(act.default || [], catalog)
@@ -255,7 +290,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
       type: act.type,
       interval_ms: act.interval_ms || 1000,
       timeout_ms: act.timeout_ms || 30000,
-      condition: act.condition ? compileCondition(act.condition) : undefined,
+      condition: act.condition ? compileCondition(act.condition, catalog) : undefined,
       sequence: act.sequence ? compileActionList(act.sequence, catalog) : undefined
     };
   }
@@ -275,18 +310,86 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
     };
   }
 
-  if (act.type === 'climate_target') {
-    const isPass = act.zone === 'passenger';
-    const tempC = act.target_temp_c ?? act.target_c ?? 21.0;
-    const clamped = Math.max(17.0, Math.min(27.5, tempC));
-    const rawVal = Math.min(0x1A, Math.max(0x06, 0x06 + Math.round((clamped - 17.0) * 2.0)));
-    const hexVal = '0x' + rawVal.toString(16).toUpperCase().padStart(2, '0');
+  if (act.type === 'climate_target' || act.type === 'remote_climate') {
+    const tempC = act.target_temp_c ?? act.target_c ?? 22.0;
     return {
-      type: 'transmit',
-      can_id: '0x4A0',
-      bus: 0,
-      payload: isPass ? { D8: hexVal } : { D2: hexVal },
-      repeat: 1
+      type: 'climate_target',
+      target_temp_c: tempC,
+      defrost: !!act.defrost,
+      duration_minutes: act.duration_minutes || 15,
+      zone: act.zone || 'driver'
+    };
+  }
+
+  if (act.type === 'cycle_entity') {
+    const entId = act.entity_id || act.target_command_id || 'seat_heater_driver';
+    const cmd = catalog.commands?.find(c => c.id === entId || c.entity_id === entId);
+    const states = act.states && act.states.length > 0 ? act.states : ['Off', 'Low Heat', 'Medium Heat', 'High Heat'];
+    const isReverse = act.direction === 'reverse';
+    const wrap = act.wrap !== false;
+
+    const choices = states.map((state, idx) => {
+      let nextIdx = isReverse ? idx - 1 : idx + 1;
+      if (nextIdx >= states.length) nextIdx = wrap ? 0 : states.length - 1;
+      if (nextIdx < 0) nextIdx = wrap ? states.length - 1 : 0;
+      const nextState = states[nextIdx];
+
+      const curOpt = cmd?.options?.find(o => o.label.toLowerCase() === state.toLowerCase() || o.id === state);
+      const nextOpt = cmd?.options?.find(o => o.label.toLowerCase() === nextState.toLowerCase() || o.id === nextState);
+
+      const cond: AutomationCondition = cmd && curOpt ? commandToCondition(cmd, curOpt) : {
+        id: `cond_cycle_${idx}`,
+        type: 'can_state',
+        can_id: act.can_id || '0x000',
+        bus: act.bus ?? 0,
+        value: state
+      };
+
+      const seqActs: any[] = [];
+      if (cmd && nextOpt) {
+        seqActs.push(commandToAction(cmd, nextOpt));
+      } else if (act.can_id) {
+        seqActs.push({
+          type: 'transmit',
+          can_id: act.can_id,
+          bus: act.bus ?? 0,
+          payload: { D1: '0x01' },
+          repeat: 1
+        });
+      }
+
+      if (act.show_popup !== false) {
+        seqActs.push({
+          type: 'track_popup',
+          level: 'info',
+          text: `${act.popup_prefix !== undefined ? act.popup_prefix : 'Driver Seat: '}${nextOpt?.label || nextState}`
+        });
+      }
+
+      return {
+        conditions: [compileCondition(cond, catalog)],
+        sequence: compileActionList(seqActs, catalog)
+      };
+    });
+
+    const fallbackState = act.fallback_state || states[0];
+    const fallbackOpt = cmd?.options?.find(o => o.label.toLowerCase() === fallbackState.toLowerCase() || o.id === fallbackState);
+    const defaultActs: any[] = [];
+    if (cmd && fallbackOpt) {
+      defaultActs.push(commandToAction(cmd, fallbackOpt));
+    }
+    if (act.show_popup !== false) {
+      defaultActs.push({
+        type: 'track_popup',
+        level: 'info',
+        text: `${act.popup_prefix !== undefined ? act.popup_prefix : 'Driver Seat: '}${fallbackOpt?.label || fallbackState}`
+      });
+    }
+
+    return {
+      type: 'choose',
+      choices,
+      default: compileActionList(defaultActs, catalog)
     };
   }
 
@@ -698,7 +801,7 @@ export function compileAutomationRule(
         to: toHex || ''
       };
     }),
-    conditions: (rule.conditions || []).map(compileCondition),
+    conditions: (rule.conditions || []).map(c => compileCondition(c, catalog)),
     actions: compileActionList(rule.actions || [], catalog)
   };
 }
@@ -757,54 +860,6 @@ export function exportToFullCatalogJson(
     commands: resolvedCommands,
     automations: cleanAutomations
   }, null, 2);
-}
-
-/**
- * Generate compact ESP32 firmware-ready JSON structure (flat, numeric, memory-optimized for C)
- */
-export function exportToEsp32FirmwareJson(
-  rules: AutomationRule[],
-  settings: AutomationSettings = {},
-  catalog: Catalog = DEFAULT_CATALOG
-): string {
-  const modeMap: Record<string, number> = {
-    one_shot: 0,
-    toggle: 1,
-    continuous_hold: 2,
-    on_change: 3,
-    poll_verify: 4
-  };
-
-  const firmwareRules: Esp32FirmwareRule[] = rules.map(r => {
-    const compiled = compileAutomationRule(r, catalog);
-    return {
-      id: compiled.id,
-      name: compiled.name,
-      en: compiled.enabled ? 1 : 0,
-      mode: modeMap[compiled.exec_mode] ?? 0,
-      trig_op: r.trigger_mode === 'all' ? 1 : 0,
-      cd_ms: compiled.cooldown_ms || 500,
-      trigs: compiled.triggers.map((t: any) => ({
-        id: `trig_${t.can_id}`,
-        can_id: t.can_id || '0x000',
-        bus: t.bus ?? 0,
-        byte: t.byte,
-        mask: t.mask || '0xF0',
-        from: t.from,
-        to: t.to
-      })),
-      conds: compiled.conditions,
-      acts: compiled.actions
-    };
-  });
-
-  const payload: Esp32FirmwareConfig = {
-    v: 2,
-    vehicle: settings.vehicle_model || 'all_egmp',
-    rules: firmwareRules
-  };
-
-  return JSON.stringify(payload, null, 2);
 }
 
 /**
@@ -1739,8 +1794,17 @@ export function applyOptionsToCondition(
   const mergedMatch: ByteMap = {};
   const mergedMask: Record<string, string> = {};
 
+  const byteSeen: Record<string, string> = {};
+  let hasSameByteConflict = false;
+
   opts.forEach(opt => {
     const m = compileToByteMap(opt.match || opt.payload);
+    for (const [k, v] of Object.entries(m)) {
+      if (byteSeen[k] !== undefined && byteSeen[k] !== v) {
+        hasSameByteConflict = true;
+      }
+      byteSeen[k] = v;
+    }
     Object.assign(mergedMatch, m);
 
     const rawMask = opt.mask;
@@ -1768,7 +1832,7 @@ export function applyOptionsToCondition(
     ...cond,
     source_command_id: cmd.id,
     source_command_name: friendlyName,
-    option_label: labels.join(' + '),
+    option_label: labels.join(hasSameByteConflict ? ' or ' : ' + '),
     selected_options: labels,
     can_id: cmd.network?.state_can_id || cmd.state_can_id || cmd.network?.action_can_id || cmd.action_can_id || cond.can_id || '0x000',
     bus: cmd.network?.bus ?? cmd.bus ?? cond.bus ?? 0,

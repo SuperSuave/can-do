@@ -169,6 +169,8 @@ export interface AutomationAction {
   popup_message?: string;
   target_temp_c?: number;
   target_c?: number;
+  defrost?: boolean;
+  duration_minutes?: number;
   zone?: 'driver' | 'passenger';
   sync_on?: boolean;
   driver_only?: boolean;
@@ -256,51 +258,4 @@ export interface AutomationSettings {
 export interface CandoRulesExport {
   settings: AutomationSettings;
   rules: AutomationRule[];
-}
-
-/**
- * Streamlined ESP32 firmware format (flat & memory-efficient C parser)
- */
-export interface Esp32FirmwareRule {
-  id: string;
-  name: string;
-  en: number; // 0 or 1
-  mode: number; // 0=one_shot, 1=toggle, 2=hold, 3=on_change, 4=poll_verify
-  trig_op: number; // 0=any, 1=all
-  cd_ms: number;
-  trigs: {
-    id: string;
-    can_id: string;
-    bus: number;
-    clicks: number;
-    from: string | ByteMap;
-    to: string | ByteMap;
-  }[];
-  conds: {
-    can_id: string;
-    bus: number;
-    match: string | ByteMap;
-    inv: number;
-  }[];
-  acts: {
-    can_id: string;
-    bus: number;
-    payload: string | ByteMap;
-    rep: number;
-    delay: number;
-    steps?: { p: string | ByteMap; r: number; d: number }[];
-    osd?: string;
-  }[];
-  off_acts?: {
-    can_id: string;
-    bus: number;
-    payload: string | ByteMap;
-    rep: number;
-  }[];
-}
-
-export interface Esp32FirmwareConfig {
-  v: number;
-  vehicle: string;
-  rules: Esp32FirmwareRule[];
 }

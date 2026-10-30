@@ -36,6 +36,7 @@ struct AutomationCondition {
     uint8_t byte_mask = 0xFF; // Bitmask (e.g. 0xF0, 0xFF)
     ConditionOperator op = ConditionOperator::EQUAL;
     uint8_t target_value = 0;
+    float target_float = 0.0f;
 
     // Time window evaluation fields (minutes from midnight 0..1439, bitmask 1 << tm_wday)
     uint16_t start_time_min = 0;
@@ -97,6 +98,7 @@ struct ActionStep {
     // For CLIMATE_TARGET
     float target_temp_c = 21.0f;
     uint32_t duration_minutes = 10;
+    bool defrost = false;
     std::string zone = "driver";
     bool sync_on = false;
     bool driver_only = false;

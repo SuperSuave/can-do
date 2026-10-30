@@ -340,6 +340,22 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
         return true;
     }
 
+    // Check if this condition is a voltage condition (12V auxiliary battery ADC)
+    if (cJSON_IsString(type_prop) && (strcmp(type_prop->valuestring, "voltage") == 0 ||
+                                      strcmp(type_prop->valuestring, "vbat") == 0)) {
+        cond.type = "voltage";
+        cJSON* op = cJSON_GetObjectItem(c_item, "operator");
+        if (cJSON_IsString(op)) cond.op = parse_operator(op->valuestring);
+        else cond.op = ConditionOperator::GREATER_THAN;
+
+        cJSON* val = cJSON_GetObjectItem(c_item, "value");
+        if (!val) val = cJSON_GetObjectItem(c_item, "voltage_val");
+        if (cJSON_IsNumber(val)) cond.target_float = (float)val->valuedouble;
+        else if (cJSON_IsString(val)) cond.target_float = (float)atof(val->valuestring);
+        else cond.target_float = 12.0f;
+        return true;
+    }
+
     cond.type = "can_state";
     cJSON* cid = cJSON_GetObjectItem(c_item, "can_id");
     if (cJSON_IsString(cid)) cond.can_id = strtol(cid->valuestring, nullptr, 16);
@@ -495,6 +511,9 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         cJSON* d_only = cJSON_GetObjectItem(a_item, "driver_only");
         if (!d_only) d_only = cJSON_GetObjectItem(a_item, "climate_driver_only");
         if (cJSON_IsBool(d_only)) step.driver_only = cJSON_IsTrue(d_only);
+
+        cJSON* def = cJSON_GetObjectItem(a_item, "defrost");
+        if (cJSON_IsBool(def)) step.defrost = cJSON_IsTrue(def);
 
         cJSON* mon = cJSON_GetObjectItem(a_item, "monitor_0x38");
         if (!mon) mon = cJSON_GetObjectItem(a_item, "smart");

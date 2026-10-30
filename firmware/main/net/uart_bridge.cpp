@@ -39,6 +39,7 @@ static std::atomic<uint32_t> s_tx_dropped_count{0};
 
 static std::mutex s_ble_status_mutex;
 static std::string s_cached_ble_status = "{\"enabled\":true,\"scanning\":false,\"connected_device\":null,\"paired_devices\":[],\"discovered_devices\":[]}";
+static FILE* s_auto_tmp_file = nullptr;
 
 bool uart_bridge_is_online(void) {
     int64_t last = s_last_bridge_rx_us.load(std::memory_order_relaxed);
@@ -384,6 +385,37 @@ static void handle_incoming_command(const char* json_str, size_t len) {
         uint16_t major_val = (major && cJSON_IsNumber(major)) ? static_cast<uint16_t>(major->valueint) : 0;
         uint16_t minor_val = (minor && cJSON_IsNumber(minor)) ? static_cast<uint16_t>(minor->valueint) : 0;
         can_engine_on_ble_beacon_event(uuid_str, evt_str, rssi_val, major_val, minor_val, mac_str, name_str);
+    } else if (strcmp(type, "auto_begin") == 0) {
+        if (s_auto_tmp_file) {
+            fclose(s_auto_tmp_file);
+            s_auto_tmp_file = nullptr;
+        }
+        s_auto_tmp_file = fopen("/spiffs/automations.json.tmp", "w");
+        uart_bridge_send_raw(s_auto_tmp_file ? "{\"type\":\"ack\",\"status\":\"auto_ready\"}" : "{\"type\":\"nack\",\"error\":\"open_failed\"}");
+    } else if (strcmp(type, "auto_chunk") == 0) {
+        cJSON* hex_item = cJSON_GetObjectItem(root, "hex");
+        if (s_auto_tmp_file && cJSON_IsString(hex_item)) {
+            const char* hex = hex_item->valuestring;
+            size_t hlen = strlen(hex);
+            for (size_t i = 0; i + 1 < hlen; i += 2) {
+                char byte_str[3] = { hex[i], hex[i+1], '\0' };
+                uint8_t b = (uint8_t)strtoul(byte_str, nullptr, 16);
+                fputc(b, s_auto_tmp_file);
+            }
+        }
+    } else if (strcmp(type, "auto_end") == 0) {
+        if (s_auto_tmp_file) {
+            fclose(s_auto_tmp_file);
+            s_auto_tmp_file = nullptr;
+            remove("/spiffs/automations.json");
+            if (rename("/spiffs/automations.json.tmp", "/spiffs/automations.json") == 0) {
+                ESP_LOGI(TAG, "Automations synchronized from Atom Lite. Reloading rules...");
+                load_automations_from_fs("/spiffs/automations.json");
+                uart_bridge_send_raw("{\"type\":\"ack\",\"status\":\"auto_synced\"}");
+            } else {
+                uart_bridge_send_raw("{\"type\":\"nack\",\"error\":\"rename_failed\"}");
+            }
+        }
     }
 
     cJSON_Delete(root);

@@ -13,6 +13,10 @@ import {
   convertConditionToTrigger,
   normalizeCanId,
   formatCanId,
+  compileCondition,
+  compileAction,
+  compileAutomationRule,
+  applyOptionsToCondition,
 } from './automationConverters.js';
 import type { Catalog, Command } from '../types/catalog.js';
 import type {
@@ -680,8 +684,129 @@ test('compileToByteMap converts numeric values and JSON object strings into clea
   });
 });
 
+test('compileAction desugars cycle_entity into native choose action with sequential state transitions', () => {
+  const catalog: Catalog = {
+    can_do_version: '1.0.0',
+    vehicles: [],
+    commands: [
+      {
+        id: 'seat_heater',
+        name: 'Seat Heater',
+        category: 'General',
+        roles: ['action', 'condition'],
+        network: { state_can_id: '0x4A2', action_can_id: '0x4A2' },
+        options: [
+          { label: 'Off', payload: { D1: '0x00' }, match: { D1: '0x00' } },
+          { label: 'Low', payload: { D1: '0x01' }, match: { D1: '0x01' } },
+          { label: 'High', payload: { D1: '0x02' }, match: { D1: '0x02' } },
+        ],
+      },
+    ],
+  };
 
+  const cycleAct: AutomationAction = {
+    id: 'act_cycle',
+    type: 'cycle_entity',
+    entity_id: 'seat_heater',
+    states: ['Off', 'Low', 'High'],
+    wrap: true,
+    show_popup: false,
+  };
 
+  const compiled = compileAction(cycleAct, catalog);
+  assert.strictEqual(compiled.type, 'choose');
+  assert.strictEqual(compiled.choices.length, 3);
 
+  // Branch 0: If Off -> Transmit Low
+  assert.strictEqual(compiled.choices[0].conditions[0].value, '0x00');
+  assert.strictEqual(compiled.choices[0].sequence[0].type, 'transmit');
+  assert.deepStrictEqual(compiled.choices[0].sequence[0].payload, { D1: '0x01' });
 
+  // Branch 1: If Low -> Transmit High
+  assert.strictEqual(compiled.choices[1].conditions[0].value, '0x01');
+  assert.strictEqual(compiled.choices[1].sequence[0].type, 'transmit');
+  assert.deepStrictEqual(compiled.choices[1].sequence[0].payload, { D1: '0x02' });
 
+  // Branch 2: If High -> Transmit Off (wrap)
+  assert.strictEqual(compiled.choices[2].conditions[0].value, '0x02');
+  assert.strictEqual(compiled.choices[2].sequence[0].type, 'transmit');
+  assert.deepStrictEqual(compiled.choices[2].sequence[0].payload, { D1: '0x00' });
+
+  // Default fallback -> Transmit Off
+  assert.strictEqual(compiled.default[0].type, 'transmit');
+  assert.deepStrictEqual(compiled.default[0].payload, { D1: '0x00' });
+});
+
+test('compileAction compiles climate_target preserving target_temp_c, defrost, and duration_minutes', () => {
+  const climAct: AutomationAction = {
+    id: 'act_clim',
+    type: 'climate_target',
+    target_temp_c: 21.5,
+    defrost: true,
+    duration_minutes: 25,
+    zone: 'driver',
+  };
+
+  const compiled = compileAction(climAct);
+  assert.strictEqual(compiled.type, 'climate_target');
+  assert.strictEqual(compiled.target_temp_c, 21.5);
+  assert.strictEqual(compiled.defrost, true);
+  assert.strictEqual(compiled.duration_minutes, 25);
+  assert.strictEqual(compiled.zone, 'driver');
+});
+
+test('compileCondition compiles voltage condition with operator and float value', () => {
+  const voltCond: AutomationCondition = {
+    id: 'cond_volt',
+    type: 'voltage',
+    operator: 'less',
+    value: '11.8',
+  };
+
+  const compiled = compileCondition(voltCond);
+  assert.strictEqual(compiled.type, 'voltage');
+  assert.strictEqual(compiled.operator, 'less');
+  assert.strictEqual(compiled.value, 11.8);
+});
+
+test('applyOptionsToCondition groups same-byte conflicting options into an OR logic group during compilation', () => {
+  const catalog: Catalog = {
+    can_do_version: '1.0.0',
+    vehicles: [],
+    commands: [
+      {
+        id: 'seat_heater',
+        name: 'Seat Heater',
+        category: 'General',
+        roles: ['action', 'condition'],
+        network: { state_can_id: '0x4A2' },
+        options: [
+          { label: 'Off', match: { D1: '0x00' } },
+          { label: 'Low Heat', match: { D1: '0x01' } },
+          { label: 'Med Heat', match: { D1: '0x02' } },
+        ],
+      },
+    ],
+  };
+
+  const baseCond: AutomationCondition = {
+    id: 'cond_multi',
+    type: 'can_state',
+  };
+
+  // User selects both 'Low Heat' and 'Med Heat' (both match on D1)
+  const multiCond = applyOptionsToCondition(
+    baseCond,
+    catalog.commands[0],
+    [catalog.commands[0].options![1], catalog.commands[0].options![2]]
+  );
+
+  assert.strictEqual(multiCond.option_label, 'Low Heat or Med Heat');
+  assert.deepStrictEqual(multiCond.selected_options, ['Low Heat', 'Med Heat']);
+
+  const compiled = compileCondition(multiCond, catalog);
+  assert.ok(compiled.or, 'Expected compiled condition to have an or property');
+  assert.strictEqual(compiled.or.length, 2);
+  assert.strictEqual(compiled.or[0].value, '0x01');
+  assert.strictEqual(compiled.or[1].value, '0x02');
+});

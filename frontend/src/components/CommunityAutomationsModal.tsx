@@ -14,7 +14,6 @@ import {
   X,
   ExternalLink,
   Copy,
-  Upload,
   Share2,
   Zap,
   Shield,
@@ -31,6 +30,7 @@ interface CommunityAutomationsModalProps {
   catalog: Catalog;
   currentRules: AutomationRule[];
   activeRule?: AutomationRule | null;
+  initialTab?: 'browse' | 'share';
   onInstallRule: (rule: AutomationRule) => void;
   onClose: () => void;
 }
@@ -39,21 +39,17 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
   catalog,
   currentRules,
   activeRule,
+  initialTab = 'browse',
   onInstallRule,
   onClose
 }) => {
-  const [activeTab, setActiveTab] = useState<'browse' | 'import' | 'share'>('browse');
+  const [activeTab, setActiveTab] = useState<'browse' | 'share'>(initialTab);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [installedIdSet, setInstalledIdSet] = useState<Set<string>>(
     () => new Set(currentRules.map(r => r.id))
   );
   const [recentlyInstalledId, setRecentlyInstalledId] = useState<string | null>(null);
-
-  // Import State
-  const [importText, setImportText] = useState('');
-  const [importError, setImportError] = useState<string | null>(null);
-  const [parsedImportRule, setParsedImportRule] = useState<AutomationRule | null>(null);
 
   // Share State
   const [selectedShareRuleId, setSelectedShareRuleId] = useState<string>(
@@ -113,63 +109,6 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
     setInstalledIdSet(prev => new Set(prev).add(preset.id).add(ruleId));
     setRecentlyInstalledId(preset.id);
     setTimeout(() => setRecentlyInstalledId(null), 2500);
-  };
-
-  // Import Parser
-  const handleParseImport = () => {
-    setImportError(null);
-    setParsedImportRule(null);
-    const trimmed = importText.trim();
-    if (!trimmed) {
-      setImportError('Please paste an automation JSON object or snippet.');
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(trimmed);
-      const candidate = parsed.rule || (Array.isArray(parsed) ? parsed[0] : parsed);
-      if (!candidate || typeof candidate !== 'object') {
-        throw new Error('Invalid JSON format: expected an automation object.');
-      }
-      if (!candidate.name) {
-        throw new Error('Missing "name" field in automation object.');
-      }
-      if (!Array.isArray(candidate.triggers) || candidate.triggers.length === 0) {
-        throw new Error('Automation must contain at least one trigger.');
-      }
-      if (!Array.isArray(candidate.actions) || candidate.actions.length === 0) {
-        throw new Error('Automation must contain at least one action.');
-      }
-
-      const validated: AutomationRule = {
-        id: candidate.id || `community_import_${Date.now().toString().slice(-5)}`,
-        name: candidate.name,
-        description: candidate.description || 'Community imported automation rule',
-        category: candidate.category || 'Community Import',
-        tags: candidate.tags || ['imported'],
-        enabled: candidate.enabled ?? true,
-        ha_expose: candidate.ha_expose ?? true,
-        ha_icon: candidate.ha_icon || 'mdi:car-cog',
-        exec_mode: candidate.exec_mode || 'one_shot',
-        cooldown_ms: candidate.cooldown_ms ?? 500,
-        triggers: candidate.triggers,
-        conditions: candidate.conditions || [],
-        actions: candidate.actions,
-        contributor: candidate.contributor
-      };
-
-      setParsedImportRule(validated);
-    } catch (err: any) {
-      setImportError(err.message || 'Could not parse automation JSON');
-    }
-  };
-
-  const handleInstallImported = () => {
-    if (!parsedImportRule) return;
-    handleInstall(parsedImportRule);
-    setImportText('');
-    setParsedImportRule(null);
-    setActiveTab('browse');
   };
 
   // Share Formatter
@@ -270,19 +209,6 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
             <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300">
               {filteredList.length}
             </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('import')}
-            className={`py-3 px-3 border-b-2 transition flex items-center gap-1.5 ${
-              activeTab === 'import'
-                ? 'border-cyan-400 text-cyan-300'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Upload className="w-3.5 h-3.5" />
-            <span>Import from JSON / Gist</span>
           </button>
 
           <button
@@ -467,78 +393,7 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
             </div>
           )}
 
-          {/* TAB 2: IMPORT */}
-          {activeTab === 'import' && (
-            <div className="space-y-4 max-w-2xl mx-auto">
-              <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2 text-xs">
-                <div className="flex items-center gap-2 font-bold text-white">
-                  <Info className="w-4 h-4 text-cyan-400" />
-                  <span>Import Community Recipe</span>
-                </div>
-                <p className="text-slate-400 leading-relaxed">
-                  Paste an automation JSON snippet shared by another user on Discord, Reddit, or a GitHub Gist.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
-                  Paste JSON / Recipe Code
-                </label>
-                <textarea
-                  rows={8}
-                  value={importText}
-                  onChange={e => setImportText(e.target.value)}
-                  placeholder={`{\n  "name": "Auto-Fold Mirrors on Lock",\n  "triggers": [...],\n  "actions": [...]\n}`}
-                  className="w-full p-3 font-mono text-xs bg-slate-950 border border-slate-800 rounded-xl text-emerald-400 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
-                />
-              </div>
-
-              {importError && (
-                <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-800/80 text-rose-300 text-xs font-medium">
-                  {importError}
-                </div>
-              )}
-
-              {parsedImportRule && (
-                <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/40 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-emerald-300">Preview Validated Rule</span>
-                    <span className="text-[10px] font-mono text-emerald-400">Ready to install</span>
-                  </div>
-                  <h4 className="text-sm font-bold text-white">{parsedImportRule.name}</h4>
-                  <p className="text-xs text-slate-400">{parsedImportRule.description}</p>
-                  <div className="flex items-center gap-3 text-[11px] font-mono text-slate-400 pt-1">
-                    <span>{parsedImportRule.triggers.length} Triggers</span>
-                    <span>{parsedImportRule.conditions.length} Conditions</span>
-                    <span>{parsedImportRule.actions.length} Actions</span>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                {!parsedImportRule ? (
-                  <button
-                    type="button"
-                    onClick={handleParseImport}
-                    className="px-4 py-2 rounded-xl text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition shadow-sm"
-                  >
-                    Validate & Preview
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleInstallImported}
-                    className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow-sm flex items-center gap-1.5"
-                  >
-                    <Plus className="w-4 h-4 stroke-[3]" />
-                    <span>Install to My Automations</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: SHARE */}
+          {/* TAB 2: SHARE */}
           {activeTab === 'share' && (
             <div className="space-y-4 max-w-2xl mx-auto">
               <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2 text-xs">
