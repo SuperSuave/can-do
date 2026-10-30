@@ -1,3 +1,14 @@
+/*
+ * Adapted from L1Z3/wicant-i-precondition:
+ * https://github.com/L1Z3/wicant-i-precondition
+ *
+ * Original authors: L1Z3, Tyler Harvey (@tylerharvey), and contributors
+ * Upstream base: meatpiHQ/wican-fw (https://github.com/meatpiHQ/wican-fw)
+ * License: GPL-3.0
+ *
+ * Modified and maintained in sync for CAN Do (https://github.com/SuperSuave/can-do).
+ */
+
 #ifndef __PRECONDITION_H__
 #define __PRECONDITION_H__
 
@@ -36,7 +47,8 @@ void precondition_stop_request(void);
 void precondition_execute_action(const char *mode, const char *action);
 bool precondition_get_state(precondition_state_t *out);
 
-// SoC on 0x2FC frame is transmitted in half-percent steps.
+// SoC is transmitted in half-percent steps on the 0x2FC frame (Ioniq 5/EV6) and
+// the 29-bit 0x0BC2FA02 frame (Ioniq 6).
 #define BATTERY_SOC_SCALE 0.5f
 
 typedef struct {
@@ -57,9 +69,10 @@ typedef enum {
 
 bool precondition_get_car_model(egmp_car_model_t *out);
 
-// Is the car currently in READY? Tracks the 0x038 power-status edge the same
-// way the state machine does; false until a 0x038 frame is seen. The negation
-// is the persistent state behind the EV_CAR_NOT_READY event.
+// Is the car currently in READY? Tracks the power-status edge (0x038, or the
+// 29-bit 0x00C03503 on Ioniq 6) the same way the state machine does; false until
+// such a frame is seen. The negation is the persistent state behind the
+// EV_CAR_NOT_READY event.
 bool car_in_ready(void);
 
 #ifdef __cplusplus

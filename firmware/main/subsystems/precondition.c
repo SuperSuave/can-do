@@ -1,3 +1,14 @@
+/*
+ * Adapted from L1Z3/wicant-i-precondition:
+ * https://github.com/L1Z3/wicant-i-precondition
+ *
+ * Original authors: L1Z3, Tyler Harvey (@tylerharvey), and contributors
+ * Upstream base: meatpiHQ/wican-fw (https://github.com/meatpiHQ/wican-fw)
+ * License: GPL-3.0
+ *
+ * Modified and maintained in sync for CAN Do (https://github.com/SuperSuave/can-do).
+ */
+
 #include <stdbool.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -163,8 +174,9 @@ static bool activation_is_release(const message_payload_t *msg, const twai_messa
 // set on EV6 (0x41/0x45/0x55), clear on Ioniq 5 (0x01/0x05/0x15)
 #define STATUS_EV6_BIT 0x40U
 
+// 0x038 for Ioniq 5/EV6, 0x00C03503 for Ioniq 6
 #define IS_POWER_STATUS_FRAME(frame_id) \
-    ((frame_id) == 0x038U)
+    ((frame_id) == 0x038U || (frame_id) == 0x00C03503U)
 
 #define IS_BMU_CONTROL_FRAME(frame_id) \
     ((frame_id) == 0x0C7U)
@@ -197,22 +209,24 @@ static bool is_utility_request(const twai_message_t *frame) {
 #define REPEATING_MODE_COOL_WAIT_US (3LL * 60LL * 1000000LL)  // continuously below cutoff before first re-nudge
 #define REPEATING_MODE_RETRY_INTERVAL_US (5LL * 60LL * 1000000LL)  // 5 minutes between re-nudges
 
-#define BATTERY_TEMPERATURE_FRAME_ID 0x152U
 #define BATTERY_TEMPERATURE_MIN_INDEX 0U
 #define BATTERY_TEMPERATURE_MAX_INDEX 1U
 #define BATTERY_TEMPERATURE_DATA_LENGTH 2U
 #define PRECONDITION_BATTERY_TEMPERATURE_CUTOFF_C 21
 
-#define IS_BATTERY_TEMPERATURE_FRAME(frame_id) ((frame_id) == BATTERY_TEMPERATURE_FRAME_ID)
+// 0x152 for Ioniq 5/EV6, 0x05415002 for Ioniq 6
+#define IS_BATTERY_TEMPERATURE_FRAME(frame_id) \
+    ((frame_id) == 0x152U || (frame_id) == 0x05415002U)
 
 // High-voltage battery state of charge. Last byte has SoC in half-percent steps.
-#define BATTERY_SOC_FRAME_ID 0x2FCU
 #define BATTERY_SOC_INDEX 7U
 #define BATTERY_SOC_DATA_LENGTH 8U
 #define PRECONDITION_BATTERY_SOC_CUTOFF_PCT 20U
 #define PRECONDITION_BATTERY_SOC_CUTOFF_RAW (PRECONDITION_BATTERY_SOC_CUTOFF_PCT * 2U)
 
-#define IS_BATTERY_SOC_FRAME(frame_id) ((frame_id) == BATTERY_SOC_FRAME_ID)
+// 0x2FC for Ioniq 5/EV6, 0x0BC2FA02 for Ioniq 6
+#define IS_BATTERY_SOC_FRAME(frame_id) \
+    ((frame_id) == 0x2FCU || (frame_id) == 0x0BC2FA02U)
 
 #define CAR_BUS CAN_BUS_0
 #if CAN_BUS_COUNT > 1
@@ -254,8 +268,8 @@ enum {
     EV_STATUS_IDLE,     // car reports preconditioning off/idle
     EV_STATUS_STARTING, // car reports preconditioning starting
     EV_STATUS_STARTED,  // car reports preconditioning fully running
-    EV_CAR_READY,       // car power entered READY (0x038 edge)
-    EV_CAR_NOT_READY,   // car power left READY (0x038 edge)
+    EV_CAR_READY,       // car power entered READY (power-status edge)
+    EV_CAR_NOT_READY,   // car power left READY (power-status edge)
     EV_TEMPERATURE_FRAME, // valid battery temperature sample received
     EV_SOC_BECAME_LOW,  // HV battery SoC crossed below the start cutoff
     EV_UTILITY_MODE,    // car entered utility mode
@@ -281,9 +295,9 @@ typedef enum {
     PRECON_STATUS_STARTED,
 } precon_status_t;
 
-// most recent power (READY) status reported by the car via 0x038. UNKNOWN
-// until the first such frame, which never arrives on platforms where that
-// frame is unavailable
+// most recent power (READY) status reported by the car via the power-status
+// frame. UNKNOWN until the first such frame, which never arrives on platforms
+// where that frame is unavailable
 typedef enum {
     READY_STATUS_UNKNOWN = 0,
     READY_STATUS_NOT_READY,
@@ -362,10 +376,10 @@ static struct {
 static struct {
     // most recent recognized preconditioning status reported by the car
     precon_status_t precon_status;
-    // latest power (READY) status from 0x038; stays UNKNOWN on platforms where
-    // that frame is unavailable. Shared with sleep/status readers; relaxed
-    // accesses suffice because this value does not signal that other shared
-    // data is ready to read.
+    // latest power (READY) status from the power-status frame; stays UNKNOWN on
+    // platforms where that frame is unavailable. Shared with sleep/status
+    // readers; relaxed accesses suffice because this value does not signal that
+    // other shared data is ready to read.
     _Atomic ready_status_t ready_status;
     bool car_in_utility;
 } platform;
@@ -1356,8 +1370,8 @@ static void precondition_global_tick(sm_t *sm) {
 static void precondition_global_rx(sm_t *sm, const twai_message_t *to_push, can_bus_t rx_bus) {
     track_popup_rx(to_push, rx_bus);
 
-    // 0x038 power status: the low nibble of byte 0 reads 0x04 while the car is
-    // in READY. only act on edges
+    // 0x038/0x00C03503 power status: the low nibble of byte 0 reads 0x04 while
+    // the car is in READY. only act on edges
     if (IS_POWER_STATUS_FRAME(to_push->identifier)
             && rx_bus == CAR_BUS
             && to_push->data_length_code >= 1U) {
@@ -1389,8 +1403,9 @@ static void precondition_global_rx(sm_t *sm, const twai_message_t *to_push, can_
         // utility mode requested
         platform.car_in_utility = true;
         // only arm the blocker where the READY status is observable: that edge
-        // is the only thing that clears it, so on platforms without 0x038 the
-        // blocker would latch forever and silently forbid every later start
+        // is the only thing that clears it, so on platforms without the
+        // power-status frame the blocker would latch forever and silently
+        // forbid every later start
         update_precon_blocker(
             PRECONDITION_BLOCK_UTILITY_MODE,
             ready_status_available()

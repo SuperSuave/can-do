@@ -1,98 +1,52 @@
-# CAN Do: Home Assistant Integration
+# CAN Do — Home Assistant Custom Integration
 
-This directory contains the custom Home Assistant integration for **CAN Do**, providing high-performance, bidirectional control and telemetry for Hyundai/Kia/Genesis vehicles (E-GMP / Gen5W platforms) communicating purely over **MQTT**.
-
----
-
-## 🌟 Highlights
-
-- **Pure MQTT**: Operates 100% via MQTT topics with Last Will and Testament (LWT) availability. Works seamlessly even when the vehicle is remote or behind cellular/NAT connections.
-- **Instrument Cluster Notifications (`notify`)**: Send arbitrary notifications, warnings, and alerts directly into the vehicle's instrument cluster track popup display using ISO-TP.
-- **Lean Edge Device**: The ESP32 does not need to store or parse the 127 kB master catalog. It executes lightweight raw CAN action bursts and streams state transitions for monitored CAN IDs.
-- **Full Domain Support**:
-  - `notify`: Cluster OSD popups & toast notifications
-  - `climate`: Driver and passenger cabin target temperature controls (0.5°C increments)
-  - `switch`: Heated steering wheel, defrost, comfort toggles
-  - `button`: Momentary pulses, climate sync toggle, wake pings
-  - `select`: Multi-state options (drive modes, sound stage focus, comfort levels)
-  - `sensor`: Road speed, gear selector (PRND), high-voltage battery SOC & temperatures
-  - `binary_sensor`: Door locks, tailgate opening, hands-on detection (HOD)
-  - `event`: Steering wheel buttons (Star button, Mode button, paddles)
-  - `lock`: Door lock and unlock controls
-  - `number`: Audio balance and fader controls
-  - `light`: Ambient mood lighting controls
-- **Native Enable / Disable**: All vehicle entities are registered in Home Assistant's Entity Registry, allowing you to easily disable any features your trim does not have.
+The **CAN Do** Home Assistant integration connects your vehicle's ESP32 **CAN Do** controller to Home Assistant. It reads entity definitions directly from `can_do_catalog.json` (`catalog_loader.py`) and exposes rich vehicle telemetry, controls, notifications, and diagnostic services under a unified Home Assistant device.
 
 ---
 
-## 🚀 Installation
+## ✨ Supported Platforms & Entities
 
-### Via HACS (Recommended)
-1. In Home Assistant, open **HACS** -> **Integrations**.
-2. Click the top right three dots -> **Custom repositories**.
-3. Add `https://github.com/SuperSuave/can-do` with category **Integration**.
-4. Click **Download** and restart Home Assistant.
+All entities are dynamically generated and mapped from the single-source-of-truth catalog:
 
-### Manual Installation
-1. Copy the `custom_components/can_do` folder to your Home Assistant's `config/custom_components/` directory:
-   ```bash
-   cp -r custom_components/can_do /config/custom_components/
-   ```
+* **Binary Sensors (`binary_sensor.py`)**: Doors, trunk/frunk, hood, lock states, seatbelts, brake pedal, charging status, and preconditioning indicators.
+* **Sensors (`sensor.py`)**: SOC, HV battery temperatures, tire pressures/temperatures, odometer, speed, 12V auxiliary battery voltage (`vbat_sensor`), and gear selection.
+* **Climate (`climate.py`)**: Cabin HVAC controls and remote climate presets.
+* **Covers (`cover.py`)**: Windows, sunroof/sunshade, charge port door, and tailgate.
+* **Locks (`lock.py`)**: Central door lock/unlock control.
+* **Switches (`switch.py`)**: Battery preconditioning toggle, seat heaters/ventilation, steering wheel heater, and automation enable/disable toggles.
+* **Buttons (`button.py`)**: One-shot CAN actions, wake pulses, horn/flash, and chime triggers.
+* **Lights (`light.py`)**: Interior ambient lighting color, brightness, and dynamic animation modes (`ambient_anim`).
+* **Numbers & Selects (`number.py`, `select.py`)**: Target charge limits, drive modes, regenerative braking levels, and configurable thresholds.
+* **Events (`event.py`)**: Steering wheel and console button press events (single, double, long press).
+* **Notifications (`notify.py`)**: Send custom text popups (`track_popup`), HUD navigation prompts (`hud_nav`), and audible chimes (`beep`) directly to the vehicle's instrument cluster / infotainment screen.
+
+---
+
+## 📦 Installation
+
+### Option 1: HACS (Recommended)
+1. Open **HACS** in Home Assistant -> **Integrations**.
+2. Click the three-dot menu in the top right and select **Custom repositories**.
+3. Enter `https://github.com/SuperSuave/can-do` and select **Integration** as the category.
+4. Click **Download** on the **CAN Do** integration.
+5. Restart Home Assistant.
+
+### Option 2: Manual Installation
+1. Copy the `custom_components/can_do` folder into your Home Assistant `<config>/custom_components/` directory.
 2. Restart Home Assistant.
-3. Go to **Settings -> Devices & Services -> Add Integration** and search for **CAN Do**.
-4. Configure your device:
-   - **Device ID**: Enter your device ID (e.g. `can-do-c2f4`).
-   - **Vehicle Model**: Choose your vehicle from the dropdown (e.g. `Hyundai Ioniq 5 Limited [US]`, `Kia EV6 GT-Line`, etc.).
-   - **Base Topic**: Default is `cando`.
 
 ---
 
-## 💬 Sending Cluster Notifications
+## ⚙️ Configuration
 
-You can send custom messages to your car's cluster from any Home Assistant automation, script, or Developer Tools:
-
-### 1. Standard Track / Media Popup (Top OSD Banner)
-```yaml
-action: notify.send_message
-target:
-  entity_id: notify.can_do
-data:
-  message: "Charge Complete! (80%)"
-  data:
-    level: "info" # Options: "info", "warning", "error"
-```
-
-### 2. Call Notification Popup (High-Visibility Cluster Dialog)
-```yaml
-action: notify.send_message
-target:
-  entity_id: notify.can_do
-data:
-  message: "Front Door Motion Detected"
-  data:
-    caller: "Security System" # If caller or type: call is specified, triggers the call popup
-    level: "warning"          # Options: "info", "warning", "error"
-    hold_ms: 6000             # Display duration in milliseconds (default: 5000)
-```
-
-Alternatively, use the direct service:
-```yaml
-action: can_do.notify
-data:
-  caller: "Home Assistant"
-  message: "Garage door left open"
-  level: "warning"
-  hold_ms: 5000
-```
+1. Go to **Settings** -> **Devices & Services** -> **Add Integration**.
+2. Search for **CAN Do** and follow the configuration flow (`config_flow.py`) to connect to your CAN Do device / MQTT broker.
 
 ---
 
-## 📡 MQTT Topic Contract
+## 📊 Sample Dashboard & Automations
 
-| Direction | Topic | Payload | Description |
-|---|---|---|---|
-| ESP32 -> HA | `cando/{device_id}/status` | `"online"` / `"offline"` | Device availability (Retained, QoS 1 LWT) |
-| ESP32 -> HA | `cando/{device_id}/state/0x{CAN_ID}` | `16-char hex` (e.g. `14010000C200F8FF`) | Broadcasted when a monitored CAN ID changes |
-| HA -> ESP32 | `cando/{device_id}/notify` | `{"message": "...", "level": "info"}` | Triggers instrument cluster track popup |
-| HA -> ESP32 | `cando/{device_id}/tx` | `{"can_id": "0x4A0", "delay_ms": 20, "steps": [...]}` | Executes raw CAN action burst |
-| HA -> ESP32 | `cando/{device_id}/subscribe_ids` | `["0x448", "0x4ce", ...]` | Sets dynamic list of CAN IDs to monitor |
+This directory includes ready-to-use templates to jumpstart your setup:
+* **`lovelace_dashboard.yaml`**: A pre-built Lovelace dashboard layout for monitoring E-GMP battery temperatures, preconditioning state, doors/windows, and climate controls.
+* **`sample_automations.yaml`**: Example Home Assistant automations demonstrating how to trigger vehicle actions, send infotainment track popup notifications, and react to CAN button events.
+* **`services.yaml`**: Custom `can_do.*` service definitions for raw/catalog command execution and vehicle notifications.
