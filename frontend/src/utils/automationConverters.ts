@@ -93,6 +93,17 @@ export function compileToByteMap(input: string | ByteMap | Record<string, unknow
     }
   }
 
+  // Support continuous hex string e.g. "D0C1751500000000" or "0xD0C1751500000000"
+  const continuousHex = trimmed.replace(/^0x/i, '');
+  if (/^[0-9a-fA-F]{2,16}$/.test(continuousHex) && continuousHex.length % 2 === 0 && !/\s/.test(trimmed)) {
+    const result: ByteMap = {};
+    const byteCount = Math.min(8, continuousHex.length / 2);
+    for (let i = 0; i < byteCount; i++) {
+      result[`D${i + 1}`] = `0x${continuousHex.slice(i * 2, i * 2 + 2).toUpperCase()}`;
+    }
+    return result;
+  }
+
   const parts = trimmed.split(/\s+/);
   const result: ByteMap = {};
 
@@ -401,8 +412,30 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
     };
   }
 
+  // Helper to resolve dual-tone door payload (0x48F) for ambient_mood_lighting presets
+  const getAmbientDoorPayload = (label: string | undefined, dashPayload: ByteMap): ByteMap => {
+    const l = (label || '').toLowerCase();
+    if (l.includes('christmas') || l.includes('xmas')) {
+      return compileToByteMap('7AC2081500000000'); // Lime Green Doors
+    }
+    if (l.includes('halloween')) {
+      return compileToByteMap('6703D51300000000'); // Deep Purple Doors
+    }
+    if (l.includes('valentine')) {
+      return compileToByteMap('EB02371700000000'); // Crimson Red Doors
+    }
+    if (l.includes('4th') || l.includes('fourth') || l.includes('july') || l.includes('patriotic')) {
+      return compileToByteMap('1E02861700000000'); // Electric Blue Doors
+    }
+    return dashPayload;
+  };
+
   // Handle explicit transmit or raw can_tx: inline multiple steps if defined, or return single transmit frame
   if (act.type === 'transmit' || act.type === 'can_tx') {
+    const isAmbient = (act.entity_id || act.source_command_id) === 'ambient_mood_lighting' || formatCanId(act.can_id) === '0x4AD';
+    const resolvedForFallback = catalog ? resolveCatalogCommandForAction(act, catalog) : {};
+    const fallbackOptSteps = resolvedForFallback.matchedOption?.steps;
+
     if (act.steps && act.steps.length > 1) {
       const inlinedSteps: any[] = [];
       act.steps.forEach((step: any, idx: number) => {
@@ -413,7 +446,10 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
           });
           return;
         }
-        const stepPayload = compileToByteMap(step.payload);
+        let stepPayload = compileToByteMap(step.payload);
+        if (Object.keys(stepPayload).length === 0 && fallbackOptSteps && fallbackOptSteps[idx]?.payload) {
+          stepPayload = compileToByteMap(fallbackOptSteps[idx].payload);
+        }
         inlinedSteps.push({
           type: 'transmit',
           can_id: formatCanId(step.can_id || act.can_id || '0x000'),
@@ -435,6 +471,22 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
           });
         }
       });
+
+      // If this is a 2-step 0x4AD ambient mood lighting sequence without 0x48F, also append the 0x48F door zone burst
+      const has48F = inlinedSteps.some(s => s.type === 'transmit' && formatCanId(s.can_id) === '0x48F');
+      if (isAmbient && !has48F && inlinedSteps.length >= 2 && inlinedSteps[0]?.type === 'transmit') {
+        const dashStage1 = inlinedSteps[0].payload;
+        const doorStage1 = getAmbientDoorPayload(act.option_label || act.command || resolvedForFallback.matchedOption?.label, dashStage1);
+        const latchCommit = compileToByteMap('0002082000000000');
+        const busVal = act.bus ?? 0;
+        inlinedSteps.push(
+          { type: 'delay', ms: 25 },
+          { type: 'transmit', can_id: '0x48F', bus: busVal, payload: doorStage1, repeat: 2 },
+          { type: 'delay', ms: 25 },
+          { type: 'transmit', can_id: '0x48F', bus: busVal, payload: latchCommit, repeat: 2 }
+        );
+      }
+
       return inlinedSteps;
     }
 
@@ -537,6 +589,20 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
             });
           }
         });
+
+        const has48F = inlinedSteps.some(s => s.type === 'transmit' && formatCanId(s.can_id) === '0x48F');
+        if (entityId === 'ambient_mood_lighting' && !has48F && inlinedSteps.length >= 2 && inlinedSteps[0]?.type === 'transmit') {
+          const dashStage1 = inlinedSteps[0].payload;
+          const doorStage1 = getAmbientDoorPayload(opt?.label || commandLabel, dashStage1);
+          const latchCommit = compileToByteMap('0002082000000000');
+          inlinedSteps.push(
+            { type: 'delay', ms: 25 },
+            { type: 'transmit', can_id: '0x48F', bus: bus, payload: doorStage1, repeat: 2 },
+            { type: 'delay', ms: 25 },
+            { type: 'transmit', can_id: '0x48F', bus: bus, payload: latchCommit, repeat: 2 }
+          );
+        }
+
         return inlinedSteps;
       }
 
@@ -1266,8 +1332,16 @@ const ENTITY_ALIASES: Record<string, string> = {
 };
 
 function extractActionPayload(act: AutomationAction): ByteMap | undefined {
-  // 1. Prefer steps with a significant byte (e.g. Low Cool 0x3F before latch 0xFF)
+  // 1. Always prefer the first step's payload (Stage 1 command frame) so we don't accidentally
+  // pick a Stage 2 commit latch frame (like 00 02 08 20) when Stage 1 is all 0x00 (e.g. Mood Light Off)
   if (Array.isArray(act.steps) && act.steps.length > 0) {
+    const firstStep = act.steps[0];
+    if (firstStep && firstStep.payload) {
+      const map = compileToByteMap(firstStep.payload);
+      if (Object.keys(map).length > 0) {
+        return map;
+      }
+    }
     for (const step of act.steps) {
       if (step && step.payload) {
         const map = compileToByteMap(step.payload);
@@ -1276,18 +1350,6 @@ function extractActionPayload(act: AutomationAction): ByteMap | undefined {
         }
       }
     }
-  }
-
-  // 2. Check act.payload for a significant byte
-  if (act.payload) {
-    const map = compileToByteMap(act.payload);
-    if (Object.keys(map).length > 0 && Object.values(map).some(isSignificantByte)) {
-      return map;
-    }
-  }
-
-  // 3. Fall back to first step payload if present
-  if (Array.isArray(act.steps) && act.steps.length > 0) {
     for (const step of act.steps) {
       if (step && step.payload) {
         const map = compileToByteMap(step.payload);
@@ -1296,7 +1358,7 @@ function extractActionPayload(act: AutomationAction): ByteMap | undefined {
     }
   }
 
-  // 4. Fall back to act.payload
+  // 2. Fall back to act.payload
   if (act.payload) {
     const map = compileToByteMap(act.payload);
     if (Object.keys(map).length > 0) return map;
@@ -1397,8 +1459,10 @@ function findBestScoredOptionForAction(
         }
 
         if (hasMismatch) {
-          // If overlapping bytes mismatch, this option cannot be active
-          score = 0;
+          // If overlapping bytes mismatch, this option cannot be active unless the label is an exact match
+          if (!labelToMatch || optLabel !== labelToMatch) {
+            score = 0;
+          }
         } else if (significantMatchCount > 0) {
           // At least one non-idle/non-padding byte matched!
           score += matchCount * 25 + significantMatchCount * 50;

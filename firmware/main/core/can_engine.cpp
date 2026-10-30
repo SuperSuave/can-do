@@ -438,10 +438,12 @@ bool evaluate_condition(const AutomationCondition& cond) {
             uint8_t masked_target = cond.target_value & mask;
 
             switch (cond.op) {
-                case ConditionOperator::EQUAL:        return masked_actual == masked_target;
-                case ConditionOperator::NOT_EQUAL:    return masked_actual != masked_target;
-                case ConditionOperator::LESS_THAN:    return masked_actual < masked_target;
-                case ConditionOperator::GREATER_THAN: return masked_actual > masked_target;
+                case ConditionOperator::EQUAL:                 return masked_actual == masked_target;
+                case ConditionOperator::NOT_EQUAL:             return masked_actual != masked_target;
+                case ConditionOperator::LESS_THAN:             return masked_actual < masked_target;
+                case ConditionOperator::LESS_THAN_OR_EQUAL:    return masked_actual <= masked_target;
+                case ConditionOperator::GREATER_THAN:          return masked_actual > masked_target;
+                case ConditionOperator::GREATER_THAN_OR_EQUAL: return masked_actual >= masked_target;
                 default: return false;
             }
         }
@@ -925,47 +927,46 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
                 cJSON_Delete(root);
             }
         }
-        // 6. Direct color keyword or hex
-        else if (cmd_lower.find("cyan") != std::string::npos || cmd_lower.find("aqua") != std::string::npos) {
-            ambient_anim_get_palette_color(8, payload_4ad); // Pure Cyan
-            new_state = "Pure Cyan / Aqua Wave";
-            has_4ad = true;
-        } else if (cmd_lower.find("amber") != std::string::npos || cmd_lower.find("orange") != std::string::npos || cmd_lower.find("sunset") != std::string::npos) {
-            ambient_anim_get_palette_color(57, payload_4ad); // Warm Sunset / Amber
-            new_state = "Warm Sunset / Amber";
-            has_4ad = true;
-        } else if (cmd_lower.find("violet") != std::string::npos || cmd_lower.find("purple") != std::string::npos) {
-            ambient_anim_get_palette_color(24, payload_4ad); // Deep Purple
-            new_state = "Deep Purple / Violet";
-            has_4ad = true;
-        } else if (cmd_lower.find("white") != std::string::npos || cmd_lower.find("champagne") != std::string::npos) {
-            ambient_anim_get_palette_color(64, payload_4ad); // Champagne White
-            new_state = "Warm White / Champagne";
-            has_4ad = true;
-        } else if (cmd_lower.find("red") != std::string::npos || cmd_lower.find("crimson") != std::string::npos) {
-            ambient_anim_get_palette_color(46, payload_4ad); // Crimson Red
-            new_state = "Crimson Red";
-            has_4ad = true;
-        } else if (cmd_lower.find("green") != std::string::npos || cmd_lower.find("mint") != std::string::npos || cmd_lower.find("lime") != std::string::npos) {
-            ambient_anim_get_palette_color(1, payload_4ad); // Lime / Mint Glow
-            new_state = "Lime / Mint Glow";
-            has_4ad = true;
-        } else if (cmd_lower.find("blue") != std::string::npos) {
-            ambient_anim_get_palette_color(15, payload_4ad); // Electric Blue
-            new_state = "Electric Blue";
-            has_4ad = true;
-        } else if (cmd_lower.find("pink") != std::string::npos || cmd_lower.find("magenta") != std::string::npos) {
-            ambient_anim_get_palette_color(33, payload_4ad); // Magenta / Neon Pink
-            new_state = "Magenta / Neon Pink";
-            has_4ad = true;
-        } else {
-            // Check if string is 'color X' or raw integer index
+        // 6. Explicit 'Color X' index, direct color keyword, or raw hex
+        else {
             int parsed_idx = 0;
             if (sscanf(cmd_lower.c_str(), "color %d", &parsed_idx) == 1 || sscanf(cmd_lower.c_str(), "%d", &parsed_idx) == 1) {
                 if (parsed_idx >= 1 && parsed_idx <= 64) {
                     ambient_anim_get_palette_color((uint8_t)parsed_idx, payload_4ad);
                     has_4ad = true;
                 }
+            } else if (cmd_lower.find("cyan") != std::string::npos || cmd_lower.find("aqua") != std::string::npos) {
+                ambient_anim_get_palette_color(8, payload_4ad); // Pure Cyan
+                new_state = "Pure Cyan / Aqua Wave";
+                has_4ad = true;
+            } else if (cmd_lower.find("amber") != std::string::npos || cmd_lower.find("orange") != std::string::npos || cmd_lower.find("sunset") != std::string::npos) {
+                ambient_anim_get_palette_color(57, payload_4ad); // Warm Sunset / Amber
+                new_state = "Warm Sunset / Amber";
+                has_4ad = true;
+            } else if (cmd_lower.find("violet") != std::string::npos || cmd_lower.find("purple") != std::string::npos) {
+                ambient_anim_get_palette_color(24, payload_4ad); // Deep Purple
+                new_state = "Deep Purple / Violet";
+                has_4ad = true;
+            } else if (cmd_lower.find("white") != std::string::npos || cmd_lower.find("champagne") != std::string::npos) {
+                ambient_anim_get_palette_color(64, payload_4ad); // Champagne White
+                new_state = "Warm White / Champagne";
+                has_4ad = true;
+            } else if (cmd_lower.find("red") != std::string::npos || cmd_lower.find("crimson") != std::string::npos) {
+                ambient_anim_get_palette_color(46, payload_4ad); // Crimson Red
+                new_state = "Crimson Red";
+                has_4ad = true;
+            } else if (cmd_lower.find("green") != std::string::npos || cmd_lower.find("mint") != std::string::npos || cmd_lower.find("lime") != std::string::npos) {
+                ambient_anim_get_palette_color(1, payload_4ad); // Lime / Mint Glow
+                new_state = "Lime / Mint Glow";
+                has_4ad = true;
+            } else if (cmd_lower.find("blue") != std::string::npos) {
+                ambient_anim_get_palette_color(15, payload_4ad); // Electric Blue
+                new_state = "Electric Blue";
+                has_4ad = true;
+            } else if (cmd_lower.find("pink") != std::string::npos || cmd_lower.find("magenta") != std::string::npos) {
+                ambient_anim_get_palette_color(33, payload_4ad); // Magenta / Neon Pink
+                new_state = "Magenta / Neon Pink";
+                has_4ad = true;
             } else {
                 std::string clean_hex;
                 for (char c : command_label) {

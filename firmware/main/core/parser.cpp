@@ -56,9 +56,11 @@ uint8_t parse_hex_string(const char* hex_str, bool* is_inverted) {
 
 ConditionOperator parse_operator(const char* op_str) {
     if (!op_str) return ConditionOperator::EQUAL;
-    if (strcmp(op_str, "not_equal") == 0 || strcmp(op_str, "!=") == 0) return ConditionOperator::NOT_EQUAL;
-    if (strcmp(op_str, "less_than") == 0 || strcmp(op_str, "<") == 0) return ConditionOperator::LESS_THAN;
-    if (strcmp(op_str, "greater_than") == 0 || strcmp(op_str, ">") == 0) return ConditionOperator::GREATER_THAN;
+    if (strcmp(op_str, "not_equal") == 0 || strcmp(op_str, "!=") == 0 || strcmp(op_str, "not_equals") == 0) return ConditionOperator::NOT_EQUAL;
+    if (strcmp(op_str, "less_than") == 0 || strcmp(op_str, "<") == 0 || strcmp(op_str, "less") == 0) return ConditionOperator::LESS_THAN;
+    if (strcmp(op_str, "less_than_or_equal") == 0 || strcmp(op_str, "<=") == 0) return ConditionOperator::LESS_THAN_OR_EQUAL;
+    if (strcmp(op_str, "greater_than") == 0 || strcmp(op_str, ">") == 0 || strcmp(op_str, "greater") == 0) return ConditionOperator::GREATER_THAN;
+    if (strcmp(op_str, "greater_than_or_equal") == 0 || strcmp(op_str, ">=") == 0) return ConditionOperator::GREATER_THAN_OR_EQUAL;
     return ConditionOperator::EQUAL;
 }
 
@@ -715,12 +717,24 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
 
         cJSON* p = cJSON_GetObjectItem(a_item, "payload");
         if (p) {
-            cJSON* p_item = nullptr;
-            cJSON_ArrayForEach(p_item, p) {
-                int idx = get_d_index(p_item->string);
-                if (idx >= 0 && cJSON_IsString(p_item)) {
-                    step.payload[idx] = parse_hex_string(p_item->valuestring);
-                    step.mask |= (1 << idx);
+            if (cJSON_IsString(p) && p->valuestring) {
+                std::string clean_hex;
+                for (const char* ch = p->valuestring; *ch; ++ch) {
+                    if (isxdigit((unsigned char)*ch)) clean_hex += *ch;
+                }
+                for (size_t i = 0; i + 1 < clean_hex.length() && (i / 2) < 8; i += 2) {
+                    uint8_t byte_idx = (uint8_t)(i / 2);
+                    step.payload[byte_idx] = (uint8_t)strtoul(clean_hex.substr(i, 2).c_str(), nullptr, 16);
+                    step.mask |= (1 << byte_idx);
+                }
+            } else {
+                cJSON* p_item = nullptr;
+                cJSON_ArrayForEach(p_item, p) {
+                    int idx = get_d_index(p_item->string);
+                    if (idx >= 0 && cJSON_IsString(p_item)) {
+                        step.payload[idx] = parse_hex_string(p_item->valuestring);
+                        step.mask |= (1 << idx);
+                    }
                 }
             }
         }

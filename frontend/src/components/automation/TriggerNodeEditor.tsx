@@ -692,10 +692,10 @@ export function TriggerNodeEditor({
             return (
               <div key={group.key || gIdx} className={gridClass}>
                 {group.items.map(({ opt, origIndex }) => {
-                  const isSelected =
-                    (trig.option_label && opt.label.toLowerCase() === trig.option_label.toLowerCase()) ||
-                    (matchedOption && opt.label.toLowerCase() === matchedOption.label.toLowerCase()) ||
-                    (!trig.option_label && !matchedOption && origIndex === 0);
+                  const activeTrigOptionLabel = (trig.option_label || matchedOption?.label || '').toLowerCase().trim();
+                  const isSelected = activeTrigOptionLabel
+                    ? opt.label.toLowerCase().trim() === activeTrigOptionLabel
+                    : origIndex === 0;
 
                   return (
                     <button
@@ -724,7 +724,47 @@ export function TriggerNodeEditor({
       )}
 
       {/* Advanced Details View */}
-      {(!hasOptions || showAdvanced) && (
+      {(!hasOptions || showAdvanced) && (() => {
+        const effectiveTrigCanId =
+          trig.can_id ||
+          catalogCmd?.network?.state_can_id ||
+          catalogCmd?.state_can_id ||
+          catalogCmd?.network?.action_can_id ||
+          catalogCmd?.action_can_id ||
+          '';
+        const effectiveTrigBus = trig.bus ?? catalogCmd?.network?.bus ?? catalogCmd?.bus ?? 0;
+        const fallbackTrigMatch = compileToByteMap(
+          matchedOption?.match || matchedOption?.payload || catalogCmd?.match || catalogCmd?.payload
+        );
+        const effectiveTrigMatch =
+          typeof trig.match === 'object' && trig.match && Object.keys(trig.match).length > 0
+            ? trig.match
+            : typeof trig.to_payload === 'object' && trig.to_payload && Object.keys(trig.to_payload).length > 0
+            ? trig.to_payload
+            : typeof trig.to_payload === 'string' && trig.to_payload.trim() !== ''
+            ? trig.to_payload
+            : Object.keys(fallbackTrigMatch).length > 0
+            ? fallbackTrigMatch
+            : '';
+        const effectiveTrigByte =
+          trig.byte ||
+          (trig.byte_index !== undefined ? `D${trig.byte_index + 1}` : '') ||
+          Object.keys(fallbackTrigMatch)[0] ||
+          '';
+        const rawFallbackMask = matchedOption?.mask || catalogCmd?.mask;
+        const effectiveTrigMask =
+          trig.mask ||
+          (typeof rawFallbackMask === 'string'
+            ? rawFallbackMask
+            : rawFallbackMask && typeof rawFallbackMask === 'object' && effectiveTrigByte
+            ? (rawFallbackMask as any)[effectiveTrigByte] || ''
+            : '');
+        const effectiveTrigTo =
+          trig.to ||
+          (trig.to_value !== undefined ? `0x${trig.to_value.toString(16).padStart(2, '0').toUpperCase()}` : '') ||
+          (effectiveTrigByte && fallbackTrigMatch[effectiveTrigByte] ? fallbackTrigMatch[effectiveTrigByte] : '');
+
+        return (
         <div className={`space-y-3 ${hasOptions ? 'pt-2.5 border-t border-slate-850' : ''}`}>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 font-mono text-[11px]">
             <div>
@@ -741,7 +781,7 @@ export function TriggerNodeEditor({
               <label className="block text-[10px] font-sans text-slate-500">CAN ID</label>
               <input
                 type="text"
-                value={trig.can_id || ''}
+                value={effectiveTrigCanId}
                 onChange={e => onUpdate({ ...trig, can_id: e.target.value })}
                 placeholder="0x448"
                 className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
@@ -750,7 +790,7 @@ export function TriggerNodeEditor({
             <div>
               <label className="block text-[10px] font-sans text-slate-500">Bus</label>
               <select
-                value={trig.bus ?? 0}
+                value={effectiveTrigBus}
                 onChange={e => onUpdate({ ...trig, bus: parseInt(e.target.value) || 0 })}
                 className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
               >
@@ -767,17 +807,19 @@ export function TriggerNodeEditor({
               <input
                 type="text"
                 value={
-                  typeof trig.match === 'object' && Object.keys(trig.match).length > 0
-                    ? JSON.stringify(trig.match)
-                    : typeof trig.to_payload === 'object' && Object.keys(trig.to_payload).length > 0
-                    ? JSON.stringify(trig.to_payload)
-                    : typeof trig.to_payload === 'string'
-                    ? trig.to_payload
+                  typeof effectiveTrigMatch === 'object' && effectiveTrigMatch && Object.keys(effectiveTrigMatch).length > 0
+                    ? JSON.stringify(effectiveTrigMatch)
+                    : typeof effectiveTrigMatch === 'string'
+                    ? effectiveTrigMatch
                     : ''
                 }
                 onChange={e => {
                   const compiled = compileToByteMap(e.target.value);
-                  onUpdate({ ...trig, match: compiled, to_payload: compiled });
+                  onUpdate({
+                    ...trig,
+                    match: Object.keys(compiled).length > 0 ? compiled : undefined,
+                    to_payload: Object.keys(compiled).length > 0 ? compiled : e.target.value
+                  });
                 }}
                 placeholder='{"D7":"0x0"}'
                 className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-cyan-300 font-bold"
@@ -789,7 +831,7 @@ export function TriggerNodeEditor({
                 <input
                   type="text"
                   placeholder="D7"
-                  value={trig.byte || (trig.byte_index !== undefined ? `D${trig.byte_index + 1}` : '')}
+                  value={effectiveTrigByte}
                   onChange={e => {
                     const byte = e.target.value.toUpperCase();
                     const num = parseInt(e.target.value.replace(/\D/g, ''), 10);
@@ -802,7 +844,7 @@ export function TriggerNodeEditor({
                 <input
                   type="text"
                   placeholder="Mask"
-                  value={trig.mask || ''}
+                  value={effectiveTrigMask}
                   onChange={e => onUpdate({ ...trig, mask: e.target.value })}
                   className="w-1/4 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-yellow-300 text-center font-bold"
                   title="Byte Bitmask (e.g. 0xF0)"
@@ -822,7 +864,7 @@ export function TriggerNodeEditor({
                 <input
                   type="text"
                   placeholder="To"
-                  value={trig.to || (trig.to_value !== undefined ? `0x${trig.to_value.toString(16).padStart(2, '0').toUpperCase()}` : '')}
+                  value={effectiveTrigTo}
                   onChange={e => {
                     const to = e.target.value;
                     const to_value = e.target.value === '' ? undefined : parseInt(e.target.value, 16) || 0;
@@ -835,7 +877,8 @@ export function TriggerNodeEditor({
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
         </>
       )}
     </div>

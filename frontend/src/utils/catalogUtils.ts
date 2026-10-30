@@ -176,7 +176,18 @@ export function cleanToByteMap(input: string | ByteMap | undefined): ByteMap {
     return cleanMap;
   }
 
-  const parts = input.trim().split(/\s+/);
+  const trimmed = input.trim();
+  const noPrefix = trimmed.replace(/^0x/i, '');
+  if (/^[0-9a-fA-F]{4,16}$/.test(noPrefix) && noPrefix.length % 2 === 0 && !trimmed.includes(' ')) {
+    const hexResult: ByteMap = {};
+    for (let i = 0; i < noPrefix.length && i < 16; i += 2) {
+      const byteIdx = Math.floor(i / 2) + 1;
+      hexResult[`D${byteIdx}`] = `0x${noPrefix.slice(i, i + 2).toUpperCase()}`;
+    }
+    return hexResult;
+  }
+
+  const parts = trimmed.split(/\s+/);
   const result: ByteMap = {};
 
   parts.forEach((part, idx) => {

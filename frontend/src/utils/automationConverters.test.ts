@@ -278,6 +278,32 @@ test('compileToByteMap normalizes object ByteMap input and filters out wildcards
   assert.deepStrictEqual(compileToByteMap(input), expected);
 });
 
+test('compileToByteMap parses continuous hex payload strings into 1-based ByteMap', () => {
+  const payload16 = 'D0C1751500000000';
+  assert.deepStrictEqual(compileToByteMap(payload16), {
+    D1: '0xD0',
+    D2: '0xC1',
+    D3: '0x75',
+    D4: '0x15',
+    D5: '0x00',
+    D6: '0x00',
+    D7: '0x00',
+    D8: '0x00',
+  });
+
+  const payloadCommit = '0002082000000000';
+  assert.deepStrictEqual(compileToByteMap(payloadCommit), {
+    D1: '0x00',
+    D2: '0x02',
+    D3: '0x08',
+    D4: '0x20',
+    D5: '0x00',
+    D6: '0x00',
+    D7: '0x00',
+    D8: '0x00',
+  });
+});
+
 test('compileToByteMap parses space-separated hex payload strings into 1-based ByteMap', () => {
   const payload = '01 02 03 04 05 06 07 08';
   assert.deepStrictEqual(compileToByteMap(payload), {
@@ -809,4 +835,73 @@ test('applyOptionsToCondition groups same-byte conflicting options into an OR lo
   assert.strictEqual(compiled.or.length, 2);
   assert.strictEqual(compiled.or[0].value, '0x01');
   assert.strictEqual(compiled.or[1].value, '0x02');
-});
+});
+
+test('resolveCatalogCommandForAction and applyOptionToAction properly handle ambient_mood_lighting continuous hex steps and Mood Light Off', () => {
+  const catalog: Catalog = {
+    can_do_version: '1.0.0',
+    vehicles: [],
+    commands: [
+      {
+        id: 'ambient_mood_lighting',
+        name: 'Ambient Mood Lighting',
+        category: 'Lighting',
+        roles: ['action'],
+        network: { action_can_id: '0x4AD', state_can_id: '0x3C6', delay_ms: 25 },
+        options: [
+          {
+            label: 'Mood Light Off',
+            steps: [
+              { payload: '0000000000000000', repeat: 2, delay_ms: 25 },
+              { payload: '0002082000000000', repeat: 2, delay_ms: 0 }
+            ]
+          },
+          {
+            label: 'Christmas Dual-Tone (Red Dash / Green Doors)',
+            steps: [
+              { payload: 'EB02371700000000', repeat: 2, delay_ms: 25 },
+              { payload: '0002082000000000', repeat: 2, delay_ms: 0 }
+            ]
+          }
+        ]
+      }
+    ]
+  };
+
+  // 1. Selecting Mood Light Off should not mismatch because of Stage 2 latch 0002082000000000
+  const offAct: AutomationAction = {
+    id: 'act_off',
+    type: 'can_tx',
+    can_id: '0x4AD',
+    entity_id: 'ambient_mood_lighting',
+    option_label: 'Mood Light Off',
+    command: 'Mood Light Off',
+    steps: [
+      { can_id: '0x4AD', bus: 0, payload: compileToByteMap('0000000000000000'), repeat: 2, delay_ms: 25 },
+      { can_id: '0x4AD', bus: 0, payload: compileToByteMap('0002082000000000'), repeat: 2, delay_ms: 0 }
+    ]
+  };
+  const resolvedOff = resolveCatalogCommandForAction(offAct, catalog);
+  assert.strictEqual(resolvedOff.command?.id, 'ambient_mood_lighting');
+  assert.strictEqual(resolvedOff.matchedOption?.label, 'Mood Light Off');
+
+  // 2. Compiling Christmas Dual-Tone appends 0x48F door zone burst with Lime Green (7AC20815)
+  const xmasAct: AutomationAction = {
+    id: 'act_xmas',
+    type: 'can_tx',
+    can_id: '0x4AD',
+    entity_id: 'ambient_mood_lighting',
+    option_label: 'Christmas Dual-Tone (Red Dash / Green Doors)',
+    command: 'Christmas Dual-Tone (Red Dash / Green Doors)',
+    steps: [
+      { can_id: '0x4AD', bus: 0, payload: compileToByteMap('EB02371700000000'), repeat: 2, delay_ms: 25 },
+      { can_id: '0x4AD', bus: 0, payload: compileToByteMap('0002082000000000'), repeat: 2, delay_ms: 0 }
+    ]
+  };
+  const compiledXmas = compileAction(xmasAct, catalog);
+  assert.ok(Array.isArray(compiledXmas));
+  const doorFrames = compiledXmas.filter((s: any) => s.type === 'transmit' && s.can_id === '0x48F');
+  assert.strictEqual(doorFrames.length, 2);
+  assert.strictEqual(doorFrames[0].payload.D1, '0x7A');
+  assert.strictEqual(doorFrames[0].payload.D2, '0xC2');
+});

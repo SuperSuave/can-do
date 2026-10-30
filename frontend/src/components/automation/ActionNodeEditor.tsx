@@ -803,6 +803,106 @@ export function ActionNodeEditor({
   }
 
   // Regular action step rendering uses catalogCmd, matchedOption, hasOptions, and actionName declared above
+  const effectiveCanId =
+    act.can_id ||
+    catalogCmd?.network?.action_can_id ||
+    catalogCmd?.action_can_id ||
+    catalogCmd?.network?.state_can_id ||
+    catalogCmd?.state_can_id ||
+    '';
+  const effectiveBus = act.bus ?? catalogCmd?.network?.bus ?? catalogCmd?.action_bus ?? catalogCmd?.bus ?? 0;
+  const effectiveRepeat =
+    act.repeat !== undefined
+      ? act.repeat
+      : matchedOption?.repeat ?? (matchedOption?.steps && matchedOption.steps[0]?.repeat) ?? catalogCmd?.repeat ?? 1;
+  const effectiveDelayMs =
+    act.delay_ms !== undefined
+      ? act.delay_ms
+      : matchedOption?.delay_ms ??
+        (matchedOption?.steps && matchedOption.steps[0]?.delay_ms) ??
+        catalogCmd?.network?.delay_ms ??
+        catalogCmd?.delay_ms ??
+        0;
+
+  const rawEffectivePayload =
+    (typeof act.payload === 'object' && act.payload && Object.keys(act.payload).length > 0
+      ? act.payload
+      : typeof act.payload === 'string' && act.payload.trim() !== ''
+      ? act.payload
+      : undefined) ??
+    matchedOption?.payload ??
+    (matchedOption?.steps && matchedOption.steps[0]?.payload) ??
+    catalogCmd?.payload;
+
+  const effectivePayloadMap = compileToByteMap(rawEffectivePayload);
+  const effectivePayload =
+    Object.keys(effectivePayloadMap).length > 0
+      ? effectivePayloadMap
+      : typeof rawEffectivePayload === 'string'
+      ? rawEffectivePayload
+      : '';
+
+  const effectiveSteps: AutomationActionStep[] | undefined = (() => {
+    const rawList =
+      act.steps && act.steps.length > 0
+        ? act.steps
+        : matchedOption?.steps && matchedOption.steps.length > 0
+        ? matchedOption.steps
+        : !matchedOption?.payload && catalogCmd?.steps && catalogCmd.steps.length > 0
+        ? catalogCmd.steps
+        : undefined;
+    if (!rawList || rawList.length === 0) return undefined;
+    return rawList.map((s, idx) => {
+      const sMap = compileToByteMap(s.payload);
+      const fallbackStepPayload =
+        matchedOption?.steps?.[idx]?.payload ?? catalogCmd?.steps?.[idx]?.payload;
+      const finalMap = Object.keys(sMap).length > 0 ? sMap : compileToByteMap(fallbackStepPayload);
+      return {
+        can_id: s.can_id || effectiveCanId || '0x000',
+        bus: s.bus ?? effectiveBus,
+        repeat: s.repeat ?? 1,
+        delay_ms: s.delay_ms ?? 0,
+        payload:
+          Object.keys(finalMap).length > 0
+            ? finalMap
+            : typeof s.payload === 'string' && s.payload.trim() !== ''
+            ? s.payload
+            : ''
+      };
+    });
+  })();
+
+  const activeOptionLabel = (act.option_label || act.command || matchedOption?.label || '').toLowerCase().trim();
+
+  const renderByteBoxes = (byteSource: any) => {
+    const map = typeof byteSource === 'object' && byteSource !== null ? byteSource : compileToByteMap(byteSource);
+    const keys = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'];
+    return (
+      <div className="grid grid-cols-8 gap-1 pt-1">
+        {keys.map(k => {
+          const val = map[k];
+          const hasVal = val !== undefined && val !== '' && val !== '*';
+          const isNonZero = hasVal && val !== '0x00' && val !== '00' && val !== '0';
+          return (
+            <div
+              key={k}
+              className={`flex flex-col items-center justify-center py-1 px-0.5 rounded border text-[10px] font-mono transition-colors ${
+                isNonZero
+                  ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200 font-bold shadow-sm'
+                  : hasVal
+                  ? 'bg-slate-900 border-slate-700/80 text-slate-300'
+                  : 'bg-slate-950/60 border-slate-800/60 text-slate-600'
+              }`}
+              title={`Byte ${k}: ${val || '*'}`}
+            >
+              <span className="text-[8px] text-slate-500 leading-none mb-0.5">{k}</span>
+              <span className="leading-none">{val || '*'}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 hover:border-slate-700/80 space-y-2.5 text-xs transition-all shadow-sm min-w-0 overflow-hidden">
@@ -820,9 +920,9 @@ export function ActionNodeEditor({
             A{index + 1}
           </span>
           <span className="font-semibold text-white text-xs sm:text-sm tracking-tight truncate">{actionName}</span>
-          {act.steps && act.steps.length > 1 && (
+          {effectiveSteps && effectiveSteps.length > 1 && (
             <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-900/40 text-emerald-300 border border-emerald-700/60 shrink-0">
-              {act.steps.length} Steps
+              {effectiveSteps.length} Steps
             </span>
           )}
         </div>
@@ -869,11 +969,9 @@ export function ActionNodeEditor({
             return (
               <div key={group.key || gIdx} className={gridClass}>
                 {group.items.map(({ opt, origIndex }) => {
-                  const isSelected =
-                    (act.option_label && opt.label.toLowerCase() === act.option_label.toLowerCase()) ||
-                    (act.command && opt.label.toLowerCase() === act.command.toLowerCase()) ||
-                    (matchedOption && opt.label.toLowerCase() === matchedOption.label.toLowerCase()) ||
-                    (!act.option_label && !act.command && !matchedOption && origIndex === 0);
+                  const isSelected = activeOptionLabel
+                    ? opt.label.toLowerCase().trim() === activeOptionLabel
+                    : origIndex === 0;
 
                   return (
                     <button
@@ -907,7 +1005,7 @@ export function ActionNodeEditor({
           act.type === 'entity_command' ||
           act.type === 'transmit' ||
           !['precondition', 'climate_target', 'track_popup', 'popup', 'delay', 'if_then', 'choose', 'webhook'].includes(act.type);
-        const hasMultipleSteps = isCanTx && !!(act.steps && act.steps.length > 1);
+        const hasMultipleSteps = isCanTx && !!(effectiveSteps && effectiveSteps.length > 1);
 
         return (
         <div className={`space-y-3 ${hasOptions ? 'pt-2.5 border-t border-slate-850' : ''}`}>
@@ -1141,7 +1239,7 @@ export function ActionNodeEditor({
                   <label className="block text-[10px] font-sans text-slate-500">Target CAN ID</label>
                   <input
                     type="text"
-                    value={act.can_id || ''}
+                    value={effectiveCanId}
                     onChange={e => onUpdate({ ...act, can_id: e.target.value, type: 'can_tx' })}
                     className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
                     placeholder="0x524"
@@ -1150,7 +1248,7 @@ export function ActionNodeEditor({
                 <div>
                   <label className="block text-[10px] font-sans text-slate-500">Bus</label>
                   <select
-                    value={act.bus ?? 0}
+                    value={effectiveBus}
                     onChange={e => onUpdate({ ...act, bus: parseInt(e.target.value) || 0, type: 'can_tx' })}
                     className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
                   >
@@ -1164,14 +1262,14 @@ export function ActionNodeEditor({
                   <div className="flex items-center gap-1">
                     <input
                       type="number"
-                      value={act.repeat !== undefined ? act.repeat : 1}
+                      value={effectiveRepeat}
                       onChange={e => onUpdate({ ...act, repeat: parseInt(e.target.value) || 1, type: 'can_tx' })}
                       className="w-12 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-200"
                     />
                     <span className="text-slate-500 font-sans">×</span>
                     <input
                       type="number"
-                      value={act.delay_ms !== undefined ? act.delay_ms : 0}
+                      value={effectiveDelayMs}
                       onChange={e => onUpdate({ ...act, delay_ms: parseInt(e.target.value) || 0, type: 'can_tx' })}
                       placeholder="ms"
                       className="w-16 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-200"
@@ -1211,7 +1309,13 @@ export function ActionNodeEditor({
                 <label className="block text-[10px] font-sans text-slate-500">Payload (1-based D1..D8)</label>
                 <input
                   type="text"
-                  value={typeof act.payload === 'object' && act.payload && Object.keys(act.payload).length > 0 ? JSON.stringify(act.payload) : (typeof act.payload === 'string' ? act.payload : '')}
+                  value={
+                    typeof effectivePayload === 'object' && effectivePayload && Object.keys(effectivePayload).length > 0
+                      ? JSON.stringify(effectivePayload)
+                      : typeof effectivePayload === 'string'
+                      ? effectivePayload
+                      : ''
+                  }
                   onChange={e => {
                     const compiled = compileToByteMap(e.target.value);
                     onUpdate({ ...act, payload: Object.keys(compiled).length > 0 ? compiled : e.target.value, type: 'can_tx' });
@@ -1219,21 +1323,22 @@ export function ActionNodeEditor({
                   placeholder='{"D1":"0x02","D2":"0x01"}'
                   className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-emerald-300 font-bold"
                 />
+                {renderByteBoxes(effectivePayload)}
               </div>
               <div className="flex items-center justify-between pt-0.5">
                 <button
                   type="button"
                   onClick={() => {
                     const currentStep: AutomationActionStep = {
-                      can_id: act.can_id || '0x000',
-                      bus: act.bus ?? 0,
-                      repeat: act.repeat !== undefined ? act.repeat : 1,
-                      delay_ms: act.delay_ms !== undefined ? act.delay_ms : 20,
-                      payload: act.payload || ''
+                      can_id: effectiveCanId || '0x000',
+                      bus: effectiveBus,
+                      repeat: effectiveRepeat,
+                      delay_ms: effectiveDelayMs || 20,
+                      payload: effectivePayload || ''
                     };
                     const secondStep: AutomationActionStep = {
-                      can_id: act.can_id || '0x000',
-                      bus: act.bus ?? 0,
+                      can_id: effectiveCanId || '0x000',
+                      bus: effectiveBus,
                       repeat: 1,
                       delay_ms: 20,
                       payload: ''
@@ -1260,7 +1365,7 @@ export function ActionNodeEditor({
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-white flex items-center gap-1.5">
                     <Layers className="w-3.5 h-3.5 text-emerald-400" />
-                    Sequence Steps ({act.steps!.length})
+                    Sequence Steps ({effectiveSteps!.length})
                   </span>
                   <span className="text-[10px] text-slate-500 font-sans">Frames will transmit sequentially in order</span>
                 </div>
@@ -1268,8 +1373,8 @@ export function ActionNodeEditor({
                   type="button"
                   onClick={() => {
                     const newStep: AutomationActionStep = {
-                      can_id: act.can_id || '0x000',
-                      bus: act.bus ?? 0,
+                      can_id: effectiveCanId || '0x000',
+                      bus: effectiveBus,
                       repeat: 1,
                       delay_ms: 20,
                       payload: ''
@@ -1277,7 +1382,7 @@ export function ActionNodeEditor({
                     onUpdate({
                       ...act,
                       type: 'can_tx',
-                      steps: [...act.steps!, newStep]
+                      steps: [...effectiveSteps!, newStep]
                     });
                   }}
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800/80 hover:bg-emerald-900 hover:text-white transition cursor-pointer"
@@ -1288,41 +1393,41 @@ export function ActionNodeEditor({
               </div>
 
               <div className="space-y-2.5">
-                {act.steps!.map((step, sIdx) => {
+                {effectiveSteps!.map((step, sIdx) => {
                   const payloadStr = typeof step.payload === 'object' && step.payload && Object.keys(step.payload).length > 0
                     ? JSON.stringify(step.payload)
                     : (typeof step.payload === 'string' ? step.payload : '');
 
                   const updateStep = (patch: Partial<AutomationActionStep>) => {
-                    const updatedSteps = act.steps!.map((st, i) => (i === sIdx ? { ...st, ...patch } : st));
+                    const updatedSteps = effectiveSteps!.map((st, i) => (i === sIdx ? { ...st, ...patch } : st));
                     const isFirstStep = sIdx === 0;
                     onUpdate({
                       ...act,
                       type: 'can_tx',
                       steps: updatedSteps,
                       ...(isFirstStep ? {
-                        can_id: patch.can_id !== undefined ? patch.can_id : act.can_id,
-                        bus: patch.bus !== undefined ? patch.bus : act.bus,
-                        repeat: patch.repeat !== undefined ? patch.repeat : act.repeat,
-                        delay_ms: patch.delay_ms !== undefined ? patch.delay_ms : act.delay_ms,
-                        payload: patch.payload !== undefined ? patch.payload : act.payload
+                        can_id: patch.can_id !== undefined ? patch.can_id : effectiveCanId,
+                        bus: patch.bus !== undefined ? patch.bus : effectiveBus,
+                        repeat: patch.repeat !== undefined ? patch.repeat : effectiveRepeat,
+                        delay_ms: patch.delay_ms !== undefined ? patch.delay_ms : effectiveDelayMs,
+                        payload: patch.payload !== undefined ? patch.payload : effectivePayload
                       } : {})
                     });
                   };
 
                   const removeStep = () => {
-                    const updatedSteps = act.steps!.filter((_, i) => i !== sIdx);
+                    const updatedSteps = effectiveSteps!.filter((_, i) => i !== sIdx);
                     if (updatedSteps.length <= 1) {
-                      const remaining = updatedSteps[0] || { can_id: act.can_id, bus: act.bus, payload: act.payload, repeat: act.repeat, delay_ms: act.delay_ms };
+                      const remaining = updatedSteps[0] || { can_id: effectiveCanId, bus: effectiveBus, payload: effectivePayload, repeat: effectiveRepeat, delay_ms: effectiveDelayMs };
                       onUpdate({
                         ...act,
                         type: 'can_tx',
                         steps: undefined,
-                        can_id: remaining.can_id || act.can_id,
-                        bus: remaining.bus ?? act.bus ?? 0,
-                        repeat: remaining.repeat ?? act.repeat ?? 1,
-                        delay_ms: remaining.delay_ms ?? act.delay_ms ?? 0,
-                        payload: remaining.payload || act.payload
+                        can_id: remaining.can_id || effectiveCanId,
+                        bus: remaining.bus ?? effectiveBus ?? 0,
+                        repeat: remaining.repeat ?? effectiveRepeat ?? 1,
+                        delay_ms: remaining.delay_ms ?? effectiveDelayMs ?? 0,
+                        payload: remaining.payload || effectivePayload
                       });
                     } else {
                       onUpdate({
@@ -1342,8 +1447,8 @@ export function ActionNodeEditor({
 
                   const moveStep = (direction: -1 | 1) => {
                     const targetIdx = sIdx + direction;
-                    if (targetIdx < 0 || targetIdx >= act.steps!.length) return;
-                    const reordered = [...act.steps!];
+                    if (targetIdx < 0 || targetIdx >= effectiveSteps!.length) return;
+                    const reordered = [...effectiveSteps!];
                     const temp = reordered[sIdx];
                     reordered[sIdx] = reordered[targetIdx];
                     reordered[targetIdx] = temp;
@@ -1366,7 +1471,7 @@ export function ActionNodeEditor({
                           <span className="w-5 h-5 rounded-full bg-emerald-950 text-emerald-300 font-bold text-[10px] flex items-center justify-center border border-emerald-800">
                             {sIdx + 1}
                           </span>
-                          <span className="font-semibold text-slate-200 text-[11px] font-sans">Step {sIdx + 1} of {act.steps!.length}</span>
+                          <span className="font-semibold text-slate-200 text-[11px] font-sans">Step {sIdx + 1} of {effectiveSteps!.length}</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <button
@@ -1380,7 +1485,7 @@ export function ActionNodeEditor({
                           </button>
                           <button
                             type="button"
-                            disabled={sIdx === act.steps!.length - 1}
+                            disabled={sIdx === effectiveSteps!.length - 1}
                             onClick={() => moveStep(1)}
                             className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition cursor-pointer"
                             title="Move step down"
@@ -1406,7 +1511,7 @@ export function ActionNodeEditor({
                             value={step.can_id || ''}
                             onChange={e => updateStep({ can_id: e.target.value })}
                             className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200"
-                            placeholder={act.can_id || "0x524"}
+                            placeholder={effectiveCanId || "0x524"}
                           />
                         </div>
                         <div>
@@ -1454,6 +1559,7 @@ export function ActionNodeEditor({
                           placeholder='{"D1":"0x02","D2":"0x01"}'
                           className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-emerald-300 font-bold"
                         />
+                        {renderByteBoxes(step.payload)}
                       </div>
                     </div>
                   );

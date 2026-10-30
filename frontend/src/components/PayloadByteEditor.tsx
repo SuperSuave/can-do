@@ -31,7 +31,16 @@ export const PayloadByteEditor: React.FC<PayloadByteEditorProps> = ({
       return keys.map(k => (input[k] !== undefined && input[k] !== '' ? String(input[k]) : '*'));
     }
     const str = typeof input === 'string' ? input : String(input);
-    const tokens = str.trim() !== '' ? str.trim().split(/\s+/) : [];
+    const trimmed = str.trim();
+    const noPrefix = trimmed.replace(/^0x/i, '');
+    let tokens: string[] = [];
+    if (/^[0-9a-fA-F]{4,16}$/.test(noPrefix) && noPrefix.length % 2 === 0 && !trimmed.includes(' ')) {
+      for (let i = 0; i < noPrefix.length && tokens.length < 8; i += 2) {
+        tokens.push('0x' + noPrefix.slice(i, i + 2).toUpperCase());
+      }
+    } else if (trimmed !== '') {
+      tokens = trimmed.split(/\s+/);
+    }
     const result: string[] = [];
     for (let i = 0; i < 8; i++) {
       result.push(tokens[i] !== undefined && tokens[i] !== '' ? tokens[i] : '*');

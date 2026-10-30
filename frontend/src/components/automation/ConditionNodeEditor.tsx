@@ -27,7 +27,8 @@ import {
   resolveCatalogCommandForTrigger,
   applyOptionToCondition,
   applyOptionsToCondition,
-  regenerateConditionIds
+  regenerateConditionIds,
+  compileToByteMap
 } from '../../utils/automationConverters';
 import {
   groupOptionsIntoGridRows,
@@ -924,11 +925,58 @@ export function ConditionNodeEditor({
     cond.source_command_name ||
     (cond.can_id ? `CAN Condition ${cond.can_id}` : `Condition ${index + 1}`);
 
-  const dKey = cond.byte ?? cond.evaluate?.byte ?? (cond.match && Object.keys(cond.match).length > 0 ? Object.keys(cond.match)[0] : '') ?? '';
-  const rawMaskVal = cond.mask ?? cond.evaluate?.mask ?? '';
-  const maskVal = typeof rawMaskVal === 'string' ? rawMaskVal : (rawMaskVal && typeof rawMaskVal === 'object' ? JSON.stringify(rawMaskVal) : '');
-  const opVal = cond.operator || cond.evaluate?.operator || (cond.invert ? 'not_equal' : 'equal');
-  const targetVal = cond.value ?? cond.evaluate?.value ?? (cond.match && dKey ? cond.match[dKey] : '') ?? '';
+  const fallbackCondMatch = compileToByteMap(
+    matchedOption?.match || matchedOption?.payload || catalogCmd?.match || catalogCmd?.payload
+  );
+  const optEval = typeof matchedOption?.evaluate === 'object' ? matchedOption.evaluate : (typeof catalogCmd?.evaluate === 'object' ? catalogCmd.evaluate : undefined);
+  const dKey =
+    cond.byte ??
+    cond.evaluate?.byte ??
+    (cond.match && Object.keys(cond.match).length > 0 ? Object.keys(cond.match)[0] : undefined) ??
+    optEval?.byte ??
+    matchedOption?.byte ??
+    Object.keys(fallbackCondMatch)[0] ??
+    '';
+  const rawMaskVal = cond.mask ?? cond.evaluate?.mask ?? optEval?.mask ?? matchedOption?.mask ?? catalogCmd?.mask ?? '';
+  const maskVal =
+    typeof rawMaskVal === 'string'
+      ? rawMaskVal
+      : rawMaskVal && typeof rawMaskVal === 'object'
+      ? dKey && (rawMaskVal as any)[dKey]
+        ? (rawMaskVal as any)[dKey]
+        : JSON.stringify(rawMaskVal)
+      : '';
+  const rawOpVal = cond.operator || cond.evaluate?.operator || optEval?.operator || matchedOption?.operator || (cond.invert ? 'not_equal' : 'equal');
+  const opVal =
+    rawOpVal === '==' || rawOpVal === 'equals'
+      ? 'equal'
+      : rawOpVal === '!=' || rawOpVal === 'not_equals'
+      ? 'not_equal'
+      : rawOpVal === '<'
+      ? 'less_than'
+      : rawOpVal === '<='
+      ? 'less_than_or_equal'
+      : rawOpVal === '>'
+      ? 'greater_than'
+      : rawOpVal === '>='
+      ? 'greater_than_or_equal'
+      : rawOpVal;
+  const targetVal =
+    cond.value ??
+    cond.evaluate?.value ??
+    (cond.match && dKey ? cond.match[dKey] : undefined) ??
+    (optEval?.value !== undefined ? String(optEval.value) : undefined) ??
+    matchedOption?.value ??
+    (dKey && fallbackCondMatch[dKey] ? fallbackCondMatch[dKey] : '');
+  const effectiveCondCanId =
+    cond.can_id ||
+    catalogCmd?.network?.state_can_id ||
+    catalogCmd?.state_can_id ||
+    catalogCmd?.network?.action_can_id ||
+    catalogCmd?.action_can_id ||
+    '';
+  const effectiveCondBus = cond.bus ?? catalogCmd?.network?.bus ?? catalogCmd?.bus ?? 0;
+  const activeCondOptionLabel = (cond.option_label || matchedOption?.label || '').toLowerCase().trim();
 
   return (
     <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 hover:border-slate-700/80 space-y-2.5 text-xs transition-all shadow-sm min-w-0 overflow-hidden">
@@ -1010,9 +1058,9 @@ export function ConditionNodeEditor({
                       const selectedList = cond.selected_options || (cond.option_label ? cond.option_label.split(',').map(s => s.trim()) : []);
                       const isSelected = isMulti
                         ? selectedList.some(l => l.toLowerCase() === opt.label.toLowerCase())
-                        : (cond.option_label && opt.label.toLowerCase() === cond.option_label.toLowerCase()) ||
-                          (matchedOption && opt.label.toLowerCase() === matchedOption.label.toLowerCase()) ||
-                          (!cond.option_label && !matchedOption && origIndex === 0);
+                        : activeCondOptionLabel
+                        ? opt.label.toLowerCase().trim() === activeCondOptionLabel
+                        : origIndex === 0;
 
                       const isLiveValid = isOptionCurrentlyValid(
                         opt,
@@ -1084,7 +1132,7 @@ export function ConditionNodeEditor({
               <label className="block text-[10px] font-sans text-slate-500">CAN ID</label>
               <input
                 type="text"
-                value={cond.can_id || ''}
+                value={effectiveCondCanId}
                 onChange={e => onUpdate({ ...cond, can_id: e.target.value })}
                 placeholder="0x120"
                 className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
@@ -1093,7 +1141,7 @@ export function ConditionNodeEditor({
             <div className="col-span-1">
               <label className="block text-[10px] font-sans text-slate-500">Bus</label>
               <select
-                value={cond.bus ?? 0}
+                value={effectiveCondBus}
                 onChange={e => onUpdate({ ...cond, bus: parseInt(e.target.value) || 0 })}
                 className="w-full bg-slate-900 border border-slate-800 rounded px-1 py-1 text-slate-200 font-sans"
               >
@@ -1151,7 +1199,9 @@ export function ConditionNodeEditor({
                 <option value="equal">== (Equal)</option>
                 <option value="not_equal">!= (Not Equal)</option>
                 <option value="less_than">&lt; (Less Than)</option>
+                <option value="less_than_or_equal">&lt;= (Less or Equal)</option>
                 <option value="greater_than">&gt; (Greater Than)</option>
+                <option value="greater_than_or_equal">&gt;= (Greater or Equal)</option>
               </select>
             </div>
             <div className="col-span-2 sm:col-span-1">

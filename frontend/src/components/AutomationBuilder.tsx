@@ -524,19 +524,59 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         }
       }
 
+      // Flow: Cycle Entity State Stepper (must run before generic CAN / multi-step flows!)
+      if (act.type === 'cycle_entity') {
+        const entId = act.entity_id || act.target_command_id || 'drivers_seat_comfort';
+        const states = act.states && act.states.length > 0 ? act.states : ['Off', 'Low Heat', 'Medium Heat', 'High Heat'];
+        const curState = entityStates.get(entId.toLowerCase()) || entityStates.get(entId) || act.fallback_state || states[0];
+        const curIdx = states.findIndex(s => s.toLowerCase() === curState.toLowerCase());
+        const dir = act.direction || 'forward';
+        let nextIdx = 0;
+        if (dir === 'forward') {
+          nextIdx = curIdx >= 0 ? curIdx + 1 : 0;
+          if (nextIdx >= states.length) {
+            nextIdx = act.wrap !== false ? 0 : states.length - 1;
+          }
+        } else {
+          nextIdx = curIdx >= 0 ? curIdx - 1 : 0;
+          if (nextIdx < 0) {
+            nextIdx = act.wrap !== false ? states.length - 1 : 0;
+          }
+        }
+        const nextState = states[nextIdx];
+        const { command: cycleCmd } = catalog ? resolveCatalogCommandForAction({ ...act, entity_id: entId, option_label: nextState, command: nextState }, catalog) : { command: undefined };
+        const nextOpt = cycleCmd?.options?.find(o => o.label.toLowerCase() === nextState.toLowerCase() || o.id === nextState);
+        if (cycleCmd && nextOpt) {
+          const syntheticAct = commandToAction(cycleCmd, nextOpt);
+          await handleTestSingleAction(syntheticAct);
+        }
+        setActionTestToast({
+          message: `Cycle ${entId}: ${curState} ➔ ${nextState} (${dir}, wrap=${act.wrap !== false})`,
+          type: 'success'
+        });
+        setTimeout(() => setActionTestToast(null), 4000);
+        return;
+      }
+
       // Flow 7: Resolve Command & Option Details from Catalog if available
       const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForAction(act, catalog) : { command: undefined, matchedOption: undefined };
       
       const targetCanId = act.can_id || catalogCmd?.network?.action_can_id || catalogCmd?.action_can_id || catalogCmd?.network?.state_can_id || catalogCmd?.state_can_id;
-      const targetEntityId = act.entity_id || catalogCmd?.id;
+      const targetEntityId = act.entity_id || act.source_command_id || catalogCmd?.id;
       const targetCommand = act.command || act.option_label || matchedOption?.label || (catalogCmd?.options && catalogCmd.options[0]?.label);
-      const rawPayload = act.payload || matchedOption?.payload || (matchedOption?.steps && matchedOption.steps[0]?.payload) || catalogCmd?.payload;
-      const { str: cleanPayloadStr, obj: cleanPayloadObj } = formatPayloadForApi(rawPayload);
+      const rawActPayload =
+        (typeof act.payload === 'object' && act.payload && Object.keys(act.payload).length > 0
+          ? act.payload
+          : typeof act.payload === 'string' && act.payload.trim() !== ''
+          ? act.payload
+          : undefined);
+      const rawPayload = rawActPayload || matchedOption?.payload || (matchedOption?.steps && matchedOption.steps[0]?.payload) || catalogCmd?.payload;
+      const { str: cleanPayloadStr } = formatPayloadForApi(rawPayload);
       const targetRepeat = act.repeat || matchedOption?.repeat || (matchedOption?.steps && matchedOption.steps[0]?.repeat) || 1;
       const targetDelay = act.delay_ms || (matchedOption?.steps && matchedOption.steps[0]?.delay_ms) || catalogCmd?.network?.delay_ms || catalogCmd?.delay_ms || 20;
       const targetBus = act.bus ?? catalogCmd?.network?.bus ?? catalogCmd?.action_bus ?? 0;
       const normBus = typeof targetBus === 'string' && !isNaN(Number(targetBus)) ? Number(targetBus) : targetBus;
-      const targetSteps = act.steps || matchedOption?.steps;
+      const targetSteps = act.steps && act.steps.length > 0 ? act.steps : matchedOption?.steps;
 
       // Special Flow 8: Battery Preconditioning
       if (act.type === 'precondition' || targetEntityId === 'battery_preconditioning' || targetEntityId === 'precondition') {
@@ -622,11 +662,45 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         return;
       }
 
+      // Special Flow 9.5: Ambient Mood Lighting (executes hardware-timed 2-stage burst on both 0x4AD Dash + 0x48F Doors)
+      if (targetEntityId === 'ambient_mood_lighting' || (targetCanId && targetCanId.toUpperCase() === '0X4AD')) {
+        let dispatchedViaEntity = false;
+        if (targetCommand) {
+          try {
+            const res = await fetch(`${base}/api/command`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                entity: 'ambient_mood_lighting',
+                command: targetCommand
+              })
+            });
+            if (res.ok) {
+              dispatchedViaEntity = true;
+            }
+          } catch {}
+        }
+
+        if (dispatchedViaEntity) {
+          setActionTestToast({
+            message: `Action tested: Ambient Mood Lighting ➔ ${targetCommand} (0x4AD Dash + 0x48F Doors)`,
+            type: 'success'
+          });
+          setTimeout(() => setActionTestToast(null), 4000);
+          return;
+        }
+      }
+
       // Flow 10: Multi-Step Action Execution (e.g. ambient lighting burst + latch commit, seat comfort 2-stage)
       if (targetSteps && targetSteps.length > 1) {
         for (let sIdx = 0; sIdx < targetSteps.length; sIdx++) {
           const stepItem = targetSteps[sIdx];
-          const { str: sStr } = formatPayloadForApi(stepItem.payload);
+          const stepPayloadMap = compileToByteMap(stepItem.payload);
+          const resolvedStepPayload =
+            Object.keys(stepPayloadMap).length > 0
+              ? stepPayloadMap
+              : matchedOption?.steps?.[sIdx]?.payload || stepItem.payload;
+          const { str: sStr } = formatPayloadForApi(resolvedStepPayload);
           const sRepeat = stepItem.repeat || targetRepeat;
           const sDelay = stepItem.delay_ms || targetDelay;
           const sCid = stepItem.can_id || targetCanId;
@@ -652,7 +726,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           }
         }
         setActionTestToast({
-          message: `Action tested: Transmitted sequence (${targetSteps.length} steps) on ${targetCanId || 'CAN'}`,
+          message: `Action tested: Transmitted sequence (${targetSteps.length} steps) on ${targetCanId || 'CAN'}${targetCommand ? ` (${targetCommand})` : ''}`,
           type: 'success'
         });
         setTimeout(() => setActionTestToast(null), 4000);
@@ -680,34 +754,6 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         const labelText = targetCommand ? ` (${targetCommand})` : '';
         setActionTestToast({
           message: `Action tested: Transmitted CAN ${targetCanId} [${cleanPayloadStr}]${labelText}`,
-          type: 'success'
-        });
-        setTimeout(() => setActionTestToast(null), 4000);
-        return;
-      }
-
-      // Flow: Cycle Entity State Stepper
-      if (act.type === 'cycle_entity') {
-        const entId = act.entity_id || act.target_command_id || 'seat_heater_driver';
-        const states = act.states && act.states.length > 0 ? act.states : ['off', 'low', 'medium', 'high'];
-        const curState = entityStates.get(entId.toLowerCase()) || act.fallback_state || states[0];
-        const curIdx = states.findIndex(s => s.toLowerCase() === curState.toLowerCase());
-        const dir = act.direction || 'forward';
-        let nextIdx = 0;
-        if (dir === 'forward') {
-          nextIdx = curIdx >= 0 ? curIdx + 1 : 0;
-          if (nextIdx >= states.length) {
-            nextIdx = act.wrap !== false ? 0 : states.length - 1;
-          }
-        } else {
-          nextIdx = curIdx >= 0 ? curIdx - 1 : 0;
-          if (nextIdx < 0) {
-            nextIdx = act.wrap !== false ? states.length - 1 : 0;
-          }
-        }
-        const nextState = states[nextIdx];
-        setActionTestToast({
-          message: `Cycle ${entId}: ${curState} ➔ ${nextState} (${dir}, wrap=${act.wrap !== false})`,
           type: 'success'
         });
         setTimeout(() => setActionTestToast(null), 4000);

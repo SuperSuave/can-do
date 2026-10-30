@@ -37,8 +37,17 @@ export const PayloadByteVisualizer: React.FC<PayloadByteVisualizerProps> = ({
       const keys = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'];
       return keys.map(k => input[k] ?? '*');
     }
-    if (input.trim() === '') return [];
-    return input.trim().split(/\s+/);
+    const trimmed = input.trim();
+    if (trimmed === '') return [];
+    const noPrefix = trimmed.replace(/^0x/i, '');
+    if (/^[0-9a-fA-F]{4,16}$/.test(noPrefix) && noPrefix.length % 2 === 0 && !trimmed.includes(' ')) {
+      const bytes: string[] = [];
+      for (let i = 0; i < noPrefix.length && bytes.length < 8; i += 2) {
+        bytes.push('0x' + noPrefix.slice(i, i + 2).toUpperCase());
+      }
+      return bytes;
+    }
+    return trimmed.split(/\s+/);
   };
 
   const getByteStyle = (token: string) => {
