@@ -38,7 +38,7 @@ export function normalizeCatalog(cat: Catalog): Catalog {
 }
 
 export const DEFAULT_CATALOG: Catalog = {
-  can_do_version: '2026.10.6-b013',
+  can_do_version: '2026.10.8-b001',
   vehicles: [],
   commands: [],
 };

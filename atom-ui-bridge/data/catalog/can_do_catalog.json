@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.10.7-b007",
+  "can_do_version": "2026.10.8-b001",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -1729,7 +1729,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
       },
       "network": {
         "bus": 0,
@@ -1741,14 +1741,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "°F",
+        "unit": "\u00b0F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62°F",
+          "label": "62\u00b0F",
           "match": {
             "D2": "0x06"
           },
@@ -1768,7 +1768,7 @@
           ]
         },
         {
-          "label": "63°F",
+          "label": "63\u00b0F",
           "match": {
             "D2": "0x07"
           },
@@ -1788,7 +1788,7 @@
           ]
         },
         {
-          "label": "64°F",
+          "label": "64\u00b0F",
           "match": {
             "D2": "0x08"
           },
@@ -1808,7 +1808,7 @@
           ]
         },
         {
-          "label": "65°F",
+          "label": "65\u00b0F",
           "match": {
             "D2": "0x09"
           },
@@ -1828,7 +1828,7 @@
           ]
         },
         {
-          "label": "66°F",
+          "label": "66\u00b0F",
           "match": {
             "D2": "0x0A"
           },
@@ -1848,7 +1848,7 @@
           ]
         },
         {
-          "label": "67°F",
+          "label": "67\u00b0F",
           "match": {
             "D2": "0x0B"
           },
@@ -1868,7 +1868,7 @@
           ]
         },
         {
-          "label": "68°F",
+          "label": "68\u00b0F",
           "match": {
             "D2": "0x0C"
           },
@@ -1888,7 +1888,7 @@
           ]
         },
         {
-          "label": "69°F",
+          "label": "69\u00b0F",
           "match": {
             "D2": "0x0D"
           },
@@ -1908,7 +1908,7 @@
           ]
         },
         {
-          "label": "70°F",
+          "label": "70\u00b0F",
           "match": {
             "D2": "0x0E"
           },
@@ -1929,7 +1929,7 @@
           "default": true
         },
         {
-          "label": "71°F",
+          "label": "71\u00b0F",
           "match": {
             "D2": "0x0F"
           },
@@ -1949,7 +1949,7 @@
           ]
         },
         {
-          "label": "72°F",
+          "label": "72\u00b0F",
           "match": {
             "D2": "0x10"
           },
@@ -1969,7 +1969,7 @@
           ]
         },
         {
-          "label": "73°F",
+          "label": "73\u00b0F",
           "match": {
             "D2": "0x11"
           },
@@ -1989,7 +1989,7 @@
           ]
         },
         {
-          "label": "74°F",
+          "label": "74\u00b0F",
           "match": {
             "D2": "0x12"
           },
@@ -2009,7 +2009,7 @@
           ]
         },
         {
-          "label": "75°F",
+          "label": "75\u00b0F",
           "match": {
             "D2": "0x13"
           },
@@ -2029,7 +2029,7 @@
           ]
         },
         {
-          "label": "76°F",
+          "label": "76\u00b0F",
           "match": {
             "D2": "0x14"
           },
@@ -2049,7 +2049,7 @@
           ]
         },
         {
-          "label": "77°F",
+          "label": "77\u00b0F",
           "match": {
             "D2": "0x15"
           },
@@ -2069,7 +2069,7 @@
           ]
         },
         {
-          "label": "78°F",
+          "label": "78\u00b0F",
           "match": {
             "D2": "0x16"
           },
@@ -2089,7 +2089,7 @@
           ]
         },
         {
-          "label": "79°F",
+          "label": "79\u00b0F",
           "match": {
             "D2": "0x17"
           },
@@ -2109,7 +2109,7 @@
           ]
         },
         {
-          "label": "80°F",
+          "label": "80\u00b0F",
           "match": {
             "D2": "0x18"
           },
@@ -2129,7 +2129,7 @@
           ]
         },
         {
-          "label": "81°F",
+          "label": "81\u00b0F",
           "match": {
             "D2": "0x19"
           },
@@ -2149,7 +2149,7 @@
           ]
         },
         {
-          "label": "82°F",
+          "label": "82\u00b0F",
           "match": {
             "D2": "0x1A"
           },
@@ -2194,7 +2194,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
       },
       "network": {
         "bus": 0,
@@ -2206,14 +2206,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "°F",
+        "unit": "\u00b0F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62°F",
+          "label": "62\u00b0F",
           "match": {
             "D3": "0x06"
           },
@@ -2233,7 +2233,7 @@
           ]
         },
         {
-          "label": "63°F",
+          "label": "63\u00b0F",
           "match": {
             "D3": "0x07"
           },
@@ -2253,7 +2253,7 @@
           ]
         },
         {
-          "label": "64°F",
+          "label": "64\u00b0F",
           "match": {
             "D3": "0x08"
           },
@@ -2273,7 +2273,7 @@
           ]
         },
         {
-          "label": "65°F",
+          "label": "65\u00b0F",
           "match": {
             "D3": "0x09"
           },
@@ -2293,7 +2293,7 @@
           ]
         },
         {
-          "label": "66°F",
+          "label": "66\u00b0F",
           "match": {
             "D3": "0x0A"
           },
@@ -2313,7 +2313,7 @@
           ]
         },
         {
-          "label": "67°F",
+          "label": "67\u00b0F",
           "match": {
             "D3": "0x0B"
           },
@@ -2333,7 +2333,7 @@
           ]
         },
         {
-          "label": "68°F",
+          "label": "68\u00b0F",
           "match": {
             "D3": "0x0C"
           },
@@ -2353,7 +2353,7 @@
           ]
         },
         {
-          "label": "69°F",
+          "label": "69\u00b0F",
           "match": {
             "D3": "0x0D"
           },
@@ -2373,7 +2373,7 @@
           ]
         },
         {
-          "label": "70°F",
+          "label": "70\u00b0F",
           "match": {
             "D3": "0x0E"
           },
@@ -2394,7 +2394,7 @@
           "default": true
         },
         {
-          "label": "71°F",
+          "label": "71\u00b0F",
           "match": {
             "D3": "0x0F"
           },
@@ -2414,7 +2414,7 @@
           ]
         },
         {
-          "label": "72°F",
+          "label": "72\u00b0F",
           "match": {
             "D3": "0x10"
           },
@@ -2434,7 +2434,7 @@
           ]
         },
         {
-          "label": "73°F",
+          "label": "73\u00b0F",
           "match": {
             "D3": "0x11"
           },
@@ -2454,7 +2454,7 @@
           ]
         },
         {
-          "label": "74°F",
+          "label": "74\u00b0F",
           "match": {
             "D3": "0x12"
           },
@@ -2474,7 +2474,7 @@
           ]
         },
         {
-          "label": "75°F",
+          "label": "75\u00b0F",
           "match": {
             "D3": "0x13"
           },
@@ -2494,7 +2494,7 @@
           ]
         },
         {
-          "label": "76°F",
+          "label": "76\u00b0F",
           "match": {
             "D3": "0x14"
           },
@@ -2514,7 +2514,7 @@
           ]
         },
         {
-          "label": "77°F",
+          "label": "77\u00b0F",
           "match": {
             "D3": "0x15"
           },
@@ -2534,7 +2534,7 @@
           ]
         },
         {
-          "label": "78°F",
+          "label": "78\u00b0F",
           "match": {
             "D3": "0x16"
           },
@@ -2554,7 +2554,7 @@
           ]
         },
         {
-          "label": "79°F",
+          "label": "79\u00b0F",
           "match": {
             "D3": "0x17"
           },
@@ -2574,7 +2574,7 @@
           ]
         },
         {
-          "label": "80°F",
+          "label": "80\u00b0F",
           "match": {
             "D3": "0x18"
           },
@@ -2594,7 +2594,7 @@
           ]
         },
         {
-          "label": "81°F",
+          "label": "81\u00b0F",
           "match": {
             "D3": "0x19"
           },
@@ -2614,7 +2614,7 @@
           ]
         },
         {
-          "label": "82°F",
+          "label": "82\u00b0F",
           "match": {
             "D3": "0x1A"
           },
@@ -4870,18 +4870,18 @@
       },
       "options": [
         {
-          "label": "Info Notification (ⓘ)",
+          "label": "Info Notification (\u24d8)",
           "level": "info",
           "popup_message": "Preconditioning Active",
           "default": true
         },
         {
-          "label": "Warning Notification (⚠)",
+          "label": "Warning Notification (\u26a0)",
           "level": "warning",
           "popup_message": "Battery Cold / Limited"
         },
         {
-          "label": "Fault Notification (‼)",
+          "label": "Fault Notification (\u203c)",
           "level": "error",
           "popup_message": "Charge Interrupted"
         },
@@ -5590,7 +5590,8 @@
               "delay_ms": 25
             }
           ],
-          "popup": "Ambient: Golden Insight"
+          "popup": "Ambient: Golden Insight",
+          "default": false
         },
         {
           "label": "Blue Flight",
@@ -5606,7 +5607,8 @@
               "delay_ms": 25
             }
           ],
-          "popup": "Ambient: Blue Flight"
+          "popup": "Ambient: Blue Flight",
+          "default": false
         },
         {
           "label": "Peaceful Forest",
@@ -5622,7 +5624,8 @@
               "delay_ms": 25
             }
           ],
-          "popup": "Ambient: Peaceful Forest"
+          "popup": "Ambient: Peaceful Forest",
+          "default": false
         },
         {
           "label": "Dreamy Purple",
@@ -5638,7 +5641,8 @@
               "delay_ms": 25
             }
           ],
-          "popup": "Ambient: Dreamy Purple"
+          "popup": "Ambient: Dreamy Purple",
+          "default": false
         },
         {
           "label": "Violet Cloud",
@@ -5654,7 +5658,8 @@
               "delay_ms": 25
             }
           ],
-          "popup": "Ambient: Violet Cloud"
+          "popup": "Ambient: Violet Cloud",
+          "default": false
         },
         {
           "label": "Refreshing Sea",
@@ -5670,75 +5675,11 @@
               "delay_ms": 25
             }
           ],
-          "popup": "Ambient: Refreshing Sea"
+          "popup": "Ambient: Refreshing Sea",
+          "default": false
         },
         {
-          "label": "Pure Cyan / Aqua Wave",
-          "steps": [
-            {
-              "payload": "0064530F00000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Cyan / Aqua"
-        },
-        {
-          "label": "Electric Blue",
-          "steps": [
-            {
-              "payload": "0054F10F00000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Electric Blue"
-        },
-        {
-          "label": "Deep Purple / Violet",
-          "steps": [
-            {
-              "payload": "8000F00F00000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Violet",
-          "default": true
-        },
-        {
-          "label": "Magenta / Neon Pink",
-          "steps": [
-            {
-              "payload": "FF00100F00000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Magenta"
-        },
-        {
-          "label": "Crimson Red",
+          "label": "Christmas Dual-Tone (Red Dash / Green Doors)",
           "steps": [
             {
               "payload": "FE88000000000000",
@@ -5751,10 +5692,11 @@
               "delay_ms": 25
             }
           ],
-          "popup": "Ambient: Crimson Red"
+          "popup": "Ambient: Christmas Dual-Tone",
+          "default": false
         },
         {
-          "label": "Warm Sunset / Amber",
+          "label": "Halloween Dual-Tone (Orange Dash / Purple Doors)",
           "steps": [
             {
               "payload": "FF50720700000000",
@@ -5767,10 +5709,45 @@
               "delay_ms": 25
             }
           ],
-          "popup": "Ambient: Sunset Orange"
+          "popup": "Ambient: Halloween Dual-Tone",
+          "default": false
         },
         {
-          "label": "Lime / Mint Glow",
+          "label": "Valentine's Dual-Tone (Pink Dash / Red Doors)",
+          "steps": [
+            {
+              "payload": "FF00100F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Valentine's Dual-Tone",
+          "default": false
+        },
+        {
+          "label": "4th of July Dual-Tone (Red Dash / Blue Doors)",
+          "steps": [
+            {
+              "payload": "FE88000000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: 4th of July Dual-Tone",
+          "default": false
+        },
+        {
+          "label": "Color 1: Lime / Mint Glow",
           "steps": [
             {
               "payload": "F7FC630B00000000",
@@ -5783,10 +5760,1065 @@
               "delay_ms": 25
             }
           ],
-          "popup": "Ambient: Mint / Lime"
+          "popup": "Ambient: Lime Glow",
+          "default": false
         },
         {
-          "label": "Warm White / Champagne",
+          "label": "Color 2: Spring Lime",
+          "steps": [
+            {
+              "payload": "E6F8A30B00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Spring Lime",
+          "default": false
+        },
+        {
+          "label": "Color 3: Fresh Grass",
+          "steps": [
+            {
+              "payload": "D2FCC30B00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Fresh Grass",
+          "default": false
+        },
+        {
+          "label": "Color 4: Pastel Mint",
+          "steps": [
+            {
+              "payload": "AFF8F30B00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Pastel Mint",
+          "default": false
+        },
+        {
+          "label": "Color 5: Light Aqua",
+          "steps": [
+            {
+              "payload": "77F8430C00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Light Aqua",
+          "default": false
+        },
+        {
+          "label": "Color 6: Bright Turquoise",
+          "steps": [
+            {
+              "payload": "3AFC630C00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Bright Turquoise",
+          "default": false
+        },
+        {
+          "label": "Color 7: Deep Turquoise",
+          "steps": [
+            {
+              "payload": "0AFCB30E00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Deep Turquoise",
+          "default": false
+        },
+        {
+          "label": "Color 8: Pure Cyan / Aqua Wave",
+          "steps": [
+            {
+              "payload": "0064530F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Pure Cyan",
+          "default": false
+        },
+        {
+          "label": "Color 9: Sky Blue Light",
+          "steps": [
+            {
+              "payload": "00D0F20F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Sky Blue Light",
+          "default": false
+        },
+        {
+          "label": "Color 10: Sky Blue",
+          "steps": [
+            {
+              "payload": "0084F20F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Sky Blue",
+          "default": false
+        },
+        {
+          "label": "Color 11: Glacier Blue",
+          "steps": [
+            {
+              "payload": "0030F20F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Glacier Blue",
+          "default": false
+        },
+        {
+          "label": "Color 12: Cerulean",
+          "steps": [
+            {
+              "payload": "00F4F10F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Cerulean",
+          "default": false
+        },
+        {
+          "label": "Color 13: Cobalt Light",
+          "steps": [
+            {
+              "payload": "00CCE10F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Cobalt Light",
+          "default": false
+        },
+        {
+          "label": "Color 14: Pacific Blue",
+          "steps": [
+            {
+              "payload": "008CF10F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Pacific Blue",
+          "default": false
+        },
+        {
+          "label": "Color 15: Electric Blue",
+          "steps": [
+            {
+              "payload": "0054F10F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Electric Blue",
+          "default": false
+        },
+        {
+          "label": "Color 16: Royal Blue",
+          "steps": [
+            {
+              "payload": "00F8F00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Royal Blue",
+          "default": false
+        },
+        {
+          "label": "Color 17: Deep Blue",
+          "steps": [
+            {
+              "payload": "1900F00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Deep Blue",
+          "default": false
+        },
+        {
+          "label": "Color 18: Indigo Blue",
+          "steps": [
+            {
+              "payload": "3700F00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Indigo Blue",
+          "default": false
+        },
+        {
+          "label": "Color 19: Blue Violet",
+          "steps": [
+            {
+              "payload": "5100F00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Blue Violet",
+          "default": false
+        },
+        {
+          "label": "Color 20: Lavender Violet",
+          "steps": [
+            {
+              "payload": "6400F00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Lavender Violet",
+          "default": false
+        },
+        {
+          "label": "Color 21: Grape Purple",
+          "steps": [
+            {
+              "payload": "6DA8F00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Grape Purple",
+          "default": false
+        },
+        {
+          "label": "Color 22: Electric Purple",
+          "steps": [
+            {
+              "payload": "7AD0F00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Electric Purple",
+          "default": false
+        },
+        {
+          "label": "Color 23: Bright Violet",
+          "steps": [
+            {
+              "payload": "7D64F00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Bright Violet",
+          "default": false
+        },
+        {
+          "label": "Color 24: Deep Purple / Violet",
+          "steps": [
+            {
+              "payload": "8000F00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Deep Purple",
+          "default": true
+        },
+        {
+          "label": "Color 25: Amethyst",
+          "steps": [
+            {
+              "payload": "8200F00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Amethyst",
+          "default": false
+        },
+        {
+          "label": "Color 26: Royal Purple",
+          "steps": [
+            {
+              "payload": "8F00F00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Royal Purple",
+          "default": false
+        },
+        {
+          "label": "Color 27: Purple Orchid",
+          "steps": [
+            {
+              "payload": "9C00F00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Purple Orchid",
+          "default": false
+        },
+        {
+          "label": "Color 28: Purple Magenta",
+          "steps": [
+            {
+              "payload": "A700F00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Purple Magenta",
+          "default": false
+        },
+        {
+          "label": "Color 29: Bright Magenta",
+          "steps": [
+            {
+              "payload": "B000F00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Bright Magenta",
+          "default": false
+        },
+        {
+          "label": "Color 30: Deep Fuchsia",
+          "steps": [
+            {
+              "payload": "C300E00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Deep Fuchsia",
+          "default": false
+        },
+        {
+          "label": "Color 31: Hot Fuchsia",
+          "steps": [
+            {
+              "payload": "CD00E00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Hot Fuchsia",
+          "default": false
+        },
+        {
+          "label": "Color 32: Neon Pink",
+          "steps": [
+            {
+              "payload": "E800E00F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Neon Pink",
+          "default": false
+        },
+        {
+          "label": "Color 33: Magenta / Neon Pink",
+          "steps": [
+            {
+              "payload": "FF00100F00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Magenta",
+          "default": false
+        },
+        {
+          "label": "Color 34: Deep Rose Pink",
+          "steps": [
+            {
+              "payload": "FF00300C00000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Deep Rose Pink",
+          "default": false
+        },
+        {
+          "label": "Color 35: Crimson Pink",
+          "steps": [
+            {
+              "payload": "FF00E00900000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Crimson Pink",
+          "default": false
+        },
+        {
+          "label": "Color 36: Bright Rose Red",
+          "steps": [
+            {
+              "payload": "FF00900800000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Bright Rose Red",
+          "default": false
+        },
+        {
+          "label": "Color 37: Ruby Red",
+          "steps": [
+            {
+              "payload": "FF00500700000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Ruby Red",
+          "default": false
+        },
+        {
+          "label": "Color 38: Cherry Red",
+          "steps": [
+            {
+              "payload": "FF00F00600000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Cherry Red",
+          "default": false
+        },
+        {
+          "label": "Color 39: Scarlet",
+          "steps": [
+            {
+              "payload": "FF00A00600000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Scarlet",
+          "default": false
+        },
+        {
+          "label": "Color 40: Carmine Red",
+          "steps": [
+            {
+              "payload": "FF00500600000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Carmine Red",
+          "default": false
+        },
+        {
+          "label": "Color 41: Pure Red Bright",
+          "steps": [
+            {
+              "payload": "FE00F00500000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Pure Red Bright",
+          "default": false
+        },
+        {
+          "label": "Color 42: Pure Red Strong",
+          "steps": [
+            {
+              "payload": "FF00800400000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Pure Red Strong",
+          "default": false
+        },
+        {
+          "label": "Color 43: Deep Crimson",
+          "steps": [
+            {
+              "payload": "FE00A00300000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Deep Crimson",
+          "default": false
+        },
+        {
+          "label": "Color 44: Blood Red",
+          "steps": [
+            {
+              "payload": "FE00E00100000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Blood Red",
+          "default": false
+        },
+        {
+          "label": "Color 45: Burnt Red",
+          "steps": [
+            {
+              "payload": "FF0CA00000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Burnt Red",
+          "default": false
+        },
+        {
+          "label": "Color 46: Crimson Red",
+          "steps": [
+            {
+              "payload": "FE88000000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Crimson Red",
+          "default": false
+        },
+        {
+          "label": "Color 47: Vermilion Red-Orange",
+          "steps": [
+            {
+              "payload": "FFC0700100000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Vermilion",
+          "default": false
+        },
+        {
+          "label": "Color 48: Deep Orange",
+          "steps": [
+            {
+              "payload": "FFF0A00200000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Deep Orange",
+          "default": false
+        },
+        {
+          "label": "Color 49: Bright Orange",
+          "steps": [
+            {
+              "payload": "FF04110300000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Bright Orange",
+          "default": false
+        },
+        {
+          "label": "Color 50: Tangerine",
+          "steps": [
+            {
+              "payload": "FF24910400000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Tangerine",
+          "default": false
+        },
+        {
+          "label": "Color 51: Sunrise Orange",
+          "steps": [
+            {
+              "payload": "FF60810500000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Sunrise Orange",
+          "default": false
+        },
+        {
+          "label": "Color 52: Golden Orange",
+          "steps": [
+            {
+              "payload": "FF80A10600000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Golden Orange",
+          "default": false
+        },
+        {
+          "label": "Color 53: Amber Gold",
+          "steps": [
+            {
+              "payload": "FFAC410700000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Amber Gold",
+          "default": false
+        },
+        {
+          "label": "Color 54: Warm Amber",
+          "steps": [
+            {
+              "payload": "FFC4110700000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Warm Amber",
+          "default": false
+        },
+        {
+          "label": "Color 55: Deep Marigold",
+          "steps": [
+            {
+              "payload": "FFF4310700000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Deep Marigold",
+          "default": false
+        },
+        {
+          "label": "Color 56: Marigold Orange",
+          "steps": [
+            {
+              "payload": "FF24B20600000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Marigold Orange",
+          "default": false
+        },
+        {
+          "label": "Color 57: Warm Sunset / Amber",
+          "steps": [
+            {
+              "payload": "FF50720700000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Sunset Orange",
+          "default": false
+        },
+        {
+          "label": "Color 58: Peach Amber",
+          "steps": [
+            {
+              "payload": "FF80F20600000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Peach Amber",
+          "default": false
+        },
+        {
+          "label": "Color 59: Golden Peach",
+          "steps": [
+            {
+              "payload": "FFB0120700000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Golden Peach",
+          "default": false
+        },
+        {
+          "label": "Color 60: Champagne Gold",
+          "steps": [
+            {
+              "payload": "FFC4C20600000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Champagne Gold",
+          "default": false
+        },
+        {
+          "label": "Color 61: Soft Gold",
+          "steps": [
+            {
+              "payload": "FFFCB20700000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Soft Gold",
+          "default": false
+        },
+        {
+          "label": "Color 62: Vanilla Gold",
+          "steps": [
+            {
+              "payload": "FE3CA30800000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Vanilla Gold",
+          "default": false
+        },
+        {
+          "label": "Color 63: Warm Ivory",
+          "steps": [
+            {
+              "payload": "FF60330900000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "popup": "Ambient: Warm Ivory",
+          "default": false
+        },
+        {
+          "label": "Color 64: Warm White / Champagne",
           "steps": [
             {
               "payload": "FEB4530A00000000",
@@ -5799,7 +6831,8 @@
               "delay_ms": 25
             }
           ],
-          "popup": "Ambient: Champagne"
+          "popup": "Ambient: Champagne",
+          "default": false
         },
         {
           "label": "Mood Light Off",
@@ -5815,7 +6848,8 @@
               "delay_ms": 25
             }
           ],
-          "popup": "Ambient: Off"
+          "popup": "Ambient: Off",
+          "default": false
         }
       ],
       "category": "Cockpit & Controls",
@@ -6048,16 +7082,16 @@
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x226",
-        "unit": "°C"
+        "unit": "\u00b0C"
       },
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 °C"
+        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 \u00b0C"
       },
       "options": [
         {
-          "label": "Freezing (<= 0°C / 32°F)",
+          "label": "Freezing (<= 0\u00b0C / 32\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": "<=",
@@ -6066,7 +7100,7 @@
           "default": true
         },
         {
-          "label": "Cold (< 15°C / 59°F)",
+          "label": "Cold (< 15\u00b0C / 59\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": "<",
@@ -6074,7 +7108,7 @@
           }
         },
         {
-          "label": "Warm (> 25°C / 77°F)",
+          "label": "Warm (> 25\u00b0C / 77\u00b0F)",
           "evaluate": {
             "byte": "D4",
             "operator": ">",
@@ -6900,7 +7934,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Right 90°",
+          "label": "Turn Right 90\u00b0",
           "match": {
             "D1": "0x03"
           },
@@ -6935,7 +7969,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Left 90°",
+          "label": "Turn Left 90\u00b0",
           "match": {
             "D1": "0x08"
           },
@@ -7645,7 +8679,7 @@
         "name": "HV Battery Module Min & Max Temp",
         "domain": "sensor",
         "icon": "mdi:thermometer-chevron-up",
-        "unit_of_measurement": "°C"
+        "unit_of_measurement": "\u00b0C"
       },
       "tags": [
         "all_egmp"
@@ -7659,17 +8693,17 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40°C offset."
+        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40\u00b0C offset."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x5D7",
-        "unit": "°C"
+        "unit": "\u00b0C"
       },
       "options": [
         {
-          "label": "Battery Optimal Warm (20°C - 35°C)",
+          "label": "Battery Optimal Warm (20\u00b0C - 35\u00b0C)",
           "evaluate": {
             "byte": "D1",
             "operator": ">=",
@@ -7678,7 +8712,7 @@
           "default": true
         },
         {
-          "label": "Battery High Temp (> 45°C / 113°F)",
+          "label": "Battery High Temp (> 45\u00b0C / 113\u00b0F)",
           "evaluate": {
             "byte": "D1",
             "operator": ">",
@@ -7686,7 +8720,7 @@
           }
         },
         {
-          "label": "Battery Cold (< 10°C / 50°F)",
+          "label": "Battery Cold (< 10\u00b0C / 50\u00b0F)",
           "evaluate": {
             "byte": "D2",
             "operator": "<",
@@ -7694,7 +8728,7 @@
           }
         },
         {
-          "label": "Battery Freezing (< 0°C / 32°F)",
+          "label": "Battery Freezing (< 0\u00b0C / 32\u00b0F)",
           "evaluate": {
             "byte": "D2",
             "operator": "<",
@@ -7990,7 +9024,7 @@
         "name": "Cabin Displayed Target Temperature",
         "domain": "sensor",
         "icon": "mdi:thermometer-lines",
-        "unit_of_measurement": "°F"
+        "unit_of_measurement": "\u00b0F"
       },
       "tags": [
         "all_egmp"
@@ -8004,31 +9038,31 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in °C x 0.5, Byte D3 = Driver Temp in °F integer)."
+        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in \u00b0C x 0.5, Byte D3 = Driver Temp in \u00b0F integer)."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x5F5",
-        "unit": "°F"
+        "unit": "\u00b0F"
       },
       "options": [
         {
-          "label": "68°F (20.0°C)",
+          "label": "68\u00b0F (20.0\u00b0C)",
           "match": {
             "D3": "0x44"
           },
           "mask": "0xFF"
         },
         {
-          "label": "70°F (21.0°C)",
+          "label": "70\u00b0F (21.0\u00b0C)",
           "match": {
             "D3": "0x46"
           },
           "mask": "0xFF"
         },
         {
-          "label": "72°F (22.0°C)",
+          "label": "72\u00b0F (22.0\u00b0C)",
           "match": {
             "D3": "0x48"
           },
@@ -8036,14 +9070,14 @@
           "default": true
         },
         {
-          "label": "74°F (23.5°C)",
+          "label": "74\u00b0F (23.5\u00b0C)",
           "match": {
             "D3": "0x4A"
           },
           "mask": "0xFF"
         },
         {
-          "label": "76°F (24.5°C)",
+          "label": "76\u00b0F (24.5\u00b0C)",
           "match": {
             "D3": "0x4C"
           },
@@ -8199,7 +9233,7 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s² signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
+        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s\u00b2 signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
       },
       "network": {
         "bus": 0,

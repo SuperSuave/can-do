@@ -30,6 +30,7 @@
 #include "uart_bridge.h"
 #include "timezone_mgr.h"
 #include "remote_climate.h"
+#include "ambient_anim.h"
 #include "usb_can.h"
 
 #include "esp_mac.h"
@@ -185,6 +186,7 @@ extern "C" void app_main(void) {
     beep_init();
     precondition_init();
     remote_climate_init();
+    ambient_anim_init();
 
     // 9. Command Queues and Tasks
     init_can_engine();

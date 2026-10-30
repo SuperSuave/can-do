@@ -564,7 +564,7 @@ Vehicle user settings for welcome accessories and hands-free automatic trunk ope
 Ambient lighting in E-GMP vehicles (Kia EV6, Hyundai Ioniq 5/6, Genesis GV60) is commanded directly from the Head Unit MICOM over M-CAN via a verified **2-Stage State Machine**. The Mood Lamp Units require a latch/commit frame following the active color burst to commit the PWM color register into EEPROM/RAM.
 
 * **Front / Center Console Zone**: **CAN ID `0x4AD` (`MLU_01`)**
-* **Rear / Door Panel Zone**: **CAN ID `0x48F` (`MLU_02`)** (Synchronized with `0x4AD`)
+* **Rear / Door Panel Zone**: **CAN ID `0x48F` (`MLU_02`)** (Synchronized or independent 2-tone split with `0x4AD`)
 * **Timing**: Spacing of 20–25 ms between consecutive frames
 
 ### 8.1 Two-Stage Transmission Protocol:
@@ -573,7 +573,7 @@ Ambient lighting in E-GMP vehicles (Kia EV6, Hyundai Ioniq 5/6, Genesis GV60) is
    * Byte `D1`: Red channel or primary theme code
    * Byte `D2`: Green channel or secondary theme code
    * Byte `D3`: Blue channel
-   * Byte `D4`: Brightness level scaling (`0x0F` = 100%, `0x07` = 50%, `0x03` = 25%, `0x00` = Off)
+   * Byte `D4`: Photopic luminous efficiency & brightness scaling (`0x0F` = 100%, `0x07` = 50%, `0x03` = 25%, `0x00` = Off)
 2. **Stage 2 (Latch / Commit Frame)**: 3 frames @ 25 ms delay:
    * **`00 02 08 20 00 00 00 00`**
    * *Critical*: Without this latch burst, the MLU microcontroller discards the RGB burst after 200 ms timeout.
@@ -590,18 +590,97 @@ Ambient lighting in E-GMP vehicles (Kia EV6, Hyundai Ioniq 5/6, Genesis GV60) is
 | **Violet Cloud** | `A7 89 F5 17 00 00 00 00` | `00 02 08 20 00 00 00 00` | Soft Lavender upper + Violet lower |
 | **Refreshing Sea** | `32 69 E6 19 00 00 00 00` | `00 02 08 20 00 00 00 00` | Turquoise upper + Cyan lower |
 
-#### Single-Color Spectrum Presets:
-| Color Name | Stage 1 Payload (`0x4AD` / `0x48F`) | Stage 2 Latch Payload | Target Tone |
+#### Holiday Dual-Tone Presets:
+| Holiday Preset | Dash Zone (`0x4AD`) | Door Zone (`0x48F`) | Description |
 | :--- | :--- | :--- | :--- |
-| **Crimson Red** | `FE 88 00 00 00 00 00 00` | `00 02 08 20 00 00 00 00` | Sport / Warning Red |
-| **Electric Blue** | `00 54 F1 0F 00 00 00 00` | `00 02 08 20 00 00 00 00` | Pure EV Blue |
-| **Pure Cyan / Aqua Wave** | `00 64 53 0F 00 00 00 00` | `00 02 08 20 00 00 00 00` | Cyan / Turquoise |
-| **Deep Purple / Violet** | `80 00 F0 0F 00 00 00 00` | `00 02 08 20 00 00 00 00` | Rich Purple |
-| **Magenta / Neon Pink** | `FF 00 10 0F 00 00 00 00` | `00 02 08 20 00 00 00 00` | Hot Pink |
-| **Warm Sunset / Amber** | `FF 50 72 07 00 00 00 00` | `00 02 08 20 00 00 00 00` | Amber / Orange |
-| **Champagne White** | `FE B4 53 0A 00 00 00 00` | `00 02 08 20 00 00 00 00` | Neutral Warm White |
-| **Lime / Mint Glow** | `F7 FC 63 0B 00 00 00 00` | `00 02 08 20 00 00 00 00` | Lime Green |
-| **Mood Light Off** | `00 00 00 00 00 00 00 00` | `00 02 08 20 00 00 00 00` | Complete Illumination Cutoff |
+| 🎄 **Christmas Dual-Tone** | `FE 88 00 00 00 00 00 00` (Red) | `F7 FC 63 0B 00 00 00 00` (Lime Green) | Festive Crimson Red dash + Lime/Mint doors |
+| 🎃 **Halloween Dual-Tone** | `FF 50 72 07 00 00 00 00` (Amber) | `80 00 F0 0F 00 00 00 00` (Purple) | Pumpkin Amber dash + Deep Witch Purple doors |
+| 💖 **Valentine's Dual-Tone** | `FF 00 10 0F 00 00 00 00` (Neon Pink) | `FE 88 00 00 00 00 00 00` (Crimson Red) | Neon Pink dash + Crimson Red doors |
+| 🎆 **4th of July Dual-Tone** | `FE 88 00 00 00 00 00 00` (Red) | `00 54 F1 0F 00 00 00 00` (Electric Blue) | Patriotic Red dash + EV Electric Blue doors |
+
+#### Dynamic Edge Animation Modes (`firmware/main/subsystems/ambient_anim.cpp`):
+The ESP32 firmware features an edge-first FreeRTOS background task (`ambient_anim_task`) that executes dynamic animations locally without requiring continuous Home Assistant, Wi-Fi, or MQTT connectivity:
+* **Rainbow Spectrum Wave**: Smoothly sweeps through all 64 palette colors with a ~45° spatial phase offset between dash and door zones.
+* **Christmas Dual-Tone Wave**: Smoothly swaps Dash and Door colors between Crimson Red and Lime Green every 1.5s.
+* **Halloween Dual-Tone Wave**: Smoothly swaps Dash and Door colors between Pumpkin Amber and Deep Purple every 1.5s.
+* **Valentine's Dual-Tone Wave**: Alternates Neon Pink and Crimson Red with soft pulsing transitions.
+* **4th of July Patriotic Wave**: 3-stage rotating sequence cycling Red, Champagne White, and Electric Blue.
+* **Police Strobe**: High-visibility 350ms alternating strobe between Crimson Red and Electric Blue.
+* **Ocean Tide**: Marine surge oscillating between Cyan, Sky Blue, and Electric Blue.
+* **Sunset Glow**: Warm transitions from Crimson Red to Warm Amber and Champagne Gold.
+* **Northern Lights Aurora**: Shifting hues between Emerald Lime and Pure Cyan.
+* **Ambient Breathe**: Smooth luminous intensity modulation (Byte D4) on the active color.
+
+#### Verified 64-Color Factory Palette Reference:
+Captured empirically from real E-GMP vehicle CAN bus logs while cycling through the complete 64-color infotainment wheel:
+
+| Index | Color Name | Stage 1 Payload (`0x4AD` / `0x48F`) | RGB Equivalent | Tone Description |
+| :---: | :--- | :--- | :---: | :--- |
+| **1** | **Lime / Mint Glow** | `F7 FC 63 0B 00 00 00 00` | `(70, 255, 70)` | Vibrant Lime Green anchor |
+| **2** | Spring Lime | `E6 F8 A3 0B 00 00 00 00` | `(85, 255, 95)` | Soft Spring Green |
+| **3** | Fresh Grass | `D2 FC C3 0B 00 00 00 00` | `(100, 255, 120)` | Grass Green |
+| **4** | Pastel Mint | `AF F8 F3 0B 00 00 00 00` | `(115, 255, 150)` | Pastel Mint Green |
+| **5** | Light Aqua | `77 F8 43 0C 00 00 00 00` | `(80, 255, 180)` | Light Aqua Green |
+| **6** | Bright Turquoise | `3A FC 63 0C 00 00 00 00` | `(40, 255, 210)` | Turquoise Cyan |
+| **7** | Deep Turquoise | `0A FC B3 0E 00 00 00 00` | `(10, 255, 235)` | Deep Turquoise |
+| **8** | **Pure Cyan / Aqua Wave** | `00 64 53 0F 00 00 00 00` | `(0, 255, 255)` | Pure Cyan anchor |
+| **9** | Sky Blue Light | `00 D0 F2 0F 00 00 00 00` | `(0, 235, 255)` | Light Sky Blue |
+| **10** | Sky Blue | `00 84 F2 0F 00 00 00 00` | `(0, 215, 255)` | Medium Sky Blue |
+| **11** | Glacier Blue | `00 30 F2 0F 00 00 00 00` | `(0, 195, 255)` | Glacier Ice Blue |
+| **12** | Cerulean | `00 F4 F1 0F 00 00 00 00` | `(0, 175, 255)` | Cerulean Blue |
+| **13** | Cobalt Light | `00 CC E1 0F 00 00 00 00` | `(0, 155, 255)` | Cobalt Blue Light |
+| **14** | Pacific Blue | `00 8C F1 0F 00 00 00 00` | `(0, 135, 255)` | Pacific Ocean Blue |
+| **15** | **Electric Blue** | `00 54 F1 0F 00 00 00 00` | `(0, 120, 255)` | Pure EV Blue anchor |
+| **16** | Royal Blue | `00 F8 F0 0F 00 00 00 00` | `(20, 90, 255)` | Royal Blue |
+| **17** | Deep Blue | `19 00 F0 0F 00 00 00 00` | `(50, 60, 255)` | Deep Indigo Blue |
+| **18** | Indigo Blue | `37 00 F0 0F 00 00 00 00` | `(80, 40, 255)` | Indigo |
+| **19** | Blue Violet | `51 00 F0 0F 00 00 00 00` | `(105, 30, 255)` | Blue-Violet |
+| **20** | Lavender Violet | `64 00 F0 0F 00 00 00 00` | `(130, 20, 255)` | Medium Lavender Violet |
+| **21** | Grape Purple | `6D A8 F0 0F 00 00 00 00` | `(150, 15, 255)` | Grape Purple |
+| **22** | Electric Purple | `7A D0 F0 0F 00 00 00 00` | `(165, 10, 255)` | Electric Purple |
+| **23** | Bright Violet | `7D 64 F0 0F 00 00 00 00` | `(175, 5, 255)` | Bright Violet |
+| **24** | **Deep Purple / Violet** | `80 00 F0 0F 00 00 00 00` | `(180, 0, 255)` | Rich Purple anchor |
+| **25** | Amethyst | `82 00 F0 0F 00 00 00 00` | `(190, 0, 250)` | Amethyst |
+| **26** | Royal Purple | `8F 00 F0 0F 00 00 00 00` | `(205, 0, 240)` | Royal Purple |
+| **27** | Purple Orchid | `9C 00 F0 0F 00 00 00 00` | `(220, 0, 230)` | Orchid Purple |
+| **28** | Purple Magenta | `A7 00 F0 0F 00 00 00 00` | `(230, 0, 215)` | Purple Magenta |
+| **29** | Bright Magenta | `B0 00 F0 0F 00 00 00 00` | `(240, 0, 200)` | Bright Magenta |
+| **30** | Deep Fuchsia | `C3 00 E0 0F 00 00 00 00` | `(245, 5, 180)` | Deep Fuchsia |
+| **31** | Hot Fuchsia | `CD 00 E0 0F 00 00 00 00` | `(250, 10, 160)` | Hot Fuchsia |
+| **32** | Neon Pink | `E8 00 E0 0F 00 00 00 00` | `(255, 15, 140)` | Vivid Neon Pink |
+| **33** | **Magenta / Neon Pink** | `FF 00 10 0F 00 00 00 00` | `(255, 20, 147)` | Hot Pink anchor |
+| **34** | Deep Rose Pink | `FF 00 30 0C 00 00 00 00` | `(255, 15, 120)` | Deep Rose Pink |
+| **35** | Crimson Pink | `FF 00 E0 09 00 00 00 00` | `(255, 10, 100)` | Crimson Pink |
+| **36** | Bright Rose Red | `FF 00 90 08 00 00 00 00` | `(255, 10, 80)` | Rose Red |
+| **37** | Ruby Red | `FF 00 50 07 00 00 00 00` | `(255, 10, 60)` | Ruby Red |
+| **38** | Cherry Red | `FF 00 F0 06 00 00 00 00` | `(255, 10, 45)` | Cherry Red |
+| **39** | Scarlet | `FF 00 A0 06 00 00 00 00` | `(255, 10, 35)` | Scarlet Red |
+| **40** | Carmine Red | `FF 00 50 06 00 00 00 00` | `(255, 10, 25)` | Carmine Red |
+| **41** | Pure Red Bright | `FE 00 F0 05 00 00 00 00` | `(255, 5, 15)` | Vivid Pure Red |
+| **42** | Pure Red Strong | `FF 00 80 04 00 00 00 00` | `(255, 0, 10)` | Deep Red |
+| **43** | Deep Crimson | `FE 00 A0 03 00 00 00 00` | `(255, 0, 5)` | Dark Crimson |
+| **44** | Blood Red | `FE 00 E0 01 00 00 00 00` | `(255, 0, 0)` | Blood Red |
+| **45** | Burnt Red | `FF 0C A0 00 00 00 00 00` | `(255, 20, 0)` | Burnt Red-Orange |
+| **46** | **Crimson Red** | `FE 88 00 00 00 00 00 00` | `(255, 0, 0)` | Sport / Warning Red anchor |
+| **47** | Vermilion Red-Orange | `FF C0 70 01 00 00 00 00` | `(255, 45, 0)` | Reddish Orange |
+| **48** | Deep Orange | `FF F0 A0 02 00 00 00 00` | `(255, 65, 0)` | Deep Orange |
+| **49** | Bright Orange | `FF 04 11 03 00 00 00 00` | `(255, 80, 0)` | Vivid Orange |
+| **50** | Tangerine | `FF 24 91 04 00 00 00 00` | `(255, 95, 0)` | Tangerine |
+| **51** | Sunrise Orange | `FF 60 81 05 00 00 00 00` | `(255, 110, 0)` | Sunrise Orange |
+| **52** | Golden Orange | `FF 80 A1 06 00 00 00 00` | `(255, 125, 0)` | Golden Orange |
+| **53** | Amber Gold | `FF AC 41 07 00 00 00 00` | `(255, 135, 0)` | Amber Gold |
+| **54** | Warm Amber | `FF C4 11 07 00 00 00 00` | `(255, 140, 0)` | Warm Amber |
+| **55** | Deep Marigold | `FF F4 31 07 00 00 00 00` | `(255, 145, 0)` | Deep Marigold Yellow |
+| **56** | Marigold Orange | `FF 24 B2 06 00 00 00 00` | `(255, 150, 0)` | Marigold |
+| **57** | **Warm Sunset / Amber** | `FF 50 72 07 00 00 00 00` | `(255, 140, 0)` | Amber / Sunset anchor |
+| **58** | Peach Amber | `FF 80 F2 06 00 00 00 00` | `(255, 165, 10)` | Peach Amber |
+| **59** | Golden Peach | `FF B0 12 07 00 00 00 00` | `(255, 180, 30)` | Golden Peach |
+| **60** | Champagne Gold | `FF C4 C2 06 00 00 00 00` | `(255, 195, 60)` | Champagne Gold |
+| **61** | Soft Gold | `FF FC B2 07 00 00 00 00` | `(255, 210, 100)` | Soft Warm Gold |
+| **62** | Vanilla Gold | `FE 3C A3 08 00 00 00 00` | `(255, 225, 140)` | Vanilla Gold |
+| **63** | Warm Ivory | `FF 60 33 09 00 00 00 00` | `(255, 235, 180)` | Warm Ivory |
+| **64** | **Champagne White** | `FE B4 53 0A 00 00 00 00` | `(255, 240, 220)` | Neutral Warm White anchor |
+| **—** | **Mood Light Off** | `00 00 00 00 00 00 00 00` | `(0, 0, 0)` | Complete Illumination Cutoff |
 
 ---
 
