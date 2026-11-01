@@ -1729,7 +1729,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
+        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
       },
       "network": {
         "bus": 0,
@@ -1741,14 +1741,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "\u00b0F",
+        "unit": "°F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62\u00b0F",
+          "label": "62°F",
           "match": {
             "D2": "0x06"
           },
@@ -1768,7 +1768,7 @@
           ]
         },
         {
-          "label": "63\u00b0F",
+          "label": "63°F",
           "match": {
             "D2": "0x07"
           },
@@ -1788,7 +1788,7 @@
           ]
         },
         {
-          "label": "64\u00b0F",
+          "label": "64°F",
           "match": {
             "D2": "0x08"
           },
@@ -1808,7 +1808,7 @@
           ]
         },
         {
-          "label": "65\u00b0F",
+          "label": "65°F",
           "match": {
             "D2": "0x09"
           },
@@ -1828,7 +1828,7 @@
           ]
         },
         {
-          "label": "66\u00b0F",
+          "label": "66°F",
           "match": {
             "D2": "0x0A"
           },
@@ -1848,7 +1848,7 @@
           ]
         },
         {
-          "label": "67\u00b0F",
+          "label": "67°F",
           "match": {
             "D2": "0x0B"
           },
@@ -1868,7 +1868,7 @@
           ]
         },
         {
-          "label": "68\u00b0F",
+          "label": "68°F",
           "match": {
             "D2": "0x0C"
           },
@@ -1888,7 +1888,7 @@
           ]
         },
         {
-          "label": "69\u00b0F",
+          "label": "69°F",
           "match": {
             "D2": "0x0D"
           },
@@ -1908,7 +1908,7 @@
           ]
         },
         {
-          "label": "70\u00b0F",
+          "label": "70°F",
           "match": {
             "D2": "0x0E"
           },
@@ -1929,7 +1929,7 @@
           "default": true
         },
         {
-          "label": "71\u00b0F",
+          "label": "71°F",
           "match": {
             "D2": "0x0F"
           },
@@ -1949,7 +1949,7 @@
           ]
         },
         {
-          "label": "72\u00b0F",
+          "label": "72°F",
           "match": {
             "D2": "0x10"
           },
@@ -1969,7 +1969,7 @@
           ]
         },
         {
-          "label": "73\u00b0F",
+          "label": "73°F",
           "match": {
             "D2": "0x11"
           },
@@ -1989,7 +1989,7 @@
           ]
         },
         {
-          "label": "74\u00b0F",
+          "label": "74°F",
           "match": {
             "D2": "0x12"
           },
@@ -2009,7 +2009,7 @@
           ]
         },
         {
-          "label": "75\u00b0F",
+          "label": "75°F",
           "match": {
             "D2": "0x13"
           },
@@ -2029,7 +2029,7 @@
           ]
         },
         {
-          "label": "76\u00b0F",
+          "label": "76°F",
           "match": {
             "D2": "0x14"
           },
@@ -2049,7 +2049,7 @@
           ]
         },
         {
-          "label": "77\u00b0F",
+          "label": "77°F",
           "match": {
             "D2": "0x15"
           },
@@ -2069,7 +2069,7 @@
           ]
         },
         {
-          "label": "78\u00b0F",
+          "label": "78°F",
           "match": {
             "D2": "0x16"
           },
@@ -2089,7 +2089,7 @@
           ]
         },
         {
-          "label": "79\u00b0F",
+          "label": "79°F",
           "match": {
             "D2": "0x17"
           },
@@ -2109,7 +2109,7 @@
           ]
         },
         {
-          "label": "80\u00b0F",
+          "label": "80°F",
           "match": {
             "D2": "0x18"
           },
@@ -2129,7 +2129,7 @@
           ]
         },
         {
-          "label": "81\u00b0F",
+          "label": "81°F",
           "match": {
             "D2": "0x19"
           },
@@ -2149,7 +2149,7 @@
           ]
         },
         {
-          "label": "82\u00b0F",
+          "label": "82°F",
           "match": {
             "D2": "0x1A"
           },
@@ -2194,7 +2194,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62\u00b0F to 82\u00b0F in 1\u00b0F increments)"
+        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
       },
       "network": {
         "bus": 0,
@@ -2206,14 +2206,14 @@
         "min": 62,
         "max": 82,
         "step": 1,
-        "unit": "\u00b0F",
+        "unit": "°F",
         "raw_min": "0x06",
         "raw_max": "0x1A",
         "delay_ms": 20
       },
       "options": [
         {
-          "label": "62\u00b0F",
+          "label": "62°F",
           "match": {
             "D3": "0x06"
           },
@@ -2233,7 +2233,7 @@
           ]
         },
         {
-          "label": "63\u00b0F",
+          "label": "63°F",
           "match": {
             "D3": "0x07"
           },
@@ -2253,7 +2253,7 @@
           ]
         },
         {
-          "label": "64\u00b0F",
+          "label": "64°F",
           "match": {
             "D3": "0x08"
           },
@@ -2273,7 +2273,7 @@
           ]
         },
         {
-          "label": "65\u00b0F",
+          "label": "65°F",
           "match": {
             "D3": "0x09"
           },
@@ -2293,7 +2293,7 @@
           ]
         },
         {
-          "label": "66\u00b0F",
+          "label": "66°F",
           "match": {
             "D3": "0x0A"
           },
@@ -2313,7 +2313,7 @@
           ]
         },
         {
-          "label": "67\u00b0F",
+          "label": "67°F",
           "match": {
             "D3": "0x0B"
           },
@@ -2333,7 +2333,7 @@
           ]
         },
         {
-          "label": "68\u00b0F",
+          "label": "68°F",
           "match": {
             "D3": "0x0C"
           },
@@ -2353,7 +2353,7 @@
           ]
         },
         {
-          "label": "69\u00b0F",
+          "label": "69°F",
           "match": {
             "D3": "0x0D"
           },
@@ -2373,7 +2373,7 @@
           ]
         },
         {
-          "label": "70\u00b0F",
+          "label": "70°F",
           "match": {
             "D3": "0x0E"
           },
@@ -2394,7 +2394,7 @@
           "default": true
         },
         {
-          "label": "71\u00b0F",
+          "label": "71°F",
           "match": {
             "D3": "0x0F"
           },
@@ -2414,7 +2414,7 @@
           ]
         },
         {
-          "label": "72\u00b0F",
+          "label": "72°F",
           "match": {
             "D3": "0x10"
           },
@@ -2434,7 +2434,7 @@
           ]
         },
         {
-          "label": "73\u00b0F",
+          "label": "73°F",
           "match": {
             "D3": "0x11"
           },
@@ -2454,7 +2454,7 @@
           ]
         },
         {
-          "label": "74\u00b0F",
+          "label": "74°F",
           "match": {
             "D3": "0x12"
           },
@@ -2474,7 +2474,7 @@
           ]
         },
         {
-          "label": "75\u00b0F",
+          "label": "75°F",
           "match": {
             "D3": "0x13"
           },
@@ -2494,7 +2494,7 @@
           ]
         },
         {
-          "label": "76\u00b0F",
+          "label": "76°F",
           "match": {
             "D3": "0x14"
           },
@@ -2514,7 +2514,7 @@
           ]
         },
         {
-          "label": "77\u00b0F",
+          "label": "77°F",
           "match": {
             "D3": "0x15"
           },
@@ -2534,7 +2534,7 @@
           ]
         },
         {
-          "label": "78\u00b0F",
+          "label": "78°F",
           "match": {
             "D3": "0x16"
           },
@@ -2554,7 +2554,7 @@
           ]
         },
         {
-          "label": "79\u00b0F",
+          "label": "79°F",
           "match": {
             "D3": "0x17"
           },
@@ -2574,7 +2574,7 @@
           ]
         },
         {
-          "label": "80\u00b0F",
+          "label": "80°F",
           "match": {
             "D3": "0x18"
           },
@@ -2594,7 +2594,7 @@
           ]
         },
         {
-          "label": "81\u00b0F",
+          "label": "81°F",
           "match": {
             "D3": "0x19"
           },
@@ -2614,7 +2614,7 @@
           ]
         },
         {
-          "label": "82\u00b0F",
+          "label": "82°F",
           "match": {
             "D3": "0x1A"
           },
@@ -4870,18 +4870,18 @@
       },
       "options": [
         {
-          "label": "Info Notification (\u24d8)",
+          "label": "Info Notification (ⓘ)",
           "level": "info",
           "popup_message": "Preconditioning Active",
           "default": true
         },
         {
-          "label": "Warning Notification (\u26a0)",
+          "label": "Warning Notification (⚠)",
           "level": "warning",
           "popup_message": "Battery Cold / Limited"
         },
         {
-          "label": "Fault Notification (\u203c)",
+          "label": "Fault Notification (‼)",
           "level": "error",
           "popup_message": "Charge Interrupted"
         },
@@ -7027,10 +7027,10 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x594"
+        "state_can_id": "0x326"
       },
       "match": {
-        "D3": "0x01"
+        "D5": "0x01"
       },
       "roles": [
         "trigger",
@@ -7040,27 +7040,116 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Decoded EV charging state from BMS1 frame 0x594 Byte D2 (Bit 1 CF_Bms_ChsSts: 1 = Active charging, 0 = Inactive) and BMS4 frame 0x597 Byte D1 (Bit 3 CF_Bms_ChgFinishedForOBC: 1 = Battery pack 100% full / terminated)."
+        "notes": "Decoded EV charging state from Gen 3 BMS_06 frame 0x326 Byte D5 (Bit 0:1 CF_Bms_ChsSts: 1 = Active charging, 0 = Inactive) and VCMS_02 frame 0x30B Byte D4 (CF_OBC_PD_Stat: 2 = Cable plugged in). Legacy Gen 2 uses BMS1 frame 0x594 Byte D2 (Bit 1 CF_Bms_ChsSts)."
       },
       "subcategory": "Charging Status",
       "options": [
         {
           "label": "Charging In Progress",
           "match": {
-            "D2": "0x02"
+            "D5": "0x01"
           },
-          "mask": "0x02",
+          "mask": "0x03",
           "default": true
         },
         {
           "label": "Not Charging / Disconnected",
           "match": {
-            "D2": "0x00"
+            "D5": "0x00"
           },
-          "mask": "0x02"
+          "mask": "0x03"
         }
       ],
-      "state_can_id": "0x594"
+      "state_can_id": "0x326",
+      "mask": "0x03",
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hi5_limited",
+            "hi5_sel",
+            "hi5_se",
+            "hi5_n",
+            "hi5_ultimate",
+            "hi5_premium",
+            "hi5_advance",
+            "ev6_gtline",
+            "ev6_wind",
+            "ev6_gt",
+            "ev6_light",
+            "ev6_gtline_s",
+            "ev6_air",
+            "hi6_limited",
+            "hi6_sel",
+            "hi6_se",
+            "hi6_ultimate",
+            "hi6_premium",
+            "gv60_performance",
+            "gv60_advanced",
+            "gv60_standard",
+            "gv60_premium",
+            "gv60_sport",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x326"
+          },
+          "options": [
+            {
+              "label": "Charging In Progress",
+              "match": {
+                "D5": "0x01"
+              },
+              "mask": "0x03",
+              "default": true
+            },
+            {
+              "label": "Not Charging / Disconnected",
+              "match": {
+                "D5": "0x00"
+              },
+              "mask": "0x03"
+            }
+          ]
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen2a",
+            "hyundai_kona_ev",
+            "kia_niro_ev",
+            "kia_soul_ev",
+            "hyundai_ioniq_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x594"
+          },
+          "options": [
+            {
+              "label": "Charging In Progress",
+              "match": {
+                "D2": "0x02"
+              },
+              "mask": "0x02",
+              "default": true
+            },
+            {
+              "label": "Not Charging / Disconnected",
+              "match": {
+                "D2": "0x00"
+              },
+              "mask": "0x02"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "cond_ambient_temperature",
@@ -7082,16 +7171,16 @@
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x226",
-        "unit": "\u00b0C"
+        "unit": "°C"
       },
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 \u00b0C"
+        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 °C"
       },
       "options": [
         {
-          "label": "Freezing (<= 0\u00b0C / 32\u00b0F)",
+          "label": "Freezing (<= 0°C / 32°F)",
           "evaluate": {
             "byte": "D4",
             "operator": "<=",
@@ -7100,7 +7189,7 @@
           "default": true
         },
         {
-          "label": "Cold (< 15\u00b0C / 59\u00b0F)",
+          "label": "Cold (< 15°C / 59°F)",
           "evaluate": {
             "byte": "D4",
             "operator": "<",
@@ -7108,7 +7197,7 @@
           }
         },
         {
-          "label": "Warm (> 25\u00b0C / 77\u00b0F)",
+          "label": "Warm (> 25°C / 77°F)",
           "evaluate": {
             "byte": "D4",
             "operator": ">",
@@ -7934,7 +8023,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Right 90\u00b0",
+          "label": "Turn Right 90°",
           "match": {
             "D1": "0x03"
           },
@@ -7969,7 +8058,7 @@
           "mask": "0xFF"
         },
         {
-          "label": "Turn Left 90\u00b0",
+          "label": "Turn Left 90°",
           "match": {
             "D1": "0x08"
           },
@@ -8266,19 +8355,20 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "AC Normal Charging (Level 2) remaining time to full charge in minutes. Decoded from BMS3 frame 0x597 Bytes D2-D3 (CR_Bms_ChgRemainedTime_min): Minutes = (Byte D3 << 8) | Byte D2. Value 0xFFFF (65535) indicates inactive / not charging."
+        "notes": "AC Normal Charging (Level 2) remaining time to full charge in minutes. Decoded from BMS_06_100ms_2 frame 0x327 Bytes D1-D2 (CR_Bms_ScChgRemaindTime_min): Minutes = (Byte D2 << 8) | Byte D1. Value 0xFFFF (65535) indicates inactive / not charging."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x597",
-        "unit": "min"
+        "state_can_id": "0x327",
+        "unit": "min",
+        "state_byte": "D1-D2"
       },
       "options": [
         {
           "label": "Under 30 Minutes",
           "evaluate": {
-            "byte": "D2",
+            "byte": "D1",
             "operator": "<=",
             "value": "0x1E"
           }
@@ -8286,7 +8376,7 @@
         {
           "label": "Under 1 Hour",
           "evaluate": {
-            "byte": "D2",
+            "byte": "D1",
             "operator": "<=",
             "value": "0x3C"
           }
@@ -8296,19 +8386,137 @@
           "evaluate": {
             "byte": "D2",
             "operator": ">",
-            "value": "0x78"
+            "value": "0x00"
           }
         },
         {
           "label": "Not Charging / Inactive",
           "match": {
-            "D2": "0xFF",
-            "D3": "0xFF"
+            "D1": "0xFF",
+            "D2": "0xFF"
           },
           "default": true
         }
       ],
-      "state_can_id": "0x597"
+      "state_can_id": "0x327",
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hi5_limited",
+            "hi5_sel",
+            "hi5_se",
+            "hi5_n",
+            "hi5_ultimate",
+            "hi5_premium",
+            "hi5_advance",
+            "ev6_gtline",
+            "ev6_wind",
+            "ev6_gt",
+            "ev6_light",
+            "ev6_gtline_s",
+            "ev6_air",
+            "hi6_limited",
+            "hi6_sel",
+            "hi6_se",
+            "hi6_ultimate",
+            "hi6_premium",
+            "gv60_performance",
+            "gv60_advanced",
+            "gv60_standard",
+            "gv60_premium",
+            "gv60_sport",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x327",
+            "unit": "min",
+            "state_byte": "D1-D2"
+          },
+          "options": [
+            {
+              "label": "Under 30 Minutes",
+              "evaluate": {
+                "byte": "D1",
+                "operator": "<=",
+                "value": "0x1E"
+              }
+            },
+            {
+              "label": "Under 1 Hour",
+              "evaluate": {
+                "byte": "D1",
+                "operator": "<=",
+                "value": "0x3C"
+              }
+            },
+            {
+              "label": "Over 2 Hours",
+              "evaluate": {
+                "byte": "D2",
+                "operator": ">",
+                "value": "0x00"
+              }
+            },
+            {
+              "label": "Not Charging / Inactive",
+              "match": {
+                "D1": "0xFF",
+                "D2": "0xFF"
+              },
+              "default": true
+            }
+          ]
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen2a",
+            "hyundai_kona_ev",
+            "kia_niro_ev",
+            "kia_soul_ev",
+            "hyundai_ioniq_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x597",
+            "unit": "min",
+            "state_byte": "D2-D3"
+          },
+          "options": [
+            {
+              "label": "Under 30 Minutes",
+              "evaluate": {
+                "byte": "D2",
+                "operator": "<=",
+                "value": "0x1E"
+              }
+            },
+            {
+              "label": "Under 1 Hour",
+              "evaluate": {
+                "byte": "D2",
+                "operator": "<=",
+                "value": "0x3C"
+              }
+            },
+            {
+              "label": "Not Charging / Inactive",
+              "match": {
+                "D2": "0xFF",
+                "D3": "0xFF"
+              },
+              "default": true
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "remaining_charge_time_dc",
@@ -8332,19 +8540,20 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "DC Quick Fast Charge (CCS / 800V DCFC) remaining time to target charge limit in minutes. Decoded from BMS3 frame 0x597 Bytes D4-D5 (CR_Bms_QcChgRemainedTime_min): Minutes = (Byte D5 << 8) | Byte D4."
+        "notes": "DC Quick Fast Charge (CCS / 800V DCFC) remaining time to target charge limit in minutes. Decoded from BMS_04_100ms_2 frame 0x25C Bytes D3-D4 (CR_Bms_QcChgRemainedTime_min): Minutes = (Byte D4 << 8) | Byte D3. Value 0xFFFF (65535) indicates inactive / not fast charging."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x597",
-        "unit": "min"
+        "state_can_id": "0x25C",
+        "unit": "min",
+        "state_byte": "D3-D4"
       },
       "options": [
         {
           "label": "Under 10 Minutes (Near 80%)",
           "evaluate": {
-            "byte": "D4",
+            "byte": "D3",
             "operator": "<=",
             "value": "0x0A"
           }
@@ -8352,7 +8561,7 @@
         {
           "label": "Under 20 Minutes",
           "evaluate": {
-            "byte": "D4",
+            "byte": "D3",
             "operator": "<=",
             "value": "0x14"
           }
@@ -8360,7 +8569,7 @@
         {
           "label": "Over 20 Minutes",
           "evaluate": {
-            "byte": "D4",
+            "byte": "D3",
             "operator": ">",
             "value": "0x14"
           }
@@ -8368,13 +8577,131 @@
         {
           "label": "Not Fast Charging",
           "match": {
-            "D4": "0xFF",
-            "D5": "0xFF"
+            "D3": "0xFF",
+            "D4": "0xFF"
           },
           "default": true
         }
       ],
-      "state_can_id": "0x597"
+      "state_can_id": "0x25C",
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hi5_limited",
+            "hi5_sel",
+            "hi5_se",
+            "hi5_n",
+            "hi5_ultimate",
+            "hi5_premium",
+            "hi5_advance",
+            "ev6_gtline",
+            "ev6_wind",
+            "ev6_gt",
+            "ev6_light",
+            "ev6_gtline_s",
+            "ev6_air",
+            "hi6_limited",
+            "hi6_sel",
+            "hi6_se",
+            "hi6_ultimate",
+            "hi6_premium",
+            "gv60_performance",
+            "gv60_advanced",
+            "gv60_standard",
+            "gv60_premium",
+            "gv60_sport",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x25C",
+            "unit": "min",
+            "state_byte": "D3-D4"
+          },
+          "options": [
+            {
+              "label": "Under 10 Minutes (Near 80%)",
+              "evaluate": {
+                "byte": "D3",
+                "operator": "<=",
+                "value": "0x0A"
+              }
+            },
+            {
+              "label": "Under 20 Minutes",
+              "evaluate": {
+                "byte": "D3",
+                "operator": "<=",
+                "value": "0x14"
+              }
+            },
+            {
+              "label": "Over 20 Minutes",
+              "evaluate": {
+                "byte": "D3",
+                "operator": ">",
+                "value": "0x14"
+              }
+            },
+            {
+              "label": "Not Fast Charging",
+              "match": {
+                "D3": "0xFF",
+                "D4": "0xFF"
+              },
+              "default": true
+            }
+          ]
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen2a",
+            "hyundai_kona_ev",
+            "kia_niro_ev",
+            "kia_soul_ev",
+            "hyundai_ioniq_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x597",
+            "unit": "min",
+            "state_byte": "D4-D5"
+          },
+          "options": [
+            {
+              "label": "Under 10 Minutes (Near 80%)",
+              "evaluate": {
+                "byte": "D4",
+                "operator": "<=",
+                "value": "0x0A"
+              }
+            },
+            {
+              "label": "Under 20 Minutes",
+              "evaluate": {
+                "byte": "D4",
+                "operator": "<=",
+                "value": "0x14"
+              }
+            },
+            {
+              "label": "Not Fast Charging",
+              "match": {
+                "D4": "0xFF",
+                "D5": "0xFF"
+              },
+              "default": true
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "remaining_charge_time_120v",
@@ -8397,19 +8724,20 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Level 1 (120V trickle) portable charger remaining time to full in minutes. Decoded from BMS8/BMS25 frame 0x4E2 Bytes D3-D4 (CR_Bms_ScChgRemainedTime_120_min): Minutes = (Byte D4 << 8) | Byte D3."
+        "notes": "Level 1 (120V trickle) portable charger remaining time to full in minutes. Decoded from BMS_06_100ms_3 frame 0x328 Bytes D1-D2 (CR_Bms_ScChgRemainedTime_120_min): Minutes = (Byte D2 << 8) | Byte D1. Value 0xFFFF (65535) indicates inactive / not charging."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x4E2",
-        "unit": "min"
+        "state_can_id": "0x328",
+        "unit": "min",
+        "state_byte": "D1-D2"
       },
       "options": [
         {
           "label": "Over 12 Hours",
           "evaluate": {
-            "byte": "D4",
+            "byte": "D2",
             "operator": ">",
             "value": "0x02"
           }
@@ -8417,13 +8745,107 @@
         {
           "label": "Not Level 1 Charging",
           "match": {
-            "D3": "0xFF",
-            "D4": "0xFF"
+            "D1": "0xFF",
+            "D2": "0xFF"
           },
           "default": true
         }
       ],
-      "state_can_id": "0x4E2"
+      "state_can_id": "0x328",
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hi5_limited",
+            "hi5_sel",
+            "hi5_se",
+            "hi5_n",
+            "hi5_ultimate",
+            "hi5_premium",
+            "hi5_advance",
+            "ev6_gtline",
+            "ev6_wind",
+            "ev6_gt",
+            "ev6_light",
+            "ev6_gtline_s",
+            "ev6_air",
+            "hi6_limited",
+            "hi6_sel",
+            "hi6_se",
+            "hi6_ultimate",
+            "hi6_premium",
+            "gv60_performance",
+            "gv60_advanced",
+            "gv60_standard",
+            "gv60_premium",
+            "gv60_sport",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x328",
+            "unit": "min",
+            "state_byte": "D1-D2"
+          },
+          "options": [
+            {
+              "label": "Over 12 Hours",
+              "evaluate": {
+                "byte": "D2",
+                "operator": ">",
+                "value": "0x02"
+              }
+            },
+            {
+              "label": "Not Level 1 Charging",
+              "match": {
+                "D1": "0xFF",
+                "D2": "0xFF"
+              },
+              "default": true
+            }
+          ]
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen2a",
+            "hyundai_kona_ev",
+            "kia_niro_ev",
+            "kia_soul_ev",
+            "hyundai_ioniq_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x4E2",
+            "unit": "min",
+            "state_byte": "D3-D4"
+          },
+          "options": [
+            {
+              "label": "Over 12 Hours",
+              "evaluate": {
+                "byte": "D4",
+                "operator": ">",
+                "value": "0x02"
+              }
+            },
+            {
+              "label": "Not Level 1 Charging",
+              "match": {
+                "D3": "0xFF",
+                "D4": "0xFF"
+              },
+              "default": true
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "ev_charge_type_active",
@@ -8445,45 +8867,147 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Active EV charging power source and protocol decoded from BMS2 frame 0x595 Byte D1 (Bit 1 CF_Bms_StdCha = Level 2 AC, Bit 2 CF_Bms_FstCha = DC Fast Charge CCS, Bit 3 CF_Bms_StdCha120V = Level 1 120V)."
+        "notes": "Active EV charging power source and protocol decoded from Gen 3 VCMS_02 frame 0x30B Byte D7 (Bits 4:5 CF_OBC_ACChargingStat = Level 2 AC, Bits 2:3 CF_OBC_DCChargingStat = DC Fast Charge CCS). Legacy Gen 2 uses BMS2 frame 0x595 Byte D1."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x595"
+        "state_can_id": "0x30B"
       },
       "options": [
         {
           "label": "Standard AC Charging (Level 2)",
           "match": {
-            "D1": "0x02"
+            "D7": "0x10"
           },
-          "mask": "0x0E",
+          "mask": "0x30",
           "default": true
         },
         {
           "label": "DC Fast Charging (CCS / 800V)",
           "match": {
-            "D1": "0x04"
+            "D7": "0x04"
           },
-          "mask": "0x0E"
-        },
-        {
-          "label": "120V Trickle Charging (Level 1)",
-          "match": {
-            "D1": "0x08"
-          },
-          "mask": "0x0E"
+          "mask": "0x0C"
         },
         {
           "label": "Not Charging / Disconnected",
           "match": {
-            "D1": "0x00"
+            "D7": "0x00"
           },
-          "mask": "0x0E"
+          "mask": "0x3C"
         }
       ],
-      "state_can_id": "0x595"
+      "state_can_id": "0x30B",
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hi5_limited",
+            "hi5_sel",
+            "hi5_se",
+            "hi5_n",
+            "hi5_ultimate",
+            "hi5_premium",
+            "hi5_advance",
+            "ev6_gtline",
+            "ev6_wind",
+            "ev6_gt",
+            "ev6_light",
+            "ev6_gtline_s",
+            "ev6_air",
+            "hi6_limited",
+            "hi6_sel",
+            "hi6_se",
+            "hi6_ultimate",
+            "hi6_premium",
+            "gv60_performance",
+            "gv60_advanced",
+            "gv60_standard",
+            "gv60_premium",
+            "gv60_sport",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x30B"
+          },
+          "options": [
+            {
+              "label": "Standard AC Charging (Level 2)",
+              "match": {
+                "D7": "0x10"
+              },
+              "mask": "0x30",
+              "default": true
+            },
+            {
+              "label": "DC Fast Charging (CCS / 800V)",
+              "match": {
+                "D7": "0x04"
+              },
+              "mask": "0x0C"
+            },
+            {
+              "label": "Not Charging / Disconnected",
+              "match": {
+                "D7": "0x00"
+              },
+              "mask": "0x3C"
+            }
+          ]
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen2a",
+            "hyundai_kona_ev",
+            "kia_niro_ev",
+            "kia_soul_ev",
+            "hyundai_ioniq_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x595"
+          },
+          "options": [
+            {
+              "label": "Standard AC Charging (Level 2)",
+              "match": {
+                "D1": "0x02"
+              },
+              "mask": "0x0E",
+              "default": true
+            },
+            {
+              "label": "DC Fast Charging (CCS / 800V)",
+              "match": {
+                "D1": "0x04"
+              },
+              "mask": "0x0E"
+            },
+            {
+              "label": "120V Trickle Charging (Level 1)",
+              "match": {
+                "D1": "0x08"
+              },
+              "mask": "0x0E"
+            },
+            {
+              "label": "Not Charging / Disconnected",
+              "match": {
+                "D1": "0x00"
+              },
+              "mask": "0x0E"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "ev_charge_port_lock_mode",
@@ -8587,19 +9111,20 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Vehicle-to-Load (V2L) estimated discharge runtime remaining in minutes before hitting configured minimum battery SOC cutoff limit. Decoded from VCMS / V2X discharge telemetry."
+        "notes": "Vehicle-to-Load (V2L) estimated discharge runtime remaining in minutes before hitting configured minimum battery SOC cutoff limit. Decoded from VCMS_03_100ms_4 frame 0x324 Bytes D7-D8 (VCMS_V2LEstDischgRmnTime): Minutes = (Byte D8 << 8) | Byte D7."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x594",
-        "unit": "min"
+        "state_can_id": "0x324",
+        "unit": "min",
+        "state_byte": "D7-D8"
       },
       "options": [
         {
           "label": "Over 5 Hours Remaining",
           "evaluate": {
-            "byte": "D5",
+            "byte": "D8",
             "operator": ">",
             "value": "0x01"
           },
@@ -8608,13 +9133,13 @@
         {
           "label": "Low V2L Runtime (< 1 Hour)",
           "evaluate": {
-            "byte": "D4",
+            "byte": "D7",
             "operator": "<=",
             "value": "0x3C"
           }
         }
       ],
-      "state_can_id": "0x594"
+      "state_can_id": "0x324"
     },
     {
       "id": "bms_cell_extremes_voltage",
@@ -8679,7 +9204,7 @@
         "name": "HV Battery Module Min & Max Temp",
         "domain": "sensor",
         "icon": "mdi:thermometer-chevron-up",
-        "unit_of_measurement": "\u00b0C"
+        "unit_of_measurement": "°C"
       },
       "tags": [
         "all_egmp"
@@ -8693,17 +9218,17 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40\u00b0C offset."
+        "notes": "Decoded highest module temperature (CR_Bms_BatMaxTemp_C, Byte D1) and lowest module temperature (CR_Bms_BatMinTemp_C, Byte D2) from BMS frame 0x5D7 with -40°C offset."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x5D7",
-        "unit": "\u00b0C"
+        "unit": "°C"
       },
       "options": [
         {
-          "label": "Battery Optimal Warm (20\u00b0C - 35\u00b0C)",
+          "label": "Battery Optimal Warm (20°C - 35°C)",
           "evaluate": {
             "byte": "D1",
             "operator": ">=",
@@ -8712,7 +9237,7 @@
           "default": true
         },
         {
-          "label": "Battery High Temp (> 45\u00b0C / 113\u00b0F)",
+          "label": "Battery High Temp (> 45°C / 113°F)",
           "evaluate": {
             "byte": "D1",
             "operator": ">",
@@ -8720,7 +9245,7 @@
           }
         },
         {
-          "label": "Battery Cold (< 10\u00b0C / 50\u00b0F)",
+          "label": "Battery Cold (< 10°C / 50°F)",
           "evaluate": {
             "byte": "D2",
             "operator": "<",
@@ -8728,7 +9253,7 @@
           }
         },
         {
-          "label": "Battery Freezing (< 0\u00b0C / 32\u00b0F)",
+          "label": "Battery Freezing (< 0°C / 32°F)",
           "evaluate": {
             "byte": "D2",
             "operator": "<",
@@ -9024,7 +9549,7 @@
         "name": "Cabin Displayed Target Temperature",
         "domain": "sensor",
         "icon": "mdi:thermometer-lines",
-        "unit_of_measurement": "\u00b0F"
+        "unit_of_measurement": "°F"
       },
       "tags": [
         "all_egmp"
@@ -9038,53 +9563,185 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Actual climate control computer displayed temperature from DATC1 frame 0x5F5 (Byte D2 = Driver Temp in \u00b0C x 0.5, Byte D3 = Driver Temp in \u00b0F integer)."
+        "notes": "Actual climate control computer displayed temperature from Gen 3 DATC_03 frame 0x380 (Byte D4 = Driver Temp in deg C x 0.5 + 14.0, Byte D5 = Driver Temp in deg F integer + 56). Legacy Gen 2 uses DATC1 frame 0x5F5."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x5F5",
-        "unit": "\u00b0F"
+        "state_can_id": "0x380",
+        "unit": "°F"
       },
       "options": [
         {
-          "label": "68\u00b0F (20.0\u00b0C)",
+          "label": "68°F (20.0°C)",
           "match": {
-            "D3": "0x44"
+            "D5": "0x0C"
           },
           "mask": "0xFF"
         },
         {
-          "label": "70\u00b0F (21.0\u00b0C)",
+          "label": "70°F (21.0°C)",
           "match": {
-            "D3": "0x46"
+            "D5": "0x0E"
           },
           "mask": "0xFF"
         },
         {
-          "label": "72\u00b0F (22.0\u00b0C)",
+          "label": "72°F (22.0°C)",
           "match": {
-            "D3": "0x48"
+            "D5": "0x10"
           },
           "mask": "0xFF",
           "default": true
         },
         {
-          "label": "74\u00b0F (23.5\u00b0C)",
+          "label": "74°F (23.5°C)",
           "match": {
-            "D3": "0x4A"
+            "D5": "0x12"
           },
           "mask": "0xFF"
         },
         {
-          "label": "76\u00b0F (24.5\u00b0C)",
+          "label": "76°F (24.5°C)",
           "match": {
-            "D3": "0x4C"
+            "D5": "0x14"
           },
           "mask": "0xFF"
         }
       ],
-      "state_can_id": "0x5F5"
+      "state_can_id": "0x380",
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hi5_limited",
+            "hi5_sel",
+            "hi5_se",
+            "hi5_n",
+            "hi5_ultimate",
+            "hi5_premium",
+            "hi5_advance",
+            "ev6_gtline",
+            "ev6_wind",
+            "ev6_gt",
+            "ev6_light",
+            "ev6_gtline_s",
+            "ev6_air",
+            "hi6_limited",
+            "hi6_sel",
+            "hi6_se",
+            "hi6_ultimate",
+            "hi6_premium",
+            "gv60_performance",
+            "gv60_advanced",
+            "gv60_standard",
+            "gv60_premium",
+            "gv60_sport",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x380",
+            "unit": "°F"
+          },
+          "options": [
+            {
+              "label": "68°F (20.0°C)",
+              "match": {
+                "D5": "0x0C"
+              },
+              "mask": "0xFF"
+            },
+            {
+              "label": "70°F (21.0°C)",
+              "match": {
+                "D5": "0x0E"
+              },
+              "mask": "0xFF"
+            },
+            {
+              "label": "72°F (22.0°C)",
+              "match": {
+                "D5": "0x10"
+              },
+              "mask": "0xFF",
+              "default": true
+            },
+            {
+              "label": "74°F (23.5°C)",
+              "match": {
+                "D5": "0x12"
+              },
+              "mask": "0xFF"
+            },
+            {
+              "label": "76°F (24.5°C)",
+              "match": {
+                "D5": "0x14"
+              },
+              "mask": "0xFF"
+            }
+          ]
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen2a",
+            "hyundai_kona_ev",
+            "kia_niro_ev",
+            "kia_soul_ev",
+            "hyundai_ioniq_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x5F5",
+            "unit": "°F"
+          },
+          "options": [
+            {
+              "label": "68°F (20.0°C)",
+              "match": {
+                "D3": "0x44"
+              },
+              "mask": "0xFF"
+            },
+            {
+              "label": "70°F (21.0°C)",
+              "match": {
+                "D3": "0x46"
+              },
+              "mask": "0xFF"
+            },
+            {
+              "label": "72°F (22.0°C)",
+              "match": {
+                "D3": "0x48"
+              },
+              "mask": "0xFF",
+              "default": true
+            },
+            {
+              "label": "74°F (23.5°C)",
+              "match": {
+                "D3": "0x4A"
+              },
+              "mask": "0xFF"
+            },
+            {
+              "label": "76°F (24.5°C)",
+              "match": {
+                "D3": "0x4C"
+              },
+              "mask": "0xFF"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "climate_blower_fan_status",
@@ -9106,52 +9763,182 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Real-time front blower fan bar level (0 to 8 bars) from DATC3 frame 0x5F7 Byte D1 (CR_Fatc_FrontBlwDisp) and front defrost amber LED status on Byte D2 Bit 0 (CR_Fatc_FrDefLed)."
+        "notes": "Real-time front blower fan bar level from Gen 3 DATC_07 frame 0x384 Byte D4 bits 0:3 (CR_Fatc_FrontBlwDisp, 0 to 15 bars). Legacy Gen 2 uses DATC3 frame 0x5F7."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x5F7"
+        "state_can_id": "0x384"
       },
       "options": [
         {
           "label": "Blower Off (0 Bars)",
           "match": {
-            "D1": "0x00"
+            "D4": "0x00"
           },
-          "mask": "0xFF"
+          "mask": "0x0F"
         },
         {
           "label": "Blower Low (1-2 Bars)",
           "match": {
-            "D1": "0x01"
+            "D4": "0x01"
           },
-          "mask": "0xFE"
+          "mask": "0x0F"
         },
         {
           "label": "Blower Medium (3-4 Bars)",
           "match": {
-            "D1": "0x03"
+            "D4": "0x03"
           },
-          "mask": "0xFE",
+          "mask": "0x0F",
           "default": true
         },
         {
           "label": "Blower High (5-6 Bars)",
           "match": {
-            "D1": "0x05"
+            "D4": "0x05"
           },
-          "mask": "0xFE"
+          "mask": "0x0F"
         },
         {
           "label": "Blower Max (7-8 Bars)",
           "match": {
-            "D1": "0x07"
+            "D4": "0x07"
           },
-          "mask": "0xFE"
+          "mask": "0x0F"
         }
       ],
-      "state_can_id": "0x5F7"
+      "state_can_id": "0x384",
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hi5_limited",
+            "hi5_sel",
+            "hi5_se",
+            "hi5_n",
+            "hi5_ultimate",
+            "hi5_premium",
+            "hi5_advance",
+            "ev6_gtline",
+            "ev6_wind",
+            "ev6_gt",
+            "ev6_light",
+            "ev6_gtline_s",
+            "ev6_air",
+            "hi6_limited",
+            "hi6_sel",
+            "hi6_se",
+            "hi6_ultimate",
+            "hi6_premium",
+            "gv60_performance",
+            "gv60_advanced",
+            "gv60_standard",
+            "gv60_premium",
+            "gv60_sport",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x384"
+          },
+          "options": [
+            {
+              "label": "Blower Off (0 Bars)",
+              "match": {
+                "D4": "0x00"
+              },
+              "mask": "0x0F"
+            },
+            {
+              "label": "Blower Low (1-2 Bars)",
+              "match": {
+                "D4": "0x01"
+              },
+              "mask": "0x0F"
+            },
+            {
+              "label": "Blower Medium (3-4 Bars)",
+              "match": {
+                "D4": "0x03"
+              },
+              "mask": "0x0F",
+              "default": true
+            },
+            {
+              "label": "Blower High (5-6 Bars)",
+              "match": {
+                "D4": "0x05"
+              },
+              "mask": "0x0F"
+            },
+            {
+              "label": "Blower Max (7-8 Bars)",
+              "match": {
+                "D4": "0x07"
+              },
+              "mask": "0x0F"
+            }
+          ]
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen2a",
+            "hyundai_kona_ev",
+            "kia_niro_ev",
+            "kia_soul_ev",
+            "hyundai_ioniq_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x5F7"
+          },
+          "options": [
+            {
+              "label": "Blower Off (0 Bars)",
+              "match": {
+                "D1": "0x00"
+              },
+              "mask": "0xFF"
+            },
+            {
+              "label": "Blower Low (1-2 Bars)",
+              "match": {
+                "D1": "0x01"
+              },
+              "mask": "0xFE"
+            },
+            {
+              "label": "Blower Medium (3-4 Bars)",
+              "match": {
+                "D1": "0x03"
+              },
+              "mask": "0xFE",
+              "default": true
+            },
+            {
+              "label": "Blower High (5-6 Bars)",
+              "match": {
+                "D1": "0x05"
+              },
+              "mask": "0xFE"
+            },
+            {
+              "label": "Blower Max (7-8 Bars)",
+              "match": {
+                "D1": "0x07"
+              },
+              "mask": "0xFE"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "lkas_steering_status",
@@ -9233,7 +10020,7 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s\u00b2 signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
+        "notes": "Front center radar longitudinal control frame 0x420 (SCC11): commanded acceleration/deceleration request (aReqValue, 0.01 m/s² signed 11-bit) and StopReq standstill brake hold flag (Byte D3 bit 0)."
       },
       "network": {
         "bus": 0,
@@ -9569,38 +10356,140 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Electric Parking Brake motor clamp/release and Auto-Hold system status from EPB frame 0x490."
+        "notes": "Electric Parking Brake status decoded from Gen 3 EPB_01 frame 0x1F1 Byte D4 bits 4:7 (EPB_F_LAMP). Legacy Gen 2 uses EPB frame 0x490."
       },
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x490"
+        "state_can_id": "0x1F1"
       },
       "options": [
         {
           "label": "Parking Brake Clamped / Engaged",
           "match": {
-            "D1": "0x01"
+            "D4": "0x01"
           },
-          "mask": "0x03",
+          "mask": "0x0F",
           "default": true
+        },
+        {
+          "label": "Parking Brake Clamped (Alternate)",
+          "match": {
+            "D4": "0x10"
+          },
+          "mask": "0xF0"
         },
         {
           "label": "Parking Brake Released",
           "match": {
-            "D1": "0x00"
+            "D4": "0x00"
           },
-          "mask": "0x03"
-        },
-        {
-          "label": "Auto-Hold Active Braking",
-          "match": {
-            "D2": "0x01"
-          },
-          "mask": "0x01"
+          "mask": "0x0F"
         }
       ],
-      "state_can_id": "0x490"
+      "state_can_id": "0x1F1",
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hi5_limited",
+            "hi5_sel",
+            "hi5_se",
+            "hi5_n",
+            "hi5_ultimate",
+            "hi5_premium",
+            "hi5_advance",
+            "ev6_gtline",
+            "ev6_wind",
+            "ev6_gt",
+            "ev6_light",
+            "ev6_gtline_s",
+            "ev6_air",
+            "hi6_limited",
+            "hi6_sel",
+            "hi6_se",
+            "hi6_ultimate",
+            "hi6_premium",
+            "gv60_performance",
+            "gv60_advanced",
+            "gv60_standard",
+            "gv60_premium",
+            "gv60_sport",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x1F1"
+          },
+          "options": [
+            {
+              "label": "Parking Brake Clamped / Engaged",
+              "match": {
+                "D4": "0x01"
+              },
+              "mask": "0x0F",
+              "default": true
+            },
+            {
+              "label": "Parking Brake Clamped (Alternate)",
+              "match": {
+                "D4": "0x10"
+              },
+              "mask": "0xF0"
+            },
+            {
+              "label": "Parking Brake Released",
+              "match": {
+                "D4": "0x00"
+              },
+              "mask": "0x0F"
+            }
+          ]
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen2a",
+            "hyundai_kona_ev",
+            "kia_niro_ev",
+            "kia_soul_ev",
+            "hyundai_ioniq_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x490"
+          },
+          "options": [
+            {
+              "label": "Parking Brake Clamped / Engaged",
+              "match": {
+                "D1": "0x01"
+              },
+              "mask": "0x03",
+              "default": true
+            },
+            {
+              "label": "Parking Brake Released",
+              "match": {
+                "D1": "0x00"
+              },
+              "mask": "0x03"
+            },
+            {
+              "label": "Auto-Hold Active Braking",
+              "match": {
+                "D2": "0x01"
+              },
+              "mask": "0x01"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "parking_sensor_beeper",
@@ -10546,13 +11435,36 @@
       "network": {
         "bus": 0,
         "type": "can_rx_tx",
-        "state_can_id": "0x450",
-        "action_can_id": "0x450"
+        "state_can_id": "0x321",
+        "action_can_id": "0x321"
       },
       "variants": [
         {
           "targets": [
             "all_egmp",
+            "hi5_limited",
+            "hi5_sel",
+            "hi5_se",
+            "hi5_n",
+            "hi5_ultimate",
+            "hi5_premium",
+            "hi5_advance",
+            "ev6_gtline",
+            "ev6_wind",
+            "ev6_gt",
+            "ev6_light",
+            "ev6_gtline_s",
+            "ev6_air",
+            "hi6_limited",
+            "hi6_sel",
+            "hi6_se",
+            "hi6_ultimate",
+            "hi6_premium",
+            "gv60_performance",
+            "gv60_advanced",
+            "gv60_standard",
+            "gv60_premium",
+            "gv60_sport",
             "hyundai_ioniq5",
             "hyundai_ioniq6",
             "kia_ev6",
@@ -10560,9 +11472,25 @@
           ],
           "network": {
             "bus": 0,
-            "type": "can_rx",
+            "type": "can_rx_tx",
             "state_can_id": "0x321",
             "action_can_id": "0x321"
+          }
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen2a",
+            "hyundai_kona_ev",
+            "kia_niro_ev",
+            "kia_soul_ev",
+            "hyundai_ioniq_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx_tx",
+            "state_can_id": "0x450",
+            "action_can_id": "0x450"
           }
         }
       ],
@@ -10593,8 +11521,8 @@
           "default": true
         }
       ],
-      "action_can_id": "0x450",
-      "state_can_id": "0x450"
+      "action_can_id": "0x321",
+      "state_can_id": "0x321"
     },
     {
       "id": "telematics_remote_security",
@@ -11911,36 +12839,142 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x593",
+        "state_can_id": "0x3A2",
         "state_byte": "D1",
-        "state_mask": "0x03"
+        "state_mask": "0x18"
       },
       "options": [
         {
           "label": "Normal",
           "match": {
             "D1": "0x00"
-          }
+          },
+          "mask": "0x18",
+          "default": true
         },
         {
           "label": "Low Pressure Warning",
           "match": {
-            "D1": "0x01"
-          }
+            "D1": "0x08"
+          },
+          "mask": "0x18"
         },
         {
           "label": "Sensor / System Fault",
           "match": {
-            "D1": "0x02"
-          }
+            "D1": "0x10"
+          },
+          "mask": "0x18"
         }
       ],
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Body Control Module (BCM) / TPMS receiver broadcast on CAN ID 0x593 Byte 0 (D1) bits 0-1, indicating master TPMS warning lamp state (0=Off, 1=On, 2=Blinking fault)."
+        "notes": "Master TPMS warning lamp decoded from Gen 3 TPMS_01 frame 0x3A2 Byte D1 bits 3:4 (TPMS_W_LAMP). Legacy Gen 2 uses 0x593 Byte D1 bits 0:1."
       },
-      "state_can_id": "0x593"
+      "state_can_id": "0x3A2",
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hi5_limited",
+            "hi5_sel",
+            "hi5_se",
+            "hi5_n",
+            "hi5_ultimate",
+            "hi5_premium",
+            "hi5_advance",
+            "ev6_gtline",
+            "ev6_wind",
+            "ev6_gt",
+            "ev6_light",
+            "ev6_gtline_s",
+            "ev6_air",
+            "hi6_limited",
+            "hi6_sel",
+            "hi6_se",
+            "hi6_ultimate",
+            "hi6_premium",
+            "gv60_performance",
+            "gv60_advanced",
+            "gv60_standard",
+            "gv60_premium",
+            "gv60_sport",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x3A2",
+            "state_byte": "D1",
+            "state_mask": "0x18"
+          },
+          "options": [
+            {
+              "label": "Normal",
+              "match": {
+                "D1": "0x00"
+              },
+              "mask": "0x18",
+              "default": true
+            },
+            {
+              "label": "Low Pressure Warning",
+              "match": {
+                "D1": "0x08"
+              },
+              "mask": "0x18"
+            },
+            {
+              "label": "Sensor / System Fault",
+              "match": {
+                "D1": "0x10"
+              },
+              "mask": "0x18"
+            }
+          ]
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen2a",
+            "hyundai_kona_ev",
+            "kia_niro_ev",
+            "kia_soul_ev",
+            "hyundai_ioniq_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x593",
+            "state_byte": "D1",
+            "state_mask": "0x03"
+          },
+          "options": [
+            {
+              "label": "Normal",
+              "match": {
+                "D1": "0x00"
+              }
+            },
+            {
+              "label": "Low Pressure Warning",
+              "match": {
+                "D1": "0x01"
+              }
+            },
+            {
+              "label": "Sensor / System Fault",
+              "match": {
+                "D1": "0x02"
+              }
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "tpms_low_pressure_fl",
@@ -11961,30 +12995,150 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x593",
-        "state_byte": "D1",
-        "state_mask": "0x10"
+        "state_can_id": "0x3A1",
+        "state_byte": "D4",
+        "state_mask": "0x03"
       },
       "options": [
         {
           "label": "Normal",
           "match": {
-            "D1": "0x00"
-          }
+            "D4": "0x00"
+          },
+          "mask": "0x03",
+          "default": true
         },
         {
           "label": "Low Pressure",
           "match": {
-            "D1": "0x10"
-          }
+            "D4": "0x01"
+          },
+          "mask": "0x03"
+        },
+        {
+          "label": "Severe Low Pressure",
+          "match": {
+            "D4": "0x02"
+          },
+          "mask": "0x03"
+        },
+        {
+          "label": "Sensor Fault",
+          "match": {
+            "D4": "0x03"
+          },
+          "mask": "0x03"
         }
       ],
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Direct front-left wheel low-pressure alert bit broadcast on CAN ID 0x593 Byte 0 (D1) bit 4."
+        "notes": "Front-left low-pressure alert decoded from Gen 3 TPMS_01 frame 0x3A1 Byte D4 bits 0:1 (POS_FL_W_LAMP). Legacy Gen 2 uses 0x593 Byte D1 bit 4."
       },
-      "state_can_id": "0x593"
+      "state_can_id": "0x3A1",
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hi5_limited",
+            "hi5_sel",
+            "hi5_se",
+            "hi5_n",
+            "hi5_ultimate",
+            "hi5_premium",
+            "hi5_advance",
+            "ev6_gtline",
+            "ev6_wind",
+            "ev6_gt",
+            "ev6_light",
+            "ev6_gtline_s",
+            "ev6_air",
+            "hi6_limited",
+            "hi6_sel",
+            "hi6_se",
+            "hi6_ultimate",
+            "hi6_premium",
+            "gv60_performance",
+            "gv60_advanced",
+            "gv60_standard",
+            "gv60_premium",
+            "gv60_sport",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x3A1",
+            "state_byte": "D4",
+            "state_mask": "0x03"
+          },
+          "options": [
+            {
+              "label": "Normal",
+              "match": {
+                "D4": "0x00"
+              },
+              "mask": "0x03",
+              "default": true
+            },
+            {
+              "label": "Low Pressure",
+              "match": {
+                "D4": "0x01"
+              },
+              "mask": "0x03"
+            },
+            {
+              "label": "Severe Low Pressure",
+              "match": {
+                "D4": "0x02"
+              },
+              "mask": "0x03"
+            },
+            {
+              "label": "Sensor Fault",
+              "match": {
+                "D4": "0x03"
+              },
+              "mask": "0x03"
+            }
+          ]
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen2a",
+            "hyundai_kona_ev",
+            "kia_niro_ev",
+            "kia_soul_ev",
+            "hyundai_ioniq_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x593",
+            "state_byte": "D1",
+            "state_mask": "0x10"
+          },
+          "options": [
+            {
+              "label": "Normal",
+              "match": {
+                "D1": "0x00"
+              }
+            },
+            {
+              "label": "Low Pressure",
+              "match": {
+                "D1": "0x10"
+              }
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "tpms_low_pressure_fr",
@@ -12005,30 +13159,150 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x593",
-        "state_byte": "D1",
-        "state_mask": "0x20"
+        "state_can_id": "0x3A1",
+        "state_byte": "D4",
+        "state_mask": "0x0C"
       },
       "options": [
         {
           "label": "Normal",
           "match": {
-            "D1": "0x00"
-          }
+            "D4": "0x00"
+          },
+          "mask": "0x0C",
+          "default": true
         },
         {
           "label": "Low Pressure",
           "match": {
-            "D1": "0x20"
-          }
+            "D4": "0x04"
+          },
+          "mask": "0x0C"
+        },
+        {
+          "label": "Severe Low Pressure",
+          "match": {
+            "D4": "0x08"
+          },
+          "mask": "0x0C"
+        },
+        {
+          "label": "Sensor Fault",
+          "match": {
+            "D4": "0x0C"
+          },
+          "mask": "0x0C"
         }
       ],
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Direct front-right wheel low-pressure alert bit broadcast on CAN ID 0x593 Byte 0 (D1) bit 5."
+        "notes": "Front-right low-pressure alert decoded from Gen 3 TPMS_01 frame 0x3A1 Byte D4 bits 2:3 (POS_FR_W_LAMP). Legacy Gen 2 uses 0x593 Byte D1 bit 5."
       },
-      "state_can_id": "0x593"
+      "state_can_id": "0x3A1",
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hi5_limited",
+            "hi5_sel",
+            "hi5_se",
+            "hi5_n",
+            "hi5_ultimate",
+            "hi5_premium",
+            "hi5_advance",
+            "ev6_gtline",
+            "ev6_wind",
+            "ev6_gt",
+            "ev6_light",
+            "ev6_gtline_s",
+            "ev6_air",
+            "hi6_limited",
+            "hi6_sel",
+            "hi6_se",
+            "hi6_ultimate",
+            "hi6_premium",
+            "gv60_performance",
+            "gv60_advanced",
+            "gv60_standard",
+            "gv60_premium",
+            "gv60_sport",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x3A1",
+            "state_byte": "D4",
+            "state_mask": "0x0C"
+          },
+          "options": [
+            {
+              "label": "Normal",
+              "match": {
+                "D4": "0x00"
+              },
+              "mask": "0x0C",
+              "default": true
+            },
+            {
+              "label": "Low Pressure",
+              "match": {
+                "D4": "0x04"
+              },
+              "mask": "0x0C"
+            },
+            {
+              "label": "Severe Low Pressure",
+              "match": {
+                "D4": "0x08"
+              },
+              "mask": "0x0C"
+            },
+            {
+              "label": "Sensor Fault",
+              "match": {
+                "D4": "0x0C"
+              },
+              "mask": "0x0C"
+            }
+          ]
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen2a",
+            "hyundai_kona_ev",
+            "kia_niro_ev",
+            "kia_soul_ev",
+            "hyundai_ioniq_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x593",
+            "state_byte": "D1",
+            "state_mask": "0x20"
+          },
+          "options": [
+            {
+              "label": "Normal",
+              "match": {
+                "D1": "0x00"
+              }
+            },
+            {
+              "label": "Low Pressure",
+              "match": {
+                "D1": "0x20"
+              }
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "tpms_low_pressure_rl",
@@ -12049,30 +13323,150 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x593",
-        "state_byte": "D1",
-        "state_mask": "0x40"
+        "state_can_id": "0x3A1",
+        "state_byte": "D4",
+        "state_mask": "0x30"
       },
       "options": [
         {
           "label": "Normal",
           "match": {
-            "D1": "0x00"
-          }
+            "D4": "0x00"
+          },
+          "mask": "0x30",
+          "default": true
         },
         {
           "label": "Low Pressure",
           "match": {
-            "D1": "0x40"
-          }
+            "D4": "0x10"
+          },
+          "mask": "0x30"
+        },
+        {
+          "label": "Severe Low Pressure",
+          "match": {
+            "D4": "0x20"
+          },
+          "mask": "0x30"
+        },
+        {
+          "label": "Sensor Fault",
+          "match": {
+            "D4": "0x30"
+          },
+          "mask": "0x30"
         }
       ],
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Direct rear-left wheel low-pressure alert bit broadcast on CAN ID 0x593 Byte 0 (D1) bit 6."
+        "notes": "Rear-left low-pressure alert decoded from Gen 3 TPMS_01 frame 0x3A1 Byte D4 bits 4:5 (POS_RL_W_LAMP). Legacy Gen 2 uses 0x593 Byte D1 bit 6."
       },
-      "state_can_id": "0x593"
+      "state_can_id": "0x3A1",
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hi5_limited",
+            "hi5_sel",
+            "hi5_se",
+            "hi5_n",
+            "hi5_ultimate",
+            "hi5_premium",
+            "hi5_advance",
+            "ev6_gtline",
+            "ev6_wind",
+            "ev6_gt",
+            "ev6_light",
+            "ev6_gtline_s",
+            "ev6_air",
+            "hi6_limited",
+            "hi6_sel",
+            "hi6_se",
+            "hi6_ultimate",
+            "hi6_premium",
+            "gv60_performance",
+            "gv60_advanced",
+            "gv60_standard",
+            "gv60_premium",
+            "gv60_sport",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x3A1",
+            "state_byte": "D4",
+            "state_mask": "0x30"
+          },
+          "options": [
+            {
+              "label": "Normal",
+              "match": {
+                "D4": "0x00"
+              },
+              "mask": "0x30",
+              "default": true
+            },
+            {
+              "label": "Low Pressure",
+              "match": {
+                "D4": "0x10"
+              },
+              "mask": "0x30"
+            },
+            {
+              "label": "Severe Low Pressure",
+              "match": {
+                "D4": "0x20"
+              },
+              "mask": "0x30"
+            },
+            {
+              "label": "Sensor Fault",
+              "match": {
+                "D4": "0x30"
+              },
+              "mask": "0x30"
+            }
+          ]
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen2a",
+            "hyundai_kona_ev",
+            "kia_niro_ev",
+            "kia_soul_ev",
+            "hyundai_ioniq_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x593",
+            "state_byte": "D1",
+            "state_mask": "0x40"
+          },
+          "options": [
+            {
+              "label": "Normal",
+              "match": {
+                "D1": "0x00"
+              }
+            },
+            {
+              "label": "Low Pressure",
+              "match": {
+                "D1": "0x40"
+              }
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "tpms_low_pressure_rr",
@@ -12093,30 +13487,150 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x593",
-        "state_byte": "D1",
-        "state_mask": "0x80"
+        "state_can_id": "0x3A1",
+        "state_byte": "D4",
+        "state_mask": "0xC0"
       },
       "options": [
         {
           "label": "Normal",
           "match": {
-            "D1": "0x00"
-          }
+            "D4": "0x00"
+          },
+          "mask": "0xC0",
+          "default": true
         },
         {
           "label": "Low Pressure",
           "match": {
-            "D1": "0x80"
-          }
+            "D4": "0x40"
+          },
+          "mask": "0xC0"
+        },
+        {
+          "label": "Severe Low Pressure",
+          "match": {
+            "D4": "0x80"
+          },
+          "mask": "0xC0"
+        },
+        {
+          "label": "Sensor Fault",
+          "match": {
+            "D4": "0xC0"
+          },
+          "mask": "0xC0"
         }
       ],
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Direct rear-right wheel low-pressure alert bit broadcast on CAN ID 0x593 Byte 0 (D1) bit 7."
+        "notes": "Rear-right low-pressure alert decoded from Gen 3 TPMS_01 frame 0x3A1 Byte D4 bits 6:7 (POS_RR_W_LAMP). Legacy Gen 2 uses 0x593 Byte D1 bit 7."
       },
-      "state_can_id": "0x593"
+      "state_can_id": "0x3A1",
+      "variants": [
+        {
+          "targets": [
+            "all_egmp",
+            "hi5_limited",
+            "hi5_sel",
+            "hi5_se",
+            "hi5_n",
+            "hi5_ultimate",
+            "hi5_premium",
+            "hi5_advance",
+            "ev6_gtline",
+            "ev6_wind",
+            "ev6_gt",
+            "ev6_light",
+            "ev6_gtline_s",
+            "ev6_air",
+            "hi6_limited",
+            "hi6_sel",
+            "hi6_se",
+            "hi6_ultimate",
+            "hi6_premium",
+            "gv60_performance",
+            "gv60_advanced",
+            "gv60_standard",
+            "gv60_premium",
+            "gv60_sport",
+            "hyundai_ioniq5",
+            "hyundai_ioniq6",
+            "kia_ev6",
+            "genesis_gv60"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x3A1",
+            "state_byte": "D4",
+            "state_mask": "0xC0"
+          },
+          "options": [
+            {
+              "label": "Normal",
+              "match": {
+                "D4": "0x00"
+              },
+              "mask": "0xC0",
+              "default": true
+            },
+            {
+              "label": "Low Pressure",
+              "match": {
+                "D4": "0x40"
+              },
+              "mask": "0xC0"
+            },
+            {
+              "label": "Severe Low Pressure",
+              "match": {
+                "D4": "0x80"
+              },
+              "mask": "0xC0"
+            },
+            {
+              "label": "Sensor Fault",
+              "match": {
+                "D4": "0xC0"
+              },
+              "mask": "0xC0"
+            }
+          ]
+        },
+        {
+          "targets": [
+            "all_gen2",
+            "all_gen2a",
+            "hyundai_kona_ev",
+            "kia_niro_ev",
+            "kia_soul_ev",
+            "hyundai_ioniq_ev"
+          ],
+          "network": {
+            "bus": 0,
+            "type": "can_rx",
+            "state_can_id": "0x593",
+            "state_byte": "D1",
+            "state_mask": "0x80"
+          },
+          "options": [
+            {
+              "label": "Normal",
+              "match": {
+                "D1": "0x00"
+              }
+            },
+            {
+              "label": "Low Pressure",
+              "match": {
+                "D1": "0x80"
+              }
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "esc_wheel_speed_fl",

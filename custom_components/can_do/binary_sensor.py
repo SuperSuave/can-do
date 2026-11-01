@@ -206,10 +206,10 @@ class CanDoBinarySensorEntity(CanDoEntity, BinarySensorEntity):
         direct_str = self.coordinator.get_can_payload(self.entity_id_str)
         if isinstance(direct_str, str):
             ds = direct_str.lower()
-            if any(k in ds for k in ["open", "active", "touched", "detected", "unlocked", "on", "yes", "true", "charging"]):
-                return True
-            if any(k in ds for k in ["closed", "inactive", "released", "locked", "off", "no", "false"]):
+            if any(k in ds for k in ["closed", "inactive", "released", "locked", "off", "no", "false", "disconnected", "not charging"]):
                 return False
+            if any(k in ds for k in ["open", "active", "touched", "detected", "unlocked", "on", "yes", "true", "charging", "warning", "fault", "low", "clamped", "engaged"]):
+                return True
 
         if not self.state_can_id:
             return None
@@ -224,15 +224,16 @@ class CanDoBinarySensorEntity(CanDoEntity, BinarySensorEntity):
         is_active: bool | None = None
         for opt in self.command.get("options", []):
             label = opt.get("label", "").lower()
-            if any(k in label for k in ["open", "active", "touched", "detected", "unlocked", "on", "yes", "true", "pressed"]):
-                match_spec = opt.get("match") or opt.get("payload")
-                if match_spec and check_match(payload, match_spec, opt.get("mask")):
-                    is_active = True
-                    break
-            elif any(k in label for k in ["closed", "inactive", "released", "locked", "off", "no", "false"]):
-                match_spec = opt.get("match") or opt.get("payload")
-                if match_spec and check_match(payload, match_spec, opt.get("mask")):
+            match_spec = opt.get("match") or opt.get("payload")
+            if not match_spec:
+                continue
+            if any(k in label for k in ["closed", "inactive", "released", "locked", "off", "no", "false", "disconnected", "not charging", "normal"]):
+                if check_match(payload, match_spec, opt.get("mask")):
                     is_active = False
+                    break
+            elif any(k in label for k in ["open", "active", "touched", "detected", "unlocked", "on", "yes", "true", "pressed", "charging", "clamped", "engaged", "warning", "fault", "low"]):
+                if check_match(payload, match_spec, opt.get("mask")):
+                    is_active = True
                     break
 
         # 2. Check command-level match

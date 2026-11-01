@@ -1385,6 +1385,7 @@ void can_rx_task(void* arg) {
                     case 0x1AC: // Cluster speed and info
                     case 0x226: // Shifter / Gear status
                     case 0x2AD: // Throttle & brake pedal
+                    case 0x30E: // VCMS Live EV Charging Power (Byte 7 is rolling counter)
                     case 0x380: // Climate cabin temperatures
                     case 0x31B: // Climate blower fan & airflow
                     case 0x476: // Center console & camera switch panel
@@ -1420,7 +1421,11 @@ void can_rx_task(void* arg) {
                     if (rx_msg.identifier == 0x1AC || rx_msg.identifier == 0x0A2 ||
                         rx_msg.identifier == 0x130 || rx_msg.identifier == 0x2AD ||
                         rx_msg.identifier == 0x227 || rx_msg.identifier == 0x29C ||
-                        rx_msg.identifier == 0x151 || rx_msg.identifier == 0x152) {
+                        rx_msg.identifier == 0x151 || rx_msg.identifier == 0x152 ||
+                        rx_msg.identifier == 0x30E || rx_msg.identifier == 0x25C ||
+                        rx_msg.identifier == 0x327 || rx_msg.identifier == 0x328 ||
+                        rx_msg.identifier == 0x324 || rx_msg.identifier == 0x597 ||
+                        rx_msg.identifier == 0x4E2) {
                         if (pit != s_last_mqtt_pub_ms.end() && (now_ms - pit->second < 100)) {
                             throttle = true;
                         }
@@ -1706,14 +1711,131 @@ void can_rx_task(void* arg) {
                 }
             }
 
-            // EV Charging Status (0x594 Byte 2)
-            if (rx_msg.identifier == 0x594 && rx_msg.data_length_code >= 3) {
-                bool chg = (rx_msg.data[2] & 0x01);
+            // EV Charging Status (Native E-GMP 0x326 Byte 5 [D5], Legacy Gen 2 0x594 Byte 2 [D2])
+            if (rx_msg.identifier == 0x326 && rx_msg.data_length_code >= 5) {
+                bool chg = ((rx_msg.data[4] & 0x03) == 1);
                 static int s_last_chg = -1;
                 int chg_int = chg ? 1 : 0;
                 if (chg_int != s_last_chg) {
                     s_last_chg = chg_int;
                     emit_live_entity_state("cond_charging", chg ? "Charging" : "Inactive");
+                }
+            } else if (rx_msg.identifier == 0x594 && rx_msg.data_length_code >= 2) {
+                bool chg = ((rx_msg.data[1] & 0x02) != 0);
+                static int s_last_chg = -1;
+                int chg_int = chg ? 1 : 0;
+                if (chg_int != s_last_chg) {
+                    s_last_chg = chg_int;
+                    emit_live_entity_state("cond_charging", chg ? "Charging" : "Inactive");
+                }
+            }
+
+            // Active EV Charge Type (Native E-GMP 0x30B Byte 7 [D7], Legacy Gen 2 0x595 Byte 1 [D1])
+            if (rx_msg.identifier == 0x30B && rx_msg.data_length_code >= 7) {
+                uint8_t d7 = rx_msg.data[6];
+                std::string ctype = "Not Charging / Disconnected";
+                if ((d7 & 0x30) == 0x10) {
+                    ctype = "Standard AC Charging (Level 2)";
+                } else if ((d7 & 0x0C) == 0x04) {
+                    ctype = "DC Fast Charging (CCS / 800V)";
+                }
+                static std::string s_last_ctype = "";
+                if (ctype != s_last_ctype) {
+                    s_last_ctype = ctype;
+                    emit_live_entity_state("ev_charge_type_active", ctype);
+                }
+            } else if (rx_msg.identifier == 0x595 && rx_msg.data_length_code >= 1) {
+                uint8_t d0 = rx_msg.data[0];
+                std::string ctype = "Not Charging / Disconnected";
+                if (d0 & 0x02) {
+                    ctype = "Standard AC Charging (Level 2)";
+                } else if (d0 & 0x04) {
+                    ctype = "DC Fast Charging (CCS / 800V)";
+                } else if (d0 & 0x08) {
+                    ctype = "120V Trickle Charging (Level 1)";
+                }
+                static std::string s_last_ctype = "";
+                if (ctype != s_last_ctype) {
+                    s_last_ctype = ctype;
+                    emit_live_entity_state("ev_charge_type_active", ctype);
+                }
+            }
+
+            // Live EV Charging Power (0x30E: Byte 6 [D7] = unsigned integer in kW, 0-255 kW)
+            if (rx_msg.identifier == 0x30E && rx_msg.data_length_code >= 7) {
+                uint8_t kw = rx_msg.data[6];
+                static int s_last_kw = -1;
+                if ((int)kw != s_last_kw) {
+                    s_last_kw = (int)kw;
+                    emit_live_entity_state("ev_charging_power", std::to_string(kw));
+                }
+            }
+
+            // AC Level 2 Remaining Charge Time (0x327: Bytes 0-1 LE minutes, Legacy Gen 2 0x597: Bytes 1-2 LE, 0xFFFF = inactive)
+            if (rx_msg.identifier == 0x327 && rx_msg.data_length_code >= 2) {
+                uint16_t rem = rx_msg.data[0] | (rx_msg.data[1] << 8);
+                static int s_last_ac_rem = -1;
+                int val = (rem == 0xFFFF) ? 0 : (int)rem;
+                if (val != s_last_ac_rem) {
+                    s_last_ac_rem = val;
+                    emit_live_entity_state("remaining_charge_time_ac", std::to_string(val));
+                }
+            } else if (rx_msg.identifier == 0x597 && rx_msg.data_length_code >= 3) {
+                uint16_t rem = rx_msg.data[1] | (rx_msg.data[2] << 8);
+                static int s_last_ac_rem = -1;
+                int val = (rem == 0xFFFF) ? 0 : (int)rem;
+                if (val != s_last_ac_rem) {
+                    s_last_ac_rem = val;
+                    emit_live_entity_state("remaining_charge_time_ac", std::to_string(val));
+                }
+            }
+
+            // DC Fast Charge Remaining Time (0x25C: Bytes 2-3 LE minutes, Legacy Gen 2 0x597: Bytes 3-4 LE, 0xFFFF = inactive)
+            if (rx_msg.identifier == 0x25C && rx_msg.data_length_code >= 4) {
+                uint16_t rem = rx_msg.data[2] | (rx_msg.data[3] << 8);
+                static int s_last_dc_rem = -1;
+                int val = (rem == 0xFFFF) ? 0 : (int)rem;
+                if (val != s_last_dc_rem) {
+                    s_last_dc_rem = val;
+                    emit_live_entity_state("remaining_charge_time_dc", std::to_string(val));
+                }
+            } else if (rx_msg.identifier == 0x597 && rx_msg.data_length_code >= 5) {
+                uint16_t rem = rx_msg.data[3] | (rx_msg.data[4] << 8);
+                static int s_last_dc_rem = -1;
+                int val = (rem == 0xFFFF) ? 0 : (int)rem;
+                if (val != s_last_dc_rem) {
+                    s_last_dc_rem = val;
+                    emit_live_entity_state("remaining_charge_time_dc", std::to_string(val));
+                }
+            }
+
+            // Level 1 120V Trickle Charge Remaining Time (0x328: Bytes 0-1 LE minutes, Legacy Gen 2 0x4E2: Bytes 2-3 LE, 0xFFFF = inactive)
+            if (rx_msg.identifier == 0x328 && rx_msg.data_length_code >= 2) {
+                uint16_t rem = rx_msg.data[0] | (rx_msg.data[1] << 8);
+                static int s_last_120v_rem = -1;
+                int val = (rem == 0xFFFF) ? 0 : (int)rem;
+                if (val != s_last_120v_rem) {
+                    s_last_120v_rem = val;
+                    emit_live_entity_state("remaining_charge_time_120v", std::to_string(val));
+                }
+            } else if (rx_msg.identifier == 0x4E2 && rx_msg.data_length_code >= 4) {
+                uint16_t rem = rx_msg.data[2] | (rx_msg.data[3] << 8);
+                static int s_last_120v_rem = -1;
+                int val = (rem == 0xFFFF) ? 0 : (int)rem;
+                if (val != s_last_120v_rem) {
+                    s_last_120v_rem = val;
+                    emit_live_entity_state("remaining_charge_time_120v", std::to_string(val));
+                }
+            }
+
+            // V2L Discharge Remaining Time (0x324: Bytes 6-7 LE minutes, 0xFFFF = inactive)
+            if (rx_msg.identifier == 0x324 && rx_msg.data_length_code >= 8) {
+                uint16_t rem = rx_msg.data[6] | (rx_msg.data[7] << 8);
+                static int s_last_v2l_rem = -1;
+                int val = (rem == 0xFFFF) ? 0 : (int)rem;
+                if (val != s_last_v2l_rem) {
+                    s_last_v2l_rem = val;
+                    emit_live_entity_state("v2l_discharge_remaining_time", std::to_string(val));
                 }
             }
 

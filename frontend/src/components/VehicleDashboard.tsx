@@ -308,7 +308,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       hoodName: findCmd('hood')?.ha_metadata?.name || 'Frunk / Hood Latch',
       chargePort: getCanId('charge_port', '3aa'),
       chargePortName: findCmd('charge_port')?.ha_metadata?.name || 'Charge Port Door',
-      charging: getCanId('cond_charging', '594'),
+      charging: getCanId('cond_charging', '326'),
       chargingName: findCmd('cond_charging')?.ha_metadata?.name || 'EV Charging Status',
       acLimit: getCanId('ac_charging_limit', '1f9'),
       acLimitName: findCmd('ac_charging_limit')?.ha_metadata?.name || 'AC Charging Limit',

@@ -331,9 +331,18 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
 
         # 0A. Direct decoded string telemetry from WiCAN (e.g. "13.4 V", "50%", "88735", "0 km/h")
         if isinstance(payload, str):
+            p_lower = payload.strip().lower()
+            if cid == "cond_charging":
+                if p_lower in ("charging", "active"):
+                    return "Charging In Progress"
+                if p_lower in ("inactive", "not charging", "disconnected"):
+                    return "Not Charging / Disconnected"
+
             for opt in self.command.get("options", []):
-                if opt.get("label", "").lower() == payload.lower():
-                    return opt.get("label")
+                opt_label = opt.get("label", "")
+                ol_lower = opt_label.lower()
+                if ol_lower == p_lower or (p_lower in ol_lower and len(p_lower) >= 4):
+                    return opt_label
             import re
             m = re.search(r"[-+]?\d*\.?\d+", payload)
             if m:
@@ -346,7 +355,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
 
         # 1. Specialized Numeric Decoders
         # 1A. V2L Minimum Discharge Limit (0x151 Byte D7: factor 0.5 %)
-        if "v2l" in cid or self.state_can_id.lower() == "0x151":
+        if cid == "v2l_minimum_charge_limit" or ("v2l" in cid and "limit" in cid) or (self.state_can_id and self.state_can_id.lower() == "0x151"):
             if isinstance(payload, list):
                 for idx in (6, 7):
                     if idx < len(payload):
@@ -446,7 +455,47 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
             if isinstance(payload, list) and 0 <= idx < len(payload):
                 return int(payload[idx])
 
-        # 1J. Generic Linear Scale
+        # 1J. Charge & Discharge Remaining Times (Minutes)
+        # AC Normal (Level 2): 0x327 Bytes D1-D2 or legacy 0x597 Bytes D2-D3 (16-bit LE unsigned, 0xFFFF = inactive)
+        if "remaining_charge_time_ac" in cid or (self.state_can_id and self.state_can_id.lower() == "0x327"):
+            if isinstance(payload, list):
+                if self.state_can_id and self.state_can_id.lower() == "0x597":
+                    if len(payload) >= 3:
+                        raw = payload[1] | (payload[2] << 8)
+                        return 0 if raw == 0xFFFF else raw
+                elif len(payload) >= 2:
+                    raw = payload[0] | (payload[1] << 8)
+                    return 0 if raw == 0xFFFF else raw
+
+        # DC Fast Charge (QC): 0x25C Bytes D3-D4 or legacy 0x597 Bytes D4-D5 (16-bit LE unsigned, 0xFFFF = inactive)
+        if "remaining_charge_time_dc" in cid or (self.state_can_id and self.state_can_id.lower() == "0x25c"):
+            if isinstance(payload, list):
+                if self.state_can_id and self.state_can_id.lower() == "0x597":
+                    if len(payload) >= 5:
+                        raw = payload[3] | (payload[4] << 8)
+                        return 0 if raw == 0xFFFF else raw
+                elif len(payload) >= 4:
+                    raw = payload[2] | (payload[3] << 8)
+                    return 0 if raw == 0xFFFF else raw
+
+        # Level 1 (120V Trickle): 0x328 Bytes D1-D2 or legacy 0x4E2 Bytes D3-D4 (16-bit LE unsigned, 0xFFFF = inactive)
+        if "remaining_charge_time_120v" in cid or (self.state_can_id and self.state_can_id.lower() in ("0x328", "0x4e2")):
+            if isinstance(payload, list):
+                if self.state_can_id and self.state_can_id.lower() == "0x4e2":
+                    if len(payload) >= 4:
+                        raw = payload[2] | (payload[3] << 8)
+                        return 0 if raw == 0xFFFF else raw
+                elif len(payload) >= 2:
+                    raw = payload[0] | (payload[1] << 8)
+                    return 0 if raw == 0xFFFF else raw
+
+        # V2L Discharge Runtime: 0x324 Bytes D7-D8 (16-bit LE unsigned, 0xFFFF = inactive)
+        if "v2l_discharge_remaining_time" in cid or (self.state_can_id and self.state_can_id.lower() == "0x324"):
+            if isinstance(payload, list) and len(payload) >= 8:
+                raw = payload[6] | (payload[7] << 8)
+                return 0 if raw == 0xFFFF else raw
+
+        # 1K. Generic Linear Scale
         if self.command.get("type") == "linear_scale" or "min" in net:
             state_byte = net.get("state_byte", "D1")
             idx = get_d_index(state_byte)

@@ -6,6 +6,7 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include <atomic>
 #include <cmath>
 #include <cstring>
@@ -20,9 +21,16 @@ static std::atomic<uint32_t> s_duration_sec{900};
 static std::atomic<uint32_t> s_start_time_ms{0};
 static std::atomic<uint8_t> s_alive_counter{0};
 static std::atomic<uint32_t> s_last_uds_tx_ms{0};
+static std::atomic<uint32_t> s_last_nm_tx_ms{0};
 static std::atomic<uint32_t> s_last_tmu_tx_ms{0};
+static SemaphoreHandle_t s_climate_mutex{nullptr};
 
 static const uint8_t UDS_TESTER_PRESENT[8] = { 0x02, 0x3E, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00 };
+// AUTOSAR Network Management Cluster frames for E-GMP Gateway Wakeup
+static const uint8_t AUTOSAR_NM_62[8] = { 0x62, 0x01, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF };
+static const uint8_t AUTOSAR_NM_61[8] = { 0x61, 0x01, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF };
+static const uint8_t AUTOSAR_NM_65[8] = { 0x65, 0x01, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF };
+static const uint8_t AUTOSAR_NM_63[8] = { 0x63, 0x01, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF };
 
 static void send_can_frame(uint32_t id, const uint8_t* data, uint8_t dlc) {
     twai_status_info_t info;
@@ -44,10 +52,21 @@ static void pack_tmu_01(uint8_t* data, bool aircon_on, float temp_c, bool defros
 
     uint8_t veh_sld_bit = 1; // CF_Tmu_VehSld: 1 = Active / Authorized subscription
     uint8_t aircon_bit = aircon_on ? 1 : 0;
-    uint8_t temp_md_bit = 0; // 0 = Celsius
+    uint8_t temp_md_bit = 0; // 0 = Celsius (E-GMP DATC default)
 
-    // E-GMP DATC Celsius scaling is 0.5 deg C per count (e.g. 22.0 C -> 44)
-    int temp_code = (int)roundf(temp_c / 0.5f) & 0xFF;
+    // OEM E-GMP DATC Celsius range: 14.0 deg C to 32.0 deg C in 0.5 deg C steps (indices 0 to 36 / 0x00 to 0x24).
+    // E.g., 14.0 C -> 0 (0x00), 22.0 C (72 F) -> 16 (0x10), 32.0 C -> 36 (0x24).
+    if (temp_c < 14.0f) {
+        temp_c = 14.0f;
+    } else if (temp_c > 32.0f) {
+        temp_c = 32.0f;
+    }
+    int temp_code = (int)roundf((temp_c - 14.0f) / 0.5f);
+    if (temp_code < 0) {
+        temp_code = 0;
+    } else if (temp_code > 36) {
+        temp_code = 36;
+    }
 
     // Byte 0:
     //   Bit 0: CF_Tmu_VehSld (1)
@@ -58,11 +77,21 @@ static void pack_tmu_01(uint8_t* data, bool aircon_on, float temp_c, bool defros
 
     // Byte 1:
     //   Bits 0-5: CF_Tmu_TempSet upper 6 bits
-    //   Bit 6: CF_Tmu_DefrostCtr
+    //   Bit 6: CF_Tmu_DefrostCtr (1 = Front windshield defrost active, 0 = Off)
     uint8_t defrost_bit = defrost ? 1 : 0;
     data[1] = ((temp_code >> 2) & 0x3F) | (defrost_bit << 6);
 
-    // Bytes 2 - 6: 0x00 (Reserved / Aux)
+    // Byte 2:
+    //   Bits 0-1: CF_Tmu_IG3Rly (3 = IG3 Relay ON / Armed, 0 = OFF)
+    //   Bit 4: CF_Tmu_SepZoneDisp (1 = Active TMU Drive State, 0 = Inactive)
+    if (aircon_on) {
+        data[2] = 0x03 | (1 << 4); // 0x13
+    } else {
+        data[2] = 0x00;
+    }
+
+    // Bytes 3 - 6: 0x00 (Byte 3: CF_Tmu_AirconCtr_Cancel = 0, Bytes 4-6: Reserved)
+
     // Byte 7:
     //   Bits 0-3: CF_Tmu_AliveCnt1 (0 to 15 rolling counter)
     data[7] = alive_cnt & 0x0F;
@@ -77,14 +106,35 @@ static void publish_climate_state(bool active) {
 
 static void remote_climate_task(void* pvParameters) {
     ESP_LOGI(TAG, "E-GMP Remote Climate background task started");
+    bool was_active = false;
 
     while (true) {
-        if (!s_active.load()) {
+        bool active = s_active.load();
+        if (!active) {
+            was_active = false;
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
 
         uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+
+        // Transition from inactive to active: send initial wakeup burst
+        if (!was_active) {
+            ESP_LOGI(TAG, "Waking up vehicle bus (AUTOSAR NM cluster + UDS 0x7DF)...");
+            for (int i = 0; i < 15; i++) {
+                send_can_frame(0x0562, AUTOSAR_NM_62, 8);
+                send_can_frame(0x0561, AUTOSAR_NM_61, 8);
+                send_can_frame(0x0565, AUTOSAR_NM_65, 8);
+                send_can_frame(0x0563, AUTOSAR_NM_63, 8);
+                send_can_frame(0x07DF, UDS_TESTER_PRESENT, 8);
+                vTaskDelay(pdMS_TO_TICKS(100));
+            }
+            now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+            s_last_nm_tx_ms.store(now_ms);
+            s_last_uds_tx_ms.store(now_ms);
+            s_last_tmu_tx_ms.store(0);
+            was_active = true;
+        }
 
         // Check if duration expired
         uint32_t dur = s_duration_sec.load();
@@ -94,13 +144,19 @@ static void remote_climate_task(void* pvParameters) {
             continue;
         }
 
-        // 1. UDS Functional TesterPresent keepalive @ 500ms
+        // 1. AUTOSAR Network Management (0x0563) keepalive @ 500ms
+        if ((now_ms - s_last_nm_tx_ms.load()) >= 500) {
+            send_can_frame(0x0563, AUTOSAR_NM_63, 8);
+            s_last_nm_tx_ms.store(now_ms);
+        }
+
+        // 2. UDS Functional TesterPresent keepalive (0x07DF) @ 500ms
         if ((now_ms - s_last_uds_tx_ms.load()) >= 500) {
             send_can_frame(0x07DF, UDS_TESTER_PRESENT, 8);
             s_last_uds_tx_ms.store(now_ms);
         }
 
-        // 2. TMU_01_200ms frame @ 200ms (5Hz)
+        // 3. TMU_01_200ms frame (0x039B) @ 200ms (5Hz)
         if ((now_ms - s_last_tmu_tx_ms.load()) >= 200) {
             uint8_t payload[8];
             uint8_t cnt = s_alive_counter.load();
@@ -116,16 +172,29 @@ static void remote_climate_task(void* pvParameters) {
 }
 
 void remote_climate_init(void) {
+    if (!s_climate_mutex) {
+        s_climate_mutex = xSemaphoreCreateMutex();
+    }
     xTaskCreate(remote_climate_task, "REMOTE_CLIM", 3072, nullptr, 4, nullptr);
     ESP_LOGI(TAG, "Remote climate subsystem initialized");
 }
 
 esp_err_t remote_climate_start(float target_temp_c, bool defrost, uint32_t duration_sec) {
+    if (s_climate_mutex) {
+        xSemaphoreTake(s_climate_mutex, portMAX_DELAY);
+    }
+
+    // Auto-convert Fahrenheit input (e.g., 72.0 F) to Celsius
+    if (target_temp_c > 40.0f) {
+        target_temp_c = (target_temp_c - 32.0f) * 5.0f / 9.0f;
+    }
+
     s_target_temp_c.store(target_temp_c);
     s_defrost.store(defrost);
     s_duration_sec.store(duration_sec > 0 ? duration_sec : 900);
     s_start_time_ms.store((uint32_t)(esp_timer_get_time() / 1000ULL));
     s_last_uds_tx_ms.store(0);
+    s_last_nm_tx_ms.store(0);
     s_last_tmu_tx_ms.store(0);
     s_active.store(true);
 
@@ -133,11 +202,22 @@ esp_err_t remote_climate_start(float target_temp_c, bool defrost, uint32_t durat
              target_temp_c, defrost ? 1 : 0, (unsigned long)(duration_sec > 0 ? duration_sec : 900));
 
     publish_climate_state(true);
+
+    if (s_climate_mutex) {
+        xSemaphoreGive(s_climate_mutex);
+    }
     return ESP_OK;
 }
 
 esp_err_t remote_climate_stop(void) {
+    if (s_climate_mutex) {
+        xSemaphoreTake(s_climate_mutex, portMAX_DELAY);
+    }
+
     if (!s_active.load()) {
+        if (s_climate_mutex) {
+            xSemaphoreGive(s_climate_mutex);
+        }
         return ESP_OK;
     }
     ESP_LOGI(TAG, "Stopping remote climate session and sending release burst...");
@@ -155,6 +235,10 @@ esp_err_t remote_climate_stop(void) {
 
     publish_climate_state(false);
     ESP_LOGI(TAG, "Remote climate session released successfully");
+
+    if (s_climate_mutex) {
+        xSemaphoreGive(s_climate_mutex);
+    }
     return ESP_OK;
 }
 
