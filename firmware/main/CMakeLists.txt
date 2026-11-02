@@ -1,7 +1,7 @@
 if(IDF_VERSION_MAJOR GREATER_EQUAL 6)
     set(MQTT_COMPONENT "espressif__mqtt")
     set(CJSON_COMPONENT "espressif__cjson")
-    set(EXTRA_COMPONENTS "esp_driver_gpio")
+    set(EXTRA_COMPONENTS "esp_driver_gpio" "esp_driver_usb_serial_jtag")
 else()
     set(MQTT_COMPONENT "mqtt")
     set(CJSON_COMPONENT "json")

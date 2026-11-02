@@ -19,8 +19,10 @@ static inline int hex_char_to_val(char c) {
 }
 
 static void usb_can_task(void* pvParameters) {
+#if defined(CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG) || defined(CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG)
     // Disable CRLF conversion on stdin so raw binary or \r does not get mangled
     usb_serial_jtag_vfs_set_rx_line_endings(ESP_LINE_ENDINGS_LF);
+#endif
 
     uint8_t rx_buf[256];
     uint8_t accum[1024];

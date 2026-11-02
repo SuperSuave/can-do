@@ -583,6 +583,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             } else {
                 hud_nav_instruction_t instr = {};
                 instr.icon = (hud_maneuver_icon_t)step.nav_icon;
+                instr.direction_deg = step.nav_direction_deg;
                 instr.distance_meters = step.nav_distance_meters;
                 instr.bar_graph = step.nav_bars;
                 instr.speed_limit_kph = step.nav_speed_limit;
@@ -590,6 +591,10 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                 if (!step.nav_street.empty()) {
                     instr.street_name = step.nav_street.c_str();
                 }
+                instr.has_lane_guidance = step.nav_has_lane_guidance;
+                instr.num_lanes = step.nav_num_lanes;
+                memcpy(instr.lane_directions, step.nav_lane_directions, 8);
+                memcpy(instr.lane_recommended, step.nav_lane_recommended, 8);
                 hud_nav_update(&instr);
             }
             continue;

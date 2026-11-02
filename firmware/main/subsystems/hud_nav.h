@@ -40,11 +40,16 @@ typedef enum {
 
 typedef struct {
     hud_maneuver_icon_t icon;
+    uint16_t direction_deg;      // 0–359 degrees turn angle
     uint16_t distance_meters;
-    uint8_t bar_graph;        // 0 to 8 countdown blocks (0 = off)
-    uint8_t speed_limit_kph;  // 0 = off, otherwise speed limit sign
-    bool speed_camera_alert;  // true = show speed camera warning
-    const char *street_name;  // UTF-8 road name (e.g. "Main St")
+    uint8_t bar_graph;           // 0 to 8 countdown blocks (0 = off, 0xF = >300m / inactive)
+    uint8_t speed_limit_kph;     // 0 = off, otherwise speed limit sign
+    bool speed_camera_alert;     // true = show speed camera warning
+    const char *street_name;     // UTF-8 road name (e.g. "Main St")
+    bool has_lane_guidance;      // true if lane parameters are specified in this instruction
+    uint8_t num_lanes;           // 0 to 8 lanes (0 = disabled)
+    uint8_t lane_directions[8];  // Lane arrow direction shapes (0=none, 1=straight, etc.)
+    uint8_t lane_recommended[8]; // 1 = recommended/highlighted lane, 0 = regular
 } hud_nav_instruction_t;
 
 /**
@@ -77,6 +82,15 @@ void hud_nav_rx(const twai_message_t *msg, can_bus_t rx_bus);
  * Update the active turn-by-turn instruction projected on the HUD.
  */
 bool hud_nav_update(const hud_nav_instruction_t *instr);
+ 
+/**
+ * Dispatch multi-lane guidance ISO-TP message (opcode 0xF1 over 0x6E2/0x6C0).
+ * @param num_lanes Number of lanes (up to 8)
+ * @param lane_directions Array of up to 8 lane direction arrow shapes
+ * @param lane_recommended Array of up to 8 recommended highlight flags (1 = highlight, 0 = normal)
+ * @return true if transmitted or queued, false on error
+ */
+bool hud_nav_send_lane_guidance(uint8_t num_lanes, const uint8_t *lane_directions, const uint8_t *lane_recommended);
 
 /**
  * Clear the HUD navigation display and release the bus to factory head unit.

@@ -112,12 +112,17 @@ struct ActionStep {
 
     // For HUD_NAV
     uint8_t nav_icon = 0;
-    uint16_t nav_distance_meters = 0;
+    uint16_t nav_direction_deg = 0;
+    uint16_t nav_distance_meters = 0xFFFF;
     uint8_t nav_bars = 0;
     uint8_t nav_speed_limit = 0;
     bool nav_camera_alert = false;
     std::string nav_street;
     std::string nav_action;
+    bool nav_has_lane_guidance = false;
+    uint8_t nav_num_lanes = 0;
+    uint8_t nav_lane_directions[8] = {0};
+    uint8_t nav_lane_recommended[8] = {0};
 
     // For IF_THEN
     std::vector<AutomationCondition> if_conditions;

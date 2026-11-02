@@ -1922,7 +1922,7 @@ static esp_err_t api_notify_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_nav_handler(httpd_req_t *req) {
-    char buf[256];
+    char buf[1024];
     int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
     if (ret <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty request");
@@ -1945,6 +1945,7 @@ static esp_err_t api_nav_handler(httpd_req_t *req) {
     }
 
     hud_nav_instruction_t instr = {};
+    instr.distance_meters = 0xFFFF; // Inactive default
     cJSON *icon_item = cJSON_GetObjectItem(root, "icon");
     if (icon_item && cJSON_IsNumber(icon_item)) {
         instr.icon = (hud_maneuver_icon_t)icon_item->valueint;
@@ -1952,7 +1953,13 @@ static esp_err_t api_nav_handler(httpd_req_t *req) {
         instr.icon = HUD_MANEUVER_STRAIGHT;
     }
 
+    cJSON *dir_item = cJSON_GetObjectItem(root, "direction");
+    if (!dir_item) dir_item = cJSON_GetObjectItem(root, "direction_deg");
+    if (!dir_item) dir_item = cJSON_GetObjectItem(root, "heading");
+    if (dir_item && cJSON_IsNumber(dir_item)) instr.direction_deg = (uint16_t)dir_item->valueint;
+
     cJSON *dist_item = cJSON_GetObjectItem(root, "distance");
+    if (!dist_item) dist_item = cJSON_GetObjectItem(root, "distance_meters");
     if (dist_item && cJSON_IsNumber(dist_item)) instr.distance_meters = (uint16_t)dist_item->valueint;
 
     cJSON *bars_item = cJSON_GetObjectItem(root, "bars");
@@ -1966,6 +1973,46 @@ static esp_err_t api_nav_handler(httpd_req_t *req) {
 
     cJSON *street_item = cJSON_GetObjectItem(root, "street");
     if (street_item && cJSON_IsString(street_item)) instr.street_name = street_item->valuestring;
+
+    cJSON *lanes_item = cJSON_GetObjectItem(root, "lanes");
+    if (!lanes_item) lanes_item = cJSON_GetObjectItem(root, "num_lanes");
+    if (lanes_item && cJSON_IsNumber(lanes_item)) {
+        instr.num_lanes = (uint8_t)lanes_item->valueint;
+        if (instr.num_lanes > 8) instr.num_lanes = 8;
+        instr.has_lane_guidance = true;
+    }
+
+    cJSON *lane_dirs = cJSON_GetObjectItem(root, "lane_directions");
+    if (lane_dirs && cJSON_IsArray(lane_dirs)) {
+        instr.has_lane_guidance = true;
+        int n = cJSON_GetArraySize(lane_dirs);
+        if (instr.num_lanes == 0 && n > 0) {
+            instr.num_lanes = (n > 8) ? 8 : (uint8_t)n;
+        }
+        for (int i = 0; i < n && i < 8; i++) {
+            cJSON *elem = cJSON_GetArrayItem(lane_dirs, i);
+            if (elem && cJSON_IsNumber(elem)) {
+                instr.lane_directions[i] = (uint8_t)elem->valueint;
+            }
+        }
+    }
+
+    cJSON *lane_recs = cJSON_GetObjectItem(root, "lane_recommended");
+    if (!lane_recs) lane_recs = cJSON_GetObjectItem(root, "lane_highlights");
+    if (lane_recs && cJSON_IsArray(lane_recs)) {
+        instr.has_lane_guidance = true;
+        int n = cJSON_GetArraySize(lane_recs);
+        for (int i = 0; i < n && i < 8; i++) {
+            cJSON *elem = cJSON_GetArrayItem(lane_recs, i);
+            if (elem) {
+                if (cJSON_IsBool(elem)) {
+                    instr.lane_recommended[i] = cJSON_IsTrue(elem) ? 1 : 0;
+                } else if (cJSON_IsNumber(elem)) {
+                    instr.lane_recommended[i] = (uint8_t)elem->valueint;
+                }
+            }
+        }
+    }
 
     cJSON *platform_item = cJSON_GetObjectItem(root, "platform");
     if (platform_item && cJSON_IsString(platform_item)) {

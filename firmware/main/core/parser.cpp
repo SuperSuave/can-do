@@ -545,6 +545,11 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         if (ic && cJSON_IsNumber(ic)) step.nav_icon = static_cast<uint8_t>(ic->valueint);
         else step.nav_icon = 1;
 
+        cJSON* dir = cJSON_GetObjectItem(a_item, "direction");
+        if (!dir) dir = cJSON_GetObjectItem(a_item, "direction_deg");
+        if (!dir) dir = cJSON_GetObjectItem(a_item, "heading");
+        if (dir && cJSON_IsNumber(dir)) step.nav_direction_deg = static_cast<uint16_t>(dir->valueint);
+
         cJSON* dist = cJSON_GetObjectItem(a_item, "distance");
         if (!dist) dist = cJSON_GetObjectItem(a_item, "distance_meters");
         if (dist && cJSON_IsNumber(dist)) step.nav_distance_meters = static_cast<uint16_t>(dist->valueint);
@@ -560,6 +565,46 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
 
         cJSON* st = cJSON_GetObjectItem(a_item, "street");
         if (st && cJSON_IsString(st)) step.nav_street = st->valuestring;
+
+        cJSON* lanes = cJSON_GetObjectItem(a_item, "lanes");
+        if (!lanes) lanes = cJSON_GetObjectItem(a_item, "num_lanes");
+        if (lanes && cJSON_IsNumber(lanes)) {
+            step.nav_num_lanes = static_cast<uint8_t>(lanes->valueint);
+            if (step.nav_num_lanes > 8) step.nav_num_lanes = 8;
+            step.nav_has_lane_guidance = true;
+        }
+
+        cJSON* lane_dirs = cJSON_GetObjectItem(a_item, "lane_directions");
+        if (lane_dirs && cJSON_IsArray(lane_dirs)) {
+            step.nav_has_lane_guidance = true;
+            int n = cJSON_GetArraySize(lane_dirs);
+            if (step.nav_num_lanes == 0 && n > 0) {
+                step.nav_num_lanes = (n > 8) ? 8 : static_cast<uint8_t>(n);
+            }
+            for (int i = 0; i < n && i < 8; i++) {
+                cJSON* elem = cJSON_GetArrayItem(lane_dirs, i);
+                if (elem && cJSON_IsNumber(elem)) {
+                    step.nav_lane_directions[i] = static_cast<uint8_t>(elem->valueint);
+                }
+            }
+        }
+
+        cJSON* lane_recs = cJSON_GetObjectItem(a_item, "lane_recommended");
+        if (!lane_recs) lane_recs = cJSON_GetObjectItem(a_item, "lane_highlights");
+        if (lane_recs && cJSON_IsArray(lane_recs)) {
+            step.nav_has_lane_guidance = true;
+            int n = cJSON_GetArraySize(lane_recs);
+            for (int i = 0; i < n && i < 8; i++) {
+                cJSON* elem = cJSON_GetArrayItem(lane_recs, i);
+                if (elem) {
+                    if (cJSON_IsBool(elem)) {
+                        step.nav_lane_recommended[i] = cJSON_IsTrue(elem) ? 1 : 0;
+                    } else if (cJSON_IsNumber(elem)) {
+                        step.nav_lane_recommended[i] = static_cast<uint8_t>(elem->valueint);
+                    }
+                }
+            }
+        }
         return true;
     } else if (strcmp(type_str, "delay") == 0) {
         step.type = ActionType::DELAY;
