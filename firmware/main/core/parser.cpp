@@ -207,6 +207,8 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
 
     // Leaf condition
     cond.logic = ConditionLogic::LEAF;
+    cJSON* src_prop = cJSON_GetObjectItem(c_item, "source");
+    if (cJSON_IsString(src_prop)) cond.source = src_prop->valuestring;
 
     // Check if this condition is a time_condition
     cJSON* type_prop = cJSON_GetObjectItem(c_item, "type");
@@ -975,6 +977,9 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
             cJSON* type = cJSON_GetObjectItem(t_item, "type");
             if (cJSON_IsString(type)) tr.type = type->valuestring;
 
+            cJSON* src_item = cJSON_GetObjectItem(t_item, "source");
+            if (cJSON_IsString(src_item)) tr.source = src_item->valuestring;
+
             if (tr.type == "time_schedule" || tr.type == "time") {
                 tr.type = "time_schedule";
                 cJSON* time_val = cJSON_GetObjectItem(t_item, "time");
@@ -1046,7 +1051,7 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
                 cJSON* rssi_item = cJSON_GetObjectItem(t_item, "target_rssi");
                 if (!rssi_item) rssi_item = cJSON_GetObjectItem(t_item, "rssi");
                 if (cJSON_IsNumber(rssi_item)) tr.target_rssi = static_cast<int8_t>(rssi_item->valueint);
-            } else if (tr.type == "ble_device_event" || tr.type == "ble_device" || tr.type == "ble_presence") {
+            } else if (tr.type == "ble_device_event" || tr.type == "ble_device" || tr.type == "ble_presence" || tr.source == "ble") {
                 tr.type = "ble_device_event";
                 cJSON* evt = cJSON_GetObjectItem(t_item, "ble_event");
                 if (!evt) evt = cJSON_GetObjectItem(t_item, "event");

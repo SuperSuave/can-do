@@ -27,6 +27,7 @@ struct ActionStep;
 struct AutomationCondition {
     ConditionLogic logic = ConditionLogic::LEAF;
     std::string type = "can_state"; // "can_state", "time_condition", or "triggered_by"
+    std::string source;             // Optional source category ("can", "wifi", "ble", "device", etc.)
 
     // Trigger ID evaluation field (for type == "triggered_by")
     std::string trigger_id;
@@ -168,6 +169,7 @@ struct CanEntity {
 struct AutomationTrigger {
     std::string id;
     std::string type = "can_rx"; // "can_rx", "byte_transition", "mqtt", or "time_schedule"
+    std::string source;          // Optional source category ("can", "wifi", "ble", "device", etc.)
     uint32_t can_id = 0;
     uint8_t bus = 0;
     int byte_index = -1;
