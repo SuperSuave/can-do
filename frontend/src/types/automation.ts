@@ -42,7 +42,7 @@ export interface AutomationTrigger {
   mqtt_topic?: string;
   mqtt_payload?: string;
   // Bluetooth BLE trigger fields
-  ble_event?: 'button' | 'connected' | 'disconnected' | 'proximity' | 'enter' | 'exit' | string;
+  ble_event?: 'button' | 'connected' | 'disconnected' | 'proximity' | 'enter' | 'exit' | 'present' | 'away' | string;
   ble_button?: string; // e.g. "volume_up", "mute+volume_down", "any", etc.
   ble_action?: 'press' | 'release' | 'hold' | 'any' | string;
   ble_device?: string; // optional device name or address filter
@@ -98,7 +98,7 @@ export interface AutomationCondition {
   or?: AutomationCondition[];
   not?: AutomationCondition[] | AutomationCondition;
   // ESP32 Device / Wi-Fi evaluation fields
-  device_property?: 'wifi_ssid' | 'wifi_connected' | 'wifi_mode' | 'ap_client_connected' | 'ap_client_rssi' | 'ble_connected' | 'ble_rssi' | 'beacon_present' | 'beacon_rssi' | string;
+  device_property?: 'wifi_ssid' | 'wifi_connected' | 'wifi_mode' | 'ap_client_connected' | 'ap_client_rssi' | 'ble_connected' | 'ble_rssi' | 'beacon_present' | 'beacon_rssi' | 'present' | 'away' | string;
   target_string?: string;
   target_bool?: boolean;
   target_rssi?: number;

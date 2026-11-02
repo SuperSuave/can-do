@@ -46,7 +46,7 @@ unsigned long g_last_wican_rx_ms = 0;
 bool g_wican_online = false;
 
 #ifndef CAN_DO_VERSION
-#define CAN_DO_VERSION "2026.11.1-b001"
+#define CAN_DO_VERSION "2026.11.1-b002"
 #endif
 
 String g_can_do_version = CAN_DO_VERSION;
@@ -101,6 +101,7 @@ struct BeaconTarget {
     int exit_timeout_s = 20;
     bool is_present = false;
     unsigned long last_seen_ms = 0;
+    float smoothed_rssi = -100.0f;
     int last_rssi = -100;
     uint16_t major = 0;
     uint16_t minor = 0;
@@ -1234,29 +1235,34 @@ class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
 
             if (match) {
                 target.last_seen_ms = millis();
-                target.last_rssi = rssi;
+                if (target.smoothed_rssi < -99.0f) {
+                    target.smoothed_rssi = (float)rssi;
+                } else {
+                    target.smoothed_rssi = 0.35f * (float)rssi + 0.65f * target.smoothed_rssi;
+                }
+                target.last_rssi = (int)roundf(target.smoothed_rssi);
                 if (adv_major != 0) target.major = adv_major;
                 if (adv_minor != 0) target.minor = adv_minor;
                 target.mac = addr; // Dynamically track latest randomized MAC for this beacon
 
-                if (!target.is_present && rssi >= target.enter_rssi) {
+                if (!target.is_present && target.last_rssi >= target.enter_rssi) {
                     target.is_present = true;
                     target.last_prox_send_ms = millis();
-                    Serial.printf("[BEACON] >>> Target '%s' ENTERED (RSSI %d dBm >= %d dBm) <<<\n",
-                                  target.name.c_str(), rssi, target.enter_rssi);
-                    String uart_msg = "{\"type\":\"ble_beacon\",\"event\":\"enter\",\"uuid\":\"" + target.uuid + "\",\"mac\":\"" + addr + "\",\"name\":\"" + target.name + "\",\"rssi\":" + String(rssi) + ",\"major\":" + String(target.major) + ",\"minor\":" + String(target.minor) + "}";
+                    Serial.printf("[BEACON] >>> Target '%s' ENTERED / PRESENT (Smoothed RSSI %d dBm >= %d dBm) <<<\n",
+                                  target.name.c_str(), target.last_rssi, target.enter_rssi);
+                    String uart_msg = "{\"type\":\"ble_beacon\",\"event\":\"enter\",\"uuid\":\"" + target.uuid + "\",\"mac\":\"" + addr + "\",\"name\":\"" + target.name + "\",\"rssi\":" + String(target.last_rssi) + ",\"major\":" + String(target.major) + ",\"minor\":" + String(target.minor) + "}";
                     send_to_wican(uart_msg);
                     safe_ws_broadcast(uart_msg);
                 } else if (!target.is_present) {
                     static unsigned long s_last_below_thresh_log = 0;
                     if (millis() - s_last_below_thresh_log > 4000) {
                         s_last_below_thresh_log = millis();
-                        Serial.printf("[BEACON] Target '%s' heard at %d dBm (Below threshold: %d dBm)\n",
-                                      target.name.c_str(), rssi, target.enter_rssi);
+                        Serial.printf("[BEACON] Target '%s' heard at %d dBm (Smoothed: %d dBm, below threshold: %d dBm)\n",
+                                      target.name.c_str(), rssi, target.last_rssi, target.enter_rssi);
                     }
                 } else if (target.is_present && (millis() - target.last_prox_send_ms > 2500)) {
                     target.last_prox_send_ms = millis();
-                    String uart_msg = "{\"type\":\"ble_beacon\",\"event\":\"proximity\",\"uuid\":\"" + target.uuid + "\",\"mac\":\"" + addr + "\",\"name\":\"" + target.name + "\",\"rssi\":" + String(rssi) + ",\"major\":" + String(target.major) + ",\"minor\":" + String(target.minor) + "}";
+                    String uart_msg = "{\"type\":\"ble_beacon\",\"event\":\"proximity\",\"uuid\":\"" + target.uuid + "\",\"mac\":\"" + addr + "\",\"name\":\"" + target.name + "\",\"rssi\":" + String(target.last_rssi) + ",\"major\":" + String(target.major) + ",\"minor\":" + String(target.minor) + "}";
                     send_to_wican(uart_msg);
                     safe_ws_broadcast(uart_msg);
                 }
@@ -2639,9 +2645,11 @@ void loop() {
         for (auto& target : g_beacon_targets) {
             if (target.is_present && (millis() - target.last_seen_ms > (unsigned long)target.exit_timeout_s * 1000)) {
                 target.is_present = false;
-                Serial.printf("[BEACON] Target '%s' EXITED (timeout %ds)\n",
+                target.smoothed_rssi = -100.0f;
+                target.last_rssi = -100;
+                Serial.printf("[BEACON] Target '%s' EXITED / AWAY (timeout %ds)\n",
                               target.name.c_str(), target.exit_timeout_s);
-                String uart_msg = "{\"type\":\"ble_beacon\",\"event\":\"exit\",\"uuid\":\"" + target.uuid + "\",\"mac\":\"" + target.mac + "\",\"name\":\"" + target.name + "\",\"rssi\":" + String(target.last_rssi) + "}";
+                String uart_msg = "{\"type\":\"ble_beacon\",\"event\":\"exit\",\"uuid\":\"" + target.uuid + "\",\"mac\":\"" + target.mac + "\",\"name\":\"" + target.name + "\",\"rssi\":-100}";
                 send_to_wican(uart_msg);
                 safe_ws_broadcast(uart_msg);
             }

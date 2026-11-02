@@ -297,8 +297,8 @@ export function TriggerNodeEditor({
               </div>
               <span className="px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-200 text-[10px] font-mono border border-purple-700/50">
                 {currentMode === 'phone_beacon'
-                  ? (trig.ble_event === 'exit' ? 'Walk-Away (exit)' : (trig.ble_event === 'proximity' ? 'Proximity' : 'Walk-Up (enter)'))
-                  : (trig.ble_event === 'disconnected' ? 'Disconnected' : 'Connected')}
+                  ? (trig.ble_event === 'exit' || trig.ble_event === 'away' ? 'Walk-Away (away)' : (trig.ble_event === 'proximity' ? 'Proximity' : 'Walk-Up (present)'))
+                  : (trig.ble_event === 'disconnected' || trig.ble_event === 'away' ? 'Disconnected (away)' : 'Connected (present)')}
                 {trig.beacon_uuid ? ` • ${trig.beacon_uuid.substring(0, 8)}...` : (trig.ble_device ? ` • ${trig.ble_device}` : '')}
                 {trig.target_rssi ? ` • RSSI: ${trig.target_rssi} dBm` : ''}
               </span>
@@ -343,10 +343,12 @@ export function TriggerNodeEditor({
                 <label className="block text-[10px] font-sans text-slate-400 mb-1">Trigger Event</label>
                 {currentMode === 'phone_beacon' ? (
                   <select
-                    value={trig.ble_event || 'enter'}
+                    value={trig.ble_event || 'present'}
                     onChange={e => onUpdate({ ...trig, ble_event: e.target.value })}
                     className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-purple-300 font-sans box-border"
                   >
+                    <option value="present">Present (In Range / Walk-Up)</option>
+                    <option value="away">Away (Out of Range / Walk-Away)</option>
                     <option value="enter">Walk-Up (Enters Proximity Range)</option>
                     <option value="exit">Walk-Away (Exits Proximity Range)</option>
                     <option value="proximity">Proximity Signal (Continuous RSSI)</option>
@@ -357,6 +359,8 @@ export function TriggerNodeEditor({
                     onChange={e => onUpdate({ ...trig, ble_event: e.target.value })}
                     className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-indigo-300 font-sans box-border"
                   >
+                    <option value="present">Present (Connected / In Range)</option>
+                    <option value="away">Away (Disconnected / Walk Away)</option>
                     <option value="connected">Device Connected (In Range)</option>
                     <option value="disconnected">Device Disconnected (Walk Away)</option>
                     <option value="proximity">Proximity Signal (RSSI)</option>

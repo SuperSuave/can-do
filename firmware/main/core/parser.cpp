@@ -282,14 +282,23 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
         return true;
     }
 
-    // Check if this condition is a BLE device presence / proximity condition
-    if (cJSON_IsString(type_prop) && (strcmp(type_prop->valuestring, "ble_device") == 0 ||
-                                      strcmp(type_prop->valuestring, "ble_presence") == 0)) {
-        cond.type = "ble_device";
+    // Check if this condition is a BLE beacon presence condition
+    if (cJSON_IsString(type_prop) && (strcmp(type_prop->valuestring, "ble_beacon") == 0 ||
+                                      strcmp(type_prop->valuestring, "beacon") == 0 ||
+                                      (strcmp(type_prop->valuestring, "ble_presence") == 0 &&
+                                       (cJSON_GetObjectItem(c_item, "beacon_uuid") != nullptr ||
+                                        cJSON_GetObjectItem(c_item, "uuid") != nullptr ||
+                                        (cJSON_GetObjectItem(c_item, "device_property") &&
+                                         strcmp(cJSON_GetObjectItem(c_item, "device_property")->valuestring, "beacon_present") == 0))))) {
+        cond.type = "ble_beacon";
         cJSON* prop = cJSON_GetObjectItem(c_item, "device_property");
         if (!prop) prop = cJSON_GetObjectItem(c_item, "property");
         if (cJSON_IsString(prop)) cond.device_property = prop->valuestring;
-        else cond.device_property = "connected";
+        else cond.device_property = "beacon_present";
+
+        cJSON* uuid = cJSON_GetObjectItem(c_item, "beacon_uuid");
+        if (!uuid) uuid = cJSON_GetObjectItem(c_item, "uuid");
+        if (cJSON_IsString(uuid)) cond.beacon_uuid = uuid->valuestring;
 
         cJSON* dev = cJSON_GetObjectItem(c_item, "ble_device");
         if (!dev) dev = cJSON_GetObjectItem(c_item, "device");
@@ -310,18 +319,14 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
         return true;
     }
 
-    // Check if this condition is a BLE beacon presence condition
-    if (cJSON_IsString(type_prop) && (strcmp(type_prop->valuestring, "ble_beacon") == 0 ||
-                                      strcmp(type_prop->valuestring, "beacon") == 0)) {
-        cond.type = "ble_beacon";
+    // Check if this condition is a BLE device presence / proximity condition
+    if (cJSON_IsString(type_prop) && (strcmp(type_prop->valuestring, "ble_device") == 0 ||
+                                      strcmp(type_prop->valuestring, "ble_presence") == 0)) {
+        cond.type = "ble_device";
         cJSON* prop = cJSON_GetObjectItem(c_item, "device_property");
         if (!prop) prop = cJSON_GetObjectItem(c_item, "property");
         if (cJSON_IsString(prop)) cond.device_property = prop->valuestring;
-        else cond.device_property = "beacon_present";
-
-        cJSON* uuid = cJSON_GetObjectItem(c_item, "beacon_uuid");
-        if (!uuid) uuid = cJSON_GetObjectItem(c_item, "uuid");
-        if (cJSON_IsString(uuid)) cond.beacon_uuid = uuid->valuestring;
+        else cond.device_property = "connected";
 
         cJSON* dev = cJSON_GetObjectItem(c_item, "ble_device");
         if (!dev) dev = cJSON_GetObjectItem(c_item, "device");
@@ -1005,12 +1010,24 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
                 if (!dev) dev = cJSON_GetObjectItem(t_item, "device");
                 if (!dev) dev = cJSON_GetObjectItem(t_item, "mac");
                 if (cJSON_IsString(dev)) tr.ble_device = dev->valuestring;
-            } else if (tr.type == "ble_device_event" || tr.type == "ble_device" || tr.type == "ble_presence") {
-                tr.type = "ble_device_event";
+            } else if (tr.type == "ble_beacon" || tr.type == "beacon" ||
+                       ((tr.type == "ble_presence" || tr.source == "ble") &&
+                        (cJSON_GetObjectItem(t_item, "beacon_uuid") != nullptr ||
+                         cJSON_GetObjectItem(t_item, "uuid") != nullptr ||
+                         (cJSON_GetObjectItem(t_item, "ble_event") &&
+                          (strcmp(cJSON_GetObjectItem(t_item, "ble_event")->valuestring, "enter") == 0 ||
+                           strcmp(cJSON_GetObjectItem(t_item, "ble_event")->valuestring, "exit") == 0 ||
+                           strcmp(cJSON_GetObjectItem(t_item, "ble_event")->valuestring, "present") == 0 ||
+                           strcmp(cJSON_GetObjectItem(t_item, "ble_event")->valuestring, "away") == 0))))) {
+                tr.type = "ble_beacon";
                 cJSON* evt = cJSON_GetObjectItem(t_item, "ble_event");
                 if (!evt) evt = cJSON_GetObjectItem(t_item, "event");
                 if (cJSON_IsString(evt)) tr.ble_event = evt->valuestring;
-                else tr.ble_event = "connected";
+                else tr.ble_event = "present";
+
+                cJSON* uuid = cJSON_GetObjectItem(t_item, "beacon_uuid");
+                if (!uuid) uuid = cJSON_GetObjectItem(t_item, "uuid");
+                if (cJSON_IsString(uuid)) tr.beacon_uuid = uuid->valuestring;
 
                 cJSON* dev = cJSON_GetObjectItem(t_item, "ble_device");
                 if (!dev) dev = cJSON_GetObjectItem(t_item, "device");
@@ -1018,19 +1035,23 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
                 if (!dev) dev = cJSON_GetObjectItem(t_item, "client_mac");
                 if (cJSON_IsString(dev)) tr.ble_device = dev->valuestring;
 
+                cJSON* maj = cJSON_GetObjectItem(t_item, "beacon_major");
+                if (!maj) maj = cJSON_GetObjectItem(t_item, "major");
+                if (cJSON_IsNumber(maj)) tr.beacon_major = static_cast<uint16_t>(maj->valueint);
+
+                cJSON* min = cJSON_GetObjectItem(t_item, "beacon_minor");
+                if (!min) min = cJSON_GetObjectItem(t_item, "minor");
+                if (cJSON_IsNumber(min)) tr.beacon_minor = static_cast<uint16_t>(min->valueint);
+
                 cJSON* rssi_item = cJSON_GetObjectItem(t_item, "target_rssi");
                 if (!rssi_item) rssi_item = cJSON_GetObjectItem(t_item, "rssi");
                 if (cJSON_IsNumber(rssi_item)) tr.target_rssi = static_cast<int8_t>(rssi_item->valueint);
-            } else if (tr.type == "ble_beacon" || tr.type == "beacon") {
-                tr.type = "ble_beacon";
+            } else if (tr.type == "ble_device_event" || tr.type == "ble_device" || tr.type == "ble_presence") {
+                tr.type = "ble_device_event";
                 cJSON* evt = cJSON_GetObjectItem(t_item, "ble_event");
                 if (!evt) evt = cJSON_GetObjectItem(t_item, "event");
                 if (cJSON_IsString(evt)) tr.ble_event = evt->valuestring;
-                else tr.ble_event = "enter";
-
-                cJSON* uuid = cJSON_GetObjectItem(t_item, "beacon_uuid");
-                if (!uuid) uuid = cJSON_GetObjectItem(t_item, "uuid");
-                if (cJSON_IsString(uuid)) tr.beacon_uuid = uuid->valuestring;
+                else tr.ble_event = "connected";
 
                 cJSON* dev = cJSON_GetObjectItem(t_item, "ble_device");
                 if (!dev) dev = cJSON_GetObjectItem(t_item, "device");

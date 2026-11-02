@@ -200,11 +200,35 @@ export function compileCondition(cond: AutomationCondition, catalog: Catalog = D
     };
   }
 
+  if (
+    cond.type === 'ble_beacon' ||
+    cond.type === 'beacon' ||
+    (cond.type === 'ble_presence' &&
+      (cond.beacon_uuid ||
+        cond.device_property === 'beacon_present' ||
+        cond.device_property === 'present' ||
+        cond.device_property === 'away'))
+  ) {
+    return {
+      type: 'ble_beacon',
+      device_property: cond.device_property || (cond.target_bool === false ? 'away' : 'present'),
+      ...(cond.beacon_uuid ? { beacon_uuid: cond.beacon_uuid } : {}),
+      ...(cond.beacon_major ? { beacon_major: cond.beacon_major } : {}),
+      ...(cond.beacon_minor ? { beacon_minor: cond.beacon_minor } : {}),
+      ...(cond.ble_device ? { ble_device: cond.ble_device } : {}),
+      ...(cond.target_string ? { target_string: cond.target_string } : {}),
+      ...(cond.target_bool !== undefined ? { target_bool: cond.target_bool } : {}),
+      ...(cond.target_rssi !== undefined ? { target_rssi: cond.target_rssi } : {}),
+      ...(cond.operator ? { operator: cond.operator } : {})
+    };
+  }
+
   if (cond.type === 'ble_device' || cond.type === 'ble_presence') {
     return {
       type: 'ble_device',
       device_property: cond.device_property || 'connected',
       ...(cond.ble_device ? { ble_device: cond.ble_device } : {}),
+      ...(cond.target_string ? { target_string: cond.target_string } : {}),
       ...(cond.target_bool !== undefined ? { target_bool: cond.target_bool } : {}),
       ...(cond.target_rssi !== undefined ? { target_rssi: cond.target_rssi } : {}),
       ...(cond.operator ? { operator: cond.operator } : {})
@@ -809,7 +833,31 @@ export function compileAutomationRule(
         };
       }
 
-      if (trig.type === 'ble_device_event' || trig.type === 'ble_device' || trig.type === 'ble_presence' || trig.source === 'ble') {
+      if (
+        trig.type === 'ble_beacon' ||
+        trig.type === 'beacon' ||
+        ((trig.type === 'ble_presence' || trig.source === 'ble') &&
+          (trig.beacon_uuid || ['enter', 'exit', 'present', 'away'].includes(trig.ble_event || '')))
+      ) {
+        return {
+          ...baseTrigger,
+          type: 'ble_beacon',
+          ble_event: trig.ble_event || 'present',
+          ...(trig.beacon_uuid ? { beacon_uuid: trig.beacon_uuid } : {}),
+          ...(trig.beacon_major ? { beacon_major: trig.beacon_major } : {}),
+          ...(trig.beacon_minor ? { beacon_minor: trig.beacon_minor } : {}),
+          ...(trig.ble_device ? { ble_device: trig.ble_device } : {}),
+          ...(trig.client_mac ? { client_mac: trig.client_mac } : {}),
+          ...(trig.target_rssi !== undefined ? { target_rssi: trig.target_rssi } : {})
+        };
+      }
+
+      if (
+        trig.type === 'ble_device_event' ||
+        trig.type === 'ble_device' ||
+        trig.type === 'ble_presence' ||
+        trig.source === 'ble'
+      ) {
         return {
           ...baseTrigger,
           type: 'ble_device_event',
@@ -2080,9 +2128,15 @@ export function convertTriggerToCondition(trigger: AutomationTrigger): Automatio
   const raw = deepClone(trigger) as Record<string, any>;
   delete raw.id;
   delete raw._clientId;
+  const isBlePresence = raw.type === 'ble_presence' || raw.type === 'ble_beacon' || raw.type === 'beacon' || raw.type === 'ble_device' || raw.type === 'ble_device_event';
+  const isBleButton = raw.type === 'ble_button';
+  const isWifi = raw.type === 'wifi' || raw.type === 'wifi_event';
+
   return regenerateConditionIds({
     ...raw,
-    type: raw.type === 'ble_button' ? 'ble_button' : (raw.type === 'wifi' || raw.type === 'wifi_event' ? 'wifi' : (raw.can_id ? 'can_state' : 'can_state')),
+    type: isBleButton ? 'ble_button' : (isBlePresence ? 'ble_presence' : (isWifi ? 'wifi' : 'can_state')),
+    device_property: isBlePresence ? (raw.ble_event === 'exit' || raw.ble_event === 'away' ? 'away' : (raw.ble_event === 'disconnected' ? 'disconnected' : 'present')) : raw.device_property,
+    target_bool: isBlePresence ? !(raw.ble_event === 'exit' || raw.ble_event === 'away' || raw.ble_event === 'disconnected') : raw.target_bool,
     operator: 'equal',
     value: raw.to ?? raw.value ?? raw.to_value ?? raw.match_payload,
     match: raw.to_payload ?? raw.match ?? raw.match_payload,
@@ -2093,10 +2147,28 @@ export function convertConditionToTrigger(condition: AutomationCondition): Autom
   const raw = deepClone(condition) as Record<string, any>;
   delete raw.id;
   delete raw._clientId;
+  const isBlePresence = raw.type === 'ble_presence' || raw.type === 'ble_beacon' || raw.type === 'beacon' || raw.type === 'ble_device';
+  const isBleButton = raw.type === 'ble_button';
+  const isWifi = raw.type === 'wifi' || raw.type === 'wifi_event' || raw.type === 'device_state';
+
+  let trigType = 'byte_transition';
+  let trigSource = 'can';
+  if (isBleButton) {
+    trigType = 'ble_button';
+    trigSource = 'ble';
+  } else if (isBlePresence) {
+    trigType = 'ble_presence';
+    trigSource = 'ble';
+  } else if (isWifi) {
+    trigType = 'wifi_event';
+    trigSource = 'wifi';
+  }
+
   return regenerateTriggerIds({
     ...raw,
-    source: raw.type === 'ble_button' ? 'ble' : (raw.type === 'wifi' ? 'wifi' : 'can'),
-    type: raw.type === 'ble_button' ? 'ble_button' : 'byte_transition',
+    source: trigSource,
+    type: trigType,
+    ble_event: isBlePresence ? (raw.device_property === 'away' || raw.target_bool === false ? 'away' : 'present') : raw.ble_event,
     to: raw.value ?? raw.state ?? (typeof raw.match === 'string' ? raw.match : undefined),
     to_payload: raw.match ?? raw.match_payload
   } as AutomationTrigger);

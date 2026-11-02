@@ -693,8 +693,8 @@ export function ConditionNodeEditor({
               <span className="font-semibold text-white truncate">Bluetooth Presence</span>
               <span className="px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 text-[10px] border border-purple-800/60 font-mono shrink-0">
                 {currentMode === 'phone_beacon'
-                  ? (cond.target_bool !== false ? 'Beacon Present' : 'Beacon Absent')
-                  : (cond.target_bool !== false ? 'Device Connected' : 'Device Disconnected')}
+                  ? (cond.target_bool !== false && cond.device_property !== 'away' ? 'Beacon Present' : 'Beacon Absent (Away)')
+                  : (cond.target_bool !== false && cond.device_property !== 'away' && cond.device_property !== 'disconnected' ? 'Device Connected (Present)' : 'Device Disconnected (Away)')}
               </span>
             </div>
           </div>
@@ -739,8 +739,15 @@ export function ConditionNodeEditor({
                 <label className="block text-[10px] font-sans text-slate-400 mb-1">Expected State</label>
                 {currentMode === 'phone_beacon' ? (
                   <select
-                    value={cond.target_bool !== false ? 'true' : 'false'}
-                    onChange={e => onUpdate({ ...cond, target_bool: e.target.value === 'true' })}
+                    value={cond.target_bool !== false && cond.device_property !== 'away' ? 'true' : 'false'}
+                    onChange={e => {
+                      const isTrue = e.target.value === 'true';
+                      onUpdate({
+                        ...cond,
+                        target_bool: isTrue,
+                        device_property: isTrue ? 'present' : 'away'
+                      });
+                    }}
                     className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-slate-200 box-border"
                   >
                     <option value="true">Beacon is Present (Near Car)</option>
@@ -748,12 +755,19 @@ export function ConditionNodeEditor({
                   </select>
                 ) : (
                   <select
-                    value={cond.target_bool !== false ? 'true' : 'false'}
-                    onChange={e => onUpdate({ ...cond, target_bool: e.target.value === 'true' })}
+                    value={cond.target_bool !== false && cond.device_property !== 'away' && cond.device_property !== 'disconnected' ? 'true' : 'false'}
+                    onChange={e => {
+                      const isTrue = e.target.value === 'true';
+                      onUpdate({
+                        ...cond,
+                        target_bool: isTrue,
+                        device_property: isTrue ? 'connected' : 'disconnected'
+                      });
+                    }}
                     className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-slate-200 box-border"
                   >
-                    <option value="true">Device is Connected</option>
-                    <option value="false">Device is Disconnected</option>
+                    <option value="true">Device is Connected (Present)</option>
+                    <option value="false">Device is Disconnected (Away)</option>
                   </select>
                 )}
               </div>
@@ -819,7 +833,9 @@ export function ConditionNodeEditor({
                       className="w-20 bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-purple-300 font-mono font-bold text-center text-[11px]"
                     />
                     <span className="text-[10px] text-slate-500 font-mono">dBm</span>
-                    {liveRssi !== undefined && liveRssi !== 0 ? (
+                    {cond.target_bool === false || cond.device_property === 'away' ? (
+                      <span className="text-[10px] text-amber-400 font-sans hidden sm:inline">(Ignored when checking Absent/Away)</span>
+                    ) : liveRssi !== undefined && liveRssi !== 0 ? (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 text-[10px] font-bold">
                         <Signal className="w-3 h-3 text-purple-400 animate-pulse" />
                         Live: {liveRssi} dBm

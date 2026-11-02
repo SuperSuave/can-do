@@ -368,16 +368,20 @@ class CanDoDataCoordinator:
         self.last_ble_beacon = payload
         _LOGGER.debug("BLE beacon event received: %s", payload)
 
+        evt = payload.get("event", "proximity")
+        is_pres = payload.get("present")
+        if is_pres is None:
+            is_pres = evt in ("enter", "proximity", "present")
         event_data = {
             "device_id": self.effective_device_id,
             "uuid": payload.get("uuid", ""),
             "mac": payload.get("mac", ""),
             "name": payload.get("name", ""),
-            "event": payload.get("event", "proximity"),
+            "event": evt,
             "rssi": payload.get("rssi", 0),
             "major": payload.get("major", 0),
             "minor": payload.get("minor", 0),
-            "present": payload.get("present", True),
+            "present": is_pres,
         }
         self.hass.bus.async_fire("cando_ble_beacon_event", event_data)
 

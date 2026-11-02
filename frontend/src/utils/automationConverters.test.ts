@@ -835,73 +835,206 @@ test('applyOptionsToCondition groups same-byte conflicting options into an OR lo
   assert.strictEqual(compiled.or.length, 2);
   assert.strictEqual(compiled.or[0].value, '0x01');
   assert.strictEqual(compiled.or[1].value, '0x02');
-});
-
-test('resolveCatalogCommandForAction and applyOptionToAction properly handle ambient_mood_lighting continuous hex steps and Mood Light Off', () => {
-  const catalog: Catalog = {
-    can_do_version: '1.0.0',
-    vehicles: [],
-    commands: [
-      {
-        id: 'ambient_mood_lighting',
-        name: 'Ambient Mood Lighting',
-        category: 'Lighting',
-        roles: ['action'],
-        network: { action_can_id: '0x4AD', state_can_id: '0x3C6', delay_ms: 25 },
-        options: [
-          {
-            label: 'Mood Light Off',
-            steps: [
-              { payload: '0000000000000000', repeat: 2, delay_ms: 25 },
-              { payload: '0002082000000000', repeat: 2, delay_ms: 0 }
-            ]
-          },
-          {
-            label: 'Christmas Dual-Tone (Red Dash / Green Doors)',
-            steps: [
-              { payload: 'EB02371700000000', repeat: 2, delay_ms: 25 },
-              { payload: '0002082000000000', repeat: 2, delay_ms: 0 }
-            ]
-          }
-        ]
-      }
-    ]
-  };
-
-  // 1. Selecting Mood Light Off should not mismatch because of Stage 2 latch 0002082000000000
-  const offAct: AutomationAction = {
-    id: 'act_off',
-    type: 'can_tx',
-    can_id: '0x4AD',
-    entity_id: 'ambient_mood_lighting',
-    option_label: 'Mood Light Off',
-    command: 'Mood Light Off',
-    steps: [
-      { can_id: '0x4AD', bus: 0, payload: compileToByteMap('0000000000000000'), repeat: 2, delay_ms: 25 },
-      { can_id: '0x4AD', bus: 0, payload: compileToByteMap('0002082000000000'), repeat: 2, delay_ms: 0 }
-    ]
-  };
-  const resolvedOff = resolveCatalogCommandForAction(offAct, catalog);
-  assert.strictEqual(resolvedOff.command?.id, 'ambient_mood_lighting');
-  assert.strictEqual(resolvedOff.matchedOption?.label, 'Mood Light Off');
-
-  // 2. Compiling Christmas Dual-Tone appends 0x48F door zone burst with Lime Green (7AC20815)
-  const xmasAct: AutomationAction = {
-    id: 'act_xmas',
-    type: 'can_tx',
-    can_id: '0x4AD',
-    entity_id: 'ambient_mood_lighting',
-    option_label: 'Christmas Dual-Tone (Red Dash / Green Doors)',
-    command: 'Christmas Dual-Tone (Red Dash / Green Doors)',
-    steps: [
-      { can_id: '0x4AD', bus: 0, payload: compileToByteMap('EB02371700000000'), repeat: 2, delay_ms: 25 },
-      { can_id: '0x4AD', bus: 0, payload: compileToByteMap('0002082000000000'), repeat: 2, delay_ms: 0 }
-    ]
-  };
-  const compiledXmas = compileAction(xmasAct, catalog);
-  assert.ok(Array.isArray(compiledXmas));
-  const doorFrames = compiledXmas.filter((s: any) => s.type === 'transmit' && s.can_id === '0x48F');
-  assert.strictEqual(doorFrames.length, 2);
-  assert.strictEqual(doorFrames[0].payload.D1, '0x7A');
-  assert.strictEqual(doorFrames[0].payload.D2, '0xC2');
-});
+});
+
+
+
+test('resolveCatalogCommandForAction and applyOptionToAction properly handle ambient_mood_lighting continuous hex steps and Mood Light Off', () => {
+
+  const catalog: Catalog = {
+
+    can_do_version: '1.0.0',
+
+    vehicles: [],
+
+    commands: [
+
+      {
+
+        id: 'ambient_mood_lighting',
+
+        name: 'Ambient Mood Lighting',
+
+        category: 'Lighting',
+
+        roles: ['action'],
+
+        network: { action_can_id: '0x4AD', state_can_id: '0x3C6', delay_ms: 25 },
+
+        options: [
+
+          {
+
+            label: 'Mood Light Off',
+
+            steps: [
+
+              { payload: '0000000000000000', repeat: 2, delay_ms: 25 },
+
+              { payload: '0002082000000000', repeat: 2, delay_ms: 0 }
+
+            ]
+
+          },
+
+          {
+
+            label: 'Christmas Dual-Tone (Red Dash / Green Doors)',
+
+            steps: [
+
+              { payload: 'EB02371700000000', repeat: 2, delay_ms: 25 },
+
+              { payload: '0002082000000000', repeat: 2, delay_ms: 0 }
+
+            ]
+
+          }
+
+        ]
+
+      }
+
+    ]
+
+  };
+
+
+
+  // 1. Selecting Mood Light Off should not mismatch because of Stage 2 latch 0002082000000000
+
+  const offAct: AutomationAction = {
+
+    id: 'act_off',
+
+    type: 'can_tx',
+
+    can_id: '0x4AD',
+
+    entity_id: 'ambient_mood_lighting',
+
+    option_label: 'Mood Light Off',
+
+    command: 'Mood Light Off',
+
+    steps: [
+
+      { can_id: '0x4AD', bus: 0, payload: compileToByteMap('0000000000000000'), repeat: 2, delay_ms: 25 },
+
+      { can_id: '0x4AD', bus: 0, payload: compileToByteMap('0002082000000000'), repeat: 2, delay_ms: 0 }
+
+    ]
+
+  };
+
+  const resolvedOff = resolveCatalogCommandForAction(offAct, catalog);
+
+  assert.strictEqual(resolvedOff.command?.id, 'ambient_mood_lighting');
+
+  assert.strictEqual(resolvedOff.matchedOption?.label, 'Mood Light Off');
+
+
+
+  // 2. Compiling Christmas Dual-Tone appends 0x48F door zone burst with Lime Green (7AC20815)
+
+  const xmasAct: AutomationAction = {
+
+    id: 'act_xmas',
+
+    type: 'can_tx',
+
+    can_id: '0x4AD',
+
+    entity_id: 'ambient_mood_lighting',
+
+    option_label: 'Christmas Dual-Tone (Red Dash / Green Doors)',
+
+    command: 'Christmas Dual-Tone (Red Dash / Green Doors)',
+
+    steps: [
+
+      { can_id: '0x4AD', bus: 0, payload: compileToByteMap('EB02371700000000'), repeat: 2, delay_ms: 25 },
+
+      { can_id: '0x4AD', bus: 0, payload: compileToByteMap('0002082000000000'), repeat: 2, delay_ms: 0 }
+
+    ]
+
+  };
+
+  const compiledXmas = compileAction(xmasAct, catalog);
+
+  assert.ok(Array.isArray(compiledXmas));
+
+  const doorFrames = compiledXmas.filter((s: any) => s.type === 'transmit' && s.can_id === '0x48F');
+
+  assert.strictEqual(doorFrames.length, 2);
+
+  assert.strictEqual(doorFrames[0].payload.D1, '0x7A');
+
+  assert.strictEqual(doorFrames[0].payload.D2, '0xC2');
+
+});
+
+
+test('compileAutomationRule and compileCondition properly serialize ble_presence and ble_beacon with present and away', () => {
+  const catalog = createMockCatalog(10);
+
+  // 1. Walk-Away trigger compilation preserves ble_beacon type and away event
+  const awayRule: AutomationRule = {
+    id: 'rule_away',
+    name: 'Walk-Away Rule',
+    enabled: true,
+    ha_expose: true,
+    ha_icon: 'mdi:car-door-lock',
+    exec_mode: 'one_shot',
+    cooldown_ms: 1000,
+    triggers: [
+      {
+        id: 'trig_away',
+        source: 'ble',
+        type: 'ble_presence',
+        ble_event: 'away',
+        beacon_uuid: 'FDA50693-A4E2-4FB1-AFCF-C6EB07647825',
+        beacon_major: 100,
+        beacon_minor: 1,
+        target_rssi: -75
+      }
+    ],
+    conditions: [
+      {
+        id: 'cond_away',
+        type: 'ble_presence',
+        device_property: 'away',
+        beacon_uuid: 'FDA50693-A4E2-4FB1-AFCF-C6EB07647825',
+        target_bool: false,
+        target_rssi: -75
+      }
+    ],
+    actions: []
+  };
+
+  const compiled = compileAutomationRule(awayRule, catalog);
+  assert.strictEqual(compiled.triggers.length, 1);
+  assert.strictEqual(compiled.triggers[0].type, 'ble_beacon');
+  assert.strictEqual(compiled.triggers[0].ble_event, 'away');
+  assert.strictEqual(compiled.triggers[0].beacon_uuid, 'FDA50693-A4E2-4FB1-AFCF-C6EB07647825');
+  assert.strictEqual(compiled.triggers[0].beacon_major, 100);
+  assert.strictEqual(compiled.triggers[0].beacon_minor, 1);
+  assert.strictEqual(compiled.triggers[0].target_rssi, -75);
+
+  assert.strictEqual(compiled.conditions.length, 1);
+  assert.strictEqual(compiled.conditions[0].type, 'ble_beacon');
+  assert.strictEqual(compiled.conditions[0].device_property, 'away');
+  assert.strictEqual(compiled.conditions[0].beacon_uuid, 'FDA50693-A4E2-4FB1-AFCF-C6EB07647825');
+  assert.strictEqual(compiled.conditions[0].target_bool, false);
+
+  // 2. Cross conversion
+  const convertedCond = convertTriggerToCondition(awayRule.triggers[0]);
+  assert.strictEqual(convertedCond.type, 'ble_presence');
+  assert.strictEqual(convertedCond.device_property, 'away');
+  assert.strictEqual(convertedCond.target_bool, false);
+
+  const convertedTrig = convertConditionToTrigger(convertedCond);
+  assert.strictEqual(convertedTrig.type, 'ble_presence');
+  assert.strictEqual(convertedTrig.ble_event, 'away');
+});

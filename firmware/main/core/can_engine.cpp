@@ -399,43 +399,21 @@ bool evaluate_condition(const AutomationCondition& cond) {
                 return true;
             }
 
-            if (cond.type == "ble_device" || cond.type == "ble_presence") {
-                const std::string& target_dev = !cond.ble_device.empty() ? cond.ble_device : cond.target_string;
-                if (target_dev.empty()) {
-                    if (cond.device_property == "connected") {
-                        for (const auto& kv : s_ble_devices) {
-                            if (kv.second.connected) return cond.target_bool;
-                        }
-                        return !cond.target_bool;
-                    }
-                    return false;
-                }
-
-                for (const auto& kv : s_ble_devices) {
-                    if (mac_matches(target_dev, kv.second.address) || strcasecmp(target_dev.c_str(), kv.second.name.c_str()) == 0) {
-                        if (cond.device_property == "connected") {
-                            return kv.second.connected == cond.target_bool;
-                        } else if (cond.device_property == "rssi" || cond.device_property == "proximity") {
-                            switch (cond.op) {
-                                case ConditionOperator::GREATER_THAN: return kv.second.rssi > cond.target_rssi;
-                                case ConditionOperator::LESS_THAN:    return kv.second.rssi < cond.target_rssi;
-                                case ConditionOperator::EQUAL:        return kv.second.rssi == cond.target_rssi;
-                                case ConditionOperator::NOT_EQUAL:    return kv.second.rssi != cond.target_rssi;
-                                default: return kv.second.rssi >= cond.target_rssi;
-                            }
-                        }
-                    }
-                }
-                return (cond.device_property == "connected") ? (!cond.target_bool) : false;
-            }
-
-            if (cond.type == "ble_beacon" || cond.type == "beacon") {
+            if (cond.type == "ble_beacon" || cond.type == "beacon" || (cond.type == "ble_presence" && (!cond.beacon_uuid.empty() || cond.device_property == "beacon_present" || cond.device_property == "present" || cond.device_property == "away"))) {
+                uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
                 const std::string& target_uuid = !cond.beacon_uuid.empty() ? cond.beacon_uuid : (!cond.ble_device.empty() ? cond.ble_device : cond.target_string);
+                bool check_away = (cond.device_property == "away" || (!cond.target_bool && (cond.device_property == "present" || cond.device_property == "beacon_present")));
+
                 if (target_uuid.empty()) {
+                    bool any_present = false;
                     for (const auto& kv : s_ble_beacons) {
-                        if (kv.second.present) return cond.target_bool;
+                        if (kv.second.present && (now_ms - kv.second.last_seen_ms <= 60000)) {
+                            any_present = true;
+                            break;
+                        }
                     }
-                    return !cond.target_bool;
+                    if (check_away) return !any_present;
+                    return any_present == cond.target_bool;
                 }
 
                 for (const auto& kv : s_ble_beacons) {
@@ -445,8 +423,14 @@ bool evaluate_condition(const AutomationCondition& cond) {
                     if (!kv.second.name.empty() && strcasecmp(target_uuid.c_str(), kv.second.name.c_str()) == 0) match = true;
 
                     if (match) {
+                        bool is_present = kv.second.present && (now_ms - kv.second.last_seen_ms <= 60000);
+                        if (check_away) {
+                            return !is_present;
+                        }
+                        if (!is_present) return false;
+
+                        // Target is present; if RSSI evaluation requested, check threshold
                         if (cond.device_property == "rssi" || cond.device_property == "proximity" || cond.target_rssi != 0) {
-                            if (!kv.second.present) return false;
                             switch (cond.op) {
                                 case ConditionOperator::GREATER_THAN: return kv.second.rssi > cond.target_rssi;
                                 case ConditionOperator::LESS_THAN:    return kv.second.rssi < cond.target_rssi;
@@ -455,10 +439,50 @@ bool evaluate_condition(const AutomationCondition& cond) {
                                 default: return kv.second.rssi >= cond.target_rssi;
                             }
                         }
-                        return kv.second.present == cond.target_bool;
+                        return true;
                     }
                 }
-                return !cond.target_bool;
+                return check_away;
+            }
+
+            if (cond.type == "ble_device" || cond.type == "ble_presence") {
+                uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+                const std::string& target_dev = !cond.ble_device.empty() ? cond.ble_device : cond.target_string;
+                bool check_away = (cond.device_property == "away" || cond.device_property == "disconnected" || (!cond.target_bool && (cond.device_property == "present" || cond.device_property == "connected")));
+
+                if (target_dev.empty()) {
+                    bool any_connected = false;
+                    for (const auto& kv : s_ble_devices) {
+                        if (kv.second.connected && (now_ms - kv.second.last_seen_ms <= 60000)) {
+                            any_connected = true;
+                            break;
+                        }
+                    }
+                    if (check_away) return !any_connected;
+                    return any_connected == cond.target_bool;
+                }
+
+                for (const auto& kv : s_ble_devices) {
+                    if (mac_matches(target_dev, kv.second.address) || strcasecmp(target_dev.c_str(), kv.second.name.c_str()) == 0) {
+                        bool is_conn = kv.second.connected && (now_ms - kv.second.last_seen_ms <= 60000);
+                        if (check_away) {
+                            return !is_conn;
+                        }
+                        if (!is_conn) return false;
+
+                        if (cond.device_property == "rssi" || cond.device_property == "proximity" || cond.target_rssi != 0) {
+                            switch (cond.op) {
+                                case ConditionOperator::GREATER_THAN: return kv.second.rssi > cond.target_rssi;
+                                case ConditionOperator::LESS_THAN:    return kv.second.rssi < cond.target_rssi;
+                                case ConditionOperator::EQUAL:        return kv.second.rssi == cond.target_rssi;
+                                case ConditionOperator::NOT_EQUAL:    return kv.second.rssi != cond.target_rssi;
+                                default: return kv.second.rssi >= cond.target_rssi;
+                            }
+                        }
+                        return true;
+                    }
+                }
+                return check_away;
             }
 
             if (cond.type == "voltage" || cond.type == "vbat") {
@@ -2474,9 +2498,21 @@ void can_engine_on_ble_device_event(const std::string& address, const std::strin
 
         for (const auto& trig : rule.triggers) {
             if (trig.type == "ble_device_event" || trig.type == "ble_device" || trig.type == "ble_presence") {
-                // Match event: "connected", "disconnected", "proximity"
+                // Match event: "connected", "disconnected", "proximity", "present", "away", "any"
                 if (!trig.ble_event.empty() && trig.ble_event != "any") {
-                    if (strcasecmp(trig.ble_event.c_str(), event.c_str()) != 0) {
+                    bool event_matched = false;
+                    if (strcasecmp(trig.ble_event.c_str(), event.c_str()) == 0) {
+                        event_matched = true;
+                    } else if (strcasecmp(trig.ble_event.c_str(), "present") == 0) {
+                        if (event == "connected" || event == "proximity" || event == "present" || event == "enter") event_matched = true;
+                    } else if (strcasecmp(trig.ble_event.c_str(), "away") == 0) {
+                        if (event == "disconnected" || event == "away" || event == "exit") event_matched = true;
+                    } else if (strcasecmp(trig.ble_event.c_str(), "connected") == 0) {
+                        if (event == "present") event_matched = true;
+                    } else if (strcasecmp(trig.ble_event.c_str(), "disconnected") == 0) {
+                        if (event == "away") event_matched = true;
+                    }
+                    if (!event_matched) {
                         continue;
                     }
                 }
@@ -2488,8 +2524,11 @@ void can_engine_on_ble_device_event(const std::string& address, const std::strin
                     }
                 }
 
-                // Match target RSSI if specified
-                if (trig.target_rssi != 0 && (event == "connected" || event == "proximity")) {
+                // Match target RSSI if specified (only for present/connected/proximity, NOT for away/disconnected)
+                bool is_away = (event == "disconnected" || event == "away" || 
+                               strcasecmp(trig.ble_event.c_str(), "disconnected") == 0 || 
+                               strcasecmp(trig.ble_event.c_str(), "away") == 0);
+                if (!is_away && trig.target_rssi != 0) {
                     if (rssi < trig.target_rssi) {
                         continue;
                     }
@@ -2535,8 +2574,8 @@ void can_engine_on_ble_beacon_event(const std::string& uuid, const std::string& 
     if (minor != 0) info.minor = minor;
     if (rssi != 0) info.rssi = rssi;
     info.last_seen_ms = now_ms;
-    if (event == "enter") info.present = true;
-    else if (event == "exit") info.present = false;
+    if (event == "enter" || event == "present") info.present = true;
+    else if (event == "exit" || event == "away") info.present = false;
     else if (event == "proximity") info.present = true;
 
     if (!mac.empty() && mac != key) {
@@ -2552,9 +2591,21 @@ void can_engine_on_ble_beacon_event(const std::string& uuid, const std::string& 
 
         for (const auto& trig : rule.triggers) {
             if (trig.type == "ble_beacon" || trig.type == "beacon" || trig.type == "ble_presence") {
-                // Match event: "enter", "exit", "proximity", "any"
+                // Match event: "enter", "exit", "proximity", "present", "away", "any"
                 if (!trig.ble_event.empty() && trig.ble_event != "any") {
-                    if (strcasecmp(trig.ble_event.c_str(), event.c_str()) != 0) {
+                    bool event_matched = false;
+                    if (strcasecmp(trig.ble_event.c_str(), event.c_str()) == 0) {
+                        event_matched = true;
+                    } else if (strcasecmp(trig.ble_event.c_str(), "present") == 0) {
+                        if (event == "enter" || event == "proximity" || event == "present") event_matched = true;
+                    } else if (strcasecmp(trig.ble_event.c_str(), "away") == 0) {
+                        if (event == "exit" || event == "away") event_matched = true;
+                    } else if (strcasecmp(trig.ble_event.c_str(), "enter") == 0) {
+                        if (event == "present") event_matched = true;
+                    } else if (strcasecmp(trig.ble_event.c_str(), "exit") == 0) {
+                        if (event == "away") event_matched = true;
+                    }
+                    if (!event_matched) {
                         continue;
                     }
                 }
@@ -2569,8 +2620,11 @@ void can_engine_on_ble_beacon_event(const std::string& uuid, const std::string& 
                     if (!match) continue;
                 }
 
-                // Match target RSSI if specified
-                if (trig.target_rssi != 0 && (event == "enter" || event == "proximity")) {
+                // Match target RSSI if specified (only for enter/present/proximity, NOT for exit/away!)
+                bool is_away = (event == "exit" || event == "away" || 
+                               strcasecmp(trig.ble_event.c_str(), "exit") == 0 || 
+                               strcasecmp(trig.ble_event.c_str(), "away") == 0);
+                if (!is_away && trig.target_rssi != 0) {
                     if (rssi < trig.target_rssi) {
                         continue;
                     }

@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.11.1-b001",
+  "can_do_version": "2026.11.1-b002",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -14617,6 +14617,154 @@
           "type": "entity_command",
           "entity_id": "hazard_lights",
           "command": "Turned OFF / Inactive"
+        }
+      ]
+    },
+    {
+      "id": "ble_walk_away_auto_lock",
+      "name": "Walk-Away Phone Beacon -> Auto Lock & Fold Mirrors",
+      "description": "Automatically secures the vehicle by locking all doors and folding exterior mirrors when your phone beacon or BLE device transitions to Away (or exits proximity range).",
+      "category": "Closures & Security",
+      "tags": [
+        "all_egmp",
+        "hyundai_ioniq5",
+        "kia_ev6",
+        "genesis_gv60"
+      ],
+      "enabled": true,
+      "ha_expose": true,
+      "ha_icon": "mdi:car-door-lock",
+      "exec_mode": "one_shot",
+      "cooldown_ms": 5000,
+      "contributor": {
+        "name": "CAN Do Community",
+        "github": "SuperSuave"
+      },
+      "triggers": [
+        {
+          "id": "trig_phone_away",
+          "source": "ble",
+          "type": "ble_presence",
+          "ble_event": "away"
+        }
+      ],
+      "conditions": [
+        {
+          "id": "cond_doors_closed",
+          "type": "can_state",
+          "can_id": "0x411",
+          "bus": 0,
+          "match": {
+            "D4": "0x00",
+            "D5": "0x00",
+            "D7": "0x00",
+            "D8": "0x00"
+          },
+          "mask": {
+            "D4": "0x01",
+            "D5": "0x04",
+            "D7": "0x10",
+            "D8": "0x01"
+          },
+          "operator": "==",
+          "source_command_id": "doors_status",
+          "option_label": "All Doors Closed"
+        },
+        {
+          "id": "cond_currently_unlocked",
+          "type": "can_state",
+          "can_id": "0x411",
+          "bus": 0,
+          "byte": "D3",
+          "mask": "0x40",
+          "operator": "==",
+          "value": "0x40",
+          "source_command_id": "door_locks",
+          "option_label": "Unlocked / Unlock"
+        }
+      ],
+      "actions": [
+        {
+          "id": "act_lock_doors",
+          "type": "entity_command",
+          "entity_id": "door_locks",
+          "command": "Locked / Lock"
+        },
+        {
+          "id": "act_fold_mirrors",
+          "type": "entity_command",
+          "entity_id": "power_mirrors",
+          "command": "Fold"
+        },
+        {
+          "id": "act_toast_locked",
+          "type": "track_popup",
+          "level": "info",
+          "text": "Walk-Away: Vehicle Locked"
+        }
+      ]
+    },
+    {
+      "id": "ble_walk_up_welcome_unlock",
+      "name": "Walk-Up Phone Beacon -> Welcome Approach & Auto-Unlock",
+      "description": "Automatically unlocks doors and unfolds exterior mirrors when your phone beacon or BLE device transitions to Present within close proximity (RSSI >= -75 dBm).",
+      "category": "Closures & Security",
+      "tags": [
+        "all_egmp",
+        "hyundai_ioniq5",
+        "kia_ev6",
+        "genesis_gv60"
+      ],
+      "enabled": false,
+      "ha_expose": true,
+      "ha_icon": "mdi:car-door-lock-open",
+      "exec_mode": "one_shot",
+      "cooldown_ms": 5000,
+      "contributor": {
+        "name": "CAN Do Community",
+        "github": "SuperSuave"
+      },
+      "triggers": [
+        {
+          "id": "trig_phone_present",
+          "source": "ble",
+          "type": "ble_presence",
+          "ble_event": "present",
+          "target_rssi": -75
+        }
+      ],
+      "conditions": [
+        {
+          "id": "cond_currently_locked",
+          "type": "can_state",
+          "can_id": "0x411",
+          "bus": 0,
+          "byte": "D3",
+          "mask": "0x40",
+          "operator": "==",
+          "value": "0x00",
+          "source_command_id": "door_locks",
+          "option_label": "Locked / Lock"
+        }
+      ],
+      "actions": [
+        {
+          "id": "act_unlock_doors",
+          "type": "entity_command",
+          "entity_id": "door_locks",
+          "command": "Unlocked / Unlock"
+        },
+        {
+          "id": "act_unfold_mirrors",
+          "type": "entity_command",
+          "entity_id": "power_mirrors",
+          "command": "Unfold"
+        },
+        {
+          "id": "act_toast_unlocked",
+          "type": "track_popup",
+          "level": "info",
+          "text": "Walk-Up: Welcome & Unlocked"
         }
       ]
     }

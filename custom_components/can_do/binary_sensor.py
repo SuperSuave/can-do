@@ -79,7 +79,7 @@ class CanDoBleBeaconPresenceSensor(BinarySensorEntity):
             return False
         if "present" in last:
             return bool(last["present"])
-        return last.get("event") in ("enter", "proximity")
+        return last.get("event") in ("enter", "proximity", "present")
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

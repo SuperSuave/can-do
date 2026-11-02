@@ -427,7 +427,7 @@ export function evaluateConditionState(
     }
 
     const isPresent = Boolean(matchedItem?.is_present || matchedItem?.connected);
-    const expected = cond.target_bool !== false;
+    const expected = (cond.device_property === 'away' || cond.device_property === 'disconnected') ? false : (cond.target_bool !== false);
     if (isPresent !== expected) {
       return {
         state: 'invalid',
