@@ -1,4 +1,5 @@
 #include "remote_climate.h"
+#include "can.h"
 #include "api.h"
 #include "mqtt_mgr.h"
 #include "driver/twai.h"
@@ -44,7 +45,7 @@ static void send_can_frame(uint32_t id, const uint8_t* data, uint8_t dlc) {
     tx_msg.rtr = 0;
     tx_msg.ss = 1; // Single-Shot mode: prevent infinite hardware retry loop on bus error
     memcpy(tx_msg.data, data, dlc);
-    twai_transmit(&tx_msg, pdMS_TO_TICKS(20));
+    can_send(CAN_BUS_0, &tx_msg, pdMS_TO_TICKS(20));
 }
 
 static void pack_tmu_01(uint8_t* data, bool aircon_on, float temp_c, bool defrost, uint8_t alive_cnt) {

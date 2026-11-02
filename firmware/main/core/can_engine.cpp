@@ -22,6 +22,8 @@
 #include "remote_climate.h"
 #include "ambient_anim.h"
 #include "vbat_sensor.h"
+#include "freertos/semphr.h"
+#include "esp_task_wdt.h"
 
 static bool mac_matches(const std::string& a, const std::string& b) {
     std::string clean_a, clean_b;
@@ -35,21 +37,61 @@ static bool mac_matches(const std::string& a, const std::string& b) {
 #define strcasecmp _stricmp
 #endif
 
+static SemaphoreHandle_t s_twai_mutex = nullptr;
+static portMUX_TYPE s_twai_spinlock = portMUX_INITIALIZER_UNLOCKED;
+
+static inline SemaphoreHandle_t get_or_create_twai_mutex(void) {
+    if (!s_twai_mutex) {
+        portENTER_CRITICAL(&s_twai_spinlock);
+        if (!s_twai_mutex) {
+            s_twai_mutex = xSemaphoreCreateMutex();
+        }
+        portEXIT_CRITICAL(&s_twai_spinlock);
+    }
+    return s_twai_mutex;
+}
+
 extern "C" esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t ticks_to_wait) {
     (void)bus;
     if (!message) return ESP_ERR_INVALID_ARG;
+    if (g_sniffer_mode.load()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    SemaphoreHandle_t mtx = get_or_create_twai_mutex();
+    TickType_t mutex_wait = ticks_to_wait < pdMS_TO_TICKS(50) ? pdMS_TO_TICKS(50) : ticks_to_wait;
+    if (mtx) {
+        if (xSemaphoreTake(mtx, mutex_wait) != pdTRUE) {
+            return ESP_ERR_TIMEOUT;
+        }
+    }
+
+    esp_err_t ret = ESP_OK;
     twai_status_info_t info;
     if (twai_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING) {
-        return ESP_ERR_INVALID_STATE;
+        ret = ESP_ERR_INVALID_STATE;
+    } else if (info.tx_error_counter >= 128) {
+        static uint32_t s_last_tec_log_ms = 0;
+        uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+        if (now_ms - s_last_tec_log_ms >= 2000) {
+            s_last_tec_log_ms = now_ms;
+            ESP_LOGW("CAN_ENGINE", "CAN TX suppressed: TEC=%lu (Error Passive: disconnected or silent bus)", (unsigned long)info.tx_error_counter);
+        }
+        ret = ESP_ERR_INVALID_STATE;
+    } else {
+        // Single-Shot mode: never loop in hardware retries on unacknowledged frames, eliminating BUS_OFF
+        message->ss = 1;
+        ret = twai_transmit(message, ticks_to_wait);
     }
-    // Suppress TX when bus error counter is elevated (Error Passive) to prevent triggering BUS_OFF on silent/disconnected bus
-    if (info.tx_error_counter >= 128) {
-        ESP_LOGW("CAN_ENGINE", "CAN TX suppressed: TEC=%lu (Error Passive: disconnected or silent bus)", (unsigned long)info.tx_error_counter);
-        return ESP_ERR_INVALID_STATE;
+
+    if (mtx) {
+        xSemaphoreGive(mtx);
     }
-    // Single-Shot mode: never loop in hardware retries on unacknowledged frames, eliminating BUS_OFF
-    message->ss = 1;
-    return twai_transmit(message, ticks_to_wait);
+    return ret;
+}
+
+extern "C" esp_err_t can_engine_transmit_safe(twai_message_t *message, TickType_t ticks_to_wait) {
+    return can_send(CAN_BUS_0, message, ticks_to_wait);
 }
 
 static const char* TAG = "CAN_ENGINE";
@@ -170,6 +212,9 @@ bool can_engine_inject_frame(const twai_message_t* msg) {
 }
 
 void init_can_engine(void) {
+    if (!s_twai_mutex) {
+        s_twai_mutex = xSemaphoreCreateMutex();
+    }
     if (!tx_command_queue) {
         tx_command_queue = xQueueCreate(16, sizeof(CanBurstCmd*));
     }
@@ -686,27 +731,13 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             if (fwd_res == FWD_BLOCK) {
                 continue;
             }
-            if (g_sniffer_mode.load()) {
-                ESP_LOGD(TAG, "Sniffer mode active: suppressed TX ID 0x%03lX", (unsigned long)msg_to_send.identifier);
-                continue;
-            }
-            twai_status_info_t info;
-            if (twai_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING) {
-                ESP_LOGW(TAG, "TWAI controller not in RUNNING state (%d), skipping burst TX", info.state);
-                break;
-            }
-            if (info.tx_error_counter >= 128) {
-                ESP_LOGW(TAG, "CAN burst TX suppressed: TEC=%lu (Error Passive: disconnected or silent bus)", (unsigned long)info.tx_error_counter);
-                break;
-            }
-            msg_to_send.ss = 1; // Single-Shot mode: prevent infinite hardware retry loop on bus error
-            if (twai_transmit(&msg_to_send, pdMS_TO_TICKS(10)) == ESP_OK) {
+            if (can_send(CAN_BUS_0, &msg_to_send, pdMS_TO_TICKS(10)) == ESP_OK) {
                 board_led_can_activity();
                 if (delay_ms > 0) {
                     vTaskDelay(pdMS_TO_TICKS(delay_ms));
                 }
             } else {
-                ESP_LOGW(TAG, "TWAI TX failed or queue full for ID 0x%03lX", (unsigned long)msg_to_send.identifier);
+                ESP_LOGW(TAG, "CAN TX failed or queue full for ID 0x%03lX", (unsigned long)msg_to_send.identifier);
             }
         }
 
@@ -1229,14 +1260,29 @@ void can_rx_task(void* arg) {
     twai_message_t rx_msg;
     ESP_LOGI(TAG, "CAN RX task running");
 
-    int rx_processed = 0;
+    esp_task_wdt_config_t twdt_cfg = {
+        .timeout_ms = 800,
+        .idle_core_mask = (1 << 0),
+        .trigger_panic = false
+    };
+    if (esp_task_wdt_reconfigure(&twdt_cfg) != ESP_OK) {
+        esp_task_wdt_init(&twdt_cfg);
+    }
+    esp_task_wdt_add(NULL);
+
+    int consecutive_rx_frames = 0;
     static uint32_t s_bus_off_or_recovering_start_ms = 0;
     static uint32_t s_last_can_frame_ms = 0;
 
     while (true) {
+        esp_task_wdt_reset();
+
         if (g_twai_reconfig_pending.load()) {
             twai_mode_t new_mode = g_twai_requested_mode.load();
             ESP_LOGI(TAG, "Reconfiguring TWAI peripheral to mode %d...", (int)new_mode);
+
+            SemaphoreHandle_t mtx = get_or_create_twai_mutex();
+            if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
 
             // Flush TX queue first to prevent uninstaller hanging on pending semaphores
             twai_clear_transmit_queue();
@@ -1258,6 +1304,8 @@ void can_rx_task(void* arg) {
             } else {
                 ESP_LOGE(TAG, "Failed reinstalling TWAI driver (%s)", esp_err_to_name(ret));
             }
+
+            if (mtx) xSemaphoreGive(mtx);
             g_twai_reconfig_pending.store(false);
         }
 
@@ -1279,6 +1327,9 @@ void can_rx_task(void* arg) {
         if (twai_get_status_info(&twai_status) == ESP_OK) {
             if (twai_status.state == TWAI_STATE_BUS_OFF) {
                 ESP_LOGW(TAG, "TWAI controller in BUS_OFF! Reinstalling hardware driver immediately...");
+                SemaphoreHandle_t mtx = get_or_create_twai_mutex();
+                if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
+
                 twai_clear_transmit_queue();
                 // In ESP-IDF, twai_driver_uninstall() is valid directly from TWAI_STATE_BUS_OFF (twai_stop must NOT be called in BUS_OFF)
                 twai_driver_uninstall();
@@ -1299,11 +1350,16 @@ void can_rx_task(void* arg) {
                 } else {
                     ESP_LOGE(TAG, "TWAI driver reinstall failed (%s)", esp_err_to_name(err));
                 }
+
+                if (mtx) xSemaphoreGive(mtx);
                 s_bus_off_or_recovering_start_ms = 0;
             } else if (twai_status.state == TWAI_STATE_STOPPED) {
                 ESP_LOGI(TAG, "TWAI controller STOPPED. Starting controller...");
+                SemaphoreHandle_t mtx = get_or_create_twai_mutex();
+                if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
                 twai_clear_transmit_queue();
                 twai_start();
+                if (mtx) xSemaphoreGive(mtx);
                 s_bus_off_or_recovering_start_ms = 0;
             } else if (twai_status.state == TWAI_STATE_RECOVERING) {
                 if (s_bus_off_or_recovering_start_ms == 0) {
@@ -1313,6 +1369,9 @@ void can_rx_task(void* arg) {
                 // do NOT restart MCU (which kills Wi-Fi and Web server). Reinstall hardware driver cleanly!
                 if (now_ms - s_bus_off_or_recovering_start_ms > 3000) {
                     ESP_LOGW(TAG, "TWAI stuck in RECOVERING state (>3000ms). Reinstalling driver without MCU reset...");
+                    SemaphoreHandle_t mtx = get_or_create_twai_mutex();
+                    if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
+
                     twai_clear_transmit_queue();
                     twai_driver_uninstall();
                     vTaskDelay(pdMS_TO_TICKS(10));
@@ -1332,30 +1391,64 @@ void can_rx_task(void* arg) {
                     } else {
                         ESP_LOGE(TAG, "TWAI driver reinstall failed (%s)", esp_err_to_name(err));
                     }
+
+                    if (mtx) xSemaphoreGive(mtx);
                     s_bus_off_or_recovering_start_ms = 0;
                 }
             } else if (twai_status.state == TWAI_STATE_RUNNING) {
                 s_bus_off_or_recovering_start_ms = 0;
             }
+        } else {
+            // Driver not running or in uninstalled/invalid state
+            static uint32_t s_last_reinstall_attempt_ms = 0;
+            if (now_ms - s_last_reinstall_attempt_ms > 1000) {
+                s_last_reinstall_attempt_ms = now_ms;
+                ESP_LOGW(TAG, "TWAI driver not running or not installed! Attempting reinstall...");
+                SemaphoreHandle_t mtx = get_or_create_twai_mutex();
+                if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
+
+                twai_clear_transmit_queue();
+                twai_driver_uninstall();
+                vTaskDelay(pdMS_TO_TICKS(10));
+
+                twai_mode_t cur_mode = g_hardware_listen_only.load() ? TWAI_MODE_LISTEN_ONLY : TWAI_MODE_NORMAL;
+                twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, cur_mode);
+                g_config.rx_queue_len = 128;
+                g_config.tx_queue_len = 32;
+                g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR | TWAI_ALERT_RX_QUEUE_FULL;
+                twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
+                twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+
+                esp_err_t err = twai_driver_install(&g_config, &t_config, &f_config);
+                if (err == ESP_OK) {
+                    twai_start();
+                    ESP_LOGI(TAG, "TWAI driver re-installed and running after invalid state recovery");
+                } else {
+                    ESP_LOGE(TAG, "TWAI driver reinstall failed (%s)", esp_err_to_name(err));
+                }
+
+                if (mtx) xSemaphoreGive(mtx);
+            }
         }
 
         bool has_frame = false;
-        if (twai_receive(&rx_msg, 0) == ESP_OK) {
+        if (twai_receive(&rx_msg, pdMS_TO_TICKS(2)) == ESP_OK) {
             has_frame = true;
-        } else if (s_can_inject_queue && xQueueReceive(s_can_inject_queue, &rx_msg, pdMS_TO_TICKS(5)) == pdTRUE) {
+        } else if (s_can_inject_queue && xQueueReceive(s_can_inject_queue, &rx_msg, 0) == pdTRUE) {
             has_frame = true;
         }
 
         if (has_frame) {
-            rx_processed++;
+            consecutive_rx_frames++;
+            if (consecutive_rx_frames >= 75) {
+                vTaskDelay(1);
+                consecutive_rx_frames = 0;
+            }
             s_last_can_frame_ms = now_ms;
             board_led_can_activity();
 
             rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 1, "precondition_rx");
             precondition_can_rx_hook(&rx_msg, CAN_BUS_0);
-
-            rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 2, "track_popup_rx");
-            track_popup_rx(&rx_msg, CAN_BUS_0);
 
             rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 3, "hud_nav_rx");
             hud_nav_rx(&rx_msg, CAN_BUS_0);
@@ -1524,8 +1617,9 @@ void can_rx_task(void* arg) {
                 if (kph != s_last_kph && (now_ms - s_last_spd_ms >= 100)) {
                     s_last_kph = kph;
                     s_last_spd_ms = now_ms;
-                    std::string spd_str = std::to_string(kph) + " km/h";
-                    emit_live_entity_state("cluster_vehicle_speed", spd_str);
+                    char spd_buf[16];
+                    snprintf(spd_buf, sizeof(spd_buf), "%u km/h", kph);
+                    emit_live_entity_state("cluster_vehicle_speed", spd_buf);
                 }
             } else if ((rx_msg.identifier == 0x0A2 || rx_msg.identifier == 0xA2) && rx_msg.data_length_code >= 2) {
                 uint16_t rawW1 = rx_msg.data[0] | (rx_msg.data[1] << 8);
@@ -1536,8 +1630,9 @@ void can_rx_task(void* arg) {
                 if (kph != s_last_wheel_kph && (now_ms - s_last_wheel_spd_ms >= 100)) {
                     s_last_wheel_kph = kph;
                     s_last_wheel_spd_ms = now_ms;
-                    std::string spd_str = std::to_string(kph) + " km/h";
-                    emit_live_entity_state("cluster_vehicle_speed", spd_str);
+                    char spd_buf[16];
+                    snprintf(spd_buf, sizeof(spd_buf), "%u km/h", kph);
+                    emit_live_entity_state("cluster_vehicle_speed", spd_buf);
                 }
             } else if (rx_msg.identifier == 0x1A0 && rx_msg.data_length_code >= 2) {
                 uint16_t raw_esc = rx_msg.data[0] | (rx_msg.data[1] << 8);
@@ -1548,8 +1643,9 @@ void can_rx_task(void* arg) {
                 if (kph != s_last_esc_kph && (now_ms - s_last_esc_spd_ms >= 100)) {
                     s_last_esc_kph = kph;
                     s_last_esc_spd_ms = now_ms;
-                    std::string spd_str = std::to_string(kph) + " km/h";
-                    emit_live_entity_state("cluster_vehicle_speed", spd_str);
+                    char spd_buf[16];
+                    snprintf(spd_buf, sizeof(spd_buf), "%u km/h", kph);
+                    emit_live_entity_state("cluster_vehicle_speed", spd_buf);
                 }
             }
 
@@ -1559,9 +1655,12 @@ void can_rx_task(void* arg) {
                 if (raw > 0 && raw < 255) {
                     int c = (int)raw - 40;
                     static int s_last_temp = 999;
-                    if (c != s_last_temp) {
+                    static uint32_t s_last_amb_ms = 0;
+                    if (c != s_last_temp && (now_ms - s_last_amb_ms >= 100)) {
                         s_last_temp = c;
-                        std::string temp_str = std::to_string(c) + " °C";
+                        s_last_amb_ms = now_ms;
+                        char temp_str[16];
+                        snprintf(temp_str, sizeof(temp_str), "%d °C", c);
                         emit_live_entity_state("cond_ambient_temperature", temp_str);
                     }
                 }
@@ -1572,9 +1671,12 @@ void can_rx_task(void* arg) {
                 uint8_t raw = rx_msg.data[7];
                 int soc = (int)(raw * 0.5f);
                 static int s_last_soc = -1;
-                if (soc >= 0 && soc <= 100 && soc != s_last_soc) {
+                static uint32_t s_last_soc_ms = 0;
+                if (soc >= 0 && soc <= 100 && soc != s_last_soc && (now_ms - s_last_soc_ms >= 100)) {
                     s_last_soc = soc;
-                    std::string soc_str = std::to_string(soc) + "%";
+                    s_last_soc_ms = now_ms;
+                    char soc_str[16];
+                    snprintf(soc_str, sizeof(soc_str), "%d%%", soc);
                     emit_live_entity_state("cond_hv_battery_soc", soc_str);
                 }
             }
@@ -1599,9 +1701,11 @@ void can_rx_task(void* arg) {
                 int minT = (int8_t)rx_msg.data[0];
                 int maxT = (int8_t)rx_msg.data[1];
                 static int s_last_minT = 999, s_last_maxT = 999;
-                if (minT != s_last_minT || maxT != s_last_maxT) {
+                static uint32_t s_last_bms_t_ms = 0;
+                if ((minT != s_last_minT || maxT != s_last_maxT) && (now_ms - s_last_bms_t_ms >= 100)) {
                     s_last_minT = minT;
                     s_last_maxT = maxT;
+                    s_last_bms_t_ms = now_ms;
                     char tbuf[64];
                     snprintf(tbuf, sizeof(tbuf), "Min: %d°C / Max: %d°C", minT, maxT);
                     emit_live_entity_state("hv_battery_temperatures", tbuf);
@@ -1770,9 +1874,13 @@ void can_rx_task(void* arg) {
             if (rx_msg.identifier == 0x30E && rx_msg.data_length_code >= 7) {
                 uint8_t kw = rx_msg.data[6];
                 static int s_last_kw = -1;
-                if ((int)kw != s_last_kw) {
+                static uint32_t s_last_kw_ms = 0;
+                if ((int)kw != s_last_kw && (now_ms - s_last_kw_ms >= 100)) {
                     s_last_kw = (int)kw;
-                    emit_live_entity_state("ev_charging_power", std::to_string(kw));
+                    s_last_kw_ms = now_ms;
+                    char kw_buf[16];
+                    snprintf(kw_buf, sizeof(kw_buf), "%u", kw);
+                    emit_live_entity_state("ev_charging_power", kw_buf);
                 }
             }
 
@@ -1780,18 +1888,26 @@ void can_rx_task(void* arg) {
             if (rx_msg.identifier == 0x327 && rx_msg.data_length_code >= 2) {
                 uint16_t rem = rx_msg.data[0] | (rx_msg.data[1] << 8);
                 static int s_last_ac_rem = -1;
+                static uint32_t s_last_ac_rem_ms = 0;
                 int val = (rem == 0xFFFF) ? 0 : (int)rem;
-                if (val != s_last_ac_rem) {
+                if (val != s_last_ac_rem && (now_ms - s_last_ac_rem_ms >= 100)) {
                     s_last_ac_rem = val;
-                    emit_live_entity_state("remaining_charge_time_ac", std::to_string(val));
+                    s_last_ac_rem_ms = now_ms;
+                    char rem_buf[16];
+                    snprintf(rem_buf, sizeof(rem_buf), "%d", val);
+                    emit_live_entity_state("remaining_charge_time_ac", rem_buf);
                 }
             } else if (rx_msg.identifier == 0x597 && rx_msg.data_length_code >= 3) {
                 uint16_t rem = rx_msg.data[1] | (rx_msg.data[2] << 8);
                 static int s_last_ac_rem = -1;
+                static uint32_t s_last_ac_rem_ms = 0;
                 int val = (rem == 0xFFFF) ? 0 : (int)rem;
-                if (val != s_last_ac_rem) {
+                if (val != s_last_ac_rem && (now_ms - s_last_ac_rem_ms >= 100)) {
                     s_last_ac_rem = val;
-                    emit_live_entity_state("remaining_charge_time_ac", std::to_string(val));
+                    s_last_ac_rem_ms = now_ms;
+                    char rem_buf[16];
+                    snprintf(rem_buf, sizeof(rem_buf), "%d", val);
+                    emit_live_entity_state("remaining_charge_time_ac", rem_buf);
                 }
             }
 
@@ -1799,18 +1915,26 @@ void can_rx_task(void* arg) {
             if (rx_msg.identifier == 0x25C && rx_msg.data_length_code >= 4) {
                 uint16_t rem = rx_msg.data[2] | (rx_msg.data[3] << 8);
                 static int s_last_dc_rem = -1;
+                static uint32_t s_last_dc_rem_ms = 0;
                 int val = (rem == 0xFFFF) ? 0 : (int)rem;
-                if (val != s_last_dc_rem) {
+                if (val != s_last_dc_rem && (now_ms - s_last_dc_rem_ms >= 100)) {
                     s_last_dc_rem = val;
-                    emit_live_entity_state("remaining_charge_time_dc", std::to_string(val));
+                    s_last_dc_rem_ms = now_ms;
+                    char rem_buf[16];
+                    snprintf(rem_buf, sizeof(rem_buf), "%d", val);
+                    emit_live_entity_state("remaining_charge_time_dc", rem_buf);
                 }
             } else if (rx_msg.identifier == 0x597 && rx_msg.data_length_code >= 5) {
                 uint16_t rem = rx_msg.data[3] | (rx_msg.data[4] << 8);
                 static int s_last_dc_rem = -1;
+                static uint32_t s_last_dc_rem_ms = 0;
                 int val = (rem == 0xFFFF) ? 0 : (int)rem;
-                if (val != s_last_dc_rem) {
+                if (val != s_last_dc_rem && (now_ms - s_last_dc_rem_ms >= 100)) {
                     s_last_dc_rem = val;
-                    emit_live_entity_state("remaining_charge_time_dc", std::to_string(val));
+                    s_last_dc_rem_ms = now_ms;
+                    char rem_buf[16];
+                    snprintf(rem_buf, sizeof(rem_buf), "%d", val);
+                    emit_live_entity_state("remaining_charge_time_dc", rem_buf);
                 }
             }
 
@@ -1818,18 +1942,26 @@ void can_rx_task(void* arg) {
             if (rx_msg.identifier == 0x328 && rx_msg.data_length_code >= 2) {
                 uint16_t rem = rx_msg.data[0] | (rx_msg.data[1] << 8);
                 static int s_last_120v_rem = -1;
+                static uint32_t s_last_120v_rem_ms = 0;
                 int val = (rem == 0xFFFF) ? 0 : (int)rem;
-                if (val != s_last_120v_rem) {
+                if (val != s_last_120v_rem && (now_ms - s_last_120v_rem_ms >= 100)) {
                     s_last_120v_rem = val;
-                    emit_live_entity_state("remaining_charge_time_120v", std::to_string(val));
+                    s_last_120v_rem_ms = now_ms;
+                    char rem_buf[16];
+                    snprintf(rem_buf, sizeof(rem_buf), "%d", val);
+                    emit_live_entity_state("remaining_charge_time_120v", rem_buf);
                 }
             } else if (rx_msg.identifier == 0x4E2 && rx_msg.data_length_code >= 4) {
                 uint16_t rem = rx_msg.data[2] | (rx_msg.data[3] << 8);
                 static int s_last_120v_rem = -1;
+                static uint32_t s_last_120v_rem_ms = 0;
                 int val = (rem == 0xFFFF) ? 0 : (int)rem;
-                if (val != s_last_120v_rem) {
+                if (val != s_last_120v_rem && (now_ms - s_last_120v_rem_ms >= 100)) {
                     s_last_120v_rem = val;
-                    emit_live_entity_state("remaining_charge_time_120v", std::to_string(val));
+                    s_last_120v_rem_ms = now_ms;
+                    char rem_buf[16];
+                    snprintf(rem_buf, sizeof(rem_buf), "%d", val);
+                    emit_live_entity_state("remaining_charge_time_120v", rem_buf);
                 }
             }
 
@@ -1837,10 +1969,14 @@ void can_rx_task(void* arg) {
             if (rx_msg.identifier == 0x324 && rx_msg.data_length_code >= 8) {
                 uint16_t rem = rx_msg.data[6] | (rx_msg.data[7] << 8);
                 static int s_last_v2l_rem = -1;
+                static uint32_t s_last_v2l_rem_ms = 0;
                 int val = (rem == 0xFFFF) ? 0 : (int)rem;
-                if (val != s_last_v2l_rem) {
+                if (val != s_last_v2l_rem && (now_ms - s_last_v2l_rem_ms >= 100)) {
                     s_last_v2l_rem = val;
-                    emit_live_entity_state("v2l_discharge_remaining_time", std::to_string(val));
+                    s_last_v2l_rem_ms = now_ms;
+                    char rem_buf[16];
+                    snprintf(rem_buf, sizeof(rem_buf), "%d", val);
+                    emit_live_entity_state("v2l_discharge_remaining_time", rem_buf);
                 }
             }
 
@@ -1850,9 +1986,13 @@ void can_rx_task(void* arg) {
                 if (raw_odo > 0) {
                     uint32_t km = (uint32_t)(raw_odo * 0.1f);
                     static uint32_t s_last_km = 0;
-                    if (km != s_last_km) {
+                    static uint32_t s_last_odo_ms = 0;
+                    if (km != s_last_km && (now_ms - s_last_odo_ms >= 100)) {
                         s_last_km = km;
-                        emit_live_entity_state("vehicle_odometer", std::to_string(km));
+                        s_last_odo_ms = now_ms;
+                        char odo_buf[16];
+                        snprintf(odo_buf, sizeof(odo_buf), "%lu", (unsigned long)km);
+                        emit_live_entity_state("vehicle_odometer", odo_buf);
                     }
                 }
             }
@@ -1876,10 +2016,14 @@ void can_rx_task(void* arg) {
                     int dF = 62 + (rawD - 0x06);
                     int pF = (rawP >= 0) ? (62 + (rawP - 0x06)) : dF;
                     static int s_last_dF = -1, s_last_pF = -1;
-                    if (dF != s_last_dF || pF != s_last_pF) {
+                    static uint32_t s_last_cabin_temp_ms = 0;
+                    if ((dF != s_last_dF || pF != s_last_pF) && (now_ms - s_last_cabin_temp_ms >= 100)) {
                         s_last_dF = dF;
                         s_last_pF = pF;
-                        emit_live_entity_state("climate_dual_cabin_temp", std::to_string(dF) + " / " + std::to_string(pF));
+                        s_last_cabin_temp_ms = now_ms;
+                        char temp_buf[32];
+                        snprintf(temp_buf, sizeof(temp_buf), "%d / %d", dF, pF);
+                        emit_live_entity_state("climate_dual_cabin_temp", temp_buf);
                     }
                 }
             }
@@ -1889,9 +2033,13 @@ void can_rx_task(void* arg) {
                 uint8_t fan_raw = rx_msg.data[3] & 0x0F;
                 int speed = (fan_raw >= 2 && fan_raw <= 9) ? (fan_raw - 1) : 0;
                 static int s_last_fan = -1;
-                if (speed != s_last_fan) {
+                static uint32_t s_last_fan_ms = 0;
+                if (speed != s_last_fan && (now_ms - s_last_fan_ms >= 100)) {
                     s_last_fan = speed;
-                    emit_live_entity_state("climate_fan_speed_level", "Fan " + std::to_string(speed));
+                    s_last_fan_ms = now_ms;
+                    char fan_buf[16];
+                    snprintf(fan_buf, sizeof(fan_buf), "Fan %d", speed);
+                    emit_live_entity_state("climate_fan_speed_level", fan_buf);
                 }
             }
 
@@ -1999,9 +2147,13 @@ void can_rx_task(void* arg) {
                 }
                 if (ac > 0) {
                     static int s_last_ac = -1;
-                    if (ac != s_last_ac) {
+                    static uint32_t s_last_ac_limit_ms = 0;
+                    if (ac != s_last_ac && (now_ms - s_last_ac_limit_ms >= 100)) {
                         s_last_ac = ac;
-                        emit_live_entity_state("ac_charging_limit", std::to_string(ac) + "%");
+                        s_last_ac_limit_ms = now_ms;
+                        char ac_buf[16];
+                        snprintf(ac_buf, sizeof(ac_buf), "%d%%", ac);
+                        emit_live_entity_state("ac_charging_limit", ac_buf);
                     }
                 }
 
@@ -2019,9 +2171,13 @@ void can_rx_task(void* arg) {
                 }
                 if (dc > 0) {
                     static int s_last_dc = -1;
-                    if (dc != s_last_dc) {
+                    static uint32_t s_last_dc_limit_ms = 0;
+                    if (dc != s_last_dc && (now_ms - s_last_dc_limit_ms >= 100)) {
                         s_last_dc = dc;
-                        emit_live_entity_state("dc_charging_limit", std::to_string(dc) + "%");
+                        s_last_dc_limit_ms = now_ms;
+                        char dc_buf[16];
+                        snprintf(dc_buf, sizeof(dc_buf), "%d%%", dc);
+                        emit_live_entity_state("dc_charging_limit", dc_buf);
                     }
                 }
             }
@@ -2055,7 +2211,7 @@ void can_rx_task(void* arg) {
             }
             rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 900, "frame_done");
         } else {
-            rx_processed = 0;
+            consecutive_rx_frames = 0;
             // Cleanly extinguish yellow CAN activity LED when bus is idle (>200ms)
             if (s_last_can_frame_ms > 0 && (now_ms - s_last_can_frame_ms > 200)) {
                 board_led_can_set(false);
@@ -2073,11 +2229,6 @@ void can_rx_task(void* arg) {
         if (now_hud_ms - s_last_hud_tick_ms >= 100) {
             s_last_hud_tick_ms = now_hud_ms;
             hud_nav_tick_100ms();
-        }
-
-        if (rx_processed >= 10) {
-            vTaskDelay(pdMS_TO_TICKS(1));
-            rx_processed = 0;
         }
     }
 }

@@ -19,6 +19,7 @@ typedef enum {
 #define CAN_BUS_COUNT 2
 
 esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t ticks_to_wait);
+esp_err_t can_engine_transmit_safe(twai_message_t *message, TickType_t ticks_to_wait);
 
 #ifdef __cplusplus
 }

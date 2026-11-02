@@ -1,8 +1,11 @@
 #include "uds_engine.h"
+#include "can.h"
 #include "vbat_sensor.h"
 #include "can_engine.h"
 #include "api.h"
 #include "mqtt_mgr.h"
+#include "network_mgr.h"
+#include "power_mgr.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -127,7 +130,7 @@ static void send_can_frame(uint32_t id, const uint8_t* data, uint8_t dlc) {
     tx_msg.rtr = 0;
     tx_msg.ss = 1; // Single-Shot mode: never loop in hardware retries on un-ACKed frames, eliminating BUS_OFF
     memcpy(tx_msg.data, data, dlc);
-    twai_transmit(&tx_msg, pdMS_TO_TICKS(20));
+    can_send(CAN_BUS_0, &tx_msg, pdMS_TO_TICKS(20));
 }
 
 static void decode_bms_payload(const uint8_t* payload, size_t len) {
@@ -192,7 +195,14 @@ void uds_engine_on_can_rx(const twai_message_t* msg) {
 
     // Filter out our own transmitted frames
     if (msg->identifier != BMS_REQ_CAN_ID) {
-        s_last_can_traffic_ms.store(get_time_ms());
+        uint32_t now = get_time_ms();
+        uint32_t last = s_last_can_traffic_ms.exchange(now);
+        uint32_t sleep_sec = s_config.sleep_delay_sec > 0 ? s_config.sleep_delay_sec : 10;
+        if (last == 0 || (now - last) > (sleep_sec * 1000)) {
+            // Vehicle transitioned from asleep to awake: instantly disable Wi-Fi modem sleep and set active tier
+            network_mgr_on_vehicle_awake();
+            power_mgr_set_tier(POWER_TIER_ACTIVE);
+        }
     }
 
     // Process ISO-TP response from BMS

@@ -5,6 +5,7 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "driver/twai.h"
+#include "can.h"
 #include <unordered_map>
 #include <array>
 #include <atomic>
@@ -23,6 +24,7 @@ void set_automations_enabled(bool enabled);
 void set_sniffer_mode(bool enabled, bool hardware_listen_only);
 
 void init_can_engine(void);
+esp_err_t can_engine_transmit_safe(twai_message_t* message, TickType_t ticks_to_wait);
 bool can_engine_inject_frame(const twai_message_t* msg);
 void update_state_cache(uint32_t can_id, const uint8_t* data);
 bool evaluate_condition(const AutomationCondition& cond);

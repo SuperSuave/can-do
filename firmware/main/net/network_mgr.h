@@ -64,3 +64,6 @@ struct WifiConnectedStation {
     int8_t rssi;
 };
 std::vector<WifiConnectedStation> network_mgr_get_ap_stations(void);
+
+// Power Save Management
+void network_mgr_on_vehicle_awake(void);

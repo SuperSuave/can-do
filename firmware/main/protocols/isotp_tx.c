@@ -288,9 +288,9 @@ bool isotp_tx_start(isotp_tx_t *tx, const uint8_t *payload, size_t payload_size)
         return false;
     }
 
-    BaseType_t taken = xSemaphoreTake(tx->request_lock, portMAX_DELAY);
-    configASSERT(taken == pdTRUE);
-    (void)taken;
+    if (xSemaphoreTake(tx->request_lock, pdMS_TO_TICKS(20)) != pdTRUE) {
+        return false;
+    }
     if (atomic_load_explicit(&tx->busy, memory_order_acquire)) {
         xSemaphoreGive(tx->request_lock);
         return false;

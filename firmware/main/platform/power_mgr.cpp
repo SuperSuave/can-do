@@ -2,6 +2,7 @@
 #include "board_pins.h"
 #include "uds_engine.h"
 #include "vbat_sensor.h"
+#include "api.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_sleep.h"
@@ -63,9 +64,10 @@ static void power_mgr_task(void* arg) {
         float vbat = vbat_sensor_get_last();
         // 12V rail >= 13.2V indicates high-voltage LDC converter is energized (vehicle is ON/driving or actively charging)
         bool ldc_active = (vbat >= 13.2f);
+        bool ws_active = has_active_websocket_clients();
 
-        // Stay in Active tier if vehicle is awake, LDC is active, OR if device is powered via USB bench power (vbat < 5.0V)
-        if (awake || ldc_active || vbat < 5.0f) {
+        // Stay in Active tier if vehicle is awake, LDC is active, Web UI is connected, OR if device is powered via USB bench power (vbat < 5.0V)
+        if (awake || ldc_active || ws_active || vbat < 5.0f) {
             power_mgr_set_tier(POWER_TIER_ACTIVE);
             critical_low_vbat_count = 0;
         } else {

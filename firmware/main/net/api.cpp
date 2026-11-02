@@ -29,7 +29,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/socket.h>
+#include <sys/time.h>
 #include <mutex>
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 
 static const char* TAG = "WEB_API";
 extern std::string g_device_id;
@@ -99,6 +103,7 @@ void broadcast_ws_raw(const std::string& json_str) {
 
 static std::unordered_map<std::string, std::string> s_live_state_cache;
 static std::mutex s_state_cache_mutex;
+static std::atomic<bool> s_has_ws_clients_cached{false};
 
 std::unordered_map<std::string, std::string> get_live_state_cache(void) {
     std::lock_guard<std::mutex> lock(s_state_cache_mutex);
@@ -117,9 +122,10 @@ void broadcast_ws_state(const std::string& entity_id, const std::string& state) 
     if (uart_bridge_is_online()) {
         uart_bridge_send_state(entity_id, state);
     }
-    if (!has_active_websocket_clients()) return;
-    std::string json = "{\"type\":\"state\",\"entity\":\"" + entity_id + "\",\"state\":\"" + state + "\"}";
-    broadcast_ws_raw(json);
+    if (!s_has_ws_clients_cached.load(std::memory_order_relaxed)) return;
+    char buf[256];
+    snprintf(buf, sizeof(buf), "{\"type\":\"state\",\"entity\":\"%s\",\"state\":\"%s\"}", entity_id.c_str(), state.c_str());
+    broadcast_ws_raw(buf);
 }
 
 void broadcast_ws_can_frame(const twai_message_t* msg) {
@@ -136,33 +142,65 @@ void broadcast_ws_automation_event(const std::string& id, const std::string& nam
     if (uart_bridge_is_online()) {
         uart_bridge_send_raw(buf);
     }
-    if (!has_active_websocket_clients()) return;
+    if (!s_has_ws_clients_cached.load(std::memory_order_relaxed)) return;
     broadcast_ws_raw(buf);
+}
+
+struct ws_log_item_t {
+    char text[192];
+};
+static QueueHandle_t s_ws_log_queue = nullptr;
+
+static void ws_log_worker_task(void *arg) {
+    ws_log_item_t item;
+    while (true) {
+        bool has_clients = has_active_websocket_clients();
+        s_has_ws_clients_cached.store(has_clients, std::memory_order_relaxed);
+
+        if (!has_clients) {
+            // When no WS client is connected, sleep to avoid spinning
+            vTaskDelay(pdMS_TO_TICKS(500));
+            continue;
+        }
+
+        // Wait up to 200ms for queued log lines; on timeout, loop to re-verify client connection
+        if (xQueueReceive(s_ws_log_queue, &item, pdMS_TO_TICKS(200)) == pdTRUE) {
+            if (!global_web_server || is_serving_static_page()) {
+                continue;
+            }
+            size_t len = strnlen(item.text, sizeof(item.text));
+            if (len == 0) continue;
+
+            std::string json = "{\"type\":\"log\",\"msg\":\"";
+            json.reserve(len + 32);
+            for (size_t i = 0; i < len && item.text[i] != '\0'; i++) {
+                if (item.text[i] == '\n' || item.text[i] == '\r') continue;
+                else if (item.text[i] == '"') json += "\\\"";
+                else if (item.text[i] == '\\') json += "\\\\";
+                else if ((uint8_t)item.text[i] >= 0x20) json += item.text[i];
+            }
+            json += "\"}";
+            broadcast_ws_raw(json);
+        }
+    }
 }
 
 int custom_websocket_logger(const char *fmt, va_list args) {
     static std::atomic<bool> s_in_logger{false};
 
-    // Atomic re-entrancy guard + fast exit if no WS clients are actively listening
+    // Atomic re-entrancy guard + non-blocking queueing (0-tick drop on queue full)
+    // NEVER calls httpd functions, takes locks, or allocates dynamic memory in logger context!
     if (!s_in_logger.exchange(true, std::memory_order_acquire)) {
-        if (global_web_server && !is_serving_static_page() && has_active_websocket_clients()) {
-            char log_buffer[256];
+        if (s_ws_log_queue && global_web_server && !is_serving_static_page() && s_has_ws_clients_cached.load(std::memory_order_relaxed)) {
+            ws_log_item_t item;
             va_list args_copy;
             va_copy(args_copy, args);
-            int len = vsnprintf(log_buffer, sizeof(log_buffer), fmt, args_copy);
+            int len = vsnprintf(item.text, sizeof(item.text), fmt, args_copy);
             va_end(args_copy);
 
             if (len > 0) {
-                std::string json = "{\"type\":\"log\",\"msg\":\"";
-                json.reserve(len + 32);
-                for (int i = 0; i < len && log_buffer[i] != '\0'; i++) {
-                    if (log_buffer[i] == '\n' || log_buffer[i] == '\r') continue;
-                    else if (log_buffer[i] == '"') json += "\\\"";
-                    else if (log_buffer[i] == '\\') json += "\\\\";
-                    else if ((uint8_t)log_buffer[i] >= 0x20) json += log_buffer[i];
-                }
-                json += "\"}";
-                broadcast_ws_raw(json);
+                // Non-blocking enqueue with 0 tick wait: drops immediately if queue is full
+                xQueueSend(s_ws_log_queue, &item, 0);
             }
         }
         s_in_logger.store(false, std::memory_order_release);
@@ -2038,7 +2076,13 @@ static esp_err_t api_nav_handler(httpd_req_t *req) {
 
 static esp_err_t ws_handler(httpd_req_t *req) {
     if (req->method == HTTP_GET) {
-        ESP_LOGI(TAG, "WebSocket client connected on fd %d", httpd_req_to_sockfd(req));
+        int sockfd = httpd_req_to_sockfd(req);
+        ESP_LOGI(TAG, "WebSocket client connected on fd %d", sockfd);
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = 200000; // 200ms send timeout so a suspended or stalled browser tab never blocks httpd
+        setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+        s_has_ws_clients_cached.store(true, std::memory_order_relaxed);
         return ESP_OK;
     }
 
@@ -2317,6 +2361,15 @@ httpd_handle_t start_webserver(void) {
         reg_uri("/*", HTTP_GET, static_file_handler);
 
         global_web_server = server;
+        if (!s_ws_log_queue) {
+            s_ws_log_queue = xQueueCreate(16, sizeof(ws_log_item_t));
+            if (s_ws_log_queue) {
+                xTaskCreate(ws_log_worker_task, "ws_log_wkr", 3584, nullptr, 2, nullptr);
+            }
+        }
+        if (!original_log_vprintf) {
+            original_log_vprintf = esp_log_set_vprintf(custom_websocket_logger);
+        }
         ESP_LOGI(TAG, "Embedded Web Server started successfully on port %d", config.server_port);
     } else {
         ESP_LOGE(TAG, "Failed starting HTTP web server: %s", esp_err_to_name(err));

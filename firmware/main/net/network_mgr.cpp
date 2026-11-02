@@ -1,6 +1,7 @@
 #include "network_mgr.h"
 #include "mqtt_mgr.h"
 #include "can_engine.h"
+#include "uds_engine.h"
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
@@ -555,6 +556,9 @@ static void network_roam_task(void* pvParameters) {
         }
 
         if (s_sta_connected) {
+            if (uds_engine_is_vehicle_awake()) {
+                esp_wifi_set_ps(WIFI_PS_NONE);
+            }
             mqtt_mgr_watchdog();
         }
     }
@@ -768,3 +772,8 @@ std::vector<WifiConnectedStation> network_mgr_get_ap_stations(void) {
     }
     return stations;
 }
+
+void network_mgr_on_vehicle_awake(void) {
+    esp_wifi_set_ps(WIFI_PS_NONE);
+}
+

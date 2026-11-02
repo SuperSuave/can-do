@@ -1,4 +1,5 @@
 #include "ambient_anim.h"
+#include "can.h"
 #include "driver/twai.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -116,7 +117,7 @@ static void send_raw_frame(uint32_t id, const uint8_t* data, uint8_t dlc) {
     tx_msg.rtr = 0;
     tx_msg.ss = 1; // Single-Shot mode to avoid bus blocking
     memcpy(tx_msg.data, data, dlc);
-    twai_transmit(&tx_msg, pdMS_TO_TICKS(20));
+    can_send(CAN_BUS_0, &tx_msg, pdMS_TO_TICKS(20));
 }
 
 void ambient_anim_send_burst(uint32_t can_id, const uint8_t* payload_4bytes) {

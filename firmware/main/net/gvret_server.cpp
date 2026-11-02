@@ -1,4 +1,5 @@
 #include "gvret_server.h"
+#include "can.h"
 #include "can_engine.h"
 #include <cstdio>
 #include <cstring>
@@ -171,11 +172,8 @@ static bool handle_client_rx(int sock) {
             can_engine_inject_frame(&tx_msg);
 
             if (!g_sniffer_mode.load()) {
-                twai_status_info_t info;
-                if (twai_get_status_info(&info) == ESP_OK && info.state == TWAI_STATE_RUNNING) {
-                    tx_msg.ss = 1; // Single-Shot mode
-                    twai_transmit(&tx_msg, pdMS_TO_TICKS(10));
-                }
+                tx_msg.ss = 1; // Single-Shot mode
+                can_send(CAN_BUS_0, &tx_msg, pdMS_TO_TICKS(10));
             } else {
                 ESP_LOGD(TAG, "Sniffer mode active: GVRET client TX 0x%03lX suppressed", (unsigned long)tx_msg.identifier);
             }
@@ -388,9 +386,7 @@ static void gvret_server_task(void* pvParameters) {
 
             // 2. Dequeue outbound CAN frames
             twai_message_t frame;
-            bool got_frame = false;
             if (xQueueReceive(s_gvret_queue, &frame, pdMS_TO_TICKS(2)) == pdTRUE) {
-                got_frame = true;
                 uint32_t now_us = (uint32_t)esp_timer_get_time();
                 pack_can_frame(batch_buf, batch_len, &frame, now_us);
             }
