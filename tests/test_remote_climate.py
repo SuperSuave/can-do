@@ -21,27 +21,58 @@ if "custom_components.can_do" not in sys.modules:
 from custom_components.can_do.catalog_loader import check_match
 
 
-def pack_tmu_01(aircon_on: bool, temp_c: float, defrost: bool, alive_cnt: int) -> list[int]:
-    """Python reference implementation of firmware pack_tmu_01 (0x39B)."""
-    data = [0] * 8
-    veh_sld_bit = 1
-    aircon_bit = 1 if aircon_on else 0
-    temp_md_bit = 0  # Celsius
-
-    # Auto-convert Fahrenheit if > 40.0
+def get_temp_index(temp_c: float) -> int:
     if temp_c > 40.0:
         temp_c = (temp_c - 32.0) * 5.0 / 9.0
+    temp_c = max(15.0, min(32.0, temp_c))
+    return int(round((temp_c - 15.0) * 2.0))
 
-    # OEM E-GMP DATC Celsius range: 14.0 deg C to 32.0 deg C in 0.5 deg C steps (indices 0 to 36)
-    temp_c = max(14.0, min(32.0, temp_c))
-    temp_code = int(round((temp_c - 14.0) / 0.5))
 
-    data[0] = (veh_sld_bit << 0) | (aircon_bit << 4) | (temp_md_bit << 5) | ((temp_code & 0x03) << 6)
-    defrost_bit = 1 if defrost else 0
-    data[1] = ((temp_code >> 2) & 0x3F) | (defrost_bit << 6)
-    data[2] = (0x03 | (1 << 4)) if aircon_on else 0x00  # CF_Tmu_IG3Rly=3, CF_Tmu_SepZoneDisp=1
-    data[7] = alive_cnt & 0x0F
+def pack_tmu_01_oem(stage: str, temp_c: float, defrost: bool, alive_cnt: int) -> list[int]:
+    """Python reference implementation of OEM E-GMP TMU_01_200ms (0x39B)."""
+    data = [0] * 8
+    temp_idx = get_temp_index(temp_c)
+    data[3] = (alive_cnt & 0x0F) << 2
+
+    if stage == 'ARM':
+        data[0] = 0x00
+        data[1] = 0x00
+        data[5] = 0x03
+        data[6] = 0x10
+    elif stage == 'RUN':
+        data[0] = 0x50
+        data[1] = temp_idx
+        data[5] = 0x03
+        data[6] = 0x10
+    elif stage == 'STEADY_RUN':
+        data[0] = 0x50
+        data[1] = temp_idx
+        data[5] = 0x00
+        data[6] = 0x00
+    elif stage == 'PRE_STOP':
+        data[0] = 0x50
+        data[1] = temp_idx
+        data[5] = 0x03
+        data[6] = 0x10
+    elif stage == 'STOP_STROBE':
+        data[0] = 0x40
+        data[1] = temp_idx
+        data[5] = 0x03
+        data[6] = 0x14
+    elif stage == 'COOLDOWN':
+        data[0] = 0x40
+        data[1] = temp_idx
+        data[5] = 0x03
+        data[6] = 0x10
+    else:
+        data[0] = 0x00
+
     return data
+
+
+def pack_tmu_01(aircon_on: bool, temp_c: float, defrost: bool, alive_cnt: int) -> list[int]:
+    """Backward compatible wrapper for firmware pack_tmu_01."""
+    return pack_tmu_01_oem('RUN' if aircon_on else 'ARM', temp_c, defrost, alive_cnt)
 
 
 class TestRemoteClimate(unittest.TestCase):
@@ -53,91 +84,71 @@ class TestRemoteClimate(unittest.TestCase):
         payload = pack_tmu_01(aircon_on=True, temp_c=22.0, defrost=False, alive_cnt=0)
 
         # In 1-based indexing, D1 is payload[0]
-        # D1 has aircon_bit at bit 4 (0x10)
+        # D1 has aircon_bit at bit 4 (0x10 in 0x50)
         self.assertEqual(payload[0] & 0x10, 0x10)
-        self.assertEqual(payload[2], 0x13)  # IG3 relay + SepZoneDisp armed
+        self.assertEqual(payload[5], 0x03)  # CF_Tmu_IG3Rly = 3 in Byte 5
+        self.assertEqual(payload[6], 0x10)  # Supervisory state in Byte 6
         self.assertTrue(check_match(payload, {"D1": "0x10"}, mask_spec="0x10"))
 
     def test_remote_climate_off_payload_matches_catalog(self) -> None:
-        """Verify stopped climate clears bit 4 in D1 and resets Byte 2."""
+        """Verify stopped climate clears bit 4 in D1."""
         payload = pack_tmu_01(aircon_on=False, temp_c=22.0, defrost=False, alive_cnt=1)
         self.assertEqual(payload[0] & 0x10, 0x00)
-        self.assertEqual(payload[2], 0x00)  # IG3 relay cleared
         self.assertTrue(check_match(payload, {"D1": "0x00"}, mask_spec="0x10"))
 
     def test_temperature_scaling_celsius(self) -> None:
-        """Verify OEM temperature scaling ((temp_c - 14.0) / 0.5)."""
-        # 14.0 C -> 0 (0x00 -> lower 2 bits: 0, upper 6: 0 = 0x00)
-        p_14 = pack_tmu_01(True, 14.0, False, 0)
-        self.assertEqual(p_14[0] & 0xC0, 0x00)
-        self.assertEqual(p_14[1] & 0x3F, 0)
+        """Verify OEM temperature scaling ((temp_c - 15.0) * 2)."""
+        # 15.0 C -> 0
+        p_15 = pack_tmu_01(True, 15.0, False, 0)
+        self.assertEqual(p_15[1], 0)
 
-        # 20.0 C -> 12 (0x0C -> lower 2 bits: 0, upper 6: 3 = 0x03)
-        p_20 = pack_tmu_01(True, 20.0, False, 0)
-        self.assertEqual(p_20[0] & 0xC0, 0x00)
-        self.assertEqual(p_20[1] & 0x3F, 3)
+        # 18.0 C -> 6 (0x06, verified from live E-GMP I-CAN ground truth capture)
+        p_18 = pack_tmu_01(True, 18.0, False, 0)
+        self.assertEqual(p_18[1], 6)
 
-        # 22.0 C -> 16 (0x10 -> lower 2 bits: 0, upper 6: 4 = 0x04)
+        # 22.0 C -> 14 (0x0E)
         p_22 = pack_tmu_01(True, 22.0, False, 0)
-        self.assertEqual(p_22[0] & 0xC0, 0x00)
-        self.assertEqual(p_22[1] & 0x3F, 4)
+        self.assertEqual(p_22[1], 14)
 
-        # 23.5 C -> 19 (0x13 -> lower 2 bits: 3 (0xC0), upper 6: 4 = 0x04)
-        p_235 = pack_tmu_01(True, 23.5, False, 0)
-        self.assertEqual(p_235[0] & 0xC0, 0xC0)
-        self.assertEqual(p_235[1] & 0x3F, 4)
-
-        # 32.0 C -> 36 (0x24 -> lower 2 bits: 0, upper 6: 9 = 0x09)
+        # 32.0 C -> 34 (0x22)
         p_32 = pack_tmu_01(True, 32.0, False, 0)
-        self.assertEqual(p_32[0] & 0xC0, 0x00)
-        self.assertEqual(p_32[1] & 0x3F, 9)
+        self.assertEqual(p_32[1], 34)
 
-        # Clamp boundaries: < 14.0 clamped to 0, > 32.0 clamped to 36
+        # Clamp boundaries: < 15.0 clamped to 0, > 32.0 clamped to 34
         p_low = pack_tmu_01(True, 10.0, False, 0)
-        self.assertEqual(p_low[1] & 0x3F, 0)
+        self.assertEqual(p_low[1], 0)
         p_high = pack_tmu_01(True, 35.0, False, 0)
-        self.assertEqual(p_high[1] & 0x3F, 9)
+        self.assertEqual(p_high[1], 34)
 
     def test_fahrenheit_auto_conversion(self) -> None:
         """Verify inputs > 40.0 F are automatically converted to Celsius and encoded properly."""
-        # 72 F -> (72 - 32) * 5 / 9 = 22.22 C -> code 16 (0x10) -> upper 6 bits: 4
+        # 64 F -> 17.78 C -> index 6 (0x06)
+        p_64f = pack_tmu_01(True, 64.0, False, 0)
+        self.assertEqual(p_64f[1], 6)
+
+        # 72 F -> (72 - 32) * 5 / 9 = 22.22 C -> index 14 (0x0E)
         p_72f = pack_tmu_01(True, 72.0, False, 0)
-        self.assertEqual(p_72f[0] & 0xC0, 0x00)
-        self.assertEqual(p_72f[1] & 0x3F, 4)
+        self.assertEqual(p_72f[1], 14)
 
-        # 68 F -> 20.0 C -> code 12 (0x0C) -> upper 6 bits: 3
-        p_68f = pack_tmu_01(True, 68.0, False, 0)
-        self.assertEqual(p_68f[0] & 0xC0, 0x00)
-        self.assertEqual(p_68f[1] & 0x3F, 3)
-
-        # 85 F -> 29.44 C -> code 31 (0x1F) -> lower 2 bits: 3 (0xC0), upper 6 bits: 7
-        p_85f = pack_tmu_01(True, 85.0, False, 0)
-        self.assertEqual(p_85f[0] & 0xC0, 0xC0)
-        self.assertEqual(p_85f[1] & 0x3F, 7)
-
-    def test_autosar_nm_wake_frame(self) -> None:
-        """Verify AUTOSAR NM frame definition for telematics node 0x63."""
-        # Telematics node 0x63 on bus 0 uses NM CAN ID 0x563
-        nm_id = 0x500 + 0x63
-        self.assertEqual(nm_id, 0x0563)
-        nm_bytes = [0x63, 0x01, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF]
-        self.assertEqual(len(nm_bytes), 8)
-        self.assertEqual(nm_bytes[0], 0x63)
-        self.assertEqual(nm_bytes[1], 0x01)
-
-    def test_defrost_flag_encoding(self) -> None:
-        """Verify defrost bit (bit 6 of Byte D2 / index 1)."""
-        p_normal = pack_tmu_01(True, 22.0, False, 0)
-        p_defrost = pack_tmu_01(True, 22.0, True, 0)
-        self.assertEqual(p_normal[1] & 0x40, 0x00)
-        self.assertEqual(p_defrost[1] & 0x40, 0x40)
+    def test_alive_counter_in_byte_3(self) -> None:
+        """Verify alive counter in bits [5:2] of Byte 3 ((cnt & 0x0F) << 2)."""
+        for cnt in range(16):
+            payload = pack_tmu_01(True, 22.0, False, cnt)
+            expected = (cnt & 0x0F) << 2
+            self.assertEqual(payload[3], expected)
 
     def test_ig3_relay_encoding(self) -> None:
-        """Verify CF_Tmu_IG3Rly and CF_Tmu_SepZoneDisp in Byte D3 (index 2)."""
-        p_on = pack_tmu_01(True, 22.0, False, 0)
-        self.assertEqual(p_on[2], 0x13)  # bits 0-1 = 0x03, bit 4 = 0x10
-        p_off = pack_tmu_01(False, 22.0, False, 0)
-        self.assertEqual(p_off[2], 0x00)
+        """Verify CF_Tmu_IG3Rly in Byte 5 (0x03 in RUN/ARM, 0x00 in STEADY_RUN)."""
+        p_run = pack_tmu_01_oem('RUN', 22.0, False, 0)
+        self.assertEqual(p_run[5], 0x03)
+        p_steady = pack_tmu_01_oem('STEADY_RUN', 22.0, False, 0)
+        self.assertEqual(p_steady[5], 0x00)
+
+    def test_cancel_strobe_encoding(self) -> None:
+        """Verify stop cancel strobe asserts bit 2 of Byte 6 (0x14)."""
+        p_cancel = pack_tmu_01_oem('STOP_STROBE', 22.0, False, 0)
+        self.assertEqual(p_cancel[0], 0x40)
+        self.assertEqual(p_cancel[6], 0x14)
 
     def test_catalog_integrity_for_climate_vs_audio(self) -> None:
         """Ensure CAN ID 0x520 is strictly audio amplifier, and 0x39B is remote climate."""

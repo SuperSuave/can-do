@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 #include <array>
+#include <memory>
+#include <atomic>
 
 enum class ConditionLogic {
     LEAF,
@@ -211,6 +213,7 @@ struct AutomationRule {
     std::string exec_mode = "one_shot"; // "one_shot", "toggle", "continuous_hold", etc.
     std::string trigger_mode = "any";   // "any", "all", "sequence"
     uint32_t last_exec_time_ms = 0;
+    std::shared_ptr<std::atomic<bool>> is_running = std::make_shared<std::atomic<bool>>(false);
     std::vector<AutomationTrigger> triggers;
     std::vector<AutomationCondition> conditions;
     std::vector<ActionStep> actions;
@@ -223,4 +226,5 @@ struct CanBurstCmd {
     const std::vector<ActionStep>* steps = nullptr;
     std::vector<ActionStep> inline_steps;
     bool async = false;
+    std::shared_ptr<std::atomic<bool>> rule_is_running = nullptr;
 };

@@ -1,7 +1,7 @@
 # E-GMP CAN Do Message Catalog Technical Audit Ledger
 
 **Audit Date**: November 2026  
-**Canonical Catalog**: `catalog/can_do_catalog.json` (v2026.11.1-b002)  
+**Canonical Catalog**: `catalog/can_do_catalog.json` (v2026.11.1-b003)  
 **Reference Sources**: `CanGEN3CsmEv.java`, `CanGEN3EvMessage.java`, `CanGEN3EV_CAN_ID_Map.csv`, `HKMC_Consolidated_CAN_Master_Map.csv`, and real-vehicle captures in `Logs/` (`charging.csv`, `ev6-7-7-26.csv`, etc.)  
 
 ---

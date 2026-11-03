@@ -51,11 +51,11 @@ bool uart_bridge_is_online(void) {
 void uart_bridge_send_raw(const std::string& line) {
     if (line.empty()) return;
 
-    // Fast-path for oversized payloads (e.g., states_dump batch): use non-blocking uart_tx_chars
+    // Fast-path for oversized payloads (e.g., states_dump batch): write directly to ring buffer
     if (line.length() + 2 > MAX_TX_MSG_LEN) {
-        uart_tx_chars(UART_BRIDGE_PORT, line.data(), line.length());
+        uart_write_bytes(UART_BRIDGE_PORT, line.data(), line.length());
         if (line.back() != '\n') {
-            uart_tx_chars(UART_BRIDGE_PORT, "\n", 1);
+            uart_write_bytes(UART_BRIDGE_PORT, "\n", 1);
         }
         return;
     }
@@ -121,7 +121,7 @@ void uart_bridge_send_all_states(void) {
     auto flush_batch = [&]() {
         if (batch_count == 0) return;
         batch_payload += "]}\n";
-        uart_tx_chars(UART_BRIDGE_PORT, batch_payload.data(), batch_payload.length());
+        uart_write_bytes(UART_BRIDGE_PORT, batch_payload.data(), batch_payload.length());
         // Yield to feed IDLE0 watchdog and allow UART hardware FIFO to drain
         vTaskDelay(pdMS_TO_TICKS(5));
         start_batch();
@@ -444,10 +444,10 @@ static void uart_bridge_worker_task(void* pvParameters) {
     int64_t last_heartbeat_us = esp_timer_get_time();
 
     while (true) {
-        // 1. Drain outbound UART TX queue using non-blocking uart_tx_chars
+        // 1. Drain outbound UART TX queue using ring buffer
         int tx_drained = 0;
         while (tx_drained < 16 && xQueueReceive(s_uart_tx_queue, &tx_msg, 0) == pdTRUE) {
-            uart_tx_chars(UART_BRIDGE_PORT, tx_msg.data, tx_msg.len);
+            uart_write_bytes(UART_BRIDGE_PORT, tx_msg.data, tx_msg.len);
             tx_drained++;
         }
 

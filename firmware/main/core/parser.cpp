@@ -702,7 +702,15 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         if (cJSON_IsNumber(interval)) step.interval_ms = static_cast<uint32_t>(interval->valueint);
 
         cJSON* timeout = cJSON_GetObjectItem(a_item, "timeout_ms");
-        if (cJSON_IsNumber(timeout)) step.timeout_ms = static_cast<uint32_t>(timeout->valueint);
+        if (!timeout) timeout = cJSON_GetObjectItem(a_item, "timeout");
+        if (timeout && cJSON_IsNumber(timeout)) {
+            // If <= 300, it's likely specified in seconds, so convert to ms; if > 300, already in ms
+            step.timeout_ms = timeout->valueint <= 300 ? static_cast<uint32_t>(timeout->valueint * 1000) : static_cast<uint32_t>(timeout->valueint);
+        }
+        cJSON* timeout_s = cJSON_GetObjectItem(a_item, "timeout_s");
+        if (timeout_s && cJSON_IsNumber(timeout_s)) {
+            step.timeout_ms = static_cast<uint32_t>(timeout_s->valueint * 1000);
+        }
 
         cJSON* cond_obj = cJSON_GetObjectItem(a_item, "condition");
         cJSON* conds_arr = cJSON_GetObjectItem(a_item, "conditions");

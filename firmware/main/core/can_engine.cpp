@@ -7,6 +7,7 @@
 #include <cmath>
 #include <algorithm>
 #include <cctype>
+#include <mutex>
 #include <sys/time.h>
 #include "esp_log.h"
 #include "mqtt_client.h"
@@ -122,6 +123,8 @@ void rtc_crash_record(uint32_t can_id, uint8_t dlc, const uint8_t* data, uint32_
 }
 
 static std::string s_current_firing_trigger_id = "";
+
+static std::mutex s_ble_mutex;
 
 struct LastBleEvent {
     std::string address;
@@ -360,6 +363,7 @@ bool evaluate_condition(const AutomationCondition& cond) {
             }
 
             if (cond.type == "ble_button" || cond.type == "ble" || cond.type == "bluetooth") {
+                std::lock_guard<std::mutex> lock(s_ble_mutex);
                 uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
                 uint32_t threshold_ms = (s_wait_for_start_ms > 0) ? s_wait_for_start_ms : (now_ms > 2500 ? now_ms - 2500 : 0);
                 if (s_wait_for_start_ms > 0) {
@@ -400,6 +404,7 @@ bool evaluate_condition(const AutomationCondition& cond) {
             }
 
             if (cond.type == "ble_beacon" || cond.type == "beacon" || (cond.type == "ble_presence" && (!cond.beacon_uuid.empty() || cond.device_property == "beacon_present" || cond.device_property == "present" || cond.device_property == "away"))) {
+                std::lock_guard<std::mutex> lock(s_ble_mutex);
                 uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
                 const std::string& target_uuid = !cond.beacon_uuid.empty() ? cond.beacon_uuid : (!cond.ble_device.empty() ? cond.ble_device : cond.target_string);
                 bool check_away = (cond.device_property == "away" || (!cond.target_bool && (cond.device_property == "present" || cond.device_property == "beacon_present")));
@@ -446,6 +451,7 @@ bool evaluate_condition(const AutomationCondition& cond) {
             }
 
             if (cond.type == "ble_device" || cond.type == "ble_presence") {
+                std::lock_guard<std::mutex> lock(s_ble_mutex);
                 uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
                 const std::string& target_dev = !cond.ble_device.empty() ? cond.ble_device : cond.target_string;
                 bool check_away = (cond.device_property == "away" || cond.device_property == "disconnected" || (!cond.target_bool && (cond.device_property == "present" || cond.device_property == "connected")));
@@ -710,12 +716,15 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
         if (step.type == ActionType::REPEAT_UNTIL || step.type == ActionType::WAIT_FOR) {
             uint32_t start_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
             s_wait_for_start_ms = start_ms;
+            uint32_t effective_timeout_ms = step.timeout_ms > 0 ? step.timeout_ms : 60000;
+            uint32_t interval = step.interval_ms > 0 ? step.interval_ms : 50;
             bool condition_met = false;
             while (!condition_met) {
                 uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-                if (step.timeout_ms > 0 && (now_ms - start_ms) >= step.timeout_ms) {
-                    ESP_LOGW(TAG, "Timeout waiting for condition in %s", 
-                             step.type == ActionType::WAIT_FOR ? "WAIT_FOR" : "REPEAT_UNTIL");
+                if ((now_ms - start_ms) >= effective_timeout_ms) {
+                    ESP_LOGW(TAG, "Timeout waiting for condition in %s (%lu ms elapsed)", 
+                             step.type == ActionType::WAIT_FOR ? "WAIT_FOR" : "REPEAT_UNTIL",
+                             (unsigned long)(now_ms - start_ms));
                     break;
                 }
                 if (step.type == ActionType::REPEAT_UNTIL && !step.sequence.empty()) {
@@ -725,9 +734,13 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                     condition_met = true;
                     break;
                 }
-                vTaskDelay(pdMS_TO_TICKS(step.interval_ms > 0 ? step.interval_ms : 50));
+                vTaskDelay(pdMS_TO_TICKS(interval));
             }
             s_wait_for_start_ms = 0;
+            if (step.type == ActionType::WAIT_FOR && !condition_met) {
+                ESP_LOGW(TAG, "WAIT_FOR condition not met before timeout; aborting remainder of action sequence");
+                break;
+            }
             continue;
         }
 
@@ -762,6 +775,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                 }
             } else {
                 ESP_LOGW(TAG, "CAN TX failed or queue full for ID 0x%03lX", (unsigned long)msg_to_send.identifier);
+                vTaskDelay(pdMS_TO_TICKS(delay_ms > 0 ? delay_ms : 2));
             }
         }
 
@@ -795,7 +809,11 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
                 uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
                 rule.last_exec_time_ms = now_ms;
                 broadcast_ws_automation_event(rule.id, rule.name);
-                bool ok = queue_action_steps_ptr(0, 20, &rule.actions, "manual_ha");
+                if (rule.is_running && rule.is_running->load()) {
+                    ESP_LOGW(TAG, "Rule '%s' is already executing; skipping manual trigger", rule.name.c_str());
+                    return false;
+                }
+                bool ok = queue_action_steps_ptr(0, 20, &rule.actions, "manual_ha", rule.is_running);
                 return ok;
             }
         }
@@ -1226,47 +1244,64 @@ bool steps_contain_async(const std::vector<ActionStep>& steps) {
     return false;
 }
 
+static std::atomic<int> s_active_async_tasks{0};
+static const int MAX_CONCURRENT_ASYNC_TASKS = 2;
+
 static void execute_can_burst_async_task(void* arg) {
     CanBurstCmd* cmd = (CanBurstCmd*)arg;
     if (cmd) {
-        if (cmd->steps && !cmd->steps->empty()) {
-            execute_can_burst(cmd->can_id, *cmd->steps, cmd->delay_ms);
-        } else if (!cmd->inline_steps.empty()) {
+        struct AsyncCleanup {
+            CanBurstCmd* c;
+            AsyncCleanup(CanBurstCmd* cmd_ptr) : c(cmd_ptr) {}
+            ~AsyncCleanup() {
+                if (c) {
+                    if (c->rule_is_running) {
+                        c->rule_is_running->store(false);
+                    }
+                    delete c;
+                }
+                s_active_async_tasks.fetch_sub(1);
+            }
+        } cleanup(cmd);
+
+        if (!cmd->inline_steps.empty()) {
             execute_can_burst(cmd->can_id, cmd->inline_steps, cmd->delay_ms);
+        } else if (cmd->steps && !cmd->steps->empty()) {
+            execute_can_burst(cmd->can_id, *cmd->steps, cmd->delay_ms);
         }
-        delete cmd;
     }
     vTaskDelete(NULL);
 }
 
-bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>& steps, const std::string& trigger_id) {
+bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>& steps, const std::string& trigger_id, std::shared_ptr<std::atomic<bool>> rule_is_running) {
     CanBurstCmd* cmd = new (std::nothrow) CanBurstCmd();
-    if (!cmd) return false;
+    if (!cmd) {
+        if (rule_is_running) rule_is_running->store(false);
+        return false;
+    }
     cmd->can_id = can_id;
     cmd->delay_ms = delay_ms;
     cmd->trigger_id = trigger_id;
     cmd->inline_steps = steps;
     cmd->async = steps_contain_async(steps);
+    cmd->rule_is_running = rule_is_running;
+    if (cmd->rule_is_running) {
+        cmd->rule_is_running->store(true);
+    }
     if (xQueueSend(tx_command_queue, &cmd, pdMS_TO_TICKS(10)) != pdTRUE) {
+        if (rule_is_running) rule_is_running->store(false);
         delete cmd;
         return false;
     }
     return true;
 }
 
-bool queue_action_steps_ptr(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>* steps, const std::string& trigger_id) {
-    CanBurstCmd* cmd = new (std::nothrow) CanBurstCmd();
-    if (!cmd) return false;
-    cmd->can_id = can_id;
-    cmd->delay_ms = delay_ms;
-    cmd->trigger_id = trigger_id;
-    cmd->steps = steps;
-    cmd->async = steps ? steps_contain_async(*steps) : false;
-    if (xQueueSend(tx_command_queue, &cmd, pdMS_TO_TICKS(10)) != pdTRUE) {
-        delete cmd;
+bool queue_action_steps_ptr(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>* steps, const std::string& trigger_id, std::shared_ptr<std::atomic<bool>> rule_is_running) {
+    if (!steps) {
+        if (rule_is_running) rule_is_running->store(false);
         return false;
     }
-    return true;
+    return queue_action_steps(can_id, delay_ms, *steps, trigger_id, rule_is_running);
 }
 
 static void emit_live_entity_state(const std::string& entity_id, const std::string& state) {
@@ -1564,6 +1599,7 @@ void can_rx_task(void* arg) {
                 uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
                 for (auto& rule : global_automations) {
                     if (!rule.enabled) continue;
+                    if (rule.is_running && rule.is_running->load()) continue;
 
                     for (const auto& trig : rule.triggers) {
                         if ((trig.type == "can_rx" || trig.type == "byte_transition") && trig.can_id == rx_msg.identifier) {
@@ -1586,7 +1622,7 @@ void can_rx_task(void* arg) {
                                     ESP_LOGI(TAG, "Automation fired: %s (trigger: %s)", rule.name.c_str(), trig.id.c_str());
                                     rule.last_exec_time_ms = now_ms;
                                     broadcast_ws_automation_event(rule.id, rule.name);
-                                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id);
+                                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id, rule.is_running);
                                 }
                             }
                         }
@@ -2264,15 +2300,35 @@ void can_tx_task(void* arg) {
     while (true) {
         if (xQueueReceive(tx_command_queue, &cmd, portMAX_DELAY) == pdTRUE && cmd) {
             if (cmd->async) {
-                xTaskCreate(execute_can_burst_async_task, "can_tx_async", 4096, cmd, 5, NULL);
+                if (s_active_async_tasks.load() >= MAX_CONCURRENT_ASYNC_TASKS) {
+                    ESP_LOGW(TAG, "Dropping async action burst: max concurrent tasks (%d) reached", MAX_CONCURRENT_ASYNC_TASKS);
+                    if (cmd->rule_is_running) {
+                        cmd->rule_is_running->store(false);
+                    }
+                    delete cmd;
+                    continue;
+                }
+                s_active_async_tasks.fetch_add(1);
+                BaseType_t res = xTaskCreate(execute_can_burst_async_task, "can_tx_async", 4096, cmd, 5, NULL);
+                if (res != pdPASS) {
+                    ESP_LOGE(TAG, "Failed to create can_tx_async task (out of memory?)");
+                    s_active_async_tasks.fetch_sub(1);
+                    if (cmd->rule_is_running) {
+                        cmd->rule_is_running->store(false);
+                    }
+                    delete cmd;
+                }
             } else {
                 s_current_firing_trigger_id = cmd->trigger_id;
-                if (cmd->steps && !cmd->steps->empty()) {
-                    execute_can_burst(cmd->can_id, *cmd->steps, cmd->delay_ms);
-                } else if (!cmd->inline_steps.empty()) {
+                if (!cmd->inline_steps.empty()) {
                     execute_can_burst(cmd->can_id, cmd->inline_steps, cmd->delay_ms);
+                } else if (cmd->steps && !cmd->steps->empty()) {
+                    execute_can_burst(cmd->can_id, *cmd->steps, cmd->delay_ms);
                 }
                 s_current_firing_trigger_id = "";
+                if (cmd->rule_is_running) {
+                    cmd->rule_is_running->store(false);
+                }
                 delete cmd;
             }
         }
@@ -2311,6 +2367,7 @@ void time_scheduler_task(void* arg) {
         uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
         for (auto& rule : global_automations) {
             if (!rule.enabled) continue;
+            if (rule.is_running && rule.is_running->load()) continue;
 
             for (const auto& trig : rule.triggers) {
                 if (trig.type == "time_schedule") {
@@ -2331,7 +2388,7 @@ void time_scheduler_task(void* arg) {
                             ESP_LOGI(TAG, "Time schedule fired rule: %s (%02d:%02d)", rule.name.c_str(), timeinfo.tm_hour, timeinfo.tm_min);
                             rule.last_exec_time_ms = now_ms;
                             broadcast_ws_automation_event(rule.id, rule.name);
-                            queue_action_steps_ptr(0, 20, &rule.actions, trig.id);
+                            queue_action_steps_ptr(0, 20, &rule.actions, trig.id, rule.is_running);
                         }
                     }
                 }
@@ -2346,6 +2403,7 @@ void can_engine_on_device_event(const std::string& event_type, const std::string
 
     for (auto& rule : global_automations) {
         if (!rule.enabled) continue;
+        if (rule.is_running && rule.is_running->load()) continue;
 
         for (const auto& trig : rule.triggers) {
             if (trig.type == "wifi" || trig.type == "wifi_event" || trig.type == "device_event") {
@@ -2401,7 +2459,7 @@ void can_engine_on_device_event(const std::string& event_type, const std::string
                              rule.name.c_str(), trig.id.c_str(), event_type.c_str());
                     rule.last_exec_time_ms = now_ms;
                     broadcast_ws_automation_event(rule.id, rule.name);
-                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id);
+                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id, rule.is_running);
                 }
             }
         }
@@ -2410,11 +2468,14 @@ void can_engine_on_device_event(const std::string& event_type, const std::string
 
 void can_engine_on_ble_event(const std::string& address, const std::string& button, const std::string& action, const std::string& combo) {
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-    s_last_ble_event.address = address;
-    s_last_ble_event.button = button;
-    s_last_ble_event.combo = combo;
-    s_last_ble_event.action = action;
-    s_last_ble_event.timestamp_ms = now_ms;
+    {
+        std::lock_guard<std::mutex> lock(s_ble_mutex);
+        s_last_ble_event.address = address;
+        s_last_ble_event.button = button;
+        s_last_ble_event.combo = combo;
+        s_last_ble_event.action = action;
+        s_last_ble_event.timestamp_ms = now_ms;
+    }
 
     mqtt_mgr_publish_ble_button(address, button, action, combo);
 
@@ -2422,6 +2483,7 @@ void can_engine_on_ble_event(const std::string& address, const std::string& butt
 
     for (auto& rule : global_automations) {
         if (!rule.enabled) continue;
+        if (rule.is_running && rule.is_running->load()) continue;
 
         for (const auto& trig : rule.triggers) {
             if (trig.type == "ble_button" || trig.type == "ble_key" || trig.type == "ble") {
@@ -2472,7 +2534,7 @@ void can_engine_on_ble_event(const std::string& address, const std::string& butt
                              rule.name.c_str(), trig.id.c_str(), button.c_str(), action.c_str());
                     rule.last_exec_time_ms = now_ms;
                     broadcast_ws_automation_event(rule.id, rule.name);
-                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id);
+                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id, rule.is_running);
                 }
             }
         }
@@ -2481,13 +2543,16 @@ void can_engine_on_ble_event(const std::string& address, const std::string& butt
 
 void can_engine_on_ble_device_event(const std::string& address, const std::string& event, int8_t rssi, const std::string& name) {
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-    auto& info = s_ble_devices[address];
-    info.address = address;
-    if (!name.empty()) info.name = name;
-    if (event == "connected") info.connected = true;
-    else if (event == "disconnected") info.connected = false;
-    if (rssi != 0) info.rssi = rssi;
-    info.last_seen_ms = now_ms;
+    {
+        std::lock_guard<std::mutex> lock(s_ble_mutex);
+        auto& info = s_ble_devices[address];
+        info.address = address;
+        if (!name.empty()) info.name = name;
+        if (event == "connected") info.connected = true;
+        else if (event == "disconnected") info.connected = false;
+        if (rssi != 0) info.rssi = rssi;
+        info.last_seen_ms = now_ms;
+    }
 
     mqtt_mgr_publish_ble_device(address, event, rssi, name);
 
@@ -2495,6 +2560,7 @@ void can_engine_on_ble_device_event(const std::string& address, const std::strin
 
     for (auto& rule : global_automations) {
         if (!rule.enabled) continue;
+        if (rule.is_running && rule.is_running->load()) continue;
 
         for (const auto& trig : rule.triggers) {
             if (trig.type == "ble_device_event" || trig.type == "ble_device" || trig.type == "ble_presence") {
@@ -2554,7 +2620,7 @@ void can_engine_on_ble_device_event(const std::string& address, const std::strin
                              rule.name.c_str(), trig.id.c_str(), event.c_str(), address.c_str());
                     rule.last_exec_time_ms = now_ms;
                     broadcast_ws_automation_event(rule.id, rule.name);
-                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id);
+                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id, rule.is_running);
                 }
             }
         }
@@ -2566,20 +2632,23 @@ void can_engine_on_ble_beacon_event(const std::string& uuid, const std::string& 
     std::string key = !uuid.empty() ? uuid : mac;
     if (key.empty()) return;
 
-    auto& info = s_ble_beacons[key];
-    info.uuid = uuid;
-    if (!mac.empty()) info.mac = mac;
-    if (!name.empty()) info.name = name;
-    if (major != 0) info.major = major;
-    if (minor != 0) info.minor = minor;
-    if (rssi != 0) info.rssi = rssi;
-    info.last_seen_ms = now_ms;
-    if (event == "enter" || event == "present") info.present = true;
-    else if (event == "exit" || event == "away") info.present = false;
-    else if (event == "proximity") info.present = true;
+    {
+        std::lock_guard<std::mutex> lock(s_ble_mutex);
+        auto& info = s_ble_beacons[key];
+        info.uuid = uuid;
+        if (!mac.empty()) info.mac = mac;
+        if (!name.empty()) info.name = name;
+        if (major != 0) info.major = major;
+        if (minor != 0) info.minor = minor;
+        if (rssi != 0) info.rssi = rssi;
+        info.last_seen_ms = now_ms;
+        if (event == "enter" || event == "present") info.present = true;
+        else if (event == "exit" || event == "away") info.present = false;
+        else if (event == "proximity") info.present = true;
 
-    if (!mac.empty() && mac != key) {
-        s_ble_beacons[mac] = info;
+        if (!mac.empty() && mac != key) {
+            s_ble_beacons[mac] = info;
+        }
     }
 
     mqtt_mgr_publish_ble_beacon(uuid, event, rssi, major, minor, mac, name);
@@ -2588,6 +2657,7 @@ void can_engine_on_ble_beacon_event(const std::string& uuid, const std::string& 
 
     for (auto& rule : global_automations) {
         if (!rule.enabled) continue;
+        if (rule.is_running && rule.is_running->load()) continue;
 
         for (const auto& trig : rule.triggers) {
             if (trig.type == "ble_beacon" || trig.type == "beacon" || trig.type == "ble_presence") {
@@ -2650,7 +2720,7 @@ void can_engine_on_ble_beacon_event(const std::string& uuid, const std::string& 
                              rule.name.c_str(), trig.id.c_str(), event.c_str(), uuid.c_str(), rssi);
                     rule.last_exec_time_ms = now_ms;
                     broadcast_ws_automation_event(rule.id, rule.name);
-                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id);
+                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id, rule.is_running);
                 }
             }
         }
