@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Spinner } from '@heroui/react';
 import {
   Bluetooth,
   Radio,
@@ -377,12 +378,12 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
   };
 
   const mediaButtons = [
+    { id: 'mute', label: 'Mute', icon: VolumeX },
     { id: 'volume_up', label: 'Volume Up (+)', icon: Volume2 },
     { id: 'volume_down', label: 'Volume Down (-)', icon: Volume2 },
+    { id: 'prev_track', label: 'Prev Track (<<)', icon: SkipBack },
     { id: 'play_pause', label: 'Play / Pause', icon: Play },
     { id: 'next_track', label: 'Next Track (>>)', icon: SkipForward },
-    { id: 'prev_track', label: 'Prev Track (<<)', icon: SkipBack },
-    { id: 'mute', label: 'Mute', icon: VolumeX },
     { id: 'shutter', label: 'Camera Shutter (Enter)', icon: Camera }
   ];
 
@@ -517,7 +518,7 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
             disabled={scanning}
             className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold text-xs shadow transition cursor-pointer"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${scanning ? 'animate-spin' : ''}`} />
+            {scanning ? <Spinner size="sm" /> : <RefreshCw className="w-3.5 h-3.5" />}
             <span>{scanning ? `Scanning (${scanSecondsLeft}s)...` : 'Scan for Devices'}</span>
           </button>
         </div>
@@ -674,9 +675,6 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
             <div>
               <h2 className="text-sm font-bold text-white flex items-center gap-2">
                 BLE Beacons & Phone Proximity (iBeacon / Key Fobs)
-                <span className="px-2 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-800 text-[10px] font-mono">
-                  Walk-Up / Walk-Away
-                </span>
               </h2>
               <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
                 Automatically trigger automations when your phone or BLE key fob enters or leaves vehicle range without pairing
@@ -997,34 +995,6 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
                 Press the volume keys or tap any number on the app. The ESP32 will receive the native keystroke and execute your automation!
               </li>
             </ol>
-          </div>
-        </div>
-      </div>
-
-      {/* Hardware Recommendations Deck */}
-      <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300 space-y-2">
-        <div className="flex items-center gap-2 font-bold text-slate-200">
-          <Keyboard className="w-4 h-4 text-cyan-400" />
-          <span>Recommended Hardware Options (Extra Buttons & Macro Keyboards)</span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1 text-[11px] text-slate-400">
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-            <span className="font-bold text-white block">Steering Wheel Media Remote</span>
-            <p>
-              Compact circular remotes (5-7 buttons: Vol+, Vol-, Next, Prev, Play, Mute). Attaches to steering wheel with strap or tape. Runs on CR2032 coin cell for 1-2 years.
-            </p>
-          </div>
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-            <span className="font-bold text-white block">3 / 6 / 9-Key Macro Keypads</span>
-            <p>
-              Bluetooth mechanical macropads with hot-swap switches & rotary encoders. Fully programmable as standard HID keys (1-9, F13-F24). Fits neatly in center console.
-            </p>
-          </div>
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-            <span className="font-bold text-white block">Bluetooth Shutter Remotes</span>
-            <p>
-              Ultra-budget ($3-$5) 2-button camera clickers. Native Volume Up / Enter commands that map directly to any CAN toggle or automation trigger.
-            </p>
           </div>
         </div>
       </div>

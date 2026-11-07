@@ -1,4 +1,15 @@
 import React, { useState, useMemo } from 'react';
+import {
+  Modal,
+  ModalBackdrop,
+  ModalContainer,
+  ModalDialog,
+  ModalHeader,
+  ModalHeading,
+  ModalBody,
+  ModalFooter,
+  Checkbox
+} from '@heroui/react';
 import { Catalog, Command } from '../types/catalog';
 import {
   X,
@@ -195,33 +206,35 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-3xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-[var(--input-bg)] border border-[var(--border-color)] flex items-center justify-center text-[var(--md-sys-color-primary)]">
-              <Layers className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-bold text-white">Batch Category Manager</h2>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                Rename, merge, reorganize, or create CAN command categories across your entire catalog.
-              </p>
-            </div>
-          </div>
+    <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
+      <ModalBackdrop variant="blur" className="bg-black/80 backdrop-blur-sm">
+        <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
+          <ModalDialog className="relative w-full max-w-3xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <ModalHeader className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] gap-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-[var(--input-bg)] border border-[var(--border-color)] flex items-center justify-center text-[var(--md-sys-color-primary)]">
+                  <Layers className="w-4 h-4" />
+                </div>
+                <div>
+                  <ModalHeading className="text-base sm:text-lg font-bold text-white">Batch Category Manager</ModalHeading>
+                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                    Rename, merge, reorganize, or create CAN command categories across your entire catalog.
+                  </p>
+                </div>
+              </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-[var(--md-sys-color-surface-container-high)] transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-[var(--md-sys-color-surface-container-high)] transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </ModalHeader>
 
-        {/* Modal Body */}
-        <div className="p-6 max-h-[72vh] overflow-y-auto space-y-5 text-xs">
+            {/* Modal Body */}
+            <ModalBody className="p-6 max-h-[72vh] overflow-y-auto space-y-5 text-xs">
           {/* Notification banner */}
           {feedback && (
             <div
@@ -300,28 +313,30 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                   {catalog.commands.map(cmd => {
                     const isChecked = newCatTargetCommands.includes(cmd.id);
                     return (
-                      <label
+                      <Checkbox
                         key={cmd.id}
-                        className="flex items-center gap-2 p-1.5 rounded hover:bg-white/5 cursor-pointer text-slate-300 text-xs"
+                        isSelected={isChecked}
+                        onChange={(selected) => {
+                          if (selected) {
+                            setNewCatTargetCommands(prev => [...prev, cmd.id]);
+                          } else {
+                            setNewCatTargetCommands(prev => prev.filter(id => id !== cmd.id));
+                          }
+                        }}
+                        aria-label={`Select ${cmd.name} for category assignment`}
+                        className="flex items-center gap-2 p-1.5 rounded hover:bg-white/5 cursor-pointer text-slate-300 text-xs w-full"
                       >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={e => {
-                            if (e.target.checked) {
-                              setNewCatTargetCommands(prev => [...prev, cmd.id]);
-                            } else {
-                              setNewCatTargetCommands(prev => prev.filter(id => id !== cmd.id));
-                            }
-                          }}
-                          className="rounded border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--md-sys-color-primary)] focus:ring-0"
-                        />
-                        <span className="font-semibold text-white">{cmd.name}</span>
-                        <span className="font-mono text-[11px] text-slate-400">({cmd.id})</span>
-                        <span className="text-[10px] ml-auto px-2 py-0.5 rounded-full bg-[var(--card-bg)] text-slate-400 border border-[var(--border-color)]">
-                          {cmd.category}
-                        </span>
-                      </label>
+                        <Checkbox.Control>
+                          <Checkbox.Indicator />
+                        </Checkbox.Control>
+                        <Checkbox.Content className="flex items-center gap-2 flex-1 min-w-0">
+                          <span className="font-semibold text-white truncate">{cmd.name}</span>
+                          <span className="font-mono text-[11px] text-slate-400">({cmd.id})</span>
+                          <span className="text-[10px] ml-auto px-2 py-0.5 rounded-full bg-[var(--card-bg)] text-slate-400 border border-[var(--border-color)] shrink-0">
+                            {cmd.category}
+                          </span>
+                        </Checkbox.Content>
+                      </Checkbox>
                     );
                   })}
                 </div>
@@ -514,10 +529,10 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
               })
             )}
           </div>
-        </div>
+        </ModalBody>
 
         {/* Footer */}
-        <div className="p-4 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] flex items-center justify-between">
+        <ModalFooter className="p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] flex items-center justify-between shrink-0">
           <div className="text-[11px] text-[var(--text-muted)]">
             Changes are saved immediately and marked as draft updates ready for GitHub contribution.
           </div>
@@ -528,8 +543,10 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
           >
             Done
           </button>
-        </div>
-      </div>
-    </div>
+        </ModalFooter>
+      </ModalDialog>
+    </ModalContainer>
+  </ModalBackdrop>
+</Modal>
   );
 };

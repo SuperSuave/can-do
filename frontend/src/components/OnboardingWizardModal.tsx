@@ -1,4 +1,16 @@
 import React, { useState, useMemo } from 'react';
+import {
+  Tabs,
+  Switch,
+  Modal,
+  ModalBackdrop,
+  ModalContainer,
+  ModalDialog,
+  ModalHeader,
+  ModalHeading,
+  ModalBody,
+  ModalFooter
+} from '@heroui/react';
 import { Catalog, Vehicle } from '../types/catalog';
 import { UserPreferences, UpdatePolicy, DEFAULT_USER_PREFERENCES } from '../types/settings';
 import { isRunningOnDevice } from '../utils/hostUtils';
@@ -89,34 +101,35 @@ export function OnboardingWizardModal({
   const stepsTotal = 5;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-2xl rounded-3xl bg-slate-900 border border-slate-700/60 shadow-2xl shadow-cyan-950/40 flex flex-col max-h-[90vh] overflow-hidden text-slate-100">
-        
-        {/* Header with Progress Steps */}
-        <div className="p-5 sm:p-6 border-b border-slate-800 bg-slate-900/60 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                Welcome to CAN Do
-              </h2>
-              <p className="text-xs text-slate-400">
-                Quick Setup &bull; Step {step} of {stepsTotal}
-              </p>
-            </div>
-          </div>
+    <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
+      <ModalBackdrop variant="blur" className="bg-slate-950/85 backdrop-blur-sm">
+        <ModalContainer placement="center" scroll="inside" className="p-3 sm:p-4">
+          <ModalDialog className="relative w-full max-w-2xl rounded-3xl bg-slate-900 border border-slate-700/60 shadow-2xl shadow-cyan-950/40 flex flex-col max-h-[90vh] overflow-hidden text-slate-100 p-0">
+            {/* Header with Progress Steps */}
+            <ModalHeader className="p-5 sm:p-6 border-b border-slate-800 bg-slate-900/60 flex items-center justify-between gap-0 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <ModalHeading className="text-base sm:text-lg font-bold text-white tracking-tight">
+                    Welcome to CAN Do
+                  </ModalHeading>
+                  <p className="text-xs text-slate-400">
+                    Quick Setup &bull; Step {step} of {stepsTotal}
+                  </p>
+                </div>
+              </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
-            title="Close setup"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                title="Close setup"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </ModalHeader>
 
         {/* Progress Bar */}
         <div className="w-full bg-slate-800 h-1">
@@ -126,14 +139,82 @@ export function OnboardingWizardModal({
           />
         </div>
 
+        {/* Wizard Step Tabs Navigation */}
+        <div className="px-4 sm:px-6 pt-3 pb-1 border-b border-slate-800 bg-slate-900/50">
+          <Tabs
+            selectedKey={String(step)}
+            onSelectionChange={key => setStep(Number(key))}
+            aria-label="Onboarding Wizard Steps"
+          >
+            <Tabs.ListContainer className="p-1 rounded-2xl bg-slate-950/70 border border-slate-800 overflow-x-auto no-scrollbar">
+              <Tabs.List className="gap-1 flex-nowrap w-full">
+                <Tabs.Tab
+                  id="1"
+                  className={`relative flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${
+                    step === 1 ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Car className={`w-3.5 h-3.5 shrink-0 ${step === 1 ? 'text-cyan-400' : 'text-slate-500'}`} />
+                  <span className="truncate">1. Vehicle</span>
+                  <Tabs.Indicator className="rounded-xl bg-slate-800 border border-slate-700/80 shadow-sm" />
+                </Tabs.Tab>
+
+                <Tabs.Tab
+                  id="2"
+                  className={`relative flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${
+                    step === 2 ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Wifi className={`w-3.5 h-3.5 shrink-0 ${step === 2 ? 'text-teal-400' : 'text-slate-500'}`} />
+                  <span className="truncate">2. Wi-Fi</span>
+                  <Tabs.Indicator className="rounded-xl bg-slate-800 border border-slate-700/80 shadow-sm" />
+                </Tabs.Tab>
+
+                <Tabs.Tab
+                  id="3"
+                  className={`relative flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${
+                    step === 3 ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${step === 3 ? 'text-cyan-400' : 'text-slate-500'}`} />
+                  <span className="truncate">3. Updates</span>
+                  <Tabs.Indicator className="rounded-xl bg-slate-800 border border-slate-700/80 shadow-sm" />
+                </Tabs.Tab>
+
+                <Tabs.Tab
+                  id="4"
+                  className={`relative flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${
+                    step === 4 ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Home className={`w-3.5 h-3.5 shrink-0 ${step === 4 ? 'text-indigo-400' : 'text-slate-500'}`} />
+                  <span className="truncate">4. HA Setup</span>
+                  <Tabs.Indicator className="rounded-xl bg-slate-800 border border-slate-700/80 shadow-sm" />
+                </Tabs.Tab>
+
+                <Tabs.Tab
+                  id="5"
+                  className={`relative flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${
+                    step === 5 ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 ${step === 5 ? 'text-emerald-400' : 'text-slate-500'}`} />
+                  <span className="truncate">5. Review</span>
+                  <Tabs.Indicator className="rounded-xl bg-slate-800 border border-slate-700/80 shadow-sm" />
+                </Tabs.Tab>
+              </Tabs.List>
+            </Tabs.ListContainer>
+          </Tabs>
+        </div>
+
         {/* Modal Body */}
-        <div className="p-5 sm:p-7 overflow-y-auto flex-1 space-y-6">
+        <ModalBody className="p-5 sm:p-7 overflow-y-auto flex-1 space-y-6">
 
           {/* =========================================================
               STEP 1: Vehicle Selection & Unit System
              ========================================================= */}
           {step === 1 && (
-            <div className="space-y-6 animate-fade-in">
+            <div className="space-y-6">
               <div>
                 <h3 className="text-sm sm:text-base font-semibold text-white flex items-center gap-2">
                   <Car className="w-4 h-4 text-cyan-400" />
@@ -192,49 +273,86 @@ export function OnboardingWizardModal({
                 </div>
               )}
 
-              {/* Unit System Toggle */}
+              {/* Unit System Tabs */}
               <div className="space-y-2 pt-2 border-t border-slate-800">
                 <label className="text-xs font-semibold text-slate-300 flex items-center gap-2">
                   <Gauge className="w-3.5 h-3.5 text-cyan-400" />
                   Measurement System
                 </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setUnitSystem('imperial')}
-                    className={`p-3.5 rounded-2xl border text-left transition ${
-                      unitSystem === 'imperial'
-                        ? 'bg-cyan-950/40 border-cyan-500 text-white shadow-sm shadow-cyan-900/20'
-                        : 'bg-slate-800/50 border-slate-700/60 text-slate-400 hover:bg-slate-800'
-                    }`}
-                  >
-                    <div className="text-xs font-bold flex items-center justify-between">
-                      <span>Imperial Units</span>
-                      {unitSystem === 'imperial' && <CheckCircle2 className="w-4 h-4 text-cyan-400" />}
-                    </div>
-                    <div className="text-[11px] text-slate-400 mt-1">
-                      Speed in <b>mph</b>, temp in <b>&deg;F</b>, tire in <b>psi</b>
-                    </div>
-                  </button>
+                <Tabs
+                  selectedKey={unitSystem}
+                  onSelectionChange={key => setUnitSystem(key as 'imperial' | 'metric')}
+                  aria-label="Measurement Units"
+                  className="w-full"
+                >
+                  <Tabs.ListContainer className="p-1 rounded-2xl bg-slate-950/60 border border-slate-800 w-full">
+                    <Tabs.List className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
+                      <Tabs.Tab
+                        id="imperial"
+                        className={`relative px-4 py-3 rounded-xl text-left cursor-pointer transition-colors ${
+                          unitSystem === 'imperial'
+                            ? 'text-white'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          {unitSystem === 'imperial' ? (
+                            <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                          ) : (
+                            <div className="w-4 h-4 rounded-full border border-slate-700 shrink-0" />
+                          )}
+                          <span
+                            className={`text-xs font-bold whitespace-nowrap transition-colors ${
+                              unitSystem === 'imperial' ? 'text-white' : 'text-slate-400'
+                            }`}
+                          >
+                            Imperial:
+                          </span>
+                          <span
+                            className={`text-[11px] whitespace-nowrap transition-colors ${
+                              unitSystem === 'imperial' ? 'text-cyan-200/90 font-medium' : 'text-slate-500'
+                            }`}
+                          >
+                            <b>MPH</b>, <b>&deg;F</b>, <b>PSI</b>
+                          </span>
+                        </div>
+                        <Tabs.Indicator className="rounded-xl bg-cyan-950/40 border border-cyan-500 shadow-sm shadow-cyan-900/20" />
+                      </Tabs.Tab>
 
-                  <button
-                    type="button"
-                    onClick={() => setUnitSystem('metric')}
-                    className={`p-3.5 rounded-2xl border text-left transition ${
-                      unitSystem === 'metric'
-                        ? 'bg-cyan-950/40 border-cyan-500 text-white shadow-sm shadow-cyan-900/20'
-                        : 'bg-slate-800/50 border-slate-700/60 text-slate-400 hover:bg-slate-800'
-                    }`}
-                  >
-                    <div className="text-xs font-bold flex items-center justify-between">
-                      <span>Metric Units</span>
-                      {unitSystem === 'metric' && <CheckCircle2 className="w-4 h-4 text-cyan-400" />}
-                    </div>
-                    <div className="text-[11px] text-slate-400 mt-1">
-                      Speed in <b>km/h</b>, temp in <b>&deg;C</b>, tire in <b>bar/kPa</b>
-                    </div>
-                  </button>
-                </div>
+                      <Tabs.Tab
+                        id="metric"
+                        className={`relative px-4 py-3 rounded-xl text-left cursor-pointer transition-colors ${
+                          unitSystem === 'metric'
+                            ? 'text-white'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          {unitSystem === 'metric' ? (
+                            <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                          ) : (
+                            <div className="w-4 h-4 rounded-full border border-slate-700 shrink-0" />
+                          )}
+                          <span
+                            className={`text-xs font-bold whitespace-nowrap transition-colors ${
+                              unitSystem === 'metric' ? 'text-white' : 'text-slate-400'
+                            }`}
+                          >
+                            Metric:
+                          </span>
+                          <span
+                            className={`text-[11px] whitespace-nowrap transition-colors ${
+                              unitSystem === 'metric' ? 'text-cyan-200/90 font-medium' : 'text-slate-500'
+                            }`}
+                          >
+                            <b>km/h</b>, <b>&deg;C</b>, <b>Bar/kPa</b>
+                          </span>
+                        </div>
+                        <Tabs.Indicator className="rounded-xl bg-cyan-950/40 border border-cyan-500 shadow-sm shadow-cyan-900/20" />
+                      </Tabs.Tab>
+                    </Tabs.List>
+                  </Tabs.ListContainer>
+                </Tabs>
               </div>
 
               {/* System Timezone */}
@@ -265,7 +383,7 @@ export function OnboardingWizardModal({
               STEP 2: Wi-Fi Setup
              ========================================================= */}
           {step === 2 && (
-            <div className="space-y-5 animate-fade-in">
+            <div className="space-y-5">
               <div>
                 <h3 className="text-sm sm:text-base font-semibold text-white flex items-center gap-2">
                   <Wifi className="w-4 h-4 text-teal-400" />
@@ -313,7 +431,7 @@ export function OnboardingWizardModal({
               STEP 3: Opt-in Update Preferences & Scheduling
              ========================================================= */}
           {step === 3 && (
-            <div className="space-y-6 animate-fade-in">
+            <div className="space-y-6">
               <div>
                 <h3 className="text-sm sm:text-base font-semibold text-white flex items-center gap-2">
                   <RefreshCw className="w-4 h-4 text-cyan-400" />
@@ -397,35 +515,50 @@ export function OnboardingWizardModal({
                     Include in updates:
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={updateFrontend}
-                        onChange={(e) => setUpdateFrontend(e.target.checked)}
-                        className="rounded border-slate-700 text-cyan-500 focus:ring-0"
-                      />
-                      <span>Web Front-End</span>
-                    </label>
+                    <Switch
+                      isSelected={updateFrontend}
+                      onChange={setUpdateFrontend}
+                      size="sm"
+                      aria-label="Web Front-End"
+                      className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300"
+                    >
+                      <Switch.Content>
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
+                        <span>Web Front-End</span>
+                      </Switch.Content>
+                    </Switch>
 
-                    <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={updateCatalog}
-                        onChange={(e) => setUpdateCatalog(e.target.checked)}
-                        className="rounded border-slate-700 text-cyan-500 focus:ring-0"
-                      />
-                      <span>Message Catalog</span>
-                    </label>
+                    <Switch
+                      isSelected={updateCatalog}
+                      onChange={setUpdateCatalog}
+                      size="sm"
+                      aria-label="Message Catalog"
+                      className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300"
+                    >
+                      <Switch.Content>
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
+                        <span>Message Catalog</span>
+                      </Switch.Content>
+                    </Switch>
 
-                    <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={updateFirmware}
-                        onChange={(e) => setUpdateFirmware(e.target.checked)}
-                        className="rounded border-slate-700 text-cyan-500 focus:ring-0"
-                      />
-                      <span>Firmware Binary</span>
-                    </label>
+                    <Switch
+                      isSelected={updateFirmware}
+                      onChange={setUpdateFirmware}
+                      size="sm"
+                      aria-label="Firmware Binary"
+                      className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300"
+                    >
+                      <Switch.Content>
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
+                        <span>Firmware Binary</span>
+                      </Switch.Content>
+                    </Switch>
                   </div>
                 </div>
               )}
@@ -443,17 +576,21 @@ export function OnboardingWizardModal({
                         Install when vehicle is typically parked overnight
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setScheduleEnabled(!scheduleEnabled)}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                        scheduleEnabled
-                          ? 'bg-cyan-500 text-slate-950'
-                          : 'bg-slate-800 text-slate-400'
-                      }`}
+                    <Switch
+                      isSelected={scheduleEnabled}
+                      onChange={setScheduleEnabled}
+                      size="sm"
+                      aria-label="Scheduled Off-Hours Install"
                     >
-                      {scheduleEnabled ? 'SCHEDULED' : 'OFF'}
-                    </button>
+                      <Switch.Content>
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
+                        <span className="text-xs font-bold text-slate-300">
+                          {scheduleEnabled ? 'SCHEDULED' : 'OFF'}
+                        </span>
+                      </Switch.Content>
+                    </Switch>
                   </div>
 
                   {scheduleEnabled && (
@@ -477,7 +614,7 @@ export function OnboardingWizardModal({
               STEP 4: Home Assistant Integration Spotlight
              ========================================================= */}
           {step === 4 && (
-            <div className="space-y-6 animate-fade-in">
+            <div className="space-y-6">
               <div>
                 <h3 className="text-sm sm:text-base font-semibold text-white flex items-center gap-2">
                   <Home className="w-4 h-4 text-indigo-400" />
@@ -548,7 +685,7 @@ export function OnboardingWizardModal({
               STEP 5: Review & Complete
              ========================================================= */}
           {step === 5 && (
-            <div className="space-y-6 animate-fade-in text-center py-2">
+            <div className="space-y-6 text-center py-2">
               <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
@@ -590,10 +727,10 @@ export function OnboardingWizardModal({
             </div>
           )}
 
-        </div>
+        </ModalBody>
 
         {/* Modal Footer Controls */}
-        <div className="p-4 sm:p-5 border-t border-slate-800 bg-slate-900/60 flex items-center justify-between">
+        <ModalFooter className="p-4 sm:p-5 border-t border-slate-800 bg-slate-900/60 flex items-center justify-between shrink-0">
           {step > 1 ? (
             <button
               type="button"
@@ -626,9 +763,11 @@ export function OnboardingWizardModal({
               <ArrowRight className="w-4 h-4" />
             </button>
           )}
-        </div>
+        </ModalFooter>
 
-      </div>
-    </div>
+      </ModalDialog>
+    </ModalContainer>
+  </ModalBackdrop>
+</Modal>
   );
 }

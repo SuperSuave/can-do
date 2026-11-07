@@ -4,6 +4,17 @@ import { validateCatalog, validateCommand } from '../utils/canValidator';
 import { normalizeCatalog } from '../data/defaultCatalog';
 import { parseDbc, DbcParseStats } from '../utils/dbcConverter';
 import {
+  Button,
+  Modal,
+  ModalBackdrop,
+  ModalContainer,
+  ModalDialog,
+  ModalHeader,
+  ModalHeading,
+  ModalBody,
+  ModalFooter
+} from '@heroui/react';
+import {
   X,
   Upload,
   FileCode,
@@ -223,29 +234,35 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-2xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)]">
-          <div>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Upload className="w-5 h-5 text-[var(--md-sys-color-primary)]" />
-              Import Catalog or Vector DBC
-            </h2>
-            <p className="text-xs text-[var(--text-muted)] mt-0.5">
-              Upload a <code className="text-cyan-300">catalog.json</code> or industry-standard{' '}
-              <code className="text-emerald-300">.dbc</code> database file.
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-[var(--md-sys-color-surface-container-high)] transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
+      <ModalBackdrop variant="blur" className="bg-black/80 backdrop-blur-sm">
+        <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
+          <ModalDialog className="relative w-full max-w-2xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <ModalHeader className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] gap-0">
+              <div>
+                <ModalHeading className="text-lg font-bold text-white flex items-center gap-2">
+                  <Upload className="w-5 h-5 text-[var(--md-sys-color-primary)]" />
+                  Import Catalog or Vector DBC
+                </ModalHeading>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  Upload a <code className="text-cyan-300">catalog.json</code> or industry-standard{' '}
+                  <code className="text-emerald-300">.dbc</code> database file.
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                isIconOnly
+                onPress={onClose}
+                aria-label="Close modal"
+                className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-[var(--md-sys-color-surface-container-high)] transition"
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </ModalHeader>
 
-        <div className="p-6 max-h-[70vh] overflow-y-auto space-y-5">
+            <ModalBody className="p-6 max-h-[70vh] overflow-y-auto space-y-5">
           {/* Drag and Drop Zone */}
           <div
             onDragOver={e => {
@@ -393,23 +410,25 @@ export const ImportModal: React.FC<ImportModalProps> = ({
               )}
             </div>
           )}
-        </div>
+        </ModalBody>
 
         {/* Modal Footer */}
-        <div className="flex items-center justify-between p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)]">
-          <button
-            type="button"
-            onClick={onClose}
+        <ModalFooter className="flex items-center justify-between p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={onClose}
             className="dash-outline-btn px-4 py-2 text-xs font-semibold"
           >
             Cancel
-          </button>
+          </Button>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={!parsedData}
-              onClick={() => handleApply('merge')}
+            <Button
+              variant="primary"
+              size="sm"
+              isDisabled={!parsedData}
+              onPress={() => handleApply('merge')}
               className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold shadow transition ${
                 parsedData
                   ? 'bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white'
@@ -418,43 +437,48 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             >
               <RefreshCw className="w-3.5 h-3.5" />
               Merge into Catalog
-            </button>
+            </Button>
             {confirmReplace ? (
               <div className="flex items-center gap-1.5 bg-rose-950/90 border border-rose-700/80 px-2.5 py-1 rounded-lg text-xs">
                 <span className="text-xs text-rose-200 font-semibold">Overwrite all?</span>
-                <button
-                  type="button"
-                  onClick={() => {
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onPress={() => {
                     handleApply('replace');
                     setConfirmReplace(false);
                   }}
                   className="px-2 py-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-xs transition"
                 >
                   Yes, Replace
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmReplace(false)}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => setConfirmReplace(false)}
                   className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs transition"
                 >
                   Cancel
-                </button>
+                </Button>
               </div>
             ) : (
-              <button
-                type="button"
-                disabled={!parsedData}
-                onClick={() => setConfirmReplace(true)}
+              <Button
+                variant="outline"
+                size="sm"
+                isDisabled={!parsedData}
+                onPress={() => setConfirmReplace(true)}
                 className={`dash-outline-btn px-3 py-2 text-xs font-medium text-rose-300 border-rose-800/60 hover:bg-rose-950/40 ${
                   !parsedData ? 'opacity-40 cursor-not-allowed' : ''
                 }`}
               >
                 Replace Entirely
-              </button>
+              </Button>
             )}
           </div>
-        </div>
-      </div>
-    </div>
+        </ModalFooter>
+      </ModalDialog>
+    </ModalContainer>
+  </ModalBackdrop>
+</Modal>
   );
 };

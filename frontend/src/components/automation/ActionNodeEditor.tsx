@@ -1,4 +1,5 @@
 import React, { useState, useContext } from 'react';
+import { Tabs, Switch, Slider } from '@heroui/react';
 import {
   Play,
   ArrowUp,
@@ -629,28 +630,17 @@ export function ActionNodeEditor({
         {!collapsed && (
           <div className="space-y-3 min-w-0">
             {/* Mode switch */}
-            <div className="flex items-center gap-2 p-1 bg-slate-900/80 border border-slate-800 rounded-lg">
-              <button
-                type="button"
-                onClick={() => {
+            <Tabs
+              selectedKey={isDelayMode ? 'delay' : 'wait_for'}
+              onSelectionChange={key => {
+                if (key === 'delay') {
                   onUpdate({
                     ...act,
                     type: 'delay',
                     delay_ms: currentTotalMs || 2000,
                     ms: currentTotalMs || 2000
                   });
-                }}
-                className={`flex-1 py-1 px-2.5 rounded text-xs font-medium transition ${
-                  isDelayMode
-                    ? 'bg-violet-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-              >
-                Fixed Delay Duration
-              </button>
-              <button
-                type="button"
-                onClick={() => {
+                } else {
                   onUpdate({
                     ...act,
                     type: 'wait_for',
@@ -663,16 +653,39 @@ export function ActionNodeEditor({
                       ble_action: 'press'
                     }]
                   });
-                }}
-                className={`flex-1 py-1 px-2.5 rounded text-xs font-medium transition ${
-                  !isDelayMode
-                    ? 'bg-violet-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-              >
-                Wait For Condition / Button Press
-              </button>
-            </div>
+                }
+              }}
+              aria-label="Delay Execution Mode"
+              className="w-full"
+            >
+              <Tabs.ListContainer className="p-1 bg-slate-900/80 border border-slate-800 rounded-lg w-full">
+                <Tabs.List className="gap-2 w-full">
+                  <Tabs.Tab
+                    id="delay"
+                    className={`relative flex-1 py-1 px-2.5 rounded text-xs font-medium transition cursor-pointer flex items-center justify-center ${
+                      isDelayMode
+                        ? 'text-white'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <span>Fixed Delay Duration</span>
+                    <Tabs.Indicator className="rounded bg-violet-600 shadow-sm" />
+                  </Tabs.Tab>
+
+                  <Tabs.Tab
+                    id="wait_for"
+                    className={`relative flex-1 py-1 px-2.5 rounded text-xs font-medium transition cursor-pointer flex items-center justify-center ${
+                      !isDelayMode
+                        ? 'text-white'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <span>Wait For Condition / Button Press</span>
+                    <Tabs.Indicator className="rounded bg-violet-600 shadow-sm" />
+                  </Tabs.Tab>
+                </Tabs.List>
+              </Tabs.ListContainer>
+            </Tabs>
 
             {isDelayMode ? (
               <div className="space-y-2">
@@ -1070,7 +1083,7 @@ export function ActionNodeEditor({
                     <option value="passenger">Passenger Zone</option>
                   </select>
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="block text-[10px] font-sans text-slate-500">Target Temp</label>
                     <span className="text-[9px] text-teal-400 font-mono">
@@ -1079,21 +1092,40 @@ export function ActionNodeEditor({
                         : '--°F'}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="14"
-                      max="32"
-                      value={act.target_temp_c ?? act.target_c ?? ''}
-                      onChange={e => {
-                        const val = e.target.value === '' ? undefined : parseFloat(e.target.value);
-                        onUpdate({ ...act, target_temp_c: val, target_c: val });
+                  <div className="flex items-center gap-2">
+                    <Slider
+                      minValue={14}
+                      maxValue={32}
+                      step={0.5}
+                      value={act.target_temp_c ?? act.target_c ?? 21.0}
+                      onChange={val => {
+                        const num = typeof val === 'number' ? val : val[0];
+                        onUpdate({ ...act, target_temp_c: num, target_c: num });
                       }}
-                      placeholder="21.0"
-                      className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-teal-300 font-bold"
-                    />
-                    <span className="text-slate-400 font-sans text-xs">°C</span>
+                      aria-label="Target Temperature Slider"
+                      className="flex-1"
+                    >
+                      <Slider.Track className="h-1.5 bg-slate-800 rounded-full cursor-pointer relative">
+                        <Slider.Fill className="bg-teal-500 rounded-full h-full" />
+                        <Slider.Thumb className="w-3.5 h-3.5 bg-teal-400 border-2 border-slate-900 rounded-full shadow cursor-grab active:cursor-grabbing focus:outline-none" />
+                      </Slider.Track>
+                    </Slider>
+                    <div className="flex items-center gap-1 shrink-0 w-20">
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="14"
+                        max="32"
+                        value={act.target_temp_c ?? act.target_c ?? ''}
+                        onChange={e => {
+                          const val = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                          onUpdate({ ...act, target_temp_c: val, target_c: val });
+                        }}
+                        placeholder="21.0"
+                        className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-teal-300 font-bold text-xs"
+                      />
+                      <span className="text-slate-400 font-sans text-[10px]">°C</span>
+                    </div>
                   </div>
                 </div>
               </>
@@ -1208,15 +1240,19 @@ export function ActionNodeEditor({
 
                 {/* In-Cabin Confirmation Popup */}
                 <div className="pt-2 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] items-center">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={act.show_popup ?? true}
-                      onChange={e => onUpdate({ ...act, show_popup: e.target.checked })}
-                      className="rounded bg-slate-900 border-slate-700 text-amber-500 focus:ring-0"
-                    />
-                    <span className="text-slate-300">Auto-show Cluster / HUD Popup Toast</span>
-                  </label>
+                  <Switch
+                    isSelected={act.show_popup ?? true}
+                    onChange={(isSelected) => onUpdate({ ...act, show_popup: isSelected })}
+                    size="sm"
+                    aria-label="Auto-show Cluster / HUD Popup Toast"
+                  >
+                    <Switch.Content>
+                      <Switch.Control>
+                        <Switch.Thumb />
+                      </Switch.Control>
+                      <span className="text-slate-300">Auto-show Cluster / HUD Popup Toast</span>
+                    </Switch.Content>
+                  </Switch>
                   {act.show_popup !== false && (
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] text-slate-500 shrink-0">Popup Prefix:</span>
@@ -1282,24 +1318,32 @@ export function ActionNodeEditor({
 
           {act.type === 'climate_target' && (
             <div className="flex items-center gap-4 pt-1 font-sans text-[11px] text-slate-400">
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={act.sync_on ?? true}
-                  onChange={e => onUpdate({ ...act, sync_on: e.target.checked })}
-                  className="rounded bg-slate-900 border-slate-700 text-teal-500 focus:ring-0"
-                />
-                <span>Sync Passenger Zone (0x4A0)</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={act.driver_only ?? false}
-                  onChange={e => onUpdate({ ...act, driver_only: e.target.checked })}
-                  className="rounded bg-slate-900 border-slate-700 text-teal-500 focus:ring-0"
-                />
-                <span>Driver Only</span>
-              </label>
+              <Switch
+                isSelected={act.sync_on ?? true}
+                onChange={(isSelected) => onUpdate({ ...act, sync_on: isSelected })}
+                size="sm"
+                aria-label="Sync Passenger Zone (0x4A0)"
+              >
+                <Switch.Content>
+                  <Switch.Control>
+                    <Switch.Thumb />
+                  </Switch.Control>
+                  <span>Sync Passenger Zone (0x4A0)</span>
+                </Switch.Content>
+              </Switch>
+              <Switch
+                isSelected={act.driver_only ?? false}
+                onChange={(isSelected) => onUpdate({ ...act, driver_only: isSelected })}
+                size="sm"
+                aria-label="Driver Only"
+              >
+                <Switch.Content>
+                  <Switch.Control>
+                    <Switch.Thumb />
+                  </Switch.Control>
+                  <span>Driver Only</span>
+                </Switch.Content>
+              </Switch>
             </div>
           )}
 

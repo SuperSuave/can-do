@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Tabs, SearchField, Select, ListBox, ListBoxItem } from '@heroui/react';
 import { CommandRole, Catalog, Vehicle } from '../types/catalog';
 import { getAllKnownFeatures } from '../utils/canValidator';
 import {
@@ -277,80 +278,146 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs min-w-0">
           {/* 1. Make Filter Dropdown */}
           <div className="relative min-w-0">
-            <select
-              value={selectedMake}
-              onChange={e => handleMakeSelectChange(e.target.value)}
-              className="w-full max-w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-[var(--md-sys-color-primary)] transition min-w-0 text-xs"
+            <Select
+              selectedKey={selectedMake}
+              onSelectionChange={key => handleMakeSelectChange(String(key))}
+              aria-label="Filter by vehicle make"
+              className="w-full min-w-0"
             >
-              <option value="all">All Makes ({catalog.vehicles.length} models)</option>
-              {availableMakes.filter(m => m !== 'all').map(m => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
+              <Select.Trigger className="w-full max-w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-[var(--md-sys-color-primary)] transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer">
+                <Select.Value className="truncate text-xs text-left" />
+                <Select.Indicator className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+              </Select.Trigger>
+              <Select.Popover className="min-w-[var(--trigger-width)] bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-50 p-1 max-h-60 overflow-y-auto">
+                <ListBox className="outline-none space-y-0.5">
+                  <ListBoxItem id="all" textValue={`All Makes (${catalog.vehicles.length} models)`} className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                    All Makes ({catalog.vehicles.length} models)
+                  </ListBoxItem>
+                  {availableMakes.filter(m => m !== 'all').map(m => (
+                    <ListBoxItem key={m} id={m} textValue={m} className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                      {m}
+                    </ListBoxItem>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+            </Select>
           </div>
 
           {/* 2. Specific Vehicle Model & Trim Dropdown */}
           <div className="relative min-w-0">
-            <select
-              value={selectedVehicleId}
-              onChange={e => handleVehicleSelectChange(e.target.value)}
-              className={`w-full max-w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border focus:outline-none transition min-w-0 text-xs ${
-                selectedVehicleId !== 'all'
-                  ? 'border-cyan-500/70 text-cyan-300 font-semibold'
-                  : 'border-[var(--border-color)] text-[var(--text-heading)] focus:border-[var(--md-sys-color-primary)]'
-              }`}
+            <Select
+              selectedKey={selectedVehicleId}
+              onSelectionChange={key => handleVehicleSelectChange(String(key))}
+              aria-label="Filter by specific vehicle model & trim"
+              className="w-full min-w-0"
             >
-              <option value="all">
-                {selectedMake !== 'all'
-                  ? `Any ${selectedMake} Model (${availableVehicles.length})`
-                  : `Any Specific Model Trim (${catalog.vehicles.length})`}
-              </option>
-              {availableVehicles.map(v => (
-                <option key={v.id} value={v.id}>
-                  {v.make !== selectedMake ? `${v.make} ` : ''}{v.model} ({v.trim}) [{v.region.toUpperCase()}]
-                </option>
-              ))}
-            </select>
+              <Select.Trigger
+                className={`w-full max-w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border focus:outline-none transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer ${
+                  selectedVehicleId !== 'all'
+                    ? 'border-cyan-500/70 text-cyan-300 font-semibold'
+                    : 'border-[var(--border-color)] text-[var(--text-heading)] focus:border-[var(--md-sys-color-primary)]'
+                }`}
+              >
+                <Select.Value className="truncate text-xs text-left" />
+                <Select.Indicator className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+              </Select.Trigger>
+              <Select.Popover className="min-w-[var(--trigger-width)] bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-50 p-1 max-h-60 overflow-y-auto">
+                <ListBox className="outline-none space-y-0.5">
+                  <ListBoxItem
+                    id="all"
+                    textValue={selectedMake !== 'all' ? `Any ${selectedMake} Model (${availableVehicles.length})` : `Any Specific Model Trim (${catalog.vehicles.length})`}
+                    className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none"
+                  >
+                    {selectedMake !== 'all'
+                      ? `Any ${selectedMake} Model (${availableVehicles.length})`
+                      : `Any Specific Model Trim (${catalog.vehicles.length})`}
+                  </ListBoxItem>
+                  {availableVehicles.map(v => {
+                    const label = `${v.make !== selectedMake ? `${v.make} ` : ''}${v.model} (${v.trim}) [${v.region.toUpperCase()}]`;
+                    return (
+                      <ListBoxItem key={v.id} id={v.id} textValue={label} className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                        {label}
+                      </ListBoxItem>
+                    );
+                  })}
+                </ListBox>
+              </Select.Popover>
+            </Select>
           </div>
 
           {/* 3. Region Filter Dropdown */}
           <div className="relative min-w-0">
-            <select
-              value={selectedRegion}
-              onChange={e => onRegionChange(e.target.value)}
-              className="w-full max-w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-[var(--md-sys-color-primary)] transition min-w-0 text-xs"
+            <Select
+              selectedKey={selectedRegion}
+              onSelectionChange={key => onRegionChange(String(key))}
+              aria-label="Filter by region"
+              className="w-full min-w-0"
             >
-              <option value="all">All Regions</option>
-              <option value="us">United States (us)</option>
-              <option value="eu">Europe (eu)</option>
-              <option value="kr">Korea (kr)</option>
-              <option value="global">Global</option>
-            </select>
+              <Select.Trigger className="w-full max-w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-[var(--md-sys-color-primary)] transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer">
+                <Select.Value className="truncate text-xs text-left" />
+                <Select.Indicator className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+              </Select.Trigger>
+              <Select.Popover className="min-w-[var(--trigger-width)] bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-50 p-1 max-h-60 overflow-y-auto">
+                <ListBox className="outline-none space-y-0.5">
+                  <ListBoxItem id="all" textValue="All Regions" className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                    All Regions
+                  </ListBoxItem>
+                  <ListBoxItem id="us" textValue="United States (us)" className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                    United States (us)
+                  </ListBoxItem>
+                  <ListBoxItem id="eu" textValue="Europe (eu)" className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                    Europe (eu)
+                  </ListBoxItem>
+                  <ListBoxItem id="kr" textValue="Korea (kr)" className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                    Korea (kr)
+                  </ListBoxItem>
+                  <ListBoxItem id="global" textValue="Global" className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                    Global
+                  </ListBoxItem>
+                </ListBox>
+              </Select.Popover>
+            </Select>
           </div>
 
           {/* 4. Equipment / Feature Filter Dropdown */}
           <div className="relative min-w-0">
-            <select
-              value={selectedFeature}
-              onChange={e => onFeatureChange(e.target.value)}
-              className={`w-full max-w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border focus:outline-none transition min-w-0 text-xs ${
-                selectedFeature !== 'all'
-                  ? 'border-emerald-500/70 text-emerald-300 font-semibold'
-                  : 'border-[var(--border-color)] text-[var(--text-heading)] focus:border-[var(--md-sys-color-primary)]'
-              }`}
+            <Select
+              selectedKey={selectedFeature}
+              onSelectionChange={key => onFeatureChange(String(key))}
+              aria-label="Filter by equipment feature"
+              className="w-full min-w-0"
             >
-              <option value="all">All Equipment Features ({featuresWithCommands.length})</option>
-              {featuresWithCommands.map(feat => {
-                const count = featureCommandCounts[feat] || 0;
-                return (
-                  <option key={feat} value={feat}>
-                    {feat} ({count} {count === 1 ? 'cmd' : 'cmds'})
-                  </option>
-                );
-              })}
-            </select>
+              <Select.Trigger
+                className={`w-full max-w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border focus:outline-none transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer ${
+                  selectedFeature !== 'all'
+                    ? 'border-emerald-500/70 text-emerald-300 font-semibold'
+                    : 'border-[var(--border-color)] text-[var(--text-heading)] focus:border-[var(--md-sys-color-primary)]'
+                }`}
+              >
+                <Select.Value className="truncate text-xs text-left" />
+                <Select.Indicator className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+              </Select.Trigger>
+              <Select.Popover className="min-w-[var(--trigger-width)] bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-50 p-1 max-h-60 overflow-y-auto">
+                <ListBox className="outline-none space-y-0.5">
+                  <ListBoxItem
+                    id="all"
+                    textValue={`All Equipment Features (${featuresWithCommands.length})`}
+                    className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none"
+                  >
+                    All Equipment Features ({featuresWithCommands.length})
+                  </ListBoxItem>
+                  {featuresWithCommands.map(feat => {
+                    const count = featureCommandCounts[feat] || 0;
+                    const label = `${feat} (${count} ${count === 1 ? 'cmd' : 'cmds'})`;
+                    return (
+                      <ListBoxItem key={feat} id={feat} textValue={label} className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                        {label}
+                      </ListBoxItem>
+                    );
+                  })}
+                </ListBox>
+              </Select.Popover>
+            </Select>
           </div>
         </div>
 
@@ -490,53 +557,73 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
           <div className="flex flex-wrap items-center justify-between sm:justify-start lg:justify-end gap-2 text-xs w-full lg:w-auto min-w-0">
             {/* Category Dropdown */}
             <div className="relative flex-1 sm:flex-initial min-w-[140px] max-w-full">
-              <select
-                value={selectedCategory}
-                onChange={e => {
-                  onCategoryChange(e.target.value);
+              <Select
+                selectedKey={selectedCategory}
+                onSelectionChange={key => {
+                  onCategoryChange(String(key));
                   onSubcategoryChange?.('all');
                 }}
-                className="w-full px-3 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-[var(--md-sys-color-primary)] text-xs min-w-0"
+                aria-label="Filter by category"
+                className="w-full min-w-0"
               >
-                <option value="all">All Categories ({categories.length})</option>
-                {categories.map(cat => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
+                <Select.Trigger className="w-full px-3 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-[var(--md-sys-color-primary)] text-xs min-w-0 flex items-center justify-between gap-1.5 cursor-pointer">
+                  <Select.Value className="truncate text-xs text-left" />
+                  <Select.Indicator className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+                </Select.Trigger>
+                <Select.Popover className="min-w-[var(--trigger-width)] bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-50 p-1 max-h-60 overflow-y-auto">
+                  <ListBox className="outline-none space-y-0.5">
+                    <ListBoxItem id="all" textValue={`All Categories (${categories.length})`} className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                      All Categories ({categories.length})
+                    </ListBoxItem>
+                    {categories.map(cat => (
+                      <ListBoxItem key={cat} id={cat} textValue={cat} className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                        {cat}
+                      </ListBoxItem>
+                    ))}
+                  </ListBox>
+                </Select.Popover>
+              </Select>
             </div>
 
             {/* View Mode Toggle: Grid vs Grouped */}
             {onViewModeChange && (
-              <div className="flex items-center p-0.5 rounded-lg bg-[var(--input-bg)] border border-[var(--border-color)] text-xs shrink-0">
-                <button
-                  type="button"
-                  onClick={() => onViewModeChange('grid')}
-                  className={`px-2 py-1 rounded font-semibold transition flex items-center gap-1 text-[11px] ${
-                    viewMode === 'grid'
-                      ? 'bg-[var(--md-sys-color-surface-container-highest)] text-white shadow-sm'
-                      : 'text-[var(--text-muted)] hover:text-white'
-                  }`}
-                  title="Standard Grid View"
-                >
-                  <LayoutGrid className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Grid</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onViewModeChange('grouped')}
-                  className={`px-2 py-1 rounded font-semibold transition flex items-center gap-1 text-[11px] ${
-                    viewMode === 'grouped'
-                      ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-700/60 shadow-sm'
-                      : 'text-[var(--text-muted)] hover:text-cyan-300'
-                  }`}
-                  title="Group commands by subsystem & function"
-                >
-                  <FolderKanban className="w-3.5 h-3.5" />
-                  <span>Grouped</span>
-                </button>
-              </div>
+              <Tabs
+                selectedKey={viewMode}
+                onSelectionChange={key => onViewModeChange(key as 'grid' | 'grouped')}
+                aria-label="View Mode"
+              >
+                <Tabs.ListContainer className="p-0.5 rounded-lg bg-[var(--input-bg)] border border-[var(--border-color)] text-xs shrink-0">
+                  <Tabs.List className="gap-0.5">
+                    <Tabs.Tab
+                      id="grid"
+                      className={`relative px-2 py-1 rounded font-semibold transition cursor-pointer flex items-center gap-1 text-[11px] ${
+                        viewMode === 'grid'
+                          ? 'text-white'
+                          : 'text-[var(--text-muted)] hover:text-white'
+                      }`}
+                      aria-label="Standard Grid View"
+                    >
+                      <LayoutGrid className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Grid</span>
+                      <Tabs.Indicator className="rounded bg-[var(--md-sys-color-surface-container-highest)] shadow-sm" />
+                    </Tabs.Tab>
+
+                    <Tabs.Tab
+                      id="grouped"
+                      className={`relative px-2 py-1 rounded font-semibold transition cursor-pointer flex items-center gap-1 text-[11px] ${
+                        viewMode === 'grouped'
+                          ? 'text-cyan-300'
+                          : 'text-[var(--text-muted)] hover:text-cyan-300'
+                      }`}
+                      aria-label="Group commands by subsystem & function"
+                    >
+                      <FolderKanban className="w-3.5 h-3.5" />
+                      <span>Grouped</span>
+                      <Tabs.Indicator className="rounded bg-cyan-950/80 border border-cyan-700/60 shadow-sm" />
+                    </Tabs.Tab>
+                  </Tabs.List>
+                </Tabs.ListContainer>
+              </Tabs>
             )}
 
             {/* Stats & Reset Filter */}
@@ -605,25 +692,26 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
       {/* 3. BOTTOM: Search & Primary Action Row (Right above the Command Cards) */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 min-w-0 pt-0.5">
         {/* Search input with responsive width */}
-        <div className="relative flex-1 min-w-0">
-          <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search commands by name, ID, CAN ID, contributor (@handle), or byte..."
-            value={search}
-            onChange={e => onSearchChange(e.target.value)}
-            className="w-full pl-10 pr-9 py-2.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)] text-xs text-[var(--text-heading)] placeholder-slate-500 focus:outline-none focus:border-[var(--md-sys-color-primary)] focus:ring-1 focus:ring-[var(--md-sys-color-primary)] shadow-sm transition"
-          />
-          {search && (
-            <button
-              onClick={() => onSearchChange('')}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-white"
-              title="Clear search"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
+        <SearchField
+          value={search}
+          onChange={onSearchChange}
+          aria-label="Search catalog commands"
+          className="flex-1 min-w-0"
+        >
+          <SearchField.Group className="relative w-full flex items-center rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)] focus-within:border-[var(--md-sys-color-primary)] focus-within:ring-1 focus-within:ring-[var(--md-sys-color-primary)] shadow-sm transition px-3 py-2 text-xs">
+            <SearchField.SearchIcon className="w-4 h-4 text-[var(--text-muted)] mr-2 shrink-0" />
+            <SearchField.Input
+              placeholder="Search commands by name, ID, CAN ID, contributor (@handle), or byte..."
+              className="w-full bg-transparent text-xs text-[var(--text-heading)] placeholder-slate-500 focus:outline-none"
+            />
+            {search && (
+              <SearchField.ClearButton
+                className="text-[var(--text-muted)] hover:text-white shrink-0 p-1 rounded-md hover:bg-slate-800 transition cursor-pointer"
+                aria-label="Clear search"
+              />
+            )}
+          </SearchField.Group>
+        </SearchField>
 
         {/* Action buttons: Expand/Collapse (when grouped), Categories & New CAN Command */}
         <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">

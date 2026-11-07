@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Tabs, Table } from '@heroui/react';
 import { CommandOption, CommandStep } from '../types/catalog';
 import { PayloadByteEditor } from './PayloadByteEditor';
 import { MdiIcon } from './MdiIcon';
@@ -592,45 +593,55 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                           </p>
                         </div>
 
-                        {/* Mode Selector Pill */}
-                        <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] self-start sm:self-auto shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => setActionTabMap(prev => ({ ...prev, [idx]: 'single' }))}
-                            className={`px-2.5 py-1 rounded-md font-medium transition ${
-                              currentMode === 'single'
-                                ? 'bg-slate-800 text-white shadow-sm'
-                                : 'text-slate-400 hover:text-slate-200'
-                            }`}
-                          >
-                            Single Frame
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActionTabMap(prev => ({ ...prev, [idx]: 'steps' }));
-                              if (!opt.steps || opt.steps.length === 0) {
-                                const initialPayload = opt.to_payload || opt.payload || '* * * * * * * *';
-                                handleUpdateState(idx, {
-                                  steps: [{ payload: initialPayload, repeat: opt.repeat || 1 }]
-                                });
-                              }
-                            }}
-                            className={`px-2.5 py-1 rounded-md font-medium flex items-center gap-1.5 transition ${
-                              currentMode === 'steps'
-                                ? 'bg-emerald-950/80 border border-emerald-800/60 text-emerald-300 font-semibold shadow-sm'
-                                : 'text-slate-400 hover:text-slate-200'
-                            }`}
-                          >
-                            <ListOrdered className="w-3 h-3 text-emerald-400" />
-                            <span>Multi-Step Sequence</span>
-                            {opt.steps && opt.steps.length > 0 && (
-                              <span className="text-[10px] font-mono px-1 rounded bg-emerald-900 text-emerald-200">
-                                {opt.steps.length}
-                              </span>
-                            )}
-                          </button>
-                        </div>
+                        {/* Mode Selector Tabs */}
+                        <Tabs
+                          selectedKey={currentMode}
+                          onSelectionChange={key => {
+                            const newMode = key as 'single' | 'steps';
+                            setActionTabMap(prev => ({ ...prev, [idx]: newMode }));
+                            if (newMode === 'steps' && (!opt.steps || opt.steps.length === 0)) {
+                              const initialPayload = opt.to_payload || opt.payload || '* * * * * * * *';
+                              handleUpdateState(idx, {
+                                steps: [{ payload: initialPayload, repeat: opt.repeat || 1 }]
+                              });
+                            }
+                          }}
+                          aria-label="Action Transmission Mode"
+                        >
+                          <Tabs.ListContainer className="p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] self-start sm:self-auto shrink-0">
+                            <Tabs.List className="gap-1">
+                              <Tabs.Tab
+                                id="single"
+                                className={`relative px-2.5 py-1 rounded-md font-medium transition cursor-pointer flex items-center ${
+                                  currentMode === 'single'
+                                    ? 'text-white'
+                                    : 'text-slate-400 hover:text-slate-200'
+                                }`}
+                              >
+                                <span>Single Frame</span>
+                                <Tabs.Indicator className="rounded-md bg-slate-800 shadow-sm" />
+                              </Tabs.Tab>
+
+                              <Tabs.Tab
+                                id="steps"
+                                className={`relative px-2.5 py-1 rounded-md font-medium flex items-center gap-1.5 transition cursor-pointer ${
+                                  currentMode === 'steps'
+                                    ? 'text-emerald-300 font-semibold'
+                                    : 'text-slate-400 hover:text-slate-200'
+                                }`}
+                              >
+                                <ListOrdered className="w-3 h-3 text-emerald-400" />
+                                <span>Multi-Step Sequence</span>
+                                {opt.steps && opt.steps.length > 0 && (
+                                  <span className="text-[10px] font-mono px-1 rounded bg-emerald-900 text-emerald-200">
+                                    {opt.steps.length}
+                                  </span>
+                                )}
+                                <Tabs.Indicator className="rounded-md bg-emerald-950/80 border border-emerald-800/60 shadow-sm" />
+                              </Tabs.Tab>
+                            </Tabs.List>
+                          </Tabs.ListContainer>
+                        </Tabs>
                       </div>
 
                       {/* Single Frame Mode */}
@@ -1070,26 +1081,24 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
             </span>
           </div>
 
-          <div className="overflow-x-auto rounded-[10px] border border-slate-800">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 font-mono text-[11px]">
-                <tr>
-                  <th className="p-2.5">#</th>
-                  <th className="p-2.5">State Name</th>
-                  <th className="p-2.5">Code</th>
-                  <th className="p-2.5">RX CAN Match Pattern</th>
-                  <th className="p-2.5">Description</th>
-                  <th className="p-2.5 text-right">Default</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/70 font-mono bg-slate-950/40">
+          <Table className="w-full text-left text-xs overflow-x-auto rounded-[10px] border border-slate-800">
+            <Table.Content aria-label="Decoded State Matrix Table">
+              <Table.Header className="bg-slate-950 text-slate-400 border-b border-slate-800 font-mono text-[11px]">
+                <Table.Column id="idx" className="p-2.5">#</Table.Column>
+                <Table.Column id="label" isRowHeader className="p-2.5">State Name</Table.Column>
+                <Table.Column id="code" className="p-2.5">Code</Table.Column>
+                <Table.Column id="rx" className="p-2.5">RX CAN Match Pattern</Table.Column>
+                <Table.Column id="desc" className="p-2.5">Description</Table.Column>
+                <Table.Column id="def" className="p-2.5 text-right">Default</Table.Column>
+              </Table.Header>
+              <Table.Body className="divide-y divide-slate-800/70 font-mono bg-slate-950/40">
                 {options.map((opt, i) => (
-                  <tr key={i} className="hover:bg-slate-900/60 transition">
-                    <td className="p-2.5 text-slate-500 font-bold">{i + 1}</td>
-                    <td className="p-2.5 font-sans font-semibold text-white">
+                  <Table.Row key={i} id={String(i)} className="hover:bg-slate-900/60 transition">
+                    <Table.Cell className="p-2.5 text-slate-500 font-bold">{i + 1}</Table.Cell>
+                    <Table.Cell className="p-2.5 font-sans font-semibold text-white">
                       {opt.label}
-                    </td>
-                    <td className="p-2.5 text-cyan-300">
+                    </Table.Cell>
+                    <Table.Cell className="p-2.5 text-cyan-300">
                       {opt.state_value !== undefined && opt.state_value !== '' ? (
                         <span className="bg-cyan-950/60 border border-cyan-800/60 px-1.5 py-0.5 rounded text-[11px]">
                           {opt.state_value}
@@ -1097,8 +1106,8 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                       ) : (
                         <span className="text-slate-600">-</span>
                       )}
-                    </td>
-                    <td className="p-2.5">
+                    </Table.Cell>
+                    <Table.Cell className="p-2.5">
                       <div className="flex flex-col gap-1">
                         {opt.match || opt.match_payload ? (
                           <span className="text-cyan-300 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/50 font-mono text-[11px] inline-block w-fit">
@@ -1118,11 +1127,11 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                           <span className="text-slate-600">-</span>
                         )}
                       </div>
-                    </td>
-                    <td className="p-2.5 font-sans text-slate-400 max-w-xs truncate">
+                    </Table.Cell>
+                    <Table.Cell className="p-2.5 font-sans text-slate-400 max-w-xs truncate">
                       {opt.description || opt.popup || '-'}
-                    </td>
-                    <td className="p-2.5 text-right">
+                    </Table.Cell>
+                    <Table.Cell className="p-2.5 text-right">
                       {opt.default ? (
                         <span className="px-2 py-0.5 rounded text-[10px] font-sans font-bold uppercase bg-cyan-950 text-cyan-300 border border-cyan-700">
                           Default
@@ -1130,12 +1139,12 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                       ) : (
                         <span className="text-slate-600">-</span>
                       )}
-                    </td>
-                  </tr>
+                    </Table.Cell>
+                  </Table.Row>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </Table.Body>
+            </Table.Content>
+          </Table>
         </div>
       )}
     </div>

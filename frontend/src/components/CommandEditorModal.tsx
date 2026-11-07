@@ -1,4 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Tabs,
+  Button,
+  Modal,
+  ModalBackdrop,
+  ModalContainer,
+  ModalDialog,
+  ModalHeader,
+  ModalHeading,
+  ModalBody,
+  ModalFooter
+} from '@heroui/react';
 import { Command, CommandRole, Catalog, CommandOption, CommandStep, ContributorInfo, getCommandContributors } from '../types/catalog';
 import { validateCommand, getAllKnownFeatures } from '../utils/canValidator';
 import { parseCanCaptureNote } from '../utils/canCaptureParser';
@@ -522,37 +534,43 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-3xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)]">
-          <div>
-            <h2 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
-              {isNew ? (
-                <>
-                  <Sparkles className="w-5 h-5 text-emerald-400" />
-                  Add New CAN Command
-                </>
-              ) : (
-                <>
-                  <Layers className="w-5 h-5 text-amber-400" />
-                  Edit Command: <span className="font-mono text-cyan-400">{formData.id}</span>
-                </>
-              )}
-            </h2>
-            <p className="text-xs text-[var(--text-muted)] mt-0.5">
-              Specify the command details, CAN identifiers, and payload patterns. Real-time validation active.
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-[var(--md-sys-color-surface-container-high)] transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
+    <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
+      <ModalBackdrop variant="blur" className="bg-black/80 backdrop-blur-sm">
+        <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
+          <ModalDialog className="relative w-full max-w-3xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <ModalHeader className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] gap-0">
+              <div>
+                <ModalHeading className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
+                  {isNew ? (
+                    <>
+                      <Sparkles className="w-5 h-5 text-emerald-400" />
+                      Add New CAN Command
+                    </>
+                  ) : (
+                    <>
+                      <Layers className="w-5 h-5 text-amber-400" />
+                      Edit Command: <span className="font-mono text-cyan-400">{formData.id}</span>
+                    </>
+                  )}
+                </ModalHeading>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  Specify the command details, CAN identifiers, and payload patterns. Real-time validation active.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  isIconOnly
+                  onPress={onClose}
+                  aria-label="Close modal"
+                  className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-[var(--md-sys-color-surface-container-high)] transition"
+                >
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+            </ModalHeader>
 
         {isNew && (
           <div className="border-b border-[var(--border-color)] bg-cyan-950/20">
@@ -561,14 +579,15 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                 <FileText className="w-4 h-4 text-cyan-400 shrink-0" />
                 <span>Have a raw capture note (<code className="font-mono text-amber-300">!cancapture</code> D1-D8 notation)?</span>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowCaptureBox(!showCaptureBox)}
+              <Button
+                variant="outline"
+                size="sm"
+                onPress={() => setShowCaptureBox(!showCaptureBox)}
                 className="px-3 py-1.5 rounded-lg bg-cyan-900 border border-cyan-700 text-white font-semibold hover:bg-cyan-800 transition shadow-sm flex items-center gap-1.5 whitespace-nowrap"
               >
                 <span>{showCaptureBox ? 'Hide Importer' : 'Paste & Parse Capture Note'}</span>
                 {showCaptureBox ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              </button>
+              </Button>
             </div>
 
             {showCaptureBox && (
@@ -632,21 +651,23 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                 )}
 
                 <div className="flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowCaptureBox(false)}
-                    className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition"
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onPress={() => setShowCaptureBox(false)}
+                    className="dash-outline-btn px-3 py-1.5 text-xs"
                   >
                     Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleApplyCaptureNote}
-                    disabled={!captureParseResult}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    isDisabled={!captureParseResult}
+                    onPress={handleApplyCaptureNote}
                     className="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition shadow-md disabled:opacity-50"
                   >
                     Apply Note to Form & Tweak
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -654,8 +675,8 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
         )}
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit}>
-          <div className="p-6 max-h-[70vh] overflow-y-auto space-y-5">
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+          <ModalBody className="p-6 max-h-[70vh] overflow-y-auto space-y-5">
             {/* Row 1: Name & ID */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -691,14 +712,16 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                     className="w-full pl-3 pr-8 py-2 rounded-[8px] font-mono text-sm bg-[var(--input-bg)] border border-[var(--border-color)] text-cyan-300 placeholder-slate-600 focus:outline-none focus:border-[var(--md-sys-color-primary)]"
                   />
                   {formData.name && (
-                    <button
-                      type="button"
-                      onClick={handleRegenerateIdFromName}
-                      title="Regenerate slug from command name"
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      isIconOnly
+                      onPress={handleRegenerateIdFromName}
+                      aria-label="Regenerate slug from command name"
                       className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-cyan-300 rounded transition"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
-                    </button>
+                    </Button>
                   )}
                 </div>
                 {!isNew && initialCommand?.id && formData.id && formData.id !== initialCommand.id && (
@@ -913,58 +936,69 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                     </span>
                   )}
                 </label>
-                <div className="flex flex-wrap items-center gap-1 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setActivePayloadMode('options')}
-                    className={`px-3 py-1 rounded-full text-xs font-medium border transition flex items-center gap-1.5 ${
-                      activePayloadMode === 'options'
-                        ? 'bg-[var(--md-sys-color-primary)] text-white border-[var(--md-sys-color-primary)] shadow-sm'
-                        : 'bg-[var(--input-bg)] border-[var(--border-color)] text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Layers className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>State Definitions ("What State is What")</span>
-                    {formData.options && formData.options.length > 0 && (
-                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono font-bold">
-                        {formData.options.length}
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActivePayloadMode('transition')}
-                    className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
-                      activePayloadMode === 'transition'
-                        ? 'bg-[var(--md-sys-color-primary)] text-white border-[var(--md-sys-color-primary)]'
-                        : 'bg-[var(--input-bg)] border-[var(--border-color)] text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    From / To Transition
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActivePayloadMode('match')}
-                    className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
-                      activePayloadMode === 'match'
-                        ? 'bg-[var(--md-sys-color-primary)] text-white border-[var(--md-sys-color-primary)]'
-                        : 'bg-[var(--input-bg)] border-[var(--border-color)] text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Single Match Pattern
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActivePayloadMode('steps')}
-                    className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
-                      activePayloadMode === 'steps'
-                        ? 'bg-[var(--md-sys-color-primary)] text-white border-[var(--md-sys-color-primary)]'
-                        : 'bg-[var(--input-bg)] border-[var(--border-color)] text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Burst Steps
-                  </button>
-                </div>
+                <Tabs
+                  selectedKey={activePayloadMode}
+                  onSelectionChange={key => setActivePayloadMode(key as 'transition' | 'match' | 'options' | 'steps')}
+                  aria-label="Payload Mode Selection"
+                >
+                  <Tabs.ListContainer className="p-1 rounded-xl bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] text-xs font-medium overflow-x-auto no-scrollbar">
+                    <Tabs.List className="gap-1 flex-wrap">
+                      <Tabs.Tab
+                        id="options"
+                        className={`relative px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                          activePayloadMode === 'options'
+                            ? 'text-white'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>State Definitions ("What State is What")</span>
+                        {formData.options && formData.options.length > 0 && (
+                          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono font-bold">
+                            {formData.options.length}
+                          </span>
+                        )}
+                        <Tabs.Indicator className="rounded-lg bg-[var(--md-sys-color-primary)] shadow-sm" />
+                      </Tabs.Tab>
+
+                      <Tabs.Tab
+                        id="transition"
+                        className={`relative px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer flex items-center ${
+                          activePayloadMode === 'transition'
+                            ? 'text-white'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <span>From / To Transition</span>
+                        <Tabs.Indicator className="rounded-lg bg-[var(--md-sys-color-primary)] shadow-sm" />
+                      </Tabs.Tab>
+
+                      <Tabs.Tab
+                        id="match"
+                        className={`relative px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer flex items-center ${
+                          activePayloadMode === 'match'
+                            ? 'text-white'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <span>Single Match Pattern</span>
+                        <Tabs.Indicator className="rounded-lg bg-[var(--md-sys-color-primary)] shadow-sm" />
+                      </Tabs.Tab>
+
+                      <Tabs.Tab
+                        id="steps"
+                        className={`relative px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer flex items-center ${
+                          activePayloadMode === 'steps'
+                            ? 'text-white'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <span>Burst Steps</span>
+                        <Tabs.Indicator className="rounded-lg bg-[var(--md-sys-color-primary)] shadow-sm" />
+                      </Tabs.Tab>
+                    </Tabs.List>
+                  </Tabs.ListContainer>
+                </Tabs>
               </div>
 
               {/* Mode 1: Transition */}
@@ -1338,14 +1372,15 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                   <span className="text-[11px] text-slate-400 hidden sm:inline">
                     Credited on card & detail modal
                   </span>
-                  <button
-                    type="button"
-                    onClick={handleAddContributor}
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onPress={handleAddContributor}
                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] bg-cyan-950/60 hover:bg-cyan-900/70 border border-cyan-700/60 text-cyan-300 text-xs font-semibold transition"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Contributor</span>
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -1361,14 +1396,16 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                         Contributor #{idx + 1}
                       </span>
                       {contributorsList.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveContributor(idx)}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          isIconOnly
+                          onPress={() => handleRemoveContributor(idx)}
                           className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-950/30 rounded transition"
-                          title="Remove contributor"
+                          aria-label="Remove contributor"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        </Button>
                       )}
                     </div>
 
@@ -1514,58 +1551,64 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                 </div>
               ))}
             </div>
-          </div>
+          </ModalBody>
 
           {/* Modal Footer */}
-          <div className="flex items-center justify-between p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)]">
+          <ModalFooter className="flex items-center justify-between p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
             <div>
               {!isNew && onDelete && initialCommand && (
                 confirmDelete ? (
                   <div className="flex items-center gap-1.5 bg-rose-950/90 border border-rose-700/80 px-2.5 py-1 rounded-lg">
                     <span className="text-xs font-semibold text-rose-200">Delete this command?</span>
-                    <button
-                      type="button"
-                      onClick={() => {
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onPress={() => {
                         onDelete(initialCommand.id);
                         onClose();
                       }}
                       className="px-2 py-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-xs transition"
                     >
                       Confirm
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDelete(false)}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onPress={() => setConfirmDelete(false)}
                       className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs transition"
                     >
                       Cancel
-                    </button>
+                    </Button>
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDelete(true)}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onPress={() => setConfirmDelete(true)}
                     className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-2 px-3 text-slate-400 hover:text-rose-400 hover:border-rose-800/60"
-                    title="Delete this command"
+                    aria-label="Delete this command"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     Delete Command
-                  </button>
+                  </Button>
                 )
               )}
             </div>
 
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={onClose}
+              <Button
+                variant="outline"
+                size="sm"
+                onPress={onClose}
                 className="dash-outline-btn px-4 py-2 text-xs font-semibold"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="submit"
-                disabled={!canSave}
+                variant="primary"
+                size="sm"
+                isDisabled={!canSave}
                 className={`px-5 py-2 rounded-full text-xs font-semibold shadow transition ${
                   canSave
                     ? 'bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white'
@@ -1573,11 +1616,13 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                 }`}
               >
                 {isNew ? 'Add to Catalog' : 'Save Changes'}
-              </button>
+              </Button>
             </div>
-          </div>
+          </ModalFooter>
         </form>
-      </div>
-    </div>
+      </ModalDialog>
+    </ModalContainer>
+  </ModalBackdrop>
+</Modal>
   );
 };

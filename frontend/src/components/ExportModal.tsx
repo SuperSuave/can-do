@@ -1,4 +1,17 @@
 import React, { useState, useMemo } from 'react';
+import {
+  Tabs,
+  Switch,
+  Button,
+  Modal,
+  ModalBackdrop,
+  ModalContainer,
+  ModalDialog,
+  ModalHeader,
+  ModalHeading,
+  ModalBody,
+  ModalFooter
+} from '@heroui/react';
 import { Catalog } from '../types/catalog';
 import { exportToDbc } from '../utils/dbcConverter';
 import {
@@ -168,93 +181,119 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-4xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-950/60 border border-cyan-800/80 flex items-center justify-center text-cyan-400">
-              <Download className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white">Export CAN Catalog</h3>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-300 font-mono border border-cyan-800/80">
-                  {catalog.can_do_version || 'Loading...'}
-                </span>
+    <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
+      <ModalBackdrop variant="blur" className="bg-black/80 backdrop-blur-sm">
+        <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
+          <ModalDialog className="relative w-full max-w-4xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <ModalHeader className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0 gap-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-950/60 border border-cyan-800/80 flex items-center justify-center text-cyan-400">
+                  <Download className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <ModalHeading className="text-base font-bold text-white">Export CAN Catalog</ModalHeading>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-300 font-mono border border-cyan-800/80">
+                      {catalog.can_do_version || 'Loading...'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Download or copy catalog in standard Vector DBC or CAN Do JSON format
+                  </p>
+                </div>
               </div>
-              <p className="text-xs text-slate-400">
-                Download or copy catalog in standard Vector DBC or CAN Do JSON format
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                isIconOnly
+                onPress={onClose}
+                aria-label="Close modal"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </ModalHeader>
 
         {/* Format Selector Bar */}
         <div className="px-5 py-3 border-b border-[var(--border-color)] bg-slate-900/60 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-slate-400 mr-1">Format:</span>
-            <button
-              type="button"
-              onClick={() => setActiveFormat('dbc')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition border ${
-                activeFormat === 'dbc'
-                  ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/50 shadow-sm'
-                  : 'bg-slate-950/50 text-slate-400 border-slate-800 hover:text-slate-200'
-              }`}
+            <Tabs
+              selectedKey={activeFormat}
+              onSelectionChange={key => setActiveFormat(key as ExportFormat)}
+              aria-label="Export Format"
             >
-              <FileCode className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Vector CAN DBC (.dbc)</span>
-              <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60">
-                SavvyCAN / comma
-              </span>
-            </button>
+              <Tabs.ListContainer className="p-0.5 rounded-lg bg-slate-950/50 border border-slate-800 text-xs">
+                <Tabs.List className="gap-1">
+                  <Tabs.Tab
+                    id="dbc"
+                    className={`relative px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition cursor-pointer ${
+                      activeFormat === 'dbc'
+                        ? 'text-cyan-300'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <FileCode className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Vector CAN DBC (.dbc)</span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60">
+                      SavvyCAN / comma
+                    </span>
+                    <Tabs.Indicator className="rounded-lg bg-cyan-500/10 border border-cyan-500/50 shadow-sm" />
+                  </Tabs.Tab>
 
-            <button
-              type="button"
-              onClick={() => setActiveFormat('json')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition border ${
-                activeFormat === 'json'
-                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/50 shadow-sm'
-                  : 'bg-slate-950/50 text-slate-400 border-slate-800 hover:text-slate-200'
-              }`}
-            >
-              <FileJson className="w-3.5 h-3.5 text-emerald-400" />
-              <span>CAN Do JSON (.json)</span>
-              <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60">
-                Hub Schema
-              </span>
-            </button>
+                  <Tabs.Tab
+                    id="json"
+                    className={`relative px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition cursor-pointer ${
+                      activeFormat === 'json'
+                        ? 'text-emerald-300'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <FileJson className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>CAN Do JSON (.json)</span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60">
+                      Hub Schema
+                    </span>
+                    <Tabs.Indicator className="rounded-lg bg-emerald-500/10 border border-emerald-500/50 shadow-sm" />
+                  </Tabs.Tab>
+                </Tabs.List>
+              </Tabs.ListContainer>
+            </Tabs>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveTab('preview')}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition ${
-                activeTab === 'preview'
-                  ? 'bg-slate-800 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              File Preview
-            </button>
-            <button
-              onClick={() => setActiveTab('help')}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition ${
-                activeTab === 'help'
-                  ? 'bg-slate-800 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Tool Setup Guide
-            </button>
-          </div>
+          <Tabs
+            selectedKey={activeTab}
+            onSelectionChange={key => setActiveTab(key as 'preview' | 'help')}
+            aria-label="Export Views"
+          >
+            <Tabs.ListContainer className="p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px]">
+              <Tabs.List className="gap-1">
+                <Tabs.Tab
+                  id="preview"
+                  className={`relative px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                    activeTab === 'preview'
+                      ? 'text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span>File Preview</span>
+                  <Tabs.Indicator className="rounded-md bg-slate-800 shadow-sm" />
+                </Tabs.Tab>
+                <Tabs.Tab
+                  id="help"
+                  className={`relative px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                    activeTab === 'help'
+                      ? 'text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span>Tool Setup Guide</span>
+                  <Tabs.Indicator className="rounded-md bg-slate-800 shadow-sm" />
+                </Tabs.Tab>
+              </Tabs.List>
+            </Tabs.ListContainer>
+          </Tabs>
         </div>
 
         {/* Filter & Configuration Toolbar */}
@@ -313,41 +352,53 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               </div>
 
               <div className="flex flex-col justify-end">
-                <label className="inline-flex items-center gap-2 cursor-pointer pb-2 text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={includeComments}
-                    onChange={e => setIncludeComments(e.target.checked)}
-                    className="rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-0 w-4 h-4"
-                  />
-                  <span className="text-[11px]">Include Author & Notes (`CM_`)</span>
-                </label>
+                <Switch
+                  isSelected={includeComments}
+                  onChange={setIncludeComments}
+                  size="sm"
+                  aria-label="Include Author & Notes (CM_)"
+                >
+                  <Switch.Content>
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
+                    <span className="text-[11px] text-slate-300">Include Author & Notes (`CM_`)</span>
+                  </Switch.Content>
+                </Switch>
               </div>
             </>
           ) : (
             <>
               <div className="flex flex-col justify-end">
-                <label className="inline-flex items-center gap-2 cursor-pointer pb-2 text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={filterJsonToScope}
-                    onChange={e => setFilterJsonToScope(e.target.checked)}
-                    className="rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-0 w-4 h-4"
-                  />
-                  <span className="text-[11px]">Filter JSON to selected scope</span>
-                </label>
+                <Switch
+                  isSelected={filterJsonToScope}
+                  onChange={setFilterJsonToScope}
+                  size="sm"
+                  aria-label="Filter JSON to selected scope"
+                >
+                  <Switch.Content>
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
+                    <span className="text-[11px] text-slate-300">Filter JSON to selected scope</span>
+                  </Switch.Content>
+                </Switch>
               </div>
 
               <div className="flex flex-col justify-end">
-                <label className="inline-flex items-center gap-2 cursor-pointer pb-2 text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={jsonMinified}
-                    onChange={e => setJsonMinified(e.target.checked)}
-                    className="rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-0 w-4 h-4"
-                  />
-                  <span className="text-[11px]">Compact (Minified) JSON</span>
-                </label>
+                <Switch
+                  isSelected={jsonMinified}
+                  onChange={setJsonMinified}
+                  size="sm"
+                  aria-label="Compact (Minified) JSON"
+                >
+                  <Switch.Content>
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
+                    <span className="text-[11px] text-slate-300">Compact (Minified) JSON</span>
+                  </Switch.Content>
+                </Switch>
               </div>
             </>
           )}
@@ -401,7 +452,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-5">
+        <ModalBody className="flex-1 overflow-y-auto p-5">
           {activeTab === 'preview' ? (
             <div className="relative">
               <pre className="p-4 rounded-xl bg-slate-950/90 border border-slate-800/90 font-mono text-xs text-slate-200 overflow-x-auto leading-relaxed max-h-[420px] select-all">
@@ -470,10 +521,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               </div>
             </div>
           )}
-        </div>
+        </ModalBody>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
+        <ModalFooter className="flex items-center justify-between p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
           <div className="text-xs text-slate-400">
             {activeFormat === 'dbc' ? (
               <span>{dbcStats.sgCount} Signals across {dbcStats.boCount} CAN Messages</span>
@@ -483,9 +534,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={handleCopy}
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={handleCopy}
               className="dash-outline-btn px-4 py-2 text-xs font-semibold inline-flex items-center gap-1.5"
             >
               {copied ? (
@@ -499,11 +551,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   <span>Copy {activeFormat === 'dbc' ? 'DBC Text' : 'JSON Text'}</span>
                 </>
               )}
-            </button>
+            </Button>
 
-            <button
-              type="button"
-              onClick={handleDownload}
+            <Button
+              variant="primary"
+              size="sm"
+              onPress={handleDownload}
               className={`px-5 py-2 rounded-full text-xs font-bold inline-flex items-center gap-2 transition shadow-md ${
                 activeFormat === 'dbc'
                   ? 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-cyan-500/20'
@@ -512,10 +565,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             >
               <Download className="w-4 h-4" />
               <span>Download {activeFormat === 'dbc' ? '.dbc File' : '.json File'}</span>
-            </button>
+            </Button>
           </div>
-        </div>
-      </div>
-    </div>
+        </ModalFooter>
+      </ModalDialog>
+    </ModalContainer>
+  </ModalBackdrop>
+</Modal>
   );
 };

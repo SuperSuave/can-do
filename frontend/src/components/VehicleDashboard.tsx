@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Tabs, Chip, Badge, Card, Tooltip, ProgressBar } from '@heroui/react';
 import { Catalog, Command, Vehicle } from '../types/catalog';
 import { isRunningOnDevice, resolveDeviceBaseUrl } from '../utils/hostUtils';
 import { deviceWs } from '../services/deviceWs';
@@ -877,21 +878,21 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       setDoors({ frontLeft: fl, frontRight: fr, rearLeft: rl, rearRight: rr });
       setHoodOpen(hood);
       setLocked(isLocked);
-      recordLog(idFormatted, canMappings.doorsName, `Doors: ${fl || fr || rl || rr ? 'Ajar' : 'Latched'}, Locks: ${isLocked ? 'Locked' : 'Unlocked'}`, hexPayload, now);
+      recordLog(idFormatted, canMappings.doorsName, `Doors: ${fl || fr || rl || rr ? 'Open' : 'Closed'}, Locks: ${isLocked ? 'Locked' : 'Unlocked'}`, hexPayload, now);
     }
 
     // Tailgate / Trunk Status (Dynamically mapped from catalog, e.g. 0x414)
     else if ((normId === canMappings.trunk || normId === '414') && bytes.length >= 4) {
       const tr = Boolean(bytes[3] & 0x01);
       setTrunkOpen(tr);
-      recordLog(idFormatted, canMappings.trunkName, tr ? 'OPEN' : 'Closed', hexPayload, now);
+      recordLog(idFormatted, canMappings.trunkName, tr ? 'Open' : 'Closed', hexPayload, now);
     }
 
     // EV Charge Port Door (Dynamically mapped from catalog, e.g. 0x3AA)
     else if ((normId === canMappings.chargePort || normId === '3aa') && bytes.length >= 5) {
       const cp = Boolean(bytes[4] & 0x02);
       setChargePortOpen(cp);
-      recordLog(idFormatted, canMappings.chargePortName, cp ? 'OPEN' : 'Closed', hexPayload, now);
+      recordLog(idFormatted, canMappings.chargePortName, cp ? 'Open' : 'Closed', hexPayload, now);
     }
 
     // EV Charging Status & Grid Interconnect (Dynamically mapped from catalog, e.g. 0x594)
@@ -1295,25 +1296,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
               <h1 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
                 {activeVehicle ? `${activeVehicle.make} ${activeVehicle.model} ${activeVehicle.trim || ''}`.trim() : `${EGMP_MODELS[selectedModel].brand} ${EGMP_MODELS[selectedModel].name}`}
               </h1>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium tracking-wide text-cyan-300 bg-cyan-950/80 border border-cyan-800/60">
-                {activeVehicle?.region ? activeVehicle.region.toUpperCase() : EGMP_MODELS[selectedModel].badge}
-              </span>
-              <button
-                type="button"
-                onClick={toggleSunroofEquipped}
-                title="Click to toggle between Sunroof and Solid Roof"
-                className={`px-2 py-0.5 rounded-full text-[10px] font-mono border transition-all cursor-pointer ${
-                  sunroof.equipped
-                    ? 'text-sky-300 bg-sky-950/70 border-sky-800/70 hover:bg-sky-900/80'
-                    : 'text-slate-400 bg-slate-800/60 border-slate-700/60 hover:text-slate-200'
-                }`}
+              <Badge
+                size="sm"
+                color="accent"
+                variant="soft"
+                className="font-mono text-[10px] font-medium tracking-wide text-cyan-300 bg-cyan-950/80 border border-cyan-800/60"
               >
-                {sunroof.equipped
-                  ? selectedModel === 'ev6' || selectedModel === 'ioniq6'
-                    ? `Glass Sunroof (${sunroof.state.toUpperCase()})`
-                    : `Vision Roof (${sunroof.sunshade === 'open' ? 'SHADE OPEN' : 'SHADED'})`
-                  : 'Solid Steel Roof'}
-              </button>
+                {activeVehicle?.region ? activeVehicle.region.toUpperCase() : EGMP_MODELS[selectedModel].badge}
+              </Badge>
             </div>
             <div className="flex flex-wrap items-center gap-2.5 mt-0.5 text-xs text-slate-400">
               <span className="font-mono">{odometer !== null ? `${odometer.toLocaleString()} ${unitSystem === 'metric' ? 'km' : 'mi'}` : `-- ${unitSystem === 'metric' ? 'km' : 'mi'}`}</span>
@@ -1322,9 +1312,13 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 <Thermometer className="w-3 h-3 text-slate-400" />
                 <span>{displayAmbient}</span>
                 {ambientThreshold && (
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded font-medium border ${ambientThreshold.color}`}>
+                  <Chip
+                    size="sm"
+                    variant="soft"
+                    className={`text-[10px] px-1.5 py-0.2 rounded font-medium border ${ambientThreshold.color}`}
+                  >
                     {ambientThreshold.label}
-                  </span>
+                  </Chip>
                 )}
               </span>
               <span>•</span>
@@ -1335,22 +1329,74 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
           </div>
         </div>
 
-        {/* Live Telemetry Badge */}
+        {/* Live Telemetry Badges & EV Battery State */}
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full lg:w-auto justify-between lg:justify-end">
-          {/* Live CAN Telemetry Connection Badge */}
-          <div className="flex items-center gap-2">
-            <div
-              id="live-can-status-badge"
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-2 border transition-all ${
-                connectedDevice
-                  ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60 shadow-sm'
-                  : 'bg-slate-900 text-slate-400 border-slate-800'
-              }`}
-            >
-              <span className={`w-2 h-2 rounded-full ${connectedDevice ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500'}`} />
-              <span>{connectedDevice ? 'Vehicle CAN Online' : 'Awaiting CAN Traffic'}</span>
-            </div>
-          </div>
+          {/* Battery State of Charge (SoC) & Charging Status Chip */}
+          <Tooltip>
+            <Tooltip.Trigger>
+              <div className="flex items-center gap-2">
+                <Chip
+                  size="sm"
+                  color={soc !== null && soc <= 20 ? 'danger' : isCharging ? 'success' : 'accent'}
+                  variant="soft"
+                  className={`px-2.5 py-1 text-xs font-mono font-semibold inline-flex items-center gap-1.5 border shadow-sm cursor-help ${
+                    isCharging
+                      ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'
+                      : soc !== null && soc <= 20
+                      ? 'bg-rose-950/80 text-rose-300 border-rose-700/60'
+                      : 'bg-cyan-950/80 text-cyan-300 border-cyan-800/60'
+                  }`}
+                >
+                  {isCharging ? (
+                    <BatteryCharging className="w-3.5 h-3.5 text-emerald-400 animate-pulse mr-1" />
+                  ) : (
+                    <Battery className="w-3.5 h-3.5 text-cyan-400 mr-1" />
+                  )}
+                  <span>{soc !== null ? `${soc}%` : '78%'}</span>
+                  {estimatedRangeMiles !== null && (
+                    <span className="text-[10px] opacity-75 ml-1">• {estimatedRangeMiles} {unitSystem === 'metric' ? 'km' : 'mi'}</span>
+                  )}
+                  {isCharging && (
+                    <span className="text-[9px] uppercase tracking-wider font-bold bg-emerald-500/20 px-1 rounded text-emerald-300 ml-1">
+                      Charging
+                    </span>
+                  )}
+                </Chip>
+                <div className="w-16 hidden sm:block">
+                  <ProgressBar
+                    value={soc ?? 78}
+                    aria-label="HV Traction Battery State of Charge"
+                    className="w-full flex flex-col gap-0.5"
+                  >
+                    <ProgressBar.Track className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                      <ProgressBar.Fill className={`${soc !== null && soc <= 20 ? 'bg-rose-500' : isCharging ? 'bg-emerald-400' : 'bg-cyan-400'} h-1.5 rounded-full transition-all duration-300`} />
+                    </ProgressBar.Track>
+                  </ProgressBar>
+                </div>
+              </div>
+            </Tooltip.Trigger>
+            <Tooltip.Content className="px-2.5 py-1 text-xs rounded-md bg-slate-900 border border-slate-700 text-slate-200 shadow-xl z-50">
+              {isCharging ? `EV Traction Battery Charging: ${soc ?? 78}%` : `HV Battery State of Charge: ${soc ?? 78}%`}
+            </Tooltip.Content>
+          </Tooltip>
+        </div>
+
+        {/* Live CAN Telemetry Connection Badge */}
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full lg:w-auto justify-between lg:justify-end">
+          <Badge
+            id="live-can-status-badge"
+            size="sm"
+            color={connectedDevice ? 'success' : 'warning'}
+            variant="soft"
+            className={`px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-2 border transition-all ${
+              connectedDevice
+                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60 shadow-sm'
+                : 'bg-slate-900 text-slate-400 border-slate-800'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full mr-1.5 ${connectedDevice ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500'}`} />
+            <span>{connectedDevice ? 'Vehicle CAN Online' : 'Awaiting CAN Traffic'}</span>
+          </Badge>
         </div>
       </header>
 
@@ -1367,7 +1413,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         
         {/* Main Vehicle Column: Unified Vehicle Outline Card */}
         <div className="lg:col-span-7 xl:col-span-8 space-y-4">
-          <div
+          <Card
             id="unified-vehicle-cockpit-card"
             className="relative p-4 sm:p-6 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--border-color)] shadow-sm space-y-5"
           >
@@ -1379,39 +1425,45 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   {(['P', 'R', 'N', 'D'] as GearMode[]).map((g) => {
                     const active = gear === g;
                     return (
-                      <button
-                        key={g}
-                        id={`gear-selector-${g}`}
-                        type="button"
-                        onClick={() => {
-                          setGear(g);
-                          if (g === 'D') {
-                            setSpeedMph(prev => (prev === 0 ? 35 : prev));
-                            setSpeedKph(prev => (prev === 0 ? 56 : prev));
-                          }
-                          if (g === 'P') {
-                            setSpeedMph(0);
-                            setSpeedKph(0);
-                          }
-                          dispatchCommand('selected_gear', g, `Shifted Transmission to ${g}`);
-                        }}
-                        title={`Vehicle Transmission Gear: ${g} (CAN 0x${canMappings.gear.toUpperCase()})`}
-                        className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all ${
-                          active
-                            ? 'bg-cyan-500 text-slate-950 shadow-md ring-1 ring-cyan-300 font-extrabold scale-105'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-                        }`}
-                      >
-                        {g}
-                      </button>
+                      <Tooltip key={g}>
+                        <Tooltip.Trigger>
+                          <button
+                            id={`gear-selector-${g}`}
+                            type="button"
+                            onClick={() => {
+                              setGear(g);
+                              if (g === 'D') {
+                                setSpeedMph(prev => (prev === 0 ? 35 : prev));
+                                setSpeedKph(prev => (prev === 0 ? 56 : prev));
+                              }
+                              if (g === 'P') {
+                                setSpeedMph(0);
+                                setSpeedKph(0);
+                              }
+                              dispatchCommand('selected_gear', g, `Shifted Transmission to ${g}`);
+                            }}
+                            className="focus:outline-none"
+                          >
+                            <Chip
+                              size="sm"
+                              color={active ? 'accent' : 'default'}
+                              variant={active ? 'primary' : 'secondary'}
+                              className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all cursor-pointer ${
+                                active
+                                  ? 'bg-cyan-500 text-slate-950 shadow-md ring-1 ring-cyan-300 font-extrabold scale-105'
+                                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                              }`}
+                            >
+                              {g}
+                            </Chip>
+                          </button>
+                        </Tooltip.Trigger>
+                        <Tooltip.Content className="px-2.5 py-1 text-xs rounded-md bg-slate-900 border border-slate-700 text-slate-200 shadow-xl z-50">
+                          {`Transmission Gear: ${g === 'P' ? 'Park' : g === 'R' ? 'Reverse' : g === 'N' ? 'Neutral' : 'Drive'} (CAN 0x${canMappings.gear.toUpperCase()})`}
+                        </Tooltip.Content>
+                      </Tooltip>
                     );
                   })}
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Transmission</span>
-                  <span className="text-xs font-mono font-semibold text-cyan-300">
-                    {gear === 'P' ? 'Parked' : gear === 'R' ? 'Reverse' : gear === 'N' ? 'Neutral' : 'Drive'}
-                  </span>
                 </div>
               </div>
 
@@ -1438,30 +1490,39 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   }`}
                 >
                   {locked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-                  <span>{locked ? 'Vehicle Locked' : 'Unlocked'}</span>
+                  <span>{locked ? 'Locked' : 'Unlocked'}</span>
                 </button>
 
                 {/* Headlights Mode Selector */}
-                <div className="flex items-center gap-0.5 p-0.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
-                  {(['off', 'parking', 'low', 'high', 'auto'] as LightMode[]).map(mode => (
-                    <button
-                      key={mode}
-                      type="button"
-                      id={`light-btn-${mode}`}
-                      onClick={() => {
-                        setLights(mode);
-                        dispatchCommand('headlight_mode', mode, `Headlights: ${mode.toUpperCase()}`);
-                      }}
-                      className={`px-2 py-1 rounded-lg text-[11px] font-medium uppercase transition-colors ${
-                        lights === mode
-                          ? 'bg-slate-700 text-cyan-300 font-bold shadow-sm'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      {mode}
-                    </button>
-                  ))}
-                </div>
+                <Tabs
+                  selectedKey={lights || 'off'}
+                  onSelectionChange={key => {
+                    const mode = key as LightMode;
+                    setLights(mode);
+                    dispatchCommand('headlight_mode', mode, `Headlights: ${mode.toUpperCase()}`);
+                  }}
+                  aria-label="Headlight Mode"
+                >
+                  <Tabs.ListContainer className="p-0.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
+                    <Tabs.List className="gap-0.5">
+                      {(['off', 'parking', 'low', 'high', 'auto'] as LightMode[]).map(mode => (
+                        <Tabs.Tab
+                          key={mode}
+                          id={mode}
+                          data-testid={`light-btn-${mode}`}
+                          className={`relative px-2 py-1 rounded-lg text-[11px] font-medium uppercase transition-colors cursor-pointer flex items-center ${
+                            lights === mode
+                              ? 'text-cyan-300 font-bold'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <span>{mode}</span>
+                          <Tabs.Indicator className="rounded-lg bg-slate-700 shadow-sm" />
+                        </Tabs.Tab>
+                      ))}
+                    </Tabs.List>
+                  </Tabs.ListContainer>
+                </Tabs>
 
                 {/* Hazards & Mirrors */}
                 <button
@@ -1600,35 +1661,6 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 onCyclePassengerSeat={() => cycleSeat(passengerSeat, false)}
                 onCycleSteeringHeat={cycleSteeringHeat}
               />
-
-              {/* TPMS Floating Badges Anchored Beside Tires */}
-              <div className="absolute top-16 left-2 sm:left-6 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono text-center shadow-lg">
-                <span className="text-slate-400 block text-[9px]">FL TIRE</span>
-                <span className={`font-bold ${tpms.fl !== null ? 'text-emerald-400' : 'text-slate-500'}`}>
-                  {tpms.fl !== null ? `${tpms.fl} PSI` : '--'}
-                </span>
-              </div>
-
-              <div className="absolute top-16 right-2 sm:right-6 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono text-center shadow-lg">
-                <span className="text-slate-400 block text-[9px]">FR TIRE</span>
-                <span className={`font-bold ${tpms.fr !== null ? 'text-emerald-400' : 'text-slate-500'}`}>
-                  {tpms.fr !== null ? `${tpms.fr} PSI` : '--'}
-                </span>
-              </div>
-
-              <div className="absolute bottom-20 left-2 sm:left-6 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono text-center shadow-lg">
-                <span className="text-slate-400 block text-[9px]">RL TIRE</span>
-                <span className={`font-bold ${tpms.rl !== null ? 'text-emerald-400' : 'text-slate-500'}`}>
-                  {tpms.rl !== null ? `${tpms.rl} PSI` : '--'}
-                </span>
-              </div>
-
-              <div className="absolute bottom-20 right-2 sm:right-6 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] font-mono text-center shadow-lg">
-                <span className="text-slate-400 block text-[9px]">RR TIRE</span>
-                <span className={`font-bold ${tpms.rr !== null ? 'text-emerald-400' : 'text-slate-500'}`}>
-                  {tpms.rr !== null ? `${tpms.rr} PSI` : '--'}
-                </span>
-              </div>
             </div>
 
             {/* Closures, Security & Latches Grid + Roof Controls */}
@@ -1637,13 +1669,6 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-indigo-400" />
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Closures & Security</h3>
-                </div>
-                <div className="text-[11px] font-mono text-slate-400">
-                  {doors.frontLeft || doors.frontRight || doors.rearLeft || doors.rearRight ? (
-                    <span className="text-amber-400 font-bold">Door Ajar</span>
-                  ) : (
-                    <span className="text-emerald-400">All Doors Latched</span>
-                  )}
                 </div>
               </div>
 
@@ -1660,7 +1685,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   }`}
                 >
                   <span className="text-[10px] block opacity-70">Driver Door</span>
-                  <span className="font-semibold">{doors.frontLeft ? 'AJAR' : 'Closed'}</span>
+                  <Chip
+                    size="sm"
+                    color={doors.frontLeft ? 'warning' : 'default'}
+                    variant="soft"
+                    className="mt-1 font-semibold text-[10px]"
+                  >
+                    {doors.frontLeft ? 'Opened' : 'Closed'}
+                  </Chip>
                 </button>
 
                 <button
@@ -1674,7 +1706,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   }`}
                 >
                   <span className="text-[10px] block opacity-70">Pass. Door</span>
-                  <span className="font-semibold">{doors.frontRight ? 'AJAR' : 'Closed'}</span>
+                  <Chip
+                    size="sm"
+                    color={doors.frontRight ? 'warning' : 'default'}
+                    variant="soft"
+                    className="mt-1 font-semibold text-[10px]"
+                  >
+                    {doors.frontRight ? 'Opened' : 'Closed'}
+                  </Chip>
                 </button>
 
                 <button
@@ -1688,7 +1727,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   }`}
                 >
                   <span className="text-[10px] block opacity-70">Rear Left</span>
-                  <span className="font-semibold">{doors.rearLeft ? 'AJAR' : 'Closed'}</span>
+                  <Chip
+                    size="sm"
+                    color={doors.rearLeft ? 'warning' : 'default'}
+                    variant="soft"
+                    className="mt-1 font-semibold text-[10px]"
+                  >
+                    {doors.rearLeft ? 'Opened' : 'Closed'}
+                  </Chip>
                 </button>
 
                 <button
@@ -1702,7 +1748,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   }`}
                 >
                   <span className="text-[10px] block opacity-70">Rear Right</span>
-                  <span className="font-semibold">{doors.rearRight ? 'AJAR' : 'Closed'}</span>
+                  <Chip
+                    size="sm"
+                    color={doors.rearRight ? 'warning' : 'default'}
+                    variant="soft"
+                    className="mt-1 font-semibold text-[10px]"
+                  >
+                    {doors.rearRight ? 'Opened' : 'Closed'}
+                  </Chip>
                 </button>
 
                 <button
@@ -1719,7 +1772,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   }`}
                 >
                   <span className="text-[10px] block opacity-70">Frunk / Hood</span>
-                  <span className="font-semibold">{hoodOpen ? 'OPEN' : 'Closed'}</span>
+                  <Chip
+                    size="sm"
+                    color={hoodOpen ? 'warning' : 'default'}
+                    variant="soft"
+                    className="mt-1 font-semibold text-[10px]"
+                  >
+                    {hoodOpen ? 'OPEN' : 'Closed'}
+                  </Chip>
                 </button>
 
                 <button
@@ -1736,7 +1796,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   }`}
                 >
                   <span className="text-[10px] block opacity-70">Liftgate / Trunk</span>
-                  <span className="font-semibold">{trunkOpen ? 'OPEN' : 'Closed'}</span>
+                  <Chip
+                    size="sm"
+                    color={trunkOpen ? 'warning' : 'default'}
+                    variant="soft"
+                    className="mt-1 font-semibold text-[10px]"
+                  >
+                    {trunkOpen ? 'OPEN' : 'Closed'}
+                  </Chip>
                 </button>
               </div>
 
@@ -1806,24 +1873,20 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
             {/* Bottom Status Strip */}
             <div className="w-full pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Live CAN Telemetry: Sensor states reflect active vehicle broadcast (BCM, BMS, VMCU, FATC)</span>
-              </span>
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs text-slate-300">
                   {EGMP_MODELS[selectedModel].brand} {EGMP_MODELS[selectedModel].name}
                 </span>
               </div>
             </div>
-          </div>
+          </Card>
         </div>
 
         {/* Right Column (Cabin Climate & Comfort Suite) */}
         <div className="lg:col-span-5 xl:col-span-4 space-y-4">
           
           {/* Dual-Zone Climate Control Suite */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--border-color)] space-y-4">
+          <Card className="p-4 sm:p-5 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--border-color)] space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Wind className="w-4 h-4 text-cyan-400" />
@@ -1959,26 +2022,36 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
             </div>
 
             {/* Airflow Direction Modes */}
-            <div className="grid grid-cols-4 gap-1.5 pt-1 text-xs">
-              {(['auto', 'face', 'face_feet', 'defog'] as AirflowMode[]).map(mode => (
-                <button
-                  key={mode}
-                  type="button"
-                  id={`airflow-btn-${mode}`}
-                  onClick={() => {
-                    setAirflow(mode);
-                    dispatchCommand('climate_airflow_direction', mode, `Airflow Mode: ${mode === 'face_feet' ? 'Face / Feet' : mode.replace('_', ' ').toUpperCase()}`);
-                  }}
-                  className={`py-1.5 rounded-lg text-[10px] font-medium uppercase border transition-colors ${
-                    airflow === mode
-                      ? 'bg-slate-800 text-cyan-300 border-cyan-700/60 font-bold'
-                      : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200'
-                  }`}
-                >
-                  {mode === 'face_feet' ? 'Face / Feet' : mode}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              selectedKey={airflow || 'auto'}
+              onSelectionChange={key => {
+                const mode = key as AirflowMode;
+                setAirflow(mode);
+                dispatchCommand('climate_airflow_direction', mode, `Airflow Mode: ${mode === 'face_feet' ? 'Face / Feet' : mode.replace('_', ' ').toUpperCase()}`);
+              }}
+              aria-label="Airflow Direction Modes"
+              className="w-full pt-1"
+            >
+              <Tabs.ListContainer className="p-1 rounded-xl bg-slate-900/60 border border-slate-800 text-xs w-full">
+                <Tabs.List className="grid grid-cols-4 gap-1 w-full">
+                  {(['auto', 'face', 'face_feet', 'defog'] as AirflowMode[]).map(mode => (
+                    <Tabs.Tab
+                      key={mode}
+                      id={mode}
+                      data-testid={`airflow-btn-${mode}`}
+                      className={`relative py-1.5 rounded-lg text-[10px] font-medium uppercase transition-colors cursor-pointer text-center flex items-center justify-center ${
+                        airflow === mode
+                          ? 'text-cyan-300 font-bold'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <span>{mode === 'face_feet' ? 'Face / Feet' : mode}</span>
+                      <Tabs.Indicator className="rounded-lg bg-slate-800 border border-cyan-700/60 shadow-sm" />
+                    </Tabs.Tab>
+                  ))}
+                </Tabs.List>
+              </Tabs.ListContainer>
+            </Tabs>
 
             {/* Quick Climate Toggles (Defrost, Recirc, Wheel) */}
             <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800/60 text-xs">
@@ -2198,7 +2271,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 </span>
               </button>
             </div>
-          </div>
+          </Card>
 
         </div>
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Tabs } from '@heroui/react';
 import { Catalog, CommandRole, GitHubRepoConfig } from '../types/catalog';
 import { CanDoLogo } from './CanDoLogo';
 import { ExportDropdown } from './ExportDropdown';
@@ -119,65 +120,77 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
 
             {/* Navigation tabs */}
-            <div className="hidden md:flex items-center gap-1 ml-4 p-1 rounded-xl bg-slate-900 border border-slate-800 text-xs">
-              <button
-                type="button"
-                onClick={() => onChangeMainTab('catalog')}
-                className={`px-3 py-1.5 rounded-lg font-semibold transition ${
-                  activeMainTab === 'catalog'
-                    ? 'bg-slate-800 text-white shadow'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
+            <div className="hidden md:flex items-center ml-4">
+              <Tabs
+                selectedKey={activeMainTab}
+                onSelectionChange={key => onChangeMainTab(key as typeof activeMainTab)}
+                aria-label="Navbar Main Navigation"
               >
-                Commands ({catalog.commands.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => onChangeMainTab('vehicles')}
-                className={`px-3 py-1.5 rounded-lg font-semibold transition ${
-                  activeMainTab === 'vehicles'
-                    ? 'bg-slate-800 text-white shadow'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Vehicles ({catalog.vehicles.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => onChangeMainTab('automations')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition ${
-                  activeMainTab === 'automations'
-                    ? 'bg-cyan-500 text-slate-950 shadow font-bold'
-                    : 'text-cyan-400 hover:text-cyan-300 hover:bg-slate-800/80'
-                }`}
-              >
-                <Zap className="w-3.5 h-3.5 fill-current" />
-                <span>Automations</span>
-                {rulesCount > 0 && (
-                  <span
-                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
-                      activeMainTab === 'automations'
-                        ? 'bg-slate-950 text-cyan-300'
-                        : 'bg-cyan-950 text-cyan-300 border border-cyan-800'
-                    }`}
-                  >
-                    {rulesCount}
-                  </span>
-                )}
-              </button>
+                <Tabs.ListContainer className="p-1 rounded-xl bg-slate-900 border border-slate-800 text-xs">
+                  <Tabs.List className="gap-1">
+                    <Tabs.Tab
+                      id="catalog"
+                      className={`relative px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer flex items-center ${
+                        activeMainTab === 'catalog'
+                          ? 'text-white'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <span>Commands ({catalog.commands.length})</span>
+                      <Tabs.Indicator className="rounded-lg bg-slate-800 shadow-sm" />
+                    </Tabs.Tab>
 
-              <button
-                type="button"
-                onClick={() => onChangeMainTab('device')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition ${
-                  activeMainTab === 'device'
-                    ? 'bg-emerald-500 text-slate-950 shadow font-bold'
-                    : 'text-emerald-400 hover:text-emerald-300 hover:bg-slate-800/80'
-                }`}
-              >
-                <Radio className="w-3.5 h-3.5" />
-                <span>Device</span>
-              </button>
+                    <Tabs.Tab
+                      id="vehicles"
+                      className={`relative px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer flex items-center ${
+                        activeMainTab === 'vehicles'
+                          ? 'text-white'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <span>Vehicles ({catalog.vehicles.length})</span>
+                      <Tabs.Indicator className="rounded-lg bg-slate-800 shadow-sm" />
+                    </Tabs.Tab>
+
+                    <Tabs.Tab
+                      id="automations"
+                      className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer ${
+                        activeMainTab === 'automations'
+                          ? 'text-slate-950 font-bold'
+                          : 'text-cyan-400 hover:text-cyan-300'
+                      }`}
+                    >
+                      <Zap className="w-3.5 h-3.5 fill-current" />
+                      <span>Automations</span>
+                      {rulesCount > 0 && (
+                        <span
+                          className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                            activeMainTab === 'automations'
+                              ? 'bg-slate-950 text-cyan-300'
+                              : 'bg-cyan-950 text-cyan-300 border border-cyan-800'
+                          }`}
+                        >
+                          {rulesCount}
+                        </span>
+                      )}
+                      <Tabs.Indicator className="rounded-lg bg-cyan-500 shadow-sm" />
+                    </Tabs.Tab>
+
+                    <Tabs.Tab
+                      id="device"
+                      className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer ${
+                        activeMainTab === 'device'
+                          ? 'text-slate-950 font-bold'
+                          : 'text-emerald-400 hover:text-emerald-300'
+                      }`}
+                    >
+                      <Radio className="w-3.5 h-3.5" />
+                      <span>Device</span>
+                      <Tabs.Indicator className="rounded-lg bg-emerald-500 shadow-sm" />
+                    </Tabs.Tab>
+                  </Tabs.List>
+                </Tabs.ListContainer>
+              </Tabs>
             </div>
           </div>
 

@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { Checkbox } from '@heroui/react';
 import { AutomationRule } from '../../types/automation';
 import { CopyPlus, Trash2, Code, Check } from 'lucide-react';
 
@@ -155,13 +156,18 @@ export const SwipeableRuleItem: React.FC<SwipeableRuleItemProps> = ({
         <div className="flex items-center justify-between gap-1.5">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             {isSelectMode ? (
-              <input
-                type="checkbox"
-                checked={isCheckedForDelete}
-                onChange={() => onToggleCheck(rule.id)}
-                onClick={(e) => e.stopPropagation()}
-                className="w-4 h-4 rounded text-rose-500 bg-slate-800 border-slate-700 focus:ring-rose-400 cursor-pointer flex-shrink-0"
-              />
+              <div onClick={(e) => e.stopPropagation()} className="flex items-center">
+                <Checkbox
+                  isSelected={isCheckedForDelete}
+                  onChange={() => onToggleCheck(rule.id)}
+                  aria-label={`Select rule ${rule.name || rule.id}`}
+                  className="cursor-pointer"
+                >
+                  <Checkbox.Control>
+                    <Checkbox.Indicator />
+                  </Checkbox.Control>
+                </Checkbox>
+              </div>
             ) : (
               <span
                 className={`w-2 h-2 rounded-full flex-shrink-0 ${

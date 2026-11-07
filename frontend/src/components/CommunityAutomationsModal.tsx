@@ -1,5 +1,19 @@
 import React, { useState, useMemo } from 'react';
 import {
+  Tabs,
+  Button,
+  Chip,
+  Badge,
+  Modal,
+  ModalBackdrop,
+  ModalContainer,
+  ModalDialog,
+  ModalHeader,
+  ModalHeading,
+  ModalBody,
+  SearchField
+} from '@heroui/react';
+import {
   AutomationRule,
   AutomationTrigger,
   AutomationCondition,
@@ -162,95 +176,111 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
-      <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header Strip */}
-        <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between gap-3 bg-slate-900/90">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-emerald-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/30 shrink-0">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-bold text-white truncate">
-                  Community Automations
-                </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                  {communityList.length} Verified
-                </span>
+    <Modal isOpen={true} onOpenChange={open => { if (!open) onClose(); }}>
+      <ModalBackdrop variant="blur" className="bg-slate-950/80 backdrop-blur-md">
+        <ModalContainer placement="center" scroll="inside" className="p-3 sm:p-4">
+          <ModalDialog className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] p-0">
+            {/* Header Strip */}
+            <ModalHeader className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between gap-3 bg-slate-900/90 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-emerald-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/30 shrink-0">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <ModalHeading className="text-base sm:text-lg font-bold text-white truncate">
+                      Community Automations
+                    </ModalHeading>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                      {communityList.length} Verified
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 truncate">
+                    Discover, 1-click install, and share vehicle automations crafted by the CAN Do community.
+                  </p>
+                </div>
               </div>
-              <p className="text-xs text-slate-400 truncate">
-                Discover, 1-click install, and share vehicle automations crafted by the CAN Do community.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
+          <Button
+            variant="ghost"
+            size="sm"
+            isIconOnly
+            onPress={onClose}
+            aria-label="Close modal"
             className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition shrink-0"
           >
             <X className="w-5 h-5" />
-          </button>
-        </div>
+          </Button>
+        </ModalHeader>
 
         {/* Tab Navigation */}
-        <div className="flex items-center px-4 sm:px-5 border-b border-slate-800 bg-slate-950/50 gap-2 overflow-x-auto text-xs font-semibold">
-          <button
-            type="button"
-            onClick={() => setActiveTab('browse')}
-            className={`py-3 px-3 border-b-2 transition flex items-center gap-1.5 ${
-              activeTab === 'browse'
-                ? 'border-cyan-400 text-cyan-300'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
+        <div className="px-4 sm:px-5 border-b border-slate-800 bg-slate-950/50 text-xs font-semibold shrink-0">
+          <Tabs
+            selectedKey={activeTab}
+            onSelectionChange={key => setActiveTab(key as 'browse' | 'share')}
+            aria-label="Community Automations Navigation"
           >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Browse Library</span>
-            <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300">
-              {filteredList.length}
-            </span>
-          </button>
+            <Tabs.ListContainer className="overflow-x-auto no-scrollbar">
+              <Tabs.List className="gap-2">
+                <Tabs.Tab
+                  id="browse"
+                  className={`relative py-3 px-3 transition flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === 'browse'
+                      ? 'text-cyan-300'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Browse Library</span>
+                  <Badge size="sm" variant="secondary" className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300">
+                    {filteredList.length}
+                  </Badge>
+                  <Tabs.Indicator className="h-0.5 bg-cyan-400 bottom-0 rounded-full" />
+                </Tabs.Tab>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('share')}
-            className={`py-3 px-3 border-b-2 transition flex items-center gap-1.5 ${
-              activeTab === 'share'
-                ? 'border-cyan-400 text-cyan-300'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Share2 className="w-3.5 h-3.5" />
-            <span>Share Your Automation</span>
-          </button>
+                <Tabs.Tab
+                  id="share"
+                  className={`relative py-3 px-3 transition flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === 'share'
+                      ? 'text-cyan-300'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>Share Your Automation</span>
+                  <Tabs.Indicator className="h-0.5 bg-cyan-400 bottom-0 rounded-full" />
+                </Tabs.Tab>
+              </Tabs.List>
+            </Tabs.ListContainer>
+          </Tabs>
         </div>
 
         {/* Tab Content Area */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+        <ModalBody className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
           {/* TAB 1: BROWSE */}
           {activeTab === 'browse' && (
             <div className="space-y-4">
               {/* Search & Category Filter */}
               <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    placeholder="Search automations by button, feature, tag, or author..."
-                    className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
+                <SearchField
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  aria-label="Search automations"
+                  className="flex-1"
+                >
+                  <SearchField.Group className="relative w-full flex items-center rounded-xl bg-slate-950 border border-slate-800 focus-within:border-cyan-500/50 focus-within:ring-1 focus-within:ring-cyan-500/50 px-3 py-1.5 text-xs transition">
+                    <SearchField.SearchIcon className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
+                    <SearchField.Input
+                      placeholder="Search automations by button, feature, tag, or author..."
+                      className="w-full bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none"
+                    />
+                    {searchQuery && (
+                      <SearchField.ClearButton
+                        className="text-slate-500 hover:text-slate-300 shrink-0 p-1 rounded-md hover:bg-slate-800 transition cursor-pointer"
+                        aria-label="Clear search"
+                      />
+                    )}
+                  </SearchField.Group>
+                </SearchField>
 
                 {/* Category Pills */}
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 text-xs shrink-0">
@@ -309,14 +339,14 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                         <div className="space-y-2.5">
                           {/* Top Badges */}
                           <div className="flex items-center justify-between gap-2">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-cyan-400 border border-slate-700/60">
+                            <Badge size="sm" color="accent" variant="soft" className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-cyan-400 border border-slate-700/60">
                               {item.category || 'General'}
-                            </span>
+                            </Badge>
                             {item.contributor && (
-                              <div className="flex items-center gap-1 text-[11px] text-slate-400 font-medium">
-                                <Github className="w-3 h-3 text-slate-500" />
+                              <Badge size="sm" variant="secondary" className="flex items-center gap-1 text-[11px] text-slate-400 font-medium">
+                                <Github className="w-3 h-3 text-slate-500 mr-1" />
                                 <span>{item.contributor.name || 'Community'}</span>
-                              </div>
+                              </Badge>
                             )}
                           </div>
 
@@ -331,34 +361,35 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                           </div>
 
                           {/* Summary Chips */}
-                          <div className="flex items-center gap-3 pt-1 text-[11px] font-mono text-slate-400 border-t border-slate-800/60">
-                            <span className="flex items-center gap-1 text-amber-300">
-                              <Zap className="w-3 h-3 text-amber-400" />
+                          <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] font-mono text-slate-400 border-t border-slate-800/60">
+                            <Chip size="sm" color="warning" variant="soft" className="flex items-center gap-1 text-amber-300">
+                              <Zap className="w-3 h-3 text-amber-400 mr-1" />
                               {item.triggers.length} {item.triggers.length === 1 ? 'Trigger' : 'Triggers'}
-                            </span>
+                            </Chip>
                             {item.conditions && item.conditions.length > 0 && (
-                              <span className="flex items-center gap-1 text-cyan-300">
-                                <Shield className="w-3 h-3 text-cyan-400" />
+                              <Chip size="sm" color="accent" variant="soft" className="flex items-center gap-1 text-cyan-300">
+                                <Shield className="w-3 h-3 text-cyan-400 mr-1" />
                                 {item.conditions.length} {item.conditions.length === 1 ? 'Cond' : 'Conds'}
-                              </span>
+                              </Chip>
                             )}
-                            <span className="flex items-center gap-1 text-emerald-300">
-                              <Send className="w-3 h-3 text-emerald-400" />
+                            <Chip size="sm" color="success" variant="soft" className="flex items-center gap-1 text-emerald-300">
+                              <Send className="w-3 h-3 text-emerald-400 mr-1" />
                               {item.actions.length} {item.actions.length === 1 ? 'Action' : 'Actions'}
-                            </span>
+                            </Chip>
                           </div>
                         </div>
 
                         {/* Action Bar */}
                         <div className="pt-3 mt-2 flex items-center justify-between gap-2 border-t border-slate-900">
-                          <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono">
-                            <Car className="w-3 h-3" />
+                          <Chip size="sm" variant="secondary" className="flex items-center gap-1 text-[10px] text-slate-500 font-mono">
+                            <Car className="w-3 h-3 mr-1" />
                             <span>{(item.tags || ['all_egmp']).join(', ')}</span>
-                          </div>
+                          </Chip>
 
-                          <button
-                            type="button"
-                            onClick={() => handleInstall(item)}
+                          <Button
+                            variant={isJustInstalled ? 'primary' : isInstalled ? 'secondary' : 'primary'}
+                            size="sm"
+                            onPress={() => handleInstall(item)}
                             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95 ${
                               isJustInstalled
                                 ? 'bg-emerald-500 text-slate-950 font-black'
@@ -383,7 +414,7 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                                 <span>1-Click Install</span>
                               </>
                             )}
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     );
@@ -458,10 +489,11 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                   <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
                     Shareable Recipe JSON
                   </label>
-                  <button
-                    type="button"
-                    onClick={handleCopyShareJson}
-                    className="text-[11px] text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1"
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onPress={handleCopyShareJson}
+                    className="text-[11px] text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1 h-auto p-1"
                   >
                     {shareCopied ? (
                       <>
@@ -474,7 +506,7 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                         <span>Copy Code</span>
                       </>
                     )}
-                  </button>
+                  </Button>
                 </div>
                 <textarea
                   readOnly
@@ -486,29 +518,33 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
 
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row items-center justify-end gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={handleCopyShareJson}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onPress={handleCopyShareJson}
                   className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white transition flex items-center justify-center gap-1.5 border border-slate-700"
                 >
                   <Copy className="w-3.5 h-3.5" />
                   <span>{shareCopied ? 'Copied to Clipboard!' : 'Copy Recipe Snippet'}</span>
-                </button>
+                </Button>
 
-                <button
-                  type="button"
-                  onClick={handleOpenGithubIssue}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onPress={handleOpenGithubIssue}
                   className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition flex items-center justify-center gap-1.5 shadow-sm"
                 >
                   <Github className="w-3.5 h-3.5" />
                   <span>Submit to GitHub Catalog</span>
                   <ExternalLink className="w-3 h-3 opacity-70" />
-                </button>
+                </Button>
               </div>
             </div>
           )}
-        </div>
-      </div>
-    </div>
+        </ModalBody>
+      </ModalDialog>
+    </ModalContainer>
+  </ModalBackdrop>
+</Modal>
   );
 };

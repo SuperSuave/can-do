@@ -1,4 +1,5 @@
 import React from 'react';
+import { Chip, Badge, Card, Checkbox, Tooltip } from '@heroui/react';
 import { Command, CommandRole, CommandOption, getCommandContributors, getCommandTestedVehicle } from '../types/catalog';
 import { PayloadByteVisualizer } from './PayloadByteVisualizer';
 import { MdiIcon, getHaDomainBadgeStyle } from './MdiIcon';
@@ -60,33 +61,42 @@ const CommandCardComponent: React.FC<CommandCardProps> = ({
     switch (role) {
       case 'trigger':
         return (
-          <span
+          <Chip
             key={role}
+            size="sm"
+            color="warning"
+            variant="soft"
             className="can-do-ha-pill trig-pill"
           >
             <Radio className="w-3 h-3 text-amber-400" />
             Trigger
-          </span>
+          </Chip>
         );
       case 'condition':
         return (
-          <span
+          <Chip
             key={role}
+            size="sm"
+            color="accent"
+            variant="soft"
             className="can-do-ha-pill cond-pill"
           >
             <Sliders className="w-3 h-3 text-cyan-400" />
             Condition
-          </span>
+          </Chip>
         );
       case 'action':
         return (
-          <span
+          <Chip
             key={role}
+            size="sm"
+            color="success"
+            variant="soft"
             className="can-do-ha-pill act-pill"
           >
             <Play className="w-3 h-3 text-emerald-400" />
             Action
-          </span>
+          </Chip>
         );
       default:
         return null;
@@ -169,7 +179,7 @@ const CommandCardComponent: React.FC<CommandCardProps> = ({
   };
 
   return (
-    <div
+    <Card
       onClick={() => onSelect(command)}
       className={`group relative flex flex-col rounded-[12px] border bg-[var(--card-bg)] p-4 sm:p-5 transition-all duration-200 hover:border-slate-500 hover:shadow-md cursor-pointer min-w-0 ${
         isNew
@@ -186,15 +196,25 @@ const CommandCardComponent: React.FC<CommandCardProps> = ({
       />
       {/* Draft badge indicator */}
       {(isNew || isModified) && (
-        <div className="absolute -top-2.5 right-4 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-950 border border-slate-800 shadow">
+        <div className="absolute -top-2.5 right-4 shadow">
           {isNew ? (
-            <span className="text-emerald-400 inline-flex items-center gap-1">
-              <Sparkles className="w-3 h-3" /> New Contribution
-            </span>
+            <Badge
+              size="sm"
+              color="success"
+              variant="soft"
+              className="text-[10px] font-bold uppercase tracking-wider bg-slate-950 border border-emerald-500/50 text-emerald-400"
+            >
+              <Sparkles className="w-3 h-3 mr-1" /> New Contribution
+            </Badge>
           ) : (
-            <span className="text-amber-400 inline-flex items-center gap-1">
-              <Edit3 className="w-3 h-3" /> Draft Modified
-            </span>
+            <Badge
+              size="sm"
+              color="warning"
+              variant="soft"
+              className="text-[10px] font-bold uppercase tracking-wider bg-slate-950 border border-amber-500/50 text-amber-400"
+            >
+              <Edit3 className="w-3 h-3 mr-1" /> Draft Modified
+            </Badge>
           )}
         </div>
       )}
@@ -206,93 +226,121 @@ const CommandCardComponent: React.FC<CommandCardProps> = ({
             {command.roles && command.roles.length > 0 ? (
               command.roles.map(role => getRoleBadge(role))
             ) : (
-              <span className="can-do-ha-pill trig-pill">
+              <Chip size="sm" color="warning" variant="soft" className="can-do-ha-pill trig-pill">
                 <Radio className="w-3 h-3 text-amber-400" />
                 Trigger
-              </span>
+              </Chip>
             )}
           </div>
         </div>
 
-        {/* Row 2: Merged CAN Bus & ID Pill */}
+        {/* Row 2: Merged CAN Bus & ID Pill & DLC */}
         <div className="flex flex-wrap items-center gap-1.5 mb-3 text-xs font-mono">
           {hasRx || hasTx ? (
-            <div 
-              className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-md bg-slate-950/80 border border-slate-800/80 text-xs font-mono shrink-0 shadow-sm"
-              title={
-                hasRx && hasTx
+            <Tooltip>
+              <Tooltip.Trigger>
+                <Chip 
+                  size="sm"
+                  variant="secondary"
+                  className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-md bg-slate-950/80 border border-slate-800/80 text-xs font-mono shrink-0 shadow-sm cursor-help"
+                >
+                  {hasRx && hasTx && rxBus === txBus ? (
+                    // Unified single bus display when RX and TX share the same bus
+                    <div className="inline-flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Bus {rxBus}
+                      </span>
+                      <span className="text-slate-600">•</span>
+                      {rxCanId === txCanId ? (
+                        <span className="inline-flex items-center gap-1 text-cyan-300 font-semibold">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">RX/TX</span>
+                          <Badge size="sm" color="accent" variant="soft" className="font-mono text-cyan-300 font-semibold px-1 py-0">{rxCanId}</Badge>
+                        </span>
+                      ) : (
+                        <div className="inline-flex items-center gap-1.5">
+                          {rxCanId && (
+                            <span className="inline-flex items-center gap-1 text-cyan-300 font-semibold">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400/80">RX</span>
+                              <Badge size="sm" color="accent" variant="soft" className="font-mono text-cyan-300 font-semibold px-1 py-0">{rxCanId}</Badge>
+                            </span>
+                          )}
+                          {rxCanId && txCanId && <span className="text-slate-600">•</span>}
+                          {txCanId && (
+                            <span className="inline-flex items-center gap-1 text-emerald-400 font-semibold">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400/80">TX</span>
+                              <Badge size="sm" color="success" variant="soft" className="font-mono text-emerald-400 font-semibold px-1 py-0">{txCanId}</Badge>
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    // Segmented display when buses differ or single RX/TX
+                    <div className="inline-flex items-center gap-2 divide-x divide-slate-800">
+                      {hasRx && (
+                        <div className="inline-flex items-center gap-1.5 text-cyan-300">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            RX Bus {rxBus}
+                          </span>
+                          {rxCanId && (
+                            <>
+                              <span className="text-slate-600">•</span>
+                              <Badge size="sm" color="accent" variant="soft" className="font-semibold font-mono text-cyan-300 px-1 py-0">{rxCanId}</Badge>
+                            </>
+                          )}
+                        </div>
+                      )}
+                      {hasTx && (
+                        <div className={`inline-flex items-center gap-1.5 text-emerald-300 ${hasRx ? 'pl-2' : ''}`}>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            TX Bus {txBus}
+                          </span>
+                          {txCanId && (
+                            <>
+                              <span className="text-slate-600">•</span>
+                              <Badge size="sm" color="success" variant="soft" className="font-semibold font-mono text-emerald-400 px-1 py-0">{txCanId}</Badge>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </Chip>
+              </Tooltip.Trigger>
+              <Tooltip.Content className="px-2.5 py-1 text-xs rounded-md bg-slate-900 border border-slate-700 text-slate-200 shadow-xl z-50">
+                {hasRx && hasTx
                   ? `RX: ${rxCanId || 'N/A'} (Bus ${rxBus}), TX: ${txCanId || 'N/A'} (Bus ${txBus})`
                   : hasRx
                   ? `RX: ${rxCanId || 'N/A'} (Bus ${rxBus})`
-                  : `TX: ${txCanId || 'N/A'} (Bus ${txBus})`
-              }
-            >
-              {hasRx && hasTx && rxBus === txBus ? (
-                // Unified single bus display when RX and TX share the same bus
-                <div className="inline-flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Bus {rxBus}
-                  </span>
-                  <span className="text-slate-600">•</span>
-                  {rxCanId === txCanId ? (
-                    <span className="inline-flex items-center gap-1 text-cyan-300 font-semibold">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">RX/TX</span>
-                      <span>{rxCanId}</span>
-                    </span>
-                  ) : (
-                    <div className="inline-flex items-center gap-1.5">
-                      {rxCanId && (
-                        <span className="inline-flex items-center gap-1 text-cyan-300 font-semibold">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400/80">RX</span>
-                          <span>{rxCanId}</span>
-                        </span>
-                      )}
-                      {rxCanId && txCanId && <span className="text-slate-600">•</span>}
-                      {txCanId && (
-                        <span className="inline-flex items-center gap-1 text-emerald-400 font-semibold">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400/80">TX</span>
-                          <span>{txCanId}</span>
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                // Segmented display when buses differ or single RX/TX
-                <div className="inline-flex items-center gap-2 divide-x divide-slate-800">
-                  {hasRx && (
-                    <div className="inline-flex items-center gap-1.5 text-cyan-300">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        RX Bus {rxBus}
-                      </span>
-                      {rxCanId && (
-                        <>
-                          <span className="text-slate-600">•</span>
-                          <span className="font-semibold text-cyan-300">{rxCanId}</span>
-                        </>
-                      )}
-                    </div>
-                  )}
-                  {hasTx && (
-                    <div className={`inline-flex items-center gap-1.5 text-emerald-300 ${hasRx ? 'pl-2' : ''}`}>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        TX Bus {txBus}
-                      </span>
-                      {txCanId && (
-                        <>
-                          <span className="text-slate-600">•</span>
-                          <span className="font-semibold text-emerald-400">{txCanId}</span>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+                  : `TX: ${txCanId || 'N/A'} (Bus ${txBus})`}
+              </Tooltip.Content>
+            </Tooltip>
           ) : (
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-slate-950/80 border border-slate-800/80 text-slate-400 shrink-0">
+            <Chip
+              size="sm"
+              variant="secondary"
+              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-slate-950/80 border border-slate-800/80 text-slate-400 shrink-0 font-mono text-xs"
+            >
               <span className="text-[10px] uppercase font-bold text-slate-500">Virtual / OSD</span>
-            </div>
+            </Chip>
+          )}
+
+          {/* DLC length pill */}
+          {(hasRx || hasTx) && (
+            <Tooltip>
+              <Tooltip.Trigger>
+                <Chip
+                  size="sm"
+                  variant="secondary"
+                  className="px-2 py-0.5 rounded-md bg-slate-950/80 border border-slate-800/80 text-slate-400 text-[10.5px] font-mono shrink-0 shadow-sm cursor-help"
+                >
+                  {(command.network as any)?.dlc || (command as any).dlc || 8} Bytes
+                </Chip>
+              </Tooltip.Trigger>
+              <Tooltip.Content className="px-2.5 py-1 text-xs rounded-md bg-slate-900 border border-slate-700 text-slate-200 shadow-xl z-50">
+                Data Length Code (CAN Frame Payload Size)
+              </Tooltip.Content>
+            </Tooltip>
           )}
         </div>
 
@@ -316,12 +364,14 @@ const CommandCardComponent: React.FC<CommandCardProps> = ({
             return (
               <div className="text-xs text-slate-500 mb-2.5 flex items-center gap-1.5 min-w-0">
                 {command.subcategory ? (
-                  <span
+                  <Chip
+                    size="sm"
+                    variant="secondary"
                     className="text-slate-400 font-medium truncate text-[11px] bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800/80"
                     title={`Subsystem: ${command.subcategory}`}
                   >
                     {command.subcategory}
-                  </span>
+                  </Chip>
                 ) : null}
               </div>
             );
@@ -329,14 +379,17 @@ const CommandCardComponent: React.FC<CommandCardProps> = ({
 
           return (
             <div className="mb-2.5 min-w-0">
-              <div 
+              <Chip 
+                size="sm"
+                color="success"
+                variant="soft"
                 className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 text-[11px] font-medium min-w-0 max-w-full shadow-sm"
                 title={`Tested vehicle: ${testedVehicle}`}
               >
-                <Car className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <Car className="w-3.5 h-3.5 text-emerald-400 shrink-0 mr-1" />
                 <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-400/80 shrink-0">Tested Vehicle:</span>
                 <span className="truncate text-emerald-200 font-medium">{testedVehicle}</span>
-              </div>
+              </Chip>
             </div>
           );
         })()}
@@ -505,33 +558,46 @@ const CommandCardComponent: React.FC<CommandCardProps> = ({
             {command.ha_domain && (() => {
               const domainStyle = getHaDomainBadgeStyle(command.ha_domain);
               return (
-                <span
+                <Chip
+                  size="sm"
+                  variant="secondary"
                   className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] font-mono font-medium border shrink-0 ${domainStyle.bg} ${domainStyle.text} ${domainStyle.border}`}
                   title={`Home Assistant Domain: ${command.ha_domain}`}
                 >
-                  <span className={`w-1.5 h-1.5 rounded-full ${domainStyle.dot}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full mr-1 ${domainStyle.dot}`} />
                   ha:{command.ha_domain}
-                </span>
+                </Chip>
               );
             })()}
             {command.type && (
-              <span className="px-2 py-0.5 rounded text-[10.5px] font-mono bg-slate-900 text-slate-400 border border-slate-800 shrink-0">
+              <Chip
+                size="sm"
+                variant="secondary"
+                className="px-2 py-0.5 rounded text-[10.5px] font-mono bg-slate-900 text-slate-400 border border-slate-800 shrink-0"
+              >
                 {command.type}
-              </span>
+              </Chip>
             )}
             {command.requires_feature && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-300 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-700/40 truncate max-w-full">
-                <Car className="w-3 h-3 shrink-0" />
+              <Chip
+                size="sm"
+                color="success"
+                variant="soft"
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-300 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-700/40 truncate max-w-full"
+              >
+                <Car className="w-3 h-3 shrink-0 mr-1" />
                 <span className="truncate">Requires: {command.requires_feature}</span>
-              </span>
+              </Chip>
             )}
             {command.tags?.map(tag => (
-              <span
+              <Chip
                 key={tag}
+                size="sm"
+                variant="secondary"
                 className="text-[10px] text-slate-400 bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-700 truncate max-w-[140px]"
               >
                 #{tag}
-              </span>
+              </Chip>
             ))}
           </div>
         )}
@@ -549,8 +615,10 @@ const CommandCardComponent: React.FC<CommandCardProps> = ({
                 {contributors.map((contrib, idx) => {
                   const handle = contrib.github ? contrib.github.replace(/^@/, '') : '';
                   return (
-                    <span
+                    <Badge
                       key={idx}
+                      size="sm"
+                      variant="secondary"
                       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-900/90 border border-slate-700/70 text-[10.5px] max-w-[170px] truncate"
                       title={contrib.notes ? `${contrib.name || handle || 'Contributor'}: ${contrib.notes}` : (contrib.name || handle)}
                     >
@@ -563,26 +631,26 @@ const CommandCardComponent: React.FC<CommandCardProps> = ({
                           className="inline-flex items-center gap-1 text-cyan-300 hover:text-cyan-200 font-mono transition truncate"
                           title={`View @${handle} on GitHub`}
                         >
-                          <Github className="w-3 h-3 text-slate-400 shrink-0" />
+                          <Github className="w-3 h-3 text-slate-400 shrink-0 mr-1" />
                           <span className="truncate">@{handle}</span>
                         </a>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-slate-300 font-medium truncate">
-                          <User className="w-3 h-3 text-slate-400 shrink-0" />
+                          <User className="w-3 h-3 text-slate-400 shrink-0 mr-1" />
                           <span className="truncate">{contrib.name}</span>
                         </span>
                       )}
                       {contrib.name && handle && (
-                        <span className="text-[9.5px] text-slate-400 truncate">
+                        <span className="text-[9.5px] text-slate-400 truncate ml-1">
                           ({contrib.name})
                         </span>
                       )}
                       {contrib.role && (
-                        <span className="text-[9px] text-slate-400 uppercase tracking-wider bg-slate-800/90 px-1 py-0.5 rounded">
+                        <span className="text-[9px] text-slate-400 uppercase tracking-wider bg-slate-800/90 px-1 py-0.5 rounded ml-1">
                           {contrib.role}
                         </span>
                       )}
-                    </span>
+                    </Badge>
                   );
                 })}
               </div>
@@ -599,26 +667,19 @@ const CommandCardComponent: React.FC<CommandCardProps> = ({
           </span>
 
           {onToggleSelectForAutomation && (
-            <div
-              onClick={e => {
-                e.stopPropagation();
-                onToggleSelectForAutomation(command);
-              }}
-              title={isSelectedForAutomation ? 'Selected for automation' : 'Select for automation'}
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10.5px] font-semibold cursor-pointer transition select-none ${
-                isSelectedForAutomation
-                  ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-bold shadow-sm'
-                  : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
-              }`}
+            <Checkbox
+              isSelected={isSelectedForAutomation || false}
+              onChange={() => onToggleSelectForAutomation(command)}
+              aria-label={`Select ${command.name} for automation`}
+              className="px-2 py-0.5 rounded-md border border-slate-800 bg-slate-950/60 hover:border-slate-700 cursor-pointer select-none"
             >
-              <input
-                type="checkbox"
-                checked={isSelectedForAutomation || false}
-                onChange={() => {}} // Handled by parent div
-                className="w-3.5 h-3.5 rounded pointer-events-none accent-cyan-500"
-              />
-              <span>Automate</span>
-            </div>
+              <Checkbox.Control>
+                <Checkbox.Indicator />
+              </Checkbox.Control>
+              <Checkbox.Content className="text-[10.5px] font-semibold text-slate-300">
+                Automate
+              </Checkbox.Content>
+            </Checkbox>
           )}
         </div>
 
@@ -716,7 +777,7 @@ const CommandCardComponent: React.FC<CommandCardProps> = ({
         </div>
       </div>
     </div>
-  </div>
+  </Card>
   );
 };
 

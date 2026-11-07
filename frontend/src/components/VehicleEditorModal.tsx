@@ -1,4 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import {
+  Tabs,
+  Button,
+  Modal,
+  ModalBackdrop,
+  ModalContainer,
+  ModalDialog,
+  ModalHeader,
+  ModalHeading,
+  ModalBody,
+  ModalFooter
+} from '@heroui/react';
 import { Catalog, Vehicle, ValidationIssue } from '../types/catalog';
 import { getAllKnownFeatures, validateVehicle } from '../utils/canValidator';
 import {
@@ -201,35 +213,41 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-2xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-[var(--input-bg)] border border-[var(--border-color)] flex items-center justify-center text-[var(--md-sys-color-primary)]">
-              <Car className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-bold text-white">
-                {isNew ? 'Add Vehicle Platform & Trim' : `Edit ${form.make} ${form.model} (${form.trim})`}
-              </h2>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                Configure vehicle specifications, unique IDs, and toggle or discover trim features.
-              </p>
-            </div>
-          </div>
+    <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
+      <ModalBackdrop variant="blur" className="bg-black/80 backdrop-blur-sm">
+        <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
+          <ModalDialog className="relative w-full max-w-2xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <ModalHeader className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] gap-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-[var(--input-bg)] border border-[var(--border-color)] flex items-center justify-center text-[var(--md-sys-color-primary)]">
+                  <Car className="w-4 h-4" />
+                </div>
+                <div>
+                  <ModalHeading className="text-base sm:text-lg font-bold text-white">
+                    {isNew ? 'Add Vehicle Platform & Trim' : `Edit ${form.make} ${form.model} (${form.trim})`}
+                  </ModalHeading>
+                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                    Configure vehicle specifications, unique IDs, and toggle or discover trim features.
+                  </p>
+                </div>
+              </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-[var(--md-sys-color-surface-container-high)] transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                isIconOnly
+                onPress={onClose}
+                aria-label="Close modal"
+                className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-[var(--md-sys-color-surface-container-high)] transition"
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </ModalHeader>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 max-h-[72vh] overflow-y-auto space-y-5 text-xs">
+            {/* Form Body */}
+            <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+              <ModalBody className="p-6 max-h-[72vh] overflow-y-auto space-y-5 text-xs">
           {/* Errors banner */}
           {errors.length > 0 && (
             <div className="p-3.5 rounded-[12px] bg-rose-950/40 border border-rose-800 text-rose-200 space-y-1">
@@ -249,22 +267,30 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
             <label className="block text-slate-300 font-semibold mb-1">
               Manufacturer / Make <span className="text-rose-400">*</span>
             </label>
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              {['Hyundai', 'Kia', 'Genesis', 'Universal'].map(m => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setForm({ ...form, make: m })}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold border transition ${
-                    form.make === m
-                      ? 'bg-[var(--md-sys-color-primary)] text-white border-[var(--md-sys-color-primary)]'
-                      : 'bg-[var(--input-bg)] text-slate-400 border-[var(--border-color)] hover:text-white'
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              selectedKey={form.make || 'Hyundai'}
+              onSelectionChange={key => setForm({ ...form, make: String(key) })}
+              aria-label="Manufacturer / Make"
+            >
+              <Tabs.ListContainer className="p-0.5 rounded-full bg-[var(--input-bg)] border border-[var(--border-color)] text-xs mb-2 inline-block">
+                <Tabs.List className="gap-1 flex-wrap">
+                  {['Hyundai', 'Kia', 'Genesis', 'Universal'].map(m => (
+                    <Tabs.Tab
+                      key={m}
+                      id={m}
+                      className={`relative px-3 py-1 rounded-full text-xs font-semibold transition cursor-pointer flex items-center ${
+                        form.make === m
+                          ? 'text-white'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span>{m}</span>
+                      <Tabs.Indicator className="rounded-full bg-[var(--md-sys-color-primary)] shadow-sm" />
+                    </Tabs.Tab>
+                  ))}
+                </Tabs.List>
+              </Tabs.ListContainer>
+            </Tabs>
             <input
               type="text"
               required
@@ -425,15 +451,16 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
                   }}
                   className="flex-1 px-3 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-cyan-300 font-mono text-xs placeholder-slate-600 focus:outline-none focus:border-[var(--md-sys-color-primary)]"
                 />
-                <button
-                  type="button"
-                  onClick={addCustomFeature}
-                  disabled={!customFeatureInput.trim()}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onPress={addCustomFeature}
+                  isDisabled={!customFeatureInput.trim()}
                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white font-semibold text-xs disabled:opacity-40 disabled:cursor-not-allowed transition"
                 >
                   <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                   Add Feature
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -446,22 +473,24 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
                 onChange={e => setFeatureSearch(e.target.value)}
                 className="w-full sm:w-64 px-3 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-[var(--md-sys-color-primary)]"
               />
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setForm({ ...form, features: [...combinedFeatures] })}
-                  className="text-[11px] text-cyan-400 hover:underline"
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => setForm({ ...form, features: [...combinedFeatures] })}
+                  className="text-[11px] text-cyan-400 h-auto py-0.5 px-1.5"
                 >
                   Enable All
-                </button>
+                </Button>
                 <span className="text-slate-600">|</span>
-                <button
-                  type="button"
-                  onClick={() => setForm({ ...form, features: [] })}
-                  className="text-[11px] text-slate-400 hover:text-rose-400"
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => setForm({ ...form, features: [] })}
+                  className="text-[11px] text-slate-400 hover:text-rose-400 h-auto py-0.5 px-1.5"
                 >
                   Clear All
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -522,27 +551,33 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
               )}
             </div>
           </div>
+        </ModalBody>
 
           {/* Modal Footer */}
-          <div className="pt-4 flex items-center justify-between border-t border-[var(--border-color)]">
-            <button
-              type="button"
-              onClick={onClose}
+          <ModalFooter className="p-4 px-6 flex items-center justify-between border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={onClose}
               className="dash-outline-btn px-4 py-2 text-xs font-semibold"
             >
               Cancel
-            </button>
+            </Button>
 
-            <button
+            <Button
               type="submit"
+              variant="primary"
+              size="sm"
               className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white font-semibold text-xs shadow-md transition"
             >
               <Check className="w-4 h-4 stroke-[2.5]" />
               {isNew ? 'Add Vehicle Platform' : 'Save Changes'}
-            </button>
-          </div>
+            </Button>
+          </ModalFooter>
         </form>
-      </div>
-    </div>
+      </ModalDialog>
+    </ModalContainer>
+  </ModalBackdrop>
+</Modal>
   );
 };

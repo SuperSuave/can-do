@@ -1,4 +1,14 @@
 import React, { useState } from 'react';
+import {
+  Modal,
+  ModalBackdrop,
+  ModalContainer,
+  ModalDialog,
+  ModalHeader,
+  ModalHeading,
+  ModalBody,
+  ModalFooter
+} from '@heroui/react';
 import { AutomationRule, AutomationSettings, AutomationTrigger, AutomationCondition, AutomationAction } from '../types/automation';
 import { formatCanId, formatHexByte, compileToByteMap } from '../utils/automationConverters';
 import {
@@ -293,29 +303,31 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto animate-in fade-in">
-      <div className="relative w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 shadow-2xl overflow-hidden my-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800 bg-slate-950/60">
-          <div>
-            <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-              <Upload className="w-5 h-5 text-cyan-400" />
-              Import Automations
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Upload an <code className="text-cyan-300">automations.json</code> file or paste a single rule snippet.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
+      <ModalBackdrop variant="blur" className="bg-black/80 backdrop-blur-sm">
+        <ModalContainer placement="center" scroll="inside" className="p-3 sm:p-6">
+          <ModalDialog className="relative w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 shadow-2xl overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <ModalHeader className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800 bg-slate-950/60 shrink-0 gap-0">
+              <div>
+                <ModalHeading className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                  <Upload className="w-5 h-5 text-cyan-400" />
+                  Import Automations
+                </ModalHeading>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Upload an <code className="text-cyan-300">automations.json</code> file or paste a single rule snippet.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </ModalHeader>
 
-        <div className="p-4 sm:p-6 max-h-[75vh] overflow-y-auto space-y-4">
+            <ModalBody className="p-4 sm:p-6 max-h-[75vh] overflow-y-auto space-y-4">
           {/* Drag & Drop or File Select Box */}
           <div
             onDragOver={e => {
@@ -437,10 +449,10 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
               </div>
             </div>
           )}
-        </div>
+        </ModalBody>
 
         {/* Footer Actions */}
-        <div className="p-4 sm:p-5 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between gap-2 flex-wrap">
+        <ModalFooter className="p-4 sm:p-5 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between gap-2 flex-wrap shrink-0">
           <button
             type="button"
             onClick={onClose}
@@ -483,8 +495,10 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
               </>
             )}
           </div>
-        </div>
-      </div>
-    </div>
+        </ModalFooter>
+      </ModalDialog>
+    </ModalContainer>
+  </ModalBackdrop>
+</Modal>
   );
 };

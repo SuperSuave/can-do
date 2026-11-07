@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { Tabs } from '@heroui/react';
 import {
   AutomationTrigger,
   AutomationCondition,
@@ -577,41 +578,51 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5">
-            <div className="flex items-center p-0.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px]">
-              <button
-                type="button"
-                onClick={() => setActiveTab('all')}
-                className={`px-2.5 py-1 rounded-lg font-medium transition ${
-                  activeTab === 'all'
-                    ? 'bg-cyan-500 text-slate-950 font-semibold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('blocks')}
-                className={`px-2.5 py-1 rounded-lg font-medium transition ${
-                  activeTab === 'blocks'
-                    ? 'bg-cyan-500 text-slate-950 font-semibold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Blocks ({filteredBlocks.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('catalog')}
-                className={`px-2.5 py-1 rounded-lg font-medium transition ${
-                  activeTab === 'catalog'
-                    ? 'bg-cyan-500 text-slate-950 font-semibold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Catalog ({filteredCatalog.length})
-              </button>
-            </div>
+            <Tabs
+              selectedKey={activeTab}
+              onSelectionChange={key => setActiveTab(key as 'all' | 'blocks' | 'catalog')}
+              aria-label="Filter Elements"
+            >
+              <Tabs.ListContainer className="p-0.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px]">
+                <Tabs.List className="gap-0.5">
+                  <Tabs.Tab
+                    id="all"
+                    className={`relative px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+                      activeTab === 'all'
+                        ? 'text-slate-950 font-semibold'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <span>All</span>
+                    <Tabs.Indicator className="rounded-lg bg-cyan-500 shadow-sm" />
+                  </Tabs.Tab>
+
+                  <Tabs.Tab
+                    id="blocks"
+                    className={`relative px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+                      activeTab === 'blocks'
+                        ? 'text-slate-950 font-semibold'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <span>Blocks ({filteredBlocks.length})</span>
+                    <Tabs.Indicator className="rounded-lg bg-cyan-500 shadow-sm" />
+                  </Tabs.Tab>
+
+                  <Tabs.Tab
+                    id="catalog"
+                    className={`relative px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+                      activeTab === 'catalog'
+                        ? 'text-slate-950 font-semibold'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <span>Catalog ({filteredCatalog.length})</span>
+                    <Tabs.Indicator className="rounded-lg bg-cyan-500 shadow-sm" />
+                  </Tabs.Tab>
+                </Tabs.List>
+              </Tabs.ListContainer>
+            </Tabs>
 
             {activeTab !== 'blocks' && categories.length > 0 && (
               <select

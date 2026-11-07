@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { Tabs, Chip, Badge } from '@heroui/react';
 import { Catalog, Vehicle } from '../types/catalog';
 import { getAllKnownFeatures } from '../utils/canValidator';
 import { VehicleEditorModal } from './VehicleEditorModal';
@@ -302,48 +303,61 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
         <div className="flex items-center gap-2.5">
           {/* Main View Toggle: Commands vs Vehicles */}
           {onChangeMainTab && (
-            <div className="ha-segmented-group text-xs">
-              <button
-                type="button"
-                onClick={() => onChangeMainTab('catalog')}
-                className={`px-3.5 py-1.5 rounded-full font-bold transition flex items-center gap-1.5 ${
-                  activeMainTab === 'catalog'
-                    ? 'active !text-white'
-                    : 'text-[var(--text-muted)] hover:text-white'
-                }`}
-              >
-                <span>Commands</span>
-                <span
-                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
-                    activeMainTab === 'catalog'
-                      ? 'bg-black/30 text-white'
-                      : 'bg-[var(--md-sys-color-surface-container-high)] text-slate-300'
-                  }`}
-                >
-                  {catalog.commands.length}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onChangeMainTab('vehicles')}
-                className={`px-3.5 py-1.5 rounded-full font-bold transition flex items-center gap-1.5 ${
-                  activeMainTab === 'vehicles'
-                    ? 'active !text-white'
-                    : 'text-[var(--text-muted)] hover:text-white'
-                }`}
-              >
-                <span>Vehicles</span>
-                <span
-                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
-                    activeMainTab === 'vehicles'
-                      ? 'bg-black/30 text-white'
-                      : 'bg-[var(--md-sys-color-surface-container-high)] text-slate-300'
-                  }`}
-                >
-                  {catalog.vehicles.length}
-                </span>
-              </button>
-            </div>
+            <Tabs
+              selectedKey={activeMainTab}
+              onSelectionChange={key => onChangeMainTab(key as 'catalog' | 'vehicles')}
+              aria-label="View Sections"
+            >
+              <Tabs.ListContainer className="p-1 rounded-full bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] text-xs">
+                <Tabs.List className="gap-1">
+                  <Tabs.Tab
+                    id="catalog"
+                    className={`relative px-3.5 py-1.5 rounded-full font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                      activeMainTab === 'catalog'
+                        ? 'text-white'
+                        : 'text-[var(--text-muted)] hover:text-white'
+                    }`}
+                  >
+                    <span>Commands</span>
+                    <Badge
+                      size="sm"
+                      variant="secondary"
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                        activeMainTab === 'catalog'
+                          ? 'bg-black/30 text-white'
+                          : 'bg-[var(--md-sys-color-surface-container-high)] text-slate-300'
+                      }`}
+                    >
+                      {catalog.commands.length}
+                    </Badge>
+                    <Tabs.Indicator className="rounded-full bg-[var(--md-sys-color-primary)] shadow-sm" />
+                  </Tabs.Tab>
+
+                  <Tabs.Tab
+                    id="vehicles"
+                    className={`relative px-3.5 py-1.5 rounded-full font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                      activeMainTab === 'vehicles'
+                        ? 'text-white'
+                        : 'text-[var(--text-muted)] hover:text-white'
+                    }`}
+                  >
+                    <span>Vehicles</span>
+                    <Badge
+                      size="sm"
+                      variant="secondary"
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                        activeMainTab === 'vehicles'
+                          ? 'bg-black/30 text-white'
+                          : 'bg-[var(--md-sys-color-surface-container-high)] text-slate-300'
+                      }`}
+                    >
+                      {catalog.vehicles.length}
+                    </Badge>
+                    <Tabs.Indicator className="rounded-full bg-[var(--md-sys-color-primary)] shadow-sm" />
+                  </Tabs.Tab>
+                </Tabs.List>
+              </Tabs.ListContainer>
+            </Tabs>
           )}
         </div>
 
@@ -375,59 +389,78 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
             </div>
 
             {selectedMake !== 'all' && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-cyan-950/60 text-cyan-300 border border-cyan-800/60 px-2 py-0.5 rounded-full">
+              <Chip
+                size="sm"
+                color="accent"
+                variant="soft"
+                className="inline-flex items-center gap-1 text-[11px] font-medium bg-cyan-950/60 text-cyan-300 border border-cyan-800/60 px-2 py-0.5 rounded-full"
+              >
                 Make: {selectedMake}
                 <button
                   type="button"
                   onClick={() => setSelectedMake('all')}
-                  className="hover:text-white"
+                  className="hover:text-white ml-1 cursor-pointer"
                   title="Clear make filter"
                 >
                   <X className="w-3 h-3" />
                 </button>
-              </span>
+              </Chip>
             )}
 
             {selectedFamily !== 'all' && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-blue-950/60 text-blue-300 border border-blue-800/60 px-2 py-0.5 rounded-full">
+              <Chip
+                size="sm"
+                color="accent"
+                variant="soft"
+                className="inline-flex items-center gap-1 text-[11px] font-medium bg-blue-950/60 text-blue-300 border border-blue-800/60 px-2 py-0.5 rounded-full"
+              >
                 Family: {selectedFamily}
                 <button
                   type="button"
                   onClick={() => setSelectedFamily('all')}
-                  className="hover:text-white"
+                  className="hover:text-white ml-1 cursor-pointer"
                   title="Clear family filter"
                 >
                   <X className="w-3 h-3" />
                 </button>
-              </span>
+              </Chip>
             )}
 
             {selectedRegion !== 'all' && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-slate-800 text-slate-300 border border-slate-700 px-2 py-0.5 rounded-full">
+              <Chip
+                size="sm"
+                variant="secondary"
+                className="inline-flex items-center gap-1 text-[11px] font-medium bg-slate-800 text-slate-300 border border-slate-700 px-2 py-0.5 rounded-full"
+              >
                 Region: {selectedRegion.toUpperCase()}
                 <button
                   type="button"
                   onClick={() => setSelectedRegion('all')}
-                  className="hover:text-white"
+                  className="hover:text-white ml-1 cursor-pointer"
                   title="Clear region filter"
                 >
                   <X className="w-3 h-3" />
                 </button>
-              </span>
+              </Chip>
             )}
 
             {activeFeatureFilter && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-emerald-950/60 text-emerald-300 border border-emerald-700/60 px-2 py-0.5 rounded-full">
+              <Chip
+                size="sm"
+                color="success"
+                variant="soft"
+                className="inline-flex items-center gap-1 text-[11px] font-medium bg-emerald-950/60 text-emerald-300 border border-emerald-700/60 px-2 py-0.5 rounded-full"
+              >
                 Equipped: {activeFeatureFilter}
                 <button
                   type="button"
                   onClick={() => setActiveFeatureFilter(null)}
-                  className="hover:text-white"
+                  className="hover:text-white ml-1 cursor-pointer"
                   title="Clear feature filter"
                 >
                   <X className="w-3 h-3" />
                 </button>
-              </span>
+              </Chip>
             )}
           </div>
 
@@ -598,19 +631,34 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
                   <div className="flex items-start justify-between gap-2 mb-2 min-w-0">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[10px] font-mono text-cyan-400 uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-cyan-950/60 border border-cyan-800 shrink-0">
+                        <Badge
+                          size="sm"
+                          color="accent"
+                          variant="soft"
+                          className="text-[10px] font-mono text-cyan-400 uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-cyan-950/60 border border-cyan-800 shrink-0"
+                        >
                           {vehicle.make}
-                        </span>
+                        </Badge>
 
                         {isAddedDraft && (
-                          <span className="text-[10px] font-mono text-emerald-300 px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-800 shrink-0">
+                          <Chip
+                            size="sm"
+                            color="success"
+                            variant="soft"
+                            className="text-[10px] font-mono text-emerald-300 px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-800 shrink-0"
+                          >
                             + Added Draft
-                          </span>
+                          </Chip>
                         )}
                         {isModifiedDraft && (
-                          <span className="text-[10px] font-mono text-amber-300 px-1.5 py-0.5 rounded bg-amber-950 border border-amber-800 shrink-0">
+                          <Chip
+                            size="sm"
+                            color="warning"
+                            variant="soft"
+                            className="text-[10px] font-mono text-amber-300 px-1.5 py-0.5 rounded bg-amber-950 border border-amber-800 shrink-0"
+                          >
                             ~ Modified Draft
-                          </span>
+                          </Chip>
                         )}
                       </div>
 
@@ -625,10 +673,14 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
                       )}
                     </div>
 
-                    <span className="flex items-center gap-1 text-[10px] uppercase font-mono px-2 py-0.5 rounded-[6px] bg-[var(--input-bg)] text-slate-300 border border-[var(--border-color)] shrink-0">
-                      <Globe className="w-3 h-3 text-cyan-400" />
+                    <Badge
+                      size="sm"
+                      variant="secondary"
+                      className="flex items-center gap-1 text-[10px] uppercase font-mono px-2 py-0.5 rounded-[6px] bg-[var(--input-bg)] text-slate-300 border border-[var(--border-color)] shrink-0"
+                    >
+                      <Globe className="w-3 h-3 text-cyan-400 mr-1" />
                       {vehicle.region}
-                    </span>
+                    </Badge>
                   </div>
 
                   {/* ID & Family metadata */}
@@ -713,8 +765,11 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
                         vehicle.features.map(f => {
                           const isFeatureFiltered = activeFeatureFilter === f;
                           return (
-                            <span
+                            <Chip
                               key={f}
+                              size="sm"
+                              color={isFeatureFiltered ? 'success' : 'default'}
+                              variant={isFeatureFiltered ? 'soft' : 'secondary'}
                               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[10px] font-mono border transition ${
                                 isFeatureFiltered
                                   ? 'bg-emerald-950 text-emerald-200 border-emerald-500 font-semibold ring-1 ring-emerald-500/50'
@@ -732,12 +787,12 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleToggleCardFeature(vehicle, f)}
-                                className="text-slate-500 hover:text-rose-400 transition ml-0.5"
+                                className="text-slate-500 hover:text-rose-400 transition ml-0.5 cursor-pointer"
                                 title={`Remove ${f} from this vehicle`}
                               >
                                 <X className="w-2.5 h-2.5" />
                               </button>
-                            </span>
+                            </Chip>
                           );
                         })
                       ) : (
@@ -751,9 +806,9 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
 
                 {/* Bottom Actions Row */}
                 <div className="pt-3 border-t border-[var(--border-color)] flex items-center justify-between text-xs">
-                  <span className="text-[var(--text-muted)] font-mono text-[11px]">
-                    <strong className="text-cyan-400">{matchingCommandsCount}</strong> compatible cmds
-                  </span>
+                  <Chip size="sm" variant="secondary" className="text-[var(--text-muted)] font-mono text-[11px]">
+                    <strong className="text-cyan-400 mr-1">{matchingCommandsCount}</strong> compatible cmds
+                  </Chip>
 
                   <div className="flex items-center gap-1.5">
                     {/* Filter commands link */}

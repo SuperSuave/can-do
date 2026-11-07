@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Tabs } from '@heroui/react';
 
 interface PayloadByteEditorProps {
   value?: string | Record<string, string>;
@@ -86,13 +87,39 @@ export const PayloadByteEditor: React.FC<PayloadByteEditorProps> = ({
           >
             Reset all to *
           </button>
-          <button
-            type="button"
-            onClick={() => setIsAdvanced(!isAdvanced)}
-            className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 hover:bg-cyan-900 transition"
+          <Tabs
+            selectedKey={isAdvanced ? 'raw' : 'boxes'}
+            onSelectionChange={key => setIsAdvanced(key === 'raw')}
+            aria-label="Payload Representation Mode"
           >
-            {isAdvanced ? 'Switch to D1–D8 Boxes' : 'Switch to Raw Text'}
-          </button>
+            <Tabs.ListContainer className="p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-[10px]">
+              <Tabs.List className="gap-0.5">
+                <Tabs.Tab
+                  id="boxes"
+                  className={`relative px-2 py-0.5 rounded font-mono transition cursor-pointer flex items-center ${
+                    !isAdvanced
+                      ? 'text-cyan-300 font-semibold'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span>D1–D8 Boxes</span>
+                  <Tabs.Indicator className="rounded bg-cyan-950 border border-cyan-800 shadow-sm" />
+                </Tabs.Tab>
+
+                <Tabs.Tab
+                  id="raw"
+                  className={`relative px-2 py-0.5 rounded font-mono transition cursor-pointer flex items-center ${
+                    isAdvanced
+                      ? 'text-cyan-300 font-semibold'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span>Raw Text</span>
+                  <Tabs.Indicator className="rounded bg-cyan-950 border border-cyan-800 shadow-sm" />
+                </Tabs.Tab>
+              </Tabs.List>
+            </Tabs.ListContainer>
+          </Tabs>
         </div>
       </div>
 

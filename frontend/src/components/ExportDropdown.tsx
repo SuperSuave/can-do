@@ -8,6 +8,7 @@ import {
   Sliders
 } from 'lucide-react';
 import { ExportFormat } from './ExportModal';
+import { Button } from '@heroui/react';
 
 interface ExportDropdownProps {
   onQuickDownloadJson: () => void;
@@ -55,13 +56,14 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
 
   return (
     <div className="relative inline-block text-left" ref={dropdownRef}>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
+      <Button
+        variant="outline"
+        size="sm"
+        onPress={() => setIsOpen(!isOpen)}
         className={buttonClasses}
         aria-expanded={isOpen}
         aria-haspopup="true"
-        title="Export catalog as JSON or Vector CAN DBC"
+        aria-label="Export catalog as JSON or Vector CAN DBC"
       >
         <Download className="w-3.5 h-3.5 text-slate-300" />
         <span>Export</span>
@@ -70,7 +72,7 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
             isOpen ? 'rotate-180 text-cyan-400' : ''
           }`}
         />
-      </button>
+      </Button>
 
       {isOpen && (
         <div className="absolute right-0 mt-1.5 w-72 rounded-xl border border-[var(--border-color)] bg-[var(--card-bg)] shadow-2xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-100">

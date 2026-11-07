@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
+  Modal,
+  ModalBackdrop,
+  ModalContainer,
+  ModalDialog
+} from '@heroui/react';
+import {
   RefreshCw,
   Cpu,
   CheckCircle2,
@@ -166,8 +172,10 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-md p-6 sm:p-7 rounded-2xl bg-slate-900 border border-cyan-500/30 shadow-2xl shadow-cyan-950/60 text-center space-y-5 overflow-hidden">
+    <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
+      <ModalBackdrop variant="blur" className="bg-slate-950/85 backdrop-blur-md">
+        <ModalContainer placement="center" className="p-4">
+          <ModalDialog className="relative w-full max-w-md p-6 sm:p-7 rounded-2xl bg-slate-900 border border-cyan-500/30 shadow-2xl shadow-cyan-950/60 text-center space-y-5 overflow-hidden">
         {/* Subtle decorative glowing background blur */}
         <div
           className={`absolute -top-16 -left-16 w-44 h-44 rounded-full blur-3xl pointer-events-none transition-colors duration-700 ${
@@ -353,8 +361,10 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
             </>
           )}
         </div>
-      </div>
-    </div>
+          </ModalDialog>
+        </ModalContainer>
+      </ModalBackdrop>
+    </Modal>
   );
 };
 

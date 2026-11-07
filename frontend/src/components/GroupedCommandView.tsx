@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { Disclosure } from '@heroui/react';
 import { Command, CommandRole, CommandOption } from '../types/catalog';
 import { CommandCard } from './CommandCard';
 import {
@@ -170,73 +171,64 @@ export const GroupedCommandView: React.FC<GroupedCommandViewProps> = ({
         const isCollapsed = collapsedGroups.has(catGroup.id);
 
         return (
-          <section
+          <Disclosure
             key={catGroup.id}
+            isExpanded={!isCollapsed}
+            onExpandedChange={() => toggleGroupCollapse(catGroup.id)}
             className="rounded-2xl border border-[var(--border-color)] bg-[var(--card-bg)]/40 overflow-hidden shadow-sm transition min-w-0"
           >
             {/* Top-Level Category Header */}
-            <div
-              onClick={() => toggleGroupCollapse(catGroup.id)}
-              className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-3 bg-[var(--card-bg)]/90 hover:bg-[var(--md-sys-color-surface-container-high)]/50 cursor-pointer border-b border-[var(--border-color)] transition select-none min-w-0"
-            >
-              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                <button
-                  type="button"
-                  className="p-1 rounded-md text-slate-400 hover:text-white transition shrink-0"
-                  aria-label={isCollapsed ? `Expand ${catGroup.categoryName}` : `Collapse ${catGroup.categoryName}`}
-                >
-                  {isCollapsed ? (
-                    <ChevronRight className="w-4 h-4 text-cyan-400" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 text-cyan-400" />
-                  )}
-                </button>
+            <Disclosure.Heading className="m-0 p-0">
+              <Disclosure.Trigger
+                className="w-full flex flex-wrap items-center justify-between gap-2.5 px-4 py-3 bg-[var(--card-bg)]/90 hover:bg-[var(--md-sys-color-surface-container-high)]/50 cursor-pointer border-b border-[var(--border-color)] transition select-none min-w-0 text-left"
+              >
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <Disclosure.Indicator className="text-cyan-400 shrink-0" />
+                  <FolderKanban className="w-4 h-4 text-cyan-400 shrink-0" />
 
-                <FolderKanban className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <span className="text-sm sm:text-base font-bold text-white tracking-tight truncate">
+                        {catGroup.categoryName}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-slate-800/90 text-slate-300 font-mono text-[11px] font-semibold border border-slate-700/60">
+                        {catGroup.totalCommands} {catGroup.totalCommands === 1 ? 'cmd' : 'cmds'}
+                      </span>
+                      {catGroup.subgroups.length > 1 && (
+                        <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-cyan-300/90 font-medium px-2 py-0.5 rounded-full bg-cyan-950/40 border border-cyan-800/40">
+                          <Layers className="w-3 h-3 text-cyan-400" />
+                          <span>{catGroup.subgroups.length} subcategories</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
 
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap min-w-0">
-                    <h3 className="text-sm sm:text-base font-bold text-white tracking-tight truncate">
-                      {catGroup.categoryName}
-                    </h3>
-                    <span className="px-2 py-0.5 rounded-full bg-slate-800/90 text-slate-300 font-mono text-[11px] font-semibold border border-slate-700/60">
-                      {catGroup.totalCommands} {catGroup.totalCommands === 1 ? 'cmd' : 'cmds'}
-                    </span>
-                    {catGroup.subgroups.length > 1 && (
-                      <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-cyan-300/90 font-medium px-2 py-0.5 rounded-full bg-cyan-950/40 border border-cyan-800/40">
-                        <Layers className="w-3 h-3 text-cyan-400" />
-                        <span>{catGroup.subgroups.length} subcategories</span>
+                {/* Category-Level Role Counters */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5 text-[10px] font-mono">
+                    {catGroup.triggersCount > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-950/60 text-amber-300 border border-amber-800/60">
+                        {catGroup.triggersCount} Trig
+                      </span>
+                    )}
+                    {catGroup.conditionsCount > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-800/60">
+                        {catGroup.conditionsCount} Cond
+                      </span>
+                    )}
+                    {catGroup.actionsCount > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-cyan-950/60 text-cyan-300 border border-cyan-800/60">
+                        {catGroup.actionsCount} Act
                       </span>
                     )}
                   </div>
                 </div>
-              </div>
-
-              {/* Category-Level Role Counters */}
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="flex items-center gap-1.5 text-[10px] font-mono">
-                  {catGroup.triggersCount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded bg-amber-950/60 text-amber-300 border border-amber-800/60">
-                      {catGroup.triggersCount} Trig
-                    </span>
-                  )}
-                  {catGroup.conditionsCount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-800/60">
-                      {catGroup.conditionsCount} Cond
-                    </span>
-                  )}
-                  {catGroup.actionsCount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded bg-cyan-950/60 text-cyan-300 border border-cyan-800/60">
-                      {catGroup.actionsCount} Act
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
+              </Disclosure.Trigger>
+            </Disclosure.Heading>
 
             {/* Category Body: Nested Subcategories or Direct Grid */}
-            {!isCollapsed && (
-              <div className="p-3.5 sm:p-4 bg-black/10 min-w-0">
+            <Disclosure.Content className="p-3.5 sm:p-4 bg-black/10 min-w-0">
                 {catGroup.subgroups.length <= 1 ? (
                   /* Single subcategory (or general): render grid directly without redundant headers */
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4 min-w-0">
@@ -327,9 +319,8 @@ export const GroupedCommandView: React.FC<GroupedCommandViewProps> = ({
                     ))}
                   </div>
                 )}
-              </div>
-            )}
-          </section>
+              </Disclosure.Content>
+            </Disclosure>
         );
       })}
     </div>

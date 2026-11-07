@@ -1,4 +1,18 @@
 import React, { useState } from 'react';
+import {
+  Tabs,
+  Chip,
+  Badge,
+  Modal,
+  ModalBackdrop,
+  ModalContainer,
+  ModalDialog,
+  ModalHeader,
+  ModalHeading,
+  ModalBody,
+  ModalFooter,
+  Table
+} from '@heroui/react';
 import { Command, CommandRole, CommandOption, Catalog, getCommandContributors } from '../types/catalog';
 import { PayloadByteVisualizer } from './PayloadByteVisualizer';
 import { validateCommand } from '../utils/canValidator';
@@ -162,165 +176,196 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-3xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto">
-        {/* Header */}
-        <div className="flex items-start justify-between p-6 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)]">
-          <div className="pr-6">
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              {command.roles.map(r => (
-                <span
-                  key={r}
-                  className={`can-do-ha-pill ${
-                    r === 'trigger' ? 'trig-pill' : r === 'condition' ? 'cond-pill' : 'act-pill'
-                  }`}
-                >
-                  {r}
-                </span>
-              ))}
-              {(command.state_can_id || command.network?.state_can_id || command.can_id) && (
-                <span className="font-mono text-xs px-2.5 py-0.5 rounded-[6px] bg-[var(--input-bg)] text-cyan-400 border border-[var(--border-color)]">
-                  {(command.action_can_id || command.network?.action_can_id)
-                    ? `Rx: ${command.state_can_id || command.network?.state_can_id || command.can_id}`
-                    : (command.state_can_id || command.network?.state_can_id || command.can_id)} • Bus {command.bus ?? command.network?.bus ?? 0}
-                </span>
-              )}
-              {(command.action_can_id || command.network?.action_can_id) && (
-                <span className="font-mono text-xs px-2.5 py-0.5 rounded-[6px] bg-[var(--input-bg)] text-emerald-400 border border-emerald-900/50">
-                  Tx: {command.action_can_id || command.network?.action_can_id} • Bus {command.action_bus ?? command.network?.bus ?? command.bus ?? 0}
-                </span>
-              )}
-              {command.type && (
-                <span className="text-xs font-mono px-2.5 py-0.5 rounded-[6px] bg-[var(--input-bg)] text-slate-300 border border-[var(--border-color)]">
-                  Type: {command.type}
-                </span>
-              )}
-              {command.ha_domain && (() => {
-                const domainStyle = getHaDomainBadgeStyle(command.ha_domain);
-                return (
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-[6px] text-xs font-mono font-semibold border ${domainStyle.bg} ${domainStyle.text} ${domainStyle.border}`}
-                    title={`Home Assistant Domain: ${command.ha_domain}`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${domainStyle.dot}`} />
-                    HA: {command.ha_domain}
-                  </span>
-                );
-              })()}
-              {(command.ha_metadata?.icon || command.icon || command.mdi) && (
-                <span
-                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-[6px] text-xs font-mono font-medium bg-sky-950/70 text-sky-300 border border-sky-800/60"
-                  title={`MDI Icon: ${command.ha_metadata?.icon || command.icon || command.mdi}`}
-                >
-                  <MdiIcon icon={command.ha_metadata?.icon || command.icon || command.mdi} className="w-3.5 h-3.5 text-sky-400" />
-                  {command.ha_metadata?.icon || command.icon || command.mdi}
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-3">
-              {(command.ha_metadata?.icon || command.icon || command.mdi) && (
-                <div className="w-9 h-9 rounded-xl bg-sky-950/70 border border-sky-800/70 flex items-center justify-center text-sky-300 shrink-0 shadow-sm">
-                  <MdiIcon icon={command.ha_metadata?.icon || command.icon || command.mdi} className="w-5 h-5" />
+    <Modal isOpen={Boolean(command)} onOpenChange={open => { if (!open) onClose(); }}>
+      <ModalBackdrop variant="blur" className="bg-black/80 backdrop-blur-sm">
+        <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
+          <ModalDialog className="relative w-full max-w-3xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <ModalHeader className="flex items-start justify-between p-6 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] gap-0">
+              <div className="pr-6">
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  {command.roles.map(r => (
+                    <Chip
+                      key={r}
+                      size="sm"
+                      color={r === 'trigger' ? 'warning' : r === 'condition' ? 'accent' : 'success'}
+                      variant="soft"
+                      className={`can-do-ha-pill capitalize ${
+                        r === 'trigger' ? 'trig-pill' : r === 'condition' ? 'cond-pill' : 'act-pill'
+                      }`}
+                    >
+                      {r}
+                    </Chip>
+                  ))}
+                  {(command.state_can_id || command.network?.state_can_id || command.can_id) && (
+                    <Badge size="sm" color="accent" variant="soft" className="font-mono text-xs px-2.5 py-0.5 rounded-[6px] bg-[var(--input-bg)] text-cyan-400 border border-[var(--border-color)]">
+                      {(command.action_can_id || command.network?.action_can_id)
+                        ? `Rx: ${command.state_can_id || command.network?.state_can_id || command.can_id}`
+                        : (command.state_can_id || command.network?.state_can_id || command.can_id)} • Bus {command.bus ?? command.network?.bus ?? 0}
+                    </Badge>
+                  )}
+                  {(command.action_can_id || command.network?.action_can_id) && (
+                    <Badge size="sm" color="success" variant="soft" className="font-mono text-xs px-2.5 py-0.5 rounded-[6px] bg-[var(--input-bg)] text-emerald-400 border border-emerald-900/50">
+                      Tx: {command.action_can_id || command.network?.action_can_id} • Bus {command.action_bus ?? command.network?.bus ?? command.bus ?? 0}
+                    </Badge>
+                  )}
+                  {command.type && (
+                    <Chip size="sm" variant="secondary" className="text-xs font-mono px-2.5 py-0.5 rounded-[6px] bg-[var(--input-bg)] text-slate-300 border border-[var(--border-color)]">
+                      Type: {command.type}
+                    </Chip>
+                  )}
+                  {command.ha_domain && (() => {
+                    const domainStyle = getHaDomainBadgeStyle(command.ha_domain);
+                    return (
+                      <Chip
+                        size="sm"
+                        variant="secondary"
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-[6px] text-xs font-mono font-semibold border ${domainStyle.bg} ${domainStyle.text} ${domainStyle.border}`}
+                        title={`Home Assistant Domain: ${command.ha_domain}`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${domainStyle.dot}`} />
+                        HA: {command.ha_domain}
+                      </Chip>
+                    );
+                  })()}
+                  {(command.ha_metadata?.icon || command.icon || command.mdi) && (
+                    <Chip
+                      size="sm"
+                      color="accent"
+                      variant="soft"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-[6px] text-xs font-mono font-medium bg-sky-950/70 text-sky-300 border border-sky-800/60"
+                      title={`MDI Icon: ${command.ha_metadata?.icon || command.icon || command.mdi}`}
+                    >
+                      <MdiIcon icon={command.ha_metadata?.icon || command.icon || command.mdi} className="w-3.5 h-3.5 text-sky-400" />
+                      {command.ha_metadata?.icon || command.icon || command.mdi}
+                    </Chip>
+                  )}
                 </div>
-              )}
-              <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">
-                {commandName}
-              </h2>
-            </div>
-            <p className="text-xs font-mono text-[var(--text-muted)] mt-1 flex items-center gap-1.5 flex-wrap">
-              <span>ID: <span className="text-slate-200">{command.id}</span></span>
-              <span>•</span>
-              <span>Category: <span className="text-cyan-400 font-sans">{command.category}</span></span>
-              {command.subcategory && (
-                <>
-                  <span>•</span>
-                  <span>Subsystem: <span className="text-cyan-300 font-sans font-semibold bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-800/60">{command.subcategory}</span></span>
-                </>
-              )}
-            </p>
-          </div>
 
-          <button
-            onClick={onClose}
-            className="p-2 text-[var(--text-muted)] hover:text-white rounded-full hover:bg-[var(--md-sys-color-surface-container-high)] transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+                <div className="flex items-center gap-3">
+                  {(command.ha_metadata?.icon || command.icon || command.mdi) && (
+                    <div className="w-9 h-9 rounded-xl bg-sky-950/70 border border-sky-800/70 flex items-center justify-center text-sky-300 shrink-0 shadow-sm">
+                      <MdiIcon icon={command.ha_metadata?.icon || command.icon || command.mdi} className="w-5 h-5" />
+                    </div>
+                  )}
+                  <ModalHeading className="text-xl md:text-2xl font-bold text-white tracking-tight">
+                    {commandName}
+                  </ModalHeading>
+                </div>
+                <p className="text-xs font-mono text-[var(--text-muted)] mt-1 flex items-center gap-1.5 flex-wrap">
+                  <span>ID: <span className="text-slate-200">{command.id}</span></span>
+                  <span>•</span>
+                  <span>Category: <span className="text-cyan-400 font-sans">{command.category}</span></span>
+                  {command.subcategory && (
+                    <>
+                      <span>•</span>
+                      <span>Subsystem: <span className="text-cyan-300 font-sans font-semibold bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-800/60">{command.subcategory}</span></span>
+                    </>
+                  )}
+                </p>
+              </div>
+
+              <button
+                onClick={onClose}
+                className="p-2 text-[var(--text-muted)] hover:text-white rounded-full hover:bg-[var(--md-sys-color-surface-container-high)] transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </ModalHeader>
 
         {/* Tab switcher */}
-        <div className="flex items-center gap-2 px-6 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-lowest)] text-sm">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`py-3 px-3 font-medium border-b-2 transition ${
-              activeTab === 'overview'
-                ? 'border-[var(--md-sys-color-primary)] text-cyan-400 font-bold'
-                : 'border-transparent text-[var(--text-muted)] hover:text-slate-200'
-            }`}
+        <div className="px-6 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-lowest)] text-sm">
+          <Tabs
+            selectedKey={activeTab}
+            onSelectionChange={key => setActiveTab(key as typeof activeTab)}
+            aria-label="Command Details Tabs"
           >
-            <Cpu className="w-4 h-4 inline-block mr-1.5" />
-            CAN Parameters
-          </button>
-          <button
-            onClick={() => setActiveTab('vehicles')}
-            className={`py-3 px-3 font-medium border-b-2 transition ${
-              activeTab === 'vehicles'
-                ? 'border-[var(--md-sys-color-primary)] text-cyan-400 font-bold'
-                : 'border-transparent text-[var(--text-muted)] hover:text-slate-200'
-            }`}
-          >
-            <Car className="w-4 h-4 inline-block mr-1.5" />
-            Vehicle Compatibility ({compatibleVehicles.length}/{catalog.vehicles.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('cancapture')}
-            className={`py-3 px-3 font-medium border-b-2 transition ${
-              activeTab === 'cancapture'
-                ? 'border-[var(--md-sys-color-primary)] text-cyan-400 font-bold'
-                : 'border-transparent text-[var(--text-muted)] hover:text-slate-200'
-            }`}
-          >
-            <FileText className="w-4 h-4 inline-block mr-1.5" />
-            Capture Note (D1–D8)
-          </button>
-          <button
-            onClick={() => setActiveTab('raw_json')}
-            className={`py-3 px-3 font-medium border-b-2 transition ${
-              activeTab === 'raw_json'
-                ? 'border-[var(--md-sys-color-primary)] text-cyan-400 font-bold'
-                : 'border-transparent text-[var(--text-muted)] hover:text-slate-200'
-            }`}
-          >
-            <Code2 className="w-4 h-4 inline-block mr-1.5" />
-            Raw JSON
-          </button>
-          <button
-            onClick={() => setActiveTab('dbc')}
-            className={`py-3 px-3 font-medium border-b-2 transition ${
-              activeTab === 'dbc'
-                ? 'border-[var(--md-sys-color-primary)] text-cyan-400 font-bold'
-                : 'border-transparent text-[var(--text-muted)] hover:text-slate-200'
-            }`}
-          >
-            <FileCode className="w-4 h-4 inline-block mr-1.5" />
-            Vector DBC Signal
-          </button>
-          <button
-            onClick={() => setActiveTab('homeassistant')}
-            className={`py-3 px-3 font-medium border-b-2 transition ${
-              activeTab === 'homeassistant'
-                ? 'border-[var(--md-sys-color-primary)] text-cyan-400 font-bold'
-                : 'border-transparent text-[var(--text-muted)] hover:text-slate-200'
-            }`}
-          >
-            <Home className="w-4 h-4 inline-block mr-1.5 text-sky-400" />
-            Home Assistant
-          </button>
+            <Tabs.ListContainer className="overflow-x-auto no-scrollbar">
+              <Tabs.List className="gap-1 sm:gap-2">
+                <Tabs.Tab
+                  id="overview"
+                  className={`relative py-3 px-3 font-medium transition cursor-pointer flex items-center ${
+                    activeTab === 'overview'
+                      ? 'text-cyan-400 font-bold'
+                      : 'text-[var(--text-muted)] hover:text-slate-200'
+                  }`}
+                >
+                  <Cpu className="w-4 h-4 inline-block mr-1.5" />
+                  <span>CAN Parameters</span>
+                  <Tabs.Indicator className="h-0.5 bg-[var(--md-sys-color-primary)] bottom-0 rounded-full" />
+                </Tabs.Tab>
+
+                <Tabs.Tab
+                  id="vehicles"
+                  className={`relative py-3 px-3 font-medium transition cursor-pointer flex items-center ${
+                    activeTab === 'vehicles'
+                      ? 'text-cyan-400 font-bold'
+                      : 'text-[var(--text-muted)] hover:text-slate-200'
+                  }`}
+                >
+                  <Car className="w-4 h-4 inline-block mr-1.5" />
+                  <span>Vehicle Compatibility ({compatibleVehicles.length}/{catalog.vehicles.length})</span>
+                  <Tabs.Indicator className="h-0.5 bg-[var(--md-sys-color-primary)] bottom-0 rounded-full" />
+                </Tabs.Tab>
+
+                <Tabs.Tab
+                  id="cancapture"
+                  className={`relative py-3 px-3 font-medium transition cursor-pointer flex items-center ${
+                    activeTab === 'cancapture'
+                      ? 'text-cyan-400 font-bold'
+                      : 'text-[var(--text-muted)] hover:text-slate-200'
+                  }`}
+                >
+                  <FileText className="w-4 h-4 inline-block mr-1.5" />
+                  <span>Capture Note (D1–D8)</span>
+                  <Tabs.Indicator className="h-0.5 bg-[var(--md-sys-color-primary)] bottom-0 rounded-full" />
+                </Tabs.Tab>
+
+                <Tabs.Tab
+                  id="raw_json"
+                  className={`relative py-3 px-3 font-medium transition cursor-pointer flex items-center ${
+                    activeTab === 'raw_json'
+                      ? 'text-cyan-400 font-bold'
+                      : 'text-[var(--text-muted)] hover:text-slate-200'
+                  }`}
+                >
+                  <Code2 className="w-4 h-4 inline-block mr-1.5" />
+                  <span>Raw JSON</span>
+                  <Tabs.Indicator className="h-0.5 bg-[var(--md-sys-color-primary)] bottom-0 rounded-full" />
+                </Tabs.Tab>
+
+                <Tabs.Tab
+                  id="dbc"
+                  className={`relative py-3 px-3 font-medium transition cursor-pointer flex items-center ${
+                    activeTab === 'dbc'
+                      ? 'text-cyan-400 font-bold'
+                      : 'text-[var(--text-muted)] hover:text-slate-200'
+                  }`}
+                >
+                  <FileCode className="w-4 h-4 inline-block mr-1.5" />
+                  <span>Vector DBC Signal</span>
+                  <Tabs.Indicator className="h-0.5 bg-[var(--md-sys-color-primary)] bottom-0 rounded-full" />
+                </Tabs.Tab>
+
+                <Tabs.Tab
+                  id="homeassistant"
+                  className={`relative py-3 px-3 font-medium transition cursor-pointer flex items-center ${
+                    activeTab === 'homeassistant'
+                      ? 'text-cyan-400 font-bold'
+                      : 'text-[var(--text-muted)] hover:text-slate-200'
+                  }`}
+                >
+                  <Home className="w-4 h-4 inline-block mr-1.5 text-sky-400" />
+                  <span>Home Assistant</span>
+                  <Tabs.Indicator className="h-0.5 bg-[var(--md-sys-color-primary)] bottom-0 rounded-full" />
+                </Tabs.Tab>
+              </Tabs.List>
+            </Tabs.ListContainer>
+          </Tabs>
         </div>
 
         {/* Body content */}
-        <div className="p-6 max-h-[68vh] overflow-y-auto space-y-6">
+        <ModalBody className="p-6 max-h-[68vh] overflow-y-auto space-y-6">
           {/* Validation Banner if any issues */}
           {(hasErrors || hasWarnings) && (
             <div
@@ -397,9 +442,9 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                               </div>
 
                               {contrib.role && (
-                                <span className="text-[10px] text-cyan-400 uppercase tracking-wider bg-cyan-950/60 border border-cyan-800 px-1.5 py-0.5 rounded font-semibold shrink-0">
+                                <Badge size="sm" color="accent" variant="soft" className="text-[10px] text-cyan-400 uppercase tracking-wider bg-cyan-950/60 border border-cyan-800 px-1.5 py-0.5 rounded font-semibold shrink-0">
                                   {contrib.role}
-                                </span>
+                                </Badge>
                               )}
                             </div>
 
@@ -473,23 +518,21 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                       </button>
                     )}
                   </div>
-                  <div className="overflow-hidden rounded-lg border border-slate-800">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800">
-                        <tr>
-                          <th className="p-3">State Meaning / Label</th>
-                          <th className="p-3 font-mono">Code / Value</th>
-                          <th className="p-3 font-mono">RX CAN Match Pattern</th>
-                          <th className="p-3 font-mono">Action Frame (TX)</th>
-                          <th className="p-3">Description / Toast</th>
-                          <th className="p-3 text-center">Default</th>
-                          <th className="p-3 text-right">Automate</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/60 font-mono">
+                  <Table className="w-full text-left text-xs overflow-hidden rounded-lg border border-slate-800">
+                    <Table.Content aria-label="Defined Discrete States Table">
+                      <Table.Header className="bg-slate-950/80 text-slate-400 border-b border-slate-800">
+                        <Table.Column id="label" isRowHeader className="p-3">State Meaning / Label</Table.Column>
+                        <Table.Column id="val" className="p-3 font-mono">Code / Value</Table.Column>
+                        <Table.Column id="rx" className="p-3 font-mono">RX CAN Match Pattern</Table.Column>
+                        <Table.Column id="tx" className="p-3 font-mono">Action Frame (TX)</Table.Column>
+                        <Table.Column id="desc" className="p-3">Description / Toast</Table.Column>
+                        <Table.Column id="def" className="p-3 text-center">Default</Table.Column>
+                        <Table.Column id="act" className="p-3 text-right">Automate</Table.Column>
+                      </Table.Header>
+                      <Table.Body className="divide-y divide-slate-800/60 font-mono">
                         {command.options.map((opt, idx) => (
-                          <tr key={idx} className="hover:bg-slate-800/30 transition">
-                            <td className="p-3 font-sans font-medium text-white">
+                          <Table.Row key={idx} id={String(idx)} className="hover:bg-slate-800/30 transition">
+                            <Table.Cell className="p-3 font-sans font-medium text-white">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="font-semibold">{opt.label}</span>
                                 {opt.requires_feature && (
@@ -498,8 +541,8 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                                   </span>
                                 )}
                               </div>
-                            </td>
-                            <td className="p-3 text-cyan-300">
+                            </Table.Cell>
+                            <Table.Cell className="p-3 text-cyan-300">
                               {opt.state_value !== undefined && opt.state_value !== '' ? (
                                 <span className="bg-cyan-950/60 border border-cyan-800/60 px-2 py-0.5 rounded text-[11px] font-bold">
                                   {formatPayloadDisplay(opt.state_value)}
@@ -511,8 +554,8 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                               ) : (
                                 <span className="text-slate-600">-</span>
                               )}
-                            </td>
-                            <td className="p-3 text-slate-300">
+                            </Table.Cell>
+                            <Table.Cell className="p-3 text-slate-300">
                               {(opt.match_payload || opt.match) ? (
                                 <span className="text-cyan-400 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/40 font-mono text-[11px]">
                                   {formatPayloadDisplay(opt.match_payload || opt.match)}
@@ -520,8 +563,8 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                               ) : (
                                 <span className="text-slate-600">-</span>
                               )}
-                            </td>
-                            <td className="p-3 text-emerald-300">
+                            </Table.Cell>
+                            <Table.Cell className="p-3 text-emerald-300">
                               {opt.steps && opt.steps.length > 0 ? (
                                 <div className="flex flex-col gap-1">
                                   <div className="flex items-center gap-1 flex-wrap">
@@ -562,11 +605,11 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                               ) : (
                                 <span className="text-slate-600">-</span>
                               )}
-                            </td>
-                            <td className="p-3 font-sans text-slate-400">
+                            </Table.Cell>
+                            <Table.Cell className="p-3 font-sans text-slate-400">
                               {opt.description || opt.popup || opt.popup_message || '-'}
-                            </td>
-                            <td className="p-3 text-center">
+                            </Table.Cell>
+                            <Table.Cell className="p-3 text-center">
                               {opt.default ? (
                                 <span className="px-2 py-0.5 rounded text-[10px] font-sans font-bold uppercase bg-cyan-950 text-cyan-300 border border-cyan-700">
                                   Default
@@ -574,8 +617,8 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                               ) : (
                                 '-'
                               )}
-                            </td>
-                            <td className="p-3 text-right">
+                            </Table.Cell>
+                            <Table.Cell className="p-3 text-right">
                               {onAddToAutomation && (
                                 <div className="inline-flex items-center gap-1.5 justify-end">
                                   <button
@@ -604,12 +647,12 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                                   </button>
                                 </div>
                               )}
-                            </td>
-                          </tr>
+                            </Table.Cell>
+                          </Table.Row>
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      </Table.Body>
+                    </Table.Content>
+                  </Table>
                 </div>
               )}
 
@@ -974,10 +1017,10 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
               </div>
             </div>
           )}
-        </div>
+        </ModalBody>
 
         {/* Modal Footer */}
-        <div className="flex flex-wrap items-center justify-between gap-3 p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)]">
+        <ModalFooter className="flex flex-wrap items-center justify-between gap-3 p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -1085,8 +1128,10 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
               Edit Command
             </button>
           </div>
-        </div>
-      </div>
-    </div>
+        </ModalFooter>
+      </ModalDialog>
+    </ModalContainer>
+  </ModalBackdrop>
+</Modal>
   );
 };

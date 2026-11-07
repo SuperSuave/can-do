@@ -15,7 +15,7 @@ export const STATE_PRESETS: StatePreset[] = [
     name: 'Gear Shifter (P / R / N / D)',
     icon: 'mdi:car-shift-pattern',
     category: 'Vehicle State & Telematics',
-    description: 'Standard automatic transmission gear positions (byte 3 matching E-GMP / CAN-Do standard)',
+    description: 'Gear positions',
     options: [
       {
         label: 'Park (P)',
@@ -52,17 +52,17 @@ export const STATE_PRESETS: StatePreset[] = [
     description: 'Vehicle door latch sensor status',
     options: [
       {
-        label: 'Closed & Latched',
+        label: 'Closed',
         state_value: '0',
         match_payload: '* * * 00 * * * *',
-        description: 'Door securely latched and closed',
+        description: 'Door is closed',
         default: true
       },
       {
-        label: 'Door Ajar / Open',
+        label: 'Open',
         state_value: '1',
         match_payload: '* * * 01 * * * *',
-        description: 'Door is ajar or opened'
+        description: 'Door is open'
       }
     ]
   },
@@ -77,14 +77,14 @@ export const STATE_PRESETS: StatePreset[] = [
         label: 'Locked',
         state_value: '0x00',
         match_payload: '* * * 00 * * * *',
-        description: 'All vehicle doors secured and locked',
+        description: 'Car is Locked',
         default: true
       },
       {
         label: 'Unlocked',
         state_value: '0x40',
         match_payload: '* * * 40 * * * *',
-        description: 'Doors unlocked / accessible'
+        description: 'Car is Unlocked'
       }
     ]
   },
@@ -187,26 +187,26 @@ export const STATE_PRESETS: StatePreset[] = [
         label: 'Disconnected',
         state_value: '0',
         match_payload: '00 * * * * * * *',
-        description: 'Charge port unplugged',
+        description: 'Unplugged',
         default: true
       },
       {
         label: 'Plugged In (Waiting)',
         state_value: '1',
         match_payload: '01 * * * * * * *',
-        description: 'Cable inserted, awaiting session start'
+        description: 'Plugged in, awaiting session start'
       },
       {
         label: 'Actively Charging',
         state_value: '2',
         match_payload: '02 * * * * * * *',
-        description: 'High-voltage energy flowing to battery pack'
+        description: 'Charging'
       },
       {
         label: 'Charging Complete',
         state_value: '3',
         match_payload: '03 * * * * * * *',
-        description: 'Target charge level reached, port in standby'
+        description: 'Charging Complete'
       }
     ]
   },
@@ -255,20 +255,20 @@ export const STATE_PRESETS: StatePreset[] = [
         label: 'Fully Closed',
         state_value: '0',
         match_payload: '* * 00 * * * * *',
-        description: 'Window glass completely raised',
+        description: 'Windows Closed',
         default: true
       },
       {
         label: 'Venting',
         state_value: '1',
         match_payload: '* * 20 * * * * *',
-        description: 'Window cracked open for fresh air ventilation'
+        description: 'Window cracked open for ventilation'
       },
       {
         label: 'Fully Lowered / Open',
         state_value: '2',
         match_payload: '* * FF * * * * *',
-        description: 'Window completely rolled down'
+        description: 'Windows Open'
       }
     ]
   }

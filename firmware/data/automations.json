@@ -42,6 +42,100 @@
           "text": "Driver Seat Ventilate"
         }
       ]
+    },
+    {
+      "id": "remote_climate_0c7_quick",
+      "name": "Remote Climate 0x0C7 Quick Pulse",
+      "description": "Fires 0x0C7 trigger pulse (3x active 0x01 then 3x release 0x00 at 40ms) on M-CAN",
+      "enabled": true,
+      "ha_expose": true,
+      "ha_icon": "mdi:snowflake",
+      "exec_mode": "one_shot",
+      "cooldown_ms": 1000,
+      "triggers": [],
+      "conditions": [],
+      "actions": [
+        {
+          "type": "transmit",
+          "can_id": "0x0C7",
+          "bus": 0,
+          "payload": "0000000100000000",
+          "repeat": 3,
+          "delay_ms": 40
+        },
+        {
+          "type": "transmit",
+          "can_id": "0x0C7",
+          "bus": 0,
+          "payload": "0000000000000000",
+          "repeat": 3,
+          "delay_ms": 40
+        },
+        {
+          "type": "track_popup",
+          "level": "info",
+          "text": "0x0C7 Trigger Sent"
+        }
+      ]
+    },
+    {
+      "id": "remote_climate_0c7_wake",
+      "name": "Remote Climate 0x0C7 with Wake Burst",
+      "description": "Wakes sleeping ECUs with 0x4A2 & 0x560 then fires 0x0C7 trigger pulse",
+      "enabled": true,
+      "ha_expose": true,
+      "ha_icon": "mdi:radiator",
+      "exec_mode": "one_shot",
+      "cooldown_ms": 2000,
+      "triggers": [],
+      "conditions": [],
+      "actions": [
+        {
+          "type": "transmit",
+          "can_id": "0x4A2",
+          "bus": 0,
+          "payload": "00000F0300000000",
+          "repeat": 3,
+          "delay_ms": 40
+        },
+        {
+          "type": "transmit",
+          "can_id": "0x560",
+          "bus": 0,
+          "payload": "600100000000FFFF",
+          "repeat": 3,
+          "delay_ms": 40
+        },
+        {
+          "type": "transmit",
+          "can_id": "0x4A2",
+          "bus": 0,
+          "payload": "0000FF03FFFF0000",
+          "repeat": 3,
+          "delay_ms": 40
+        },
+        {
+          "type": "transmit",
+          "can_id": "0x0C7",
+          "bus": 0,
+          "payload": "0000000100000000",
+          "repeat": 3,
+          "delay_ms": 40
+        },
+        {
+          "type": "transmit",
+          "can_id": "0x0C7",
+          "bus": 0,
+          "payload": "0000000000000000",
+          "repeat": 3,
+          "delay_ms": 40
+        },
+        {
+          "type": "track_popup",
+          "level": "info",
+          "text": "Remote Climate Wake Sent"
+        }
+      ]
     }
   ]
 }

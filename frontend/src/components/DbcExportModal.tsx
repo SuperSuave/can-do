@@ -1,4 +1,16 @@
 import React, { useState, useMemo } from 'react';
+import {
+  Tabs,
+  Switch,
+  Modal,
+  ModalBackdrop,
+  ModalContainer,
+  ModalDialog,
+  ModalHeader,
+  ModalHeading,
+  ModalBody,
+  ModalFooter
+} from '@heroui/react';
 import { Catalog } from '../types/catalog';
 import { exportToDbc } from '../utils/dbcConverter';
 import {
@@ -88,33 +100,35 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-4xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-950/60 border border-cyan-800/80 flex items-center justify-center text-cyan-400">
-              <FileCode className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white">Export Vector CAN DBC</h3>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-300 font-mono border border-cyan-800/80">
-                  Industry Standard .dbc
-                </span>
+    <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
+      <ModalBackdrop variant="blur" className="bg-black/80 backdrop-blur-sm">
+        <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
+          <ModalDialog className="relative w-full max-w-4xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <ModalHeader className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0 gap-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-950/60 border border-cyan-800/80 flex items-center justify-center text-cyan-400">
+                  <FileCode className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <ModalHeading className="text-base font-bold text-white">Export Vector CAN DBC</ModalHeading>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-300 font-mono border border-cyan-800/80">
+                      Industry Standard .dbc
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Compatible with SavvyCAN, comma.ai / opendbc, Wireshark, Vector CANoe, and BusMaster
+                  </p>
+                </div>
               </div>
-              <p className="text-xs text-slate-400">
-                Compatible with SavvyCAN, comma.ai / opendbc, Wireshark, Vector CANoe, and BusMaster
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </ModalHeader>
 
         {/* Filter Toolbar */}
         <div className="p-4 border-b border-[var(--border-color)] bg-slate-950/40 grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs shrink-0">
@@ -170,15 +184,19 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
           </div>
 
           <div className="flex flex-col justify-end">
-            <label className="inline-flex items-center gap-2 cursor-pointer pb-2 text-slate-300">
-              <input
-                type="checkbox"
-                checked={includeComments}
-                onChange={e => setIncludeComments(e.target.checked)}
-                className="rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-0 w-4 h-4"
-              />
-              <span className="text-[11px]">Include Author & Notes (`CM_`)</span>
-            </label>
+            <Switch
+              isSelected={includeComments}
+              onChange={setIncludeComments}
+              size="sm"
+              aria-label="Include Author & Notes (CM_)"
+            >
+              <Switch.Content>
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
+                <span className="text-[11px] text-slate-300">Include Author & Notes (`CM_`)</span>
+              </Switch.Content>
+            </Switch>
           </div>
         </div>
 
@@ -203,32 +221,42 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveTab('preview')}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition ${
-                activeTab === 'preview'
-                  ? 'bg-slate-800 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              DBC Preview
-            </button>
-            <button
-              onClick={() => setActiveTab('help')}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition ${
-                activeTab === 'help'
-                  ? 'bg-slate-800 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Tool Setup Guide
-            </button>
-          </div>
+          <Tabs
+            selectedKey={activeTab}
+            onSelectionChange={key => setActiveTab(key as 'preview' | 'help')}
+            aria-label="Export Views"
+          >
+            <Tabs.ListContainer className="p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px]">
+              <Tabs.List className="gap-1">
+                <Tabs.Tab
+                  id="preview"
+                  className={`relative px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                    activeTab === 'preview'
+                      ? 'text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span>DBC Preview</span>
+                  <Tabs.Indicator className="rounded-md bg-slate-800 shadow-sm" />
+                </Tabs.Tab>
+                <Tabs.Tab
+                  id="help"
+                  className={`relative px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                    activeTab === 'help'
+                      ? 'text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span>Tool Setup Guide</span>
+                  <Tabs.Indicator className="rounded-md bg-slate-800 shadow-sm" />
+                </Tabs.Tab>
+              </Tabs.List>
+            </Tabs.ListContainer>
+          </Tabs>
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-5">
+        <ModalBody className="flex-1 overflow-y-auto p-5">
           {activeTab === 'preview' ? (
             <div className="relative">
               <pre className="p-4 rounded-xl bg-slate-950/90 border border-slate-800/90 font-mono text-xs text-slate-200 overflow-x-auto leading-relaxed max-h-[420px] select-all">
@@ -288,10 +316,10 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
               </div>
             </div>
           )}
-        </div>
+        </ModalBody>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
+        <ModalFooter className="flex items-center justify-between p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
           <div className="text-xs text-slate-400">
             {stats.sgCount} Signals across {stats.boCount} CAN Messages
           </div>
@@ -324,8 +352,10 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
               <span>Download .dbc File</span>
             </button>
           </div>
-        </div>
-      </div>
-    </div>
+        </ModalFooter>
+      </ModalDialog>
+    </ModalContainer>
+  </ModalBackdrop>
+</Modal>
   );
 };

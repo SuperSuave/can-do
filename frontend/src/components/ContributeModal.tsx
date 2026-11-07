@@ -1,4 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import {
+  Tabs,
+  Button,
+  Modal,
+  ModalBackdrop,
+  ModalContainer,
+  ModalDialog,
+  ModalHeader,
+  ModalHeading,
+  ModalBody,
+  ModalFooter
+} from '@heroui/react';
 import { Catalog, Command, GitHubRepoConfig, Vehicle } from '../types/catalog';
 import {
   generateIssueMarkdown,
@@ -123,41 +135,49 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-3xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto">
-        {/* Header */}
-        <div className="flex items-start justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)]">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="h-7 px-1.5 py-0.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] flex items-center justify-center">
-                <CanDoLogo className="h-4.5 w-auto" />
+    <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
+      <ModalBackdrop variant="blur" className="bg-black/80 backdrop-blur-sm">
+        <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
+          <ModalDialog className="relative w-full max-w-3xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <ModalHeader className="flex items-start justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] gap-0">
+              <div>
+                <div className="flex items-center gap-3">
+                  <div className="h-7 px-1.5 py-0.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] flex items-center justify-center">
+                    <CanDoLogo className="h-4.5 w-auto" />
+                  </div>
+                  <ModalHeading className="text-lg md:text-xl font-bold text-white">
+                    Contribute to CAN Do Message Catalog
+                  </ModalHeading>
+                </div>
+                <p className="text-xs text-[var(--text-muted)] mt-1">
+                  Submit your proposed CAN messages to <code className="text-cyan-300">{configState.owner}/{configState.repo}</code> on GitHub.
+                </p>
               </div>
-              <h2 className="text-lg md:text-xl font-bold text-white">
-                Contribute to CAN Do Message Catalog
-              </h2>
-            </div>
-            <p className="text-xs text-[var(--text-muted)] mt-1">
-              Submit your proposed CAN messages to <code className="text-cyan-300">{configState.owner}/{configState.repo}</code> on GitHub.
-            </p>
-          </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowConfig(!showConfig)}
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={() => setShowConfig(!showConfig)}
               className="dash-outline-btn px-2.5 py-1 text-xs font-semibold flex items-center gap-1"
-              title="Configure Target GitHub Repository"
+              aria-label="Configure Target GitHub Repository"
             >
               <Settings className="w-4 h-4" />
               <span className="hidden sm:inline">Repo Settings</span>
-            </button>
-            <button
-              onClick={onClose}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              isIconOnly
+              onPress={onClose}
+              aria-label="Close modal"
               className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-[var(--md-sys-color-surface-container-high)] transition"
             >
               <X className="w-5 h-5" />
-            </button>
+            </Button>
           </div>
-        </div>
+        </ModalHeader>
 
         {/* Repository Settings Panel */}
         {showConfig && (
@@ -202,20 +222,22 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setShowConfig(false)}
+              <Button
+                variant="outline"
+                size="sm"
+                onPress={() => setShowConfig(false)}
                 className="dash-outline-btn px-3 py-1 text-xs"
               >
                 Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveConfig}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onPress={handleSaveConfig}
                 className="px-4 py-1.5 rounded-full bg-[var(--md-sys-color-primary)] text-white font-semibold hover:opacity-90 transition"
               >
                 Save Repo Settings
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -255,72 +277,90 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
             confirmResetDrafts ? (
               <div className="flex items-center gap-1.5 bg-rose-950/90 border border-rose-700/80 px-2 py-0.5 rounded text-xs">
                 <span className="text-[10px] text-rose-200 font-semibold">Clear marks?</span>
-                <button
-                  type="button"
-                  onClick={() => {
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onPress={() => {
                     onClearDrafts();
                     setConfirmResetDrafts(false);
                   }}
-                  className="px-1.5 py-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-[10px] transition"
+                  className="px-1.5 py-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-[10px] h-auto transition"
                 >
                   Yes
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmResetDrafts(false)}
-                  className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] transition"
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => setConfirmResetDrafts(false)}
+                  className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] h-auto transition"
                 >
                   No
-                </button>
+                </Button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmResetDrafts(true)}
-                className="text-[11px] text-slate-500 hover:text-rose-400 transition"
+              <Button
+                variant="ghost"
+                size="sm"
+                onPress={() => setConfirmResetDrafts(true)}
+                className="text-[11px] text-slate-500 hover:text-rose-400 transition h-auto p-0"
               >
                 Reset Draft Marks
-              </button>
+              </Button>
             )
           )}
         </div>
 
         {/* Tab Selection */}
-        <div className="flex items-center gap-2 px-6 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] text-xs">
-          <button
-            onClick={() => setActiveTab('issue')}
-            className={`py-3 px-3 font-semibold border-b-2 transition ${
-              activeTab === 'issue'
-                ? 'border-[var(--md-sys-color-primary)] text-white'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
+        <div className="px-6 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] text-xs">
+          <Tabs
+            selectedKey={activeTab}
+            onSelectionChange={key => setActiveTab(key as 'issue' | 'webedit' | 'download')}
+            aria-label="Contribute Options"
           >
-            1. One-Click GitHub Issue (Recommended)
-          </button>
-          <button
-            onClick={() => setActiveTab('webedit')}
-            className={`py-3 px-3 font-semibold border-b-2 transition ${
-              activeTab === 'webedit'
-                ? 'border-[var(--md-sys-color-primary)] text-white'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            2. Web Editor / PR Fork
-          </button>
-          <button
-            onClick={() => setActiveTab('download')}
-            className={`py-3 px-3 font-semibold border-b-2 transition ${
-              activeTab === 'download'
-                ? 'border-[var(--md-sys-color-primary)] text-white'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            3. Download / Export JSON
-          </button>
+            <Tabs.ListContainer className="overflow-x-auto no-scrollbar">
+              <Tabs.List className="gap-2">
+                <Tabs.Tab
+                  id="issue"
+                  className={`relative py-3 px-3 font-semibold transition cursor-pointer flex items-center ${
+                    activeTab === 'issue'
+                      ? 'text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span>1. One-Click GitHub Issue (Recommended)</span>
+                  <Tabs.Indicator className="h-0.5 bg-[var(--md-sys-color-primary)] bottom-0 rounded-full" />
+                </Tabs.Tab>
+
+                <Tabs.Tab
+                  id="webedit"
+                  className={`relative py-3 px-3 font-semibold transition cursor-pointer flex items-center ${
+                    activeTab === 'webedit'
+                      ? 'text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span>2. Web Editor / PR Fork</span>
+                  <Tabs.Indicator className="h-0.5 bg-[var(--md-sys-color-primary)] bottom-0 rounded-full" />
+                </Tabs.Tab>
+
+                <Tabs.Tab
+                  id="download"
+                  className={`relative py-3 px-3 font-semibold transition cursor-pointer flex items-center ${
+                    activeTab === 'download'
+                      ? 'text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span>3. Download / Export JSON</span>
+                  <Tabs.Indicator className="h-0.5 bg-[var(--md-sys-color-primary)] bottom-0 rounded-full" />
+                </Tabs.Tab>
+              </Tabs.List>
+            </Tabs.ListContainer>
+          </Tabs>
         </div>
 
         {/* Tab 1: One Click GitHub Issue */}
-        <div className="p-6 max-h-[64vh] overflow-y-auto space-y-4">
+        <ModalBody className="p-6 max-h-[64vh] overflow-y-auto space-y-4">
           {activeTab === 'issue' && (
             <div className="space-y-4 text-xs">
               <div className="p-3.5 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] text-slate-300 space-y-1">
@@ -366,14 +406,15 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
                   <label className="font-medium text-slate-400">
                     Generated Issue Body Preview
                   </label>
-                  <button
-                    type="button"
-                    onClick={handleCopyIssueBody}
-                    className="text-cyan-400 hover:underline flex items-center gap-1"
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onPress={handleCopyIssueBody}
+                    className="text-cyan-400 hover:underline flex items-center gap-1 h-auto p-1"
                   >
                     {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                     {copied ? 'Copied' : 'Copy Markdown'}
-                  </button>
+                  </Button>
                 </div>
                 <textarea
                   readOnly
@@ -420,14 +461,15 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
               </div>
 
               <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={handleCopyFullCatalog}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onPress={handleCopyFullCatalog}
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white font-semibold transition"
                 >
                   {copiedCatalog ? <Check className="w-4 h-4 text-white" /> : <Copy className="w-4 h-4" />}
                   {copiedCatalog ? 'Catalog JSON Copied!' : '1. Copy Full Catalog JSON'}
-                </button>
+                </Button>
 
                 <a
                   href={getGitHubWebEditUrl(configState)}
@@ -457,41 +499,46 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
               </div>
 
               <div className="flex flex-wrap items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={handleDownloadCatalog}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onPress={handleDownloadCatalog}
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white font-semibold transition"
                 >
                   <Download className="w-4 h-4" />
                   Download catalog.json
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCopyFullCatalog}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onPress={handleCopyFullCatalog}
                   className="dash-outline-btn inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold"
                 >
                   {copiedCatalog ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                   {copiedCatalog ? 'Copied to Clipboard' : 'Copy JSON'}
-                </button>
+                </Button>
               </div>
             </div>
           )}
-        </div>
+        </ModalBody>
 
         {/* Modal Footer */}
-        <div className="flex items-center justify-between p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)]">
+        <ModalFooter className="flex items-center justify-between p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
           <span className="text-[11px] text-[var(--text-muted)] font-mono">
             CAN Do Version: {catalog.can_do_version || 'unknown'} • {catalog.commands.length} Commands
           </span>
-          <button
-            type="button"
-            onClick={onClose}
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={onClose}
             className="dash-outline-btn px-4 py-1.5 text-xs font-semibold"
           >
             Close
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </ModalFooter>
+      </ModalDialog>
+    </ModalContainer>
+  </ModalBackdrop>
+</Modal>
   );
 };

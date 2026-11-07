@@ -15,6 +15,7 @@ import { VehiclesTab } from './components/VehiclesTab';
 import { GroupedCommandView } from './components/GroupedCommandView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { CanDoLogo } from './components/CanDoLogo';
+import { Tabs, Button, Chip, Badge } from '@heroui/react';
 import type { ExportFormat } from './components/ExportModal';
 
 // Code-split dynamic imports for heavy tabs and secondary modals
@@ -369,28 +370,6 @@ export default function App() {
     }
   }, [automationSettings]);
 
-  // Main navigation tab slider state
-  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const [sliderStyle, setSliderStyle] = useState<{ left: number; width: number }>({ left: 0, width: 0 });
-
-  useEffect(() => {
-    const updateSlider = () => {
-      const currentBtn = tabRefs.current[activeMainTab];
-      if (currentBtn) {
-        setSliderStyle({
-          left: currentBtn.offsetLeft,
-          width: currentBtn.offsetWidth,
-        });
-      }
-    };
-    updateSlider();
-    window.addEventListener('resize', updateSlider);
-    const timer = setTimeout(updateSlider, 50);
-    return () => {
-      window.removeEventListener('resize', updateSlider);
-      clearTimeout(timer);
-    };
-  }, [activeMainTab, catalog.commands.length, catalog.vehicles.length, automationRules.length]);
 
   // 5. Filters state
   const [search, setSearch] = useState('');
@@ -1060,11 +1039,9 @@ export default function App() {
       {/* Hero Banner / Header Area */}
       <header className="border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] px-3.5 py-4 sm:px-6 sm:py-5 lg:px-8">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 items-center gap-4 py-1">
-          {/* Left: Version chip */}
-          <div className="flex items-center justify-center md:justify-start order-2 md:order-1">
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-[var(--input-bg)] text-cyan-400 border border-[var(--border-color)] shadow-sm">
-              {catalog.can_do_version || 'Loading...'}
-            </span>
+
+          {/* Left: empty space to push logo to center */}
+          <div className="flex flex-col items-center justify-center text-center order-1 md:order-1">
           </div>
 
           {/* Center: Centered CAN Do Logo with 'CAN Do' text underneath */}
@@ -1075,14 +1052,13 @@ export default function App() {
             </h1>
           </div>
 
-          {/* Right: Consolidated Action Toolbar */}
-          <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 text-xs w-full order-3 md:order-3">
-            {/* Theme Toggle Button */}
-            <button
-              type="button"
-              onClick={toggleTheme}
+          {/* Right: Theme Toggle Button */}
+          <div className="flex flex-col items-center justify-center text-center order-1 md:order-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={toggleTheme}
               aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
               className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-1.5 px-3 transition hover:border-cyan-400"
             >
               {theme === 'dark' ? (
@@ -1096,54 +1072,7 @@ export default function App() {
                   <span className="hidden sm:inline">Dark</span>
                 </>
               )}
-            </button>
-
-            {/* Catalog Health Status */}
-            <button
-              type="button"
-              onClick={() => setIsHealthOpen(true)}
-              title="Open Catalog Validation Report"
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition ${
-                validationReport.isValid
-                  ? 'bg-emerald-950/30 text-emerald-300 border-emerald-800/80 hover:bg-emerald-950/60'
-                  : 'bg-rose-950/30 text-rose-300 border-rose-800/80 hover:bg-rose-950/60 animate-pulse'
-              }`}
-            >
-              <span className={`status-dot ${validationReport.isValid ? 'green' : 'red'}`} />
-              <span>{validationReport.isValid ? 'Valid Catalog' : 'Audit Issues'}</span>
-            </button>
-
-            {/* Reload from /catalog Button */}
-            <button
-              type="button"
-              onClick={handleReloadCatalog}
-              className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-1.5 px-3.5 text-cyan-300 hover:text-cyan-200"
-              title="Pull latest catalog directly from /catalog/can_do_catalog.json"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Reload /catalog</span>
-            </button>
-
-            {/* Import Button */}
-            <button
-              type="button"
-              onClick={() => setIsImportOpen(true)}
-              className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-1.5 px-3.5"
-              title="Import JSON catalog or Vector DBC"
-            >
-              <Upload className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Import</span>
-            </button>
-
-            {/* Merged Export Button & Dropdown */}
-            <ExportDropdown
-              variant="toolbar"
-              onQuickDownloadJson={handleQuickDownload}
-              onOpenExportModal={format => {
-                setExportModalFormat(format || 'dbc');
-                setIsExportOpen(true);
-              }}
-            />
+            </Button>
           </div>
         </div>
       </header>
@@ -1152,121 +1081,74 @@ export default function App() {
       <div className="border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="relative flex items-center justify-center h-14">
-            {/* Centered Segmented Tab Group with Sliding Indicator */}
-            <nav
-              className="relative inline-flex items-center p-1 rounded-xl bg-slate-900/90 border border-slate-800/80 shadow-inner overflow-x-auto no-scrollbar"
+            {/* HeroUI Segmented Tab Navigation with Animated Indicator */}
+            <Tabs
+              selectedKey={activeMainTab}
+              onSelectionChange={key => handleSetMainTab(key as 'dashboard' | 'automations' | 'catalog' | 'device')}
               aria-label="Main Navigation"
             >
-              {/* Sliding Active Indicator Pill */}
-              <div
-                className="absolute top-1 bottom-1 rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm transition-all duration-300 ease-out pointer-events-none"
-                style={{
-                  left: `${sliderStyle.left}px`,
-                  width: `${sliderStyle.width}px`,
-                  opacity: sliderStyle.width > 0 ? 1 : 0,
-                }}
-              />
+              <Tabs.ListContainer className="bg-slate-900/90 border border-slate-800/80 shadow-inner rounded-xl">
+                <Tabs.List className="gap-1 p-1">
+                  <Tabs.Tab
+                    id="dashboard"
+                    className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
+                      activeMainTab === 'dashboard' ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Gauge className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'dashboard' ? 'text-sky-400' : 'text-slate-400'}`} />
+                    <span>Cockpit</span>
+                    <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
+                  </Tabs.Tab>
 
-              <button
-                id="main-tab-dashboard"
-                ref={el => { tabRefs.current['dashboard'] = el; }}
-                type="button"
-                onClick={() => handleSetMainTab('dashboard')}
-                className={`relative z-10 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
-                  activeMainTab === 'dashboard'
-                    ? 'text-white font-semibold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Gauge className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'dashboard' ? 'text-sky-400' : 'text-slate-500'}`} />
-                <span>Live Cockpit</span>
-                <span
-                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono transition-colors ${
-                    activeMainTab === 'dashboard'
-                      ? 'bg-slate-900/90 text-sky-300 border border-slate-700/70'
-                      : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
-                  }`}
-                >
-                  LIVE
-                </span>
-              </button>
+                  <Tabs.Tab
+                    id="automations"
+                    className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
+                      activeMainTab === 'automations' ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Zap className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'automations' ? 'text-amber-400' : 'text-slate-400'}`} />
+                    <span>Automations</span>
+                    <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
+                  </Tabs.Tab>
 
-              <button
-                id="main-tab-automations"
-                ref={el => { tabRefs.current['automations'] = el; }}
-                type="button"
-                onClick={() => handleSetMainTab('automations')}
-                className={`relative z-10 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
-                  activeMainTab === 'automations'
-                    ? 'text-white font-semibold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Zap className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'automations' ? 'text-amber-400' : 'text-slate-500'}`} />
-                <span>Automations</span>
-                <span
-                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono transition-colors ${
-                    activeMainTab === 'automations'
-                      ? 'bg-slate-900/90 text-amber-300 border border-slate-700/70'
-                      : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
-                  }`}
-                >
-                  {automationRules.length}
-                </span>
-              </button>
+                  <Tabs.Tab
+                    id="catalog"
+                    className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
+                      activeMainTab === 'catalog' ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Layers className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'catalog' ? 'text-cyan-400' : 'text-slate-400'}`} />
+                    <span>Catalog</span>
+                    <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
+                  </Tabs.Tab>
 
-              <button
-                id="main-tab-catalog"
-                ref={el => { tabRefs.current['catalog'] = el; }}
-                type="button"
-                onClick={() => handleSetMainTab('catalog')}
-                className={`relative z-10 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
-                  activeMainTab === 'catalog'
-                    ? 'text-white font-semibold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Layers className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'catalog' ? 'text-cyan-400' : 'text-slate-500'}`} />
-                <span>Catalog</span>
-                <span
-                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono transition-colors ${
-                    activeMainTab === 'catalog'
-                      ? 'bg-slate-900/90 text-cyan-300 border border-slate-700/70'
-                      : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
-                  }`}
-                >
-                  {catalog.commands.length}
-                </span>
-              </button>
-
-              <button
-                id="main-tab-device"
-                ref={el => { tabRefs.current['device'] = el; }}
-                type="button"
-                onClick={() => handleSetMainTab('device')}
-                className={`relative z-10 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
-                  activeMainTab === 'device'
-                    ? 'text-white font-semibold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Radio className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'device' ? 'text-emerald-400' : 'text-slate-500'}`} />
-                <span>Device Console</span>
-              </button>
-            </nav>
+                  <Tabs.Tab
+                    id="device"
+                    className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
+                      activeMainTab === 'device' ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Radio className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'device' ? 'text-emerald-400' : 'text-slate-400'}`} />
+                    <span>Settings</span>
+                    <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
+                  </Tabs.Tab>
+                </Tabs.List>
+              </Tabs.ListContainer>
+            </Tabs>
 
             {/* Quick action button positioned to the right */}
             {activeMainTab === 'catalog' && selectedForAutomation.size > 0 && (
               <div className="absolute right-0 flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleCreateAutomationFromSelected}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onPress={handleCreateAutomationFromSelected}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition shadow-sm"
                 >
                   <Zap className="w-3.5 h-3.5 fill-current" />
                   <span className="hidden sm:inline">Build with ({selectedForAutomation.size})</span>
                   <span className="sm:hidden">({selectedForAutomation.size})</span>
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -1287,60 +1169,114 @@ export default function App() {
           <div className="space-y-5 sm:space-y-6 min-w-0">
             {/* Catalog Sub-Tab Navigation Header (Messages vs Vehicles) */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-800/80">
-              <div className="inline-flex items-center p-1 rounded-xl bg-slate-900/90 border border-slate-800/80 shadow-inner">
-                <button
-                  type="button"
-                  id="catalog-subtab-messages"
-                  onClick={() => setCatalogSubTab('messages')}
-                  className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    catalogSubTab === 'messages'
-                      ? 'bg-slate-800 text-white shadow-sm border border-slate-700/80'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Layers className={`w-3.5 h-3.5 ${catalogSubTab === 'messages' ? 'text-cyan-400' : 'text-slate-500'}`} />
-                  <span>Messages</span>
-                  <span
-                    className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
-                      catalogSubTab === 'messages'
-                        ? 'bg-slate-900 text-cyan-300 border border-slate-700/70'
-                        : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
-                    }`}
-                  >
-                    {catalog.commands.length}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  id="catalog-subtab-vehicles"
-                  onClick={() => setCatalogSubTab('vehicles')}
-                  className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    catalogSubTab === 'vehicles'
-                      ? 'bg-slate-800 text-white shadow-sm border border-slate-700/80'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Car className={`w-3.5 h-3.5 ${catalogSubTab === 'vehicles' ? 'text-indigo-400' : 'text-slate-500'}`} />
-                  <span>Vehicles</span>
-                  <span
-                    className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
-                      catalogSubTab === 'vehicles'
-                        ? 'bg-slate-900 text-indigo-300 border border-slate-700/70'
-                        : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
-                    }`}
-                  >
-                    {catalog.vehicles.length}
-                  </span>
-                </button>
-              </div>
+              <Tabs
+                selectedKey={catalogSubTab}
+                onSelectionChange={key => setCatalogSubTab(key as 'messages' | 'vehicles')}
+                aria-label="Catalog Sections"
+              >
+                <Tabs.ListContainer className="bg-slate-900/90 border border-slate-800/80 shadow-inner rounded-xl">
+                  <Tabs.List className="gap-1 p-1">
+                    <Tabs.Tab
+                      id="messages"
+                      className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold cursor-pointer transition-colors ${
+                        catalogSubTab === 'messages' ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Layers className={`w-3.5 h-3.5 ${catalogSubTab === 'messages' ? 'text-cyan-400' : 'text-slate-400'}`} />
+                      <span>Messages</span>
+                      <Badge
+                        size="sm"
+                        variant={catalogSubTab === 'messages' ? 'soft' : 'secondary'}
+                        color={catalogSubTab === 'messages' ? 'accent' : 'default'}
+                        className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono transition-colors ${
+                          catalogSubTab === 'messages'
+                            ? 'bg-slate-900 text-cyan-300 border border-slate-700/70'
+                            : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
+                        }`}
+                      >
+                        {catalog.commands.length}
+                      </Badge>
+                      <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
+                    </Tabs.Tab>
 
-              <div className="text-xs text-slate-400 hidden sm:block">
-                {catalogSubTab === 'messages' ? (
-                  <span>Explore, filter, and test decoded CAN bus telemetry and commands</span>
-                ) : (
-                  <span>Vehicle profiles, bus specifications, and supported feature sets</span>
-                )}
+                    <Tabs.Tab
+                      id="vehicles"
+                      className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold cursor-pointer transition-colors ${
+                        catalogSubTab === 'vehicles' ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Car className={`w-3.5 h-3.5 ${catalogSubTab === 'vehicles' ? 'text-indigo-400' : 'text-slate-400'}`} />
+                      <span>Vehicles</span>
+                      <Badge
+                        size="sm"
+                        variant={catalogSubTab === 'vehicles' ? 'soft' : 'secondary'}
+                        className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono transition-colors ${
+                          catalogSubTab === 'vehicles'
+                            ? 'bg-slate-900 text-indigo-300 border border-slate-700/70'
+                            : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
+                        }`}
+                      >
+                        {catalog.vehicles.length}
+                      </Badge>
+                      <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
+                    </Tabs.Tab>
+                  </Tabs.List>
+                </Tabs.ListContainer>
+              </Tabs>
+
+              {/* Right: Consolidated Action Toolbar */}
+              <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 text-xs w-full order-3 md:order-3">
+                {/* Catalog Health Status */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onPress={() => setIsHealthOpen(true)}
+                  aria-label="Open Catalog Validation Report"
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition ${
+                    validationReport.isValid
+                      ? 'bg-emerald-950/30 text-emerald-300 border-emerald-800/80 hover:bg-emerald-950/60'
+                      : 'bg-rose-950/30 text-rose-300 border-rose-800/80 hover:bg-rose-950/60 animate-pulse'
+                  }`}
+                >
+                  <span className={`status-dot ${validationReport.isValid ? 'green' : 'red'}`} />
+                  <span>{validationReport.isValid ? 'Valid Catalog' : 'Audit Issues'}</span>
+                </Button>
+
+                {/* Reload from /catalog Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onPress={handleReloadCatalog}
+                  className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-1.5 px-3.5 text-cyan-300 hover:text-cyan-200"
+                  aria-label="Pull latest catalog directly from /catalog/can_do_catalog.json"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Reload /catalog</span>
+                </Button>
+
+                {/* Import Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onPress={() => setIsImportOpen(true)}
+                  className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-1.5 px-3.5"
+                  aria-label="Import JSON catalog or Vector DBC"
+                >
+                  <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Import</span>
+                </Button>
+
+                {/* Merged Export Button & Dropdown */}
+                <ExportDropdown
+                  variant="toolbar"
+                  onQuickDownloadJson={handleQuickDownload}
+                  onOpenExportModal={format => {
+                    setExportModalFormat(format || 'dbc');
+                    setIsExportOpen(true);
+                  }}
+                />
               </div>
+              
             </div>
 
             {catalogSubTab === 'messages' ? (
@@ -1431,9 +1367,10 @@ export default function App() {
                 <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-4">
                   No commands match your current search criteria or vehicle compatibility filter.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => {
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => {
                     setSearch('');
                     setSelectedRole('all');
                     setSelectedCategory('all');
@@ -1446,7 +1383,7 @@ export default function App() {
                   className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white transition"
                 >
                   Clear All Filters
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -1606,35 +1543,38 @@ export default function App() {
       <div className="ha-fab-stack">
         {/* Contribute to GitHub FAB: only visible if edits exist */}
         {totalPendingCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setIsContributeOpen(true)}
+          <Button
+            variant="primary"
+            size="sm"
+            onPress={() => setIsContributeOpen(true)}
             className="ha-save-fab dirty"
-            title="Review & Contribute Changes to GitHub"
+            aria-label="Review & Contribute Changes to GitHub"
           >
             <Github className="w-4 h-4" />
             <span>Contribute ({totalPendingCount} Staged)</span>
-          </button>
+          </Button>
         )}
 
         {/* Automate FAB */}
         {activeMainTab === 'catalog' && (
           <div className="flex items-center gap-2">
             {selectedForAutomation.size > 0 && (
-              <button
-                type="button"
-                onClick={() => setSelectedForAutomation(new Set())}
-                title="Clear selected commands"
+              <Button
+                variant="outline"
+                size="sm"
+                onPress={() => setSelectedForAutomation(new Set())}
+                aria-label="Clear selected commands"
                 className="inline-flex items-center gap-1 h-9 px-3 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold shadow-lg backdrop-blur transition"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>Clear</span>
-              </button>
+              </Button>
             )}
 
-            <button
-              type="button"
-              onClick={() => {
+            <Button
+              variant="primary"
+              size="sm"
+              onPress={() => {
                 if (selectedForAutomation.size > 0) {
                   handleCreateAutomationFromSelected();
                 } else {
@@ -1642,7 +1582,7 @@ export default function App() {
                 }
               }}
               className={`ha-automate-fab ${selectedForAutomation.size > 0 ? 'active' : ''}`}
-              title={
+              aria-label={
                 selectedForAutomation.size > 0
                   ? `Create Automation Rule with ${selectedForAutomation.size} selected command${selectedForAutomation.size > 1 ? 's' : ''}`
                   : 'Open Automation Builder'
@@ -1654,7 +1594,7 @@ export default function App() {
                   ? `+ Automate (${selectedForAutomation.size})`
                   : '+ Automate'}
               </span>
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -1751,13 +1691,15 @@ export default function App() {
         )}
 
         {/* First-Use Onboarding Experience */}
-        <OnboardingWizardModal
-          isOpen={isOnboardingOpen}
-          catalog={catalog}
-          initialPreferences={userPreferences}
-          onComplete={handleCompleteOnboarding}
-          onClose={() => setIsOnboardingOpen(false)}
-        />
+        {isOnboardingOpen && (
+          <OnboardingWizardModal
+            isOpen={isOnboardingOpen}
+            catalog={catalog}
+            initialPreferences={userPreferences}
+            onComplete={handleCompleteOnboarding}
+            onClose={() => setIsOnboardingOpen(false)}
+          />
+        )}
       </Suspense>
     </div>
   );
