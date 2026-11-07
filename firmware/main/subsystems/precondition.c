@@ -1325,9 +1325,20 @@ static const sm_state_t S_WAIT_STOPPED = {
 // ********************* global hooks *********************
 
 static void push_precondition_state(void);
+static int64_t s_last_power_status_us = 0;
 
 static void precondition_global_tick(sm_t *sm) {
     track_popup_tick();
+
+    // If the CAN bus went to sleep while ready_status was still READY, transition cleanly to NOT_READY
+    if (car_in_ready() && s_last_power_status_us != 0
+            && ts_elapsed(sm_now(sm), s_last_power_status_us) >= 2500000LL) {
+        ESP_LOGI(TAG, "0x038 timeout (CAN bus asleep) -> car power: off");
+        atomic_store_explicit(&platform.ready_status, READY_STATUS_NOT_READY, memory_order_relaxed);
+        platform.car_in_utility = false;
+        update_precon_blocker(PRECONDITION_BLOCK_UTILITY_MODE, false);
+        sm_send_event(sm, EV_CAR_NOT_READY);
+    }
 
     // long press mode: trigger once when the hold crosses the threshold, without
     // waiting for the release frame. state only becomes pressed via the rx hook,
@@ -1375,6 +1386,7 @@ static void precondition_global_rx(sm_t *sm, const twai_message_t *to_push, can_
     if (IS_POWER_STATUS_FRAME(to_push->identifier)
             && rx_bus == CAR_BUS
             && to_push->data_length_code >= 1U) {
+        s_last_power_status_us = sm_now(sm);
         ready_status_t ready = POWER_STATUS_READY(to_push->data[0])
                                ? READY_STATUS_READY : READY_STATUS_NOT_READY;
         // UNKNOWN counts as not-ready, preserving the plain-bool edge behavior:

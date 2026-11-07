@@ -40,6 +40,7 @@ static bool mac_matches(const std::string& a, const std::string& b) {
 
 static SemaphoreHandle_t s_twai_mutex = nullptr;
 static portMUX_TYPE s_twai_spinlock = portMUX_INITIALIZER_UNLOCKED;
+static std::atomic<uint32_t> s_last_can_rx_ms{0};
 
 static inline SemaphoreHandle_t get_or_create_twai_mutex(void) {
     if (!s_twai_mutex) {
@@ -50,6 +51,28 @@ static inline SemaphoreHandle_t get_or_create_twai_mutex(void) {
         portEXIT_CRITICAL(&s_twai_spinlock);
     }
     return s_twai_mutex;
+}
+
+esp_err_t can_engine_get_status_info(twai_status_info_t* status_info) {
+    if (!status_info) return ESP_ERR_INVALID_ARG;
+    SemaphoreHandle_t mtx = get_or_create_twai_mutex();
+    if (mtx) {
+        if (xSemaphoreTake(mtx, pdMS_TO_TICKS(50)) != pdTRUE) {
+            return ESP_ERR_TIMEOUT;
+        }
+    }
+    esp_err_t err = twai_get_status_info(status_info);
+    if (mtx) {
+        xSemaphoreGive(mtx);
+    }
+    return err;
+}
+
+extern "C" bool can_engine_is_bus_awake(uint32_t max_silence_ms) {
+    uint32_t last_rx = s_last_can_rx_ms.load(std::memory_order_relaxed);
+    if (last_rx == 0) return false;
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    return (now_ms - last_rx) <= max_silence_ms;
 }
 
 extern "C" esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t ticks_to_wait) {
@@ -69,14 +92,20 @@ extern "C" esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t
 
     esp_err_t ret = ESP_OK;
     twai_status_info_t info;
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    uint32_t last_rx = s_last_can_rx_ms.load(std::memory_order_relaxed);
+    bool bus_silent = (last_rx == 0) || ((now_ms - last_rx) > 1500);
+
     if (twai_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING) {
         ret = ESP_ERR_INVALID_STATE;
-    } else if (info.tx_error_counter >= 128) {
+    } else if (info.tx_error_counter >= 96 || (bus_silent && info.tx_error_counter >= 16)) {
+        if (info.msgs_to_tx > 0) {
+            twai_clear_transmit_queue();
+        }
         static uint32_t s_last_tec_log_ms = 0;
-        uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
         if (now_ms - s_last_tec_log_ms >= 2000) {
             s_last_tec_log_ms = now_ms;
-            ESP_LOGW("CAN_ENGINE", "CAN TX suppressed: TEC=%lu (Error Passive: disconnected or silent bus)", (unsigned long)info.tx_error_counter);
+            ESP_LOGW("CAN_ENGINE", "CAN TX suppressed: TEC=%lu (silent or sleeping bus)", (unsigned long)info.tx_error_counter);
         }
         ret = ESP_ERR_INVALID_STATE;
     } else {
@@ -1320,7 +1349,7 @@ void can_rx_task(void* arg) {
     ESP_LOGI(TAG, "CAN RX task running");
 
     esp_task_wdt_config_t twdt_cfg = {
-        .timeout_ms = 800,
+        .timeout_ms = 3000,
         .idle_core_mask = (1 << 0),
         .trigger_panic = false
     };
@@ -1332,6 +1361,7 @@ void can_rx_task(void* arg) {
     int consecutive_rx_frames = 0;
     static uint32_t s_bus_off_or_recovering_start_ms = 0;
     static uint32_t s_last_can_frame_ms = 0;
+    static bool s_can_led_idle_cleared = true;
 
     while (true) {
         esp_task_wdt_reset();
@@ -1351,7 +1381,7 @@ void can_rx_task(void* arg) {
             twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, new_mode);
             g_config.rx_queue_len = 128;
             g_config.tx_queue_len = 32;
-            g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR | TWAI_ALERT_RX_QUEUE_FULL;
+            g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_RX_QUEUE_FULL;
             twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
             twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
@@ -1385,33 +1415,27 @@ void can_rx_task(void* arg) {
 
         if (twai_get_status_info(&twai_status) == ESP_OK) {
             if (twai_status.state == TWAI_STATE_BUS_OFF) {
-                ESP_LOGW(TAG, "TWAI controller in BUS_OFF! Reinstalling hardware driver immediately...");
+                ESP_LOGW(TAG, "TWAI controller in BUS_OFF! Initiating hardware recovery...");
                 SemaphoreHandle_t mtx = get_or_create_twai_mutex();
                 if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
 
                 twai_clear_transmit_queue();
-                // In ESP-IDF, twai_driver_uninstall() is valid directly from TWAI_STATE_BUS_OFF (twai_stop must NOT be called in BUS_OFF)
-                twai_driver_uninstall();
-                vTaskDelay(pdMS_TO_TICKS(10));
-
-                twai_mode_t cur_mode = g_hardware_listen_only.load() ? TWAI_MODE_LISTEN_ONLY : TWAI_MODE_NORMAL;
-                twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, cur_mode);
-                g_config.rx_queue_len = 128;
-                g_config.tx_queue_len = 32;
-                g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR | TWAI_ALERT_RX_QUEUE_FULL;
-                twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
-                twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-
-                esp_err_t err = twai_driver_install(&g_config, &t_config, &f_config);
-                if (err == ESP_OK) {
-                    twai_start();
-                    ESP_LOGI(TAG, "TWAI driver re-installed and running after BUS_OFF reset");
-                } else {
-                    ESP_LOGE(TAG, "TWAI driver reinstall failed (%s)", esp_err_to_name(err));
+                if (twai_initiate_recovery() != ESP_OK) {
+                    twai_driver_uninstall();
+                    twai_mode_t cur_mode = g_hardware_listen_only.load() ? TWAI_MODE_LISTEN_ONLY : TWAI_MODE_NORMAL;
+                    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, cur_mode);
+                    g_config.rx_queue_len = 128;
+                    g_config.tx_queue_len = 32;
+                    g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_RX_QUEUE_FULL;
+                    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
+                    twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+                    if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK) {
+                        twai_start();
+                    }
                 }
 
                 if (mtx) xSemaphoreGive(mtx);
-                s_bus_off_or_recovering_start_ms = 0;
+                s_bus_off_or_recovering_start_ms = now_ms;
             } else if (twai_status.state == TWAI_STATE_STOPPED) {
                 ESP_LOGI(TAG, "TWAI controller STOPPED. Starting controller...");
                 SemaphoreHandle_t mtx = get_or_create_twai_mutex();
@@ -1424,22 +1448,22 @@ void can_rx_task(void* arg) {
                 if (s_bus_off_or_recovering_start_ms == 0) {
                     s_bus_off_or_recovering_start_ms = now_ms;
                 }
-                // If hardware is stuck in RECOVERING for > 3000ms (e.g. bench test, silent bus, transceiver standby),
-                // do NOT restart MCU (which kills Wi-Fi and Web server). Reinstall hardware driver cleanly!
+                // If hardware is stuck in RECOVERING for > 3000ms (e.g. bench test, dominant fault),
+                // reinstall hardware driver cleanly without MCU reset.
                 if (now_ms - s_bus_off_or_recovering_start_ms > 3000) {
                     ESP_LOGW(TAG, "TWAI stuck in RECOVERING state (>3000ms). Reinstalling driver without MCU reset...");
                     SemaphoreHandle_t mtx = get_or_create_twai_mutex();
                     if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
 
                     twai_clear_transmit_queue();
+                    twai_stop();
                     twai_driver_uninstall();
-                    vTaskDelay(pdMS_TO_TICKS(10));
 
                     twai_mode_t cur_mode = g_hardware_listen_only.load() ? TWAI_MODE_LISTEN_ONLY : TWAI_MODE_NORMAL;
                     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, cur_mode);
                     g_config.rx_queue_len = 128;
                     g_config.tx_queue_len = 32;
-                    g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR | TWAI_ALERT_RX_QUEUE_FULL;
+                    g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_RX_QUEUE_FULL;
                     twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
                     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
@@ -1467,14 +1491,14 @@ void can_rx_task(void* arg) {
                 if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
 
                 twai_clear_transmit_queue();
+                twai_stop();
                 twai_driver_uninstall();
-                vTaskDelay(pdMS_TO_TICKS(10));
 
                 twai_mode_t cur_mode = g_hardware_listen_only.load() ? TWAI_MODE_LISTEN_ONLY : TWAI_MODE_NORMAL;
                 twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, cur_mode);
                 g_config.rx_queue_len = 128;
                 g_config.tx_queue_len = 32;
-                g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR | TWAI_ALERT_RX_QUEUE_FULL;
+                g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_RX_QUEUE_FULL;
                 twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
                 twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
@@ -1504,6 +1528,8 @@ void can_rx_task(void* arg) {
                 consecutive_rx_frames = 0;
             }
             s_last_can_frame_ms = now_ms;
+            s_last_can_rx_ms.store(now_ms, std::memory_order_relaxed);
+            s_can_led_idle_cleared = false;
             board_led_can_activity();
 
             rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 1, "precondition_rx");
@@ -2272,8 +2298,9 @@ void can_rx_task(void* arg) {
             rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 900, "frame_done");
         } else {
             consecutive_rx_frames = 0;
-            // Cleanly extinguish yellow CAN activity LED when bus is idle (>200ms)
-            if (s_last_can_frame_ms > 0 && (now_ms - s_last_can_frame_ms > 200)) {
+            // Cleanly extinguish yellow CAN activity LED once when bus becomes idle (>200ms)
+            if (!s_can_led_idle_cleared && s_last_can_frame_ms > 0 && (now_ms - s_last_can_frame_ms > 200)) {
+                s_can_led_idle_cleared = true;
                 board_led_can_set(false);
             }
         }
@@ -2281,7 +2308,6 @@ void can_rx_task(void* arg) {
         if (now_ms - s_last_precon_tick_ms >= 40) {
             s_last_precon_tick_ms = now_ms;
             precondition_tick();
-            track_popup_tick();
         }
 
         static uint32_t s_last_hud_tick_ms = 0;

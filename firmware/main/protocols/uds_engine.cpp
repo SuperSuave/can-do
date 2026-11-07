@@ -99,10 +99,10 @@ bool uds_engine_is_gate_open(void) {
         return false;
     }
 
-    // Gate 3: Passive Vehicle Awake Gate - require passive CAN traffic within the last 3000ms
-    // to avoid transmitting onto the bus while ECUs are powering down
+    // Gate 3: Passive Vehicle Awake Gate - require passive CAN traffic within the last 500ms
+    // to avoid transmitting onto the bus while ECUs are powering down / sleeping
     uint32_t last = s_last_can_traffic_ms.load();
-    if (last == 0 || (get_time_ms() - last) > 3000) {
+    if (last == 0 || (get_time_ms() - last) > 500) {
         return false;
     }
 
@@ -115,7 +115,7 @@ bms_live_data_t uds_engine_get_bms_data(void) {
 
 static void send_can_frame(uint32_t id, const uint8_t* data, uint8_t dlc) {
     twai_status_info_t info;
-    if (twai_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING) {
+    if (can_engine_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING) {
         return;
     }
     if (info.tx_error_counter >= 16) {
@@ -343,7 +343,7 @@ void uds_engine_load_preferences(void) {
 
 void uds_engine_init(void) {
     uds_engine_load_preferences();
-    xTaskCreate(uds_worker_task, "UDS_WORKER", 2048, nullptr, 3, nullptr);
+    xTaskCreate(uds_worker_task, "UDS_WORKER", 4096, nullptr, 3, nullptr);
     ESP_LOGI(TAG, "UDS BMS Engine initialized (Triple-Gate Protected)");
 }
 

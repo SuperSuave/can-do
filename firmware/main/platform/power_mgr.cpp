@@ -2,6 +2,7 @@
 #include "board_pins.h"
 #include "uds_engine.h"
 #include "vbat_sensor.h"
+#include "network_mgr.h"
 #include "api.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
@@ -17,9 +18,15 @@ void power_mgr_set_tier(power_tier_t tier) {
     if (s_current_tier == tier) return;
 
     if (tier == POWER_TIER_STANDBY) {
-        // Enable 802.11 Modem Sleep (drops current from ~85mA to ~18mA while remaining 100% connected)
-        esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
-        ESP_LOGI(TAG, "Entering Tier 2 Standby (Wi-Fi Modem Sleep enabled)");
+        NetworkStatusInfo net_st = network_mgr_get_status();
+        // Only enable 802.11 Modem Sleep when connected as pure Station (SoftAP inactive and not scanning)
+        if (net_st.sta_connected && !net_st.ap_active && !network_mgr_is_scanning()) {
+            esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+            ESP_LOGI(TAG, "Entering Tier 2 Standby (Wi-Fi Modem Sleep enabled)");
+        } else {
+            esp_wifi_set_ps(WIFI_PS_NONE);
+            ESP_LOGI(TAG, "Entering Tier 2 Standby (SoftAP/Scan active, keeping Wi-Fi PS NONE)");
+        }
     } else if (tier == POWER_TIER_ACTIVE) {
         // Disable power-save for minimal latency during active driving/telemetry
         esp_wifi_set_ps(WIFI_PS_NONE);
@@ -93,6 +100,6 @@ static void power_mgr_task(void* arg) {
 }
 
 void power_mgr_init(void) {
-    xTaskCreate(power_mgr_task, "PWR_MGR", 2560, nullptr, 1, nullptr);
+    xTaskCreate(power_mgr_task, "PWR_MGR", 4096, nullptr, 1, nullptr);
     ESP_LOGI(TAG, "Multi-Tier Smart Power Manager initialized");
 }

@@ -160,6 +160,8 @@ bool hud_nav_send_lane_guidance(uint8_t num_lanes, const uint8_t *lane_direction
     return ok;
 }
 
+extern bool can_engine_is_bus_awake(uint32_t max_silence_ms);
+
 void hud_nav_init(hud_platform_type_t platform) {
     s_platform = platform;
     s_hud_frame_id = (platform == HUD_PLATFORM_GEN2_CCAN) ? HUD_NAV_GEN2_FRAME_ID : HUD_NAV_EGMP_FRAME_ID;
@@ -186,7 +188,7 @@ void hud_nav_init(hud_platform_type_t platform) {
         .padding_byte = 0x00U,
     };
     isotp_tx_init(&s_street_isotp, "hud-street-isotp", &cfg);
-    isotp_tx_start_worker(&s_street_isotp, "hud_street_isotp", 2048, 5);
+    isotp_tx_start_worker(&s_street_isotp, "hud_street_isotp", 3072, 5);
 
     ESP_LOGI(TAG, "HUD Navigation initialized (platform=%d, frame_id=0x%03X, cfg_id=0x%03X)",
              (int)s_platform, (unsigned int)s_hud_frame_id, (unsigned int)s_hud_cfg_frame_id);
@@ -212,7 +214,7 @@ void hud_nav_tick_100ms(void) {
         return;
     }
 
-    if (!s_nav_active && s_clear_frames_remaining == 0U) {
+    if ((!s_nav_active && s_clear_frames_remaining == 0U) || (!can_engine_is_bus_awake(1500) && (s_nav_active = false, s_clear_frames_remaining = 0U, true))) {
         return;
     }
 

@@ -24,6 +24,8 @@ void set_automations_enabled(bool enabled);
 void set_sniffer_mode(bool enabled, bool hardware_listen_only);
 
 void init_can_engine(void);
+esp_err_t can_engine_get_status_info(twai_status_info_t* status_info);
+extern "C" bool can_engine_is_bus_awake(uint32_t max_silence_ms);
 esp_err_t can_engine_transmit_safe(twai_message_t* message, TickType_t ticks_to_wait);
 bool can_engine_inject_frame(const twai_message_t* msg);
 void update_state_cache(uint32_t can_id, const uint8_t* data);

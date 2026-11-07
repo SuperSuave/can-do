@@ -1343,7 +1343,7 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
     cJSON_AddStringToObject(root, "system_time", time_str);
 
     twai_status_info_t twai_st;
-    if (twai_get_status_info(&twai_st) == ESP_OK) {
+    if (can_engine_get_status_info(&twai_st) == ESP_OK) {
         const char* state_str = "unknown";
         switch (twai_st.state) {
             case TWAI_STATE_STOPPED: state_str = "stopped"; break;
