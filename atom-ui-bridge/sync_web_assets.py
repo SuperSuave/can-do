@@ -20,7 +20,7 @@ def sync():
         for f in files:
             if f.endswith(".map") or f.endswith(".gz.gz"):
                 continue
-            if "catalog" in f or "catalog" in root:
+            if "catalog" in f or "catalog" in root or f == ".nojekyll" or f == "frontend_manifest.json.gz" or f.startswith("404"):
                 continue
 
             rel = os.path.relpath(os.path.join(root, f), FRONTEND_DIST)
@@ -36,8 +36,6 @@ def sync():
                     fg.write(raw)
             else:
                 if f == ".nojekyll":
-                    with open(dst_path, "wb") as fu:
-                        fu.write(raw)
                     continue
 
                 gz_dist = src_path + ".gz"
@@ -57,15 +55,16 @@ def sync():
                             with open(dst_path, "wb") as fu:
                                 fu.write(raw)
 
-    # Also bundle can_do_catalog.json and can_do_catalog.json.gz into Atom Lite data
+    # Also bundle can_do_catalog.json and can_do_catalog.json.gz into Atom Lite data (minified)
     cat_src = os.path.join(REPO_ROOT, "catalog", "can_do_catalog.json")
     if os.path.exists(cat_src):
+        import json
         atom_cat_dir = os.path.join(ATOM_DATA, "catalog")
         os.makedirs(atom_cat_dir, exist_ok=True)
         atom_cat_dst_gz = os.path.join(atom_cat_dir, "can_do_catalog.json.gz")
         atom_cat_dst = os.path.join(atom_cat_dir, "can_do_catalog.json")
-        with open(cat_src, "rb") as f_in:
-            cat_raw = f_in.read()
+        with open(cat_src, "r", encoding="utf-8") as f_in:
+            cat_raw = json.dumps(json.load(f_in), separators=(',', ':')).encode('utf-8')
         with gzip.open(atom_cat_dst_gz, "wb", compresslevel=9) as f_out:
             f_out.write(cat_raw)
         with open(atom_cat_dst, "wb") as f_out:
@@ -87,7 +86,7 @@ def sync():
             print(f"Synchronized CAN_DO_VERSION in atom-ui-bridge/src/main.cpp -> {ver}")
 
     atom_bytes = sum(os.path.getsize(os.path.join(r, f)) for r, d, fs in os.walk(ATOM_DATA) for f in fs)
-    print(f"Sync complete! Atom Lite LittleFS: {atom_bytes / 1024:.1f} KB (Partition: 2048 KB)")
+    print(f"Sync complete! Atom Lite LittleFS: {atom_bytes / 1024:.1f} KB (Partition: 960 KB)")
 
 if __name__ == "__main__":
     sync()
