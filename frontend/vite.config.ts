@@ -149,24 +149,26 @@ export default defineConfig(() => {
           const dataDir = path.resolve(__dirname, '../firmware/data');
           const wwwDir = path.join(dataDir, 'www');
 
-          // Stage in firmware/data/catalog.json (LittleFS root)
+          // Stage in firmware/data/catalog.json (LittleFS root) - MINIFIED to fit 960KB LittleFS partition
           const catalogFile = path.resolve(__dirname, '../catalog/can_do_catalog.json');
           if (fs.existsSync(catalogFile)) {
             try {
               if (!fs.existsSync(dataDir)) {
                 fs.mkdirSync(dataDir, { recursive: true });
               }
-              fs.copyFileSync(catalogFile, path.join(dataDir, 'catalog.json'));
+              const parsedCatalog = JSON.parse(fs.readFileSync(catalogFile, 'utf-8'));
+              fs.writeFileSync(path.join(dataDir, 'catalog.json'), JSON.stringify(parsedCatalog), 'utf-8');
             } catch (e) {
               console.warn('[vite closeBundle] Warning copying catalog.json:', e);
             }
           }
 
-          // Also copy automations.json if present in firmware
+          // Also copy automations.json if present in firmware (minified)
           const repoAuto = path.resolve(__dirname, '../firmware/automations.json');
           if (fs.existsSync(repoAuto)) {
             try {
-              fs.copyFileSync(repoAuto, path.join(dataDir, 'automations.json'));
+              const parsedAuto = JSON.parse(fs.readFileSync(repoAuto, 'utf-8'));
+              fs.writeFileSync(path.join(dataDir, 'automations.json'), JSON.stringify(parsedAuto), 'utf-8');
             } catch (e) {
               console.warn('[vite closeBundle] Warning copying automations.json:', e);
             }
@@ -228,8 +230,13 @@ export default defineConfig(() => {
                 }
                 copyCompactToWww(srcPath, destPath);
               } else if (entry.isFile()) {
-                // Skip duplicating can_do_catalog in www since it is at /spiffs/catalog.json
-                if (entry.name.startsWith('can_do_catalog')) continue;
+                // Skip duplicating can_do_catalog, .nojekyll, 404 fallback, or manifest.gz in www
+                if (
+                  entry.name.startsWith('can_do_catalog') ||
+                  entry.name === '.nojekyll' ||
+                  entry.name.startsWith('404') ||
+                  entry.name === 'frontend_manifest.json.gz'
+                ) continue;
 
                 // Copy all .gz files for compressed assets
                 if (entry.name.endsWith('.gz')) {

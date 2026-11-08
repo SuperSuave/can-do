@@ -70,11 +70,21 @@ set(FS_DIR "${CMAKE_CURRENT_LIST_DIR}/../data")
 # Create the data directory if it doesn't exist yet
 file(MAKE_DIRECTORY "${FS_DIR}/www")
 
-# Always stage canonical catalog from catalog/can_do_catalog.json
+# Always stage canonical catalog from catalog/can_do_catalog.json (minified for LittleFS budget)
 if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../catalog/can_do_catalog.json")
-    file(COPY "${CMAKE_CURRENT_LIST_DIR}/../../catalog/can_do_catalog.json" DESTINATION "${FS_DIR}")
-    if(EXISTS "${FS_DIR}/can_do_catalog.json")
-        file(RENAME "${FS_DIR}/can_do_catalog.json" "${FS_DIR}/catalog.json")
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_FOUND)
+        execute_process(
+            COMMAND "${Python3_EXECUTABLE}" -c
+            "import json; c = json.load(open('${CMAKE_CURRENT_LIST_DIR}/../../catalog/can_do_catalog.json')); open('${FS_DIR}/catalog.json', 'w').write(json.dumps(c, separators=(',', ':')))"
+            RESULT_VARIABLE MINIFY_RES
+        )
+    endif()
+    if(NOT EXISTS "${FS_DIR}/catalog.json")
+        file(COPY "${CMAKE_CURRENT_LIST_DIR}/../../catalog/can_do_catalog.json" DESTINATION "${FS_DIR}")
+        if(EXISTS "${FS_DIR}/can_do_catalog.json")
+            file(RENAME "${FS_DIR}/can_do_catalog.json" "${FS_DIR}/catalog.json")
+        endif()
     endif()
 endif()
 
