@@ -49,7 +49,7 @@ class CanDoNumberEntity(CanDoEntity, NumberEntity):
     @property
     def native_value(self) -> float | None:
         """Return the current number value."""
-        direct = self.coordinator.get_can_payload(self.entity_id_str)
+        direct = self.coordinator.get_can_state(self.entity_id_str)
         if direct is not None:
             if isinstance(direct, (int, float)):
                 self._value = max(self._attr_native_min_value, min(self._attr_native_max_value, float(direct)))

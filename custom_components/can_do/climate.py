@@ -240,7 +240,7 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
             attrs["heated_steering_wheel"] = ["Off", "On"][wheel_val] if wheel_val < 2 else "Unknown"
 
         # 4. Seat Comfort (0x496 Byte D1 / drivers_seat_comfort entity)
-        drv_direct = self.coordinator.get_can_payload("drivers_seat_comfort")
+        drv_direct = self.coordinator.get_can_state("drivers_seat_comfort")
         if isinstance(drv_direct, str):
             attrs["driver_seat_comfort"] = drv_direct
         else:
@@ -259,7 +259,7 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
                 if d_raw in seat_map:
                     attrs["driver_seat_comfort"] = seat_map[d_raw]
 
-        pass_direct = self.coordinator.get_can_payload("passengers_seat_comfort")
+        pass_direct = self.coordinator.get_can_state("passengers_seat_comfort")
         if isinstance(pass_direct, str):
             attrs["passenger_seat_comfort"] = pass_direct
         else:

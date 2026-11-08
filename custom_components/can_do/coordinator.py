@@ -36,6 +36,19 @@ _CRC_CAN_IDS: set[str] = {
 }
 
 
+def normalize_can_id(cid: str | None) -> str:
+    """Normalize CAN ID to standard 3-digit lower-case hex format (e.g. '0x045', '0x1ac')."""
+    if not cid:
+        return ""
+    s = str(cid).strip().lower()
+    if s.startswith("0x"):
+        try:
+            return f"0x{int(s, 16):03x}"
+        except ValueError:
+            pass
+    return s
+
+
 class CanDoDataCoordinator:
     """Coordinates state updates and commands for CAN Do via Home Assistant MQTT."""
 
@@ -285,6 +298,9 @@ class CanDoDataCoordinator:
                 ]
                 prev_vals = self.can_states.get(can_id)
                 self.can_states[can_id] = byte_vals
+                norm_id = normalize_can_id(can_id)
+                if norm_id != can_id:
+                    self.can_states[norm_id] = byte_vals
 
                 # Skip duplicate identical frames
                 if isinstance(prev_vals, list) and prev_vals == byte_vals:
@@ -296,26 +312,44 @@ class CanDoDataCoordinator:
                         return
 
                 self._notify_can_listeners(can_id)
+                if norm_id != can_id:
+                    self._notify_can_listeners(norm_id)
             except ValueError:
                 self.can_states[can_id] = hex_payload
+                norm_id = normalize_can_id(can_id)
+                if norm_id != can_id:
+                    self.can_states[norm_id] = hex_payload
                 self._notify_can_listeners(can_id)
+                if norm_id != can_id:
+                    self._notify_can_listeners(norm_id)
         else:
             # String or label state (e.g. "Locked / Lock", "Unlocked / Unlock", "All Doors Closed")
             prev_val = self.can_states.get(can_id)
             self.can_states[can_id] = hex_payload
+            norm_id = normalize_can_id(can_id)
+            if norm_id != can_id:
+                self.can_states[norm_id] = hex_payload
             if prev_val != hex_payload:
                 self._notify_can_listeners(can_id)
+                if norm_id != can_id:
+                    self._notify_can_listeners(norm_id)
 
     def register_listener(self, can_id: str, callback_fn: Callable[[], None]) -> Callable[[], None]:
         """Register entity callback for a specific state CAN ID."""
-        can_id_norm = can_id.lower()
-        if can_id_norm not in self._listeners:
-            self._listeners[can_id_norm] = []
-        self._listeners[can_id_norm].append(callback_fn)
+        can_id_raw = can_id.lower()
+        can_id_norm = normalize_can_id(can_id_raw)
+        target_keys = {can_id_raw, can_id_norm}
+
+        for k in target_keys:
+            if k not in self._listeners:
+                self._listeners[k] = []
+            if callback_fn not in self._listeners[k]:
+                self._listeners[k].append(callback_fn)
 
         def remove_listener() -> None:
-            if can_id_norm in self._listeners and callback_fn in self._listeners[can_id_norm]:
-                self._listeners[can_id_norm].remove(callback_fn)
+            for k in target_keys:
+                if k in self._listeners and callback_fn in self._listeners[k]:
+                    self._listeners[k].remove(callback_fn)
 
         return remove_listener
 
@@ -476,13 +510,22 @@ class CanDoDataCoordinator:
         if not can_id:
             return None
         val = self.can_states.get(can_id.lower())
+        if val is None:
+            norm = normalize_can_id(can_id)
+            if norm != can_id.lower():
+                val = self.can_states.get(norm)
         return val if isinstance(val, list) else None
 
     def get_can_state(self, key: str | None) -> Any:
         """Retrieve any cached state (list, float, str) for an entity or CAN ID."""
         if not key:
             return None
-        return self.can_states.get(key.lower())
+        val = self.can_states.get(key.lower())
+        if val is None:
+            norm = normalize_can_id(key)
+            if norm != key.lower():
+                val = self.can_states.get(norm)
+        return val
 
     async def async_send_action(
         self, can_id: str, delay_ms: int, steps: list[dict[str, Any]]

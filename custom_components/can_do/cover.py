@@ -70,6 +70,17 @@ class CanDoCoverEntity(CanDoEntity, CoverEntity):
     @property
     def is_closed(self) -> bool | None:
         """Return True if the cover is closed."""
+        # 0. Check direct entity state (e.g. from WiCAN emit_live_entity_state)
+        direct_state = self.coordinator.get_can_state(self.entity_id_str)
+        if isinstance(direct_state, bool):
+            return direct_state
+        if isinstance(direct_state, str):
+            ds = direct_state.lower()
+            if "closed" in ds or "close" in ds:
+                return True
+            if "open" in ds or "opening" in ds:
+                return False
+
         if not self.state_can_id:
             return None
 

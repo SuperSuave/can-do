@@ -447,6 +447,22 @@ class TestEgmpAuditDecoders(unittest.TestCase):
         self.coordinator.can_states["0x4e2"] = [0x00, 0x00, 0xC2, 0x01, 0x00, 0x00, 0x00, 0x00]
         self.assertEqual(sensor_l1_gen2.native_value, 450)
 
+    def test_wican_direct_entity_state_and_can_id_normalization(self):
+        """Verify coordinator normalizes CAN IDs (0x45 vs 0x045) and entity platforms ingest WiCAN live states."""
+        # 1. CAN ID Normalization in Coordinator
+        self.coordinator.can_states["0x045"] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x50, 0x00, 0x00]
+        # Querying with non-padded 0x45 should successfully retrieve 0x045 payload
+        p = self.coordinator.get_can_payload("0x45")
+        self.assertEqual(p, [0x00, 0x00, 0x00, 0x00, 0x00, 0x50, 0x00, 0x00])
+
+        # 2. Direct string state handling in binary sensor (doors_status)
+        cmd_doors = self.commands_by_id["doors_status"]
+        bs = CanDoBinarySensorEntity(self.coordinator, cmd_doors)
+        self.coordinator.can_states["doors_status"] = "All Doors Closed"
+        self.assertFalse(bs.is_on)
+        self.coordinator.can_states["doors_status"] = "Driver Door Open"
+        self.assertTrue(bs.is_on)
+
 
 if __name__ == "__main__":
     unittest.main()

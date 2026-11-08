@@ -198,7 +198,13 @@ def get_monitored_can_ids(vehicle_id: str) -> list[str]:
         net = c.get("network", {})
         cid = net.get("state_can_id")
         if cid:
-            ids.add(cid.lower())
+            s = str(cid).strip().lower()
+            if s.startswith("0x"):
+                try:
+                    s = f"0x{int(s, 16):03x}"
+                except ValueError:
+                    pass
+            ids.add(s)
     return sorted(ids)
 
 

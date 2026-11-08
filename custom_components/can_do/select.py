@@ -87,7 +87,7 @@ class CanDoSelectEntity(CanDoEntity, SelectEntity):
                 return payload
 
         # 2. Direct decoded entity state from coordinator (e.g. from WiCAN / ESP32 emit_live_entity_state)
-        entity_val = self.coordinator.get_can_payload(self.entity_id_str)
+        entity_val = self.coordinator.get_can_state(self.entity_id_str)
         if entity_val and isinstance(entity_val, str) and entity_val in self.options:
             return entity_val
 
