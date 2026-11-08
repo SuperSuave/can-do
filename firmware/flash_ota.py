@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""
+CAN Do Firmware OTA Flasher
+Usage: python flash_ota.py <IP> <firmware.bin>
+"""
+import sys
+import os
+import time
+import urllib.request
+import urllib.error
+
+def flash_firmware(ip, bin_path):
+    if not os.path.isfile(bin_path):
+        print(f"Error: binary file {bin_path} not found")
+        return False
+        
+    file_size = os.path.getsize(bin_path)
+    print(f"Flashing {bin_path} ({file_size:,} bytes) to http://{ip}/api/ota ...")
+    
+    url = f"http://{ip}/api/ota"
+    with open(bin_path, "rb") as f:
+        data = f.read()
+
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "Content-Type": "application/octet-stream",
+            "Content-Length": str(len(data))
+        },
+        method="POST"
+    )
+    
+    start_t = time.time()
+    try:
+        with urllib.request.urlopen(req, timeout=90) as resp:
+            body = resp.read().decode("utf-8", errors="ignore")
+            dur = time.time() - start_t
+            print(f"OTA Response (in {dur:.1f}s): {resp.status} - {body}")
+            return True
+    except urllib.error.HTTPError as e:
+        print(f"HTTP Error {e.code}: {e.read().decode('utf-8', errors='ignore')}")
+        return False
+    except Exception as e:
+        # Check if the device restarted immediately after flashing
+        dur = time.time() - start_t
+        print(f"Connection ended after {dur:.1f}s: {e}")
+        return True
+
+if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        print("Usage: python flash_ota.py <IP> <binary_path>")
+        sys.exit(1)
+    ip = sys.argv[1]
+    bin_path = sys.argv[2]
+    flash_firmware(ip, bin_path)
