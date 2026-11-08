@@ -49,8 +49,36 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
   const pingTimerRef = useRef<number | null>(null);
   const elapsedTimerRef = useRef<number | null>(null);
   const autoCloseTimerRef = useRef<number | null>(null);
+  const isCheckingRef = useRef<boolean>(false);
+  const isReconnectedRef = useRef<boolean>(false);
+  const sawDisconnectRef = useRef<boolean>(false);
+  const onCloseRef = useRef(onClose);
+  const onReconnectedRef = useRef(onReconnected);
 
-  const targetUrl = resolveDeviceBaseUrl(deviceHost);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    onReconnectedRef.current = onReconnected;
+  }, [onReconnected]);
+
+  // Always prefer the current browser IP/origin when served directly from the device
+  const targetUrl = isRunningOnDevice() && (!deviceHost || deviceHost === 'auto' || deviceHost.toLowerCase().includes('current host'))
+    ? window.location.origin
+    : resolveDeviceBaseUrl(deviceHost);
+  const displayHost = targetUrl.replace(/^https?:\/\//, '');
+
+  const performReloadOrClose = useCallback(async () => {
+    if (isRunningOnDevice()) {
+      try {
+        await fetch(`${window.location.origin}/?t=${Date.now()}`, { cache: 'reload' });
+      } catch {}
+      window.location.reload();
+    } else {
+      onCloseRef.current();
+    }
+  }, []);
 
   // Reset state when modal opens
   useEffect(() => {
@@ -61,6 +89,9 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
       setReconnectedUptime(null);
       setIsChecking(false);
       setAutoCloseCountdown(null);
+      isCheckingRef.current = false;
+      isReconnectedRef.current = false;
+      sawDisconnectRef.current = false;
     }
   }, [isOpen]);
 
@@ -77,48 +108,65 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
     };
   }, [isOpen, isReconnected]);
 
-  // Ping probe to test if device is back online
+  // Ping probe to test if device is back online via /api/system/status
   const checkDeviceStatus = useCallback(async () => {
-    if (!isOpen || isReconnected || isChecking) return;
+    if (!isOpen || isReconnectedRef.current || isCheckingRef.current) return;
+    isCheckingRef.current = true;
     setIsChecking(true);
     setPingCount(prev => prev + 1);
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), 2200);
 
-      // Probe /api/status (LittleFS / ESP-IDF REST API endpoint)
-      const res = await fetch(`${targetUrl}/api/status`, {
-        cache: 'no-cache',
+      // Probe /api/system/status (canonical status endpoint on both WiCAN ESP-IDF and Atom Lite)
+      const res = await fetch(`${targetUrl}/api/system/status?t=${Date.now()}`, {
+        cache: 'no-store',
         signal: controller.signal
       });
       clearTimeout(timeoutId);
 
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
-        setIsReconnected(true);
-        if (data.uptime_sec !== undefined) {
-          setReconnectedUptime(data.uptime_sec);
+        // Ensure we don't catch a pre-reboot response before the 1s restart_task fires:
+        // Accept immediately if uptime_sec is fresh (< 45s), or if we already observed a disconnect,
+        // or after at least 4s have elapsed.
+        const freshBoot = typeof data.uptime_sec === 'number' && data.uptime_sec < 45;
+        if (freshBoot || sawDisconnectRef.current) {
+          isReconnectedRef.current = true;
+          setIsReconnected(true);
+          if (data.uptime_sec !== undefined) {
+            setReconnectedUptime(data.uptime_sec);
+          }
+          if (onReconnectedRef.current) {
+            onReconnectedRef.current();
+          }
+          setAutoCloseCountdown(3);
         }
-        if (onReconnected) {
-          onReconnected();
-        }
-        // Start 4-second auto-close countdown so user can see confirmation
-        setAutoCloseCountdown(4);
+      } else {
+        sawDisconnectRef.current = true;
       }
     } catch {
-      // Device still restarting or network temporarily offline
+      // Device is actively resetting or Wi-Fi is re-associating
+      sawDisconnectRef.current = true;
     } finally {
+      isCheckingRef.current = false;
       setIsChecking(false);
     }
-  }, [isOpen, isReconnected, isChecking, targetUrl, onReconnected]);
+  }, [isOpen, targetUrl]);
+
+  // Fallback check if uptime_sec isn't small (e.g. if reload happened without full power cycle after 5s)
+  useEffect(() => {
+    if (isOpen && secondsElapsed >= 5 && !sawDisconnectRef.current) {
+      sawDisconnectRef.current = true;
+    }
+  }, [isOpen, secondsElapsed]);
 
   // Periodic pinging: Start probing after 3 seconds of reboot
   useEffect(() => {
     if (!isOpen || isReconnected) return;
 
-    // Wait 3 seconds before starting active pinging to give ESP32 time to reset
-    const startDelay = setTimeout(() => {
+    const startDelay = window.setTimeout(() => {
       checkDeviceStatus();
       pingTimerRef.current = window.setInterval(() => {
         checkDeviceStatus();
@@ -131,29 +179,32 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
     };
   }, [isOpen, isReconnected, checkDeviceStatus]);
 
-  // Countdown timer when reconnected
+  // Countdown timer when reconnected — decoupled from parent render callbacks
   useEffect(() => {
-    if (autoCloseCountdown === null || autoCloseCountdown <= 0) return;
+    if (!isReconnected) return;
 
     autoCloseTimerRef.current = window.setInterval(() => {
       setAutoCloseCountdown(prev => {
-        if (prev === null || prev <= 1) {
-          // If running embedded directly on the device, reload the page to load fresh assets
-          if (isRunningOnDevice()) {
-            window.location.reload();
-          } else {
-            onClose();
+        if (prev === null) return null;
+        if (prev <= 1) {
+          if (autoCloseTimerRef.current) {
+            clearInterval(autoCloseTimerRef.current);
+            autoCloseTimerRef.current = null;
           }
-          return null;
+          performReloadOrClose();
+          return 0;
         }
         return prev - 1;
       });
     }, 1000);
 
     return () => {
-      if (autoCloseTimerRef.current) clearInterval(autoCloseTimerRef.current);
+      if (autoCloseTimerRef.current) {
+        clearInterval(autoCloseTimerRef.current);
+        autoCloseTimerRef.current = null;
+      }
     };
-  }, [autoCloseCountdown, onClose]);
+  }, [isReconnected, performReloadOrClose]);
 
   if (!isOpen) return null;
 
@@ -164,11 +215,7 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
     : Math.min(95, Math.round((secondsElapsed / estimatedTotalSec) * 100));
 
   const handleManualReload = () => {
-    if (isRunningOnDevice()) {
-      window.location.reload();
-    } else {
-      onClose();
-    }
+    performReloadOrClose();
   };
 
   return (
@@ -279,7 +326,7 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
           <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
             <span className="flex items-center gap-1.5">
               <Wifi className={`w-3.5 h-3.5 ${isChecking ? 'text-cyan-300 animate-pulse' : 'text-slate-500'}`} />
-              <span>Host: <strong className="text-slate-200 font-mono">{deviceHost || 'auto'}</strong></span>
+              <span>Host: <strong className="text-slate-200 font-mono">{displayHost}</strong></span>
             </span>
             <span className="font-mono text-[10px] text-slate-400">
               {isReconnected ? (

@@ -32,6 +32,34 @@ export default defineConfig(() => {
           entryFileNames: '[name]-[hash:6].js',
           chunkFileNames: '[hash:8].js',
           assetFileNames: '[name]-[hash:6].[ext]',
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('lucide-react')) {
+                return 'vendor-icons';
+              }
+              if (
+                id.includes('node_modules/react/') ||
+                id.includes('node_modules/react-dom/') ||
+                id.includes('node_modules/scheduler/') ||
+                id.includes('@react-aria') ||
+                id.includes('@react-stately') ||
+                id.includes('@internationalized')
+              ) {
+                return 'vendor-react';
+              }
+              return 'vendor-heroui';
+            }
+            if (
+              id.includes('/components/OnboardingWizardModal') ||
+              id.includes('/components/CatalogHealthModal') ||
+              id.includes('/components/CategoryManagerModal') ||
+              id.includes('/components/ExportModal') ||
+              id.includes('/components/ImportModal') ||
+              id.includes('/components/ContributeModal')
+            ) {
+              return 'app-modals';
+            }
+          },
         },
       },
     },

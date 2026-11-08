@@ -49,6 +49,13 @@ export function getDefaultEspIp(): string {
 export function resolveDeviceBaseUrl(target?: string | null): string {
   if (typeof window === 'undefined') return 'http://192.168.4.1';
 
+  // When running directly on the ESP32 web server, if no explicit target was passed
+  // (or 'auto' is passed), always resolve to the current browser origin IP/hostname
+  // so stale localStorage IPs from previous Wi-Fi networks never hijack requests.
+  if (isRunningOnDevice() && (target === undefined || target === null || target === '' || target === 'auto')) {
+    return window.location.origin;
+  }
+
   let raw = target;
   if (raw === undefined && typeof localStorage !== 'undefined') {
     raw = localStorage.getItem('cando_device_host');

@@ -284,10 +284,28 @@ def main():
             pass
 
     current_files = {f"/spiffs/www/{f}" for f in os.listdir(www_dir)}
+    keep_names = [f for f in os.listdir(www_dir) if not f.startswith(".")]
+    try:
+        import json
+        ctrl_body = json.dumps({"action": "clean_stale_web", "keep": keep_names}).encode("utf-8")
+        ctrl_req = urllib.request.Request(
+            f"http://{ip}/api/system/control",
+            data=ctrl_body,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(ctrl_req, timeout=8) as c_resp:
+            c_json = json.loads(c_resp.read().decode("utf-8", errors="ignore"))
+            print(f"Hardware clean_stale_web: deleted {c_json.get('deleted_count', 0)} files ({c_json.get('bytes_freed', 0):,} bytes freed)")
+    except Exception:
+        pass
+
     stale_to_clean = [s for s in set(historic_stale) if s not in current_files]
     print(f"Cleaning {len(stale_to_clean)} stale asset candidates...", flush=True)
     for stale in stale_to_clean:
         truncate_remote_file(ip, stale)
+    # Free catalog.json space prior to writing web assets so old unminified 369KB catalog never causes ENOSPC
+    truncate_remote_file(ip, "/spiffs/catalog.json")
     print("Done cleaning stale assets.\n", flush=True)
 
     # 1. Upload www assets

@@ -188,6 +188,9 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     // was loaded from. This prevents stale IPs saved from a previous network from
     // breaking the connection when the device gets a new DHCP address.
     if (isRunningOnDevice()) {
+      try {
+        localStorage.setItem('cando_device_host', 'auto');
+      } catch {}
       return 'auto';
     }
     const saved = localStorage.getItem('cando_device_host');

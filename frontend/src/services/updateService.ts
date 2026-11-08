@@ -581,6 +581,12 @@ export async function executeUpdateSequence(
           }
         }
 
+        // 1f. If catalog is also being updated, free the existing catalog.json blocks up-front
+        // so an older unminified 369KB catalog never collides with the new web assets on the 960KB partition
+        if (componentsToUpdate.catalog) {
+          await truncateDeviceFile(deviceBaseUrl, '/spiffs/catalog.json');
+        }
+
         // 2. Upload new web assets sequentially with fallback download URLs
         const totalFiles = manifest.files.length;
         for (let i = 0; i < totalFiles; i++) {
@@ -697,10 +703,18 @@ export async function executeUpdateSequence(
         throw new Error('Unable to download message catalog from GitHub. Check internet connection or CORS restrictions.');
       }
 
-      onProgress('catalog', 60, 'Writing catalog.json to LittleFS storage...');
+      onProgress('catalog', 60, 'Minifying and writing catalog.json to LittleFS storage...');
+      let minifiedCatalog = catalogText;
+      try {
+        minifiedCatalog = JSON.stringify(JSON.parse(catalogText));
+      } catch {}
+
+      // Truncate existing catalog first to prevent LittleFS Copy-On-Write block exhaustion
+      await truncateDeviceFile(deviceBaseUrl, '/spiffs/catalog.json');
+
       // If firmware is also being updated, do not reboot yet!
       const deferReboot = Boolean(componentsToUpdate.firmware);
-      const ok = await uploadToDevice(deviceBaseUrl, '/spiffs/catalog.json', catalogText, deferReboot);
+      const ok = await uploadToDevice(deviceBaseUrl, '/spiffs/catalog.json', minifiedCatalog, deferReboot);
       if (!ok) {
         throw new Error('Failed to save catalog.json to device LittleFS storage.');
       }
