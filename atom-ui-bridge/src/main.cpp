@@ -2493,27 +2493,52 @@ void setup() {
     );
 
     // Serve Static SPA files from LittleFS
-    server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html").setCacheControl("max-age=600");
+    // Dedicated routes for index.html with no-cache so browser always loads latest release
+    auto serveIndexHtml = [](AsyncWebServerRequest *request) {
+        AsyncWebServerResponse *response;
+        if (LittleFS.exists("/index.html.gz")) {
+            response = request->beginResponse(LittleFS, "/index.html.gz", "text/html");
+            response->addHeader("Content-Encoding", "gzip");
+        } else if (LittleFS.exists("/index.html")) {
+            response = request->beginResponse(LittleFS, "/index.html", "text/html");
+        } else {
+            request->send(404, "text/plain", "CAN-Do Web Assets Not Found. Flash LittleFS data partition.");
+            return;
+        }
+        response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        response->addHeader("Pragma", "no-cache");
+        response->addHeader("Expires", "0");
+        response->addHeader("Access-Control-Allow-Origin", "*");
+        request->send(response);
+    };
 
-    // SPA Fallback for client-side routing (strictly never for /api/ routes)
-    server.onNotFound([](AsyncWebServerRequest *request) {
-        if (request->url().startsWith("/api/")) {
+    server.on("/", HTTP_GET, serveIndexHtml);
+    server.on("/index.html", HTTP_GET, serveIndexHtml);
+
+    server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html").setCacheControl("public, max-age=31536000, immutable");
+
+    // SPA Fallback for client-side routing (strictly never for /api/ routes or static assets)
+    server.onNotFound([serveIndexHtml](AsyncWebServerRequest *request) {
+        String url = request->url();
+        if (url.startsWith("/api/")) {
             AsyncWebServerResponse *response = request->beginResponse(404, "application/json", "{\"status\":\"error\",\"message\":\"Endpoint not found\"}");
+            response->addHeader("Access-Control-Allow-Origin", "*");
+            request->send(response);
+            return;
+        }
+        if (url.endsWith(".js") || url.endsWith(".css") || url.endsWith(".svg") || url.endsWith(".png") ||
+            url.endsWith(".ico") || url.endsWith(".json") || url.endsWith(".woff2") || url.endsWith(".map") ||
+            url.endsWith(".bin") || url.endsWith(".gz")) {
+            AsyncWebServerResponse *response = request->beginResponse(404, "text/plain", "Static Asset Not Found");
             response->addHeader("Access-Control-Allow-Origin", "*");
             request->send(response);
             return;
         }
         if (request->method() == HTTP_OPTIONS) {
             request->send(204);
-        } else if (LittleFS.exists("/index.html.gz")) {
-            AsyncWebServerResponse *response = request->beginResponse(LittleFS, "/index.html.gz", "text/html");
-            response->addHeader("Content-Encoding", "gzip");
-            request->send(response);
-        } else if (LittleFS.exists("/index.html")) {
-            request->send(LittleFS, "/index.html", "text/html");
-        } else {
-            request->send(404, "text/plain", "CAN-Do Web Assets Not Found. Flash LittleFS data partition.");
+            return;
         }
+        serveIndexHtml(request);
     });
 
     server.begin();

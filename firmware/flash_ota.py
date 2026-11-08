@@ -54,3 +54,4 @@ if __name__ == "__main__":
     ip = sys.argv[1]
     bin_path = sys.argv[2]
     flash_firmware(ip, bin_path)
+

@@ -49,12 +49,12 @@
     {
       "name": "index.html",
       "path": "/spiffs/www/index.html",
-      "size": 4349
+      "size": 5089
     },
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 1810
+      "size": 2051
     },
     {
       "name": "LLc-6rSF.js.gz",
