@@ -221,8 +221,6 @@ void serial_cli_process_line(const char* raw_line, size_t len) {
             printf("[WIFI] Starting 2.4GHz Wi-Fi scan...\r\n");
             wifi_scan_config_t scan_cfg = {};
             scan_cfg.scan_type = WIFI_SCAN_TYPE_ACTIVE;
-            scan_cfg.scan_time.active.min = 120;
-            scan_cfg.scan_time.active.max = 250;
             esp_err_t err = esp_wifi_scan_start(&scan_cfg, true);
             if (err == ESP_OK) {
                 uint16_t ap_count = 0;

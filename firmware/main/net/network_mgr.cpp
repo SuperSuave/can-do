@@ -388,12 +388,10 @@ static void network_roam_task(void* pvParameters) {
                 s_is_scanning = true;
                 xEventGroupClearBits(s_wifi_event_group, WIFI_SCAN_DONE_BIT);
 
-                // Active probe scan with 150-300ms dwell so mobile hotspots respond reliably
+                // Active probe scan (default dwell parameters for Bluetooth coexistence)
                 wifi_scan_config_t scan_cfg = {};
                 scan_cfg.show_hidden = false;
                 scan_cfg.scan_type = WIFI_SCAN_TYPE_ACTIVE;
-                scan_cfg.scan_time.active.min = 120;
-                scan_cfg.scan_time.active.max = 250;
 
                 if (esp_wifi_scan_start(&scan_cfg, false) == ESP_OK) {
                     EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group, WIFI_SCAN_DONE_BIT, pdTRUE, pdFALSE, pdMS_TO_TICKS(6000));
@@ -753,8 +751,6 @@ bool network_mgr_start_scan(void) {
     wifi_scan_config_t scan_cfg = {};
     scan_cfg.show_hidden = false;
     scan_cfg.scan_type = WIFI_SCAN_TYPE_ACTIVE;
-    scan_cfg.scan_time.active.min = 120;
-    scan_cfg.scan_time.active.max = 250;
     esp_err_t err = esp_wifi_scan_start(&scan_cfg, false);
     if (err != ESP_OK) {
         s_is_scanning = false;

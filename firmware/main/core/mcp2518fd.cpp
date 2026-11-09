@@ -109,12 +109,12 @@ esp_err_t mcp2518fd_set_mode(mcp2518fd_t *dev, mcp2518fd_mode_t mode) {
     ret = mcp2518fd_write_32(dev, MCP2518FD_REG_CiCON, cicon);
     if (ret != ESP_OK) return ret;
 
-    // Wait for OPMOD (bits 30:28) to reflect requested mode
+    // Wait for OPMOD (bits 23:21) to reflect requested mode
     uint32_t start_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
     while ((uint32_t)(esp_timer_get_time() / 1000ULL) - start_ms < 100) {
         ret = mcp2518fd_read_32(dev, MCP2518FD_REG_CiCON, &cicon);
         if (ret == ESP_OK) {
-            uint8_t opmod = (cicon >> 28) & 0x7;
+            uint8_t opmod = (cicon >> 21) & 0x7;
             if (opmod == (uint8_t)mode) {
                 return ESP_OK;
             }
@@ -123,7 +123,7 @@ esp_err_t mcp2518fd_set_mode(mcp2518fd_t *dev, mcp2518fd_mode_t mode) {
     }
 
     ESP_LOGW(TAG, "CS=%d: Mode change timeout (requested=%d, opmod=%lu)",
-             (int)dev->config.cs_pin, (int)mode, (cicon >> 28) & 0x7);
+             (int)dev->config.cs_pin, (int)mode, (unsigned long)((cicon >> 21) & 0x7));
     return ESP_ERR_TIMEOUT;
 }
 
@@ -132,14 +132,6 @@ esp_err_t mcp2518fd_init(mcp2518fd_t *dev, const mcp2518fd_config_t *config) {
     memset(dev, 0, sizeof(mcp2518fd_t));
     dev->config = *config;
     dev->mutex = xSemaphoreCreateMutex();
-
-    // Configure CS GPIO
-    gpio_config_t cs_cfg = {};
-    cs_cfg.pin_bit_mask = (1ULL << config->cs_pin);
-    cs_cfg.mode = GPIO_MODE_OUTPUT;
-    cs_cfg.pull_up_en = GPIO_PULLUP_ENABLE;
-    gpio_config(&cs_cfg);
-    gpio_set_level(config->cs_pin, 1);
 
     // Configure INT GPIO (Active LOW)
     if (config->int_pin >= 0) {
@@ -171,12 +163,14 @@ esp_err_t mcp2518fd_init(mcp2518fd_t *dev, const mcp2518fd_config_t *config) {
     }
     vTaskDelay(pdMS_TO_TICKS(10));
 
-    // Verify communication by reading CiCON (defaults to Configuration mode 0x04000000 on power-up)
+    // Verify communication by reading CiCON (defaults to Configuration mode on power-up)
     uint32_t cicon = 0;
     ret = mcp2518fd_read_32(dev, MCP2518FD_REG_CiCON, &cicon);
-    if (ret != ESP_OK || ((cicon >> 28) & 0x7) != MCP2518FD_MODE_CONFIG) {
-        ESP_LOGE(TAG, "Device not detected or invalid CiCON on CS=%d: ret=%d, val=0x%08lX",
-                 config->cs_pin, ret, (unsigned long)cicon);
+    uint8_t opmod = (cicon >> 21) & 0x7;
+    uint8_t reqop = (cicon >> 24) & 0x7;
+    if (ret != ESP_OK || (opmod != MCP2518FD_MODE_CONFIG && reqop != MCP2518FD_MODE_CONFIG)) {
+        ESP_LOGE(TAG, "Device not detected or invalid CiCON on CS=%d: ret=%d, val=0x%08lX (opmod=%u, reqop=%u)",
+                 config->cs_pin, ret, (unsigned long)cicon, opmod, reqop);
         return ESP_ERR_NOT_FOUND;
     }
 
@@ -506,18 +500,20 @@ esp_err_t dual_can_init(void) {
     }
 
     // 2. Initialize Channel 1 SPI master bus (SPI3_HOST)
-#if defined(CAN1_SPI_HOST) && (CAN1_SPI_HOST != CAN0_SPI_HOST)
-    spi_bus_config_t bus1_cfg = {};
-    bus1_cfg.mosi_io_num = CAN1_SPI_MOSI_PIN;
-    bus1_cfg.miso_io_num = CAN1_SPI_MISO_PIN;
-    bus1_cfg.sclk_io_num = CAN1_SPI_SCK_PIN;
-    bus1_cfg.quadwp_io_num = -1;
-    bus1_cfg.quadhd_io_num = -1;
-    bus1_cfg.max_transfer_sz = 128;
+#if defined(CAN1_SPI_HOST)
+    if (CAN1_SPI_HOST != CAN0_SPI_HOST) {
+        spi_bus_config_t bus1_cfg = {};
+        bus1_cfg.mosi_io_num = CAN1_SPI_MOSI_PIN;
+        bus1_cfg.miso_io_num = CAN1_SPI_MISO_PIN;
+        bus1_cfg.sclk_io_num = CAN1_SPI_SCK_PIN;
+        bus1_cfg.quadwp_io_num = -1;
+        bus1_cfg.quadhd_io_num = -1;
+        bus1_cfg.max_transfer_sz = 128;
 
-    ret = spi_bus_initialize(CAN1_SPI_HOST, &bus1_cfg, SPI_DMA_CH_AUTO);
-    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
-        ESP_LOGE(TAG, "Failed initializing SPI bus for Channel 1 (%s)", esp_err_to_name(ret));
+        ret = spi_bus_initialize(CAN1_SPI_HOST, &bus1_cfg, SPI_DMA_CH_AUTO);
+        if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+            ESP_LOGE(TAG, "Failed initializing SPI bus for Channel 1 (%s)", esp_err_to_name(ret));
+        }
     }
 #endif
 
