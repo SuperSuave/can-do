@@ -1,9 +1,11 @@
 #include "api.h"
+#include "ble_mgr.h"
 #include "uart_bridge.h"
 #include "esp_littlefs.h"
 #include <dirent.h>
 #include "parser.h"
 #include "can_engine.h"
+#include "can.h"
 #include "network_mgr.h"
 #include "gvret_server.h"
 #include "mqtt_mgr.h"
@@ -287,6 +289,42 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
     }
 
     if (fd == -1) {
+        if (strcmp(req->uri, "/") == 0 || strcmp(req->uri, "/index.html") == 0) {
+            static const char* FALLBACK_HTML = 
+                "<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+                "<title>CAN Do Setup</title><style>"
+                "body{font-family:system-ui,sans-serif;max-width:440px;margin:2rem auto;padding:1rem;background:#0f172a;color:#f8fafc}"
+                ".card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:1.5rem;box-shadow:0 10px 15px -3px rgba(0,0,0,0.5)}"
+                "h1{font-size:1.4rem;margin:0 0 0.5rem;color:#38bdf8}h2{font-size:1rem;color:#94a3b8;margin:1rem 0 0.5rem}"
+                "label{display:block;margin:0.75rem 0 0.25rem;font-size:0.85rem;color:#cbd5e1}"
+                "input[type=text],input[type=password]{width:100%;box-sizing:border-box;padding:0.6rem;background:#334155;border:1px solid #475569;border-radius:6px;color:#fff}"
+                "button{width:100%;padding:0.75rem;margin-top:1.25rem;background:#2563eb;color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer}"
+                "button:hover{background:#1d4ed8}.badge{display:inline-block;padding:0.2rem 0.5rem;background:#065f46;color:#a7f3d0;border-radius:4px;font-size:0.75rem;font-weight:600}"
+                "#msg{margin-top:1rem;font-size:0.9rem;color:#38bdf8}"
+                "</style></head><body><div class=\"card\">"
+                "<h1>CAN Do ESP32-S3</h1><span class=\"badge\">SoftAP Mode</span>"
+                "<h2>Connect to Local Wi-Fi</h2>"
+                "<form id=\"wf\" onsubmit=\"submitWifi(event)\">"
+                "<label>Wi-Fi Network Name (SSID)</label><input type=\"text\" id=\"ssid\" required>"
+                "<label>Wi-Fi Password</label><input type=\"password\" id=\"pwd\">"
+                "<button type=\"submit\" id=\"btn\">Save &amp; Connect</button></form>"
+                "<div id=\"msg\"></div>"
+                "<p style=\"font-size:0.8rem;color:#64748b;margin-top:1.5rem\">Tip: You can also configure credentials via Serial console using: <code>wifi \"SSID\" \"PASSWORD\"</code></p>"
+                "</div><script>"
+                "async function submitWifi(e){e.preventDefault();const btn=document.getElementById('btn');const msg=document.getElementById('msg');"
+                "btn.disabled=true;btn.innerText='Connecting...';msg.innerText='Saving network credentials...';"
+                "try{const res=await fetch('/api/wifi/networks',{method:'POST',headers:{'Content-Type':'application/json'},"
+                "body:JSON.stringify({ssid:document.getElementById('ssid').value,password:document.getElementById('pwd').value,priority:100})});"
+                "if(res.ok){msg.innerText='Credentials saved! Connecting to Wi-Fi... Check Serial monitor for assigned IP.';}"
+                "else{msg.innerText='Error saving credentials.';btn.disabled=false;btn.innerText='Retry';}}"
+                "catch(err){msg.innerText='Failed: '+err;btn.disabled=false;btn.innerText='Retry';}}"
+                "</script></body></html>";
+            set_cors_headers(req);
+            httpd_resp_set_type(req, "text/html");
+            httpd_resp_sendstr(req, FALLBACK_HTML);
+            return ESP_OK;
+        }
+
         set_cors_headers(req);
         httpd_resp_send_404(req);
         return ESP_FAIL;
@@ -1315,7 +1353,15 @@ static esp_err_t api_post_preferences_handler(httpd_req_t *req) {
 
 static esp_err_t api_system_status_handler(httpd_req_t *req) {
     cJSON *root = cJSON_CreateObject();
+#if CONFIG_IDF_TARGET_ESP32S3
+    cJSON_AddStringToObject(root, "device", "WiCAN ESP32-S3 (Dual CAN FD)");
+    cJSON_AddStringToObject(root, "target", "esp32s3");
+    cJSON_AddBoolToObject(root, "dual_can", true);
+#else
     cJSON_AddStringToObject(root, "device", "WiCAN ESP32-C3");
+    cJSON_AddStringToObject(root, "target", "esp32c3");
+    cJSON_AddBoolToObject(root, "dual_can", false);
+#endif
     cJSON_AddStringToObject(root, "device_id", DEVICE_ID.c_str());
     cJSON_AddBoolToObject(root, "automations_enabled", g_automations_enabled.load());
     cJSON_AddBoolToObject(root, "sniffer_mode", g_sniffer_mode.load());
@@ -2112,7 +2158,7 @@ static esp_err_t ws_handler(httpd_req_t *req) {
 static esp_err_t api_ble_status_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    std::string status_json = uart_bridge_get_ble_status();
+    std::string status_json = ble_mgr_get_status_json();
     httpd_resp_sendstr(req, status_json.c_str());
     return ESP_OK;
 }
@@ -2129,9 +2175,7 @@ static esp_err_t api_ble_scan_handler(httpd_req_t *req) {
             if (dur <= 0 || dur > 60) dur = 10;
         }
     }
-    char buf[64];
-    snprintf(buf, sizeof(buf), "{\"type\":\"ble_scan\",\"duration\":%d}", dur);
-    uart_bridge_send_raw(buf);
+    ble_mgr_start_scan(dur);
     httpd_resp_sendstr(req, "{\"status\":\"scanning_started\"}");
     return ESP_OK;
 }
@@ -2150,12 +2194,9 @@ static esp_err_t api_ble_pair_handler(httpd_req_t *req) {
             if (!addr) addr = cJSON_GetObjectItem(root, "address");
             cJSON *name = cJSON_GetObjectItem(root, "name");
             if (addr && cJSON_IsString(addr)) {
-                std::string cmd = "{\"type\":\"ble_pair\",\"address\":\"";
-                cmd += addr->valuestring;
-                cmd += "\",\"name\":\"";
-                cmd += (name && cJSON_IsString(name)) ? name->valuestring : "";
-                cmd += "\"}";
-                uart_bridge_send_raw(cmd);
+                std::string addr_str = addr->valuestring;
+                std::string name_str = (name && cJSON_IsString(name)) ? name->valuestring : "";
+                ble_mgr_pair_device(addr_str, name_str);
                 cJSON_Delete(root);
                 httpd_resp_sendstr(req, "{\"status\":\"pairing_requested\"}");
                 return ESP_OK;
@@ -2173,7 +2214,7 @@ static esp_err_t api_ble_unpair_handler(httpd_req_t *req) {
     char buf[256];
     int len = std::min(req->content_len, sizeof(buf) - 1);
     int ret = (len > 0) ? httpd_req_recv(req, buf, len) : 0;
-    std::string cmd = "{\"type\":\"ble_unpair\"}";
+    std::string addr_str = "";
     if (ret > 0) {
         buf[ret] = '\0';
         cJSON *root = cJSON_Parse(buf);
@@ -2181,12 +2222,12 @@ static esp_err_t api_ble_unpair_handler(httpd_req_t *req) {
             cJSON *addr = cJSON_GetObjectItem(root, "mac");
             if (!addr) addr = cJSON_GetObjectItem(root, "address");
             if (addr && cJSON_IsString(addr)) {
-                cmd = "{\"type\":\"ble_unpair\",\"address\":\"" + std::string(addr->valuestring) + "\"}";
+                addr_str = addr->valuestring;
             }
             cJSON_Delete(root);
         }
     }
-    uart_bridge_send_raw(cmd);
+    ble_mgr_unpair_device(addr_str);
     httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
     return ESP_OK;
 }
@@ -2197,24 +2238,20 @@ static esp_err_t api_ble_test_event_handler(httpd_req_t *req) {
     char buf[256];
     int len = std::min(req->content_len, sizeof(buf) - 1);
     int ret = (len > 0) ? httpd_req_recv(req, buf, len) : 0;
+    std::string btn_str = "volume_up";
+    std::string act_str = "press";
     if (ret > 0) {
         buf[ret] = '\0';
         cJSON *root = cJSON_Parse(buf);
         if (root) {
             cJSON *btn = cJSON_GetObjectItem(root, "button");
             cJSON *act = cJSON_GetObjectItem(root, "action");
-            std::string cmd = "{\"type\":\"ble_test_event\",\"button\":\"";
-            cmd += (btn && cJSON_IsString(btn)) ? btn->valuestring : "volume_up";
-            cmd += "\",\"action\":\"";
-            cmd += (act && cJSON_IsString(act)) ? act->valuestring : "press";
-            cmd += "\"}";
-            uart_bridge_send_raw(cmd);
+            if (btn && cJSON_IsString(btn)) btn_str = btn->valuestring;
+            if (act && cJSON_IsString(act)) act_str = act->valuestring;
             cJSON_Delete(root);
-            httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
-            return ESP_OK;
         }
     }
-    uart_bridge_send_raw("{\"type\":\"ble_test_event\",\"button\":\"volume_up\",\"action\":\"press\"}");
+    ble_mgr_inject_test_event(btn_str, act_str);
     httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
     return ESP_OK;
 }
@@ -2222,25 +2259,8 @@ static esp_err_t api_ble_test_event_handler(httpd_req_t *req) {
 static esp_err_t api_ble_beacons_get_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    std::string ble_json = uart_bridge_get_ble_status();
-    cJSON *root = cJSON_Parse(ble_json.c_str());
-    cJSON *resp = cJSON_CreateObject();
-    if (root) {
-        cJSON *targets = cJSON_GetObjectItem(root, "beacon_targets");
-        cJSON *disc = cJSON_GetObjectItem(root, "discovered_beacons");
-        if (targets) cJSON_AddItemToObject(resp, "targets", cJSON_Duplicate(targets, 1));
-        else cJSON_AddArrayToObject(resp, "targets");
-        if (disc) cJSON_AddItemToObject(resp, "discovered", cJSON_Duplicate(disc, 1));
-        else cJSON_AddArrayToObject(resp, "discovered");
-        cJSON_Delete(root);
-    } else {
-        cJSON_AddArrayToObject(resp, "targets");
-        cJSON_AddArrayToObject(resp, "discovered");
-    }
-    char *out = cJSON_PrintUnformatted(resp);
-    cJSON_Delete(resp);
-    httpd_resp_sendstr(req, out ? out : "{\"targets\":[],\"discovered\":[]}");
-    if (out) free(out);
+    std::string resp = ble_mgr_get_beacons_json();
+    httpd_resp_sendstr(req, resp.c_str());
     return ESP_OK;
 }
 
@@ -2254,16 +2274,26 @@ static esp_err_t api_ble_beacons_post_handler(httpd_req_t *req) {
         buf[ret] = '\0';
         cJSON *root = cJSON_Parse(buf);
         if (root) {
-            cJSON_AddStringToObject(root, "type", "ble_beacon_config");
-            cJSON_AddStringToObject(root, "action", "set");
-            char *json_cmd = cJSON_PrintUnformatted(root);
-            if (json_cmd) {
-                uart_bridge_send_raw(json_cmd);
-                free(json_cmd);
-            }
+            cJSON *uuid = cJSON_GetObjectItem(root, "uuid");
+            cJSON *mac = cJSON_GetObjectItem(root, "mac");
+            if (!mac) mac = cJSON_GetObjectItem(root, "address");
+            cJSON *name = cJSON_GetObjectItem(root, "name");
+            cJSON *enter_rssi = cJSON_GetObjectItem(root, "enter_rssi");
+            cJSON *exit_timeout = cJSON_GetObjectItem(root, "exit_timeout_s");
+            if (!exit_timeout) exit_timeout = cJSON_GetObjectItem(root, "exit_timeout");
+
+            std::string uuid_str = (uuid && cJSON_IsString(uuid)) ? uuid->valuestring : "";
+            std::string mac_str = (mac && cJSON_IsString(mac)) ? mac->valuestring : "";
+            std::string name_str = (name && cJSON_IsString(name)) ? name->valuestring : "Phone Beacon";
+            int r_val = (enter_rssi && cJSON_IsNumber(enter_rssi)) ? enter_rssi->valueint : -75;
+            int t_val = (exit_timeout && cJSON_IsNumber(exit_timeout)) ? exit_timeout->valueint : 20;
+
+            bool ok = ble_mgr_set_beacon(uuid_str, mac_str, name_str, r_val, t_val);
             cJSON_Delete(root);
-            httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
-            return ESP_OK;
+            if (ok) {
+                httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
+                return ESP_OK;
+            }
         }
     }
     httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid beacon JSON");
@@ -2280,16 +2310,19 @@ static esp_err_t api_ble_beacons_delete_handler(httpd_req_t *req) {
         buf[ret] = '\0';
         cJSON *root = cJSON_Parse(buf);
         if (root) {
-            cJSON_AddStringToObject(root, "type", "ble_beacon_config");
-            cJSON_AddStringToObject(root, "action", "delete");
-            char *json_cmd = cJSON_PrintUnformatted(root);
-            if (json_cmd) {
-                uart_bridge_send_raw(json_cmd);
-                free(json_cmd);
-            }
+            cJSON *uuid = cJSON_GetObjectItem(root, "uuid");
+            cJSON *mac = cJSON_GetObjectItem(root, "mac");
+            if (!mac) mac = cJSON_GetObjectItem(root, "address");
+
+            std::string uuid_str = (uuid && cJSON_IsString(uuid)) ? uuid->valuestring : "";
+            std::string mac_str = (mac && cJSON_IsString(mac)) ? mac->valuestring : "";
+
+            bool ok = ble_mgr_delete_beacon(uuid_str, mac_str);
             cJSON_Delete(root);
-            httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
-            return ESP_OK;
+            if (ok) {
+                httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
+                return ESP_OK;
+            }
         }
     }
     httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid beacon delete JSON");

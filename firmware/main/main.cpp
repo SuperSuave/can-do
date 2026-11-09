@@ -21,6 +21,7 @@
 #include "track_popup.h"
 #include "precondition.h"
 #include "board_pins.h"
+#include "mcp2518fd.h"
 #include "mqtt_mgr.h"
 #include "network_mgr.h"
 #include "gvret_server.h"
@@ -32,6 +33,7 @@
 #include "remote_climate.h"
 #include "ambient_anim.h"
 #include "usb_can.h"
+#include "ble_mgr.h"
 
 #include "esp_mac.h"
 #include "esp_wifi.h"
@@ -78,6 +80,15 @@ static esp_err_t init_fs(void) {
 }
 
 static esp_err_t init_twai(void) {
+    esp_err_t ret = ESP_OK;
+#if CONFIG_IDF_TARGET_ESP32S3
+    ret = dual_can_init();
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Dual-CAN MCP2518FD subsystem active. On-chip TWAI bypassed.");
+        return ESP_OK;
+    }
+    ESP_LOGW(TAG, "Dual-CAN MCP2518FD not detected, falling back to on-chip TWAI...");
+#endif
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, TWAI_MODE_NORMAL);
     g_config.rx_queue_len = 128;
     g_config.tx_queue_len = 32;
@@ -85,7 +96,7 @@ static esp_err_t init_twai(void) {
     twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
-    esp_err_t ret = twai_driver_install(&g_config, &t_config, &f_config);
+    ret = twai_driver_install(&g_config, &t_config, &f_config);
     if (ret != ESP_OK) return ret;
     return twai_start();
 }
@@ -187,6 +198,7 @@ extern "C" void app_main(void) {
     precondition_init();
     remote_climate_init();
     ambient_anim_init();
+    ble_mgr_init();
 
     // 9. Command Queues and Tasks
     init_can_engine();
@@ -207,4 +219,3 @@ extern "C" void app_main(void) {
 
     ESP_LOGI(TAG, "Hardware & Network Initialization complete. Ready.");
 }
-

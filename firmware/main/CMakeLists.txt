@@ -1,11 +1,15 @@
 if(IDF_VERSION_MAJOR GREATER_EQUAL 6)
     set(MQTT_COMPONENT "espressif__mqtt")
     set(CJSON_COMPONENT "espressif__cjson")
-    set(EXTRA_COMPONENTS "esp_driver_gpio" "esp_driver_usb_serial_jtag")
+    set(EXTRA_COMPONENTS "esp_driver_gpio" "esp_driver_usb_serial_jtag" "esp_driver_spi")
 else()
     set(MQTT_COMPONENT "mqtt")
     set(CJSON_COMPONENT "json")
     set(EXTRA_COMPONENTS "")
+endif()
+
+if(IDF_TARGET STREQUAL "esp32s3" OR IDF_TARGET STREQUAL "esp32")
+    list(APPEND EXTRA_COMPONENTS "bt" "h2zero__esp-nimble-cpp")
 endif()
 
 idf_component_register(
@@ -13,13 +17,16 @@ idf_component_register(
         "main.cpp"
         "core/parser.cpp"
         "core/can_engine.cpp"
+        "core/mcp2518fd.cpp"
         "net/api.cpp"
+        "net/ble_mgr.cpp"
         "net/config_server.c"
         "net/gvret_server.cpp"
         "net/mqtt_mgr.cpp"
         "net/network_mgr.cpp"
         "net/uart_bridge.cpp"
         "net/usb_can.cpp"
+        "net/serial_cli.cpp"
         "platform/persistent_settings.c"
         "platform/power_mgr.cpp"
         "platform/timezone_mgr.cpp"

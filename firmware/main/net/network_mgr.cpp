@@ -55,6 +55,7 @@ static const int DEFER_GOT_IP_BIT      = BIT3;
 static const int DEFER_DISCONN_BIT     = BIT4;
 static const int DEFER_AP_STACONN_BIT  = BIT5;
 static const int DEFER_AP_STADISC_BIT  = BIT6;
+static const int WIFI_TRIGGER_ROAM_BIT = BIT7;
 
 static char s_deferred_ap_mac[18] = {0};
 
@@ -360,6 +361,7 @@ static void process_deferred_network_events(void) {
 static void network_roam_task(void* pvParameters) {
     ESP_LOGI(TAG, "Network roaming & watchdog task started");
     uint8_t high_prio_hold_retries = 0;
+    uint32_t roam_wait_ms = 5000;
 
     while (true) {
         process_deferred_network_events();
@@ -375,7 +377,10 @@ static void network_roam_task(void* pvParameters) {
                 prev_prio = s_last_connected_prio;
             }
 
-            if (!targets.empty() && !s_is_scanning) {
+            wifi_sta_list_t ap_stas = {};
+            bool has_ap_client = (s_ap_active && esp_wifi_ap_get_sta_list(&ap_stas) == ESP_OK && ap_stas.num > 0);
+
+            if (!targets.empty() && !s_is_scanning && !has_ap_client) {
                 // Ensure STA is cleanly idle before starting an active scan
                 esp_wifi_disconnect();
                 vTaskDelay(pdMS_TO_TICKS(100));
@@ -480,6 +485,12 @@ static void network_roam_task(void* pvParameters) {
                             }
                         }
 
+                        if (candidates.empty()) {
+                            roam_wait_ms = 20000; // Backoff to 20s quiet window so SoftAP stays stable on Channel 1
+                        } else {
+                            roam_wait_ms = 5000;
+                        }
+
                         // 4. Attempt association with best ranked candidates
                         bool connected = false;
                         for (const auto& cand : candidates) {
@@ -546,10 +557,14 @@ static void network_roam_task(void* pvParameters) {
             }
         }
 
-        // Wait up to 5 seconds, waking immediately if any deferred network event bit fires
+        // Wait up to roam_wait_ms, waking immediately if any deferred network event or trigger fires
         EventBits_t wake_bits = xEventGroupWaitBits(s_wifi_event_group,
-            DEFER_GOT_IP_BIT | DEFER_DISCONN_BIT | DEFER_AP_STACONN_BIT | DEFER_AP_STADISC_BIT,
-            pdFALSE, pdFALSE, pdMS_TO_TICKS(5000));
+            DEFER_GOT_IP_BIT | DEFER_DISCONN_BIT | DEFER_AP_STACONN_BIT | DEFER_AP_STADISC_BIT | WIFI_TRIGGER_ROAM_BIT,
+            pdTRUE, pdFALSE, pdMS_TO_TICKS(roam_wait_ms));
+
+        if (wake_bits & WIFI_TRIGGER_ROAM_BIT) {
+            roam_wait_ms = 500; // Immediate scan and roam requested
+        }
 
         if (wake_bits != 0) {
             process_deferred_network_events();
@@ -673,6 +688,7 @@ bool network_mgr_add_known_network(const std::string& ssid, const std::string& p
         }
     }
     save_settings_to_fs();
+    network_mgr_trigger_roam();
     return true;
 }
 
@@ -777,3 +793,23 @@ void network_mgr_on_vehicle_awake(void) {
     esp_wifi_set_ps(WIFI_PS_NONE);
 }
 
+
+
+void network_mgr_clear_known_networks(void) {
+    {
+        std::lock_guard<std::mutex> lock(s_net_mutex);
+        s_known_networks.clear();
+    }
+    save_settings_to_fs();
+    if (s_sta_connected) {
+        esp_wifi_disconnect();
+    }
+    start_softap();
+    ESP_LOGI(TAG, "All known networks cleared. SoftAP active.");
+}
+
+void network_mgr_trigger_roam(void) {
+    if (s_wifi_event_group) {
+        xEventGroupSetBits(s_wifi_event_group, WIFI_TRIGGER_ROAM_BIT);
+    }
+}

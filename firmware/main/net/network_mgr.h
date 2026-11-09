@@ -47,6 +47,8 @@ NetworkStatusInfo network_mgr_get_status(void);
 std::vector<KnownNetwork> network_mgr_get_known_networks(void);
 bool network_mgr_add_known_network(const std::string& ssid, const std::string& password, int priority);
 bool network_mgr_remove_known_network(const std::string& ssid);
+void network_mgr_clear_known_networks(void);
+void network_mgr_trigger_roam(void);
 
 // AP Settings
 void network_mgr_set_ap_mode(ApFallbackMode mode);

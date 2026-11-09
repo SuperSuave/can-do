@@ -1,4 +1,5 @@
 #include "usb_can.h"
+#include "serial_cli.h"
 #include <unistd.h>
 #include <fcntl.h>
 #include <cstring>
@@ -28,7 +29,8 @@ static void usb_can_task(void* pvParameters) {
     uint8_t accum[1024];
     size_t accum_len = 0;
 
-    ESP_LOGI(TAG, "USB Serial CAN ingestion task started (SLCAN & GVRET support on COM port)");
+    ESP_LOGI(TAG, "USB Serial CAN ingestion & CLI task started (SLCAN, GVRET & CLI on COM/USB)");
+    serial_cli_init();
 
     static uint32_t s_injected_count = 0;
 
@@ -46,62 +48,7 @@ static void usb_can_task(void* pvParameters) {
             while (idx < accum_len) {
                 uint8_t b = accum[idx];
 
-                // 1. Check for SLCAN: 't' (standard 11-bit) or 'T' (extended 29-bit)
-                if (b == 't' || b == 'T') {
-                    size_t eol = idx;
-                    while (eol < accum_len && accum[eol] != '\r' && accum[eol] != '\n') {
-                        eol++;
-                    }
-                    if (eol >= accum_len) {
-                        break; // Wait for full line
-                    }
-
-                    bool is_ext = (b == 'T');
-                    size_t id_len = is_ext ? 8 : 3;
-                    size_t min_len = 1 + id_len + 1; // prefix + ID + DLC
-
-                    if (eol - idx >= min_len) {
-                        uint32_t id = 0;
-                        bool valid = true;
-                        for (size_t i = 0; i < id_len; i++) {
-                            int v = hex_char_to_val((char)accum[idx + 1 + i]);
-                            if (v < 0) { valid = false; break; }
-                            id = (id << 4) | v;
-                        }
-
-                        int dlc = hex_char_to_val((char)accum[idx + 1 + id_len]);
-                        if (valid && dlc >= 0 && dlc <= 8 && (eol - idx >= min_len + dlc * 2)) {
-                            twai_message_t tx_msg = {};
-                            tx_msg.extd = is_ext ? 1 : 0;
-                            tx_msg.identifier = id;
-                            tx_msg.data_length_code = dlc;
-
-                            size_t dpos = idx + 1 + id_len + 1;
-                            for (int d = 0; d < dlc; d++) {
-                                int h = hex_char_to_val((char)accum[dpos + d * 2]);
-                                int l = hex_char_to_val((char)accum[dpos + d * 2 + 1]);
-                                if (h < 0 || l < 0) { valid = false; break; }
-                                tx_msg.data[d] = (uint8_t)((h << 4) | l);
-                            }
-
-                            if (valid) {
-                                can_engine_inject_frame(&tx_msg);
-                                s_injected_count++;
-                                if (s_injected_count % 1000 == 0) {
-                                    ESP_LOGI(TAG, "USB Ingested %lu frames", (unsigned long)s_injected_count);
-                                }
-                            }
-                        }
-                    }
-
-                    idx = eol + 1;
-                    while (idx < accum_len && (accum[idx] == '\r' || accum[idx] == '\n')) {
-                        idx++;
-                    }
-                    continue;
-                }
-
-                // 2. Check for binary GVRET (starts with 0xF1)
+                // 1. Check for binary GVRET (starts with 0xF1)
                 if (b == 0xF1) {
                     if (idx + 1 >= accum_len) break;
                     uint8_t cmd = accum[idx + 1];
@@ -138,8 +85,74 @@ static void usb_can_task(void* pvParameters) {
                     }
                 }
 
-                // Unrecognized byte, advance
-                idx++;
+                // 2. Check for newline-delimited command (SLCAN or Serial CLI)
+                size_t eol = idx;
+                while (eol < accum_len && accum[eol] != '\r' && accum[eol] != '\n') {
+                    eol++;
+                }
+
+                if (eol >= accum_len) {
+                    // Line is not complete yet, wait for more data
+                    if (accum_len >= sizeof(accum)) {
+                        accum_len = 0;
+                    }
+                    break;
+                }
+
+                // Complete line found: accum[idx ... eol - 1]
+                bool handled_slcan = false;
+                if (b == 't' || b == 'T') {
+                    bool is_ext = (b == 'T');
+                    size_t id_len = is_ext ? 8 : 3;
+                    size_t min_len = 1 + id_len + 1; // prefix + ID + DLC
+
+                    if (eol - idx >= min_len) {
+                        uint32_t id = 0;
+                        bool valid = true;
+                        for (size_t i = 0; i < id_len; i++) {
+                            int v = hex_char_to_val((char)accum[idx + 1 + i]);
+                            if (v < 0) { valid = false; break; }
+                            id = (id << 4) | v;
+                        }
+
+                        int dlc = hex_char_to_val((char)accum[idx + 1 + id_len]);
+                        if (valid && dlc >= 0 && dlc <= 8 && (eol - idx >= min_len + dlc * 2)) {
+                            twai_message_t tx_msg = {};
+                            tx_msg.extd = is_ext ? 1 : 0;
+                            tx_msg.identifier = id;
+                            tx_msg.data_length_code = dlc;
+
+                            size_t dpos = idx + 1 + id_len + 1;
+                            for (int d = 0; d < dlc; d++) {
+                                int h = hex_char_to_val((char)accum[dpos + d * 2]);
+                                int l = hex_char_to_val((char)accum[dpos + d * 2 + 1]);
+                                if (h < 0 || l < 0) { valid = false; break; }
+                                tx_msg.data[d] = (uint8_t)((h << 4) | l);
+                            }
+
+                            if (valid) {
+                                can_engine_inject_frame(&tx_msg);
+                                s_injected_count++;
+                                handled_slcan = true;
+                            }
+                        }
+                    }
+                }
+
+                if (!handled_slcan) {
+                    // Text command or JSON
+                    char line_buf[256];
+                    size_t line_len = eol - idx;
+                    if (line_len >= sizeof(line_buf)) line_len = sizeof(line_buf) - 1;
+                    memcpy(line_buf, accum + idx, line_len);
+                    line_buf[line_len] = '\0';
+                    serial_cli_process_line(line_buf, line_len);
+                }
+
+                idx = eol + 1;
+                while (idx < accum_len && (accum[idx] == '\r' || accum[idx] == '\n')) {
+                    idx++;
+                }
             }
 
             if (idx > 0) {

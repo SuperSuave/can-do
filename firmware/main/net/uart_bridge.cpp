@@ -501,6 +501,10 @@ static void uart_bridge_worker_task(void* pvParameters) {
 }
 
 void uart_bridge_init(void) {
+    if ((int)UART_BRIDGE_TX_PIN < 0 || (int)UART_BRIDGE_RX_PIN < 0) {
+        ESP_LOGI(TAG, "UART Bridge disabled (pins not configured)");
+        return;
+    }
     s_uart_tx_queue = xQueueCreate(TX_QUEUE_DEPTH, sizeof(UartTxMsg));
 
     // Detach GPIO 20/21 from any default UART0 console routing before binding UART1

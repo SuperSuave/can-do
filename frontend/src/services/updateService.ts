@@ -27,6 +27,7 @@ export interface UpdateCheckResult {
     frontend_manifest_url?: string;
     wican_firmware_url?: string;
     atom_firmware_url?: string;
+    s3_firmware_url?: string;
   };
 }
 
@@ -136,12 +137,14 @@ export async function checkForUpdates(
     // Locate assets if attached to GitHub release
     let wicanFirmwareUrl: string | undefined;
     let atomFirmwareUrl: string | undefined;
+    let s3FirmwareUrl: string | undefined;
     let catalogUrl: string | undefined;
     let manifestUrl: string | undefined;
 
     if (Array.isArray(release.assets)) {
       let bestWicanScore = -1;
       let bestAtomScore = -1;
+      let bestS3Score = -1;
 
       for (const asset of release.assets) {
         const name = (asset.name || '').toLowerCase();
@@ -167,6 +170,16 @@ export async function checkForUpdates(
             if (score > bestAtomScore) {
               bestAtomScore = score;
               atomFirmwareUrl = downloadUrl;
+            }
+          } else if (name.includes('esp32s3') || name.includes('s3')) {
+            let score = 10;
+            if (name.includes('esp32s3')) score += 30;
+            if (tag && name.includes(tag.toLowerCase())) score += 30;
+            if (tag && name === `can-do-esp32s3-${tag.toLowerCase()}.bin`) score += 50;
+            if (name === 'can-do-esp32s3.bin') score += 20;
+            if (score > bestS3Score) {
+              bestS3Score = score;
+              s3FirmwareUrl = downloadUrl;
             }
           } else {
             // WiCAN (ESP32-C3) application binary - strictly exclude Atom / Bridge
@@ -197,6 +210,9 @@ export async function checkForUpdates(
     }
     if (!atomFirmwareUrl) {
       atomFirmwareUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/atom-ui-bridge/can-do-atom-bridge.bin`;
+    }
+    if (!s3FirmwareUrl) {
+      s3FirmwareUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/can-do-esp32s3.bin`;
     }
 
     // Select the firmware URL for the active device target (WiCAN vs Atom bridge)
@@ -264,7 +280,9 @@ async function checkFallbackCatalogUpdate(
       const hasFrontendUpdate = Boolean(remoteVersion && (!currentFrontendVersion || currentFrontendVersion === 'unknown' || isVersionNewer(remoteVersion, currentFrontendVersion)));
       const wicanFirmwareUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/can-do-esp32c3.bin`;
       const atomFirmwareUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/atom-ui-bridge/can-do-atom-bridge.bin`;
+      const s3FirmwareUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/can-do-esp32s3.bin`;
       const isAtom = (targetDevice || '').toLowerCase().includes('atom') || (targetDevice || '').toLowerCase().includes('bridge');
+      const isS3 = (targetDevice || '').toLowerCase().includes('esp32s3') || (targetDevice || '').toLowerCase().includes('s3');
 
       return {
         has_update: hasCatalogUpdate || hasFirmwareUpdate || hasFrontendUpdate,
@@ -277,7 +295,7 @@ async function checkFallbackCatalogUpdate(
           firmware: hasFirmwareUpdate,
         },
         assets: {
-          firmware_url: isAtom ? atomFirmwareUrl : wicanFirmwareUrl,
+          firmware_url: isAtom ? atomFirmwareUrl : (isS3 ? s3FirmwareUrl : wicanFirmwareUrl),
           wican_firmware_url: wicanFirmwareUrl,
           atom_firmware_url: atomFirmwareUrl,
           catalog_url: `https://raw.githubusercontent.com/${GITHUB_REPO}/main/catalog/can_do_catalog.json`,
@@ -420,6 +438,8 @@ export async function executeUpdateSequence(
       const dev = (st.device || '').toLowerCase();
       if (dev.includes('atom') || dev.includes('bridge')) {
         effectiveTarget = 'atom';
+      } else if (dev.includes('esp32s3') || dev.includes('s3')) {
+        effectiveTarget = 'esp32s3';
       } else if (dev.includes('wican') || dev.includes('esp32c3')) {
         effectiveTarget = 'esp32c3';
       }
@@ -725,11 +745,16 @@ export async function executeUpdateSequence(
     // STAGE 3: FIRMWARE BINARY (Final step, triggers reboot)
     // -------------------------------------------------------------
     const isAtom = (effectiveTarget || '').toLowerCase().includes('atom') || (effectiveTarget || '').toLowerCase().includes('bridge');
+    const isS3 = (effectiveTarget || '').toLowerCase().includes('esp32s3') || (effectiveTarget || '').toLowerCase().includes('s3');
     const defaultRawFwUrl = isAtom
       ? `https://raw.githubusercontent.com/${GITHUB_REPO}/main/atom-ui-bridge/can-do-atom-bridge.bin`
+      : isS3
+      ? `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/can-do-esp32s3.bin`
       : `https://raw.githubusercontent.com/${GITHUB_REPO}/main/firmware/can-do-esp32c3.bin`;
     const selectedFwUrl = isAtom
       ? (updateData.assets.atom_firmware_url || updateData.assets.firmware_url || defaultRawFwUrl)
+      : isS3
+      ? (updateData.assets.s3_firmware_url || updateData.assets.firmware_url || defaultRawFwUrl)
       : (updateData.assets.wican_firmware_url || updateData.assets.firmware_url || defaultRawFwUrl);
 
     if (componentsToUpdate.firmware) {

@@ -17,6 +17,7 @@
 #include "precondition.h"
 #include "board_pins.h"
 #include "can.h"
+#include "mcp2518fd.h"
 #include "mqtt_mgr.h"
 #include "uds_engine.h"
 #include "network_mgr.h"
@@ -75,11 +76,43 @@ extern "C" bool can_engine_is_bus_awake(uint32_t max_silence_ms) {
     return (now_ms - last_rx) <= max_silence_ms;
 }
 
+extern "C" bool can_bus_is_available(can_bus_t bus) {
+    if (dual_can_is_available(bus)) return true;
+    if (bus == CAN_BUS_0) {
+        twai_status_info_t info;
+        return (twai_get_status_info(&info) == ESP_OK && info.state == TWAI_STATE_RUNNING);
+    }
+    return false;
+}
+
+extern "C" esp_err_t can_send_fd(can_bus_t bus, const can_fd_frame_t *frame, TickType_t ticks_to_wait) {
+    if (!frame) return ESP_ERR_INVALID_ARG;
+    if (g_sniffer_mode.load()) return ESP_ERR_INVALID_STATE;
+
+    if (dual_can_is_available(bus)) {
+        return dual_can_send(bus, frame, ticks_to_wait);
+    }
+
+    if (bus == CAN_BUS_0) {
+        twai_message_t msg;
+        can_fd_to_twai(frame, &msg);
+        return can_send(CAN_BUS_0, &msg, ticks_to_wait);
+    }
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
 extern "C" esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t ticks_to_wait) {
-    (void)bus;
     if (!message) return ESP_ERR_INVALID_ARG;
     if (g_sniffer_mode.load()) {
         return ESP_ERR_INVALID_STATE;
+    }
+
+    if (dual_can_is_available(bus)) {
+        return dual_can_send_twai(bus, message, ticks_to_wait);
+    }
+
+    if (bus != CAN_BUS_0) {
+        return ESP_ERR_NOT_FOUND;
     }
 
     SemaphoreHandle_t mtx = get_or_create_twai_mutex();
@@ -782,22 +815,23 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             }
         }
 
+        can_bus_t target_bus = (step.bus == 1) ? CAN_BUS_1 : CAN_BUS_0;
         for (int r = 0; r < step.repeat; r++) {
             twai_message_t msg_to_send = tx_msg;
-            fwd_result_t fwd_res = precondition_fwd_hook(&msg_to_send, CAN_BUS_0);
+            fwd_result_t fwd_res = precondition_fwd_hook(&msg_to_send, target_bus);
             if (fwd_res == FWD_BLOCK) {
                 continue;
             }
-            fwd_res = track_popup_fwd(&msg_to_send, CAN_BUS_0);
+            fwd_res = track_popup_fwd(&msg_to_send, target_bus);
             if (fwd_res == FWD_BLOCK) {
                 continue;
             }
 
-            fwd_res = hud_nav_fwd(&msg_to_send, CAN_BUS_0);
+            fwd_res = hud_nav_fwd(&msg_to_send, target_bus);
             if (fwd_res == FWD_BLOCK) {
                 continue;
             }
-            if (can_send(CAN_BUS_0, &msg_to_send, pdMS_TO_TICKS(10)) == ESP_OK) {
+            if (can_send(target_bus, &msg_to_send, pdMS_TO_TICKS(10)) == ESP_OK) {
                 board_led_can_activity();
                 if (delay_ms > 0) {
                     vTaskDelay(pdMS_TO_TICKS(delay_ms));
@@ -1515,10 +1549,34 @@ void can_rx_task(void* arg) {
         }
 
         bool has_frame = false;
-        if (twai_receive(&rx_msg, pdMS_TO_TICKS(2)) == ESP_OK) {
+        can_bus_t frame_bus = CAN_BUS_0;
+        can_fd_frame_t rx_fd_msg = {};
+
+        // Check Dual-CAN MCP2518FD hardware if active
+        if (dual_can_is_available(CAN_BUS_0) && mcp2518fd_rx_available(dual_can_get_device(CAN_BUS_0))) {
+            if (dual_can_receive(CAN_BUS_0, &rx_fd_msg, 0) == ESP_OK) {
+                has_frame = true;
+                frame_bus = CAN_BUS_0;
+                can_fd_to_twai(&rx_fd_msg, &rx_msg);
+            }
+        }
+        if (!has_frame && dual_can_is_available(CAN_BUS_1) && mcp2518fd_rx_available(dual_can_get_device(CAN_BUS_1))) {
+            if (dual_can_receive(CAN_BUS_1, &rx_fd_msg, 0) == ESP_OK) {
+                has_frame = true;
+                frame_bus = CAN_BUS_1;
+                can_fd_to_twai(&rx_fd_msg, &rx_msg);
+            }
+        }
+
+        // Fall back to on-chip TWAI or inject queue
+        if (!has_frame && twai_receive(&rx_msg, pdMS_TO_TICKS(2)) == ESP_OK) {
             has_frame = true;
-        } else if (s_can_inject_queue && xQueueReceive(s_can_inject_queue, &rx_msg, 0) == pdTRUE) {
+            frame_bus = CAN_BUS_0;
+            can_twai_to_fd(&rx_msg, CAN_BUS_0, &rx_fd_msg);
+        } else if (!has_frame && s_can_inject_queue && xQueueReceive(s_can_inject_queue, &rx_msg, 0) == pdTRUE) {
             has_frame = true;
+            frame_bus = CAN_BUS_0;
+            can_twai_to_fd(&rx_msg, CAN_BUS_0, &rx_fd_msg);
         }
 
         if (has_frame) {
@@ -1533,17 +1591,17 @@ void can_rx_task(void* arg) {
             board_led_can_activity();
 
             rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 1, "precondition_rx");
-            precondition_can_rx_hook(&rx_msg, CAN_BUS_0);
+            precondition_can_rx_hook(&rx_msg, frame_bus);
 
             rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 3, "hud_nav_rx");
-            hud_nav_rx(&rx_msg, CAN_BUS_0);
+            hud_nav_rx(&rx_msg, frame_bus);
 
             rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 4, "uds_engine_rx");
             uds_engine_on_can_rx(&rx_msg);
 
-            // Stream raw frame to connected SavvyCAN/GVRET client
+            // Stream raw frame to connected SavvyCAN/GVRET client with bus metadata
             rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 6, "gvret_enqueue");
-            gvret_enqueue_frame(&rx_msg);
+            gvret_enqueue_fd_frame(&rx_fd_msg);
 
             if (rx_msg.rtr) {
                 rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 999, "rtr_done");

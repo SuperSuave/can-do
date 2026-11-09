@@ -1,60 +1,66 @@
 #include "gvret_server.h"
-#include "can.h"
 #include "can_engine.h"
-#include <cstdio>
-#include <cstring>
-#include <vector>
-#include <atomic>
+#include "can.h"
+#include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
-#include "esp_system.h"
-#include "esp_log.h"
-#include "esp_timer.h"
-#include "lwip/sockets.h"
-#include "lwip/netdb.h"
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <cstring>
+#include <cerrno>
+#include <atomic>
 
 static const char* TAG = "GVRET";
 
-#define GVRET_QUEUE_SIZE 256
-#define GVRET_BATCH_SIZE 1400
+#define GVRET_QUEUE_SIZE 128
+#define GVRET_BATCH_SIZE 512
 #define GVRET_FLUSH_INTERVAL_MS 10
 
 static QueueHandle_t s_gvret_queue = nullptr;
 static std::atomic<int> s_client_count{0};
 static int s_active_client_fd = -1;
 
-void gvret_enqueue_frame(const twai_message_t* msg) {
-    if (!msg || s_client_count.load() == 0 || !s_gvret_queue) return;
-
-    if (xQueueSend(s_gvret_queue, msg, 0) != pdTRUE) {
-        // Drop oldest frame to protect heap and avoid backpressure starvation
-        twai_message_t discarded;
-        xQueueReceive(s_gvret_queue, &discarded, 0);
-        xQueueSend(s_gvret_queue, msg, 0);
-    }
-}
-
 int gvret_get_client_count(void) {
     return s_client_count.load();
 }
 
-static bool send_flush_buffer(int sock, uint8_t* buffer, size_t& len) {
-    if (len == 0 || sock < 0) return true;
-    int sent = send(sock, buffer, len, MSG_DONTWAIT);
-    len = 0;
-    if (sent < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            // Buffer full / client paused capture: discard batch silently without log flooding
-            return true;
+void gvret_enqueue_frame(const twai_message_t* msg, uint8_t bus) {
+    if (!s_gvret_queue || s_client_count.load() == 0 || !msg) return;
+    can_fd_frame_t frame;
+    can_twai_to_fd(msg, (can_bus_t)bus, &frame);
+    xQueueSend(s_gvret_queue, &frame, 0); // Drop without blocking if queue is full
+}
+
+void gvret_enqueue_fd_frame(const can_fd_frame_t* msg) {
+    if (!s_gvret_queue || s_client_count.load() == 0 || !msg) return;
+    xQueueSend(s_gvret_queue, msg, 0);
+}
+
+static bool send_flush_buffer(int sock, uint8_t* buf, size_t& len) {
+    if (len == 0) return true;
+    size_t sent = 0;
+    while (sent < len) {
+        int r = send(sock, buf + sent, len - sent, MSG_DONTWAIT);
+        if (r > 0) {
+            sent += r;
+            continue;
+        }
+        if (r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            vTaskDelay(pdMS_TO_TICKS(2));
+            continue;
         }
         ESP_LOGW(TAG, "GVRET socket send error (%d), peer disconnected", errno);
         return false;
     }
+    len = 0;
     return true;
 }
 
-static void pack_can_frame(uint8_t* dest, size_t& offset, const twai_message_t* msg, uint32_t timestamp_us) {
+static void pack_can_frame(uint8_t* dest, size_t& offset, const can_fd_frame_t* msg, uint32_t timestamp_us) {
     // GVRET Binary Format:
     // 0: 0xF1 (Start of packet)
     // 1: 0x00 (BUILD_CAN_FRAME)
@@ -73,7 +79,7 @@ static void pack_can_frame(uint8_t* dest, size_t& offset, const twai_message_t* 
     dest[offset++] = (uint8_t)((timestamp_us >> 24) & 0xFF);
 
     uint32_t id_field = msg->identifier;
-    if (msg->extd) {
+    if (msg->flags.extd) {
         id_field |= 0x80000000;
     }
 
@@ -82,9 +88,9 @@ static void pack_can_frame(uint8_t* dest, size_t& offset, const twai_message_t* 
     dest[offset++] = (uint8_t)((id_field >> 16) & 0xFF);
     dest[offset++] = (uint8_t)((id_field >> 24) & 0xFF);
 
-    uint8_t dlc = msg->data_length_code > 8 ? 8 : msg->data_length_code;
-    uint8_t flags = (0 << 4) | (dlc & 0x0F); // Bus 0
-    if (msg->rtr) flags |= 0x40;
+    uint8_t dlc = msg->len > 8 ? 8 : msg->len;
+    uint8_t flags = ((msg->bus & 0x0F) << 4) | (dlc & 0x0F);
+    if (msg->flags.rtr) flags |= 0x40;
     dest[offset++] = flags;
 
     for (int i = 0; i < dlc; i++) {
@@ -157,7 +163,7 @@ static bool handle_client_rx(int sock) {
                           (s_rx_accum[frame_pos+2] << 16) | (s_rx_accum[frame_pos+3] << 24);
             frame_pos += 4;
             uint8_t bus = s_rx_accum[frame_pos++];
-            (void)bus;
+            can_bus_t target_bus = (bus == 1) ? CAN_BUS_1 : CAN_BUS_0;
             frame_pos++; // skip len
 
             twai_message_t tx_msg = {};
@@ -173,7 +179,7 @@ static bool handle_client_rx(int sock) {
 
             if (!g_sniffer_mode.load()) {
                 tx_msg.ss = 1; // Single-Shot mode
-                can_send(CAN_BUS_0, &tx_msg, pdMS_TO_TICKS(10));
+                can_send(target_bus, &tx_msg, pdMS_TO_TICKS(10));
             } else {
                 ESP_LOGD(TAG, "Sniffer mode active: GVRET client TX 0x%03lX suppressed", (unsigned long)tx_msg.identifier);
             }
@@ -191,17 +197,20 @@ static bool handle_client_rx(int sock) {
             send(sock, reply, sizeof(reply), MSG_DONTWAIT);
             idx += 2;
         } else if (cmd == 0x02) {
-            uint8_t reply[3] = { 0xF1, 0x02, 0x00 };
+            // Firmware version reply (CAN Do 2026.11)
+            uint8_t reply[4] = { 0xF1, 0x02, 0x04, 0x14 };
             send(sock, reply, sizeof(reply), MSG_DONTWAIT);
             idx += 2;
         } else if (cmd == 0x03) {
-            uint8_t reply[10] = { 0xF1, 0x03, 0, 0, 0, 0, 0, 0, 0, 0 };
-            send(sock, reply, sizeof(reply), MSG_DONTWAIT);
-            idx += 2;
+            // Filter configuration command (0xF1 0x03 + 8B)
+            if (idx + 10 > s_accum_len) break;
+            idx += 10;
         } else if (cmd == 0x04) {
-            if (idx + 3 > s_accum_len) break;
-            idx += 3;
+            // Baud rate configuration command (0xF1 0x04 + 4B baud)
+            if (idx + 6 > s_accum_len) break;
+            idx += 6;
         } else if (cmd == 0x05) {
+            // Bus configuration command: 0xF1 0x05 + 4B bus0 + 4B bus1
             if (idx + 10 > s_accum_len) break;
             size_t pos = idx + 2;
             uint32_t bus0_cfg = s_rx_accum[pos] | (s_rx_accum[pos+1] << 8) | (s_rx_accum[pos+2] << 16) | (s_rx_accum[pos+3] << 24);
@@ -210,15 +219,16 @@ static bool handle_client_rx(int sock) {
             else if (speed == 0) speed = 500000;
             bool listen_only = (bus0_cfg & 0x20000000) != 0;
             if (listen_only != g_hardware_listen_only.load()) {
-                set_sniffer_mode(g_sniffer_mode.load(), listen_only);
+                set_sniffer_mode(listen_only, listen_only);
             }
             idx += 10;
         } else if (cmd == 0x06) {
             uint8_t bus0_flags = 0x01;
             if (g_hardware_listen_only.load()) bus0_flags |= 0x10;
             uint32_t bus0_speed = 500000;
-            uint8_t bus1_flags = 0x00;
-            uint32_t bus1_speed = 0;
+            uint8_t bus1_flags = can_bus_is_available(CAN_BUS_1) ? 0x01 : 0x00;
+            if (g_hardware_listen_only.load() && bus1_flags) bus1_flags |= 0x10;
+            uint32_t bus1_speed = can_bus_is_available(CAN_BUS_1) ? 500000 : 0;
             uint8_t reply[12] = {
                 0xF1, 0x06,
                 bus0_flags,
@@ -246,17 +256,15 @@ static bool handle_client_rx(int sock) {
             send(sock, reply, sizeof(reply), MSG_DONTWAIT);
             idx += 2;
         } else if (cmd == 0x0A) {
-            if (idx + 3 > s_accum_len) break;
-            idx += 3;
-        } else if (cmd == 0x0C) {
-            uint8_t reply[3] = { 0xF1, 0x0C, 0x01 };
+            idx += 2;
+        } else if (cmd == 0x0B) {
+            uint8_t reply[2] = { 0xF1, 0x0B };
             send(sock, reply, sizeof(reply), MSG_DONTWAIT);
             idx += 2;
-        } else if (cmd == 0x0D) {
-            if (idx + 14 > s_accum_len) break;
-            idx += 14;
-        } else {
+        } else if (cmd == 0x0C) {
             idx += 2;
+        } else {
+            idx++;
         }
     }
 
@@ -309,13 +317,13 @@ static void gvret_server_task(void* pvParameters) {
             listen(listen_sock_secondary, 2);
             ESP_LOGI(TAG, "GVRET server listening on port %d (WiCAN / SavvyCAN alternate)", secondary_port);
         } else {
-            ESP_LOGW(TAG, "Failed binding secondary port %d: errno %d", secondary_port, errno);
+            ESP_LOGW(TAG, "Failed binding alternate port %d: errno %d", secondary_port, errno);
         }
     }
 
-    uint8_t* batch_buf = (uint8_t*)malloc(GVRET_BATCH_SIZE + 64);
+    uint8_t* batch_buf = (uint8_t*)malloc(GVRET_BATCH_SIZE);
     if (!batch_buf) {
-        ESP_LOGE(TAG, "Failed allocating batch buffer");
+        ESP_LOGE(TAG, "Failed to allocate GVRET batch buffer");
         if (listen_sock_primary >= 0) close(listen_sock_primary);
         if (listen_sock_secondary >= 0) close(listen_sock_secondary);
         vTaskDelete(nullptr);
@@ -336,43 +344,26 @@ static void gvret_server_task(void* pvParameters) {
             if (listen_sock_secondary > max_fd) max_fd = listen_sock_secondary;
         }
 
-        struct timeval tv = {1, 0};
+        struct timeval tv = { .tv_sec = 1, .tv_usec = 0 };
         int s = select(max_fd + 1, &read_fds, nullptr, nullptr, &tv);
         if (s <= 0) continue;
 
         int client_sock = -1;
-        struct sockaddr_in client_addr;
-        socklen_t client_len = sizeof(client_addr);
-
         if (listen_sock_primary >= 0 && FD_ISSET(listen_sock_primary, &read_fds)) {
-            client_sock = accept(listen_sock_primary, (struct sockaddr*)&client_addr, &client_len);
+            client_sock = accept(listen_sock_primary, nullptr, nullptr);
         } else if (listen_sock_secondary >= 0 && FD_ISSET(listen_sock_secondary, &read_fds)) {
-            client_sock = accept(listen_sock_secondary, (struct sockaddr*)&client_addr, &client_len);
+            client_sock = accept(listen_sock_secondary, nullptr, nullptr);
         }
 
-        if (client_sock < 0) {
-            vTaskDelay(pdMS_TO_TICKS(50));
-            continue;
-        }
+        if (client_sock < 0) continue;
 
-        // Set TCP_NODELAY to bypass Nagle's algorithm and ensure instant frame dispatch
-        int nodelay = 1;
-        setsockopt(client_sock, IPPROTO_TCP, TCP_NODELAY, (char*)&nodelay, sizeof(int));
-
-        // Set non-blocking
-        int flags = fcntl(client_sock, F_GETFL, 0);
-        fcntl(client_sock, F_SETFL, flags | O_NONBLOCK);
-
+        ESP_LOGI(TAG, "GVRET client connected! Suspending automated burst commands for clean bus sniffing...");
         s_active_client_fd = client_sock;
         s_client_count.store(1);
-        ESP_LOGI(TAG, "SavvyCAN / GVRET client connected from %s:%d",
-                 inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+        s_accum_len = 0;
 
         bool prev_automations_state = g_automations_enabled.load();
-        if (prev_automations_state) {
-            set_automations_enabled(false);
-            ESP_LOGI(TAG, "Automations automatically paused while SavvyCAN/SavvyLens is connected");
-        }
+        set_automations_enabled(false);
 
         size_t batch_len = 0;
         int64_t last_flush_us = esp_timer_get_time();
@@ -385,7 +376,7 @@ static void gvret_server_task(void* pvParameters) {
             }
 
             // 2. Dequeue outbound CAN frames
-            twai_message_t frame;
+            can_fd_frame_t frame;
             if (xQueueReceive(s_gvret_queue, &frame, pdMS_TO_TICKS(2)) == pdTRUE) {
                 uint32_t now_us = (uint32_t)esp_timer_get_time();
                 pack_can_frame(batch_buf, batch_len, &frame, now_us);
@@ -402,16 +393,12 @@ static void gvret_server_task(void* pvParameters) {
                 }
                 last_flush_us = cur_us;
             }
-
-            // Note: client connection closure & fatal socket errors are continuously
-            // detected and handled by handle_client_rx() at the top of the loop.
         }
 
         close(client_sock);
         s_active_client_fd = -1;
         s_client_count.store(0);
         s_accum_len = 0;
-        // Clear queue on disconnect
         xQueueReset(s_gvret_queue);
 
         if (prev_automations_state) {
@@ -428,7 +415,7 @@ static void gvret_server_task(void* pvParameters) {
 
 esp_err_t gvret_server_init(uint16_t port) {
     if (!s_gvret_queue) {
-        s_gvret_queue = xQueueCreate(GVRET_QUEUE_SIZE, sizeof(twai_message_t));
+        s_gvret_queue = xQueueCreate(GVRET_QUEUE_SIZE, sizeof(can_fd_frame_t));
         if (!s_gvret_queue) return ESP_ERR_NO_MEM;
     }
 

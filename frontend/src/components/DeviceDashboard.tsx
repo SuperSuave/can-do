@@ -292,6 +292,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const [updateMessage, setUpdateMessage] = useState<string>('');
 
   const isAtomBridge = Boolean(status?.device && (status.device.toLowerCase().includes('atom') || status.device.toLowerCase().includes('bridge')));
+  const isS3Device = Boolean(status?.device && (status.device.toLowerCase().includes('esp32s3') || status.device.toLowerCase().includes('s3') || status.device.toLowerCase().includes('dual can')));
 
   useEffect(() => {
     if (preferences) {
@@ -369,7 +370,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             setIsRebootModalOpen(true);
           }
         },
-        isAtomBridge ? 'atom' : 'esp32c3'
+        isAtomBridge ? 'atom' : isS3Device ? 'esp32s3' : 'esp32c3'
       );
       setUpdateStage('complete');
       setUpdateProgressPct(100);
@@ -2105,7 +2106,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                       className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/60 text-xs font-bold transition shrink-0"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span>{isAtomBridge ? 'Download Atom .bin' : 'Download WiCAN .bin'}</span>
+                      <span>{isAtomBridge ? 'Download Atom .bin' : isS3Device ? 'Download S3 .bin' : 'Download WiCAN .bin'}</span>
                     </a>
                   )}
                   <Button
@@ -2578,7 +2579,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/60 text-xs font-semibold shrink-0 transition"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>{isAtomBridge ? 'Download Latest Atom .bin' : 'Download Latest WiCAN .bin'}</span>
+                  <span>{isAtomBridge ? 'Download Latest Atom .bin' : isS3Device ? 'Download Latest S3 .bin' : 'Download Latest WiCAN .bin'}</span>
                 </a>
               )}
             </div>
