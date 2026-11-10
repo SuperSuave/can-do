@@ -3,6 +3,7 @@
 #include "can_engine.h"
 #include "track_popup.h"
 #include "hud_nav.h"
+#include "power_mgr.h"
 #include "cJSON.h"
 #include "esp_log.h"
 #include <cstdio>
@@ -34,12 +35,6 @@ static std::string s_lwt_topic;
 
 static FILE* s_automations_tmp_file = nullptr;
 static bool s_receiving_automations = false;
-
-static void mqtt_delayed_restart_task(void *arg) {
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    esp_restart();
-    vTaskDelete(NULL);
-}
 
 // Non-blocking MQTT enqueue helper: never blocks can_rx_task or UART worker on TCP socket stalls
 static inline void mqtt_enqueue_nonblocking(const char* topic, const char* data, int len, int qos, int retain) {
@@ -381,7 +376,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     if (valid) {
                         rename("/spiffs/automations.json.tmp", "/spiffs/automations.json");
                         mqtt_enqueue_nonblocking(status_topic.c_str(), "{\"status\":\"ok\"}", 15, 0, 0);
-                        xTaskCreate(mqtt_delayed_restart_task, "mqtt_restart", 2048, nullptr, 5, nullptr);
+                        power_mgr_schedule_restart(1000);
                     } else {
                         unlink("/spiffs/automations.json.tmp");
                         mqtt_enqueue_nonblocking(status_topic.c_str(), "{\"status\":\"error\",\"message\":\"Invalid JSON syntax\"}", 50, 0, 0);

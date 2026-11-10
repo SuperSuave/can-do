@@ -24,7 +24,6 @@ idf_component_register(
         "net/gvret_server.cpp"
         "net/mqtt_mgr.cpp"
         "net/network_mgr.cpp"
-        "net/uart_bridge.cpp"
         "net/usb_can.cpp"
         "net/serial_cli.cpp"
         "platform/persistent_settings.c"

@@ -1,11 +1,11 @@
 #include "api.h"
 #include "ble_mgr.h"
-#include "uart_bridge.h"
 #include "esp_littlefs.h"
 #include <dirent.h>
 #include "parser.h"
 #include "can_engine.h"
 #include "can.h"
+#include "mcp2518fd.h"
 #include "network_mgr.h"
 #include "gvret_server.h"
 #include "mqtt_mgr.h"
@@ -13,6 +13,7 @@
 #include "hud_nav.h"
 #include "vbat_sensor.h"
 #include "uds_engine.h"
+#include "power_mgr.h"
 #include "cJSON.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
@@ -121,9 +122,6 @@ void broadcast_ws_state(const std::string& entity_id, const std::string& state) 
         }
         s_live_state_cache[entity_id] = state;
     }
-    if (uart_bridge_is_online()) {
-        uart_bridge_send_state(entity_id, state);
-    }
     if (!s_has_ws_clients_cached.load(std::memory_order_relaxed)) return;
     char buf[256];
     snprintf(buf, sizeof(buf), "{\"type\":\"state\",\"entity\":\"%s\",\"state\":\"%s\"}", entity_id.c_str(), state.c_str());
@@ -141,9 +139,6 @@ void broadcast_ws_automation_event(const std::string& id, const std::string& nam
     snprintf(buf, sizeof(buf),
              "{\"type\":\"automation_fired\",\"id\":\"%s\",\"name\":\"%s\",\"ts\":%lu}",
              id.c_str(), name.c_str(), (unsigned long)now_ms);
-    if (uart_bridge_is_online()) {
-        uart_bridge_send_raw(buf);
-    }
     if (!s_has_ws_clients_cached.load(std::memory_order_relaxed)) return;
     broadcast_ws_raw(buf);
 }
@@ -214,9 +209,12 @@ int custom_websocket_logger(const char *fmt, va_list args) {
     return 0;
 }
 
-static void restart_task(void *arg) {
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    esp_restart();
+static esp_err_t send_reboot_json_response(httpd_req_t *req, const char *json_body, uint32_t delay_ms = 1200) {
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Connection", "close");
+    httpd_resp_sendstr(req, json_body);
+    power_mgr_schedule_restart(delay_ms);
+    return ESP_OK;
 }
 
 static esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filepath) {
@@ -857,8 +855,7 @@ static esp_err_t api_file_upload_handler(httpd_req_t *req) {
     bool skip_reboot = (httpd_req_get_hdr_value_str(req, "X-No-Reboot", no_reboot_hdr, sizeof(no_reboot_hdr)) == ESP_OK && strcmp(no_reboot_hdr, "1") == 0);
 
     if (strcmp(filepath, "/spiffs/catalog.json") == 0 && !skip_reboot) {
-        httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"Catalog saved. Rebooting...\"}");
-        xTaskCreate(restart_task, "restart_task", 2048, nullptr, 5, nullptr);
+        return send_reboot_json_response(req, "{\"status\":\"success\",\"message\":\"Catalog saved. Rebooting...\"}");
     } else {
         httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"File saved successfully.\"}");
     }
@@ -920,10 +917,7 @@ static esp_err_t api_ota_handler(httpd_req_t *req) {
     s_active_static_transfers.fetch_sub(1, std::memory_order_relaxed);
 
     if (esp_ota_end(update_handle) == ESP_OK && esp_ota_set_boot_partition(update_partition) == ESP_OK) {
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"Firmware flashed. Rebooting...\"}");
-        xTaskCreate(restart_task, "restart_task", 2048, nullptr, 5, nullptr);
-        return ESP_OK;
+        return send_reboot_json_response(req, "{\"status\":\"success\",\"message\":\"Firmware flashed. Rebooting...\"}");
     }
 
     httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA flash failed");
@@ -1113,8 +1107,7 @@ static void cloud_ota_task(void *pvParameter) {
                 g_ota_state.in_progress = false;
                 g_ota_state.success = true;
                 broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] Cloud flash 100% complete! Rebooting device in 2s...\"}");
-                vTaskDelay(pdMS_TO_TICKS(1500));
-                esp_restart();
+                power_mgr_schedule_restart(1500);
                 vTaskDelete(nullptr);
                 return;
             }
@@ -1264,11 +1257,7 @@ static esp_err_t api_post_automations_handler(httpd_req_t *req) {
     }
 
     ESP_LOGI(TAG, "New automations.json written (%d bytes). Triggering soft-reset...", req->content_len);
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"Automations saved successfully. Soft-resetting engine...\"}");
-
-    xTaskCreate(restart_task, "restart_task", 2048, nullptr, 5, nullptr);
-    return ESP_OK;
+    return send_reboot_json_response(req, "{\"status\":\"success\",\"message\":\"Automations saved successfully. Soft-resetting engine...\"}");
 }
 
 static esp_err_t api_get_preferences_handler(httpd_req_t *req) {
@@ -1354,10 +1343,14 @@ static esp_err_t api_post_preferences_handler(httpd_req_t *req) {
 static esp_err_t api_system_status_handler(httpd_req_t *req) {
     cJSON *root = cJSON_CreateObject();
 #if CONFIG_IDF_TARGET_ESP32S3
+    bool bus0_ok = dual_can_is_available(CAN_BUS_0);
+    bool bus1_ok = dual_can_is_available(CAN_BUS_1);
+    bool any_dual_can = bus0_ok || bus1_ok;
     cJSON_AddStringToObject(root, "device", "WiCAN ESP32-S3 (Dual CAN FD)");
     cJSON_AddStringToObject(root, "target", "esp32s3");
-    cJSON_AddBoolToObject(root, "dual_can", true);
+    cJSON_AddBoolToObject(root, "dual_can", any_dual_can);
 #else
+    bool any_dual_can = false;
     cJSON_AddStringToObject(root, "device", "WiCAN ESP32-C3");
     cJSON_AddStringToObject(root, "target", "esp32c3");
     cJSON_AddBoolToObject(root, "dual_can", false);
@@ -1366,6 +1359,7 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
     cJSON_AddBoolToObject(root, "automations_enabled", g_automations_enabled.load());
     cJSON_AddBoolToObject(root, "sniffer_mode", g_sniffer_mode.load());
     cJSON_AddBoolToObject(root, "hardware_listen_only", g_hardware_listen_only.load());
+    cJSON_AddNumberToObject(root, "gvret_clients", gvret_get_client_count());
     const esp_app_desc_t *app_desc = esp_app_get_description();
     const char* fw_ver = (app_desc && app_desc->version[0] != '\0') ? app_desc->version : "unknown";
     cJSON_AddStringToObject(root, "can_do_version", fw_ver);
@@ -1388,21 +1382,65 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
     }
     cJSON_AddStringToObject(root, "system_time", time_str);
 
-    twai_status_info_t twai_st;
-    if (can_engine_get_status_info(&twai_st) == ESP_OK) {
-        const char* state_str = "unknown";
-        switch (twai_st.state) {
-            case TWAI_STATE_STOPPED: state_str = "stopped"; break;
-            case TWAI_STATE_RUNNING: state_str = "running"; break;
-            case TWAI_STATE_BUS_OFF: state_str = "bus_off"; break;
-            case TWAI_STATE_RECOVERING: state_str = "recovering"; break;
+#if CONFIG_IDF_TARGET_ESP32S3
+    uint32_t max_tec = 0, max_rec = 0, total_tx_fail = 0, total_rx_ovf = 0;
+    bool any_bus_off = false;
+    auto add_mcp_bus = [&](const char* key, can_bus_t bus, bool is_fd) {
+        mcp2518fd_t* dev = dual_can_get_device(bus);
+        bool online = dev && dev->initialized;
+        uint8_t tec = 0, rec = 0;
+        bool bo = false;
+        if (online) {
+            mcp2518fd_get_error_counts(dev, &tec, &rec, &bo);
+            if (tec > max_tec) max_tec = tec;
+            if (rec > max_rec) max_rec = rec;
+            if (bo) any_bus_off = true;
+            total_tx_fail += dev->tx_fail_count;
+            total_rx_ovf += dev->rx_overflow_count;
         }
-        cJSON_AddStringToObject(root, "twai_state", state_str);
-        cJSON_AddNumberToObject(root, "tx_error_counter", twai_st.tx_error_counter);
-        cJSON_AddNumberToObject(root, "rx_error_counter", twai_st.rx_error_counter);
-        cJSON_AddNumberToObject(root, "rx_missed_count", twai_st.rx_missed_count);
-        cJSON_AddNumberToObject(root, "rx_overrun_count", twai_st.rx_overrun_count);
-        cJSON_AddNumberToObject(root, "bus_error_count", twai_st.bus_error_count);
+        cJSON *bobj = cJSON_CreateObject();
+        cJSON_AddBoolToObject(bobj, "online", online);
+        cJSON_AddStringToObject(bobj, "driver", online ? "mcp2518fd" : "offline");
+        cJSON_AddStringToObject(bobj, "mode", is_fd ? "can_fd_500k_2m" : "classic_500k");
+        cJSON_AddBoolToObject(bobj, "listen_only", online ? dev->config.listen_only : false);
+        cJSON_AddNumberToObject(bobj, "tec", tec);
+        cJSON_AddNumberToObject(bobj, "rec", rec);
+        cJSON_AddBoolToObject(bobj, "bus_off", bo);
+        cJSON_AddNumberToObject(bobj, "tx_fail", online ? dev->tx_fail_count : 0);
+        cJSON_AddNumberToObject(bobj, "rx_overflow", online ? dev->rx_overflow_count : 0);
+        cJSON_AddItemToObject(root, key, bobj);
+    };
+    add_mcp_bus("can0", CAN_BUS_0, false);
+    add_mcp_bus("can1", CAN_BUS_1, true);
+
+    if (any_dual_can) {
+        cJSON_AddStringToObject(root, "twai_state", any_bus_off ? "bus_off" : "running");
+        cJSON_AddNumberToObject(root, "tx_error_counter", max_tec);
+        cJSON_AddNumberToObject(root, "rx_error_counter", max_rec);
+        cJSON_AddNumberToObject(root, "rx_missed_count", 0);
+        cJSON_AddNumberToObject(root, "rx_overrun_count", total_rx_ovf);
+        cJSON_AddNumberToObject(root, "bus_error_count", total_tx_fail);
+    } else
+#endif
+    {
+        twai_status_info_t twai_st;
+        if (can_engine_get_status_info(&twai_st) == ESP_OK) {
+            const char* state_str = "unknown";
+            switch (twai_st.state) {
+                case TWAI_STATE_STOPPED: state_str = "stopped"; break;
+                case TWAI_STATE_RUNNING: state_str = "running"; break;
+                case TWAI_STATE_BUS_OFF: state_str = "bus_off"; break;
+                case TWAI_STATE_RECOVERING: state_str = "recovering"; break;
+            }
+            cJSON_AddStringToObject(root, "twai_state", state_str);
+            cJSON_AddNumberToObject(root, "tx_error_counter", twai_st.tx_error_counter);
+            cJSON_AddNumberToObject(root, "rx_error_counter", twai_st.rx_error_counter);
+            cJSON_AddNumberToObject(root, "rx_missed_count", twai_st.rx_missed_count);
+            cJSON_AddNumberToObject(root, "rx_overrun_count", twai_st.rx_overrun_count);
+            cJSON_AddNumberToObject(root, "bus_error_count", twai_st.bus_error_count);
+        } else if (!any_dual_can) {
+            cJSON_AddStringToObject(root, "twai_state", "offline");
+        }
     }
 
     esp_reset_reason_t reason = esp_reset_reason();
@@ -1652,10 +1690,7 @@ static esp_err_t api_system_control_handler(httpd_req_t *req) {
     cJSON *reboot_item = cJSON_GetObjectItem(root, "reboot");
     if (should_reboot || (reboot_item && cJSON_IsTrue(reboot_item))) {
         cJSON_Delete(root);
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_sendstr(req, "{\"status\":\"ok\",\"message\":\"Rebooting...\"}");
-        xTaskCreate(restart_task, "restart_task", 2048, nullptr, 5, nullptr);
-        return ESP_OK;
+        return send_reboot_json_response(req, "{\"status\":\"ok\",\"message\":\"Rebooting...\"}");
     }
 
     cJSON_Delete(root);

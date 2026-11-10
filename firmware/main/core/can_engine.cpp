@@ -24,6 +24,7 @@
 #include "remote_climate.h"
 #include "ambient_anim.h"
 #include "vbat_sensor.h"
+#include "power_mgr.h"
 #include "freertos/semphr.h"
 #include "esp_task_wdt.h"
 
@@ -56,6 +57,20 @@ static inline SemaphoreHandle_t get_or_create_twai_mutex(void) {
 
 esp_err_t can_engine_get_status_info(twai_status_info_t* status_info) {
     if (!status_info) return ESP_ERR_INVALID_ARG;
+    if (dual_can_is_available(CAN_BUS_0)) {
+        memset(status_info, 0, sizeof(twai_status_info_t));
+        mcp2518fd_t* dev = dual_can_get_device(CAN_BUS_0);
+        uint8_t tec = 0, rec = 0;
+        bool bo = false;
+        esp_err_t ret = mcp2518fd_get_error_counts(dev, &tec, &rec, &bo);
+        if (ret != ESP_OK) return ret;
+        status_info->state = bo ? TWAI_STATE_BUS_OFF : TWAI_STATE_RUNNING;
+        status_info->tx_error_counter = tec;
+        status_info->rx_error_counter = rec;
+        status_info->rx_overrun_count = dev ? dev->rx_overflow_count : 0;
+        status_info->bus_error_count = dev ? dev->tx_fail_count : 0;
+        return ESP_OK;
+    }
     SemaphoreHandle_t mtx = get_or_create_twai_mutex();
     if (mtx) {
         if (xSemaphoreTake(mtx, pdMS_TO_TICKS(50)) != pdTRUE) {
@@ -1397,57 +1412,84 @@ void can_rx_task(void* arg) {
     static uint32_t s_last_can_frame_ms = 0;
     static bool s_can_led_idle_cleared = true;
 
+    const bool use_dual_can = dual_can_is_available(CAN_BUS_0) || dual_can_is_available(CAN_BUS_1);
+    bool prefer_bus1 = false;
+    uint32_t last_dual_can_health_ms = 0;
+
     while (true) {
         esp_task_wdt_reset();
-
-        if (g_twai_reconfig_pending.load()) {
-            twai_mode_t new_mode = g_twai_requested_mode.load();
-            ESP_LOGI(TAG, "Reconfiguring TWAI peripheral to mode %d...", (int)new_mode);
-
-            SemaphoreHandle_t mtx = get_or_create_twai_mutex();
-            if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
-
-            // Flush TX queue first to prevent uninstaller hanging on pending semaphores
-            twai_clear_transmit_queue();
-            twai_stop();
-            twai_driver_uninstall();
-
-            twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, new_mode);
-            g_config.rx_queue_len = 128;
-            g_config.tx_queue_len = 32;
-            g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_RX_QUEUE_FULL;
-            twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
-            twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-
-            esp_err_t ret = twai_driver_install(&g_config, &t_config, &f_config);
-            if (ret == ESP_OK) {
-                twai_start();
-                ESP_LOGI(TAG, "TWAI reconfigured to %s",
-                         new_mode == TWAI_MODE_LISTEN_ONLY ? "LISTEN_ONLY" : "NORMAL");
-            } else {
-                ESP_LOGE(TAG, "Failed reinstalling TWAI driver (%s)", esp_err_to_name(ret));
-            }
-
-            if (mtx) xSemaphoreGive(mtx);
-            g_twai_reconfig_pending.store(false);
+        if (power_mgr_is_restarting()) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
         }
-
-        // Drain alerts so alert buffer never fills up
-        uint32_t alerts = 0;
-        if (twai_read_alerts(&alerts, 0) == ESP_OK && alerts != 0) {
-            if (alerts & TWAI_ALERT_BUS_OFF) {
-                ESP_LOGW(TAG, "TWAI alert: BUS_OFF");
-            }
-            if (alerts & TWAI_ALERT_RX_QUEUE_FULL) {
-                ESP_LOGW(TAG, "TWAI alert: RX queue full, dropping frame");
-            }
-        }
-
-        // Auto-recover supervisor for TWAI peripheral
-        twai_status_info_t twai_status;
         uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
 
-        if (twai_get_status_info(&twai_status) == ESP_OK) {
+        if (use_dual_can) {
+            if (g_twai_reconfig_pending.load()) {
+                dual_can_set_listen_only(g_hardware_listen_only.load());
+                g_twai_reconfig_pending.store(false);
+            }
+            if ((now_ms - last_dual_can_health_ms) >= 1000) {
+                last_dual_can_health_ms = now_ms;
+                for (int b = 0; b < CAN_BUS_COUNT; b++) {
+                    can_bus_t bus = static_cast<can_bus_t>(b);
+                    if (!dual_can_is_available(bus)) continue;
+                    uint8_t tec = 0, rec = 0;
+                    bool bus_off = false;
+                    mcp2518fd_t* dev = dual_can_get_device(bus);
+                    if (dev && mcp2518fd_get_error_counts(dev, &tec, &rec, &bus_off) == ESP_OK && bus_off) {
+                        ESP_LOGW(TAG, "Dual-CAN bus %d in BUS_OFF (TEC=%u, REC=%u), recovering...", b, tec, rec);
+                        mcp2518fd_recover(dev);
+                    }
+                }
+            }
+        } else {
+            if (g_twai_reconfig_pending.load()) {
+                twai_mode_t new_mode = g_twai_requested_mode.load();
+                ESP_LOGI(TAG, "Reconfiguring TWAI peripheral to mode %d...", (int)new_mode);
+
+                SemaphoreHandle_t mtx = get_or_create_twai_mutex();
+                if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
+
+                // Flush TX queue first to prevent uninstaller hanging on pending semaphores
+                twai_clear_transmit_queue();
+                twai_stop();
+                twai_driver_uninstall();
+
+                twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, new_mode);
+                g_config.rx_queue_len = 128;
+                g_config.tx_queue_len = 32;
+                g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_RX_QUEUE_FULL;
+                twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
+                twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+
+                esp_err_t ret = twai_driver_install(&g_config, &t_config, &f_config);
+                if (ret == ESP_OK) {
+                    twai_start();
+                    ESP_LOGI(TAG, "TWAI reconfigured to %s",
+                             new_mode == TWAI_MODE_LISTEN_ONLY ? "LISTEN_ONLY" : "NORMAL");
+                } else {
+                    ESP_LOGE(TAG, "Failed reinstalling TWAI driver (%s)", esp_err_to_name(ret));
+                }
+
+                if (mtx) xSemaphoreGive(mtx);
+                g_twai_reconfig_pending.store(false);
+            }
+
+            // Drain alerts so alert buffer never fills up
+            uint32_t alerts = 0;
+            if (twai_read_alerts(&alerts, 0) == ESP_OK && alerts != 0) {
+                if (alerts & TWAI_ALERT_BUS_OFF) {
+                    ESP_LOGW(TAG, "TWAI alert: BUS_OFF");
+                }
+                if (alerts & TWAI_ALERT_RX_QUEUE_FULL) {
+                    ESP_LOGW(TAG, "TWAI alert: RX queue full, dropping frame");
+                }
+            }
+
+            // Auto-recover supervisor for TWAI peripheral
+            twai_status_info_t twai_status;
+            if (twai_get_status_info(&twai_status) == ESP_OK) {
             if (twai_status.state == TWAI_STATE_BUS_OFF) {
                 ESP_LOGW(TAG, "TWAI controller in BUS_OFF! Initiating hardware recovery...");
                 SemaphoreHandle_t mtx = get_or_create_twai_mutex();
@@ -1547,36 +1589,44 @@ void can_rx_task(void* arg) {
                 if (mtx) xSemaphoreGive(mtx);
             }
         }
+        } // end !use_dual_can
 
         bool has_frame = false;
         can_bus_t frame_bus = CAN_BUS_0;
         can_fd_frame_t rx_fd_msg = {};
 
-        // Check Dual-CAN MCP2518FD hardware if active
-        if (dual_can_is_available(CAN_BUS_0) && mcp2518fd_rx_available(dual_can_get_device(CAN_BUS_0))) {
-            if (dual_can_receive(CAN_BUS_0, &rx_fd_msg, 0) == ESP_OK) {
+        // Check Dual-CAN MCP2518FD hardware fairly (round-robin start bus so neither starves the other)
+        if (use_dual_can) {
+            can_bus_t order[2] = { prefer_bus1 ? CAN_BUS_1 : CAN_BUS_0, prefer_bus1 ? CAN_BUS_0 : CAN_BUS_1 };
+            prefer_bus1 = !prefer_bus1;
+            for (int i = 0; i < 2; i++) {
+                can_bus_t b = order[i];
+                if (dual_can_is_available(b) && dual_can_poll_receive(b, &rx_fd_msg) == ESP_OK) {
+                    has_frame = true;
+                    frame_bus = b;
+                    can_fd_to_twai(&rx_fd_msg, &rx_msg);
+                    break;
+                }
+            }
+            if (!has_frame && s_can_inject_queue && xQueueReceive(s_can_inject_queue, &rx_msg, 0) == pdTRUE) {
                 has_frame = true;
                 frame_bus = CAN_BUS_0;
-                can_fd_to_twai(&rx_fd_msg, &rx_msg);
+                can_twai_to_fd(&rx_msg, CAN_BUS_0, &rx_fd_msg);
             }
-        }
-        if (!has_frame && dual_can_is_available(CAN_BUS_1) && mcp2518fd_rx_available(dual_can_get_device(CAN_BUS_1))) {
-            if (dual_can_receive(CAN_BUS_1, &rx_fd_msg, 0) == ESP_OK) {
+            if (!has_frame) {
+                vTaskDelay(pdMS_TO_TICKS(1));
+            }
+        } else {
+            // On-chip TWAI or inject queue
+            if (twai_receive(&rx_msg, pdMS_TO_TICKS(2)) == ESP_OK) {
                 has_frame = true;
-                frame_bus = CAN_BUS_1;
-                can_fd_to_twai(&rx_fd_msg, &rx_msg);
+                frame_bus = CAN_BUS_0;
+                can_twai_to_fd(&rx_msg, CAN_BUS_0, &rx_fd_msg);
+            } else if (s_can_inject_queue && xQueueReceive(s_can_inject_queue, &rx_msg, 0) == pdTRUE) {
+                has_frame = true;
+                frame_bus = CAN_BUS_0;
+                can_twai_to_fd(&rx_msg, CAN_BUS_0, &rx_fd_msg);
             }
-        }
-
-        // Fall back to on-chip TWAI or inject queue
-        if (!has_frame && twai_receive(&rx_msg, pdMS_TO_TICKS(2)) == ESP_OK) {
-            has_frame = true;
-            frame_bus = CAN_BUS_0;
-            can_twai_to_fd(&rx_msg, CAN_BUS_0, &rx_fd_msg);
-        } else if (!has_frame && s_can_inject_queue && xQueueReceive(s_can_inject_queue, &rx_msg, 0) == pdTRUE) {
-            has_frame = true;
-            frame_bus = CAN_BUS_0;
-            can_twai_to_fd(&rx_msg, CAN_BUS_0, &rx_fd_msg);
         }
 
         if (has_frame) {
@@ -1833,6 +1883,7 @@ void can_rx_task(void* arg) {
                     static float s_last_aux_v = 0.0f;
                     if (fabs(v - s_last_aux_v) >= 0.1f) {
                         s_last_aux_v = v;
+                        vbat_sensor_set_from_can(v);
                         char vbuf[16];
                         snprintf(vbuf, sizeof(vbuf), "%.1f V", v);
                         emit_live_entity_state("cond_aux_12v_battery", vbuf);
@@ -2382,7 +2433,11 @@ void can_tx_task(void* arg) {
     ESP_LOGI(TAG, "CAN TX task running");
 
     while (true) {
-        if (xQueueReceive(tx_command_queue, &cmd, portMAX_DELAY) == pdTRUE && cmd) {
+        if (power_mgr_is_restarting()) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
+        if (xQueueReceive(tx_command_queue, &cmd, pdMS_TO_TICKS(200)) == pdTRUE && cmd) {
             if (cmd->async) {
                 if (s_active_async_tasks.load() >= MAX_CONCURRENT_ASYNC_TASKS) {
                     ESP_LOGW(TAG, "Dropping async action burst: max concurrent tasks (%d) reached", MAX_CONCURRENT_ASYNC_TASKS);

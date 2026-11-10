@@ -17,6 +17,7 @@
 #include <cmath>
 #include <cctype>
 #include <cstring>
+#include <atomic>
 
 static const char* TAG = "BLE_MGR";
 
@@ -89,6 +90,7 @@ static bool s_has_last_event = false;
 static std::vector<std::string> s_held_buttons;
 
 static bool s_ble_scanning = false;
+static std::atomic<bool> s_ble_shutting_down{false};
 static uint32_t s_ble_scan_start_ms = 0;
 static uint32_t s_ble_scan_duration_ms = 10000;
 static bool s_ble_client_connected = false;
@@ -889,7 +891,7 @@ class ScanCallbacks : public NimBLEScanCallbacks {
         s_ble_scanning = false;
         ESP_LOGI(TAG, "Active scan ended (reason: %d, count: %d)", reason, scanResults.getCount());
 
-        if (!s_ble_client_connected) {
+        if (!s_ble_client_connected && !s_ble_shutting_down.load(std::memory_order_relaxed)) {
             NimBLEScan* pScan = NimBLEDevice::getScan();
             pScan->clearResults();
             pScan->setMaxResults(0);
@@ -906,8 +908,9 @@ class ScanCallbacks : public NimBLEScanCallbacks {
 static void ble_worker_task(void* pvParameters) {
     uint32_t last_exit_check = get_time_ms();
 
-    while (true) {
+    while (!s_ble_shutting_down.load(std::memory_order_relaxed)) {
         vTaskDelay(pdMS_TO_TICKS(150));
+        if (s_ble_shutting_down.load(std::memory_order_relaxed)) break;
 
         // 1. Process deferred connect request
         std::string connect_addr = "";
@@ -963,6 +966,7 @@ static void ble_worker_task(void* pvParameters) {
             }
         }
     }
+    vTaskDelete(nullptr);
 }
 
 // ============================================================================
@@ -988,6 +992,18 @@ void ble_mgr_init(void) {
 
     xTaskCreate(ble_worker_task, "ble_worker", 4096, nullptr, 3, nullptr);
     ESP_LOGI(TAG, "Native BLE Central & Observer Subsystem initialized successfully.");
+}
+
+void ble_mgr_shutdown(void) {
+    if (s_ble_shutting_down.exchange(true)) return;
+    if (NimBLEDevice::isInitialized()) {
+        NimBLEScan* pScan = NimBLEDevice::getScan();
+        if (pScan) {
+            pScan->stop();
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
+        NimBLEDevice::deinit(false);
+    }
 }
 
 std::string ble_mgr_get_status_json(void) {
@@ -1322,6 +1338,8 @@ bool ble_mgr_is_scanning(void) {
 void ble_mgr_init(void) {
     ESP_LOGI(TAG, "Bluetooth is disabled in sdkconfig. ble_mgr inactive.");
 }
+
+void ble_mgr_shutdown(void) {}
 
 std::string ble_mgr_get_status_json(void) {
     return "{\"enabled\":false,\"scanning\":false,\"connected_device\":null,\"paired_devices\":[],\"discovered_devices\":[],\"beacon_targets\":[],\"discovered_beacons\":[]}";

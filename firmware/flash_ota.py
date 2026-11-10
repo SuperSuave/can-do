@@ -6,6 +6,7 @@ Usage: python flash_ota.py <IP> <firmware.bin>
 import sys
 import os
 import time
+import http.client
 import urllib.request
 import urllib.error
 
@@ -26,26 +27,31 @@ def flash_firmware(ip, bin_path):
         data=data,
         headers={
             "Content-Type": "application/octet-stream",
-            "Content-Length": str(len(data))
+            "Content-Length": str(len(data)),
+            "Connection": "close"
         },
         method="POST"
     )
     
     start_t = time.time()
     try:
-        with urllib.request.urlopen(req, timeout=90) as resp:
+        with urllib.request.urlopen(req, timeout=120) as resp:
             body = resp.read().decode("utf-8", errors="ignore")
             dur = time.time() - start_t
             print(f"OTA Response (in {dur:.1f}s): {resp.status} - {body}")
-            return True
+            return resp.status == 200
     except urllib.error.HTTPError as e:
         print(f"HTTP Error {e.code}: {e.read().decode('utf-8', errors='ignore')}")
         return False
-    except Exception as e:
-        # Check if the device restarted immediately after flashing
+    except (http.client.RemoteDisconnected, ConnectionResetError) as e:
+        # Device may close the socket right as it begins rebooting
         dur = time.time() - start_t
-        print(f"Connection ended after {dur:.1f}s: {e}")
+        print(f"Connection closed after {dur:.1f}s (device likely rebooting): {e}")
         return True
+    except Exception as e:
+        dur = time.time() - start_t
+        print(f"OTA failed after {dur:.1f}s: {e}")
+        return False
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
@@ -53,5 +59,5 @@ if __name__ == "__main__":
         sys.exit(1)
     ip = sys.argv[1]
     bin_path = sys.argv[2]
-    flash_firmware(ip, bin_path)
+    sys.exit(0 if flash_firmware(ip, bin_path) else 1)
 

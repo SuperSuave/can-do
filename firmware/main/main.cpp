@@ -28,7 +28,6 @@
 #include "vbat_sensor.h"
 #include "uds_engine.h"
 #include "power_mgr.h"
-#include "uart_bridge.h"
 #include "timezone_mgr.h"
 #include "remote_climate.h"
 #include "ambient_anim.h"
@@ -156,7 +155,6 @@ extern "C" void app_main(void) {
     // 0. Initialize WiCAN board hardware (CAN Transceiver STB pin and LEDs)
     board_hardware_init();
     vbat_sensor_init();
-    uart_bridge_init();
 
     // 1. Core Networking Subsystems (MUST be initialized before any sockets or wifi)
     ESP_ERROR_CHECK(esp_netif_init());
@@ -190,32 +188,25 @@ extern "C" void app_main(void) {
     // 6. Start GVRET TCP Port 23 Server (SavvyCAN / SavvyLens)
     gvret_server_init(23);
 
-    // 7. Init TWAI (CAN)
-    ESP_ERROR_CHECK(init_twai());
-
-    // 8. Init Cluster Track Selection Popup, Preconditioning & Remote Climate Subsystems
+    // 7. Init Subsystems, Command Queues & Load Automations BEFORE opening CAN RX FIFOs
     beep_init();
     precondition_init();
     remote_climate_init();
     ambient_anim_init();
     ble_mgr_init();
 
-    // 9. Command Queues and Tasks
     init_can_engine();
+    load_automations_from_fs("/spiffs/automations.json");
     uds_engine_init();
     power_mgr_init();
     usb_can_init();
+
+    // 8. Init TWAI / Dual-CAN Hardware and launch RX/TX tasks immediately to prevent boot RX overflow
+    ESP_ERROR_CHECK(init_twai());
     xTaskCreate(can_rx_task, "CAN_RX", 8192, nullptr, 5, nullptr);
     xTaskCreate(can_tx_task, "CAN_TX", 4096, nullptr, 4, nullptr);
     xTaskCreate(time_scheduler_task, "TIME_SCHED", 4096, nullptr, 3, nullptr);
 
-    // 10. Start automations in dedicated background task (CAN coprocessor mode)
-    xTaskCreate([](void*) {
-        ESP_LOGI(TAG, "Background startup task starting (CAN coprocessor mode)...");
-        load_automations_from_fs("/spiffs/automations.json");
-        ESP_LOGI(TAG, "CAN coprocessor startup complete. Free heap: %lu bytes", (unsigned long)esp_get_free_heap_size());
-        vTaskDelete(NULL);
-    }, "BG_INIT", 4096, nullptr, 1, nullptr);
-
-    ESP_LOGI(TAG, "Hardware & Network Initialization complete. Ready.");
+    ESP_LOGI(TAG, "Hardware & Network Initialization complete. Free heap: %lu bytes",
+             (unsigned long)esp_get_free_heap_size());
 }

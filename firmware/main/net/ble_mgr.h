@@ -10,6 +10,7 @@ extern "C" {
 #endif
 
 void ble_mgr_init(void);
+void ble_mgr_shutdown(void);
 
 #ifdef __cplusplus
 }

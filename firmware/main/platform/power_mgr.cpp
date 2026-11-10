@@ -4,15 +4,22 @@
 #include "vbat_sensor.h"
 #include "network_mgr.h"
 #include "api.h"
+#include "mcp2518fd.h"
+#include "ble_mgr.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_sleep.h"
+#include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <atomic>
+#include <cstdio>
 
 static const char* TAG = "POWER_MGR";
 static power_tier_t s_current_tier = POWER_TIER_ACTIVE;
+static std::atomic<bool> s_restart_scheduled{false};
+static std::atomic<bool> s_restarting{false};
 
 void power_mgr_set_tier(power_tier_t tier) {
     if (s_current_tier == tier) return;
@@ -43,8 +50,10 @@ void power_mgr_enter_deep_sleep(uint32_t sleep_duration_sec) {
     ESP_LOGI(TAG, "Entering Tier 3 Emergency Deep Sleep (<1mA). Wake sources: CAN RX (GPIO %d) + %lu s timer",
              (int)CAN_RX_PIN, (unsigned long)sleep_duration_sec);
 
-    // 1. Ensure CAN transceiver STB is LOW (0 = enabled) so dominant CAN pulses pull CAN_RX LOW
-    gpio_set_level(CAN_STB_PIN, 0);
+    // 1. Ensure CAN transceiver STB is LOW (0 = enabled) if wired
+    if (CAN_STB_PIN >= 0) {
+        gpio_set_level(CAN_STB_PIN, 0);
+    }
 
     // 2. Configure native ESP32-C3 Deep Sleep GPIO wakeup on CAN RX falling edge (dominant bus state)
     gpio_wakeup_enable((gpio_num_t)CAN_RX_PIN, GPIO_INTR_LOW_LEVEL);
@@ -102,4 +111,51 @@ static void power_mgr_task(void* arg) {
 void power_mgr_init(void) {
     xTaskCreate(power_mgr_task, "PWR_MGR", 4096, nullptr, 1, nullptr);
     ESP_LOGI(TAG, "Multi-Tier Smart Power Manager initialized");
+}
+
+bool power_mgr_is_restarting(void) {
+    return s_restarting.load(std::memory_order_relaxed);
+}
+
+static void restart_worker_task(void* arg) {
+    uint32_t delay_ms = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(arg));
+    if (delay_ms > 0) {
+        vTaskDelay(pdMS_TO_TICKS(delay_ms));
+    }
+
+    s_restarting.store(true, std::memory_order_relaxed);
+    // Allow CAN_RX / CAN_TX tasks to observe restart flag and release SPI mutexes cleanly
+    vTaskDelay(pdMS_TO_TICKS(60));
+
+    ble_mgr_shutdown();
+    dual_can_shutdown();
+
+    ESP_LOGI(TAG, "Restarting ESP32 cleanly...");
+    fflush(stdout);
+    vTaskDelay(pdMS_TO_TICKS(40));
+
+    esp_restart();
+    vTaskDelete(nullptr);
+}
+
+void power_mgr_schedule_restart(uint32_t delay_ms) {
+    if (s_restart_scheduled.exchange(true)) return;
+    BaseType_t ok = xTaskCreatePinnedToCore(
+        restart_worker_task,
+        "SYS_RESTART",
+        4096,
+        reinterpret_cast<void*>(static_cast<uintptr_t>(delay_ms)),
+        6,
+        nullptr,
+        0
+    );
+    if (ok != pdPASS) {
+        s_restarting.store(true, std::memory_order_relaxed);
+        if (delay_ms > 0) {
+            vTaskDelay(pdMS_TO_TICKS(delay_ms));
+        }
+        dual_can_shutdown();
+        fflush(stdout);
+        esp_restart();
+    }
 }

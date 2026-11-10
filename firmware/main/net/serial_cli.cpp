@@ -3,6 +3,7 @@
 #include "can_engine.h"
 #include "ble_mgr.h"
 #include "mcp2518fd.h"
+#include "power_mgr.h"
 #include "cJSON.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
@@ -133,9 +134,8 @@ void serial_cli_process_line(const char* raw_line, size_t len) {
     if (cmd == "help" || cmd == "?") {
         print_banner();
     } else if (cmd == "reboot" || cmd == "restart") {
-        printf("[SYS] Rebooting ESP32-S3 now...\r\n");
-        vTaskDelay(pdMS_TO_TICKS(150));
-        esp_restart();
+        printf("[SYS] Rebooting ESP32 cleanly...\r\n");
+        power_mgr_schedule_restart(150);
     } else if (cmd == "status") {
         int64_t uptime_sec = esp_timer_get_time() / 1000000;
         uint32_t free_heap = esp_get_free_heap_size();

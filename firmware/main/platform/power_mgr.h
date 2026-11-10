@@ -17,6 +17,8 @@ void power_mgr_init(void);
 void power_mgr_set_tier(power_tier_t tier);
 power_tier_t power_mgr_get_tier(void);
 void power_mgr_enter_deep_sleep(uint32_t sleep_duration_sec);
+void power_mgr_schedule_restart(uint32_t delay_ms);
+bool power_mgr_is_restarting(void);
 
 #ifdef __cplusplus
 }
