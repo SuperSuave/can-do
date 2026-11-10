@@ -304,24 +304,24 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
 
   return (
     <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
-      <ModalBackdrop variant="blur" className="bg-black/80 backdrop-blur-sm">
+      <ModalBackdrop variant="blur" className="bg-backdrop backdrop-blur-sm">
         <ModalContainer placement="center" scroll="inside" className="p-3 sm:p-6">
-          <ModalDialog className="relative w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 shadow-2xl overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+          <ModalDialog className="relative w-full max-w-2xl rounded-2xl border border-border bg-overlay text-overlay-foreground shadow-overlay overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
             {/* Header */}
-            <ModalHeader className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800 bg-slate-950/60 shrink-0 gap-0">
+            <ModalHeader className="flex items-center justify-between p-4 sm:p-5 border-b border-separator bg-surface shrink-0 gap-0">
               <div>
-                <ModalHeading className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                  <Upload className="w-5 h-5 text-cyan-400" />
+                <ModalHeading className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
+                  <Upload className="w-5 h-5 text-accent" />
                   Import Automations
                 </ModalHeading>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Upload an <code className="text-cyan-300">automations.json</code> file or paste a single rule snippet.
+                <p className="text-xs text-muted mt-0.5">
+                  Upload an <code className="text-accent">automations.json</code> file or paste a single rule snippet.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={onClose}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+                className="p-1.5 text-muted hover:text-foreground rounded-lg hover:bg-default-hover transition"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -338,16 +338,16 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
             onDrop={handleDrop}
             className={`border-2 border-dashed rounded-xl p-5 text-center transition-all ${
               dragOver
-                ? 'border-cyan-400 bg-cyan-950/30'
-                : 'border-slate-700 hover:border-slate-600 bg-slate-950/40'
+                ? 'border-accent bg-accent-soft'
+                : 'border-border hover:border-border-secondary bg-surface-secondary'
             }`}
           >
-            <FileJson className="w-8 h-8 mx-auto text-cyan-400 mb-2 opacity-80" />
-            <p className="text-sm font-semibold text-slate-200">
-              Drag & drop your <span className="text-cyan-400 font-mono">automations.json</span> file here
+            <FileJson className="w-8 h-8 mx-auto text-accent mb-2 opacity-80" />
+            <p className="text-sm font-semibold text-foreground">
+              Drag & drop your <span className="text-accent font-mono">automations.json</span> file here
             </p>
-            <p className="text-xs text-slate-500 mt-1 mb-3">or browse from your device</p>
-            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 cursor-pointer transition">
+            <p className="text-xs text-muted mt-1 mb-3">or browse from your device</p>
+            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-surface-tertiary hover:bg-default-hover text-accent border border-border cursor-pointer transition">
               <Upload className="w-3.5 h-3.5" />
               <span>Select .json file</span>
               <input
@@ -361,9 +361,9 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
 
           {/* Paste JSON Snippet Textarea */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs text-slate-400">
+            <div className="flex items-center justify-between text-xs text-muted">
               <label htmlFor="import-textarea" className="font-semibold flex items-center gap-1.5">
-                <ClipboardPaste className="w-3.5 h-3.5 text-cyan-400" />
+                <ClipboardPaste className="w-3.5 h-3.5 text-accent" />
                 Or Paste JSON Snippet (Full File or Single Automation):
               </label>
               {jsonText && (
@@ -374,7 +374,7 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
                     setParsedRules(null);
                     setError(null);
                   }}
-                  className="text-[11px] text-slate-500 hover:text-slate-300 underline"
+                  className="text-[11px] text-muted hover:text-foreground underline"
                 >
                   Clear
                 </button>
@@ -389,36 +389,36 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
                 handleProcessRaw(e.target.value);
               }}
               placeholder='{\n  "name": "Auto Walkaway Lock",\n  "exec_mode": "one_shot",\n  "triggers": [...],\n  "actions": [...]\n}'
-              className="w-full p-3 font-mono text-xs rounded-xl bg-slate-950 border border-slate-800 text-cyan-300 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-cyan-500 resize-y"
+              className="w-full p-3 font-mono text-xs rounded-xl bg-surface-secondary border border-border text-accent placeholder:text-muted/60 focus:outline-none focus:border-focus resize-y"
               spellCheck={false}
             />
           </div>
 
           {/* Error Message */}
           {error && (
-            <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs flex items-start gap-2.5 animate-in fade-in">
-              <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+            <div className="p-3 rounded-xl bg-danger-soft border border-danger/40 text-danger-soft-foreground text-xs flex items-start gap-2.5 animate-in fade-in">
+              <AlertTriangle className="w-4 h-4 text-danger flex-shrink-0 mt-0.5" />
               <div className="space-y-0.5">
                 <span className="font-bold">Parsing Error</span>
-                <p className="text-rose-200/90">{error}</p>
+                <p className="opacity-90">{error}</p>
               </div>
             </div>
           )}
 
           {/* Success / Parsed Summary Preview */}
           {parsedRules && parsedRules.length > 0 && !error && (
-            <div className="p-3.5 rounded-xl bg-slate-950/80 border border-cyan-500/40 space-y-2.5 animate-in fade-in">
+            <div className="p-3.5 rounded-xl bg-surface-secondary border border-accent/40 space-y-2.5 animate-in fade-in">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span className="text-xs font-bold text-white">
+                  <CheckCircle2 className="w-4 h-4 text-success" />
+                  <span className="text-xs font-bold text-foreground">
                     {parsedRules.length === 1
                       ? '1 Automation Detected'
                       : `${parsedRules.length} Automations Detected`}
                   </span>
                 </div>
                 {parsedSettings?.vehicle_model && (
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-surface-tertiary text-foreground border border-border">
                     Vehicle: {parsedSettings.vehicle_model}
                   </span>
                 )}
@@ -429,15 +429,15 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
                 {parsedRules.map((rule, idx) => (
                   <div
                     key={rule.id || idx}
-                    className="flex items-center justify-between p-2 rounded-lg bg-slate-900/90 border border-slate-800 text-xs"
+                    className="flex items-center justify-between p-2 rounded-lg bg-surface-tertiary border border-border text-xs"
                   >
                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 flex-shrink-0" />
-                      <span className="font-semibold text-slate-200 truncate">
+                      <span className="w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0" />
+                      <span className="font-semibold text-foreground truncate">
                         {rule.name || `Rule #${idx + 1}`}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 text-[10px] text-slate-400 flex-shrink-0 font-mono">
+                    <div className="flex items-center gap-2 text-[10px] text-muted flex-shrink-0 font-mono">
                       <span>{rule.triggers?.length || 0} trig</span>
                       <span>·</span>
                       <span>{rule.conditions?.length || 0} cond</span>
@@ -452,11 +452,11 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
         </ModalBody>
 
         {/* Footer Actions */}
-        <ModalFooter className="p-4 sm:p-5 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between gap-2 flex-wrap shrink-0">
+        <ModalFooter className="p-4 sm:p-5 border-t border-separator bg-surface flex items-center justify-between gap-2 flex-wrap shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-surface-secondary hover:bg-default-hover text-foreground border border-border transition"
           >
             Cancel
           </button>
@@ -469,7 +469,7 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setConfirmReplace(true)}
-                    className="px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 border border-rose-900/60 transition"
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold text-danger hover:bg-danger-soft border border-danger/40 transition"
                     title="Replace all existing automations"
                   >
                     Replace All
@@ -478,7 +478,7 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
                   <button
                     type="button"
                     onClick={() => handleApply('replace')}
-                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition animate-pulse shadow-md"
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-danger hover:bg-danger-hover text-danger-foreground transition animate-pulse shadow-md"
                   >
                     Confirm Replace ({existingRules.length} will be wiped)
                   </button>
@@ -487,7 +487,7 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
                 <button
                   type="button"
                   onClick={() => handleApply('merge')}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition shadow-lg shadow-cyan-950/50"
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold bg-accent hover:bg-accent-hover text-accent-foreground transition shadow-md"
                 >
                   <span>Merge ({parsedRules.length} Rules)</span>
                   <ArrowRight className="w-3.5 h-3.5" />

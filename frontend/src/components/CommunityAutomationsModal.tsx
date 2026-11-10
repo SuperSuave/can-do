@@ -177,25 +177,25 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
 
   return (
     <Modal isOpen={true} onOpenChange={open => { if (!open) onClose(); }}>
-      <ModalBackdrop variant="blur" className="bg-slate-950/80 backdrop-blur-md">
+      <ModalBackdrop variant="blur" className="bg-backdrop backdrop-blur-md">
         <ModalContainer placement="center" scroll="inside" className="p-3 sm:p-4">
-          <ModalDialog className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] p-0">
+          <ModalDialog className="w-full max-w-4xl bg-overlay text-overlay-foreground border border-border rounded-2xl shadow-overlay overflow-hidden flex flex-col max-h-[90vh] p-0">
             {/* Header Strip */}
-            <ModalHeader className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between gap-3 bg-slate-900/90 shrink-0">
+            <ModalHeader className="p-4 sm:p-5 border-b border-separator flex items-center justify-between gap-3 bg-surface shrink-0">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-emerald-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/30 shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-accent-soft text-accent flex items-center justify-center border border-accent/30 shrink-0">
                   <Sparkles className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <ModalHeading className="text-base sm:text-lg font-bold text-white truncate">
+                    <ModalHeading className="text-base sm:text-lg font-bold text-foreground truncate">
                       Community Automations
                     </ModalHeading>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-accent-soft text-accent-soft-foreground border border-accent/30">
                       {communityList.length} Verified
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 truncate">
+                  <p className="text-xs text-muted truncate">
                     Discover, 1-click install, and share vehicle automations crafted by the CAN Do community.
                   </p>
                 </div>
@@ -206,14 +206,14 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
             isIconOnly
             onPress={onClose}
             aria-label="Close modal"
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition shrink-0"
+            className="p-1.5 text-muted hover:text-foreground rounded-lg hover:bg-default-hover transition shrink-0"
           >
             <X className="w-5 h-5" />
           </Button>
         </ModalHeader>
 
         {/* Tab Navigation */}
-        <div className="px-4 sm:px-5 border-b border-slate-800 bg-slate-950/50 text-xs font-semibold shrink-0">
+        <div className="px-4 sm:px-5 border-b border-separator bg-surface text-xs font-semibold shrink-0">
           <Tabs
             selectedKey={activeTab}
             onSelectionChange={key => setActiveTab(key as 'browse' | 'share')}
@@ -225,29 +225,29 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                   id="browse"
                   className={`relative py-3 px-3 transition flex items-center gap-1.5 cursor-pointer ${
                     activeTab === 'browse'
-                      ? 'text-cyan-300'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'text-accent'
+                      : 'text-muted hover:text-foreground'
                   }`}
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>Browse Library</span>
-                  <Badge size="sm" variant="secondary" className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300">
+                  <Badge size="sm" variant="secondary" className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-surface-secondary text-foreground border border-border">
                     {filteredList.length}
                   </Badge>
-                  <Tabs.Indicator className="h-0.5 bg-cyan-400 bottom-0 rounded-full" />
+                  <Tabs.Indicator className="h-0.5 bg-accent bottom-0 rounded-full" />
                 </Tabs.Tab>
 
                 <Tabs.Tab
                   id="share"
                   className={`relative py-3 px-3 transition flex items-center gap-1.5 cursor-pointer ${
                     activeTab === 'share'
-                      ? 'text-cyan-300'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'text-accent'
+                      : 'text-muted hover:text-foreground'
                   }`}
                 >
                   <Share2 className="w-3.5 h-3.5" />
                   <span>Share Your Automation</span>
-                  <Tabs.Indicator className="h-0.5 bg-cyan-400 bottom-0 rounded-full" />
+                  <Tabs.Indicator className="h-0.5 bg-accent bottom-0 rounded-full" />
                 </Tabs.Tab>
               </Tabs.List>
             </Tabs.ListContainer>
@@ -267,15 +267,15 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                   aria-label="Search automations"
                   className="flex-1"
                 >
-                  <SearchField.Group className="relative w-full flex items-center rounded-xl bg-slate-950 border border-slate-800 focus-within:border-cyan-500/50 focus-within:ring-1 focus-within:ring-cyan-500/50 px-3 py-1.5 text-xs transition">
-                    <SearchField.SearchIcon className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
+                  <SearchField.Group className="relative w-full flex items-center rounded-xl bg-surface-secondary border border-border focus-within:border-focus focus-within:ring-1 focus-within:ring-focus/40 px-3 py-1.5 text-xs transition">
+                    <SearchField.SearchIcon className="w-4 h-4 text-muted mr-2 shrink-0" />
                     <SearchField.Input
                       placeholder="Search automations by button, feature, tag, or author..."
-                      className="w-full bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none"
+                      className="w-full bg-transparent text-xs text-foreground placeholder:text-field-placeholder focus:outline-none"
                     />
                     {searchQuery && (
                       <SearchField.ClearButton
-                        className="text-slate-500 hover:text-slate-300 shrink-0 p-1 rounded-md hover:bg-slate-800 transition cursor-pointer"
+                        className="text-muted hover:text-foreground shrink-0 p-1 rounded-md hover:bg-default-hover transition cursor-pointer"
                         aria-label="Clear search"
                       />
                     )}
@@ -289,8 +289,8 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                     onClick={() => setSelectedCategory('all')}
                     className={`px-2.5 py-1.5 rounded-lg font-medium transition ${
                       selectedCategory === 'all'
-                        ? 'bg-cyan-500 text-slate-950 font-bold'
-                        : 'bg-slate-800/80 text-slate-400 hover:text-slate-200'
+                        ? 'bg-accent text-accent-foreground font-bold'
+                        : 'bg-surface-secondary text-muted hover:text-foreground border border-border'
                     }`}
                   >
                     All
@@ -302,8 +302,8 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                       onClick={() => setSelectedCategory(cat)}
                       className={`px-2.5 py-1.5 rounded-lg font-medium transition whitespace-nowrap ${
                         selectedCategory === cat
-                          ? 'bg-cyan-500 text-slate-950 font-bold'
-                          : 'bg-slate-800/80 text-slate-400 hover:text-slate-200'
+                          ? 'bg-accent text-accent-foreground font-bold'
+                          : 'bg-surface-secondary text-muted hover:text-foreground border border-border'
                       }`}
                     >
                       {cat}
@@ -314,10 +314,10 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
 
               {/* Automation Cards Grid */}
               {filteredList.length === 0 ? (
-                <div className="p-8 text-center rounded-2xl bg-slate-950/40 border border-dashed border-slate-800 space-y-2">
-                  <Sparkles className="w-8 h-8 text-slate-600 mx-auto" />
-                  <div className="text-sm font-semibold text-slate-300">No automations match your search</div>
-                  <p className="text-xs text-slate-500">
+                <div className="p-8 text-center rounded-2xl bg-surface-secondary border border-dashed border-border space-y-2">
+                  <Sparkles className="w-8 h-8 text-muted mx-auto" />
+                  <div className="text-sm font-semibold text-foreground">No automations match your search</div>
+                  <p className="text-xs text-muted">
                     Try adjusting your filters or search keywords, or import a community JSON snippet.
                   </p>
                 </div>
@@ -332,19 +332,19 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                         key={item.id}
                         className={`p-4 rounded-xl border flex flex-col justify-between transition-all duration-200 ${
                           isJustInstalled
-                            ? 'bg-emerald-950/30 border-emerald-500/50 shadow-lg shadow-emerald-900/20'
-                            : 'bg-slate-950/60 hover:bg-slate-950/90 border-slate-800/80 hover:border-slate-700'
+                            ? 'bg-success-soft border-success/50 shadow-md'
+                            : 'bg-surface-secondary hover:bg-surface-tertiary border-border hover:border-border-secondary'
                         }`}
                       >
                         <div className="space-y-2.5">
                           {/* Top Badges */}
                           <div className="flex items-center justify-between gap-2">
-                            <Badge size="sm" color="accent" variant="soft" className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-cyan-400 border border-slate-700/60">
+                            <Badge size="sm" color="accent" variant="soft" className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-accent-soft text-accent-soft-foreground border border-accent/30">
                               {item.category || 'General'}
                             </Badge>
                             {item.contributor && (
-                              <Badge size="sm" variant="secondary" className="flex items-center gap-1 text-[11px] text-slate-400 font-medium">
-                                <Github className="w-3 h-3 text-slate-500 mr-1" />
+                              <Badge size="sm" variant="secondary" className="flex items-center gap-1 text-[11px] text-muted font-medium bg-surface-tertiary border border-border">
+                                <Github className="w-3 h-3 text-muted mr-1" />
                                 <span>{item.contributor.name || 'Community'}</span>
                               </Badge>
                             )}
@@ -352,36 +352,36 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
 
                           {/* Title & Description */}
                           <div>
-                            <h3 className="text-sm font-bold text-white group-hover:text-cyan-300 transition">
+                            <h3 className="text-sm font-bold text-foreground transition">
                               {item.name}
                             </h3>
-                            <p className="text-xs text-slate-400 line-clamp-2 mt-1 leading-relaxed">
+                            <p className="text-xs text-muted line-clamp-2 mt-1 leading-relaxed">
                               {item.description}
                             </p>
                           </div>
 
                           {/* Summary Chips */}
-                          <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] font-mono text-slate-400 border-t border-slate-800/60">
-                            <Chip size="sm" color="warning" variant="soft" className="flex items-center gap-1 text-amber-300">
-                              <Zap className="w-3 h-3 text-amber-400 mr-1" />
+                          <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] font-mono text-muted border-t border-separator">
+                            <Chip size="sm" color="warning" variant="soft" className="flex items-center gap-1 bg-warning-soft text-warning-soft-foreground border border-warning/30">
+                              <Zap className="w-3 h-3 text-warning mr-1" />
                               {item.triggers.length} {item.triggers.length === 1 ? 'Trigger' : 'Triggers'}
                             </Chip>
                             {item.conditions && item.conditions.length > 0 && (
-                              <Chip size="sm" color="accent" variant="soft" className="flex items-center gap-1 text-cyan-300">
-                                <Shield className="w-3 h-3 text-cyan-400 mr-1" />
+                              <Chip size="sm" color="accent" variant="soft" className="flex items-center gap-1 bg-accent-soft text-accent-soft-foreground border border-accent/30">
+                                <Shield className="w-3 h-3 text-accent mr-1" />
                                 {item.conditions.length} {item.conditions.length === 1 ? 'Cond' : 'Conds'}
                               </Chip>
                             )}
-                            <Chip size="sm" color="success" variant="soft" className="flex items-center gap-1 text-emerald-300">
-                              <Send className="w-3 h-3 text-emerald-400 mr-1" />
+                            <Chip size="sm" color="success" variant="soft" className="flex items-center gap-1 bg-success-soft text-success-soft-foreground border border-success/30">
+                              <Send className="w-3 h-3 text-success mr-1" />
                               {item.actions.length} {item.actions.length === 1 ? 'Action' : 'Actions'}
                             </Chip>
                           </div>
                         </div>
 
                         {/* Action Bar */}
-                        <div className="pt-3 mt-2 flex items-center justify-between gap-2 border-t border-slate-900">
-                          <Chip size="sm" variant="secondary" className="flex items-center gap-1 text-[10px] text-slate-500 font-mono">
+                        <div className="pt-3 mt-2 flex items-center justify-between gap-2 border-t border-separator">
+                          <Chip size="sm" variant="secondary" className="flex items-center gap-1 text-[10px] text-muted font-mono bg-surface-tertiary border border-border">
                             <Car className="w-3 h-3 mr-1" />
                             <span>{(item.tags || ['all_egmp']).join(', ')}</span>
                           </Chip>
@@ -392,10 +392,10 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                             onPress={() => handleInstall(item)}
                             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95 ${
                               isJustInstalled
-                                ? 'bg-emerald-500 text-slate-950 font-black'
+                                ? 'bg-success text-success-foreground font-black'
                                 : isInstalled
-                                ? 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
-                                : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950'
+                                ? 'bg-surface-tertiary text-foreground hover:bg-default-hover border border-border'
+                                : 'bg-accent hover:bg-accent-hover text-accent-foreground'
                             }`}
                           >
                             {isJustInstalled ? (
@@ -405,7 +405,7 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                               </>
                             ) : isInstalled ? (
                               <>
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                <Check className="w-3.5 h-3.5 text-success" />
                                 <span>Add Another Copy</span>
                               </>
                             ) : (
@@ -427,25 +427,25 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
           {/* TAB 2: SHARE */}
           {activeTab === 'share' && (
             <div className="space-y-4 max-w-2xl mx-auto">
-              <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2 text-xs">
-                <div className="flex items-center gap-2 font-bold text-white">
-                  <Share2 className="w-4 h-4 text-cyan-400" />
+              <div className="p-4 rounded-xl bg-surface-secondary border border-border space-y-2 text-xs">
+                <div className="flex items-center gap-2 font-bold text-foreground">
+                  <Share2 className="w-4 h-4 text-accent" />
                   <span>Share Your Automation with the Community</span>
                 </div>
-                <p className="text-slate-400 leading-relaxed">
+                <p className="text-muted leading-relaxed">
                   Export your rule formatted for community sharing. You can submit it to the CAN Do GitHub repository to be included in the official catalog for all drivers!
                 </p>
               </div>
 
               {/* Rule Selector */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                <label className="text-xs font-bold uppercase tracking-wider text-muted block">
                   Select Automation to Share
                 </label>
                 <select
                   value={selectedShareRuleId}
                   onChange={e => setSelectedShareRuleId(e.target.value)}
-                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+                  className="w-full p-2.5 bg-surface-secondary border border-border rounded-xl text-xs text-foreground focus:outline-none focus:border-focus"
                 >
                   {currentRules.map(r => (
                     <option key={r.id} value={r.id}>
@@ -458,7 +458,7 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
               {/* Contributor Inputs */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-400 block">
+                  <label className="text-[11px] font-semibold text-muted block">
                     Your Name / Handle
                   </label>
                   <input
@@ -466,11 +466,11 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                     value={contributorName}
                     onChange={e => setContributorName(e.target.value)}
                     placeholder="e.g. SuperSuave"
-                    className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+                    className="w-full p-2 bg-surface-secondary border border-border rounded-lg text-xs text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-400 block">
+                  <label className="text-[11px] font-semibold text-muted block">
                     GitHub Username (Optional)
                   </label>
                   <input
@@ -478,7 +478,7 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                     value={contributorGithub}
                     onChange={e => setContributorGithub(e.target.value)}
                     placeholder="e.g. SuperSuave"
-                    className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+                    className="w-full p-2 bg-surface-secondary border border-border rounded-lg text-xs text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                   />
                 </div>
               </div>
@@ -486,18 +486,18 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
               {/* JSON Preview */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted block">
                     Shareable Recipe JSON
                   </label>
                   <Button
                     variant="ghost"
                     size="sm"
                     onPress={handleCopyShareJson}
-                    className="text-[11px] text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1 h-auto p-1"
+                    className="text-[11px] text-accent hover:opacity-80 font-semibold flex items-center gap-1 h-auto p-1"
                   >
                     {shareCopied ? (
                       <>
-                        <Check className="w-3 h-3 text-emerald-400" />
+                        <Check className="w-3 h-3 text-success" />
                         <span>Copied!</span>
                       </>
                     ) : (
@@ -512,7 +512,7 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                   readOnly
                   rows={8}
                   value={sharePayload}
-                  className="w-full p-3 font-mono text-xs bg-slate-950 border border-slate-800 rounded-xl text-cyan-300 focus:outline-none select-all"
+                  className="w-full p-3 font-mono text-xs bg-surface-secondary border border-border rounded-xl text-accent focus:outline-none select-all"
                 />
               </div>
 
@@ -522,7 +522,7 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                   variant="secondary"
                   size="sm"
                   onPress={handleCopyShareJson}
-                  className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white transition flex items-center justify-center gap-1.5 border border-slate-700"
+                  className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-bold bg-surface-secondary hover:bg-default-hover text-foreground transition flex items-center justify-center gap-1.5 border border-border"
                 >
                   <Copy className="w-3.5 h-3.5" />
                   <span>{shareCopied ? 'Copied to Clipboard!' : 'Copy Recipe Snippet'}</span>
@@ -532,7 +532,7 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                   variant="primary"
                   size="sm"
                   onPress={handleOpenGithubIssue}
-                  className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition flex items-center justify-center gap-1.5 shadow-sm"
+                  className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-bold bg-accent hover:bg-accent-hover text-accent-foreground transition flex items-center justify-center gap-1.5 shadow-sm"
                 >
                   <Github className="w-3.5 h-3.5" />
                   <span>Submit to GitHub Catalog</span>

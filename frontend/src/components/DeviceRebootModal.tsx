@@ -218,18 +218,18 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
 
   return (
     <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
-      <ModalBackdrop variant="blur" className="bg-slate-950/85 backdrop-blur-md">
+      <ModalBackdrop variant="blur" className="bg-backdrop backdrop-blur-md">
         <ModalContainer placement="center" className="p-4">
-          <ModalDialog className="relative w-full max-w-md p-6 sm:p-7 rounded-2xl bg-slate-900 border border-cyan-500/30 shadow-2xl shadow-cyan-950/60 text-center space-y-5 overflow-hidden">
+          <ModalDialog className="relative w-full max-w-md p-6 sm:p-7 rounded-2xl bg-overlay text-overlay-foreground border border-accent/30 shadow-overlay text-center space-y-5 overflow-hidden">
         {/* Subtle decorative glowing background blur */}
         <div
           className={`absolute -top-16 -left-16 w-44 h-44 rounded-full blur-3xl pointer-events-none transition-colors duration-700 ${
-            isReconnected ? 'bg-emerald-500/20' : 'bg-cyan-500/15'
+            isReconnected ? 'bg-success/20' : 'bg-accent/15'
           }`}
         />
         <div
           className={`absolute -bottom-16 -right-16 w-44 h-44 rounded-full blur-3xl pointer-events-none transition-colors duration-700 ${
-            isReconnected ? 'bg-teal-500/20' : 'bg-blue-500/15'
+            isReconnected ? 'bg-success/15' : 'bg-accent/10'
           }`}
         />
 
@@ -238,7 +238,7 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            className="absolute top-4 right-4 p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-default-hover transition"
             title="Dismiss popup"
           >
             <X className="w-4 h-4" />
@@ -249,19 +249,19 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
         <div className="relative flex items-center justify-center pt-2">
           {isReconnected ? (
             <div className="relative">
-              <div className="w-20 h-20 rounded-2xl bg-emerald-950/60 border border-emerald-500/60 flex items-center justify-center shadow-lg shadow-emerald-950/60 animate-bounce-short">
-                <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+              <div className="w-20 h-20 rounded-2xl bg-success-soft border border-success/60 flex items-center justify-center shadow-lg animate-bounce-short">
+                <CheckCircle2 className="w-10 h-10 text-success" />
               </div>
-              <div className="absolute -inset-1 rounded-2xl bg-emerald-400/20 blur-sm -z-10 animate-pulse" />
+              <div className="absolute -inset-1 rounded-2xl bg-success/20 blur-sm -z-10 animate-pulse" />
             </div>
           ) : (
             <div className="relative">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-cyan-950/80 to-blue-950/80 border border-cyan-500/50 flex items-center justify-center shadow-lg shadow-cyan-950/60">
-                <RefreshCw className="w-9 h-9 text-cyan-400 animate-spin" />
+              <div className="w-20 h-20 rounded-2xl bg-accent-soft border border-accent/50 flex items-center justify-center shadow-lg">
+                <RefreshCw className="w-9 h-9 text-accent animate-spin" />
               </div>
               {/* Expanding pulse rings */}
-              <div className="absolute -inset-2 rounded-2xl border border-cyan-400/30 animate-ping pointer-events-none" />
-              <div className="absolute -inset-4 rounded-3xl border border-cyan-500/10 pointer-events-none" />
+              <div className="absolute -inset-2 rounded-2xl border border-accent/30 animate-ping pointer-events-none" />
+              <div className="absolute -inset-4 rounded-3xl border border-accent/15 pointer-events-none" />
             </div>
           )}
         </div>
@@ -272,21 +272,21 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
             <span
               className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider border ${
                 isReconnected
-                  ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
-                  : 'bg-cyan-950 text-cyan-300 border-cyan-800 animate-pulse'
+                  ? 'bg-success-soft text-success-soft-foreground border-success/40'
+                  : 'bg-accent-soft text-accent-soft-foreground border-accent/40 animate-pulse'
               }`}
             >
               {isReconnected ? 'System Online' : 'Device Rebooting'}
             </span>
           </div>
 
-          <h3 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+          <h3 className="text-lg sm:text-xl font-bold text-foreground tracking-tight">
             {isReconnected
               ? 'Hardware Back Online!'
               : (customTitle || 'Restarting CAN Do Hardware...')}
           </h3>
 
-          <p className="text-xs text-slate-300 leading-relaxed max-w-sm mx-auto">
+          <p className="text-xs text-muted leading-relaxed max-w-sm mx-auto">
             {isReconnected
               ? 'Reconnection verified successfully! The new firmware and LittleFS assets are active on your ESP32.'
               : (customMessage ||
@@ -295,38 +295,38 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
         </div>
 
         {/* Progress & Countdown Section */}
-        <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-3">
+        <div className="p-3.5 rounded-xl bg-surface-secondary border border-border space-y-3">
           <div className="flex items-center justify-between text-xs font-mono">
-            <span className="text-slate-400 flex items-center gap-1.5">
-              <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="text-muted flex items-center gap-1.5">
+              <Cpu className="w-3.5 h-3.5 text-accent" />
               <span>CAN Do ESP32</span>
             </span>
-            <span className={isReconnected ? 'text-emerald-400 font-bold' : 'text-cyan-300'}>
+            <span className={isReconnected ? 'text-success font-bold' : 'text-accent'}>
               {isReconnected ? 'Reboot Verified' : `${secondsElapsed}s elapsed`}
             </span>
           </div>
 
           {/* Progress bar */}
-          <div className="w-full bg-slate-800/80 rounded-full h-2.5 overflow-hidden p-0.5 border border-slate-700/50">
+          <div className="w-full bg-surface-tertiary rounded-full h-2.5 overflow-hidden p-0.5 border border-border">
             <div
               className={`h-full rounded-full transition-all duration-500 ${
                 isReconnected
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
-                  : 'bg-gradient-to-r from-cyan-500 via-sky-400 to-teal-400'
+                  ? 'bg-success'
+                  : 'bg-accent'
               }`}
               style={{ width: `${progressPct}%` }}
             />
           </div>
 
           {/* Pinging telemetry indicator */}
-          <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
+          <div className="flex items-center justify-between text-[11px] text-muted pt-0.5">
             <span className="flex items-center gap-1.5">
-              <Wifi className={`w-3.5 h-3.5 ${isChecking ? 'text-cyan-300 animate-pulse' : 'text-slate-500'}`} />
-              <span>Host: <strong className="text-slate-200 font-mono">{displayHost}</strong></span>
+              <Wifi className={`w-3.5 h-3.5 ${isChecking ? 'text-accent animate-pulse' : 'text-muted'}`} />
+              <span>Host: <strong className="text-foreground font-mono">{displayHost}</strong></span>
             </span>
-            <span className="font-mono text-[10px] text-slate-400">
+            <span className="font-mono text-[10px] text-muted">
               {isReconnected ? (
-                <span className="text-emerald-400 font-semibold">HTTP 200 OK</span>
+                <span className="text-success font-semibold">HTTP 200 OK</span>
               ) : pingCount > 0 ? (
                 `Ping probe #${pingCount}`
               ) : (
@@ -336,16 +336,16 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
           </div>
 
           {version && (
-            <div className="text-[10px] text-slate-400 border-t border-slate-800/60 pt-2 flex items-center justify-between">
+            <div className="text-[10px] text-muted border-t border-separator pt-2 flex items-center justify-between">
               <span>Target Version:</span>
-              <span className="font-mono text-cyan-300 font-bold">{version}</span>
+              <span className="font-mono text-accent font-bold">{version}</span>
             </div>
           )}
 
           {reconnectedUptime !== null && (
-            <div className="text-[10px] text-slate-400 border-t border-slate-800/60 pt-2 flex items-center justify-between">
+            <div className="text-[10px] text-muted border-t border-separator pt-2 flex items-center justify-between">
               <span>Device Uptime:</span>
-              <span className="font-mono text-emerald-300 font-bold">{reconnectedUptime}s (Fresh Boot)</span>
+              <span className="font-mono text-success font-bold">{reconnectedUptime}s (Fresh Boot)</span>
             </div>
           )}
         </div>
@@ -356,12 +356,12 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
             <button
               type="button"
               onClick={handleManualReload}
-              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-950/40 transition flex items-center justify-center gap-2"
+              className="w-full py-2.5 px-4 rounded-xl bg-success hover:bg-success-hover text-success-foreground font-bold text-xs shadow-lg transition flex items-center justify-center gap-2"
             >
               <span>{isRunningOnDevice() ? 'Reload Dashboard Now' : 'Back to Device Console'}</span>
               <ArrowRight className="w-4 h-4" />
               {autoCloseCountdown !== null && (
-                <span className="text-[10px] bg-emerald-950 text-emerald-200 px-1.5 py-0.5 rounded-full font-mono font-normal">
+                <span className="text-[10px] bg-black/15 text-success-foreground px-1.5 py-0.5 rounded-full font-mono font-normal">
                   auto in {autoCloseCountdown}s
                 </span>
               )}
@@ -370,10 +370,10 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
             <>
               {secondsElapsed > 15 ? (
                 <div className="space-y-2 text-left">
-                  <div className="p-2.5 rounded-lg bg-amber-950/30 border border-amber-800/50 text-[11px] text-amber-200 flex items-start gap-2">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="p-2.5 rounded-lg bg-warning-soft border border-warning/40 text-[11px] text-warning-soft-foreground flex items-start gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
                     <p className="leading-relaxed">
-                      Reconnection is taking a bit longer than usual. If the device was assigned a different DHCP IP or restarted in SoftAP mode, connect to <strong className="text-white font-mono">192.168.4.1</strong> or reload.
+                      Reconnection is taking a bit longer than usual. If the device was assigned a different DHCP IP or restarted in SoftAP mode, connect to <strong className="text-foreground font-mono">192.168.4.1</strong> or reload.
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -381,7 +381,7 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
                       type="button"
                       onClick={() => checkDeviceStatus()}
                       disabled={isChecking}
-                      className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/60 font-semibold text-xs flex items-center justify-center gap-1.5 transition"
+                      className="flex-1 py-2 px-3 rounded-xl bg-surface-secondary hover:bg-default-hover text-accent border border-accent/40 font-semibold text-xs flex items-center justify-center gap-1.5 transition"
                     >
                       <RotateCcw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin' : ''}`} />
                       <span>Ping Again</span>
@@ -389,15 +389,15 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
                     <button
                       type="button"
                       onClick={onClose}
-                      className="py-2 px-4 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-300 font-semibold text-xs transition"
+                      className="py-2 px-4 rounded-xl bg-surface-secondary hover:bg-default-hover text-muted hover:text-foreground border border-border font-semibold text-xs transition"
                     >
                       Dismiss
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+                <div className="flex items-center justify-center gap-2 text-xs text-muted">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-ping" />
                   <span>Waiting for ESP32 Wi-Fi handshake...</span>
                 </div>
               )}

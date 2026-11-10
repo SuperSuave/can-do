@@ -159,80 +159,80 @@ export function getHaDomainBadgeStyle(domain?: string): {
   switch (domain?.toLowerCase()) {
     case 'notify':
       return {
-        bg: 'bg-orange-950/60',
-        text: 'text-orange-300',
-        border: 'border-orange-800/60',
-        dot: 'bg-orange-400'
+        bg: 'bg-warning-soft',
+        text: 'text-warning-soft-foreground',
+        border: 'border-warning/30',
+        dot: 'bg-warning'
       };
     case 'event':
       return {
-        bg: 'bg-purple-950/60',
-        text: 'text-purple-300',
-        border: 'border-purple-800/60',
-        dot: 'bg-purple-400'
+        bg: 'bg-purple-500/15',
+        text: 'text-purple-600 dark:text-purple-400',
+        border: 'border-purple-500/30',
+        dot: 'bg-purple-500'
       };
     case 'binary_sensor':
       return {
-        bg: 'bg-teal-950/60',
-        text: 'text-teal-300',
-        border: 'border-teal-800/60',
-        dot: 'bg-teal-400'
+        bg: 'bg-accent-soft',
+        text: 'text-accent-soft-foreground',
+        border: 'border-accent/30',
+        dot: 'bg-accent'
       };
     case 'sensor':
       return {
-        bg: 'bg-sky-950/60',
-        text: 'text-sky-300',
-        border: 'border-sky-800/60',
-        dot: 'bg-sky-400'
+        bg: 'bg-accent-soft',
+        text: 'text-accent-soft-foreground',
+        border: 'border-accent/30',
+        dot: 'bg-accent'
       };
     case 'switch':
       return {
-        bg: 'bg-emerald-950/60',
-        text: 'text-emerald-300',
-        border: 'border-emerald-800/60',
-        dot: 'bg-emerald-400'
+        bg: 'bg-success-soft',
+        text: 'text-success-soft-foreground',
+        border: 'border-success/30',
+        dot: 'bg-success'
       };
     case 'button':
       return {
-        bg: 'bg-amber-950/60',
-        text: 'text-amber-300',
-        border: 'border-amber-800/60',
-        dot: 'bg-amber-400'
+        bg: 'bg-warning-soft',
+        text: 'text-warning-soft-foreground',
+        border: 'border-warning/30',
+        dot: 'bg-warning'
       };
     case 'climate':
       return {
-        bg: 'bg-rose-950/60',
-        text: 'text-rose-300',
-        border: 'border-rose-800/60',
-        dot: 'bg-rose-400'
+        bg: 'bg-danger-soft',
+        text: 'text-danger-soft-foreground',
+        border: 'border-danger/30',
+        dot: 'bg-danger'
       };
     case 'select':
       return {
-        bg: 'bg-indigo-950/60',
-        text: 'text-indigo-300',
-        border: 'border-indigo-800/60',
-        dot: 'bg-indigo-400'
+        bg: 'bg-purple-500/15',
+        text: 'text-purple-600 dark:text-purple-400',
+        border: 'border-purple-500/30',
+        dot: 'bg-purple-500'
       };
     case 'lock':
       return {
-        bg: 'bg-red-950/60',
-        text: 'text-red-300',
-        border: 'border-red-800/60',
-        dot: 'bg-red-400'
+        bg: 'bg-danger-soft',
+        text: 'text-danger-soft-foreground',
+        border: 'border-danger/30',
+        dot: 'bg-danger'
       };
     case 'light':
       return {
-        bg: 'bg-yellow-950/60',
-        text: 'text-yellow-300',
-        border: 'border-yellow-800/60',
-        dot: 'bg-yellow-400'
+        bg: 'bg-warning-soft',
+        text: 'text-warning-soft-foreground',
+        border: 'border-warning/30',
+        dot: 'bg-warning'
       };
     default:
       return {
-        bg: 'bg-slate-900/80',
-        text: 'text-cyan-300',
-        border: 'border-slate-700/80',
-        dot: 'bg-cyan-400'
+        bg: 'bg-surface-secondary',
+        text: 'text-accent',
+        border: 'border-border',
+        dot: 'bg-accent'
       };
   }
 }

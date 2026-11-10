@@ -244,25 +244,25 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
   };
 
   return (
-    <div className="p-4 sm:p-5 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] space-y-5">
+    <div className="p-4 sm:p-5 rounded-[12px] bg-surface border border-border space-y-5">
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[var(--border-color)]/70">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-separator">
         <div>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-cyan-950/80 border border-cyan-800/80 flex items-center justify-center text-cyan-400">
+            <div className="w-7 h-7 rounded-lg bg-accent-soft border border-accent/30 flex items-center justify-center text-accent">
               <Layers className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
                 <span>State Definitions</span>
-                <span className="text-cyan-400 font-mono text-xs font-semibold">
+                <span className="text-accent font-mono text-xs font-semibold">
                   ({stateCanId || 'RX CAN ID'}{bus !== undefined ? ` • Bus ${bus}` : ''})
                 </span>
-                <span className="text-slate-400 text-xs font-normal">
+                <span className="text-muted text-xs font-normal">
                   — "What state is what"
                 </span>
               </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-muted mt-0.5">
                 Map human-readable states (e.g. Park, Drive, Open, Closed, Heated Level) to CAN byte patterns.
               </p>
             </div>
@@ -275,17 +275,17 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
             <button
               type="button"
               onClick={() => setShowPresetsDropdown(!showPresetsDropdown)}
-              className="px-3 py-1.5 rounded-[8px] bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition flex items-center gap-1.5 shadow-sm"
+              className="px-3 py-1.5 rounded-[8px] bg-surface-secondary hover:bg-default-hover text-foreground border border-border text-xs font-semibold transition flex items-center gap-1.5 shadow-sm"
               title="Load vehicle state template preset"
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <Sparkles className="w-3.5 h-3.5 text-warning" />
               <span>Load Template Preset</span>
               <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showPresetsDropdown ? 'rotate-180' : ''}`} />
             </button>
 
             {showPresetsDropdown && (
-              <div className="absolute right-0 top-full mt-1.5 w-72 sm:w-80 rounded-[12px] bg-slate-900 border border-slate-700 shadow-2xl p-2 z-50 space-y-1">
-                <div className="px-2 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800">
+              <div className="absolute right-0 top-full mt-1.5 w-72 sm:w-80 rounded-[12px] bg-overlay text-overlay-foreground border border-border shadow-overlay p-2 z-50 space-y-1">
+                <div className="px-2 py-1.5 text-[11px] font-bold uppercase tracking-wider text-muted border-b border-separator">
                   Select a State Template Preset
                 </div>
                 <div className="max-h-72 overflow-y-auto space-y-1 py-1">
@@ -294,24 +294,24 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                       key={preset.id}
                       type="button"
                       onClick={() => handleApplyPreset(preset)}
-                      className="w-full text-left p-2 rounded-lg hover:bg-slate-800 transition flex items-start gap-2.5 group"
+                      className="w-full text-left p-2 rounded-lg hover:bg-default-hover transition flex items-start gap-2.5 group"
                     >
-                      <MdiIcon icon={preset.icon} className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
+                      <MdiIcon icon={preset.icon} className="w-5 h-5 text-accent shrink-0 mt-0.5" />
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs font-semibold text-white group-hover:text-cyan-300 transition flex items-center justify-between">
+                        <div className="text-xs font-semibold text-foreground group-hover:text-accent transition flex items-center justify-between">
                           <span>{preset.name}</span>
-                          <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950 px-1.5 py-0.2 rounded border border-cyan-800/60">
+                          <span className="text-[10px] font-mono text-accent-soft-foreground bg-accent-soft px-1.5 py-0.2 rounded border border-accent/30">
                             {preset.options.length} states
                           </span>
                         </div>
-                        <div className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
+                        <div className="text-[11px] text-muted line-clamp-1 mt-0.5">
                           {preset.description}
                         </div>
                       </div>
                     </button>
                   ))}
                 </div>
-                <div className="p-1.5 text-[10px] text-slate-500 border-t border-slate-800 text-center">
+                <div className="p-1.5 text-[10px] text-muted border-t border-separator text-center">
                   Applies pre-configured states matching E-GMP / CAN-Do catalog standards.
                 </div>
               </div>
@@ -321,7 +321,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
           <button
             type="button"
             onClick={handleAddState}
-            className="px-3 py-1.5 rounded-[8px] bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-sm"
+            className="px-3 py-1.5 rounded-[8px] bg-accent hover:bg-accent-hover text-accent-foreground text-xs font-semibold transition flex items-center gap-1.5 shadow-sm"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add State</span>
@@ -331,13 +331,13 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
 
       {/* State List */}
       {options.length === 0 ? (
-        <div className="p-8 text-center border-2 border-dashed border-slate-800 rounded-[12px] bg-slate-950/40 space-y-3">
-          <Layers className="w-8 h-8 text-slate-600 mx-auto" />
+        <div className="p-8 text-center border-2 border-dashed border-border rounded-[12px] bg-surface-secondary space-y-3">
+          <Layers className="w-8 h-8 text-muted mx-auto" />
           <div>
-            <p className="text-sm font-semibold text-slate-300">
+            <p className="text-sm font-semibold text-foreground">
               No states defined yet for this CAN ID
             </p>
-            <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+            <p className="text-xs text-muted mt-1 max-w-md mx-auto">
               Define "what state is what" so CAN-Do can decode live messages or trigger automations when specific states occur.
             </p>
           </div>
@@ -345,7 +345,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
             <button
               type="button"
               onClick={handleAddState}
-              className="px-3 py-1.5 rounded-lg bg-[var(--md-sys-color-primary)] text-white text-xs font-semibold flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-accent-foreground text-xs font-semibold flex items-center gap-1.5 transition"
             >
               <Plus className="w-3.5 h-3.5" />
               Add Blank State
@@ -353,9 +353,9 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
             <button
               type="button"
               onClick={() => handleApplyPreset(STATE_PRESETS[0])}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 hover:bg-slate-700 text-xs font-semibold flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-lg bg-surface-tertiary text-foreground hover:bg-default-hover border border-border text-xs font-semibold flex items-center gap-1.5 transition"
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <Sparkles className="w-3.5 h-3.5 text-warning" />
               Load Gear Shifter Preset
             </button>
           </div>
@@ -365,28 +365,28 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
           {options.map((opt, idx) => (
             <div
               key={idx}
-              className={`p-4 rounded-[12px] bg-[var(--input-bg)] border transition-all ${
+              className={`p-4 rounded-[12px] bg-surface-secondary border transition-all ${
                 opt.default
-                  ? 'border-cyan-700/60 shadow-md shadow-cyan-950/20'
-                  : 'border-[var(--border-color)]'
+                  ? 'border-accent/60 shadow-sm'
+                  : 'border-border'
               } space-y-3.5`}
             >
               {/* State Header Bar */}
-              <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-[var(--border-color)]/60">
+              <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-separator">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-mono font-bold text-cyan-400 shrink-0">
+                  <span className="w-6 h-6 rounded-full bg-surface-tertiary border border-border flex items-center justify-center text-xs font-mono font-bold text-accent shrink-0">
                     {idx + 1}
                   </span>
-                  <span className="text-xs font-bold text-white tracking-tight truncate">
+                  <span className="text-xs font-bold text-foreground tracking-tight truncate">
                     {opt.label || `State #${idx + 1}`}
                   </span>
                   {opt.state_value !== undefined && opt.state_value !== '' && (
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700 shrink-0">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-surface-tertiary text-accent border border-border shrink-0">
                       Code: {opt.state_value}
                     </span>
                   )}
                   {opt.default && (
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-700 shrink-0">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-accent-soft text-accent-soft-foreground border border-accent/40 shrink-0">
                       Default
                     </span>
                   )}
@@ -397,8 +397,8 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                   <label
                     className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] text-xs cursor-pointer border transition ${
                       opt.default
-                        ? 'bg-cyan-950/80 text-cyan-300 border-cyan-700 font-semibold'
-                        : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                        ? 'bg-accent-soft text-accent-soft-foreground border-accent/40 font-semibold'
+                        : 'bg-surface-tertiary text-muted border-border hover:text-foreground'
                     }`}
                     title="Set this state as default/initial"
                   >
@@ -407,7 +407,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                       name="default_state_radio"
                       checked={!!opt.default}
                       onChange={() => handleUpdateState(idx, { default: true })}
-                      className="accent-[var(--md-sys-color-primary)]"
+                      className="accent-[var(--accent)]"
                     />
                     <span>Default</span>
                   </label>
@@ -417,7 +417,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                     type="button"
                     disabled={idx === 0}
                     onClick={() => handleMoveState(idx, idx - 1)}
-                    className="p-1 text-slate-400 hover:text-white disabled:opacity-30 rounded hover:bg-slate-800 transition"
+                    className="p-1 text-muted hover:text-foreground disabled:opacity-30 rounded hover:bg-default-hover transition"
                     title="Move state up"
                   >
                     <ChevronUp className="w-4 h-4" />
@@ -426,7 +426,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                     type="button"
                     disabled={idx === options.length - 1}
                     onClick={() => handleMoveState(idx, idx + 1)}
-                    className="p-1 text-slate-400 hover:text-white disabled:opacity-30 rounded hover:bg-slate-800 transition"
+                    className="p-1 text-muted hover:text-foreground disabled:opacity-30 rounded hover:bg-default-hover transition"
                     title="Move state down"
                   >
                     <ChevronDown className="w-4 h-4" />
@@ -436,7 +436,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                   <button
                     type="button"
                     onClick={() => handleDuplicateState(idx)}
-                    className="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition"
+                    className="p-1 text-muted hover:text-accent rounded hover:bg-default-hover transition"
                     title="Duplicate state"
                   >
                     <Copy className="w-3.5 h-3.5" />
@@ -446,7 +446,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                   <button
                     type="button"
                     onClick={() => handleRemoveState(idx)}
-                    className="p-1 text-slate-400 hover:text-rose-400 rounded hover:bg-rose-950/40 transition"
+                    className="p-1 text-muted hover:text-danger rounded hover:bg-danger-soft transition"
                     title="Delete state"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -457,40 +457,40 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
               {/* State Identity Inputs */}
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
                 <div className="sm:col-span-5">
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    State Name / Meaning <span className="text-rose-400">*</span>
+                  <label className="block text-[11px] font-semibold text-muted mb-1">
+                    State Name / Meaning <span className="text-danger">*</span>
                   </label>
                   <input
                     type="text"
                     placeholder="e.g. Park (P), Drive (D), Driver Door Open, High Heat"
                     value={opt.label}
                     onChange={e => handleUpdateState(idx, { label: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded-[8px] bg-[var(--card-bg)] border border-[var(--border-color)] text-white font-medium text-xs focus:outline-none focus:border-cyan-500"
+                    className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-border text-foreground placeholder:text-field-placeholder font-medium text-xs focus:outline-none focus:border-focus"
                   />
                 </div>
 
                 <div className="sm:col-span-3">
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                  <label className="block text-[11px] font-semibold text-muted mb-1 flex items-center justify-between">
                     <span>Value / Code</span>
-                    <span className="text-[10px] font-normal text-slate-500">Hex or Number</span>
+                    <span className="text-[10px] font-normal text-muted">Hex or Number</span>
                   </label>
                   <input
                     type="text"
                     placeholder="e.g. 0x00, 0x05, 1, 0"
                     value={opt.state_value ?? ''}
                     onChange={e => handleUpdateState(idx, { state_value: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded-[8px] bg-[var(--card-bg)] border border-[var(--border-color)] font-mono text-cyan-300 text-xs focus:outline-none focus:border-cyan-500"
+                    className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-border font-mono text-accent placeholder:text-field-placeholder text-xs focus:outline-none focus:border-focus"
                   />
                 </div>
 
                 <div className="sm:col-span-4">
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                  <label className="block text-[11px] font-semibold text-muted mb-1">
                     Requires Feature (Optional)
                   </label>
                   <select
                     value={opt.requires_feature || ''}
                     onChange={e => handleUpdateState(idx, { requires_feature: e.target.value || undefined })}
-                    className="w-full px-2.5 py-1.5 rounded-[8px] bg-[var(--card-bg)] border border-[var(--border-color)] text-xs text-slate-300 focus:outline-none focus:border-cyan-500"
+                    className="w-full px-2.5 py-1.5 rounded-[8px] bg-surface-tertiary border border-border text-xs text-foreground focus:outline-none focus:border-focus"
                   >
                     <option value="">None (Always available)</option>
                     {knownFeatures.map(feat => (
@@ -505,7 +505,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
               {/* State Description & Toast */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                  <label className="block text-[11px] font-semibold text-muted mb-1">
                     State Description (Optional)
                   </label>
                   <input
@@ -513,12 +513,12 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                     placeholder="e.g. Vehicle transmission locked in Park"
                     value={opt.description || ''}
                     onChange={e => handleUpdateState(idx, { description: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded-[8px] bg-[var(--card-bg)] border border-[var(--border-color)] text-slate-300 text-xs focus:outline-none focus:border-cyan-500"
+                    className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-border text-foreground placeholder:text-field-placeholder text-xs focus:outline-none focus:border-focus"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                  <label className="block text-[11px] font-semibold text-muted mb-1">
                     Cluster OSD Toast / Message (Optional)
                   </label>
                   <input
@@ -526,19 +526,19 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                     placeholder="e.g. Transmission: Park"
                     value={opt.popup || ''}
                     onChange={e => handleUpdateState(idx, { popup: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded-[8px] bg-[var(--card-bg)] border border-[var(--border-color)] text-slate-300 text-xs focus:outline-none focus:border-cyan-500"
+                    className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-border text-foreground placeholder:text-field-placeholder text-xs focus:outline-none focus:border-focus"
                   />
                 </div>
               </div>
 
               {/* CAN RX Match Payload Editor (The core mapping) */}
-              <div className="pt-2 border-t border-[var(--border-color)]/60">
+              <div className="pt-2 border-t border-separator">
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-cyan-300">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-accent">
                       RX CAN Match Pattern for this State:
                     </span>
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[10px] text-muted">
                       (Bytes received on {stateCanId || 'Rx CAN ID'} when in this state)
                     </span>
                   </div>
@@ -552,26 +552,26 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
               </div>
 
               {/* Action Transmission (TX) / Transition Steps (Optional) */}
-              <div className="pt-2 border-t border-[var(--border-color)]/50">
+              <div className="pt-2 border-t border-separator">
                 <button
                   type="button"
                   onClick={() => setExpandedActionIndex(expandedActionIndex === idx ? null : idx)}
-                  className="flex items-center justify-between w-full text-left text-[11px] text-slate-400 hover:text-slate-200 transition py-1"
+                  className="flex items-center justify-between w-full text-left text-[11px] text-muted hover:text-foreground transition py-1"
                 >
                   <span className="flex items-center gap-1.5">
-                    <Sliders className="w-3 h-3 text-emerald-400" />
+                    <Sliders className="w-3 h-3 text-success" />
                     <span>
                       {opt.to_payload || opt.payload || (opt.steps && opt.steps.length > 0)
                         ? 'Action Frame (TX) Configured'
                         : '+ Optional Action Transmission (TX) / Trigger Transition'}
                     </span>
                     {(opt.to_payload || opt.payload || (opt.steps && opt.steps.length > 0)) && (
-                      <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-800/60">
+                      <span className="text-[10px] font-mono text-success-soft-foreground bg-success-soft px-1.5 py-0.2 rounded border border-success/40">
                         {opt.steps ? `${opt.steps.length} steps` : formatPayloadDisplay(opt.to_payload || opt.payload)}
                       </span>
                     )}
                   </span>
-                  <span className="text-slate-500">
+                  <span className="text-muted">
                     {expandedActionIndex === idx ? 'Collapse ▲' : 'Configure ▼'}
                   </span>
                 </button>
@@ -581,14 +581,14 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                   const currentMode = actionTabMap[idx] || (hasSteps ? 'steps' : 'single');
 
                   return (
-                    <div className="mt-2 p-3 sm:p-4 rounded-[10px] bg-slate-950/80 border border-slate-800/90 space-y-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-800/70">
+                    <div className="mt-2 p-3 sm:p-4 rounded-[10px] bg-surface-tertiary border border-border space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-separator">
                         <div>
-                          <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                            <Sliders className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                            <Sliders className="w-3.5 h-3.5 text-success" />
                             Action Transmission (TX) / Transition Configuration
                           </span>
-                          <p className="text-[10px] text-slate-400 mt-0.5">
+                          <p className="text-[10px] text-muted mt-0.5">
                             Configure CAN frame(s) transmitted to trigger or simulate this button / state.
                           </p>
                         </div>
@@ -608,36 +608,36 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                           }}
                           aria-label="Action Transmission Mode"
                         >
-                          <Tabs.ListContainer className="p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] self-start sm:self-auto shrink-0">
+                          <Tabs.ListContainer className="p-0.5 rounded-lg bg-surface-secondary border border-border text-[11px] self-start sm:self-auto shrink-0">
                             <Tabs.List className="gap-1">
                               <Tabs.Tab
                                 id="single"
                                 className={`relative px-2.5 py-1 rounded-md font-medium transition cursor-pointer flex items-center ${
                                   currentMode === 'single'
-                                    ? 'text-white'
-                                    : 'text-slate-400 hover:text-slate-200'
+                                    ? 'text-foreground'
+                                    : 'text-muted hover:text-foreground'
                                 }`}
                               >
                                 <span>Single Frame</span>
-                                <Tabs.Indicator className="rounded-md bg-slate-800 shadow-sm" />
+                                <Tabs.Indicator className="rounded-md bg-surface border border-border shadow-sm" />
                               </Tabs.Tab>
 
                               <Tabs.Tab
                                 id="steps"
                                 className={`relative px-2.5 py-1 rounded-md font-medium flex items-center gap-1.5 transition cursor-pointer ${
                                   currentMode === 'steps'
-                                    ? 'text-emerald-300 font-semibold'
-                                    : 'text-slate-400 hover:text-slate-200'
+                                    ? 'text-success-soft-foreground font-semibold'
+                                    : 'text-muted hover:text-foreground'
                                 }`}
                               >
-                                <ListOrdered className="w-3 h-3 text-emerald-400" />
+                                <ListOrdered className="w-3 h-3 text-success" />
                                 <span>Multi-Step Sequence</span>
                                 {opt.steps && opt.steps.length > 0 && (
-                                  <span className="text-[10px] font-mono px-1 rounded bg-emerald-900 text-emerald-200">
+                                  <span className="text-[10px] font-mono px-1 rounded bg-success text-success-foreground">
                                     {opt.steps.length}
                                   </span>
                                 )}
-                                <Tabs.Indicator className="rounded-md bg-emerald-950/80 border border-emerald-800/60 shadow-sm" />
+                                <Tabs.Indicator className="rounded-md bg-success-soft border border-success/40 shadow-sm" />
                               </Tabs.Tab>
                             </Tabs.List>
                           </Tabs.ListContainer>
@@ -663,8 +663,8 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                 onChange={val => handleUpdateState(idx, { from_payload: val })}
                               />
 
-                              <div className="flex items-center justify-between gap-2 p-2 rounded bg-slate-900 border border-slate-800 text-xs">
-                                <span className="text-slate-300 font-medium text-[11px]">Action Repeat Count:</span>
+                              <div className="flex items-center justify-between gap-2 p-2 rounded bg-surface-secondary border border-border text-xs">
+                                <span className="text-foreground font-medium text-[11px]">Action Repeat Count:</span>
                                 <div className="flex items-center gap-1">
                                   <input
                                     type="number"
@@ -672,16 +672,16 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                     max="50"
                                     value={opt.repeat || 1}
                                     onChange={e => handleUpdateState(idx, { repeat: parseInt(e.target.value) || 1 })}
-                                    className="w-16 px-2 py-0.5 rounded bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-amber-300 text-center font-bold"
+                                    className="w-16 px-2 py-0.5 rounded bg-surface-tertiary border border-border font-mono text-xs text-warning text-center font-bold focus:outline-none focus:border-focus"
                                   />
-                                  <span className="text-[11px] text-slate-400">times</span>
+                                  <span className="text-[11px] text-muted">times</span>
                                 </div>
                               </div>
                             </div>
                           </div>
 
                           <div className="flex items-center justify-between pt-1">
-                            <span className="text-[10px] text-slate-500">
+                            <span className="text-[10px] text-muted">
                               For buttons requiring multi-frame pulses or setup sequences (e.g. EV6 setup), switch to Multi-Step Sequence.
                             </span>
                             <button
@@ -693,7 +693,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                   steps: [{ payload: initialPayload, repeat: opt.repeat || 1 }]
                                 });
                               }}
-                              className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-medium transition"
+                              className="text-[11px] text-success hover:opacity-80 flex items-center gap-1 font-medium transition"
                             >
                               <ListOrdered className="w-3.5 h-3.5" /> Convert to Multi-Step Sequence →
                             </button>
@@ -704,9 +704,9 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                       {/* Multi-Step Sequence Mode */}
                       {currentMode === 'steps' && (
                         <div className="space-y-3">
-                          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900/60 p-2 rounded-lg border border-slate-800 text-xs">
-                            <span className="text-[11px] text-slate-300 flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                          <div className="flex flex-wrap items-center justify-between gap-2 bg-surface-secondary p-2 rounded-lg border border-border text-xs">
+                            <span className="text-[11px] text-foreground flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
                               <span>Frames will be transmitted sequentially in this exact order:</span>
                             </span>
                             <div className="flex items-center gap-2">
@@ -716,7 +716,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                   setPastingOptIdx(pastingOptIdx === idx ? null : idx);
                                   setPasteStepText('');
                                 }}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[11px] font-medium transition border border-slate-700"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-surface-tertiary hover:bg-default-hover text-accent text-[11px] font-medium transition border border-border"
                               >
                                 <FileText className="w-3 h-3" />
                                 {pastingOptIdx === idx ? 'Close Paste' : 'Paste Step Sequence'}
@@ -724,7 +724,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleAddOptionStep(idx, false)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-[11px] font-semibold transition shadow-sm"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-success hover:bg-success-hover text-success-foreground text-[11px] font-semibold transition shadow-sm"
                               >
                                 <Plus className="w-3 h-3" />
                                 Add Frame Step
@@ -732,9 +732,9 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleAddOptionStep(idx, true)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-amber-800/80 hover:bg-amber-700 text-amber-200 border border-amber-700/60 text-[11px] font-semibold transition shadow-sm"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-warning-soft hover:opacity-90 text-warning-soft-foreground border border-warning/40 text-[11px] font-semibold transition shadow-sm"
                               >
-                                <Clock className="w-3 h-3" />
+                                <Clock className="w-3 h-3 text-warning" />
                                 Add Delay
                               </button>
                             </div>
@@ -742,29 +742,29 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
 
                           {/* Paste Box */}
                           {pastingOptIdx === idx && (
-                            <div className="p-3 rounded-lg bg-slate-900 border border-cyan-800/80 space-y-2">
+                            <div className="p-3 rounded-lg bg-surface-secondary border border-accent/40 space-y-2">
                               <div className="flex items-center justify-between text-xs">
-                                <span className="font-semibold text-cyan-300 flex items-center gap-1.5">
+                                <span className="font-semibold text-accent flex items-center gap-1.5">
                                   <FileText className="w-3.5 h-3.5" /> Paste Raw Step Sequence (Hex, Repeats & Delays)
                                 </span>
-                                <span className="text-[10px] text-slate-400">e.g. 0x4F1: 00 C0 ... × 5 (500 ms dwell) or Delay 500ms</span>
+                                <span className="text-[10px] text-muted">e.g. 0x4F1: 00 C0 ... × 5 (500 ms dwell) or Delay 500ms</span>
                               </div>
                               <textarea
                                 rows={4}
                                 value={pasteStepText}
                                 onChange={e => setPasteStepText(e.target.value)}
                                 placeholder="Paste lines like:&#10;0x4F1: 00 C0 00 00 00 00 00 00 × 5 (500 ms dwell)&#10;0x4A2: 00 00 0C 00 00 00 00 00 × 3&#10;0x4A2: 00 03 FC 00 FF FF 00 00 × 3&#10;or standalone: Delay 500ms"
-                                className="w-full font-mono text-xs p-2 rounded bg-black/60 border border-slate-700 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500"
+                                className="w-full font-mono text-xs p-2 rounded bg-surface-tertiary border border-border text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                               />
                               <div className="flex items-center justify-between text-xs">
-                                <span className="text-[10px] text-slate-400">
+                                <span className="text-[10px] text-muted">
                                   Auto-detects CAN IDs (0x4F1), repeats (x 5), post-dwell delays, and delay steps.
                                 </span>
                                 <div className="flex items-center gap-2">
                                   <button
                                     type="button"
                                     onClick={() => setPastingOptIdx(null)}
-                                    className="px-2.5 py-1 text-slate-400 hover:text-white transition text-xs"
+                                    className="px-2.5 py-1 text-muted hover:text-foreground transition text-xs"
                                   >
                                     Cancel
                                   </button>
@@ -772,7 +772,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                     type="button"
                                     disabled={!pasteStepText.trim()}
                                     onClick={() => handleApplyPastedSteps(idx)}
-                                    className="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-semibold transition text-xs"
+                                    className="px-3 py-1 rounded bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-foreground font-semibold transition text-xs"
                                   >
                                     Parse & Apply Steps
                                   </button>
@@ -783,21 +783,21 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
 
                           {/* List of Steps */}
                           {(!opt.steps || opt.steps.length === 0) ? (
-                            <div className="text-center py-6 px-3 rounded-lg border border-dashed border-slate-800 bg-slate-900/30 text-xs text-slate-400 space-y-2">
+                            <div className="text-center py-6 px-3 rounded-lg border border-dashed border-border bg-surface-secondary text-xs text-muted space-y-2">
                               <p>No sequence steps defined yet.</p>
                               <div className="flex items-center justify-center gap-2">
                                 <button
                                   type="button"
                                   onClick={() => handleAddOptionStep(idx, false)}
-                                  className="inline-flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-semibold"
+                                  className="inline-flex items-center gap-1 text-success hover:opacity-80 font-semibold"
                                 >
                                   <Plus className="w-3 h-3" /> Add Frame Step
                                 </button>
-                                <span className="text-slate-600">•</span>
+                                <span className="text-muted">•</span>
                                 <button
                                   type="button"
                                   onClick={() => handleAddOptionStep(idx, true)}
-                                  className="inline-flex items-center gap-1 text-amber-400 hover:text-amber-300 font-semibold"
+                                  className="inline-flex items-center gap-1 text-warning hover:opacity-80 font-semibold"
                                 >
                                   <Clock className="w-3 h-3" /> Add Delay Step
                                 </button>
@@ -812,24 +812,24 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                   return (
                                     <div
                                       key={sIdx}
-                                      className="p-3 rounded-lg bg-amber-950/30 border border-amber-800/60 space-y-2"
+                                      className="p-3 rounded-lg bg-warning-soft border border-warning/40 space-y-2"
                                     >
                                       <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
                                         <div className="flex items-center gap-2">
-                                          <span className="w-5 h-5 rounded-full bg-amber-900 border border-amber-700 text-amber-200 text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
+                                          <span className="w-5 h-5 rounded-full bg-warning text-warning-foreground text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
                                             <Clock className="w-3 h-3" />
                                           </span>
-                                          <span className="font-semibold text-amber-300">
+                                          <span className="font-semibold text-warning-soft-foreground">
                                             Delay Step #{sIdx + 1}
                                           </span>
-                                          <span className="text-[10px] text-amber-400/80 font-mono">
+                                          <span className="text-[10px] text-warning-soft-foreground/80 font-mono">
                                             (Dwell pause before next step)
                                           </span>
                                         </div>
 
                                         <div className="flex items-center gap-2">
                                           <div className="flex items-center gap-1">
-                                            <span className="text-[11px] text-slate-300">Duration:</span>
+                                            <span className="text-[11px] text-foreground">Duration:</span>
                                             <input
                                               type="number"
                                               min="0"
@@ -840,12 +840,12 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                                   delay_ms: parseInt(e.target.value) || 0
                                                 })
                                               }
-                                              className="w-20 px-2 py-0.5 rounded bg-[var(--input-bg)] border border-amber-700/60 font-mono text-xs text-amber-300 text-center font-bold"
+                                              className="w-20 px-2 py-0.5 rounded bg-surface-tertiary border border-warning/40 font-mono text-xs text-warning text-center font-bold focus:outline-none focus:border-focus"
                                             />
-                                            <span className="text-[11px] text-slate-400">ms</span>
+                                            <span className="text-[11px] text-muted">ms</span>
                                           </div>
 
-                                          <div className="h-4 w-[1px] bg-slate-800 mx-0.5"></div>
+                                          <div className="h-4 w-[1px] bg-separator mx-0.5"></div>
 
                                           {/* Reorder Buttons */}
                                           <button
@@ -853,7 +853,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                             disabled={sIdx === 0}
                                             onClick={() => handleMoveOptionStep(idx, sIdx, sIdx - 1)}
                                             title="Move step up"
-                                            className="p-1 text-slate-400 hover:text-white disabled:opacity-30 rounded hover:bg-slate-800 transition"
+                                            className="p-1 text-muted hover:text-foreground disabled:opacity-30 rounded hover:bg-default-hover transition"
                                           >
                                             <ArrowUp className="w-3.5 h-3.5" />
                                           </button>
@@ -862,7 +862,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                             disabled={sIdx === (opt.steps?.length || 1) - 1}
                                             onClick={() => handleMoveOptionStep(idx, sIdx, sIdx + 1)}
                                             title="Move step down"
-                                            className="p-1 text-slate-400 hover:text-white disabled:opacity-30 rounded hover:bg-slate-800 transition"
+                                            className="p-1 text-muted hover:text-foreground disabled:opacity-30 rounded hover:bg-default-hover transition"
                                           >
                                             <ArrowDown className="w-3.5 h-3.5" />
                                           </button>
@@ -870,7 +870,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                             type="button"
                                             onClick={() => handleDuplicateOptionStep(idx, sIdx)}
                                             title="Duplicate step"
-                                            className="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition"
+                                            className="p-1 text-muted hover:text-accent rounded hover:bg-default-hover transition"
                                           >
                                             <Copy className="w-3.5 h-3.5" />
                                           </button>
@@ -878,7 +878,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                             type="button"
                                             onClick={() => handleRemoveOptionStep(idx, sIdx)}
                                             title="Remove step"
-                                            className="p-1 text-slate-400 hover:text-rose-400 rounded hover:bg-slate-800 transition"
+                                            className="p-1 text-muted hover:text-danger rounded hover:bg-danger-soft transition"
                                           >
                                             <Trash2 className="w-3.5 h-3.5" />
                                           </button>
@@ -891,28 +891,28 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                 return (
                                   <div
                                     key={sIdx}
-                                    className="p-3 rounded-lg bg-slate-900/90 border border-slate-800 space-y-2"
+                                    className="p-3 rounded-lg bg-surface-secondary border border-border space-y-2"
                                   >
                                     <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
                                       <div className="flex items-center gap-2">
-                                        <span className="w-5 h-5 rounded-full bg-emerald-950 border border-emerald-700/80 text-emerald-300 text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
+                                        <span className="w-5 h-5 rounded-full bg-success-soft border border-success/40 text-success text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
                                           {sIdx + 1}
                                         </span>
-                                        <span className="font-semibold text-slate-200">
+                                        <span className="font-semibold text-foreground">
                                           Frame Step #{sIdx + 1}
                                         </span>
                                         {step.can_id && (
-                                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-950/70 text-cyan-300 border border-cyan-800/60 font-bold">
+                                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-accent-soft text-accent-soft-foreground border border-accent/30 font-bold">
                                             TX: {step.can_id}
                                           </span>
                                         )}
                                         {step.repeat && step.repeat > 1 && (
-                                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950/70 text-amber-300 border border-amber-800/60 font-bold">
+                                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warning-soft text-warning-soft-foreground border border-warning/30 font-bold">
                                             Repeated {step.repeat}x
                                           </span>
                                         )}
                                         {step.delay_ms && step.delay_ms > 0 && (
-                                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-950/70 text-purple-300 border border-purple-800/60 font-bold">
+                                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/40 font-bold">
                                             +{step.delay_ms}ms dwell
                                           </span>
                                         )}
@@ -921,7 +921,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                       <div className="flex items-center gap-2">
                                         {/* CAN ID Override */}
                                         <div className="flex items-center gap-1" title="Override TX CAN ID for this specific step (leave blank to inherit command Action CAN ID)">
-                                          <span className="text-[11px] text-slate-400">CAN ID:</span>
+                                          <span className="text-[11px] text-muted">CAN ID:</span>
                                           <input
                                             type="text"
                                             placeholder={actionCanId || "0x..."}
@@ -937,13 +937,13 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                                 can_id: formatted
                                               });
                                             }}
-                                            className="w-20 px-1.5 py-0.5 rounded bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-cyan-300 placeholder:text-slate-600 font-bold"
+                                            className="w-20 px-1.5 py-0.5 rounded bg-surface-tertiary border border-border font-mono text-xs text-accent placeholder:text-field-placeholder font-bold focus:outline-none focus:border-focus"
                                           />
                                         </div>
 
                                         {/* Repeat Count */}
                                         <div className="flex items-center gap-1">
-                                          <span className="text-[11px] text-slate-400">Repeat:</span>
+                                          <span className="text-[11px] text-muted">Repeat:</span>
                                           <input
                                             type="number"
                                             min="1"
@@ -952,14 +952,14 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                             onChange={e =>
                                               handleUpdateOptionStep(idx, sIdx, { repeat: parseInt(e.target.value) || 1 })
                                             }
-                                            className="w-12 px-1 py-0.5 rounded bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-amber-300 text-center font-bold"
+                                            className="w-12 px-1 py-0.5 rounded bg-surface-tertiary border border-border font-mono text-xs text-warning text-center font-bold focus:outline-none focus:border-focus"
                                           />
-                                          <span className="text-[10px] text-slate-400">x</span>
+                                          <span className="text-[10px] text-muted">x</span>
                                         </div>
 
                                         {/* Dwell Delay */}
                                         <div className="flex items-center gap-1" title="Dwell delay after sending this frame burst before executing the next step">
-                                          <span className="text-[11px] text-slate-400">Dwell:</span>
+                                          <span className="text-[11px] text-muted">Dwell:</span>
                                           <input
                                             type="number"
                                             min="0"
@@ -968,12 +968,12 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                             onChange={e =>
                                               handleUpdateOptionStep(idx, sIdx, { delay_ms: parseInt(e.target.value) || 0 })
                                             }
-                                            className="w-16 px-1.5 py-0.5 rounded bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-purple-300 text-center font-bold"
+                                            className="w-16 px-1.5 py-0.5 rounded bg-surface-tertiary border border-border font-mono text-xs text-purple-600 dark:text-purple-400 text-center font-bold focus:outline-none focus:border-focus"
                                           />
-                                          <span className="text-[10px] text-slate-400">ms</span>
+                                          <span className="text-[10px] text-muted">ms</span>
                                         </div>
 
-                                        <div className="h-4 w-[1px] bg-slate-800 mx-0.5"></div>
+                                        <div className="h-4 w-[1px] bg-separator mx-0.5"></div>
 
                                         {/* Reorder Buttons */}
                                         <button
@@ -981,7 +981,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                           disabled={sIdx === 0}
                                           onClick={() => handleMoveOptionStep(idx, sIdx, sIdx - 1)}
                                           title="Move step up"
-                                          className="p-1 text-slate-400 hover:text-white disabled:opacity-30 rounded hover:bg-slate-800 transition"
+                                          className="p-1 text-muted hover:text-foreground disabled:opacity-30 rounded hover:bg-default-hover transition"
                                         >
                                           <ArrowUp className="w-3.5 h-3.5" />
                                         </button>
@@ -990,7 +990,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                           disabled={sIdx === (opt.steps?.length || 1) - 1}
                                           onClick={() => handleMoveOptionStep(idx, sIdx, sIdx + 1)}
                                           title="Move step down"
-                                          className="p-1 text-slate-400 hover:text-white disabled:opacity-30 rounded hover:bg-slate-800 transition"
+                                          className="p-1 text-muted hover:text-foreground disabled:opacity-30 rounded hover:bg-default-hover transition"
                                         >
                                           <ArrowDown className="w-3.5 h-3.5" />
                                         </button>
@@ -998,7 +998,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                           type="button"
                                           onClick={() => handleDuplicateOptionStep(idx, sIdx)}
                                           title="Duplicate step"
-                                          className="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition"
+                                          className="p-1 text-muted hover:text-accent rounded hover:bg-default-hover transition"
                                         >
                                           <Copy className="w-3.5 h-3.5" />
                                         </button>
@@ -1006,7 +1006,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                           type="button"
                                           onClick={() => handleRemoveOptionStep(idx, sIdx)}
                                           title="Remove step"
-                                          className="p-1 text-slate-400 hover:text-rose-400 rounded hover:bg-slate-800 transition"
+                                          className="p-1 text-muted hover:text-danger rounded hover:bg-danger-soft transition"
                                         >
                                           <Trash2 className="w-3.5 h-3.5" />
                                         </button>
@@ -1034,14 +1034,14 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleAddOptionStep(idx, false)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/70 font-medium transition"
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-success-soft hover:opacity-90 text-success-soft-foreground border border-success/40 font-medium transition"
                               >
                                 <Plus className="w-3.5 h-3.5" /> Add Frame Step
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleAddOptionStep(idx, true)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-800/70 font-medium transition"
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-warning-soft hover:opacity-90 text-warning-soft-foreground border border-warning/40 font-medium transition"
                               >
                                 <Clock className="w-3.5 h-3.5" /> Add Delay Step
                               </button>
@@ -1051,7 +1051,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleUpdateState(idx, { steps: undefined })}
-                                className="text-slate-500 hover:text-rose-400 transition text-[11px]"
+                                className="text-muted hover:text-danger transition text-[11px]"
                               >
                                 Revert to Single Frame (Remove Steps)
                               </button>
@@ -1070,20 +1070,20 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
 
       {/* Decoded State Matrix Summary Table */}
       {options.length > 0 && (
-        <div className="pt-4 border-t border-[var(--border-color)]/70 space-y-2.5">
+        <div className="pt-4 border-t border-separator space-y-2.5">
           <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-              <Check className="w-3.5 h-3.5 text-cyan-400" />
+            <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+              <Check className="w-3.5 h-3.5 text-accent" />
               <span>Decoded State Matrix ({options.length} Mapped States)</span>
             </h4>
-            <span className="text-[11px] text-slate-400">
-              RX CAN ID: <span className="font-mono text-cyan-300 font-semibold">{stateCanId || '0x???'}</span>
+            <span className="text-[11px] text-muted">
+              RX CAN ID: <span className="font-mono text-accent font-semibold">{stateCanId || '0x???'}</span>
             </span>
           </div>
 
-          <Table className="w-full text-left text-xs overflow-x-auto rounded-[10px] border border-slate-800">
+          <Table className="w-full text-left text-xs overflow-x-auto rounded-[10px] border border-border bg-surface-secondary">
             <Table.Content aria-label="Decoded State Matrix Table">
-              <Table.Header className="bg-slate-950 text-slate-400 border-b border-slate-800 font-mono text-[11px]">
+              <Table.Header className="bg-surface-tertiary text-muted border-b border-border font-mono text-[11px]">
                 <Table.Column id="idx" className="p-2.5">#</Table.Column>
                 <Table.Column id="label" isRowHeader className="p-2.5">State Name</Table.Column>
                 <Table.Column id="code" className="p-2.5">Code</Table.Column>
@@ -1091,53 +1091,53 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                 <Table.Column id="desc" className="p-2.5">Description</Table.Column>
                 <Table.Column id="def" className="p-2.5 text-right">Default</Table.Column>
               </Table.Header>
-              <Table.Body className="divide-y divide-slate-800/70 font-mono bg-slate-950/40">
+              <Table.Body className="divide-y divide-separator font-mono">
                 {options.map((opt, i) => (
-                  <Table.Row key={i} id={String(i)} className="hover:bg-slate-900/60 transition">
-                    <Table.Cell className="p-2.5 text-slate-500 font-bold">{i + 1}</Table.Cell>
-                    <Table.Cell className="p-2.5 font-sans font-semibold text-white">
+                  <Table.Row key={i} id={String(i)} className="hover:bg-surface-tertiary/60 transition">
+                    <Table.Cell className="p-2.5 text-muted font-bold">{i + 1}</Table.Cell>
+                    <Table.Cell className="p-2.5 font-sans font-semibold text-foreground">
                       {opt.label}
                     </Table.Cell>
-                    <Table.Cell className="p-2.5 text-cyan-300">
+                    <Table.Cell className="p-2.5 text-accent">
                       {opt.state_value !== undefined && opt.state_value !== '' ? (
-                        <span className="bg-cyan-950/60 border border-cyan-800/60 px-1.5 py-0.5 rounded text-[11px]">
+                        <span className="bg-accent-soft border border-accent/30 text-accent-soft-foreground px-1.5 py-0.5 rounded text-[11px]">
                           {opt.state_value}
                         </span>
                       ) : (
-                        <span className="text-slate-600">-</span>
+                        <span className="text-muted">-</span>
                       )}
                     </Table.Cell>
                     <Table.Cell className="p-2.5">
                       <div className="flex flex-col gap-1">
                         {opt.match || opt.match_payload ? (
-                          <span className="text-cyan-300 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/50 font-mono text-[11px] inline-block w-fit">
+                          <span className="text-accent-soft-foreground bg-accent-soft px-2 py-0.5 rounded border border-accent/30 font-mono text-[11px] inline-block w-fit">
                             RX: {formatPayloadDisplay(opt.match || opt.match_payload)}
                           </span>
                         ) : null}
                         {opt.steps && opt.steps.length > 0 ? (
-                          <span className="text-emerald-300 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/50 font-mono text-[11px] inline-block w-fit">
+                          <span className="text-success-soft-foreground bg-success-soft px-2 py-0.5 rounded border border-success/30 font-mono text-[11px] inline-block w-fit">
                             TX: {opt.steps.length} sequential steps ({opt.steps.map(s => `x${s.repeat || 1}`).join(', ')})
                           </span>
                         ) : (opt.to_payload || opt.payload) ? (
-                          <span className="text-emerald-300 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/50 font-mono text-[11px] inline-block w-fit">
+                          <span className="text-success-soft-foreground bg-success-soft px-2 py-0.5 rounded border border-success/30 font-mono text-[11px] inline-block w-fit">
                             TX: {formatPayloadDisplay(opt.to_payload || opt.payload)} {opt.repeat && opt.repeat > 1 ? `x${opt.repeat}` : ''}
                           </span>
                         ) : null}
                         {!opt.match && !opt.match_payload && !opt.steps && !opt.to_payload && !opt.payload && (
-                          <span className="text-slate-600">-</span>
+                          <span className="text-muted">-</span>
                         )}
                       </div>
                     </Table.Cell>
-                    <Table.Cell className="p-2.5 font-sans text-slate-400 max-w-xs truncate">
+                    <Table.Cell className="p-2.5 font-sans text-muted max-w-xs truncate">
                       {opt.description || opt.popup || '-'}
                     </Table.Cell>
                     <Table.Cell className="p-2.5 text-right">
                       {opt.default ? (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-sans font-bold uppercase bg-cyan-950 text-cyan-300 border border-cyan-700">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-sans font-bold uppercase bg-accent-soft text-accent-soft-foreground border border-accent/40">
                           Default
                         </span>
                       ) : (
-                        <span className="text-slate-600">-</span>
+                        <span className="text-muted">-</span>
                       )}
                     </Table.Cell>
                   </Table.Row>

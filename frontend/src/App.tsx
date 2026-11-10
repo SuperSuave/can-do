@@ -1035,9 +1035,9 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--background-color)] text-[var(--text-color)] selection:bg-cyan-500 selection:text-slate-950">
+    <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-accent selection:text-accent-foreground">
       {/* Hero Banner / Header Area */}
-      <header className="border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] px-3.5 py-4 sm:px-6 sm:py-5 lg:px-8">
+      <header className="border-b border-border bg-surface px-3.5 py-4 sm:px-6 sm:py-5 lg:px-8">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 items-center gap-4 py-1">
 
           {/* Left: empty space to push logo to center */}
@@ -1047,7 +1047,7 @@ export default function App() {
           {/* Center: Centered CAN Do Logo with 'CAN Do' text underneath */}
           <div className="flex flex-col items-center justify-center text-center order-1 md:order-2">
             <CanDoLogo className="h-12 sm:h-16 md:h-18 w-auto" />
-            <h1 className="mt-1.5 text-lg sm:text-xl font-bold text-white tracking-wide">
+            <h1 className="mt-1.5 text-lg sm:text-xl font-bold text-foreground tracking-wide">
               CAN Do
             </h1>
           </div>
@@ -1059,16 +1059,16 @@ export default function App() {
               size="sm"
               onPress={toggleTheme}
               aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-              className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-1.5 px-3 transition hover:border-cyan-400"
+              className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-1.5 px-3 transition hover:border-accent"
             >
               {theme === 'dark' ? (
                 <>
-                  <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <Sun className="w-3.5 h-3.5 text-warning shrink-0" />
                   <span className="hidden sm:inline">Light</span>
                 </>
               ) : (
                 <>
-                  <Moon className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                  <Moon className="w-3.5 h-3.5 text-accent shrink-0" />
                   <span className="hidden sm:inline">Dark</span>
                 </>
               )}
@@ -1078,7 +1078,7 @@ export default function App() {
       </header>
 
       {/* Main Tab Navigation Header */}
-      <div className="border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md sticky top-0 z-30">
+      <div className="border-b border-border bg-surface/90 backdrop-blur-md sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="relative flex items-center justify-center h-14">
             {/* HeroUI Segmented Tab Navigation with Animated Indicator */}
@@ -1087,50 +1087,50 @@ export default function App() {
               onSelectionChange={key => handleSetMainTab(key as 'dashboard' | 'automations' | 'catalog' | 'device')}
               aria-label="Main Navigation"
             >
-              <Tabs.ListContainer className="bg-slate-900/90 border border-slate-800/80 shadow-inner rounded-xl">
+              <Tabs.ListContainer className="bg-surface-secondary border border-border rounded-xl">
                 <Tabs.List className="gap-1 p-1">
                   <Tabs.Tab
                     id="dashboard"
                     className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                      activeMainTab === 'dashboard' ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
+                      activeMainTab === 'dashboard' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
                     }`}
                   >
-                    <Gauge className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'dashboard' ? 'text-sky-400' : 'text-slate-400'}`} />
+                    <Gauge className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'dashboard' ? 'text-accent' : 'text-muted'}`} />
                     <span>Cockpit</span>
-                    <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
+                    <Tabs.Indicator className="rounded-lg bg-surface-tertiary border border-border shadow-sm" />
                   </Tabs.Tab>
 
                   <Tabs.Tab
                     id="automations"
                     className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                      activeMainTab === 'automations' ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
+                      activeMainTab === 'automations' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
                     }`}
                   >
-                    <Zap className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'automations' ? 'text-amber-400' : 'text-slate-400'}`} />
+                    <Zap className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'automations' ? 'text-warning' : 'text-muted'}`} />
                     <span>Automations</span>
-                    <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
+                    <Tabs.Indicator className="rounded-lg bg-surface-tertiary border border-border shadow-sm" />
                   </Tabs.Tab>
 
                   <Tabs.Tab
                     id="catalog"
                     className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                      activeMainTab === 'catalog' ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
+                      activeMainTab === 'catalog' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
                     }`}
                   >
-                    <Layers className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'catalog' ? 'text-cyan-400' : 'text-slate-400'}`} />
+                    <Layers className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'catalog' ? 'text-accent' : 'text-muted'}`} />
                     <span>Catalog</span>
-                    <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
+                    <Tabs.Indicator className="rounded-lg bg-surface-tertiary border border-border shadow-sm" />
                   </Tabs.Tab>
 
                   <Tabs.Tab
                     id="device"
                     className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                      activeMainTab === 'device' ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
+                      activeMainTab === 'device' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
                     }`}
                   >
-                    <Radio className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'device' ? 'text-emerald-400' : 'text-slate-400'}`} />
+                    <Radio className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'device' ? 'text-success' : 'text-muted'}`} />
                     <span>Settings</span>
-                    <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
+                    <Tabs.Indicator className="rounded-lg bg-surface-tertiary border border-border shadow-sm" />
                   </Tabs.Tab>
                 </Tabs.List>
               </Tabs.ListContainer>
@@ -1143,7 +1143,7 @@ export default function App() {
                   variant="primary"
                   size="sm"
                   onPress={handleCreateAutomationFromSelected}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition shadow-sm"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-warning hover:bg-warning-hover text-warning-foreground text-xs font-bold transition shadow-sm"
                 >
                   <Zap className="w-3.5 h-3.5 fill-current" />
                   <span className="hidden sm:inline">Build with ({selectedForAutomation.size})</span>
@@ -1159,43 +1159,43 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 min-w-0">
         <Suspense
           fallback={
-            <div className="flex flex-col items-center justify-center p-20 space-y-3 text-slate-400">
-              <div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-              <span className="text-xs font-mono text-[var(--text-muted)]">Loading module...</span>
+            <div className="flex flex-col items-center justify-center p-20 space-y-3 text-muted">
+              <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-mono text-muted">Loading module...</span>
             </div>
           }
         >
           {activeMainTab === 'catalog' ? (
           <div className="space-y-5 sm:space-y-6 min-w-0">
             {/* Catalog Sub-Tab Navigation Header (Messages vs Vehicles) */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-800/80">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-separator">
               <Tabs
                 selectedKey={catalogSubTab}
                 onSelectionChange={key => setCatalogSubTab(key as 'messages' | 'vehicles')}
                 aria-label="Catalog Sections"
               >
-                <Tabs.ListContainer className="bg-slate-900/90 border border-slate-800/80 shadow-inner rounded-xl">
+                <Tabs.ListContainer className="bg-surface-secondary border border-border rounded-xl">
                   <Tabs.List className="gap-1 p-1">
                     <Tabs.Tab
                       id="messages"
                       className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold cursor-pointer transition-colors ${
-                        catalogSubTab === 'messages' ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+                        catalogSubTab === 'messages' ? 'text-foreground' : 'text-muted hover:text-foreground'
                       }`}
                     >
-                      <Layers className={`w-3.5 h-3.5 ${catalogSubTab === 'messages' ? 'text-cyan-400' : 'text-slate-400'}`} />
+                      <Layers className={`w-3.5 h-3.5 ${catalogSubTab === 'messages' ? 'text-accent' : 'text-muted'}`} />
                       <span>Messages</span>
-                      <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
+                      <Tabs.Indicator className="rounded-lg bg-surface-tertiary border border-border shadow-sm" />
                     </Tabs.Tab>
 
                     <Tabs.Tab
                       id="vehicles"
                       className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold cursor-pointer transition-colors ${
-                        catalogSubTab === 'vehicles' ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+                        catalogSubTab === 'vehicles' ? 'text-foreground' : 'text-muted hover:text-foreground'
                       }`}
                     >
-                      <Car className={`w-3.5 h-3.5 ${catalogSubTab === 'vehicles' ? 'text-indigo-400' : 'text-slate-400'}`} />
+                      <Car className={`w-3.5 h-3.5 ${catalogSubTab === 'vehicles' ? 'text-accent' : 'text-muted'}`} />
                       <span>Vehicles</span>
-                      <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
+                      <Tabs.Indicator className="rounded-lg bg-surface-tertiary border border-border shadow-sm" />
                     </Tabs.Tab>
                   </Tabs.List>
                 </Tabs.ListContainer>
@@ -1211,8 +1211,8 @@ export default function App() {
                   aria-label="Open Catalog Validation Report"
                   className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition ${
                     validationReport.isValid
-                      ? 'bg-emerald-950/30 text-emerald-300 border-emerald-800/80 hover:bg-emerald-950/60'
-                      : 'bg-rose-950/30 text-rose-300 border-rose-800/80 hover:bg-rose-950/60 animate-pulse'
+                      ? 'bg-success-soft text-success-soft-foreground border-success/30 hover:bg-success/20'
+                      : 'bg-danger-soft text-danger-soft-foreground border-danger/30 hover:bg-danger/20 animate-pulse'
                   }`}
                 >
                   <span className={`status-dot ${validationReport.isValid ? 'green' : 'red'}`} />
@@ -1224,7 +1224,7 @@ export default function App() {
                   variant="outline"
                   size="sm"
                   onPress={handleReloadCatalog}
-                  className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-1.5 px-3.5 text-cyan-300 hover:text-cyan-200"
+                  className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-1.5 px-3.5 text-accent hover:text-accent/80"
                   aria-label="Pull latest catalog directly from /catalog/can_do_catalog.json"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
@@ -1239,7 +1239,7 @@ export default function App() {
                   className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-1.5 px-3.5"
                   aria-label="Import JSON catalog or Vector DBC"
                 >
-                  <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                  <Upload className="w-3.5 h-3.5 text-accent" />
                   <span>Import</span>
                 </Button>
 
@@ -1338,10 +1338,10 @@ export default function App() {
                 </div>
               )
             ) : (
-              <div className="text-center py-16 px-4 rounded-2xl border border-dashed border-slate-800 bg-slate-950/40">
-                <Search className="w-8 h-8 text-slate-600 mx-auto mb-3" />
-                <h3 className="text-base font-semibold text-slate-300">No CAN messages found</h3>
-                <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-4">
+              <div className="text-center py-16 px-4 rounded-2xl border border-dashed border-border bg-surface/60">
+                <Search className="w-8 h-8 text-muted mx-auto mb-3" />
+                <h3 className="text-base font-semibold text-foreground">No CAN messages found</h3>
+                <p className="text-xs text-muted max-w-md mx-auto mt-1 mb-4">
                   No commands match your current search criteria or vehicle compatibility filter.
                 </p>
                 <Button
@@ -1357,7 +1357,7 @@ export default function App() {
                     setSelectedRegion('all');
                     setSelectedFeature('all');
                   }}
-                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white transition"
+                  className="px-4 py-2 rounded-lg bg-surface-secondary hover:bg-surface-tertiary border border-border text-xs font-semibold text-foreground transition"
                 >
                   Clear All Filters
                 </Button>
@@ -1498,19 +1498,19 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] text-[var(--text-muted)] py-8 px-4 text-xs">
+      <footer className="border-t border-border bg-surface text-muted py-8 px-4 text-xs">
         <div className="max-w-7xl mx-auto flex flex-col items-center justify-center">
           {/* Centered Logo without background, with title and metadata underneath */}
           <div className="flex flex-col items-center justify-center text-center gap-2">
             <div className="flex items-center justify-center transition-transform hover:scale-105">
               <CanDoLogo className="h-10 sm:h-12 w-auto" />
             </div>
-            <div className="flex flex-col sm:flex-row items-center gap-1.5 sm:gap-2 text-slate-300 font-medium">
-              <span className="font-semibold text-white tracking-wide">CAN Do Automations</span>
-              <span className="hidden sm:inline text-slate-600">•</span>
-              <span className="text-[var(--text-muted)] font-mono text-[11px]">{catalog.can_do_version || 'unknown'}</span>
-              <span className="hidden sm:inline text-slate-600">•</span>
-              <span className="text-[var(--text-muted)]">Community Message Catalog</span>
+            <div className="flex flex-col sm:flex-row items-center gap-1.5 sm:gap-2 text-muted font-medium">
+              <span className="font-semibold text-foreground tracking-wide">CAN Do Automations</span>
+              <span className="hidden sm:inline text-muted/60">•</span>
+              <span className="text-muted font-mono text-[11px]">{catalog.can_do_version || 'unknown'}</span>
+              <span className="hidden sm:inline text-muted/60">•</span>
+              <span className="text-muted">Community Message Catalog</span>
             </div>
           </div>
         </div>
@@ -1541,7 +1541,7 @@ export default function App() {
                 size="sm"
                 onPress={() => setSelectedForAutomation(new Set())}
                 aria-label="Clear selected commands"
-                className="inline-flex items-center gap-1 h-9 px-3 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold shadow-lg backdrop-blur transition"
+                className="inline-flex items-center gap-1 h-9 px-3 rounded-full bg-overlay hover:bg-surface-secondary text-overlay-foreground border border-border text-xs font-semibold shadow-overlay backdrop-blur transition"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>Clear</span>

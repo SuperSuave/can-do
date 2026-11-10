@@ -108,7 +108,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           title: 'Custom CAN Trigger',
           desc: 'Trigger on raw CAN ID, byte value transitions, or button click gestures',
           icon: Radio,
-          color: 'text-amber-400 bg-amber-950/40 border-amber-800/60',
+          color: 'text-warning bg-warning-soft border-warning/30',
           create: (): AutomationTrigger => ({
             id: `trig_${Date.now().toString(36)}`,
             name: 'Custom CAN Trigger',
@@ -128,7 +128,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           title: 'Time / Clock Schedule',
           desc: 'Fire at specific time and days',
           icon: Clock,
-          color: 'text-cyan-400 bg-cyan-950/40 border-cyan-800/60',
+          color: 'text-accent bg-accent-soft border-accent/30',
           create: (): AutomationTrigger => ({
             id: `trig_time_${Date.now().toString(36)}`,
             source: 'time',
@@ -142,7 +142,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           title: 'Bluetooth Remote / Keypad Button or Combo',
           desc: 'Trigger based on specified buttons from paired BT device',
           icon: Bluetooth,
-          color: 'text-blue-400 bg-blue-950/40 border-blue-800/60',
+          color: 'text-accent bg-accent-soft border-accent/30',
           create: (): AutomationTrigger => ({
             id: `trig_ble_${Date.now().toString(36)}`,
             source: 'ble',
@@ -156,7 +156,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           title: 'Bluetooth Presence / Proximity',
           desc: 'Trigger when your phone, BLE key fob, or paired device enters or exits range',
           icon: Bluetooth,
-          color: 'text-purple-400 bg-purple-950/40 border-purple-800/60',
+          color: 'text-purple-600 dark:text-purple-400 bg-purple-500/15 border-purple-500/40',
           create: (): AutomationTrigger => ({
             id: `trig_ble_${Date.now().toString(36)}`,
             source: 'ble',
@@ -172,7 +172,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           title: 'Wi-Fi / AP Connection Event',
           desc: 'Trigger on network connect/disconnect or when a client connects to the ESP32 SoftAP (with proximity RSSI)',
           icon: Wifi,
-          color: 'text-sky-400 bg-sky-950/40 border-sky-800/60',
+          color: 'text-accent bg-accent-soft border-accent/30',
           create: (): AutomationTrigger => ({
             id: `trig_wifi_${Date.now().toString(36)}`,
             source: 'wifi',
@@ -193,7 +193,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           title: 'Triggered By (CHOOSE Branching)',
           desc: 'Evaluate which trigger ID initiated this automation execution',
           icon: Radio,
-          color: 'text-amber-400 bg-amber-950/40 border-amber-800/60',
+          color: 'text-warning bg-warning-soft border-warning/30',
           create: (): AutomationCondition => ({
             id: `cond_trig_${Date.now().toString(36)}`,
             type: 'triggered_by',
@@ -205,7 +205,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           title: 'Exact CAN Payload Match',
           desc: 'Evaluate live bus byte values with bitmask and equality/range operators',
           icon: Cpu,
-          color: 'text-purple-400 bg-purple-950/40 border-purple-800/60',
+          color: 'text-accent bg-accent-soft border-accent/30',
           create: (): AutomationCondition => ({
             id: `cond_${Date.now().toString(36)}`,
             logic: 'leaf',
@@ -222,7 +222,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           title: 'Time Window / Schedule',
           desc: 'Specify valid hours and days for actions to run',
           icon: Clock,
-          color: 'text-cyan-400 bg-cyan-950/40 border-cyan-800/60',
+          color: 'text-accent bg-accent-soft border-accent/30',
           create: (): AutomationCondition => ({
             id: `cond_time_${Date.now().toString(36)}`,
             type: 'time_condition',
@@ -236,7 +236,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           title: '12V Battery Voltage Check',
           desc: 'Confirm auxiliary 12V system is above or below threshold voltage',
           icon: Zap,
-          color: 'text-yellow-400 bg-yellow-950/40 border-yellow-800/60',
+          color: 'text-warning bg-warning-soft border-warning/30',
           create: (): AutomationCondition => ({
             id: `cond_volt_${Date.now().toString(36)}`,
             type: 'voltage',
@@ -249,7 +249,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           title: 'ESP32 Wi-Fi / AP Mode Condition',
           desc: 'Check connected Wi-Fi network (SSID), whether in AP mode, or connected device presence & signal strength (RSSI proximity)',
           icon: Wifi,
-          color: 'text-sky-400 bg-sky-950/40 border-sky-800/60',
+          color: 'text-accent bg-accent-soft border-accent/30',
           create: (): AutomationCondition => ({
             id: `cond_wifi_${Date.now().toString(36)}`,
             type: 'device_state',
@@ -265,7 +265,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           title: 'Bluetooth Button',
           desc: 'Evaluate if a specific Bluetooth button/combo was pressed',
           icon: Bluetooth,
-          color: 'text-blue-400 bg-blue-950/40 border-blue-800/60',
+          color: 'text-accent bg-accent-soft border-accent/30',
           create: (): AutomationCondition => ({
             id: `cond_ble_btn_${Date.now().toString(36)}`,
             type: 'ble_button',
@@ -278,7 +278,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           title: 'Bluetooth Presence / Proximity Condition',
           desc: 'Check whether phone beacon, key fob, or paired device is present or in specified range',
           icon: Bluetooth,
-          color: 'text-purple-400 bg-purple-950/40 border-purple-800/60',
+          color: 'text-purple-600 dark:text-purple-400 bg-purple-500/15 border-purple-500/40',
           create: (): AutomationCondition => ({
             id: `cond_ble_pres_${Date.now().toString(36)}`,
             type: 'ble_presence',
@@ -294,7 +294,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           title: 'AND Logic Block',
           desc: 'Group multiple conditions; ALL must evaluate to true',
           icon: Code,
-          color: 'text-purple-400 bg-purple-950/40 border-purple-800/60',
+          color: 'text-purple-600 dark:text-purple-400 bg-purple-500/15 border-purple-500/40',
           create: (): AutomationCondition => ({
             id: `cond_and_${Date.now().toString(36)}`,
             logic: 'and',
@@ -306,7 +306,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           title: 'OR Logic Block',
           desc: 'Group multiple conditions; AT LEAST ONE must evaluate to true',
           icon: Code,
-          color: 'text-indigo-400 bg-indigo-950/40 border-indigo-800/60',
+          color: 'text-accent bg-accent-soft border-accent/30',
           create: (): AutomationCondition => ({
             id: `cond_or_${Date.now().toString(36)}`,
             logic: 'or',
@@ -318,7 +318,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           title: 'NOT Logic Block',
           desc: 'Invert condition outcome; condition must evaluate to false',
           icon: Code,
-          color: 'text-rose-400 bg-rose-950/40 border-rose-800/60',
+          color: 'text-danger bg-danger-soft border-danger/30',
           create: (): AutomationCondition => ({
             id: `cond_not_${Date.now().toString(36)}`,
             logic: 'not',
@@ -335,7 +335,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         title: 'If - Then - Else',
         desc: 'Perform actions conditionally based on nested condition evaluation',
         icon: GitFork,
-        color: 'text-cyan-400 bg-cyan-950/40 border-cyan-800/60',
+        color: 'text-accent bg-accent-soft border-accent/30',
         create: (): AutomationAction => ({
           id: `act_ifthen_${Date.now().toString(36)}`,
           type: 'if_then',
@@ -349,7 +349,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         title: 'Choose (Sequential Branching)',
         desc: 'Multi-branch sequence executing the first matching condition',
         icon: Split,
-        color: 'text-blue-400 bg-blue-950/40 border-blue-800/60',
+        color: 'text-purple-600 dark:text-purple-400 bg-purple-500/15 border-purple-500/40',
         create: (): AutomationAction => ({
           id: `act_choose_${Date.now().toString(36)}`,
           type: 'choose',
@@ -362,7 +362,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         title: 'Wait (Condition or Delay)',
         desc: 'Pause until a button or condition is met, or pause for a specified delay duration',
         icon: Clock,
-        color: 'text-violet-400 bg-violet-950/40 border-violet-800/60',
+        color: 'text-purple-600 dark:text-purple-400 bg-purple-500/15 border-purple-500/40',
         create: (): AutomationAction => ({
           id: `act_wait_${Date.now().toString(36)}`,
           type: 'wait_for',
@@ -382,7 +382,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         title: 'Custom CAN Transmit',
         desc: 'Specify custom CAN frames with repeat and delay timing',
         icon: Radio,
-        color: 'text-emerald-400 bg-emerald-950/40 border-emerald-800/60',
+        color: 'text-success bg-success-soft border-success/30',
         create: (): AutomationAction => ({
           id: `act_can_${Date.now().toString(36)}`,
           type: 'can_tx',
@@ -398,7 +398,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         title: 'Cluster Popup (OSD)',
         desc: 'Show notification vehicle cluster or CAN Do UI',
         icon: MessageSquare,
-        color: 'text-cyan-400 bg-cyan-950/40 border-cyan-800/60',
+        color: 'text-accent bg-accent-soft border-accent/30',
         create: (): AutomationAction => ({
           id: `act_pop_${Date.now().toString(36)}`,
           type: 'track_popup',
@@ -411,7 +411,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         title: 'Dynamic Climate Target',
         desc: 'Adjust driver or passenger setpoint temp and zone conditioning',
         icon: Thermometer,
-        color: 'text-rose-400 bg-rose-950/40 border-rose-800/60',
+        color: 'text-danger bg-danger-soft border-danger/30',
         create: (): AutomationAction => ({
           id: `act_clim_${Date.now().toString(36)}`,
           type: 'climate_target',
@@ -424,7 +424,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         title: 'Cycle Entity State (Stepper)',
         desc: 'Cycle through levels/states (e.g. Off -> Low -> Med -> High) with optional Notification',
         icon: RotateCw,
-        color: 'text-amber-400 bg-amber-950/40 border-amber-800/60',
+        color: 'text-warning bg-warning-soft border-warning/30',
         create: (): AutomationAction => ({
           id: `act_cycle_${Date.now().toString(36)}`,
           type: 'cycle_entity',
@@ -441,7 +441,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         title: 'Battery Preconditioning',
         desc: 'Trigger battery preconditioning',
         icon: Zap,
-        color: 'text-yellow-400 bg-yellow-950/40 border-yellow-800/60',
+        color: 'text-warning bg-warning-soft border-warning/30',
         create: (): AutomationAction => ({
           id: `act_precon_${Date.now().toString(36)}`,
           type: 'precondition',
@@ -497,51 +497,51 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
   const typeConfig = {
     trigger: {
       pillText: 'When',
-      pillClass: 'bg-amber-950 text-amber-300 border-amber-800/70',
+      pillClass: 'bg-warning-soft text-warning-soft-foreground border-warning/40',
       title: 'Add Trigger',
       icon: Zap,
-      iconColor: 'text-amber-400 bg-amber-950/50'
+      iconColor: 'text-warning bg-warning-soft'
     },
     condition: {
       pillText: 'And if',
-      pillClass: 'bg-sky-950 text-sky-300 border-sky-800/70',
+      pillClass: 'bg-accent-soft text-accent-soft-foreground border-accent/40',
       title: 'Add Condition',
       icon: Shield,
-      iconColor: 'text-sky-400 bg-sky-950/50'
+      iconColor: 'text-accent bg-accent-soft'
     },
     action: {
       pillText: 'Then do',
-      pillClass: 'bg-emerald-950 text-emerald-300 border-emerald-800/70',
+      pillClass: 'bg-success-soft text-success-soft-foreground border-success/40',
       title: 'Add Action',
       icon: Send,
-      iconColor: 'text-emerald-400 bg-emerald-950/50'
+      iconColor: 'text-success bg-success-soft'
     }
   }[target.type];
 
   return (
     <div
       onClick={handleClose}
-      className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm transition-opacity duration-200 ease-out ${
+      className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-backdrop backdrop-blur-sm transition-opacity duration-200 ease-out ${
         isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
       }`}
     >
       <div
         onClick={e => e.stopPropagation()}
-        className={`w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh] transition-all duration-200 ease-out transform ${
+        className={`w-full max-w-2xl bg-overlay text-overlay-foreground border border-border rounded-2xl shadow-overlay overflow-hidden flex flex-col max-h-[88vh] transition-all duration-200 ease-out transform ${
           isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-3'
         }`}
       >
         {/* Header */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between gap-3 bg-slate-900/90">
+        <div className="p-4 border-b border-separator flex items-center justify-between gap-3 bg-surface">
           <div className="flex items-center gap-2.5">
             <span className={`px-2 py-0.5 rounded-full font-bold uppercase text-[10px] tracking-wider border font-mono ${typeConfig.pillClass}`}>
               {typeConfig.pillText}
             </span>
             <div>
-              <h3 className="text-sm font-bold text-white leading-snug">
+              <h3 className="text-sm font-bold text-foreground leading-snug">
                 {target.title || typeConfig.title}
               </h3>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-muted">
                 {target.contextHint || 'Select a building block or vehicle catalog command'}
               </p>
             </div>
@@ -549,29 +549,29 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           <button
             type="button"
             onClick={handleClose}
-            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition"
+            className="text-muted hover:text-foreground p-1.5 rounded-lg hover:bg-default-hover transition"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Search Bar & Nav Filter */}
-        <div className="p-3 border-b border-slate-800 bg-slate-950/60 flex flex-col sm:flex-row gap-2">
+        <div className="p-3 border-b border-separator bg-surface flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted" />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder={`Search ${target.type} elements or catalog commands...`}
               autoFocus
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-8 pr-8 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition"
+              className="w-full bg-surface-secondary border border-border rounded-xl pl-8 pr-8 py-1.5 text-xs text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus transition"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                className="absolute right-2.5 top-2.5 text-slate-500 hover:text-slate-300"
+                className="absolute right-2.5 top-2.5 text-muted hover:text-foreground"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -584,42 +584,42 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
               onSelectionChange={key => setActiveTab(key as 'all' | 'blocks' | 'catalog')}
               aria-label="Filter Elements"
             >
-              <Tabs.ListContainer className="p-0.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px]">
+              <Tabs.ListContainer className="p-0.5 rounded-xl bg-surface-secondary border border-border text-[11px]">
                 <Tabs.List className="gap-0.5">
                   <Tabs.Tab
                     id="all"
                     className={`relative px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
                       activeTab === 'all'
-                        ? 'text-slate-950 font-semibold'
-                        : 'text-slate-400 hover:text-slate-200'
+                        ? 'text-accent-foreground font-semibold'
+                        : 'text-muted hover:text-foreground'
                     }`}
                   >
                     <span>All</span>
-                    <Tabs.Indicator className="rounded-lg bg-cyan-500 shadow-sm" />
+                    <Tabs.Indicator className="rounded-lg bg-accent shadow-sm" />
                   </Tabs.Tab>
 
                   <Tabs.Tab
                     id="blocks"
                     className={`relative px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
                       activeTab === 'blocks'
-                        ? 'text-slate-950 font-semibold'
-                        : 'text-slate-400 hover:text-slate-200'
+                        ? 'text-accent-foreground font-semibold'
+                        : 'text-muted hover:text-foreground'
                     }`}
                   >
                     <span>Blocks ({filteredBlocks.length})</span>
-                    <Tabs.Indicator className="rounded-lg bg-cyan-500 shadow-sm" />
+                    <Tabs.Indicator className="rounded-lg bg-accent shadow-sm" />
                   </Tabs.Tab>
 
                   <Tabs.Tab
                     id="catalog"
                     className={`relative px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
                       activeTab === 'catalog'
-                        ? 'text-slate-950 font-semibold'
-                        : 'text-slate-400 hover:text-slate-200'
+                        ? 'text-accent-foreground font-semibold'
+                        : 'text-muted hover:text-foreground'
                     }`}
                   >
                     <span>Catalog ({filteredCatalog.length})</span>
-                    <Tabs.Indicator className="rounded-lg bg-cyan-500 shadow-sm" />
+                    <Tabs.Indicator className="rounded-lg bg-accent shadow-sm" />
                   </Tabs.Tab>
                 </Tabs.List>
               </Tabs.ListContainer>
@@ -629,7 +629,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
               <select
                 value={selectedCategory}
                 onChange={e => setSelectedCategory(e.target.value)}
-                className="bg-slate-900 border border-slate-800 rounded-xl px-2 py-1 text-xs text-slate-300 focus:outline-none"
+                className="bg-surface-secondary border border-border rounded-xl px-2 py-1 text-xs text-foreground focus:outline-none focus:border-focus"
               >
                 <option value="all">All Categories</option>
                 {categories.map(c => (
@@ -647,9 +647,9 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           {/* Section 1: Building Blocks */}
           {(activeTab === 'all' || activeTab === 'blocks') && filteredBlocks.length > 0 && (
             <div className="space-y-2">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-muted flex items-center gap-1.5">
                 <span>Building Blocks &amp; Flow Control</span>
-                <span className="text-slate-600 font-mono">({filteredBlocks.length})</span>
+                <span className="text-muted font-mono">({filteredBlocks.length})</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {filteredBlocks.map(block => {
@@ -659,17 +659,17 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
                       key={block.id}
                       type="button"
                       onClick={() => handleSelectBlock(block)}
-                      className="group p-3 rounded-xl bg-slate-950/70 border border-slate-800 hover:border-cyan-500/80 hover:bg-slate-800/40 transition text-left flex items-start gap-2.5 cursor-pointer"
+                      className="group p-3 rounded-xl bg-surface-secondary border border-border hover:border-accent hover:bg-surface-tertiary transition text-left flex items-start gap-2.5 cursor-pointer"
                     >
                       <div className={`p-2 rounded-lg border flex-shrink-0 ${block.color}`}>
                         <Icon className="w-4 h-4" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-xs font-bold text-white group-hover:text-cyan-300 transition flex items-center justify-between">
+                        <div className="text-xs font-bold text-foreground group-hover:text-accent transition flex items-center justify-between">
                           <span>{block.title}</span>
-                          <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-cyan-400 transition" />
+                          <ChevronRight className="w-3.5 h-3.5 text-muted group-hover:text-accent transition" />
                         </div>
-                        <p className="text-[11px] text-slate-400 line-clamp-2 mt-0.5 leading-relaxed">
+                        <p className="text-[11px] text-muted line-clamp-2 mt-0.5 leading-relaxed">
                           {block.desc}
                         </p>
                       </div>
@@ -683,13 +683,13 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           {/* Section 2: Vehicle Catalog Presets */}
           {(activeTab === 'all' || activeTab === 'catalog') && (
             <div className="space-y-2">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-muted flex items-center gap-1.5">
                 <span>Vehicle Catalog Commands</span>
-                <span className="text-slate-600 font-mono">({filteredCatalog.length})</span>
+                <span className="text-muted font-mono">({filteredCatalog.length})</span>
               </div>
 
               {filteredCatalog.length === 0 ? (
-                <div className="p-6 rounded-xl bg-slate-950/40 border border-dashed border-slate-800 text-center text-xs text-slate-500">
+                <div className="p-6 rounded-xl bg-surface-secondary border border-dashed border-border text-center text-xs text-muted">
                   No catalog commands match your search query.
                 </div>
               ) : (
@@ -700,19 +700,19 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
                     return (
                       <div
                         key={cmd.id}
-                        className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/90 hover:border-slate-700 transition flex flex-col gap-2"
+                        className="p-3 rounded-xl bg-surface-secondary border border-border hover:border-border-secondary transition flex flex-col gap-2"
                       >
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-white truncate">
+                              <span className="text-xs font-bold text-foreground truncate">
                                 {cmd.name || cmd.ha_metadata?.name || cmd.id}
                               </span>
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 font-mono border border-slate-800">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-tertiary text-muted font-mono border border-border">
                                 {cmd.category}
                               </span>
                             </div>
-                            <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono mt-0.5">
+                            <div className="flex items-center gap-2 text-[10px] text-muted font-mono mt-0.5">
                               {(cmd.state_can_id || cmd.network?.state_can_id) && (
                                 <span>RX: {cmd.state_can_id || cmd.network?.state_can_id}</span>
                               )}
@@ -725,7 +725,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
                           <button
                             type="button"
                             onClick={() => handleSelectCatalogItem(cmd)}
-                            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-500 text-slate-950 hover:bg-cyan-400 transition"
+                            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-accent text-accent-foreground hover:bg-accent-hover transition"
                           >
                             Select Command
                           </button>
@@ -733,14 +733,14 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
 
                         {/* Direct Option/State selection */}
                         {hasOptions && (
-                          <div className="pt-2 border-t border-slate-900/90 flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[10px] text-slate-500 font-medium">Or pick state:</span>
+                          <div className="pt-2 border-t border-separator flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] text-muted font-medium">Or pick state:</span>
                             {cmd.options!.map((opt, optIdx) => (
                               <button
                                 key={optIdx}
                                 type="button"
                                 onClick={() => handleSelectCatalogItem(cmd, opt)}
-                                className="px-2 py-0.5 rounded text-[10px] font-mono text-cyan-300 bg-slate-900 hover:bg-cyan-950 hover:text-cyan-200 border border-slate-800 hover:border-cyan-800 transition"
+                                className="px-2 py-0.5 rounded text-[10px] font-mono text-accent bg-surface-tertiary hover:bg-accent-soft hover:text-accent-soft-foreground border border-border hover:border-accent/40 transition"
                               >
                                 {opt.label}
                               </button>

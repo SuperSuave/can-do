@@ -175,28 +175,28 @@ export const GroupedCommandView: React.FC<GroupedCommandViewProps> = ({
             key={catGroup.id}
             isExpanded={!isCollapsed}
             onExpandedChange={() => toggleGroupCollapse(catGroup.id)}
-            className="rounded-2xl border border-[var(--border-color)] bg-[var(--card-bg)]/40 overflow-hidden shadow-sm transition min-w-0"
+            className="rounded-2xl border border-border bg-surface overflow-hidden shadow-surface transition min-w-0"
           >
             {/* Top-Level Category Header */}
             <Disclosure.Heading className="m-0 p-0">
               <Disclosure.Trigger
-                className="w-full flex flex-wrap items-center justify-between gap-2.5 px-4 py-3 bg-[var(--card-bg)]/90 hover:bg-[var(--md-sys-color-surface-container-high)]/50 cursor-pointer border-b border-[var(--border-color)] transition select-none min-w-0 text-left"
+                className="w-full flex flex-wrap items-center justify-between gap-2.5 px-4 py-3 bg-surface hover:bg-surface-secondary cursor-pointer border-b border-border transition select-none min-w-0 text-left"
               >
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <Disclosure.Indicator className="text-cyan-400 shrink-0" />
-                  <FolderKanban className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <Disclosure.Indicator className="text-accent shrink-0" />
+                  <FolderKanban className="w-4 h-4 text-accent shrink-0" />
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap min-w-0">
-                      <span className="text-sm sm:text-base font-bold text-white tracking-tight truncate">
+                      <span className="text-sm sm:text-base font-bold text-foreground tracking-tight truncate">
                         {catGroup.categoryName}
                       </span>
-                      <span className="px-2 py-0.5 rounded-full bg-slate-800/90 text-slate-300 font-mono text-[11px] font-semibold border border-slate-700/60">
+                      <span className="px-2 py-0.5 rounded-full bg-surface-secondary text-foreground font-mono text-[11px] font-semibold border border-border">
                         {catGroup.totalCommands} {catGroup.totalCommands === 1 ? 'cmd' : 'cmds'}
                       </span>
                       {catGroup.subgroups.length > 1 && (
-                        <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-cyan-300/90 font-medium px-2 py-0.5 rounded-full bg-cyan-950/40 border border-cyan-800/40">
-                          <Layers className="w-3 h-3 text-cyan-400" />
+                        <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-accent-soft-foreground font-medium px-2 py-0.5 rounded-full bg-accent-soft border border-accent/30">
+                          <Layers className="w-3 h-3 text-accent" />
                           <span>{catGroup.subgroups.length} subcategories</span>
                         </span>
                       )}
@@ -208,17 +208,17 @@ export const GroupedCommandView: React.FC<GroupedCommandViewProps> = ({
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="flex items-center gap-1.5 text-[10px] font-mono">
                     {catGroup.triggersCount > 0 && (
-                      <span className="px-1.5 py-0.5 rounded bg-amber-950/60 text-amber-300 border border-amber-800/60">
+                      <span className="px-1.5 py-0.5 rounded bg-warning-soft text-warning-soft-foreground border border-warning/30">
                         {catGroup.triggersCount} Trig
                       </span>
                     )}
                     {catGroup.conditionsCount > 0 && (
-                      <span className="px-1.5 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-800/60">
+                      <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent-soft-foreground border border-accent/30">
                         {catGroup.conditionsCount} Cond
                       </span>
                     )}
                     {catGroup.actionsCount > 0 && (
-                      <span className="px-1.5 py-0.5 rounded bg-cyan-950/60 text-cyan-300 border border-cyan-800/60">
+                      <span className="px-1.5 py-0.5 rounded bg-success-soft text-success-soft-foreground border border-success/30">
                         {catGroup.actionsCount} Act
                       </span>
                     )}
@@ -228,7 +228,7 @@ export const GroupedCommandView: React.FC<GroupedCommandViewProps> = ({
             </Disclosure.Heading>
 
             {/* Category Body: Nested Subcategories or Direct Grid */}
-            <Disclosure.Content className="p-3.5 sm:p-4 bg-black/10 min-w-0">
+            <Disclosure.Content className="p-3.5 sm:p-4 bg-background/40 min-w-0">
                 {catGroup.subgroups.length <= 1 ? (
                   /* Single subcategory (or general): render grid directly without redundant headers */
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4 min-w-0">
@@ -254,13 +254,13 @@ export const GroupedCommandView: React.FC<GroupedCommandViewProps> = ({
                     {catGroup.subgroups.map(subgroup => (
                       <div key={subgroup.name} className="space-y-3 min-w-0">
                         {/* Nested Subgroup Header */}
-                        <div className="flex items-center justify-between gap-2 pb-2 border-b border-[var(--border-color)]/70">
+                        <div className="flex items-center justify-between gap-2 pb-2 border-b border-separator">
                           <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-1.5 h-3.5 rounded-full bg-cyan-400 shrink-0" />
-                            <h4 className="text-xs sm:text-sm font-semibold text-slate-200 tracking-tight">
+                            <div className="w-1.5 h-3.5 rounded-full bg-accent shrink-0" />
+                            <h4 className="text-xs sm:text-sm font-semibold text-foreground tracking-tight">
                               {subgroup.name}
                             </h4>
-                            <span className="text-[11px] text-slate-400 font-mono">
+                            <span className="text-[11px] text-muted font-mono">
                               ({subgroup.commands.length} {subgroup.commands.length === 1 ? 'cmd' : 'cmds'})
                             </span>
                           </div>
@@ -268,17 +268,17 @@ export const GroupedCommandView: React.FC<GroupedCommandViewProps> = ({
                           <div className="flex items-center gap-2 shrink-0">
                             <div className="flex items-center gap-1.5 text-[10px] font-mono">
                               {subgroup.triggersCount > 0 && (
-                                <span className="px-1.5 py-0.2 rounded bg-amber-950/40 text-amber-300/90 border border-amber-800/40">
+                                <span className="px-1.5 py-0.2 rounded bg-warning-soft text-warning-soft-foreground border border-warning/30">
                                   {subgroup.triggersCount} Trig
                                 </span>
                               )}
                               {subgroup.conditionsCount > 0 && (
-                                <span className="px-1.5 py-0.2 rounded bg-emerald-950/40 text-emerald-300/90 border border-emerald-800/40">
+                                <span className="px-1.5 py-0.2 rounded bg-accent-soft text-accent-soft-foreground border border-accent/30">
                                   {subgroup.conditionsCount} Cond
                                 </span>
                               )}
                               {subgroup.actionsCount > 0 && (
-                                <span className="px-1.5 py-0.2 rounded bg-cyan-950/40 text-cyan-300/90 border border-cyan-800/40">
+                                <span className="px-1.5 py-0.2 rounded bg-success-soft text-success-soft-foreground border border-success/30">
                                   {subgroup.actionsCount} Act
                                 </span>
                               )}
@@ -288,7 +288,7 @@ export const GroupedCommandView: React.FC<GroupedCommandViewProps> = ({
                               <button
                                 type="button"
                                 onClick={() => onSelectSubcategory(subgroup.name)}
-                                className="text-[11px] text-cyan-400 hover:text-cyan-300 hover:underline px-1.5 py-0.5 font-medium ml-1"
+                                className="text-[11px] text-accent hover:underline px-1.5 py-0.5 font-medium ml-1"
                                 title={`Filter strictly to ${subgroup.name}`}
                               >
                                 Focus

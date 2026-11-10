@@ -65,33 +65,33 @@ export const AutomationMoreInfoModal: React.FC<AutomationMoreInfoModalProps> = (
 
   return (
     <Modal isOpen={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <ModalBackdrop className="bg-black/80 backdrop-blur-sm fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+      <ModalBackdrop className="bg-backdrop backdrop-blur-sm fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
         <ModalContainer className="w-full max-w-lg">
-          <ModalDialog className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <ModalHeader className="px-5 py-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/70">
+          <ModalDialog className="bg-overlay border border-border rounded-2xl shadow-overlay overflow-hidden flex flex-col max-h-[90vh]">
+            <ModalHeader className="px-5 py-4 border-b border-separator flex items-center justify-between bg-surface">
               <div className="flex items-center gap-2.5 min-w-0">
                 <span
                   className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                    rule.enabled ? 'bg-emerald-400' : 'bg-slate-600'
+                    rule.enabled ? 'bg-success' : 'bg-muted/50'
                   }`}
                 />
-                <ModalHeading className="text-base font-bold text-white truncate">
+                <ModalHeading className="text-base font-bold text-foreground truncate">
                   {rule.name || 'Automation Details'}
                 </ModalHeading>
               </div>
               <button
                 type="button"
                 onClick={onClose}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                className="p-1 rounded-lg text-muted hover:text-foreground hover:bg-surface-secondary transition"
                 aria-label="Close modal"
               >
                 <X className="w-5 h-5" />
               </button>
             </ModalHeader>
 
-            <ModalBody className="p-5 space-y-4 overflow-y-auto text-sm text-slate-300">
+            <ModalBody className="p-5 space-y-4 overflow-y-auto text-sm text-foreground">
               {/* Primary Status Banner */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950/80 border border-slate-800">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-surface-secondary border border-border">
                 <div className="flex items-center gap-3">
                   <HaToggleSwitch
                     checked={rule.enabled}
@@ -99,10 +99,10 @@ export const AutomationMoreInfoModal: React.FC<AutomationMoreInfoModalProps> = (
                     ariaLabel="Toggle automation state"
                   />
                   <div>
-                    <div className="font-semibold text-white text-sm">
+                    <div className="font-semibold text-foreground text-sm">
                       {rule.enabled ? 'Automation is Active' : 'Automation is Disabled'}
                     </div>
-                    <div className="text-xs text-slate-400 font-mono">
+                    <div className="text-xs text-muted font-mono">
                       ID: {rule.id}
                     </div>
                   </div>
@@ -115,7 +115,7 @@ export const AutomationMoreInfoModal: React.FC<AutomationMoreInfoModalProps> = (
                       onClose();
                       onEditCategory && onEditCategory(rule);
                     }}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-cyan-950/70 text-cyan-300 border border-cyan-800/60 hover:bg-cyan-900/60 transition"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-accent-soft text-accent-soft-foreground border border-accent/30 hover:bg-accent/20 transition"
                   >
                     <Tag className="w-3 h-3" />
                     <span>{rule.category}</span>
@@ -127,7 +127,7 @@ export const AutomationMoreInfoModal: React.FC<AutomationMoreInfoModalProps> = (
                       onClose();
                       onEditCategory && onEditCategory(rule);
                     }}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-slate-400 hover:text-cyan-300 hover:bg-slate-800 transition"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-muted hover:text-accent hover:bg-surface-tertiary transition"
                   >
                     <Tag className="w-3 h-3" />
                     <span>+ Add Category</span>
@@ -137,66 +137,66 @@ export const AutomationMoreInfoModal: React.FC<AutomationMoreInfoModalProps> = (
 
               {/* Statistics & Engine Info */}
               <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-800/80">
-                  <div className="flex items-center justify-center gap-1 text-cyan-400 text-xs font-semibold mb-0.5">
+                <div className="p-2.5 rounded-xl bg-surface-secondary border border-border">
+                  <div className="flex items-center justify-center gap-1 text-warning text-xs font-semibold mb-0.5">
                     <Zap className="w-3.5 h-3.5" />
                     <span>Triggers</span>
                   </div>
-                  <div className="text-lg font-bold text-white font-mono">
+                  <div className="text-lg font-bold text-foreground font-mono">
                     {(rule.triggers || []).length}
                   </div>
                 </div>
-                <div className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-800/80">
-                  <div className="flex items-center justify-center gap-1 text-amber-400 text-xs font-semibold mb-0.5">
+                <div className="p-2.5 rounded-xl bg-surface-secondary border border-border">
+                  <div className="flex items-center justify-center gap-1 text-accent text-xs font-semibold mb-0.5">
                     <Shield className="w-3.5 h-3.5" />
                     <span>Conditions</span>
                   </div>
-                  <div className="text-lg font-bold text-white font-mono">
+                  <div className="text-lg font-bold text-foreground font-mono">
                     {(rule.conditions || []).length}
                   </div>
                 </div>
-                <div className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-800/80">
-                  <div className="flex items-center justify-center gap-1 text-emerald-400 text-xs font-semibold mb-0.5">
+                <div className="p-2.5 rounded-xl bg-surface-secondary border border-border">
+                  <div className="flex items-center justify-center gap-1 text-success text-xs font-semibold mb-0.5">
                     <Send className="w-3.5 h-3.5" />
                     <span>Actions</span>
                   </div>
-                  <div className="text-lg font-bold text-white font-mono">
+                  <div className="text-lg font-bold text-foreground font-mono">
                     {(rule.actions || []).length}
                   </div>
                 </div>
               </div>
 
               {/* Execution Specs */}
-              <div className="p-3 rounded-xl bg-slate-950/50 border border-slate-800/80 space-y-2 text-xs">
+              <div className="p-3 rounded-xl bg-surface-secondary border border-border space-y-2 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Execution Mode</span>
-                  <span className="font-semibold text-slate-200 capitalize">
+                  <span className="text-muted">Execution Mode</span>
+                  <span className="font-semibold text-foreground capitalize">
                     {rule.exec_mode?.replace('_', ' ') || 'One Shot'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Trigger Mode</span>
-                  <span className="font-semibold text-slate-200 capitalize">
+                  <span className="text-muted">Trigger Mode</span>
+                  <span className="font-semibold text-foreground capitalize">
                     {rule.trigger_mode || 'any'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Cooldown</span>
-                  <span className="font-mono text-cyan-300">
+                  <span className="text-muted">Cooldown</span>
+                  <span className="font-mono text-accent">
                     {rule.cooldown_ms || 0} ms
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Home Assistant Entity</span>
-                  <span className="font-mono text-slate-300 truncate max-w-[220px]">
+                  <span className="text-muted">Home Assistant Entity</span>
+                  <span className="font-mono text-foreground truncate max-w-[220px]">
                     automation.cando_{rule.id.toLowerCase()}
                   </span>
                 </div>
               </div>
 
               {rule.description && (
-                <div className="p-3 rounded-xl bg-slate-950/50 border border-slate-800/80 text-xs text-slate-300">
-                  <div className="font-semibold text-slate-400 mb-1">Description</div>
+                <div className="p-3 rounded-xl bg-surface-secondary border border-border text-xs text-foreground">
+                  <div className="font-semibold text-muted mb-1">Description</div>
                   <p className="leading-relaxed">{rule.description}</p>
                 </div>
               )}
@@ -206,30 +206,30 @@ export const AutomationMoreInfoModal: React.FC<AutomationMoreInfoModalProps> = (
                 <button
                   type="button"
                   onClick={() => setShowJson(!showJson)}
-                  className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-cyan-300 transition"
+                  className="flex items-center gap-1.5 text-xs text-muted hover:text-accent transition"
                 >
                   <FileCode className="w-3.5 h-3.5" />
                   <span>{showJson ? 'Hide JSON representation' : 'View JSON representation'}</span>
                 </button>
                 {showJson && (
                   <div className="mt-2 relative">
-                    <pre className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-[11px] font-mono text-slate-300 overflow-x-auto max-h-48">
+                    <pre className="p-3 bg-surface-secondary rounded-xl border border-border text-[11px] font-mono text-foreground overflow-x-auto max-h-48">
                       {JSON.stringify(rule, null, 2)}
                     </pre>
                     <button
                       type="button"
                       onClick={handleCopyJson}
-                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs transition"
+                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-surface-tertiary hover:bg-default-hover text-foreground border border-border text-xs transition"
                       title="Copy JSON"
                     >
-                      {copiedJson ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copiedJson ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                   </div>
                 )}
               </div>
             </ModalBody>
 
-            <ModalFooter className="px-5 py-3 border-t border-slate-800/80 bg-slate-950/70 flex items-center justify-between">
+            <ModalFooter className="px-5 py-3 border-t border-separator bg-surface flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
@@ -238,9 +238,9 @@ export const AutomationMoreInfoModal: React.FC<AutomationMoreInfoModalProps> = (
                     onClose();
                     onRunActions && onRunActions(rule);
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-surface-secondary hover:bg-surface-tertiary text-foreground border border-border transition"
                 >
-                  <Play className="w-3.5 h-3.5 fill-current text-cyan-400" />
+                  <Play className="w-3.5 h-3.5 fill-current text-accent" />
                   <span>Run actions</span>
                 </Button>
                 <Button
@@ -250,9 +250,9 @@ export const AutomationMoreInfoModal: React.FC<AutomationMoreInfoModalProps> = (
                     onClose();
                     onShowTraces && onShowTraces(rule);
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-surface-secondary hover:bg-surface-tertiary text-foreground border border-border transition"
                 >
-                  <TracesIcon className="w-3.5 h-3.5 text-cyan-400" />
+                  <TracesIcon className="w-3.5 h-3.5 text-accent" />
                   <span>Traces</span>
                 </Button>
               </div>
@@ -261,7 +261,7 @@ export const AutomationMoreInfoModal: React.FC<AutomationMoreInfoModalProps> = (
                 variant="primary"
                 size="sm"
                 onPress={onClose}
-                className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition"
+                className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-accent hover:bg-accent-hover text-accent-foreground transition"
               >
                 Close
               </Button>

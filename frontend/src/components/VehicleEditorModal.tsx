@@ -214,20 +214,20 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
 
   return (
     <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
-      <ModalBackdrop variant="blur" className="bg-black/80 backdrop-blur-sm">
+      <ModalBackdrop variant="blur" className="bg-backdrop backdrop-blur-sm">
         <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
-          <ModalDialog className="relative w-full max-w-2xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+          <ModalDialog className="relative w-full max-w-2xl rounded-[16px] border border-border bg-overlay text-overlay-foreground shadow-overlay overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
             {/* Header */}
-            <ModalHeader className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] gap-0">
+            <ModalHeader className="flex items-center justify-between p-5 border-b border-separator bg-surface gap-0">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-[var(--input-bg)] border border-[var(--border-color)] flex items-center justify-center text-[var(--md-sys-color-primary)]">
+                <div className="w-8 h-8 rounded-full bg-surface-secondary border border-border flex items-center justify-center text-accent">
                   <Car className="w-4 h-4" />
                 </div>
                 <div>
-                  <ModalHeading className="text-base sm:text-lg font-bold text-white">
+                  <ModalHeading className="text-base sm:text-lg font-bold text-foreground">
                     {isNew ? 'Add Vehicle Platform & Trim' : `Edit ${form.make} ${form.model} (${form.trim})`}
                   </ModalHeading>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <p className="text-xs text-muted mt-0.5">
                     Configure vehicle specifications, unique IDs, and toggle or discover trim features.
                   </p>
                 </div>
@@ -239,7 +239,7 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
                 isIconOnly
                 onPress={onClose}
                 aria-label="Close modal"
-                className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-[var(--md-sys-color-surface-container-high)] transition"
+                className="p-1.5 text-muted hover:text-foreground rounded-full hover:bg-default-hover transition"
               >
                 <X className="w-5 h-5" />
               </Button>
@@ -250,8 +250,8 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
               <ModalBody className="p-6 max-h-[72vh] overflow-y-auto space-y-5 text-xs">
           {/* Errors banner */}
           {errors.length > 0 && (
-            <div className="p-3.5 rounded-[12px] bg-rose-950/40 border border-rose-800 text-rose-200 space-y-1">
-              <div className="font-semibold flex items-center gap-1.5 text-rose-300">
+            <div className="p-3.5 rounded-[12px] bg-danger-soft border border-danger/40 text-danger-soft-foreground space-y-1">
+              <div className="font-semibold flex items-center gap-1.5 text-danger">
                 <AlertTriangle className="w-4 h-4" /> Validation Issues:
               </div>
               {errors.map((err, idx) => (
@@ -264,15 +264,15 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
 
           {/* Make & Quick buttons */}
           <div>
-            <label className="block text-slate-300 font-semibold mb-1">
-              Manufacturer / Make <span className="text-rose-400">*</span>
+            <label className="block text-foreground font-semibold mb-1">
+              Manufacturer / Make <span className="text-danger">*</span>
             </label>
             <Tabs
               selectedKey={form.make || 'Hyundai'}
               onSelectionChange={key => setForm({ ...form, make: String(key) })}
               aria-label="Manufacturer / Make"
             >
-              <Tabs.ListContainer className="p-0.5 rounded-full bg-[var(--input-bg)] border border-[var(--border-color)] text-xs mb-2 inline-block">
+              <Tabs.ListContainer className="p-0.5 rounded-full bg-surface-secondary border border-border text-xs mb-2 inline-block">
                 <Tabs.List className="gap-1 flex-wrap">
                   {['Hyundai', 'Kia', 'Genesis', 'Universal'].map(m => (
                     <Tabs.Tab
@@ -280,12 +280,12 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
                       id={m}
                       className={`relative px-3 py-1 rounded-full text-xs font-semibold transition cursor-pointer flex items-center ${
                         form.make === m
-                          ? 'text-white'
-                          : 'text-slate-400 hover:text-white'
+                          ? 'text-accent-foreground'
+                          : 'text-muted hover:text-foreground'
                       }`}
                     >
                       <span>{m}</span>
-                      <Tabs.Indicator className="rounded-full bg-[var(--md-sys-color-primary)] shadow-sm" />
+                      <Tabs.Indicator className="rounded-full bg-accent shadow-sm" />
                     </Tabs.Tab>
                   ))}
                 </Tabs.List>
@@ -297,15 +297,15 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
               placeholder="e.g. Hyundai, Kia, Genesis"
               value={form.make || ''}
               onChange={e => setForm({ ...form, make: e.target.value })}
-              className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+              className="w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
             />
           </div>
 
           {/* Model and Trim */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-slate-300 font-semibold mb-1">
-                Model Name <span className="text-rose-400">*</span>
+              <label className="block text-foreground font-semibold mb-1">
+                Model Name <span className="text-danger">*</span>
               </label>
               <input
                 type="text"
@@ -313,13 +313,13 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
                 placeholder="e.g. Ioniq 5, EV6, GV60, EV9"
                 value={form.model || ''}
                 onChange={e => handleModelChange(e.target.value)}
-                className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                className="w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
               />
             </div>
 
             <div>
-              <label className="block text-slate-300 font-semibold mb-1">
-                Trim / Variant <span className="text-rose-400">*</span>
+              <label className="block text-foreground font-semibold mb-1">
+                Trim / Variant <span className="text-danger">*</span>
               </label>
               <input
                 type="text"
@@ -327,7 +327,7 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
                 placeholder="e.g. Limited, Wind, GT-Line, Standard"
                 value={form.trim || ''}
                 onChange={e => handleTrimChange(e.target.value)}
-                className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                className="w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
               />
             </div>
           </div>
@@ -335,7 +335,7 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
           {/* Display Name & Region */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-slate-300 font-semibold mb-1">
+              <label className="block text-foreground font-semibold mb-1">
                 Display Title (Optional label)
               </label>
               <input
@@ -343,18 +343,18 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
                 placeholder="e.g. Limited or AWD Dual-Motor"
                 value={form.name || ''}
                 onChange={e => setForm({ ...form, name: e.target.value })}
-                className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                className="w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
               />
             </div>
 
             <div>
-              <label className="block text-slate-300 font-semibold mb-1">
-                Market Region <span className="text-rose-400">*</span>
+              <label className="block text-foreground font-semibold mb-1">
+                Market Region <span className="text-danger">*</span>
               </label>
               <select
                 value={form.region || 'us'}
                 onChange={e => setForm({ ...form, region: e.target.value })}
-                className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                className="w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-focus"
               >
                 <option value="us">United States (us)</option>
                 <option value="eu">Europe (eu)</option>
@@ -366,17 +366,17 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
           </div>
 
           {/* Vehicle ID & Family */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-[12px] bg-surface-secondary border border-border">
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-slate-300 font-semibold">
-                  Unique Vehicle ID <span className="text-rose-400">*</span>
+                <label className="text-foreground font-semibold">
+                  Unique Vehicle ID <span className="text-danger">*</span>
                 </label>
                 {autoIdLocked && (
                   <button
                     type="button"
                     onClick={() => setAutoIdLocked(false)}
-                    className="text-[10px] text-cyan-400 hover:underline"
+                    className="text-[10px] text-accent hover:underline"
                   >
                     Unlock custom ID
                   </button>
@@ -391,16 +391,16 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
                   setAutoIdLocked(false);
                   setForm({ ...form, id: e.target.value });
                 }}
-                className="w-full px-3 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-cyan-300 font-mono focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-border text-accent font-mono focus:outline-none focus:border-focus"
               />
-              <p className="text-[10px] text-slate-500 mt-0.5">
+              <p className="text-[10px] text-muted mt-0.5">
                 Internal reference used in CAN Do catalog JSON
               </p>
             </div>
 
             <div>
-              <label className="block text-slate-300 font-semibold mb-1">
-                Vehicle Family Slug <span className="text-rose-400">*</span>
+              <label className="block text-foreground font-semibold mb-1">
+                Vehicle Family Slug <span className="text-danger">*</span>
               </label>
               <input
                 type="text"
@@ -408,9 +408,9 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
                 placeholder="e.g. ioniq5, ev6, gv60"
                 value={form.family || ''}
                 onChange={e => setForm({ ...form, family: e.target.value })}
-                className="w-full px-3 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-white font-mono focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-border text-foreground font-mono focus:outline-none focus:border-focus"
               />
-              <p className="text-[10px] text-slate-500 mt-0.5">
+              <p className="text-[10px] text-muted mt-0.5">
                 Matches vehicle command compatibility tags
               </p>
             </div>
@@ -420,21 +420,21 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
           <div className="space-y-3 pt-2">
             <div className="flex items-center justify-between">
               <div>
-                <label className="text-sm font-bold text-white flex items-center gap-1.5">
-                  <Tag className="w-4 h-4 text-cyan-400" />
+                <label className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                  <Tag className="w-4 h-4 text-accent" />
                   Trim Features & Equipment ({form.features?.length || 0} active)
                 </label>
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[11px] text-muted">
                   Select discovered features equipped on this specific trim. Commands with{' '}
-                  <code className="text-cyan-300">requires_feature</code> will only run on matching vehicles.
+                  <code className="text-accent">requires_feature</code> will only run on matching vehicles.
                 </p>
               </div>
             </div>
 
             {/* Discover / Add custom new feature inline */}
-            <div className="p-3 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] space-y-2">
-              <div className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <div className="p-3 rounded-[12px] bg-surface-secondary border border-border space-y-2">
+              <div className="text-[11px] font-semibold text-foreground flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-warning" />
                 Discover a New Feature Not in Catalog Yet:
               </div>
               <div className="flex items-center gap-2">
@@ -449,14 +449,14 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
                       addCustomFeature();
                     }
                   }}
-                  className="flex-1 px-3 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-cyan-300 font-mono text-xs placeholder-slate-600 focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                  className="flex-1 px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-border text-accent font-mono text-xs placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                 />
                 <Button
                   variant="primary"
                   size="sm"
                   onPress={addCustomFeature}
                   isDisabled={!customFeatureInput.trim()}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white font-semibold text-xs disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-accent hover:bg-accent-hover text-accent-foreground font-semibold text-xs disabled:opacity-40 disabled:cursor-not-allowed transition"
                 >
                   <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                   Add Feature
@@ -471,23 +471,23 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
                 placeholder="Filter feature list..."
                 value={featureSearch}
                 onChange={e => setFeatureSearch(e.target.value)}
-                className="w-full sm:w-64 px-3 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                className="w-full sm:w-64 px-3 py-1.5 rounded-[8px] bg-surface-secondary border border-border text-xs text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
               />
               <div className="flex items-center gap-1">
                 <Button
                   variant="ghost"
                   size="sm"
                   onPress={() => setForm({ ...form, features: [...combinedFeatures] })}
-                  className="text-[11px] text-cyan-400 h-auto py-0.5 px-1.5"
+                  className="text-[11px] text-accent h-auto py-0.5 px-1.5"
                 >
                   Enable All
                 </Button>
-                <span className="text-slate-600">|</span>
+                <span className="text-muted">|</span>
                 <Button
                   variant="ghost"
                   size="sm"
                   onPress={() => setForm({ ...form, features: [] })}
-                  className="text-[11px] text-slate-400 hover:text-rose-400 h-auto py-0.5 px-1.5"
+                  className="text-[11px] text-muted hover:text-danger h-auto py-0.5 px-1.5"
                 >
                   Clear All
                 </Button>
@@ -495,7 +495,7 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
             </div>
 
             {/* Feature Pills Selection Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-56 overflow-y-auto p-2.5 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)]">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-56 overflow-y-auto p-2.5 rounded-[12px] bg-surface-secondary border border-border">
               {filteredFeatures.map(feat => {
                 const isChecked = form.features?.includes(feat);
                 return (
@@ -505,14 +505,14 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
                     onClick={() => toggleFeature(feat)}
                     className={`flex items-center justify-between p-2 rounded-[8px] text-left transition font-mono text-[11px] border ${
                       isChecked
-                        ? 'bg-[var(--card-bg)] text-cyan-200 border-[var(--md-sys-color-primary)] shadow-sm'
-                        : 'bg-[var(--input-bg)] text-slate-400 border-[var(--border-color)] hover:border-slate-600 hover:text-slate-200'
+                        ? 'bg-accent-soft text-accent-soft-foreground border-accent shadow-sm'
+                        : 'bg-surface-tertiary text-muted border-border hover:border-border-secondary hover:text-foreground'
                     }`}
                   >
                     <span className="truncate mr-1.5">{feat}</span>
                     <span
                       className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border ${
-                        isChecked ? 'border-[var(--md-sys-color-primary)] bg-[var(--md-sys-color-primary)] text-white' : 'border-slate-700 bg-slate-900'
+                        isChecked ? 'border-accent bg-accent text-accent-foreground' : 'border-border bg-surface'
                       }`}
                     >
                       {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
@@ -524,8 +524,8 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
           </div>
 
           {/* Active Features Summary Preview */}
-          <div className="p-3 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)]">
-            <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
+          <div className="p-3 rounded-[12px] bg-surface-secondary border border-border">
+            <div className="text-[10px] uppercase tracking-wider font-semibold text-muted mb-1.5">
               Active Features Summary ({form.features?.length || 0}):
             </div>
             <div className="flex flex-wrap gap-1">
@@ -533,13 +533,13 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
                 form.features.map(f => (
                   <span
                     key={f}
-                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-[var(--input-bg)] text-cyan-300 border border-[var(--border-color)]"
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-surface-tertiary text-accent border border-border"
                   >
                     {f}
                     <button
                       type="button"
                       onClick={() => toggleFeature(f)}
-                      className="hover:text-white"
+                      className="hover:text-foreground"
                       title="Remove feature"
                     >
                       <X className="w-2.5 h-2.5" />
@@ -547,14 +547,14 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
                   </span>
                 ))
               ) : (
-                <span className="text-xs text-slate-500 italic">No features currently assigned</span>
+                <span className="text-xs text-muted italic">No features currently assigned</span>
               )}
             </div>
           </div>
         </ModalBody>
 
           {/* Modal Footer */}
-          <ModalFooter className="p-4 px-6 flex items-center justify-between border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
+          <ModalFooter className="p-4 px-6 flex items-center justify-between border-t border-separator bg-surface shrink-0">
             <Button
               variant="outline"
               size="sm"
@@ -568,7 +568,7 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
               type="submit"
               variant="primary"
               size="sm"
-              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white font-semibold text-xs shadow-md transition"
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-accent hover:bg-accent-hover text-accent-foreground font-semibold text-xs shadow-md transition"
             >
               <Check className="w-4 h-4 stroke-[2.5]" />
               {isNew ? 'Add Vehicle Platform' : 'Save Changes'}

@@ -188,7 +188,7 @@ export const AutomationActionMenu: React.FC<AutomationActionMenuProps> = ({
         left: menuCoords.left !== undefined ? `${menuCoords.left}px` : undefined,
         right: menuCoords.right !== undefined ? `${menuCoords.right}px` : undefined,
       }}
-      className="fixed z-[9999] w-[152px] max-w-[152px] min-w-[152px] box-border py-1.5 px-1 rounded-xl bg-[#1c1c1e] border border-[#38383a] shadow-2xl shadow-black/95 backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+      className="fixed z-[9999] w-[152px] max-w-[152px] min-w-[152px] box-border py-1.5 px-1 rounded-xl bg-overlay border border-border shadow-overlay backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
       onClick={(e) => e.stopPropagation()}
     >
       {/* 1. More info */}
@@ -197,10 +197,10 @@ export const AutomationActionMenu: React.FC<AutomationActionMenuProps> = ({
         size="sm"
         fullWidth
         onPress={() => handleAction(onMoreInfo)}
-        className="w-full justify-start px-3 py-2 h-auto text-left whitespace-nowrap hover:!bg-white/10 active:!bg-white/15 transition-colors group cursor-pointer border-0 rounded-lg"
+        className="w-full justify-start px-3 py-2 h-auto text-left whitespace-nowrap hover:!bg-surface-secondary active:!bg-surface-tertiary transition-colors group cursor-pointer border-0 rounded-lg"
       >
-        <Info className="w-4 h-4 text-[#38bdf8] flex-shrink-0 mr-3" />
-        <span className="text-[13px] font-semibold text-[#38bdf8]">More info</span>
+        <Info className="w-4 h-4 text-accent flex-shrink-0 mr-3" />
+        <span className="text-[13px] font-semibold text-accent">More info</span>
       </Button>
 
       {/* 2. Settings */}
@@ -209,10 +209,10 @@ export const AutomationActionMenu: React.FC<AutomationActionMenuProps> = ({
         size="sm"
         fullWidth
         onPress={() => handleAction(onEditSettings)}
-        className="w-full justify-start px-3 py-2 h-auto text-left whitespace-nowrap hover:!bg-white/10 active:!bg-white/15 transition-colors group cursor-pointer border-0 rounded-lg text-slate-200 hover:text-white"
+        className="w-full justify-start px-3 py-2 h-auto text-left whitespace-nowrap hover:!bg-surface-secondary active:!bg-surface-tertiary transition-colors group cursor-pointer border-0 rounded-lg text-overlay-foreground"
       >
-        <Settings className="w-4 h-4 text-slate-400 group-hover:text-slate-200 flex-shrink-0 mr-3" />
-        <span className="text-[13px] font-medium text-slate-200">Settings</span>
+        <Settings className="w-4 h-4 text-muted group-hover:text-overlay-foreground flex-shrink-0 mr-3" />
+        <span className="text-[13px] font-medium text-overlay-foreground">Settings</span>
       </Button>
 
       {/* 3. Edit category */}
@@ -221,10 +221,10 @@ export const AutomationActionMenu: React.FC<AutomationActionMenuProps> = ({
         size="sm"
         fullWidth
         onPress={() => handleAction(onEditCategory)}
-        className="w-full justify-start px-3 py-2 h-auto text-left whitespace-nowrap hover:!bg-white/10 active:!bg-white/15 transition-colors group cursor-pointer border-0 rounded-lg text-slate-200 hover:text-white"
+        className="w-full justify-start px-3 py-2 h-auto text-left whitespace-nowrap hover:!bg-surface-secondary active:!bg-surface-tertiary transition-colors group cursor-pointer border-0 rounded-lg text-overlay-foreground"
       >
-        <Tag className="w-4 h-4 text-slate-400 group-hover:text-slate-200 flex-shrink-0 mr-3" />
-        <span className="text-[13px] font-medium text-slate-200">Edit category</span>
+        <Tag className="w-4 h-4 text-muted group-hover:text-overlay-foreground flex-shrink-0 mr-3" />
+        <span className="text-[13px] font-medium text-overlay-foreground">Edit category</span>
       </Button>
 
       {/* 4. Run actions */}
@@ -233,10 +233,10 @@ export const AutomationActionMenu: React.FC<AutomationActionMenuProps> = ({
         size="sm"
         fullWidth
         onPress={() => handleAction(onRunActions)}
-        className="w-full justify-start px-3 py-2 h-auto text-left whitespace-nowrap hover:!bg-white/10 active:!bg-white/15 transition-colors group cursor-pointer border-0 rounded-lg text-slate-200 hover:text-white"
+        className="w-full justify-start px-3 py-2 h-auto text-left whitespace-nowrap hover:!bg-surface-secondary active:!bg-surface-tertiary transition-colors group cursor-pointer border-0 rounded-lg text-overlay-foreground"
       >
-        <Play className="w-4 h-4 fill-current text-slate-400 group-hover:text-slate-200 flex-shrink-0 mr-3" />
-        <span className="text-[13px] font-medium text-slate-200">Run actions</span>
+        <Play className="w-4 h-4 fill-current text-muted group-hover:text-overlay-foreground flex-shrink-0 mr-3" />
+        <span className="text-[13px] font-medium text-overlay-foreground">Run actions</span>
       </Button>
 
       {/* 5. Traces */}
@@ -245,10 +245,10 @@ export const AutomationActionMenu: React.FC<AutomationActionMenuProps> = ({
         size="sm"
         fullWidth
         onPress={() => handleAction(onShowTraces)}
-        className="w-full justify-start px-3 py-2 h-auto text-left whitespace-nowrap hover:!bg-white/10 active:!bg-white/15 transition-colors group cursor-pointer border-0 rounded-lg text-slate-200 hover:text-white"
+        className="w-full justify-start px-3 py-2 h-auto text-left whitespace-nowrap hover:!bg-surface-secondary active:!bg-surface-tertiary transition-colors group cursor-pointer border-0 rounded-lg text-overlay-foreground"
       >
-        <TracesIcon className="w-4 h-4 text-slate-400 group-hover:text-slate-200 flex-shrink-0 mr-3" />
-        <span className="text-[13px] font-medium text-slate-200">Traces</span>
+        <TracesIcon className="w-4 h-4 text-muted group-hover:text-overlay-foreground flex-shrink-0 mr-3" />
+        <span className="text-[13px] font-medium text-overlay-foreground">Traces</span>
       </Button>
 
       {/* 6. Duplicate */}
@@ -257,10 +257,10 @@ export const AutomationActionMenu: React.FC<AutomationActionMenuProps> = ({
         size="sm"
         fullWidth
         onPress={() => handleAction(onDuplicate)}
-        className="w-full justify-start px-3 py-2 h-auto text-left whitespace-nowrap hover:!bg-white/10 active:!bg-white/15 transition-colors group cursor-pointer border-0 rounded-lg text-slate-200 hover:text-white"
+        className="w-full justify-start px-3 py-2 h-auto text-left whitespace-nowrap hover:!bg-surface-secondary active:!bg-surface-tertiary transition-colors group cursor-pointer border-0 rounded-lg text-overlay-foreground"
       >
-        <Copy className="w-4 h-4 text-slate-400 group-hover:text-slate-200 flex-shrink-0 mr-3" />
-        <span className="text-[13px] font-medium text-slate-200">Duplicate</span>
+        <Copy className="w-4 h-4 text-muted group-hover:text-overlay-foreground flex-shrink-0 mr-3" />
+        <span className="text-[13px] font-medium text-overlay-foreground">Duplicate</span>
       </Button>
 
       {/* 7. Disable / Enable */}
@@ -273,14 +273,14 @@ export const AutomationActionMenu: React.FC<AutomationActionMenuProps> = ({
             if (onToggleEnabled) onToggleEnabled(!rule.enabled);
           });
         }}
-        className="w-full justify-start px-3 py-2 h-auto text-left whitespace-nowrap hover:!bg-white/10 active:!bg-white/15 transition-colors group cursor-pointer border-0 rounded-lg text-slate-200 hover:text-white"
+        className="w-full justify-start px-3 py-2 h-auto text-left whitespace-nowrap hover:!bg-surface-secondary active:!bg-surface-tertiary transition-colors group cursor-pointer border-0 rounded-lg text-overlay-foreground"
       >
         {rule.enabled ? (
-          <ToggleLeft className="w-4 h-4 text-slate-400 group-hover:text-slate-200 flex-shrink-0 mr-3" />
+          <ToggleLeft className="w-4 h-4 text-muted group-hover:text-overlay-foreground flex-shrink-0 mr-3" />
         ) : (
-          <ToggleRight className="w-4 h-4 text-cyan-400 flex-shrink-0 mr-3" />
+          <ToggleRight className="w-4 h-4 text-accent flex-shrink-0 mr-3" />
         )}
-        <span className="text-[13px] font-medium text-slate-200">
+        <span className="text-[13px] font-medium text-overlay-foreground">
           {rule.enabled ? 'Disable' : 'Enable'}
         </span>
       </Button>
@@ -291,10 +291,10 @@ export const AutomationActionMenu: React.FC<AutomationActionMenuProps> = ({
         size="sm"
         fullWidth
         onPress={() => handleAction(onDelete)}
-        className="w-full justify-start px-3 py-2 h-auto text-left whitespace-nowrap hover:!bg-rose-500/15 active:!bg-rose-500/25 transition-colors group cursor-pointer border-0 rounded-lg text-[#f87171] hover:text-rose-300"
+        className="w-full justify-start px-3 py-2 h-auto text-left whitespace-nowrap hover:!bg-danger-soft active:!bg-danger/25 transition-colors group cursor-pointer border-0 rounded-lg text-danger"
       >
-        <Trash2 className="w-4 h-4 text-[#f87171] flex-shrink-0 mr-3" />
-        <span className="text-[13px] font-medium text-[#f87171]">
+        <Trash2 className="w-4 h-4 text-danger flex-shrink-0 mr-3" />
+        <span className="text-[13px] font-medium text-danger">
           Delete
         </span>
       </Button>
@@ -315,8 +315,8 @@ export const AutomationActionMenu: React.FC<AutomationActionMenuProps> = ({
         aria-label={`Actions for automation ${rule.name || rule.id}`}
         className={`!rounded-full flex items-center justify-center transition-colors duration-150 p-0 ${buttonDimensions} ${
           isOpen
-            ? '!bg-slate-700 text-white'
-            : '!bg-white/5 hover:!bg-white/10 active:!bg-white/15 text-slate-300 hover:text-white border-0'
+            ? '!bg-surface-tertiary text-foreground'
+            : '!bg-surface-secondary hover:!bg-surface-tertiary text-muted hover:text-foreground border-0'
         }`}
       >
         <MoreVertical className={isSm ? 'w-4 h-4' : 'w-4 h-4'} />

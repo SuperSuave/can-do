@@ -72,10 +72,10 @@ export const PayloadByteEditor: React.FC<PayloadByteEditorProps> = ({
   };
 
   return (
-    <div className="space-y-2 p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+    <div className="space-y-2 p-3 rounded-xl bg-surface-secondary border border-border">
       <div className="flex items-center justify-between">
         {label && (
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+          <span className="text-xs font-semibold uppercase tracking-wider text-foreground">
             {label}
           </span>
         )}
@@ -83,7 +83,7 @@ export const PayloadByteEditor: React.FC<PayloadByteEditorProps> = ({
           <button
             type="button"
             onClick={handleClear}
-            className="text-[10px] text-slate-400 hover:text-slate-200 underline"
+            className="text-[10px] text-muted hover:text-foreground underline"
           >
             Reset all to *
           </button>
@@ -92,30 +92,30 @@ export const PayloadByteEditor: React.FC<PayloadByteEditorProps> = ({
             onSelectionChange={key => setIsAdvanced(key === 'raw')}
             aria-label="Payload Representation Mode"
           >
-            <Tabs.ListContainer className="p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-[10px]">
+            <Tabs.ListContainer className="p-0.5 rounded-lg bg-surface-tertiary border border-border text-[10px]">
               <Tabs.List className="gap-0.5">
                 <Tabs.Tab
                   id="boxes"
                   className={`relative px-2 py-0.5 rounded font-mono transition cursor-pointer flex items-center ${
                     !isAdvanced
-                      ? 'text-cyan-300 font-semibold'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'text-accent-soft-foreground font-semibold'
+                      : 'text-muted hover:text-foreground'
                   }`}
                 >
                   <span>D1–D8 Boxes</span>
-                  <Tabs.Indicator className="rounded bg-cyan-950 border border-cyan-800 shadow-sm" />
+                  <Tabs.Indicator className="rounded bg-accent-soft border border-accent/30 shadow-sm" />
                 </Tabs.Tab>
 
                 <Tabs.Tab
                   id="raw"
                   className={`relative px-2 py-0.5 rounded font-mono transition cursor-pointer flex items-center ${
                     isAdvanced
-                      ? 'text-cyan-300 font-semibold'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'text-accent-soft-foreground font-semibold'
+                      : 'text-muted hover:text-foreground'
                   }`}
                 >
                   <span>Raw Text</span>
-                  <Tabs.Indicator className="rounded bg-cyan-950 border border-cyan-800 shadow-sm" />
+                  <Tabs.Indicator className="rounded bg-accent-soft border border-accent/30 shadow-sm" />
                 </Tabs.Tab>
               </Tabs.List>
             </Tabs.ListContainer>
@@ -130,17 +130,17 @@ export const PayloadByteEditor: React.FC<PayloadByteEditorProps> = ({
             value={typeof value === 'object' ? Object.entries(value).map(([k, v]) => `${k}:${v}`).join(' ') : (value || '')}
             onChange={e => onChange(e.target.value)}
             placeholder="e.g. * * * * * F8 * *"
-            className="w-full px-3 py-2 rounded-lg bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-sm text-cyan-300 focus:outline-none focus:border-cyan-500"
+            className="w-full px-3 py-2 rounded-lg bg-surface-tertiary border border-border font-mono text-sm text-accent focus:outline-none focus:border-focus"
           />
-          <p className="text-[10px] text-slate-500">
-            Enter space-separated hex bytes or wildcards (<code className="text-amber-300">*</code>).
+          <p className="text-[10px] text-muted">
+            Enter space-separated hex bytes or wildcards (<code className="text-warning">*</code>).
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-8 gap-1 sm:gap-1.5 w-full py-0.5">
           {tokens.map((token, idx) => (
             <div key={idx} className="flex flex-col items-center gap-1">
-              <span className="text-[10px] font-mono font-bold text-cyan-400/90">
+              <span className="text-[10px] font-mono font-bold text-accent">
                 D{idx + 1}
               </span>
               <input
@@ -152,8 +152,8 @@ export const PayloadByteEditor: React.FC<PayloadByteEditorProps> = ({
                 title={`Byte D${idx + 1} (leave empty for *)`}
                 className={`w-full text-center px-1 py-1.5 rounded-lg font-mono text-xs uppercase transition border focus:outline-none ${
                   token !== '*' && token !== ''
-                    ? 'bg-cyan-950/80 text-cyan-300 border-cyan-600 font-semibold'
-                    : 'bg-slate-900 text-slate-500 border-slate-800 hover:border-slate-700 placeholder-slate-700'
+                    ? 'bg-accent-soft text-accent-soft-foreground border-accent/60 font-semibold'
+                    : 'bg-surface-tertiary text-muted border-border hover:border-border-secondary placeholder:text-muted/60'
                 }`}
               />
             </div>

@@ -208,23 +208,23 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
   return (
     <div className="space-y-3.5">
       {/* 1. TOP: Vehicle & Hardware Equipment Compatibility Bar */}
-      <div className="rounded-xl border border-[var(--border-color)] bg-[var(--card-bg)]/80 p-2.5 sm:p-3 space-y-2.5 shadow-sm">
+      <div className="rounded-xl border border-border bg-surface p-2.5 sm:p-3 space-y-2.5 shadow-surface">
         <div className="flex flex-wrap items-center justify-between gap-2">
           {/* Header label & active pills */}
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <div className="inline-flex items-center gap-1.5 font-semibold text-cyan-400">
+            <div className="inline-flex items-center gap-1.5 font-semibold text-accent">
               <Car className="w-4 h-4" />
               <span>Vehicle & Compatibility:</span>
             </div>
 
             {/* Active pills indicator */}
             {selectedMake !== 'all' && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-cyan-950/60 text-cyan-300 border border-cyan-800/60 px-2 py-0.5 rounded-full">
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-accent-soft text-accent-soft-foreground border border-accent/30 px-2 py-0.5 rounded-full">
                 Make: {selectedMake}
                 <button
                   type="button"
                   onClick={() => onMakeChange('all')}
-                  className="hover:text-white ml-0.5"
+                  className="hover:text-foreground ml-0.5"
                   title="Clear make filter"
                 >
                   <X className="w-3 h-3" />
@@ -233,12 +233,12 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
             )}
 
             {selectedRegion !== 'all' && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-slate-800 text-slate-300 border border-slate-700 px-2 py-0.5 rounded-full">
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-surface-secondary text-foreground border border-border px-2 py-0.5 rounded-full">
                 Region: {selectedRegion.toUpperCase()}
                 <button
                   type="button"
                   onClick={() => onRegionChange('all')}
-                  className="hover:text-white ml-0.5"
+                  className="hover:text-accent ml-0.5"
                   title="Clear region filter"
                 >
                   <X className="w-3 h-3" />
@@ -247,12 +247,12 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
             )}
 
             {selectedFeature !== 'all' && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-emerald-950/60 text-emerald-300 border border-emerald-700/60 px-2 py-0.5 rounded-full">
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-success-soft text-success-soft-foreground border border-success/30 px-2 py-0.5 rounded-full">
                 Requires: {selectedFeature}
                 <button
                   type="button"
                   onClick={() => onFeatureChange('all')}
-                  className="hover:text-white ml-0.5"
+                  className="hover:text-foreground ml-0.5"
                   title="Clear feature filter"
                 >
                   <X className="w-3 h-3" />
@@ -266,7 +266,7 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
             <button
               type="button"
               onClick={handleResetVehicleFilters}
-              className="text-xs text-cyan-400 hover:text-cyan-300 hover:underline inline-flex items-center gap-1"
+              className="text-xs text-accent hover:underline inline-flex items-center gap-1"
             >
               <X className="w-3.5 h-3.5" />
               <span>Clear Vehicle Filters</span>
@@ -284,17 +284,17 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
               aria-label="Filter by vehicle make"
               className="w-full min-w-0"
             >
-              <Select.Trigger className="w-full max-w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-[var(--md-sys-color-primary)] transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer">
+              <Select.Trigger className="w-full max-w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-accent transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer">
                 <Select.Value className="truncate text-xs text-left" />
-                <Select.Indicator className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+                <Select.Indicator className="w-4 h-4 text-muted shrink-0" />
               </Select.Trigger>
-              <Select.Popover className="min-w-[var(--trigger-width)] bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-50 p-1 max-h-60 overflow-y-auto">
+              <Select.Popover className="min-w-[var(--trigger-width)] bg-overlay border border-border rounded-lg shadow-overlay z-50 p-1 max-h-60 overflow-y-auto">
                 <ListBox className="outline-none space-y-0.5">
-                  <ListBoxItem id="all" textValue={`All Makes (${catalog.vehicles.length} models)`} className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                  <ListBoxItem id="all" textValue={`All Makes (${catalog.vehicles.length} models)`} className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none">
                     All Makes ({catalog.vehicles.length} models)
                   </ListBoxItem>
                   {availableMakes.filter(m => m !== 'all').map(m => (
-                    <ListBoxItem key={m} id={m} textValue={m} className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                    <ListBoxItem key={m} id={m} textValue={m} className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none">
                       {m}
                     </ListBoxItem>
                   ))}
@@ -312,21 +312,21 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
               className="w-full min-w-0"
             >
               <Select.Trigger
-                className={`w-full max-w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border focus:outline-none transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer ${
+                className={`w-full max-w-full px-3 py-2 rounded-[8px] bg-surface-secondary border focus:outline-none transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer ${
                   selectedVehicleId !== 'all'
-                    ? 'border-cyan-500/70 text-cyan-300 font-semibold'
-                    : 'border-[var(--border-color)] text-[var(--text-heading)] focus:border-[var(--md-sys-color-primary)]'
+                    ? 'border-accent text-accent font-semibold'
+                    : 'border-border text-foreground focus:border-accent'
                 }`}
               >
                 <Select.Value className="truncate text-xs text-left" />
-                <Select.Indicator className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+                <Select.Indicator className="w-4 h-4 text-muted shrink-0" />
               </Select.Trigger>
-              <Select.Popover className="min-w-[var(--trigger-width)] bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-50 p-1 max-h-60 overflow-y-auto">
+              <Select.Popover className="min-w-[var(--trigger-width)] bg-overlay border border-border rounded-lg shadow-overlay z-50 p-1 max-h-60 overflow-y-auto">
                 <ListBox className="outline-none space-y-0.5">
                   <ListBoxItem
                     id="all"
                     textValue={selectedMake !== 'all' ? `Any ${selectedMake} Model (${availableVehicles.length})` : `Any Specific Model Trim (${catalog.vehicles.length})`}
-                    className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none"
+                    className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none"
                   >
                     {selectedMake !== 'all'
                       ? `Any ${selectedMake} Model (${availableVehicles.length})`
@@ -335,7 +335,7 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
                   {availableVehicles.map(v => {
                     const label = `${v.make !== selectedMake ? `${v.make} ` : ''}${v.model} (${v.trim}) [${v.region.toUpperCase()}]`;
                     return (
-                      <ListBoxItem key={v.id} id={v.id} textValue={label} className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                      <ListBoxItem key={v.id} id={v.id} textValue={label} className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none">
                         {label}
                       </ListBoxItem>
                     );
@@ -353,25 +353,25 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
               aria-label="Filter by region"
               className="w-full min-w-0"
             >
-              <Select.Trigger className="w-full max-w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-[var(--md-sys-color-primary)] transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer">
+              <Select.Trigger className="w-full max-w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-accent transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer">
                 <Select.Value className="truncate text-xs text-left" />
-                <Select.Indicator className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+                <Select.Indicator className="w-4 h-4 text-muted shrink-0" />
               </Select.Trigger>
-              <Select.Popover className="min-w-[var(--trigger-width)] bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-50 p-1 max-h-60 overflow-y-auto">
+              <Select.Popover className="min-w-[var(--trigger-width)] bg-overlay border border-border rounded-lg shadow-overlay z-50 p-1 max-h-60 overflow-y-auto">
                 <ListBox className="outline-none space-y-0.5">
-                  <ListBoxItem id="all" textValue="All Regions" className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                  <ListBoxItem id="all" textValue="All Regions" className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none">
                     All Regions
                   </ListBoxItem>
-                  <ListBoxItem id="us" textValue="United States (us)" className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                  <ListBoxItem id="us" textValue="United States (us)" className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none">
                     United States (us)
                   </ListBoxItem>
-                  <ListBoxItem id="eu" textValue="Europe (eu)" className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                  <ListBoxItem id="eu" textValue="Europe (eu)" className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none">
                     Europe (eu)
                   </ListBoxItem>
-                  <ListBoxItem id="kr" textValue="Korea (kr)" className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                  <ListBoxItem id="kr" textValue="Korea (kr)" className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none">
                     Korea (kr)
                   </ListBoxItem>
-                  <ListBoxItem id="global" textValue="Global" className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                  <ListBoxItem id="global" textValue="Global" className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none">
                     Global
                   </ListBoxItem>
                 </ListBox>
@@ -388,21 +388,21 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
               className="w-full min-w-0"
             >
               <Select.Trigger
-                className={`w-full max-w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border focus:outline-none transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer ${
+                className={`w-full max-w-full px-3 py-2 rounded-[8px] bg-surface-secondary border focus:outline-none transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer ${
                   selectedFeature !== 'all'
-                    ? 'border-emerald-500/70 text-emerald-300 font-semibold'
-                    : 'border-[var(--border-color)] text-[var(--text-heading)] focus:border-[var(--md-sys-color-primary)]'
+                    ? 'border-success text-success font-semibold'
+                    : 'border-border text-foreground focus:border-accent'
                 }`}
               >
                 <Select.Value className="truncate text-xs text-left" />
-                <Select.Indicator className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+                <Select.Indicator className="w-4 h-4 text-muted shrink-0" />
               </Select.Trigger>
-              <Select.Popover className="min-w-[var(--trigger-width)] bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-50 p-1 max-h-60 overflow-y-auto">
+              <Select.Popover className="min-w-[var(--trigger-width)] bg-overlay border border-border rounded-lg shadow-overlay z-50 p-1 max-h-60 overflow-y-auto">
                 <ListBox className="outline-none space-y-0.5">
                   <ListBoxItem
                     id="all"
                     textValue={`All Equipment Features (${featuresWithCommands.length})`}
-                    className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none"
+                    className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none"
                   >
                     All Equipment Features ({featuresWithCommands.length})
                   </ListBoxItem>
@@ -410,7 +410,7 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
                     const count = featureCommandCounts[feat] || 0;
                     const label = `${feat} (${count} ${count === 1 ? 'cmd' : 'cmds'})`;
                     return (
-                      <ListBoxItem key={feat} id={feat} textValue={label} className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                      <ListBoxItem key={feat} id={feat} textValue={label} className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none">
                         {label}
                       </ListBoxItem>
                     );
@@ -423,30 +423,30 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
 
         {/* Active Selected Vehicle Banner (When a specific vehicle trim is selected) */}
         {selectedVehicle && (
-          <div className="mt-2.5 pt-2.5 border-t border-[var(--border-color)]/60 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 bg-cyan-950/20 p-3 rounded-lg border border-cyan-800/30">
+          <div className="mt-2.5 pt-2.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 bg-accent-soft p-3 rounded-lg border border-accent/30">
             <div className="flex items-start gap-3 min-w-0">
-              <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 shrink-0 mt-0.5">
+              <div className="p-2 rounded-lg bg-accent/15 border border-accent/30 text-accent shrink-0 mt-0.5">
                 <Car className="w-5 h-5" />
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-bold text-white">
+                  <span className="text-sm font-bold text-foreground">
                     {selectedVehicle.make} {selectedVehicle.model}
                   </span>
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-cyan-400/20 text-cyan-300 border border-cyan-400/40">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-accent/20 text-accent-soft-foreground border border-accent/40">
                     {selectedVehicle.trim}
                   </span>
-                  <span className="px-1.5 py-0.2 rounded text-[10px] font-mono uppercase bg-slate-800 text-slate-300 border border-slate-700">
+                  <span className="px-1.5 py-0.2 rounded text-[10px] font-mono uppercase bg-surface-secondary text-foreground border border-border">
                     {selectedVehicle.region}
                   </span>
-                  <span className="text-[11px] text-slate-400 font-mono">
+                  <span className="text-[11px] text-muted font-mono">
                     family: {selectedVehicle.family}
                   </span>
                 </div>
 
                 {/* Equipped features on this vehicle */}
                 <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                  <span className="text-[11px] text-slate-400">Equipped:</span>
+                  <span className="text-[11px] text-muted">Equipped:</span>
                   {selectedVehicle.features.map(f => {
                     const isFeatureSelected = selectedFeature === f;
                     return (
@@ -456,8 +456,8 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
                         onClick={() => onFeatureChange(isFeatureSelected ? 'all' : f)}
                         className={`text-[10px] font-mono px-1.5 py-0.5 rounded transition ${
                           isFeatureSelected
-                            ? 'bg-emerald-400 text-black font-bold ring-2 ring-emerald-400/50'
-                            : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                            ? 'bg-success text-success-foreground font-bold ring-2 ring-success/50'
+                            : 'bg-surface-secondary hover:bg-surface-tertiary text-foreground border border-border'
                         }`}
                         title={isFeatureSelected ? 'Click to clear feature filter' : `Filter commands requiring ${f}`}
                       >
@@ -470,24 +470,24 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
             </div>
 
             <div className="flex items-center gap-2 self-end md:self-center shrink-0">
-              <span className="text-xs font-mono text-cyan-400 bg-cyan-950/60 px-2.5 py-1 rounded border border-cyan-800/40">
+              <span className="text-xs font-mono text-accent-soft-foreground bg-surface-secondary px-2.5 py-1 rounded border border-accent/30">
                 <strong>{filteredCount}</strong> compatible
               </span>
               {onNavigateToVehicles && (
                 <button
                   type="button"
                   onClick={onNavigateToVehicles}
-                  className="dash-outline-btn text-xs py-1.5 px-3 inline-flex items-center gap-1 text-slate-300 hover:text-white"
+                  className="dash-outline-btn text-xs py-1.5 px-3 inline-flex items-center gap-1"
                   title="Inspect this vehicle in the Vehicles tab"
                 >
                   <span>Specs</span>
-                  <ArrowRight className="w-3 h-3 text-cyan-400" />
+                  <ArrowRight className="w-3 h-3 text-accent" />
                 </button>
               )}
               <button
                 type="button"
                 onClick={() => onVehicleChange('all')}
-                className="text-xs py-1.5 px-2.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-rose-300 inline-flex items-center gap-1 transition"
+                className="text-xs py-1.5 px-2.5 rounded-md bg-surface-secondary hover:bg-surface-tertiary text-muted hover:text-danger border border-border inline-flex items-center gap-1 transition"
                 title="Clear vehicle selection"
               >
                 <X className="w-3.5 h-3.5" />
@@ -501,18 +501,18 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
       {/* 2. MIDDLE: Streamlined Taxonomy & View Deck (Unified Rows 2 & 3) */}
       <div className="space-y-2">
         {/* Main Taxonomy Controls Bar */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 min-w-0 bg-[var(--card-bg)]/40 p-2 sm:p-2.5 rounded-xl border border-[var(--border-color)]">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 min-w-0 bg-surface p-2 sm:p-2.5 rounded-xl border border-border">
           {/* Left: View Switching & Role Segmentation */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 min-w-0">
             {/* Role Filter Pills */}
-            <div className="flex flex-wrap items-center gap-1 p-1 rounded-full bg-[var(--input-bg)] border border-[var(--border-color)] text-xs">
+            <div className="flex flex-wrap items-center gap-1 p-1 rounded-full bg-surface-secondary border border-border text-xs">
               <button
                 type="button"
                 onClick={() => onRoleChange('all')}
                 className={`px-2.5 sm:px-3 py-1 rounded-full font-semibold transition text-[11px] sm:text-xs ${
                   selectedRole === 'all'
-                    ? 'bg-[var(--md-sys-color-surface-container-highest)] text-white shadow-sm'
-                    : 'text-[var(--text-muted)] hover:text-white'
+                    ? 'bg-surface-tertiary text-foreground shadow-sm border border-border'
+                    : 'text-muted hover:text-foreground'
                 }`}
               >
                 All Roles
@@ -523,7 +523,7 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
                 className={`px-2.5 sm:px-3 py-1 rounded-full font-semibold transition text-[11px] sm:text-xs ${
                   selectedRole === 'trigger'
                     ? 'trig-pill'
-                    : 'text-[var(--text-muted)] hover:text-amber-300'
+                    : 'text-muted hover:text-warning'
                 }`}
               >
                 Triggers
@@ -534,7 +534,7 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
                 className={`px-2.5 sm:px-3 py-1 rounded-full font-semibold transition text-[11px] sm:text-xs ${
                   selectedRole === 'condition'
                     ? 'cond-pill'
-                    : 'text-[var(--text-muted)] hover:text-cyan-300'
+                    : 'text-muted hover:text-accent'
                 }`}
               >
                 Conditions
@@ -545,7 +545,7 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
                 className={`px-2.5 sm:px-3 py-1 rounded-full font-semibold transition text-[11px] sm:text-xs ${
                   selectedRole === 'action'
                     ? 'act-pill'
-                    : 'text-[var(--text-muted)] hover:text-emerald-300'
+                    : 'text-muted hover:text-success'
                 }`}
               >
                 Actions
@@ -566,17 +566,17 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
                 aria-label="Filter by category"
                 className="w-full min-w-0"
               >
-                <Select.Trigger className="w-full px-3 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-[var(--md-sys-color-primary)] text-xs min-w-0 flex items-center justify-between gap-1.5 cursor-pointer">
+                <Select.Trigger className="w-full px-3 py-1.5 rounded-[8px] bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-accent text-xs min-w-0 flex items-center justify-between gap-1.5 cursor-pointer">
                   <Select.Value className="truncate text-xs text-left" />
-                  <Select.Indicator className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+                  <Select.Indicator className="w-4 h-4 text-muted shrink-0" />
                 </Select.Trigger>
-                <Select.Popover className="min-w-[var(--trigger-width)] bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-50 p-1 max-h-60 overflow-y-auto">
+                <Select.Popover className="min-w-[var(--trigger-width)] bg-overlay border border-border rounded-lg shadow-overlay z-50 p-1 max-h-60 overflow-y-auto">
                   <ListBox className="outline-none space-y-0.5">
-                    <ListBoxItem id="all" textValue={`All Categories (${categories.length})`} className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                    <ListBoxItem id="all" textValue={`All Categories (${categories.length})`} className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none">
                       All Categories ({categories.length})
                     </ListBoxItem>
                     {categories.map(cat => (
-                      <ListBoxItem key={cat} id={cat} textValue={cat} className="px-2.5 py-1.5 text-xs rounded hover:bg-slate-800 text-slate-200 cursor-pointer outline-none">
+                      <ListBoxItem key={cat} id={cat} textValue={cat} className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none">
                         {cat}
                       </ListBoxItem>
                     ))}
@@ -592,34 +592,34 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
                 onSelectionChange={key => onViewModeChange(key as 'grid' | 'grouped')}
                 aria-label="View Mode"
               >
-                <Tabs.ListContainer className="p-0.5 rounded-lg bg-[var(--input-bg)] border border-[var(--border-color)] text-xs shrink-0">
+                <Tabs.ListContainer className="p-0.5 rounded-lg bg-surface-secondary border border-border text-xs shrink-0">
                   <Tabs.List className="gap-0.5">
                     <Tabs.Tab
                       id="grid"
                       className={`relative px-2 py-1 rounded font-semibold transition cursor-pointer flex items-center gap-1 text-[11px] ${
                         viewMode === 'grid'
-                          ? 'text-white'
-                          : 'text-[var(--text-muted)] hover:text-white'
+                          ? 'text-foreground'
+                          : 'text-muted hover:text-foreground'
                       }`}
                       aria-label="Standard Grid View"
                     >
                       <LayoutGrid className="w-3.5 h-3.5" />
                       <span className="hidden sm:inline">Grid</span>
-                      <Tabs.Indicator className="rounded bg-[var(--md-sys-color-surface-container-highest)] shadow-sm" />
+                      <Tabs.Indicator className="rounded bg-surface-tertiary shadow-sm" />
                     </Tabs.Tab>
 
                     <Tabs.Tab
                       id="grouped"
                       className={`relative px-2 py-1 rounded font-semibold transition cursor-pointer flex items-center gap-1 text-[11px] ${
                         viewMode === 'grouped'
-                          ? 'text-cyan-300'
-                          : 'text-[var(--text-muted)] hover:text-cyan-300'
+                          ? 'text-accent'
+                          : 'text-muted hover:text-accent'
                       }`}
                       aria-label="Group commands by subsystem & function"
                     >
                       <FolderKanban className="w-3.5 h-3.5" />
                       <span>Grouped</span>
-                      <Tabs.Indicator className="rounded bg-cyan-950/80 border border-cyan-700/60 shadow-sm" />
+                      <Tabs.Indicator className="rounded bg-accent-soft border border-accent/40 shadow-sm" />
                     </Tabs.Tab>
                   </Tabs.List>
                 </Tabs.ListContainer>
@@ -632,14 +632,14 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
                 <button
                   type="button"
                   onClick={handleResetAllFilters}
-                  className="text-xs text-cyan-400 hover:text-cyan-300 hover:underline px-1.5 py-0.5 flex items-center gap-1 font-medium"
+                  className="text-xs text-accent hover:underline px-1.5 py-0.5 flex items-center gap-1 font-medium"
                 >
                   <X className="w-3 h-3" />
                   <span>Reset</span>
                 </button>
               )}
 
-              <span className="text-[var(--text-muted)] font-mono text-[11px] bg-[var(--input-bg)] px-2 py-1 rounded border border-[var(--border-color)] shrink-0">
+              <span className="text-muted font-mono text-[11px] bg-surface-secondary px-2 py-1 rounded border border-border shrink-0">
                 {filteredCount}/{totalCount}
               </span>
             </div>
@@ -649,8 +649,8 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
         {/* Subsystem / Subcategory Chips Bar (Integrated directly beneath Category) */}
         {availableSubcategories.length > 0 && (
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 px-1 text-xs min-w-0">
-            <span className="text-slate-400 text-[11px] font-medium flex items-center gap-1 shrink-0 mr-1">
-              <Layers className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="text-muted text-[11px] font-medium flex items-center gap-1 shrink-0 mr-1">
+              <Layers className="w-3.5 h-3.5 text-accent" />
               <span className="hidden sm:inline">Subsystems:</span>
             </span>
             <button
@@ -658,8 +658,8 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
               onClick={() => onSubcategoryChange?.('all')}
               className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium shrink-0 transition ${
                 selectedSubcategory === 'all'
-                  ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 font-semibold'
-                  : 'bg-slate-900/60 text-slate-400 hover:text-white border border-slate-800'
+                  ? 'bg-accent-soft text-accent-soft-foreground border border-accent/40 font-semibold'
+                  : 'bg-surface text-muted hover:text-foreground border border-border'
               }`}
             >
               All Subsystems
@@ -676,8 +676,8 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
                   onClick={() => onSubcategoryChange?.(isSelected ? 'all' : subcat)}
                   className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium shrink-0 transition flex items-center gap-1.5 ${
                     isSelected
-                      ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/70 font-semibold shadow-sm'
-                      : 'bg-slate-900/60 text-slate-400 hover:text-white border border-slate-800'
+                      ? 'bg-accent/20 text-accent-soft-foreground border border-accent/60 font-semibold shadow-sm'
+                      : 'bg-surface text-muted hover:text-foreground border border-border'
                   }`}
                 >
                   <span>{subcat}</span>
@@ -698,15 +698,15 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
           aria-label="Search catalog commands"
           className="flex-1 min-w-0"
         >
-          <SearchField.Group className="relative w-full flex items-center rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)] focus-within:border-[var(--md-sys-color-primary)] focus-within:ring-1 focus-within:ring-[var(--md-sys-color-primary)] shadow-sm transition px-3 py-2 text-xs">
-            <SearchField.SearchIcon className="w-4 h-4 text-[var(--text-muted)] mr-2 shrink-0" />
+          <SearchField.Group className="relative w-full flex items-center rounded-xl bg-field border border-border focus-within:border-accent focus-within:ring-1 focus-within:ring-focus shadow-sm transition px-3 py-2 text-xs">
+            <SearchField.SearchIcon className="w-4 h-4 text-muted mr-2 shrink-0" />
             <SearchField.Input
               placeholder="Search commands by name, ID, CAN ID, contributor (@handle), or byte..."
-              className="w-full bg-transparent text-xs text-[var(--text-heading)] placeholder-slate-500 focus:outline-none"
+              className="w-full bg-transparent text-xs text-field-foreground placeholder:text-field-placeholder focus:outline-none"
             />
             {search && (
               <SearchField.ClearButton
-                className="text-[var(--text-muted)] hover:text-white shrink-0 p-1 rounded-md hover:bg-slate-800 transition cursor-pointer"
+                className="text-muted hover:text-foreground shrink-0 p-1 rounded-md hover:bg-surface-secondary transition cursor-pointer"
                 aria-label="Clear search"
               />
             )}
@@ -716,24 +716,24 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
         {/* Action buttons: Expand/Collapse (when grouped), Categories & New CAN Command */}
         <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
           {viewMode === 'grouped' && onExpandAll && onCollapseAll && (
-            <div className="inline-flex items-center p-0.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)] text-xs shrink-0 shadow-sm">
+            <div className="inline-flex items-center p-0.5 rounded-xl bg-surface-secondary border border-border text-xs shrink-0 shadow-sm">
               <button
                 type="button"
                 onClick={onExpandAll}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition text-xs font-semibold"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-foreground hover:bg-surface-tertiary transition text-xs font-semibold"
                 title="Expand all groups"
               >
-                <Maximize2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <Maximize2 className="w-3.5 h-3.5 text-accent shrink-0" />
                 <span className="whitespace-nowrap">Expand All</span>
               </button>
-              <div className="h-4 w-px bg-slate-800 shrink-0 mx-0.5" />
+              <div className="h-4 w-px bg-separator shrink-0 mx-0.5" />
               <button
                 type="button"
                 onClick={onCollapseAll}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition text-xs font-semibold"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-foreground hover:bg-surface-tertiary transition text-xs font-semibold"
                 title="Collapse all groups"
               >
-                <Minimize2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <Minimize2 className="w-3.5 h-3.5 text-accent shrink-0" />
                 <span className="whitespace-nowrap">Collapse All</span>
               </button>
             </div>
@@ -746,7 +746,7 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
               className="dash-outline-btn flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 text-xs py-2.5 px-3 sm:px-3.5 whitespace-nowrap rounded-xl"
               title="Manage, batch rename, or merge CAN command categories"
             >
-              <Layers className="w-4 h-4 text-cyan-400 shrink-0" />
+              <Layers className="w-4 h-4 text-accent shrink-0" />
               <span>Categories</span>
             </button>
           )}
@@ -754,7 +754,7 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
           <button
             type="button"
             onClick={onOpenCreateModal}
-            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white font-semibold text-xs shadow-sm transition whitespace-nowrap"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-foreground font-semibold text-xs shadow-sm transition whitespace-nowrap"
             title="Create a new CAN automation command"
           >
             <Plus className="w-4 h-4 stroke-[2.5] shrink-0" />

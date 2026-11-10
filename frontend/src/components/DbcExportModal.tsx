@@ -101,46 +101,46 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
 
   return (
     <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
-      <ModalBackdrop variant="blur" className="bg-black/80 backdrop-blur-sm">
+      <ModalBackdrop variant="blur" className="bg-backdrop backdrop-blur-sm">
         <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
-          <ModalDialog className="relative w-full max-w-4xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+          <ModalDialog className="relative w-full max-w-4xl rounded-[16px] border border-border bg-overlay text-overlay-foreground shadow-overlay overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
             {/* Header */}
-            <ModalHeader className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0 gap-0">
+            <ModalHeader className="flex items-center justify-between p-5 border-b border-separator bg-surface shrink-0 gap-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-cyan-950/60 border border-cyan-800/80 flex items-center justify-center text-cyan-400">
+                <div className="w-10 h-10 rounded-xl bg-accent-soft border border-accent/30 flex items-center justify-center text-accent">
                   <FileCode className="w-5 h-5" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <ModalHeading className="text-base font-bold text-white">Export Vector CAN DBC</ModalHeading>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-300 font-mono border border-cyan-800/80">
+                    <ModalHeading className="text-base font-bold text-foreground">Export Vector CAN DBC</ModalHeading>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-foreground font-mono border border-accent/30">
                       Industry Standard .dbc
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-muted">
                     Compatible with SavvyCAN, comma.ai / opendbc, Wireshark, Vector CANoe, and BusMaster
                   </p>
                 </div>
               </div>
               <button
                 onClick={onClose}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                className="p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-default-hover transition"
               >
                 <X className="w-5 h-5" />
               </button>
             </ModalHeader>
 
         {/* Filter Toolbar */}
-        <div className="p-4 border-b border-[var(--border-color)] bg-slate-950/40 grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs shrink-0">
+        <div className="p-4 border-b border-separator bg-surface-secondary grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs shrink-0">
           <div>
-            <label className="block text-[11px] font-semibold text-slate-400 mb-1 flex items-center gap-1">
-              <Car className="w-3.5 h-3.5 text-cyan-400" />
+            <label className="block text-[11px] font-semibold text-muted mb-1 flex items-center gap-1">
+              <Car className="w-3.5 h-3.5 text-accent" />
               Target Vehicle Trim
             </label>
             <select
               value={vehicleFilter}
               onChange={e => setVehicleFilter(e.target.value)}
-              className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--input-bg)] border border-[var(--border-color)] text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+              className="w-full px-2.5 py-1.5 rounded-lg bg-surface-tertiary border border-border text-foreground focus:outline-none focus:border-focus"
             >
               <option value="all">All Vehicles & Trims</option>
               {catalog.vehicles.map(v => (
@@ -152,14 +152,14 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-[11px] font-semibold text-slate-400 mb-1 flex items-center gap-1">
-              <Layers className="w-3.5 h-3.5 text-cyan-400" />
+            <label className="block text-[11px] font-semibold text-muted mb-1 flex items-center gap-1">
+              <Layers className="w-3.5 h-3.5 text-accent" />
               Category Filter
             </label>
             <select
               value={categoryFilter}
               onChange={e => setCategoryFilter(e.target.value)}
-              className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--input-bg)] border border-[var(--border-color)] text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+              className="w-full px-2.5 py-1.5 rounded-lg bg-surface-tertiary border border-border text-foreground focus:outline-none focus:border-focus"
             >
               <option value="all">All Categories ({catalog.commands.length})</option>
               {categories.map(cat => (
@@ -171,7 +171,7 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+            <label className="block text-[11px] font-semibold text-muted mb-1">
               ECU Transmitter Node
             </label>
             <input
@@ -179,7 +179,7 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
               value={ecuName}
               onChange={e => setEcuName(e.target.value)}
               placeholder="CAN_DO_HUB"
-              className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+              className="w-full px-2.5 py-1.5 rounded-lg bg-surface-tertiary border border-border font-mono text-xs text-foreground focus:outline-none focus:border-focus"
             />
           </div>
 
@@ -194,30 +194,30 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
                 <Switch.Control>
                   <Switch.Thumb />
                 </Switch.Control>
-                <span className="text-[11px] text-slate-300">Include Author & Notes (`CM_`)</span>
+                <span className="text-[11px] text-foreground">Include Author & Notes (`CM_`)</span>
               </Switch.Content>
             </Switch>
           </div>
         </div>
 
         {/* Stats strip */}
-        <div className="px-5 py-2.5 bg-slate-900/50 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
-          <div className="flex items-center gap-4 text-slate-300">
+        <div className="px-5 py-2.5 bg-surface border-b border-separator flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
+          <div className="flex items-center gap-4 text-foreground">
             <div>
-              <span className="text-slate-400 text-[11px]">CAN Messages (`BO_`): </span>
-              <strong className="text-white font-mono">{stats.boCount}</strong>
+              <span className="text-muted text-[11px]">CAN Messages (`BO_`): </span>
+              <strong className="text-foreground font-mono">{stats.boCount}</strong>
             </div>
             <div>
-              <span className="text-slate-400 text-[11px]">Signals (`SG_`): </span>
-              <strong className="text-cyan-300 font-mono">{stats.sgCount}</strong>
+              <span className="text-muted text-[11px]">Signals (`SG_`): </span>
+              <strong className="text-accent font-mono">{stats.sgCount}</strong>
             </div>
             <div>
-              <span className="text-slate-400 text-[11px]">Value Tables (`VAL_`): </span>
-              <strong className="text-emerald-300 font-mono">{stats.valCount}</strong>
+              <span className="text-muted text-[11px]">Value Tables (`VAL_`): </span>
+              <strong className="text-success font-mono">{stats.valCount}</strong>
             </div>
             <div>
-              <span className="text-slate-400 text-[11px]">Annotations (`CM_`): </span>
-              <strong className="text-amber-300 font-mono">{stats.cmCount}</strong>
+              <span className="text-muted text-[11px]">Annotations (`CM_`): </span>
+              <strong className="text-warning font-mono">{stats.cmCount}</strong>
             </div>
           </div>
 
@@ -226,29 +226,29 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
             onSelectionChange={key => setActiveTab(key as 'preview' | 'help')}
             aria-label="Export Views"
           >
-            <Tabs.ListContainer className="p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px]">
+            <Tabs.ListContainer className="p-0.5 rounded-lg bg-surface-secondary border border-border text-[11px]">
               <Tabs.List className="gap-1">
                 <Tabs.Tab
                   id="preview"
                   className={`relative px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
                     activeTab === 'preview'
-                      ? 'text-white'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'text-foreground'
+                      : 'text-muted hover:text-foreground'
                   }`}
                 >
                   <span>DBC Preview</span>
-                  <Tabs.Indicator className="rounded-md bg-slate-800 shadow-sm" />
+                  <Tabs.Indicator className="rounded-md bg-surface-tertiary border border-border shadow-sm" />
                 </Tabs.Tab>
                 <Tabs.Tab
                   id="help"
                   className={`relative px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
                     activeTab === 'help'
-                      ? 'text-white'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'text-foreground'
+                      : 'text-muted hover:text-foreground'
                   }`}
                 >
                   <span>Tool Setup Guide</span>
-                  <Tabs.Indicator className="rounded-md bg-slate-800 shadow-sm" />
+                  <Tabs.Indicator className="rounded-md bg-surface-tertiary border border-border shadow-sm" />
                 </Tabs.Tab>
               </Tabs.List>
             </Tabs.ListContainer>
@@ -259,15 +259,15 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
         <ModalBody className="flex-1 overflow-y-auto p-5">
           {activeTab === 'preview' ? (
             <div className="relative">
-              <pre className="p-4 rounded-xl bg-slate-950/90 border border-slate-800/90 font-mono text-xs text-slate-200 overflow-x-auto leading-relaxed max-h-[420px] select-all">
+              <pre className="p-4 rounded-xl bg-surface-secondary border border-border font-mono text-xs text-foreground overflow-x-auto leading-relaxed max-h-[420px] select-all">
                 {dbcContent}
               </pre>
             </div>
           ) : (
-            <div className="space-y-4 text-xs text-slate-300 leading-relaxed">
-              <div className="p-4 rounded-xl bg-slate-900/70 border border-slate-800 space-y-2">
-                <h4 className="font-bold text-white text-sm flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-cyan-400" />
+            <div className="space-y-4 text-xs text-muted leading-relaxed">
+              <div className="p-4 rounded-xl bg-surface-secondary border border-border space-y-2">
+                <h4 className="font-bold text-foreground text-sm flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-accent" />
                   Using this DBC in Automotive Tools
                 </h4>
                 <p>
@@ -277,37 +277,37 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1.5">
-                  <strong className="text-white block font-semibold">1. SavvyCAN & SocketCAN</strong>
-                  <p className="text-slate-400">
-                    Open SavvyCAN → Click <code className="text-cyan-300">File</code> →{' '}
-                    <code className="text-cyan-300">Load DBC File</code>. All CAN frames matching the
+                <div className="p-3.5 rounded-xl bg-surface-secondary border border-border space-y-1.5">
+                  <strong className="text-foreground block font-semibold">1. SavvyCAN & SocketCAN</strong>
+                  <p className="text-muted">
+                    Open SavvyCAN → Click <code className="text-accent">File</code> →{' '}
+                    <code className="text-accent">Load DBC File</code>. All CAN frames matching the
                     IDs will immediately decode into named buttons and byte values.
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1.5">
-                  <strong className="text-white block font-semibold">2. comma.ai / opendbc</strong>
-                  <p className="text-slate-400">
-                    Drop the downloaded <code className="text-cyan-300">.dbc</code> file directly into{' '}
-                    <code className="text-slate-300">opendbc/</code> repository or your custom fork for
+                <div className="p-3.5 rounded-xl bg-surface-secondary border border-border space-y-1.5">
+                  <strong className="text-foreground block font-semibold">2. comma.ai / opendbc</strong>
+                  <p className="text-muted">
+                    Drop the downloaded <code className="text-accent">.dbc</code> file directly into{' '}
+                    <code className="text-foreground">opendbc/</code> repository or your custom fork for
                     openpilot CAN message decoding.
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1.5">
-                  <strong className="text-white block font-semibold">3. Wireshark</strong>
-                  <p className="text-slate-400">
-                    In Wireshark, navigate to <code className="text-cyan-300">Analyze</code> →{' '}
-                    <code className="text-cyan-300">Enabled Protocols</code> →{' '}
-                    <code className="text-slate-300">CANopen / CAN</code> and load the DBC database to
+                <div className="p-3.5 rounded-xl bg-surface-secondary border border-border space-y-1.5">
+                  <strong className="text-foreground block font-semibold">3. Wireshark</strong>
+                  <p className="text-muted">
+                    In Wireshark, navigate to <code className="text-accent">Analyze</code> →{' '}
+                    <code className="text-accent">Enabled Protocols</code> →{' '}
+                    <code className="text-foreground">CANopen / CAN</code> and load the DBC database to
                     view live signal names in packet captures.
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1.5">
-                  <strong className="text-white block font-semibold">4. Python / cantools</strong>
-                  <p className="text-slate-400 font-mono text-[11px] text-cyan-300/90">
+                <div className="p-3.5 rounded-xl bg-surface-secondary border border-border space-y-1.5">
+                  <strong className="text-foreground block font-semibold">4. Python / cantools</strong>
+                  <p className="font-mono text-[11px] text-accent">
                     import cantools<br />
                     db = cantools.database.load_file('catalog.dbc')<br />
                     db.decode_message(0x448, b'\x00\x00\x00\x00\x00\x10\x00\x00')
@@ -319,8 +319,8 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
         </ModalBody>
 
         {/* Footer */}
-        <ModalFooter className="flex items-center justify-between p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
-          <div className="text-xs text-slate-400">
+        <ModalFooter className="flex items-center justify-between p-4 px-6 border-t border-separator bg-surface shrink-0">
+          <div className="text-xs text-muted">
             {stats.sgCount} Signals across {stats.boCount} CAN Messages
           </div>
 
@@ -332,8 +332,8 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
             >
               {copied ? (
                 <>
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="text-emerald-300">Copied to Clipboard</span>
+                  <Check className="w-3.5 h-3.5 text-success" />
+                  <span className="text-success">Copied to Clipboard</span>
                 </>
               ) : (
                 <>
@@ -346,7 +346,7 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
             <button
               type="button"
               onClick={handleDownload}
-              className="px-5 py-2 rounded-full text-xs font-semibold bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold shadow-md shadow-cyan-500/20 inline-flex items-center gap-2 transition"
+              className="px-5 py-2 rounded-full text-xs bg-accent hover:bg-accent-hover text-accent-foreground font-bold shadow-md inline-flex items-center gap-2 transition"
             >
               <Download className="w-4 h-4" />
               <span>Download .dbc File</span>

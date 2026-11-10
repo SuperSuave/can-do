@@ -52,18 +52,18 @@ export const PayloadByteVisualizer: React.FC<PayloadByteVisualizerProps> = ({
 
   const getByteStyle = (token: string) => {
     if (token === '*') {
-      return 'bg-slate-800 text-slate-400 border-slate-700/60 font-mono';
+      return 'bg-surface-tertiary text-muted border-border font-mono';
     }
     if (token === 'VAR') {
-      return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/60 font-mono font-bold ring-1 ring-cyan-500/30';
+      return 'bg-accent/20 text-accent border-accent/60 font-mono font-bold ring-1 ring-accent/30';
     }
     if (token.startsWith('!')) {
-      return 'bg-rose-950/50 text-rose-300 border-rose-600/40 font-mono font-semibold';
+      return 'bg-danger-soft text-danger-soft-foreground border-danger/40 font-mono font-semibold';
     }
     if (token.includes('*')) {
-      return 'bg-amber-950/40 text-amber-300 border-amber-600/40 font-mono';
+      return 'bg-warning-soft text-warning-soft-foreground border-warning/40 font-mono';
     }
-    return 'bg-cyan-950/50 text-cyan-300 border-cyan-500/40 font-mono font-semibold';
+    return 'bg-accent-soft text-accent-soft-foreground border-accent/40 font-mono font-semibold';
   };
 
   const renderByteRow = (tokens: string[], label?: string) => {
@@ -77,7 +77,7 @@ export const PayloadByteVisualizer: React.FC<PayloadByteVisualizerProps> = ({
     return (
       <div className="flex flex-col gap-2 w-full pb-1">
         {label && (
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted">
             {label}
           </span>
         )}
@@ -99,7 +99,7 @@ export const PayloadByteVisualizer: React.FC<PayloadByteVisualizerProps> = ({
                 >
                   <span className="font-mono">{token}</span>
                 </div>
-                <span className="font-mono font-bold text-cyan-300 text-[9px] sm:text-[10px]">
+                <span className="font-mono font-bold text-accent text-[9px] sm:text-[10px]">
                   D{idx + 1}
                 </span>
               </div>
@@ -116,12 +116,12 @@ export const PayloadByteVisualizer: React.FC<PayloadByteVisualizerProps> = ({
     const toTokens = parseTokens(toPayload);
 
     return (
-      <div className={`flex ${compact ? 'flex-col' : 'flex-col lg:flex-row'} items-start ${compact ? '' : 'lg:items-center'} gap-2 sm:gap-3 bg-slate-950/60 p-2 sm:p-2.5 rounded-lg border border-slate-800 min-w-0`}>
+      <div className={`flex ${compact ? 'flex-col' : 'flex-col lg:flex-row'} items-start ${compact ? '' : 'lg:items-center'} gap-2 sm:gap-3 bg-surface-secondary p-2 sm:p-2.5 rounded-lg border border-border min-w-0`}>
         <div className="flex-1 w-full min-w-0">
           {renderByteRow(fromTokens, 'From (Idle / Off)')}
         </div>
-        {!compact && <div className="text-slate-500 font-bold px-1 hidden lg:block">→</div>}
-        <div className={`text-slate-500 font-bold py-0.5 ${compact ? 'text-xs text-slate-500' : 'lg:hidden'}`}>↓</div>
+        {!compact && <div className="text-muted font-bold px-1 hidden lg:block">→</div>}
+        <div className={`text-muted font-bold py-0.5 ${compact ? 'text-xs' : 'lg:hidden'}`}>↓</div>
         <div className="flex-1 w-full min-w-0">
           {renderByteRow(toTokens, 'To (Active / Trigger)')}
         </div>
@@ -133,7 +133,7 @@ export const PayloadByteVisualizer: React.FC<PayloadByteVisualizerProps> = ({
   if (matchPayload) {
     const matchTokens = parseTokens(matchPayload);
     return (
-      <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
+      <div className="bg-surface-secondary p-2.5 rounded-lg border border-border">
         {renderByteRow(matchTokens, 'Match Pattern')}
       </div>
     );
@@ -143,7 +143,7 @@ export const PayloadByteVisualizer: React.FC<PayloadByteVisualizerProps> = ({
   if (payload) {
     const tokens = parseTokens(payload);
     return (
-      <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
+      <div className="bg-surface-secondary p-2.5 rounded-lg border border-border">
         {renderByteRow(tokens, 'TX Payload')}
       </div>
     );
@@ -158,11 +158,11 @@ export const PayloadByteVisualizer: React.FC<PayloadByteVisualizerProps> = ({
       return `0x${(Number(val) & 0xFF).toString(16).toUpperCase().padStart(2, '0')}`;
     });
     return (
-      <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800 space-y-2">
+      <div className="bg-surface-secondary p-2.5 rounded-lg border border-border space-y-2">
         {numericRange && (
-          <div className="flex items-center justify-between text-xs font-mono text-cyan-300 px-1">
+          <div className="flex items-center justify-between text-xs font-mono text-accent-soft-foreground px-1">
             <span>Range: {numericRange.min}{numericRange.unit || ''} to {numericRange.max}{numericRange.unit || ''}</span>
-            <span className="text-slate-400">Target: <strong className="text-cyan-400 font-bold">{targetByte || 'D1'}</strong></span>
+            <span className="text-muted">Target: <strong className="text-accent font-bold">{targetByte || 'D1'}</strong></span>
           </div>
         )}
         {renderByteRow(tokens, 'Base Frame (Dynamic VAR Byte)')}
@@ -171,7 +171,7 @@ export const PayloadByteVisualizer: React.FC<PayloadByteVisualizerProps> = ({
   }
 
   return (
-    <div className="text-xs text-slate-500 italic py-1">
+    <div className="text-xs text-muted italic py-1">
       No raw frame payload defined (virtual command or variable status)
     </div>
   );

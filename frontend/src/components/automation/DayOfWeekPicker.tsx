@@ -32,13 +32,13 @@ export function DayOfWeekPicker({
 
   return (
     <div className="space-y-1.5 pt-1">
-      <div className="flex items-center justify-between text-[10px] text-slate-400">
+      <div className="flex items-center justify-between text-[10px] text-muted">
         <span className="font-semibold">Active Days</span>
         <div className="flex items-center gap-1 font-sans">
           <button
             type="button"
             onClick={() => onChange(['mon', 'tue', 'wed', 'thu', 'fri'])}
-            className="hover:text-cyan-400 underline underline-offset-2"
+            className="hover:text-accent underline underline-offset-2"
           >
             Weekdays
           </button>
@@ -46,7 +46,7 @@ export function DayOfWeekPicker({
           <button
             type="button"
             onClick={() => onChange(['sat', 'sun'])}
-            className="hover:text-cyan-400 underline underline-offset-2"
+            className="hover:text-accent underline underline-offset-2"
           >
             Weekends
           </button>
@@ -54,7 +54,7 @@ export function DayOfWeekPicker({
           <button
             type="button"
             onClick={() => onChange(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])}
-            className="hover:text-cyan-400 underline underline-offset-2"
+            className="hover:text-accent underline underline-offset-2"
           >
             All
           </button>
@@ -70,8 +70,8 @@ export function DayOfWeekPicker({
               onClick={() => toggleDay(d.id)}
               className={`px-2 py-0.5 rounded text-[10px] font-bold transition border ${
                 active
-                  ? 'bg-cyan-500 text-slate-950 border-cyan-400'
-                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                  ? 'bg-accent text-accent-foreground border-accent'
+                  : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
               }`}
             >
               {d.label}

@@ -1314,12 +1314,12 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         {activeRule ? (
           <div className="order-2 lg:order-1 lg:col-span-8 space-y-4 min-w-0">
             {/* Active Rule Action Strip & Properties */}
-            <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-900 border border-slate-800 shadow-sm space-y-3 min-w-0">
+            <div className="p-2.5 sm:p-3.5 rounded-xl bg-surface border border-border shadow-sm space-y-3 min-w-0">
               <div className="flex items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <span
                     className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                      activeRule.enabled ? 'bg-emerald-400' : 'bg-slate-600'
+                      activeRule.enabled ? 'bg-success' : 'bg-muted/40'
                     }`}
                   />
                   <input
@@ -1327,13 +1327,13 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     value={activeRule.name}
                     onChange={e => handleUpdateActiveRule({ name: e.target.value })}
                     placeholder="Automation Name"
-                    className="bg-transparent text-sm font-bold text-white focus:outline-none focus:ring-1 focus:ring-cyan-500/50 rounded px-1.5 py-0.5 w-full min-w-0 truncate"
+                    className="bg-transparent text-sm font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-focus rounded px-1.5 py-0.5 w-full min-w-0 truncate"
                   />
                   {activeRule.category ? (
                     <button
                       type="button"
                       onClick={() => setEditingCategoryRule(activeRule)}
-                      className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-cyan-950/70 text-cyan-300 border border-cyan-800/60 hover:bg-cyan-900/60 transition flex-shrink-0"
+                      className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-accent-soft text-accent-soft-foreground border border-accent/30 hover:opacity-90 transition flex-shrink-0"
                       title="Edit category"
                     >
                       <Tag className="w-2.5 h-2.5" />
@@ -1343,7 +1343,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     <button
                       type="button"
                       onClick={() => setEditingCategoryRule(activeRule)}
-                      className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] text-slate-500 hover:text-cyan-300 hover:bg-slate-850 transition flex-shrink-0"
+                      className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] text-muted hover:text-accent hover:bg-default-hover transition flex-shrink-0"
                       title="Add category"
                     >
                       <Tag className="w-2.5 h-2.5" />
@@ -1377,12 +1377,12 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               </div>
 
               {/* Automation Properties Bar */}
-              <div className="pt-2 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+              <div className="pt-2 border-t border-separator grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-medium text-slate-400">Cooldown</label>
-                    <span className="text-[10px] text-cyan-400 font-mono">
+                    <label className="block text-[10px] font-medium text-muted">Cooldown</label>
+                    <span className="text-[10px] text-accent font-mono">
                       {activeRule.cooldown_ms || 0}ms
                     </span>
                   </div>
@@ -1399,9 +1399,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       aria-label="Cooldown in milliseconds"
                       className="flex-1"
                     >
-                      <Slider.Track className="h-1.5 bg-slate-900 rounded-full cursor-pointer relative">
-                        <Slider.Fill className="bg-cyan-500 rounded-full h-full" />
-                        <Slider.Thumb className="w-3.5 h-3.5 bg-cyan-400 border-2 border-slate-950 rounded-full shadow cursor-grab active:cursor-grabbing focus:outline-none" />
+                      <Slider.Track className="h-1.5 bg-surface-tertiary rounded-full cursor-pointer relative">
+                        <Slider.Fill className="bg-accent rounded-full h-full" />
+                        <Slider.Thumb className="w-3.5 h-3.5 bg-accent border-2 border-surface rounded-full shadow cursor-grab active:cursor-grabbing focus:outline-none" />
                       </Slider.Track>
                     </Slider>
                     <input
@@ -1411,19 +1411,19 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       value={activeRule.cooldown_ms !== undefined ? activeRule.cooldown_ms : 0}
                       onChange={e => handleUpdateActiveRule({ cooldown_ms: parseInt(e.target.value) || 0 })}
                       placeholder="0"
-                      className="w-16 bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500 text-right"
+                      className="w-16 bg-surface-secondary border border-border rounded px-1.5 py-0.5 text-foreground font-mono text-xs focus:outline-none focus:border-focus text-right"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-medium text-slate-400 mb-1">Home Assistant Icon</label>
+                  <label className="block text-[10px] font-medium text-muted mb-1">Home Assistant Icon</label>
                   <input
                     type="text"
                     value={activeRule.ha_icon || ''}
                     onChange={e => handleUpdateActiveRule({ ha_icon: e.target.value })}
                     placeholder="mdi:car-cog"
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-surface-secondary border border-border rounded px-2 py-1 text-foreground text-xs focus:outline-none focus:border-focus"
                   />
                 </div>
 
@@ -1433,13 +1433,13 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     onChange={(isSelected) => handleUpdateActiveRule({ ha_expose: isSelected })}
                     size="sm"
                     aria-label="Expose to Home Assistant"
-                    className="p-1.5 rounded-lg bg-slate-950 border border-slate-800/90 hover:border-slate-700 transition"
+                    className="p-1.5 rounded-lg bg-surface-secondary border border-border hover:border-border-secondary transition"
                   >
                     <Switch.Content>
                       <Switch.Control>
                         <Switch.Thumb />
                       </Switch.Control>
-                      <span className="text-[11px] font-medium text-slate-300">Expose to HA</span>
+                      <span className="text-[11px] font-medium text-foreground">Expose to HA</span>
                     </Switch.Content>
                   </Switch>
                 </div>
@@ -1453,15 +1453,15 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   <button
                     type="button"
                     onClick={() => setCollapsedTriggers(!collapsedTriggers)}
-                    className="text-slate-400 hover:text-white transition p-0.5"
+                    className="text-muted hover:text-foreground transition p-0.5"
                     title={collapsedTriggers ? "Expand triggers" : "Collapse triggers"}
                   >
                     {collapsedTriggers ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
                   </button>
-                  <span className="p-1 rounded-lg bg-amber-500/20 text-amber-400">
+                  <span className="p-1 rounded-lg bg-warning-soft text-warning">
                     <Zap className="w-3.5 h-3.5" />
                   </span>
-                  <span className="text-xs font-bold uppercase tracking-wider text-white">
+                  <span className="text-xs font-bold uppercase tracking-wider text-foreground">
                     Triggers
                   </span>
 
@@ -1471,7 +1471,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               {!collapsedTriggers && (
                 <>
                   {activeRule.triggers.length === 0 ? (
-                    <div className="p-3 rounded-xl bg-slate-950/40 border border-dashed border-slate-800 text-center text-xs text-slate-500 italic">
+                    <div className="p-3 rounded-xl bg-surface-secondary border border-dashed border-border text-center text-xs text-muted italic">
                       No triggers defined. Automation will never fire.
                     </div>
                   ) : (
@@ -1548,10 +1548,10 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                             handleUpdateActiveRule({ triggers: [...activeRule.triggers, pasted] });
                           }
                         }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-950/60 hover:bg-amber-900/60 text-amber-200 border border-amber-700/60 transition cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-warning-soft hover:opacity-90 text-warning-soft-foreground border border-warning/40 transition cursor-pointer"
                         aria-label={`Paste copied trigger "${clipboard.label}"`}
                       >
-                        <ClipboardPaste className="w-3.5 h-3.5 text-amber-300" />
+                        <ClipboardPaste className="w-3.5 h-3.5 text-warning" />
                         <span>Paste Trigger ({clipboard.label})</span>
                       </Button>
                     )}
@@ -1566,10 +1566,10 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                             handleUpdateActiveRule({ triggers: [...activeRule.triggers, pasted] });
                           }
                         }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-950/50 hover:bg-sky-900/50 text-sky-200 border border-sky-700/60 transition cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-accent-soft hover:opacity-90 text-accent-soft-foreground border border-accent/40 transition cursor-pointer"
                         aria-label={`Convert & paste copied condition "${clipboard.label}" as trigger`}
                       >
-                        <ClipboardPaste className="w-3.5 h-3.5 text-sky-300" />
+                        <ClipboardPaste className="w-3.5 h-3.5 text-accent" />
                         <span>Paste as Trigger ({clipboard.label})</span>
                       </Button>
                     )}
@@ -1581,19 +1581,19 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             {/* Toast notification for single action tests */}
             {actionTestToast && (
               <div
-                className={`flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl border text-xs font-medium shadow-lg animate-in fade-in slide-in-from-top-2 duration-200 ${
+                className={`flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl border text-xs font-medium shadow-overlay animate-in fade-in slide-in-from-top-2 duration-200 ${
                   actionTestToast.type === 'success'
-                    ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-300 shadow-emerald-950/50'
+                    ? 'bg-success-soft border-success/40 text-success-soft-foreground'
                     : actionTestToast.type === 'error'
-                    ? 'bg-rose-950/90 border-rose-500/40 text-rose-300 shadow-rose-950/50'
-                    : 'bg-sky-950/90 border-sky-500/40 text-sky-300 shadow-sky-950/50'
+                    ? 'bg-danger-soft border-danger/40 text-danger-soft-foreground'
+                    : 'bg-accent-soft border-accent/40 text-accent-soft-foreground'
                 }`}
               >
                 <span>{actionTestToast.message}</span>
                 <button
                   type="button"
                   onClick={() => setActionTestToast(null)}
-                  className="p-1 hover:bg-white/10 rounded transition text-slate-400 hover:text-white"
+                  className="p-1 hover:bg-default-hover rounded transition text-muted hover:text-foreground"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -1607,15 +1607,15 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   <button
                     type="button"
                     onClick={() => setCollapsedConditions(!collapsedConditions)}
-                    className="text-slate-400 hover:text-white transition p-0.5"
+                    className="text-muted hover:text-foreground transition p-0.5"
                     title={collapsedConditions ? "Expand conditions" : "Collapse conditions"}
                   >
                     {collapsedConditions ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
                   </button>
-                  <span className="p-1 rounded-lg bg-sky-500/20 text-sky-400">
+                  <span className="p-1 rounded-lg bg-accent-soft text-accent">
                     <Shield className="w-3.5 h-3.5" />
                   </span>
-                  <span className="text-xs font-bold uppercase tracking-wider text-white">
+                  <span className="text-xs font-bold uppercase tracking-wider text-foreground">
                     Conditions
                   </span>
                 </div>
@@ -1625,8 +1625,8 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     const conds = activeRule.conditions || [];
                     if (conds.length === 0) {
                       return (
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                          <Check className="w-3 h-3 text-emerald-400" />
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-success-soft text-success-soft-foreground border border-success/30">
+                          <Check className="w-3 h-3 text-success" />
                           <span>Gate Open (Unconditional)</span>
                         </span>
                       );
@@ -1643,11 +1643,11 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     if (gateEval.state === 'valid') {
                       return (
                         <span
-                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm shadow-emerald-500/20"
+                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-success-soft text-success-soft-foreground border border-success/40 shadow-sm"
                           title="All conditions currently evaluate as TRUE based on live CAN bus/entity state"
                         >
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          <Check className="w-3 h-3 text-emerald-400" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                          <Check className="w-3 h-3 text-success" />
                           <span>Gate Open: Valid</span>
                         </span>
                       );
@@ -1655,26 +1655,26 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     if (gateEval.state === 'invalid') {
                       return (
                         <span
-                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm shadow-rose-500/20"
+                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-danger-soft text-danger-soft-foreground border border-danger/40 shadow-sm"
                           title={gateEval.reason || "Conditions currently block execution"}
                         >
-                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
-                          <X className="w-3 h-3 text-rose-400" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-danger" />
+                          <X className="w-3 h-3 text-danger" />
                           <span>Gate Closed: Blocked</span>
                         </span>
                       );
                     }
                     return (
                       <span
-                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700"
+                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface-secondary text-muted border border-border"
                         title={gateEval.reason || "Waiting for live frame or state telemetry"}
                       >
-                        <HelpCircle className="w-3 h-3 text-slate-400" />
+                        <HelpCircle className="w-3 h-3 text-muted" />
                         <span>Gate State: Unknown</span>
                       </span>
                     );
                   })()}
-                  <span className="text-[11px] text-slate-400 hidden sm:inline">
+                  <span className="text-[11px] text-muted hidden sm:inline">
                     Evaluated before actions run
                   </span>
                 </div>
@@ -1705,19 +1705,19 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   <button
                     type="button"
                     onClick={() => setCollapsedActions(!collapsedActions)}
-                    className="text-slate-400 hover:text-white transition p-0.5"
+                    className="text-muted hover:text-foreground transition p-0.5"
                     title={collapsedActions ? "Expand actions" : "Collapse actions"}
                   >
                     {collapsedActions ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
                   </button>
-                  <span className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400">
+                  <span className="p-1 rounded-lg bg-success-soft text-success">
                     <Send className="w-3.5 h-3.5" />
                   </span>
-                  <span className="text-xs font-bold uppercase tracking-wider text-white">
+                  <span className="text-xs font-bold uppercase tracking-wider text-foreground">
                     Actions
                   </span>
                 </div>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-muted">
                   Executed in sequence when triggers &amp; conditions match
                 </span>
               </div>
@@ -1744,7 +1744,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
           </div>
         ) : (
-          <div className="order-2 lg:order-1 lg:col-span-8 flex items-center justify-center p-12 rounded-2xl bg-slate-900 border border-slate-800 text-slate-500 text-sm">
+          <div className="order-2 lg:order-1 lg:col-span-8 flex items-center justify-center p-12 rounded-2xl bg-surface border border-border text-muted text-sm">
             Select or create an automation rule to start editing.
           </div>
         )}
@@ -1752,19 +1752,19 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         {/* Right Column: Automations List & JSON Inspector (contents on mobile, 4 cols sidebar on desktop) */}
         <div className="contents lg:block lg:order-2 lg:col-span-4 lg:space-y-4">
           {/* Card 1: Automations List (Appears at top on single-column mobile) */}
-          <div className="order-1 lg:order-none p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-3">
+          <div className="order-1 lg:order-none p-4 rounded-2xl bg-surface border border-border shadow-sm space-y-3">
             {!isSelectMode ? (
               <div className="space-y-2.5">
                 {/* Header Top Row: Title + Primary Action */}
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted">
                     Automations ({rules.length})
                   </span>
                   <Button
                     variant="primary"
                     size="sm"
                     onPress={handleAddRule}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/40 transition shadow-sm shrink-0"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-accent-soft text-accent-soft-foreground hover:bg-accent hover:text-accent-foreground border border-accent/40 transition shadow-sm shrink-0"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>New Rule</span>
@@ -1772,15 +1772,15 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 </div>
 
                 {/* Secondary Action Toolbar: Community, Dry Run, Select, Import, Export (Left-justified) */}
-                <div className="flex flex-wrap items-center justify-start gap-1.5 pt-2 border-t border-slate-800/80">
+                <div className="flex flex-wrap items-center justify-start gap-1.5 pt-2 border-t border-separator">
                   <Button
                     variant="outline"
                     size="sm"
                     onPress={() => { setCommunityModalTab('browse'); setShowCommunityModal(true); }}
                     aria-label="Explore Community Automations"
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-gradient-to-r from-amber-500/15 to-cyan-500/15 text-amber-300 hover:from-amber-500/25 hover:to-cyan-500/25 border border-amber-500/30 transition shadow-sm"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-warning-soft text-warning-soft-foreground hover:opacity-90 border border-warning/40 transition shadow-sm"
                   >
-                    <Sparkles className="w-3 h-3 text-amber-400" />
+                    <Sparkles className="w-3 h-3 text-warning" />
                     <span>Community</span>
                   </Button>
                   <Button
@@ -1788,7 +1788,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     size="sm"
                     onPress={handleSimulateRule}
                     aria-label="Dry run active rule simulation"
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 transition"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-surface-secondary hover:bg-default-hover text-accent border border-border transition"
                   >
                     <Play className="w-3 h-3 fill-current" />
                     <span>Dry Run</span>
@@ -1801,9 +1801,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       setSelectedRuleIdsForDelete(new Set());
                     }}
                     aria-label="Select automations to delete"
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-surface-secondary hover:bg-default-hover text-foreground border border-border transition"
                   >
-                    <CheckSquare className="w-3 h-3 text-cyan-400" />
+                    <CheckSquare className="w-3 h-3 text-accent" />
                     <span>Select</span>
                   </Button>
                   <Button
@@ -1811,9 +1811,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     size="sm"
                     onPress={() => setShowImportModal(true)}
                     aria-label="Import automations from file or paste JSON"
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-surface-secondary hover:bg-default-hover text-foreground border border-border transition"
                   >
-                    <Upload className="w-3 h-3 text-cyan-400" />
+                    <Upload className="w-3 h-3 text-accent" />
                     <span className="hidden sm:inline">Import</span>
                   </Button>
                   <Button
@@ -1821,17 +1821,17 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     size="sm"
                     onPress={handleDownloadJson}
                     aria-label="Export and download automations.json"
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-surface-secondary hover:bg-default-hover text-foreground border border-border transition"
                   >
-                    <Download className="w-3 h-3 text-cyan-400" />
+                    <Download className="w-3 h-3 text-accent" />
                     <span className="hidden sm:inline">Export</span>
                   </Button>
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-between gap-2 flex-wrap bg-slate-950/80 -m-1 p-2 rounded-xl border border-slate-800">
+              <div className="flex items-center justify-between gap-2 flex-wrap bg-surface-secondary -m-1 p-2 rounded-xl border border-border">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-cyan-300">
+                  <span className="text-xs font-bold text-accent">
                     Select Mode
                   </span>
                   <button
@@ -1843,7 +1843,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                         setSelectedRuleIdsForDelete(new Set(rules.map(r => r.id)));
                       }
                     }}
-                    className="text-[11px] text-slate-400 hover:text-cyan-300 transition underline underline-offset-2"
+                    className="text-[11px] text-muted hover:text-accent transition underline underline-offset-2"
                   >
                     {selectedRuleIdsForDelete.size === rules.length ? 'Deselect All' : 'Select All'}
                   </button>
@@ -1855,7 +1855,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       variant="danger"
                       size="sm"
                       onPress={handleBatchDelete}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition shadow-sm animate-pulse"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-danger hover:bg-danger-hover text-danger-foreground transition shadow-sm animate-pulse"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>Delete ({selectedRuleIdsForDelete.size})</span>
@@ -1868,7 +1868,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       setIsSelectMode(false);
                       setSelectedRuleIdsForDelete(new Set());
                     }}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-surface-tertiary hover:bg-default-hover text-foreground border border-border transition"
                   >
                     <span>Done</span>
                   </Button>
@@ -1877,13 +1877,13 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             )}
 
             {/* Device Sync Toolbar */}
-            <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800/90 space-y-1.5">
+            <div className="p-2 rounded-xl bg-surface-secondary border border-border space-y-1.5">
               <div className="flex items-center justify-between gap-1.5">
                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
                   <select
                     value={useMqttSync ? 'mqtt' : 'rest'}
                     onChange={e => setUseMqttSync(e.target.value === 'mqtt')}
-                    className="px-1.5 py-1 text-[10px] font-mono rounded-lg bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    className="px-1.5 py-1 text-[10px] font-mono rounded-lg bg-surface-tertiary border border-border text-accent focus:outline-none focus:border-focus"
                     title="Sync Method"
                   >
                     <option value="rest">Local (REST)</option>
@@ -1897,10 +1897,10 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       onChange={e => setEspIp(e.target.value)}
                       placeholder={getDefaultEspIp()}
                       title="Device IP address or hostname"
-                      className="min-w-0 flex-1 px-2 py-0.5 text-xs font-mono rounded-lg bg-slate-900 border border-slate-700 text-cyan-300 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      className="min-w-0 flex-1 px-2 py-0.5 text-xs font-mono rounded-lg bg-surface-tertiary border border-border text-accent placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                     />
                   ) : (
-                    <span className="text-[11px] font-mono text-slate-400 truncate flex-1">
+                    <span className="text-[11px] font-mono text-muted truncate flex-1">
                       {mqttRemoteConfig.deviceId || 'mqtt-device'}
                     </span>
                   )}
@@ -1913,9 +1913,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     isDisabled={syncing}
                     onPress={handlePullFromEsp}
                     aria-label="Pull automations from vehicle device"
-                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition disabled:opacity-50"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-surface-tertiary hover:bg-default-hover text-foreground border border-border transition disabled:opacity-50"
                   >
-                    <ArrowDown className="w-3 h-3 text-cyan-400" />
+                    <ArrowDown className="w-3 h-3 text-accent" />
                     <span>Pull</span>
                   </Button>
                   <Button
@@ -1926,8 +1926,8 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     aria-label={hasUnpushedChanges ? "Unpushed changes - click to push to vehicle" : "Automations in sync with vehicle"}
                     className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold transition disabled:opacity-50 shadow-sm ${
                       hasUnpushedChanges
-                        ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 ring-2 ring-amber-400/50 shadow-amber-500/20'
-                        : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950'
+                        ? 'bg-warning hover:bg-warning-hover text-warning-foreground ring-2 ring-warning/40'
+                        : 'bg-accent hover:bg-accent-hover text-accent-foreground'
                     }`}
                   >
                     <ArrowUp className="w-3 h-3" />
@@ -1938,13 +1938,13 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
               {/* MQTT Expanded Credentials if in MQTT mode */}
               {useMqttSync && (
-                <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-slate-800/80 animate-in fade-in">
+                <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-separator animate-in fade-in">
                   <input
                     type="text"
                     value={mqttRemoteConfig.wsUrl}
                     onChange={e => updateMqttConfig({ wsUrl: e.target.value })}
                     placeholder="wss://broker:port"
-                    className="px-2 py-0.5 text-[11px] font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    className="px-2 py-0.5 text-[11px] font-mono rounded bg-surface-tertiary border border-border text-accent focus:outline-none focus:border-focus"
                     title="Broker WS URL (Must be wss:// if on HTTPS domain)"
                   />
                   <input
@@ -1952,29 +1952,29 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     value={mqttRemoteConfig.deviceId}
                     onChange={e => updateMqttConfig({ deviceId: e.target.value })}
                     placeholder="Device ID (e.g. my_device)"
-                    className="px-2 py-0.5 text-[11px] font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    className="px-2 py-0.5 text-[11px] font-mono rounded bg-surface-tertiary border border-border text-accent focus:outline-none focus:border-focus"
                   />
                   <input
                     type="text"
                     value={mqttRemoteConfig.user}
                     onChange={e => updateMqttConfig({ user: e.target.value })}
                     placeholder="Username (optional)"
-                    className="px-2 py-0.5 text-[11px] font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    className="px-2 py-0.5 text-[11px] font-mono rounded bg-surface-tertiary border border-border text-accent focus:outline-none focus:border-focus"
                   />
                   <input
                     type="password"
                     value={mqttRemoteConfig.pass}
                     onChange={e => updateMqttConfig({ pass: e.target.value })}
                     placeholder="Password (optional)"
-                    className="px-2 py-0.5 text-[11px] font-mono rounded bg-slate-900 border border-slate-700 text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    className="px-2 py-0.5 text-[11px] font-mono rounded bg-surface-tertiary border border-border text-accent focus:outline-none focus:border-focus"
                   />
                 </div>
               )}
 
               {syncStatus && (
-                <div className="text-[10px] font-mono text-cyan-300 bg-cyan-950/50 border border-cyan-800/60 rounded-md px-2 py-0.5 flex items-center justify-between">
+                <div className="text-[10px] font-mono text-accent-soft-foreground bg-accent-soft border border-accent/30 rounded-md px-2 py-0.5 flex items-center justify-between">
                   <span className="truncate">{syncStatus}</span>
-                  {syncing && <RefreshCw className="w-3 h-3 text-cyan-400 animate-spin flex-shrink-0 ml-1" />}
+                  {syncing && <RefreshCw className="w-3 h-3 text-accent animate-spin flex-shrink-0 ml-1" />}
                 </div>
               )}
             </div>
@@ -2045,16 +2045,16 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
       {/* MODAL: Rule Dry Run / Simulation Log */}
       {showSimulateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-backdrop backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-xl bg-overlay text-overlay-foreground border border-border rounded-2xl shadow-overlay overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-separator bg-surface flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-accent-soft text-accent flex items-center justify-center">
                   <Play className="w-4 h-4 fill-current" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">Rule Simulation Dry-Run</h3>
-                  <p className="text-[11px] text-slate-400">
+                  <h3 className="text-sm font-bold text-foreground">Rule Simulation Dry-Run</h3>
+                  <p className="text-[11px] text-muted">
                     Emulating ESP32 reactive rule evaluation pipeline
                   </p>
                 </div>
@@ -2064,27 +2064,27 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 size="sm"
                 isIconOnly
                 onPress={() => setShowSimulateModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                className="text-muted hover:text-foreground p-1 rounded-lg hover:bg-default-hover"
                 aria-label="Close simulation modal"
               >
                 <X className="w-4 h-4" />
               </Button>
             </div>
 
-            <div className="p-4 bg-slate-950 font-mono text-xs text-emerald-400 space-y-1 max-h-80 overflow-y-auto leading-relaxed select-text">
+            <div className="p-4 bg-surface-secondary font-mono text-xs text-success space-y-1 max-h-80 overflow-y-auto leading-relaxed select-text">
               {simulationLog.map((line, idx) => (
-                <div key={idx} className={line.startsWith('[Sim Ingress]') ? 'text-yellow-300' : line.startsWith('  ->') ? 'text-cyan-300 pl-2' : ''}>
+                <div key={idx} className={line.startsWith('[Sim Ingress]') ? 'text-warning' : line.startsWith('  ->') ? 'text-accent pl-2' : ''}>
                   {line}
                 </div>
               ))}
             </div>
 
-            <div className="p-3 border-t border-slate-800 bg-slate-900/80 flex items-center justify-end">
+            <div className="p-3 border-t border-separator bg-surface flex items-center justify-end">
               <Button
                 variant="secondary"
                 size="sm"
                 onPress={() => setShowSimulateModal(false)}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition"
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-surface-secondary hover:bg-default-hover text-foreground border border-border transition"
               >
                 Close Log
               </Button>
@@ -2123,22 +2123,22 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
       {/* Floating Clipboard Indicator */}
       {clipboard && (
-        <div className="fixed bottom-5 right-5 z-40 max-w-sm flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-slate-900/95 border border-cyan-500/40 shadow-2xl backdrop-blur-md text-xs animate-in fade-in slide-in-from-bottom-2">
-          <div className="p-1.5 rounded-lg bg-cyan-500/20 text-cyan-400 shrink-0">
+        <div className="fixed bottom-5 right-5 z-40 max-w-sm flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-overlay text-overlay-foreground border border-accent/40 shadow-overlay backdrop-blur-md text-xs animate-in fade-in slide-in-from-bottom-2">
+          <div className="p-1.5 rounded-lg bg-accent-soft text-accent shrink-0">
             <ClipboardCheck className="w-4 h-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+            <div className="text-[10px] text-muted uppercase tracking-wider font-semibold">
               Clipboard ({clipboard.type})
             </div>
-            <div className="text-white font-medium truncate" title={clipboard.label}>
+            <div className="text-foreground font-medium truncate" title={clipboard.label}>
               {clipboard.label}
             </div>
           </div>
           <button
             type="button"
             onClick={clearClipboard}
-            className="p-1 text-slate-400 hover:text-rose-400 rounded transition shrink-0"
+            className="p-1 text-muted hover:text-danger rounded transition shrink-0"
             title="Clear clipboard"
           >
             <X className="w-3.5 h-3.5" />

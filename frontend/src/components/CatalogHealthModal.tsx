@@ -76,17 +76,17 @@ Shared / Multiplexed CAN Frames: ${sharedCanIds.length}
 
   return (
     <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
-      <ModalBackdrop variant="blur" className="bg-black/80 backdrop-blur-sm">
+      <ModalBackdrop variant="blur" className="bg-backdrop backdrop-blur-sm">
         <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
-          <ModalDialog className="relative w-full max-w-2xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+          <ModalDialog className="relative w-full max-w-2xl rounded-[16px] border border-border bg-overlay text-overlay-foreground shadow-overlay overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
             {/* Header */}
-            <ModalHeader className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] gap-0">
+            <ModalHeader className="flex items-center justify-between p-5 border-b border-separator bg-surface gap-0">
               <div>
-                <ModalHeading className="text-lg font-bold text-white flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-[var(--md-sys-color-primary)]" />
+                <ModalHeading className="text-lg font-bold text-foreground flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-accent" />
                   Catalog Validation & Health Audit
                 </ModalHeading>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                <p className="text-xs text-muted mt-0.5">
                   Comprehensive scan of CAN IDs, payload masks, multiplexing, and vehicle compatibility.
                 </p>
               </div>
@@ -96,7 +96,7 @@ Shared / Multiplexed CAN Frames: ${sharedCanIds.length}
                 isIconOnly
                 onPress={onClose}
                 aria-label="Close modal"
-                className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-[var(--md-sys-color-surface-container-high)] transition"
+                className="p-1.5 text-muted hover:text-foreground rounded-full hover:bg-default-hover transition"
               >
                 <X className="w-5 h-5" />
               </Button>
@@ -112,7 +112,7 @@ Shared / Multiplexed CAN Frames: ${sharedCanIds.length}
             <div className="flex items-center gap-3">
               <Alert.Indicator className="shrink-0" />
               <Alert.Content>
-                <Alert.Title className="text-sm font-bold text-white">
+                <Alert.Title className="text-sm font-bold text-foreground">
                   {report.errors.length === 0
                     ? 'Catalog Passed Validation Checks'
                     : `${report.errors.length} Critical Syntax Error(s) Found`}
@@ -151,34 +151,34 @@ Shared / Multiplexed CAN Frames: ${sharedCanIds.length}
               onPress={handleCopyReport}
               className="dash-outline-btn px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 shrink-0 ml-3"
             >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
               Copy Audit
             </Button>
           </Alert>
 
           {/* Quick Metrics */}
           <div className="grid grid-cols-4 gap-2 text-center">
-            <div className="p-2.5 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] flex flex-col items-center gap-1">
-              <div className="text-base font-bold text-white">{report.roleCounts.trigger}</div>
+            <div className="p-2.5 rounded-[12px] bg-surface-secondary border border-border flex flex-col items-center gap-1">
+              <div className="text-base font-bold text-foreground">{report.roleCounts.trigger}</div>
               <Badge size="sm" color="warning" variant="soft" className="text-[10px] font-semibold uppercase">
                 Triggers
               </Badge>
             </div>
-            <div className="p-2.5 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] flex flex-col items-center gap-1">
-              <div className="text-base font-bold text-white">{report.roleCounts.condition}</div>
-              <Badge size="sm" color="success" variant="soft" className="text-[10px] font-semibold uppercase">
+            <div className="p-2.5 rounded-[12px] bg-surface-secondary border border-border flex flex-col items-center gap-1">
+              <div className="text-base font-bold text-foreground">{report.roleCounts.condition}</div>
+              <Badge size="sm" color="accent" variant="soft" className="text-[10px] font-semibold uppercase">
                 Conditions
               </Badge>
             </div>
-            <div className="p-2.5 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] flex flex-col items-center gap-1">
-              <div className="text-base font-bold text-white">{report.roleCounts.action}</div>
-              <Badge size="sm" color="accent" variant="soft" className="text-[10px] font-semibold uppercase">
+            <div className="p-2.5 rounded-[12px] bg-surface-secondary border border-border flex flex-col items-center gap-1">
+              <div className="text-base font-bold text-foreground">{report.roleCounts.action}</div>
+              <Badge size="sm" color="success" variant="soft" className="text-[10px] font-semibold uppercase">
                 Actions
               </Badge>
             </div>
-            <div className="p-2.5 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] flex flex-col items-center gap-1">
-              <div className="text-base font-bold text-white">{catalog.vehicles.length}</div>
-              <Badge size="sm" variant="secondary" className="text-[10px] font-semibold uppercase text-purple-400">
+            <div className="p-2.5 rounded-[12px] bg-surface-secondary border border-border flex flex-col items-center gap-1">
+              <div className="text-base font-bold text-foreground">{catalog.vehicles.length}</div>
+              <Badge size="sm" variant="secondary" className="text-[10px] font-semibold uppercase bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/40">
                 Vehicles
               </Badge>
             </div>
@@ -186,16 +186,16 @@ Shared / Multiplexed CAN Frames: ${sharedCanIds.length}
 
           {/* Errors list if any */}
           {report.errors.length > 0 && (
-            <Alert status="danger" className="p-3.5 rounded-[12px] border text-rose-200 space-y-1.5">
+            <Alert status="danger" className="p-3.5 rounded-[12px] border text-danger-soft-foreground space-y-1.5">
               <Alert.Indicator />
               <Alert.Content className="w-full">
-                <Alert.Title className="font-semibold flex items-center gap-1.5 text-rose-300">
+                <Alert.Title className="font-semibold flex items-center gap-1.5 text-danger">
                   Errors Requiring Fix:
                 </Alert.Title>
                 <Alert.Description className="space-y-1 block mt-1">
                   {report.errors.map((err, i) => (
                     <div key={i} className="pl-2">
-                      • <strong className="font-mono text-white">{err.commandId}</strong>: {err.message}
+                      • <strong className="font-mono text-foreground">{err.commandId}</strong>: {err.message}
                     </div>
                   ))}
                 </Alert.Description>
@@ -206,11 +206,11 @@ Shared / Multiplexed CAN Frames: ${sharedCanIds.length}
           {/* Shared / Multiplexed Frames */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="font-semibold text-slate-300 flex items-center gap-1.5">
-                <Cpu className="w-4 h-4 text-cyan-400" />
+              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                <Cpu className="w-4 h-4 text-accent" />
                 Multiplexed / Shared CAN Frames ({sharedCanIds.length})
               </span>
-              <span className="text-[11px] text-[var(--text-muted)]">
+              <span className="text-[11px] text-muted">
                 Expected for automotive sensor frames
               </span>
             </div>
@@ -218,18 +218,18 @@ Shared / Multiplexed CAN Frames: ${sharedCanIds.length}
               {sharedCanIds.map(([canIdKey, cmdNames]) => (
                 <div
                   key={canIdKey}
-                  className="p-2.5 rounded-[10px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] flex items-start justify-between gap-3"
+                  className="p-2.5 rounded-[10px] bg-surface-secondary border border-border flex items-start justify-between gap-3"
                 >
                   <div>
-                    <span className="font-mono text-cyan-300 font-semibold">{canIdKey}</span>
-                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                    <span className="font-mono text-accent font-semibold">{canIdKey}</span>
+                    <div className="text-[11px] text-muted mt-0.5">
                       {cmdNames.join(' • ')}
                     </div>
                   </div>
                   <Badge
                     size="sm"
                     variant="secondary"
-                    className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-[var(--input-bg)] text-slate-400 border border-[var(--border-color)] shrink-0"
+                    className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-surface-tertiary text-muted border border-border shrink-0"
                   >
                     {cmdNames.length} commands
                   </Badge>
@@ -240,11 +240,11 @@ Shared / Multiplexed CAN Frames: ${sharedCanIds.length}
 
           {/* Feature Coverage */}
           <div>
-            <span className="font-semibold text-slate-300 flex items-center gap-1.5 mb-2">
-              <Car className="w-4 h-4 text-emerald-400" />
+            <span className="font-semibold text-foreground flex items-center gap-1.5 mb-2">
+              <Car className="w-4 h-4 text-success" />
               Trim Feature Coverage ({featuresWithCommands.size} of {knownFeatures.length} features active)
             </span>
-            <div className="p-3 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] space-y-2">
+            <div className="p-3 rounded-[12px] bg-surface-secondary border border-border space-y-2">
               <div className="flex flex-wrap gap-1.5">
                 {knownFeatures.map(feat => {
                   const hasCmd = featuresWithCommands.has(feat);
@@ -256,8 +256,8 @@ Shared / Multiplexed CAN Frames: ${sharedCanIds.length}
                       variant={hasCmd ? 'soft' : 'secondary'}
                       className={`px-2 py-0.5 rounded-full text-[11px] font-mono ${
                         hasCmd
-                          ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800'
-                          : 'bg-[var(--input-bg)] text-slate-500 border border-[var(--border-color)]'
+                          ? 'bg-success-soft text-success-soft-foreground border border-success/40'
+                          : 'bg-surface-tertiary text-muted border border-border'
                       }`}
                     >
                       {feat} {hasCmd ? '✓' : '(No commands)'}
@@ -266,7 +266,7 @@ Shared / Multiplexed CAN Frames: ${sharedCanIds.length}
                 })}
               </div>
               {unusedFeatures.length > 0 && (
-                <p className="text-[11px] text-[var(--text-muted)] pt-1">
+                <p className="text-[11px] text-muted pt-1">
                   Features without commands: {unusedFeatures.join(', ')}. Contributors can submit new CAN triggers/actions for these!
                 </p>
               )}
@@ -275,12 +275,12 @@ Shared / Multiplexed CAN Frames: ${sharedCanIds.length}
         </ModalBody>
 
         {/* Footer */}
-        <ModalFooter className="flex items-center justify-end p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
+        <ModalFooter className="flex items-center justify-end p-4 px-6 border-t border-separator bg-surface shrink-0">
           <Button
             variant="primary"
             size="sm"
             onPress={onClose}
-            className="px-5 py-2 rounded-full text-xs font-semibold text-white bg-[var(--md-sys-color-primary)] hover:opacity-90 transition"
+            className="px-5 py-2 rounded-full text-xs font-semibold text-accent-foreground bg-accent hover:bg-accent-hover transition"
           >
             Close Audit
           </Button>

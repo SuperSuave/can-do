@@ -74,30 +74,30 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
 
   return (
     <Modal isOpen={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <ModalBackdrop className="bg-black/80 backdrop-blur-sm fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+      <ModalBackdrop className="bg-backdrop backdrop-blur-sm fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
         <ModalContainer className="w-full max-w-lg">
-          <ModalDialog className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <ModalHeader className="px-5 py-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/70">
+          <ModalDialog className="bg-overlay border border-border rounded-2xl shadow-overlay overflow-hidden flex flex-col max-h-[90vh]">
+            <ModalHeader className="px-5 py-4 border-b border-separator flex items-center justify-between bg-surface">
               <div className="flex items-center gap-2">
-                <Settings className="w-4 h-4 text-cyan-400" />
-                <ModalHeading className="text-base font-bold text-white">
+                <Settings className="w-4 h-4 text-accent" />
+                <ModalHeading className="text-base font-bold text-foreground">
                   Automation Settings
                 </ModalHeading>
               </div>
               <button
                 type="button"
                 onClick={onClose}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                className="p-1 rounded-lg text-muted hover:text-foreground hover:bg-surface-secondary transition"
                 aria-label="Close modal"
               >
                 <X className="w-5 h-5" />
               </button>
             </ModalHeader>
 
-            <ModalBody className="p-5 space-y-4 overflow-y-auto text-sm text-slate-300">
+            <ModalBody className="p-5 space-y-4 overflow-y-auto text-sm text-foreground">
               {/* Name */}
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                <label className="block text-xs font-semibold text-muted mb-1">
                   Automation Name
                 </label>
                 <input
@@ -105,13 +105,13 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Auto Seat Warmer on Entry"
-                  className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-sm focus:outline-none focus:border-cyan-500"
+                  className="w-full px-3 py-1.5 rounded-xl bg-surface-secondary border border-border text-foreground text-sm focus:outline-none focus:border-accent"
                 />
               </div>
 
               {/* Category */}
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                <label className="block text-xs font-semibold text-muted mb-1">
                   Category
                 </label>
                 <input
@@ -119,20 +119,20 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   placeholder="e.g. Comfort & Climate"
-                  className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-xs focus:outline-none focus:border-cyan-500"
+                  className="w-full px-3 py-1.5 rounded-xl bg-surface-secondary border border-border text-foreground text-xs focus:outline-none focus:border-accent"
                 />
               </div>
 
               {/* Execution & Trigger Modes */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  <label className="block text-xs font-semibold text-muted mb-1">
                     Execution Mode
                   </label>
                   <select
                     value={execMode}
                     onChange={(e) => setExecMode(e.target.value as ExecutionMode)}
-                    className="w-full px-2.5 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-xs focus:outline-none focus:border-cyan-500"
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-surface-secondary border border-border text-foreground text-xs focus:outline-none focus:border-accent"
                   >
                     <option value="one_shot">One Shot (Fire Once)</option>
                     <option value="toggle">Toggle (Flip State)</option>
@@ -143,13 +143,13 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  <label className="block text-xs font-semibold text-muted mb-1">
                     Trigger Mode
                   </label>
                   <select
                     value={triggerMode}
                     onChange={(e) => setTriggerMode(e.target.value as TriggerCombineMode)}
-                    className="w-full px-2.5 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-xs focus:outline-none focus:border-cyan-500"
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-surface-secondary border border-border text-foreground text-xs focus:outline-none focus:border-accent"
                   >
                     <option value="any">Any Trigger (OR)</option>
                     <option value="all">All Triggers (AND)</option>
@@ -159,12 +159,12 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
               </div>
 
               {/* Cooldown Slider */}
-              <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2">
+              <div className="p-3 rounded-xl bg-surface-secondary border border-border space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-300">
+                  <label className="text-xs font-semibold text-foreground">
                     Cooldown (Debounce)
                   </label>
-                  <span className="text-xs font-mono text-cyan-400">
+                  <span className="text-xs font-mono text-accent">
                     {cooldownMs} ms
                   </span>
                 </div>
@@ -181,9 +181,9 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
                     aria-label="Cooldown in milliseconds"
                     className="flex-1"
                   >
-                    <Slider.Track className="h-1.5 bg-slate-800 rounded-full cursor-pointer relative">
-                      <Slider.Fill className="bg-cyan-500 rounded-full h-full" />
-                      <Slider.Thumb className="w-3.5 h-3.5 bg-cyan-400 border-2 border-slate-950 rounded-full shadow cursor-grab active:cursor-grabbing focus:outline-none" />
+                    <Slider.Track className="h-1.5 bg-surface-tertiary rounded-full cursor-pointer relative">
+                      <Slider.Fill className="bg-accent rounded-full h-full" />
+                      <Slider.Thumb className="w-3.5 h-3.5 bg-accent border-2 border-surface rounded-full shadow cursor-grab active:cursor-grabbing focus:outline-none" />
                     </Slider.Track>
                   </Slider>
                   <input
@@ -192,19 +192,19 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
                     step="50"
                     value={cooldownMs}
                     onChange={(e) => setCooldownMs(parseInt(e.target.value) || 0)}
-                    className="w-16 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500 text-right"
+                    className="w-16 bg-surface-tertiary border border-border rounded px-1.5 py-1 text-foreground font-mono text-xs focus:outline-none focus:border-accent text-right"
                   />
                 </div>
               </div>
 
               {/* Home Assistant Integration */}
-              <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2.5">
+              <div className="p-3 rounded-xl bg-surface-secondary border border-border space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-xs font-semibold text-slate-200">
+                    <div className="text-xs font-semibold text-foreground">
                       Expose to Home Assistant
                     </div>
-                    <div className="text-[11px] text-slate-400">
+                    <div className="text-[11px] text-muted">
                       Publishes MQTT discovery entity for dashboard switch & triggers
                     </div>
                   </div>
@@ -217,8 +217,8 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
                 </div>
 
                 {haExpose && (
-                  <div className="pt-2 border-t border-slate-800">
-                    <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                  <div className="pt-2 border-t border-separator">
+                    <label className="block text-[11px] font-medium text-muted mb-1">
                       Material Design Icon
                     </label>
                     <input
@@ -226,7 +226,7 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
                       value={haIcon}
                       onChange={(e) => setHaIcon(e.target.value)}
                       placeholder="mdi:car-cog"
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-surface-tertiary border border-border text-foreground font-mono text-xs focus:outline-none focus:border-accent"
                     />
                   </div>
                 )}
@@ -234,7 +234,7 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
 
               {/* Description */}
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                <label className="block text-xs font-semibold text-muted mb-1">
                   Description / Documentation
                 </label>
                 <textarea
@@ -242,17 +242,17 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
                   onChange={(e) => setDescription(e.target.value)}
                   rows={2}
                   placeholder="Optional notes or operational context for this automation..."
-                  className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-xs focus:outline-none focus:border-cyan-500 resize-none"
+                  className="w-full px-3 py-1.5 rounded-xl bg-surface-secondary border border-border text-foreground text-xs focus:outline-none focus:border-accent resize-none"
                 />
               </div>
             </ModalBody>
 
-            <ModalFooter className="px-5 py-3 border-t border-slate-800/80 bg-slate-950/70 flex items-center justify-end gap-2">
+            <ModalFooter className="px-5 py-3 border-t border-separator bg-surface flex items-center justify-end gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onPress={onClose}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-surface-secondary hover:bg-surface-tertiary text-foreground border border-border transition"
               >
                 Cancel
               </Button>
@@ -260,7 +260,7 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
                 variant="primary"
                 size="sm"
                 onPress={handleSave}
-                className="px-4 py-1.5 rounded-xl text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition"
+                className="px-4 py-1.5 rounded-xl text-xs font-bold bg-accent hover:bg-accent-hover text-accent-foreground transition"
               >
                 Save Settings
               </Button>

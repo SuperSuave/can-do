@@ -207,18 +207,18 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 
   return (
     <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
-      <ModalBackdrop variant="blur" className="bg-black/80 backdrop-blur-sm">
+      <ModalBackdrop variant="blur" className="bg-backdrop backdrop-blur-sm">
         <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
-          <ModalDialog className="relative w-full max-w-3xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+          <ModalDialog className="relative w-full max-w-3xl rounded-[16px] border border-border bg-overlay text-overlay-foreground shadow-overlay overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
             {/* Header */}
-            <ModalHeader className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] gap-0">
+            <ModalHeader className="flex items-center justify-between p-5 border-b border-separator bg-surface gap-0">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-[var(--input-bg)] border border-[var(--border-color)] flex items-center justify-center text-[var(--md-sys-color-primary)]">
+                <div className="w-8 h-8 rounded-full bg-surface-secondary border border-border flex items-center justify-center text-accent">
                   <Layers className="w-4 h-4" />
                 </div>
                 <div>
-                  <ModalHeading className="text-base sm:text-lg font-bold text-white">Batch Category Manager</ModalHeading>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <ModalHeading className="text-base sm:text-lg font-bold text-foreground">Batch Category Manager</ModalHeading>
+                  <p className="text-xs text-muted mt-0.5">
                     Rename, merge, reorganize, or create CAN command categories across your entire catalog.
                   </p>
                 </div>
@@ -227,7 +227,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-[var(--md-sys-color-surface-container-high)] transition"
+                className="p-1.5 text-muted hover:text-foreground rounded-full hover:bg-default-hover transition"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -240,22 +240,22 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
             <div
               className={`p-3 rounded-[12px] border flex items-center justify-between gap-2 ${
                 feedback.type === 'success'
-                  ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
-                  : 'bg-rose-950/60 border-rose-800 text-rose-300'
+                  ? 'bg-success-soft border-success/40 text-success-soft-foreground'
+                  : 'bg-danger-soft border-danger/40 text-danger-soft-foreground'
               }`}
             >
               <div className="flex items-center gap-2 text-xs">
                 {feedback.type === 'success' ? (
-                  <Check className="w-4 h-4 shrink-0" />
+                  <Check className="w-4 h-4 shrink-0 text-success" />
                 ) : (
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-danger" />
                 )}
                 <span>{feedback.message}</span>
               </div>
               <button
                 type="button"
                 onClick={() => setFeedback(null)}
-                className="text-slate-400 hover:text-white p-1"
+                className="text-muted hover:text-foreground p-1"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -269,7 +269,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
               placeholder="Search existing categories..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full sm:w-64 px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+              className="w-full sm:w-64 px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-xs text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
             />
 
             <button
@@ -277,7 +277,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
               onClick={() => setIsCreatingNew(!isCreatingNew)}
               className="dash-outline-btn inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold shrink-0"
             >
-              <FolderPlus className="w-4 h-4 text-[var(--md-sys-color-primary)]" />
+              <FolderPlus className="w-4 h-4 text-accent" />
               <span>{isCreatingNew ? 'Close New Category Form' : 'Create & Assign New Category'}</span>
             </button>
           </div>
@@ -286,30 +286,30 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
           {isCreatingNew && (
             <form
               onSubmit={handleCreateAndAssign}
-              className="p-4 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] space-y-3"
+              className="p-4 rounded-[12px] bg-surface-secondary border border-border space-y-3"
             >
-              <div className="flex items-center gap-2 font-bold text-white text-xs">
-                <Plus className="w-4 h-4 text-[var(--md-sys-color-primary)]" />
+              <div className="flex items-center gap-2 font-bold text-foreground text-xs">
+                <Plus className="w-4 h-4 text-accent" />
                 <span>Create New Category</span>
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Category Name</label>
+                <label className="block text-foreground font-semibold mb-1">Category Name</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. ADAS & Driver Assist, Suspension & Lift, Trailer & Towing"
                   value={newCatName}
                   onChange={e => setNewCatName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-white text-xs focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                  className="w-full px-3 py-2 rounded-[8px] bg-surface-tertiary border border-border text-foreground placeholder:text-field-placeholder text-xs focus:outline-none focus:border-focus"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">
+                <label className="block text-foreground font-semibold mb-1">
                   Select Commands to Move to this New Category ({newCatTargetCommands.length} selected):
                 </label>
-                <div className="max-h-40 overflow-y-auto p-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] space-y-1">
+                <div className="max-h-40 overflow-y-auto p-2 rounded-[8px] bg-surface-tertiary border border-border space-y-1">
                   {catalog.commands.map(cmd => {
                     const isChecked = newCatTargetCommands.includes(cmd.id);
                     return (
@@ -324,15 +324,15 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                           }
                         }}
                         aria-label={`Select ${cmd.name} for category assignment`}
-                        className="flex items-center gap-2 p-1.5 rounded hover:bg-white/5 cursor-pointer text-slate-300 text-xs w-full"
+                        className="flex items-center gap-2 p-1.5 rounded hover:bg-default-hover cursor-pointer text-foreground text-xs w-full"
                       >
                         <Checkbox.Control>
                           <Checkbox.Indicator />
                         </Checkbox.Control>
                         <Checkbox.Content className="flex items-center gap-2 flex-1 min-w-0">
-                          <span className="font-semibold text-white truncate">{cmd.name}</span>
-                          <span className="font-mono text-[11px] text-slate-400">({cmd.id})</span>
-                          <span className="text-[10px] ml-auto px-2 py-0.5 rounded-full bg-[var(--card-bg)] text-slate-400 border border-[var(--border-color)] shrink-0">
+                          <span className="font-semibold text-foreground truncate">{cmd.name}</span>
+                          <span className="font-mono text-[11px] text-muted">({cmd.id})</span>
+                          <span className="text-[10px] ml-auto px-2 py-0.5 rounded-full bg-surface text-muted border border-border shrink-0">
                             {cmd.category}
                           </span>
                         </Checkbox.Content>
@@ -352,7 +352,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-full bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white font-semibold transition"
+                  className="px-4 py-1.5 rounded-full bg-accent hover:bg-accent-hover text-accent-foreground font-semibold transition"
                 >
                   Create & Reassign
                 </button>
@@ -362,24 +362,24 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 
           {/* Merge panel banner if active */}
           {mergeSource && (
-            <div className="p-4 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] space-y-3">
+            <div className="p-4 rounded-[12px] bg-surface-secondary border border-border space-y-3">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-indigo-300 font-bold text-xs">
+                <div className="flex items-center gap-2 text-accent font-bold text-xs">
                   <Merge className="w-4 h-4" />
                   <span>Merge Category "{mergeSource}"</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setMergeSource(null)}
-                  className="text-slate-400 hover:text-white"
+                  className="text-muted hover:text-foreground"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <p className="text-xs text-[var(--text-muted)]">
+              <p className="text-xs text-muted">
                 All commands currently classified under{' '}
-                <code className="text-cyan-300 font-bold">{mergeSource}</code> will be re-tagged to the
+                <code className="text-accent font-bold">{mergeSource}</code> will be re-tagged to the
                 target category below:
               </p>
 
@@ -388,7 +388,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                   <select
                     value={mergeTarget}
                     onChange={e => setMergeTarget(e.target.value)}
-                    className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-white text-xs focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                    className="w-full px-3 py-2 rounded-[8px] bg-surface-tertiary border border-border text-foreground text-xs focus:outline-none focus:border-focus"
                   >
                     <option value="" disabled>
                       Select Destination Category...
@@ -407,7 +407,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                   type="button"
                   onClick={handleExecuteMerge}
                   disabled={!mergeTarget}
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-full bg-[var(--md-sys-color-primary)] hover:opacity-90 disabled:opacity-50 text-white font-semibold text-xs transition shrink-0"
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-full bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-foreground font-semibold text-xs transition shrink-0"
                 >
                   <Check className="w-4 h-4" />
                   Confirm Merge
@@ -418,13 +418,13 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 
           {/* Categories List */}
           <div className="space-y-2">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between px-1">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted flex items-center justify-between px-1">
               <span>Active Categories ({categoryStats.length})</span>
               <span>Command Count</span>
             </div>
 
             {filteredStats.length === 0 ? (
-              <div className="p-8 text-center rounded-[12px] border border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] text-slate-400">
+              <div className="p-8 text-center rounded-[12px] border border-border bg-surface-secondary text-muted">
                 No categories found matching "{search}"
               </div>
             ) : (
@@ -434,7 +434,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                 return (
                   <div
                     key={cat.name}
-                    className="p-3.5 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] hover:border-slate-600 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    className="p-3.5 rounded-[12px] bg-surface-secondary border border-border hover:border-border-secondary transition flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                   >
                     {/* Left: Category info or edit input */}
                     <div className="flex-1">
@@ -453,12 +453,12 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                               }
                             }}
                             autoFocus
-                            className="flex-1 px-2.5 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--md-sys-color-primary)] text-white text-xs font-semibold focus:outline-none"
+                            className="flex-1 px-2.5 py-1.5 rounded-[8px] bg-surface-tertiary border border-focus text-foreground text-xs font-semibold focus:outline-none"
                           />
                           <button
                             type="button"
                             onClick={() => handleSaveRename(cat.name)}
-                            className="p-1.5 rounded-full bg-[var(--md-sys-color-primary)] text-white hover:opacity-90 transition"
+                            className="p-1.5 rounded-full bg-accent hover:bg-accent-hover text-accent-foreground transition"
                             title="Save new category name"
                           >
                             <Check className="w-4 h-4 stroke-[2.5]" />
@@ -466,7 +466,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                           <button
                             type="button"
                             onClick={() => setEditingCategory(null)}
-                            className="p-1.5 rounded-full bg-slate-800 text-slate-400 hover:text-white transition"
+                            className="p-1.5 rounded-full bg-surface-tertiary text-muted hover:text-foreground border border-border transition"
                             title="Cancel rename"
                           >
                             <X className="w-4 h-4" />
@@ -474,8 +474,8 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-white text-sm">{cat.name}</span>
-                          <span className="px-2 py-0.5 rounded-full bg-[var(--input-bg)] text-slate-400 border border-[var(--border-color)] text-[11px] font-mono">
+                          <span className="font-bold text-foreground text-sm">{cat.name}</span>
+                          <span className="px-2 py-0.5 rounded-full bg-surface-tertiary text-muted border border-border text-[11px] font-mono">
                             {cat.count} {cat.count === 1 ? 'command' : 'commands'}
                           </span>
                         </div>
@@ -486,14 +486,14 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                         {cat.commands.slice(0, 4).map(c => (
                           <span
                             key={c.id}
-                            className="px-2 py-0.5 rounded-full bg-[var(--input-bg)] text-slate-400 border border-[var(--border-color)] text-[10px] font-mono truncate max-w-[140px]"
+                            className="px-2 py-0.5 rounded-full bg-surface-tertiary text-muted border border-border text-[10px] font-mono truncate max-w-[140px]"
                             title={c.name}
                           >
                             {c.name}
                           </span>
                         ))}
                         {cat.commands.length > 4 && (
-                          <span className="text-[10px] text-slate-500 px-1 py-0.5">
+                          <span className="text-[10px] text-muted px-1 py-0.5">
                             +{cat.commands.length - 4} more
                           </span>
                         )}
@@ -532,14 +532,14 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
         </ModalBody>
 
         {/* Footer */}
-        <ModalFooter className="p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] flex items-center justify-between shrink-0">
-          <div className="text-[11px] text-[var(--text-muted)]">
+        <ModalFooter className="p-4 px-6 border-t border-separator bg-surface flex items-center justify-between shrink-0">
+          <div className="text-[11px] text-muted">
             Changes are saved immediately and marked as draft updates ready for GitHub contribution.
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 rounded-full bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white font-semibold text-xs transition"
+            className="px-5 py-2 rounded-full bg-accent hover:bg-accent-hover text-accent-foreground font-semibold text-xs transition"
           >
             Done
           </button>

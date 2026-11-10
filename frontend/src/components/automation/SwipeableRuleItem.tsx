@@ -53,8 +53,8 @@ export const SwipeableRuleItem: React.FC<SwipeableRuleItemProps> = ({
       onClick={handleClick}
       className={`relative z-10 p-2.5 rounded-xl cursor-pointer border text-left flex items-center justify-between gap-2.5 transition-all duration-150 select-none ${
         isSelected
-          ? 'bg-slate-800/95 border-cyan-500/80 shadow-md shadow-cyan-950/40 text-white ring-1 ring-cyan-500/30'
-          : 'bg-slate-950/80 border-slate-800/90 text-slate-300 hover:bg-slate-850/80 hover:border-slate-700'
+          ? 'bg-surface-secondary border-accent shadow-sm text-foreground ring-1 ring-accent/30'
+          : 'bg-surface border-border text-foreground hover:bg-surface-secondary hover:border-border-secondary'
       }`}
     >
       {/* Left side: Selection Checkbox / Status Indicator + Title + Badges */}
@@ -75,7 +75,7 @@ export const SwipeableRuleItem: React.FC<SwipeableRuleItemProps> = ({
         ) : (
           <span
             className={`w-2 h-2 rounded-full flex-shrink-0 transition-colors ${
-              rule.enabled ? 'bg-emerald-400' : 'bg-slate-600'
+              rule.enabled ? 'bg-success' : 'bg-muted/50'
             }`}
           />
         )}
@@ -87,15 +87,15 @@ export const SwipeableRuleItem: React.FC<SwipeableRuleItemProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mt-0.5 flex-wrap">
+          <div className="flex items-center gap-1.5 text-[10px] text-muted font-mono mt-0.5 flex-wrap">
             {rule.category && (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-slate-800/90 text-cyan-300 border border-slate-700/80 font-sans text-[9px] font-medium truncate max-w-[110px]">
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-surface-tertiary text-accent border border-border font-sans text-[9px] font-medium truncate max-w-[110px]">
                 <Tag className="w-2.5 h-2.5 flex-shrink-0" />
                 <span className="truncate">{rule.category}</span>
               </span>
             )}
             {rule.ha_expose && (
-              <span className="px-1 py-0.2 rounded bg-orange-950/60 text-orange-300 border border-orange-800/40 text-[9px]">
+              <span className="px-1 py-0.2 rounded bg-warning-soft text-warning-soft-foreground border border-warning/30 text-[9px]">
                 HA
               </span>
             )}
@@ -103,7 +103,7 @@ export const SwipeableRuleItem: React.FC<SwipeableRuleItemProps> = ({
               {(rule.triggers || []).length}T · {(rule.conditions || []).length}C · {(rule.actions || []).length}A
             </span>
             {rule.cooldown_ms ? (
-              <span className="text-slate-500 hidden sm:inline">
+              <span className="text-muted hidden sm:inline">
                 {rule.cooldown_ms}ms
               </span>
             ) : null}

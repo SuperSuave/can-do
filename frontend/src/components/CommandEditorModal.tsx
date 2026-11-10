@@ -535,26 +535,26 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
 
   return (
     <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
-      <ModalBackdrop variant="blur" className="bg-black/80 backdrop-blur-sm">
+      <ModalBackdrop variant="blur" className="bg-backdrop backdrop-blur-sm">
         <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
-          <ModalDialog className="relative w-full max-w-3xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+          <ModalDialog className="relative w-full max-w-3xl rounded-[16px] border border-border bg-overlay text-overlay-foreground shadow-overlay overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
             {/* Header */}
-            <ModalHeader className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] gap-0">
+            <ModalHeader className="flex items-center justify-between p-5 border-b border-separator bg-surface gap-0">
               <div>
-                <ModalHeading className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
+                <ModalHeading className="text-lg md:text-xl font-bold text-foreground flex items-center gap-2">
                   {isNew ? (
                     <>
-                      <Sparkles className="w-5 h-5 text-emerald-400" />
+                      <Sparkles className="w-5 h-5 text-success" />
                       Add New CAN Command
                     </>
                   ) : (
                     <>
-                      <Layers className="w-5 h-5 text-amber-400" />
-                      Edit Command: <span className="font-mono text-cyan-400">{formData.id}</span>
+                      <Layers className="w-5 h-5 text-warning" />
+                      Edit Command: <span className="font-mono text-accent">{formData.id}</span>
                     </>
                   )}
                 </ModalHeading>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                <p className="text-xs text-muted mt-0.5">
                   Specify the command details, CAN identifiers, and payload patterns. Real-time validation active.
                 </p>
               </div>
@@ -565,7 +565,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                   isIconOnly
                   onPress={onClose}
                   aria-label="Close modal"
-                  className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-[var(--md-sys-color-surface-container-high)] transition"
+                  className="p-1.5 text-muted hover:text-foreground rounded-full hover:bg-default-hover transition"
                 >
                   <X className="w-5 h-5" />
                 </Button>
@@ -573,17 +573,17 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
             </ModalHeader>
 
         {isNew && (
-          <div className="border-b border-[var(--border-color)] bg-cyan-950/20">
+          <div className="border-b border-separator bg-accent-soft/40">
             <div className="px-5 py-3 flex items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 text-cyan-200">
-                <FileText className="w-4 h-4 text-cyan-400 shrink-0" />
-                <span>Have a raw capture note (<code className="font-mono text-amber-300">!cancapture</code> D1-D8 notation)?</span>
+              <div className="flex items-center gap-2 text-foreground">
+                <FileText className="w-4 h-4 text-accent shrink-0" />
+                <span>Have a raw capture note (<code className="font-mono text-warning">!cancapture</code> D1-D8 notation)?</span>
               </div>
               <Button
                 variant="outline"
                 size="sm"
                 onPress={() => setShowCaptureBox(!showCaptureBox)}
-                className="px-3 py-1.5 rounded-lg bg-cyan-900 border border-cyan-700 text-white font-semibold hover:bg-cyan-800 transition shadow-sm flex items-center gap-1.5 whitespace-nowrap"
+                className="px-3 py-1.5 rounded-lg bg-surface hover:bg-default-hover border border-accent/40 text-accent font-semibold transition shadow-sm flex items-center gap-1.5 whitespace-nowrap"
               >
                 <span>{showCaptureBox ? 'Hide Importer' : 'Paste & Parse Capture Note'}</span>
                 {showCaptureBox ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -597,48 +597,48 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                   value={captureNoteText}
                   onChange={e => setCaptureNoteText(e.target.value)}
                   placeholder="Paste !cancapture note here..."
-                  className="w-full font-mono text-xs p-3 rounded-xl bg-black/60 border border-cyan-800/60 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                  className="w-full font-mono text-xs p-3 rounded-xl bg-surface-secondary border border-border text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                 />
                 
                 {captureParseResult && (
-                  <div className="p-3.5 rounded-xl bg-cyan-950/60 border border-cyan-800/60 text-xs space-y-3">
-                    <div className="flex items-center justify-between text-cyan-300 font-semibold">
+                  <div className="p-3.5 rounded-xl bg-surface-secondary border border-accent/40 text-xs space-y-3">
+                    <div className="flex items-center justify-between text-accent font-semibold">
                       <span>Parsed: {captureParseResult.inferredName}</span>
-                      <span className="font-mono text-[10px] bg-cyan-900 px-2 py-0.5 rounded text-cyan-200">
+                      <span className="font-mono text-[10px] bg-accent-soft px-2 py-0.5 rounded text-accent-soft-foreground border border-accent/30">
                         {captureParseResult.command.options?.length || 0} Options / States
                       </span>
                     </div>
-                    <div className="text-[11px] text-slate-300 flex flex-wrap gap-x-4 gap-y-1">
-                      <span><strong>Category:</strong> {captureParseResult.category}</span>
-                      <span><strong>Command CAN ID:</strong> {captureParseResult.commandCanId || 'N/A'}</span>
-                      <span><strong>State CAN ID:</strong> {captureParseResult.stateCanId || 'N/A'}</span>
+                    <div className="text-[11px] text-muted flex flex-wrap gap-x-4 gap-y-1">
+                      <span><strong className="text-foreground">Category:</strong> {captureParseResult.category}</span>
+                      <span><strong className="text-foreground">Command CAN ID:</strong> {captureParseResult.commandCanId || 'N/A'}</span>
+                      <span><strong className="text-foreground">State CAN ID:</strong> {captureParseResult.stateCanId || 'N/A'}</span>
                     </div>
 
                     {/* D1-D8 Byte Boxes Preview */}
                     {captureParseResult.command.options && captureParseResult.command.options.length > 0 && (
-                      <div className="space-y-2 mt-2 pt-2 border-t border-cyan-800/40">
-                        <span className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wider">
+                      <div className="space-y-2 mt-2 pt-2 border-t border-separator">
+                        <span className="text-[10px] font-semibold text-accent uppercase tracking-wider">
                           Decoded Byte Payload Preview:
                         </span>
                         <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
                           {captureParseResult.command.options.map((opt, idx) => (
-                            <div key={idx} className="p-2 rounded-lg bg-slate-900/90 border border-slate-800 text-xs space-y-1.5">
-                              <span className="font-bold text-white flex items-center gap-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                            <div key={idx} className="p-2 rounded-lg bg-surface-tertiary border border-border text-xs space-y-1.5">
+                              <span className="font-bold text-foreground flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-accent"></span>
                                 {opt.label}
                               </span>
                               {opt.steps && opt.steps.map((st, sIdx) => (
                                 <div key={sIdx} className="space-y-1">
-                                  <span className="text-[10px] font-mono text-emerald-400">Tx Step:</span>
+                                  <span className="text-[10px] font-mono text-success">Tx Step:</span>
                                   <PayloadByteVisualizer payload={st.payload} compact={true} />
                                   {st.repeat && st.repeat > 1 && (
-                                    <span className="text-[10px] text-amber-300 font-mono">x{st.repeat}</span>
+                                    <span className="text-[10px] text-warning font-mono">x{st.repeat}</span>
                                   )}
                                 </div>
                               ))}
                               {opt.match_payload && (
                                 <div className="space-y-1 pt-1">
-                                  <span className="text-[10px] font-mono text-cyan-400">State Match:</span>
+                                  <span className="text-[10px] font-mono text-accent">State Match:</span>
                                   <PayloadByteVisualizer matchPayload={opt.match_payload} compact={true} />
                                 </div>
                               )}
@@ -664,7 +664,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                     size="sm"
                     isDisabled={!captureParseResult}
                     onPress={handleApplyCaptureNote}
-                    className="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition shadow-md disabled:opacity-50"
+                    className="px-4 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-accent-foreground text-xs font-bold transition shadow-md disabled:opacity-50"
                   >
                     Apply Note to Form & Tweak
                   </Button>
@@ -680,8 +680,8 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
             {/* Row 1: Name & ID */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Command Name <span className="text-rose-400">*</span>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1.5">
+                  Command Name <span className="text-danger">*</span>
                 </label>
                 <input
                   type="text"
@@ -689,16 +689,16 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                   placeholder="e.g. Steering Wheel Star Button"
                   value={formData.name || ''}
                   onChange={e => handleNameChange(e.target.value)}
-                  className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                  className="w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-sm text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                 />
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
-                    Command ID (Slug) <span className="text-rose-400">*</span>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted">
+                    Command ID (Slug) <span className="text-danger">*</span>
                   </label>
-                  <span className="text-[10px] text-slate-400 font-mono tracking-tight">
+                  <span className="text-[10px] text-muted font-mono tracking-tight">
                     lowercase_with_underscores
                   </span>
                 </div>
@@ -709,7 +709,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                     placeholder="e.g. sw_star"
                     value={formData.id || ''}
                     onChange={e => handleIdChange(e.target.value)}
-                    className="w-full pl-3 pr-8 py-2 rounded-[8px] font-mono text-sm bg-[var(--input-bg)] border border-[var(--border-color)] text-cyan-300 placeholder-slate-600 focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                    className="w-full pl-3 pr-8 py-2 rounded-[8px] font-mono text-sm bg-surface-secondary border border-border text-accent placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                   />
                   {formData.name && (
                     <Button
@@ -718,15 +718,15 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                       isIconOnly
                       onPress={handleRegenerateIdFromName}
                       aria-label="Regenerate slug from command name"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-cyan-300 rounded transition"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted hover:text-accent rounded transition"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
                     </Button>
                   )}
                 </div>
                 {!isNew && initialCommand?.id && formData.id && formData.id !== initialCommand.id && (
-                  <p className="text-[11px] text-amber-400/90 mt-1 flex items-center gap-1 font-mono">
-                    Renaming: <span className="text-slate-400 line-through">{initialCommand.id}</span> → <span className="text-cyan-300 font-semibold">{formData.id}</span>
+                  <p className="text-[11px] text-warning mt-1 flex items-center gap-1 font-mono">
+                    Renaming: <span className="text-muted line-through">{initialCommand.id}</span> → <span className="text-accent font-semibold">{formData.id}</span>
                   </p>
                 )}
               </div>
@@ -735,8 +735,8 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
             {/* Row 2: Category, Subcategory & Roles */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Category <span className="text-rose-400">*</span>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1.5">
+                  Category <span className="text-danger">*</span>
                 </label>
                 <div className="relative">
                   <input
@@ -745,7 +745,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                     required
                     value={formData.category || ''}
                     onChange={e => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-sm text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                    className="w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-sm text-foreground focus:outline-none focus:border-focus"
                   />
                   <datalist id="category-suggestions">
                     {availableCategories.map(cat => (
@@ -756,8 +756,8 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Subsystem / Group <span className="text-slate-500 font-normal text-[11px]">(Optional)</span>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1.5">
+                  Subsystem / Group <span className="text-muted font-normal text-[11px]">(Optional)</span>
                 </label>
                 <div className="relative">
                   <input
@@ -766,7 +766,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                     placeholder="e.g. Driver Seat Comfort"
                     value={formData.subcategory || ''}
                     onChange={e => setFormData({ ...formData, subcategory: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-sm text-white focus:outline-none focus:border-[var(--md-sys-color-primary)] placeholder:text-slate-600"
+                    className="w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-sm text-foreground focus:outline-none focus:border-focus placeholder:text-field-placeholder"
                   />
                   <datalist id="subcategory-suggestions">
                     {availableSubcategories.map(subcat => (
@@ -777,8 +777,8 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Roles <span className="text-rose-400">*</span>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1.5">
+                  Roles <span className="text-danger">*</span>
                 </label>
                 <div className="flex items-center gap-2 pt-1">
                   {(['trigger', 'condition', 'action'] as CommandRole[]).map(role => {
@@ -791,11 +791,11 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                         className={`flex-1 py-1.5 px-3 rounded-full text-xs font-semibold border capitalize transition ${
                           isSelected
                             ? role === 'trigger'
-                              ? 'bg-amber-950/80 text-amber-300 border-amber-500 shadow-sm'
+                              ? 'bg-warning-soft text-warning-soft-foreground border-warning shadow-sm'
                               : role === 'condition'
-                              ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500 shadow-sm'
-                              : 'bg-cyan-950/80 text-cyan-300 border-cyan-500 shadow-sm'
-                            : 'bg-[var(--input-bg)] border-[var(--border-color)] text-slate-400 hover:border-slate-500'
+                              ? 'bg-accent-soft text-accent-soft-foreground border-accent shadow-sm'
+                              : 'bg-success-soft text-success-soft-foreground border-success shadow-sm'
+                            : 'bg-surface-secondary border-border text-muted hover:border-border-secondary hover:text-foreground'
                         }`}
                       >
                         {role}
@@ -807,10 +807,10 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
             </div>
 
             {/* Row 3: CAN ID, Bus, Type, Action CAN ID */}
-            <div className="space-y-3 p-4 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)]">
+            <div className="space-y-3 p-4 rounded-[12px] bg-surface-secondary border border-border">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-foreground mb-1">
                     {formData.action_can_id ? 'State / Rx CAN ID' : 'CAN ID (Hex)'}
                   </label>
                   <input
@@ -818,12 +818,12 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                     placeholder="0x448 or 0x438"
                     value={formData.state_can_id || ''}
                     onChange={e => setFormData({ ...formData, state_can_id: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-sm text-cyan-300 focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                    className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-border font-mono text-sm text-accent focus:outline-none focus:border-focus"
                   />
-                  <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
+                  <div className="flex items-center justify-between text-[10px] text-muted mt-1">
                     <span>11-bit (&le;0x7FF) or 29-bit</span>
                     {formData.options && formData.options.length > 0 && (
-                      <span className="text-cyan-400 font-medium">
+                      <span className="text-accent font-medium">
                         {formData.options.length} states mapped
                       </span>
                     )}
@@ -831,7 +831,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-foreground mb-1">
                     CAN Bus Index
                   </label>
                   <input
@@ -840,15 +840,15 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                     max="4"
                     value={formData.bus ?? 0}
                     onChange={e => setFormData({ ...formData, bus: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-sm text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                    className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-border font-mono text-sm text-foreground focus:outline-none focus:border-focus"
                   />
-                  <span className="text-[10px] text-slate-500 mt-1 block">
+                  <span className="text-[10px] text-muted mt-1 block">
                     0 = Primary CAN (C-CAN / E-CAN)
                   </span>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-foreground mb-1">
                     Command Type
                   </label>
                   <select
@@ -865,7 +865,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                       }
                       setFormData({ ...formData, ...updates });
                     }}
-                    className="w-full px-3 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-sm text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                    className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-border text-sm text-foreground focus:outline-none focus:border-focus"
                   >
                     {COMMAND_TYPES.map(t => (
                       <option key={t} value={t}>
@@ -873,7 +873,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                       </option>
                     ))}
                   </select>
-                  <span className="text-[10px] text-slate-500 mt-1 block">
+                  <span className="text-[10px] text-muted mt-1 block">
                     Handler protocol type
                   </span>
                 </div>
@@ -881,26 +881,26 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
 
               {/* Action CAN ID (Tx) row when action role is enabled or action_can_id is set */}
               {(formData.roles?.includes('action') || formData.action_can_id) && (
-                <div className="pt-3 border-t border-[var(--border-color)]/60 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="pt-3 border-t border-separator grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-emerald-400 mb-1 flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-success mb-1 flex items-center justify-between">
                       <span>Action / Tx CAN ID (Hex)</span>
-                      <span className="text-[10px] font-normal text-slate-400">Optional separate Tx ID</span>
+                      <span className="text-[10px] font-normal text-muted">Optional separate Tx ID</span>
                     </label>
                     <input
                       type="text"
                       placeholder="e.g. 0x4A2 (for command transmission)"
                       value={formData.action_can_id || ''}
                       onChange={e => setFormData({ ...formData, action_can_id: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-emerald-800/60 font-mono text-sm text-emerald-300 focus:outline-none focus:border-emerald-500"
+                      className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-success/40 font-mono text-sm text-success focus:outline-none focus:border-success"
                     />
-                    <span className="text-[10px] text-slate-400 mt-1 block">
+                    <span className="text-[10px] text-muted mt-1 block">
                       Use when sending commands (Tx) on a different CAN ID than the state sensor (Rx, e.g. 0x4A2 vs 0x438).
                     </span>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-emerald-400 mb-1">
+                    <label className="block text-xs font-semibold text-success mb-1">
                       Action Bus Index
                     </label>
                     <input
@@ -915,9 +915,9 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                           action_bus: e.target.value === '' ? undefined : parseInt(e.target.value)
                         })
                       }
-                      className="w-full px-3 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-emerald-800/60 font-mono text-sm text-white focus:outline-none focus:border-emerald-500"
+                      className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-success/40 font-mono text-sm text-foreground focus:outline-none focus:border-success"
                     />
-                    <span className="text-[10px] text-slate-400 mt-1 block">
+                    <span className="text-[10px] text-muted mt-1 block">
                       Defaults to primary bus ({formData.bus ?? 0}) if empty.
                     </span>
                   </div>
@@ -928,10 +928,10 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
             {/* Row 4: Payload Mode Selector */}
             <div id="payload-pattern-config-section">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-                <label className="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted flex items-center gap-1.5">
                   <span>Payload Pattern Configuration</span>
                   {formData.state_can_id && (
-                    <span className="text-[10px] text-cyan-400 font-mono font-normal">
+                    <span className="text-[10px] text-accent font-mono font-normal">
                       for {formData.state_can_id}
                     </span>
                   )}
@@ -941,60 +941,64 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                   onSelectionChange={key => setActivePayloadMode(key as 'transition' | 'match' | 'options' | 'steps')}
                   aria-label="Payload Mode Selection"
                 >
-                  <Tabs.ListContainer className="p-1 rounded-xl bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] text-xs font-medium overflow-x-auto no-scrollbar">
+                  <Tabs.ListContainer className="p-1 rounded-xl bg-surface-secondary border border-border text-xs font-medium overflow-x-auto no-scrollbar">
                     <Tabs.List className="gap-1 flex-wrap">
                       <Tabs.Tab
                         id="options"
                         className={`relative px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
                           activePayloadMode === 'options'
-                            ? 'text-white'
-                            : 'text-slate-400 hover:text-white'
+                            ? 'text-accent-foreground'
+                            : 'text-muted hover:text-foreground'
                         }`}
                       >
-                        <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                        <Layers className={`w-3.5 h-3.5 ${activePayloadMode === 'options' ? 'text-accent-foreground' : 'text-accent'}`} />
                         <span>State Definitions ("What State is What")</span>
                         {formData.options && formData.options.length > 0 && (
-                          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono font-bold">
+                          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                            activePayloadMode === 'options'
+                              ? 'bg-accent-foreground/20 text-accent-foreground'
+                              : 'bg-accent-soft text-accent-soft-foreground border border-accent/30'
+                          }`}>
                             {formData.options.length}
                           </span>
                         )}
-                        <Tabs.Indicator className="rounded-lg bg-[var(--md-sys-color-primary)] shadow-sm" />
+                        <Tabs.Indicator className="rounded-lg bg-accent shadow-sm" />
                       </Tabs.Tab>
 
                       <Tabs.Tab
                         id="transition"
                         className={`relative px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer flex items-center ${
                           activePayloadMode === 'transition'
-                            ? 'text-white'
-                            : 'text-slate-400 hover:text-white'
+                            ? 'text-accent-foreground'
+                            : 'text-muted hover:text-foreground'
                         }`}
                       >
                         <span>From / To Transition</span>
-                        <Tabs.Indicator className="rounded-lg bg-[var(--md-sys-color-primary)] shadow-sm" />
+                        <Tabs.Indicator className="rounded-lg bg-accent shadow-sm" />
                       </Tabs.Tab>
 
                       <Tabs.Tab
                         id="match"
                         className={`relative px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer flex items-center ${
                           activePayloadMode === 'match'
-                            ? 'text-white'
-                            : 'text-slate-400 hover:text-white'
+                            ? 'text-accent-foreground'
+                            : 'text-muted hover:text-foreground'
                         }`}
                       >
                         <span>Single Match Pattern</span>
-                        <Tabs.Indicator className="rounded-lg bg-[var(--md-sys-color-primary)] shadow-sm" />
+                        <Tabs.Indicator className="rounded-lg bg-accent shadow-sm" />
                       </Tabs.Tab>
 
                       <Tabs.Tab
                         id="steps"
                         className={`relative px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer flex items-center ${
                           activePayloadMode === 'steps'
-                            ? 'text-white'
-                            : 'text-slate-400 hover:text-white'
+                            ? 'text-accent-foreground'
+                            : 'text-muted hover:text-foreground'
                         }`}
                       >
                         <span>Burst Steps</span>
-                        <Tabs.Indicator className="rounded-lg bg-[var(--md-sys-color-primary)] shadow-sm" />
+                        <Tabs.Indicator className="rounded-lg bg-accent shadow-sm" />
                       </Tabs.Tab>
                     </Tabs.List>
                   </Tabs.ListContainer>
@@ -1003,7 +1007,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
 
               {/* Mode 1: Transition */}
               {activePayloadMode === 'transition' && (
-                <div className="p-4 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] space-y-4">
+                <div className="p-4 rounded-[12px] bg-surface-secondary border border-border space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <PayloadByteEditor
                       label="From Payload (Idle / Released)"
@@ -1017,8 +1021,8 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                     />
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400 pt-1">
-                    <span className="text-slate-500">Syntax Quick Paste:</span>
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted pt-1">
+                    <span className="text-muted">Syntax Quick Paste:</span>
                     <button
                       type="button"
                       onClick={() =>
@@ -1028,7 +1032,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                           to_payload: '* * * * * * * 1*'
                         })
                       }
-                      className="px-2 py-0.5 rounded-[6px] bg-[var(--input-bg)] border border-[var(--border-color)] hover:bg-slate-700 text-slate-300 font-mono"
+                      className="px-2 py-0.5 rounded-[6px] bg-surface-tertiary border border-border hover:bg-default-hover text-foreground font-mono transition"
                     >
                       D8 Bit Trigger
                     </button>
@@ -1041,7 +1045,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                           to_payload: '00 00 01 00 00 00 00 00'
                         })
                       }
-                      className="px-2 py-0.5 rounded-[6px] bg-[var(--input-bg)] border border-[var(--border-color)] hover:bg-slate-700 text-slate-300 font-mono"
+                      className="px-2 py-0.5 rounded-[6px] bg-surface-tertiary border border-border hover:bg-default-hover text-foreground font-mono transition"
                     >
                       D3 Pulse
                     </button>
@@ -1054,7 +1058,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                           to_payload: '* * * * * F8 * *'
                         })
                       }
-                      className="px-2 py-0.5 rounded-[6px] bg-[var(--input-bg)] border border-[var(--border-color)] hover:bg-slate-700 text-slate-300 font-mono"
+                      className="px-2 py-0.5 rounded-[6px] bg-surface-tertiary border border-border hover:bg-default-hover text-foreground font-mono transition"
                     >
                       D6 Seat Pulse
                     </button>
@@ -1072,7 +1076,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
 
               {/* Mode 2: Match */}
               {activePayloadMode === 'match' && (
-                <div className="p-4 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] space-y-3">
+                <div className="p-4 rounded-[12px] bg-surface-secondary border border-border space-y-3">
                   <PayloadByteEditor
                     label="Match Payload (Sensor / State Condition)"
                     value={formData.match || formData.match_payload || '* * * * * * * *'}
@@ -1099,15 +1103,15 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
 
               {/* Mode 4: Burst Steps */}
               {activePayloadMode === 'steps' && (
-                <div className="p-4 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] space-y-3">
+                <div className="p-4 rounded-[12px] bg-surface-secondary border border-border space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-slate-400">
+                    <span className="text-xs font-medium text-muted">
                       Sequential Frame Steps ({formData.steps?.length || 0})
                     </span>
                     <button
                       type="button"
                       onClick={handleAddStep}
-                      className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[var(--md-sys-color-primary)] text-white text-xs hover:opacity-90 transition font-medium"
+                      className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-accent hover:bg-accent-hover text-accent-foreground text-xs transition font-medium"
                     >
                       <Plus className="w-3.5 h-3.5" /> Add Step
                     </button>
@@ -1117,17 +1121,17 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                     {formData.steps?.map((step, idx) => (
                       <div
                         key={idx}
-                        className="p-3 rounded-[10px] bg-[var(--input-bg)] border border-[var(--border-color)] space-y-2 text-xs"
+                        className="p-3 rounded-[10px] bg-surface-tertiary border border-border space-y-2 text-xs"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-white flex items-center gap-1.5">
-                            <span className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center font-mono text-slate-400 text-[10px]">
+                          <span className="font-bold text-foreground flex items-center gap-1.5">
+                            <span className="w-5 h-5 rounded-full bg-surface border border-border flex items-center justify-center font-mono text-muted text-[10px]">
                               {idx + 1}
                             </span>
                             Step Payload
                           </span>
                           <div className="flex items-center gap-2">
-                            <span className="text-slate-400">Repeat:</span>
+                            <span className="text-muted">Repeat:</span>
                             <input
                               type="number"
                               min="1"
@@ -1136,12 +1140,12 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                               onChange={e =>
                                 handleUpdateStep(idx, { repeat: parseInt(e.target.value) || 1 })
                               }
-                              className="w-16 px-2 py-1 rounded-[6px] bg-[var(--card-bg)] border border-[var(--border-color)] font-mono text-white text-center text-xs"
+                              className="w-16 px-2 py-1 rounded-[6px] bg-surface border border-border font-mono text-foreground text-center text-xs focus:outline-none focus:border-focus"
                             />
                             <button
                               type="button"
                               onClick={() => handleRemoveStep(idx)}
-                              className="p-1 hover:text-rose-400 text-slate-500 rounded"
+                              className="p-1 hover:text-danger text-muted rounded transition"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -1162,13 +1166,13 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
             {/* Row 5: Required Feature, Tags, Delay */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-muted mb-1">
                   Requires Feature (Vehicle Trim)
                 </label>
                 <select
                   value={formData.requires_feature || ''}
                   onChange={e => setFormData({ ...formData, requires_feature: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-xs text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                  className="w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-xs text-foreground focus:outline-none focus:border-focus"
                 >
                   <option value="">None (Available on all models)</option>
                   {knownFeatures.map(feat => (
@@ -1180,7 +1184,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-muted mb-1">
                   Tags (comma separated)
                 </label>
                 <input
@@ -1188,12 +1192,12 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                   placeholder="e.g. kia_ev6, ioniq5"
                   value={tagsInput}
                   onChange={e => handleTagsChange(e.target.value)}
-                  className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-xs text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                  className="w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-xs text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-muted mb-1">
                   Delay Between Frames (ms)
                 </label>
                 <input
@@ -1204,23 +1208,23 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                   onChange={e =>
                     setFormData({ ...formData, delay_ms: parseInt(e.target.value) || 0 })
                   }
-                  className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                  className="w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border font-mono text-xs text-foreground focus:outline-none focus:border-focus"
                 />
               </div>
             </div>
 
             {/* Home Assistant & MDI Integration */}
-            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3.5">
+            <div className="p-4 rounded-xl bg-surface-secondary border border-border space-y-3.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-md bg-sky-950/70 border border-sky-800/60 flex items-center justify-center text-sky-400">
+                  <div className="w-6 h-6 rounded-md bg-accent-soft border border-accent/30 flex items-center justify-center text-accent">
                     <Home className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-xs font-bold text-white uppercase tracking-wider">
+                  <span className="text-xs font-bold text-foreground uppercase tracking-wider">
                     Home Assistant & MDI Integration (ha_domain, mdi / icon)
                   </span>
                 </div>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-muted">
                   Controls entity type and icon rendering across Home Assistant & the catalog
                 </span>
               </div>
@@ -1229,7 +1233,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                 {/* HA Domain */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-slate-300">
+                    <label className="block text-xs font-semibold text-muted">
                       Home Assistant Domain (ha_domain)
                     </label>
                     {formData.ha_domain && (() => {
@@ -1248,7 +1252,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                       placeholder="e.g. event, sensor, binary_sensor"
                       value={formData.ha_domain || ''}
                       onChange={e => setFormData({ ...formData, ha_domain: e.target.value })}
-                      className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-sky-300 focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                      className="w-full px-3 py-2 rounded-[8px] bg-surface-tertiary border border-border font-mono text-xs text-accent placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                     />
                     <datalist id="ha-domain-suggestions">
                       {COMMON_HA_DOMAINS.map(d => (
@@ -1266,8 +1270,8 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                         onClick={() => setFormData({ ...formData, ha_domain: d })}
                         className={`text-[10px] font-mono px-1.5 py-0.5 rounded border transition ${
                           formData.ha_domain === d
-                            ? 'bg-sky-500/20 text-sky-300 border-sky-500 font-bold'
-                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700'
+                            ? 'bg-accent-soft text-accent-soft-foreground border-accent font-bold'
+                            : 'bg-surface-tertiary text-muted border-border hover:border-border-secondary hover:text-foreground'
                         }`}
                       >
                         {d}
@@ -1279,14 +1283,14 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                 {/* MDI Icon with live preview */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-slate-300">
+                    <label className="block text-xs font-semibold text-muted">
                       MDI Icon (mdi / icon)
                     </label>
-                    <span className="text-[10px] text-slate-500 font-mono">mdi:icon-name</span>
+                    <span className="text-[10px] text-muted font-mono">mdi:icon-name</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div
-                      className="w-9 h-9 rounded-lg bg-sky-950/70 border border-sky-800/70 flex items-center justify-center text-sky-400 shrink-0 shadow-sm"
+                      className="w-9 h-9 rounded-lg bg-accent-soft border border-accent/30 flex items-center justify-center text-accent shrink-0 shadow-sm"
                       title={formData.icon || formData.mdi || 'No icon set'}
                     >
                       <MdiIcon icon={formData.icon || formData.mdi} className="w-5 h-5" />
@@ -1301,7 +1305,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                           const val = e.target.value;
                           setFormData({ ...formData, icon: val, mdi: val });
                         }}
-                        className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-sky-300 focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                        className="w-full px-3 py-2 rounded-[8px] bg-surface-tertiary border border-border font-mono text-xs text-accent placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                       />
                       <datalist id="mdi-icon-suggestions">
                         {SUGGESTED_MDI_ICONS.map(i => (
@@ -1320,8 +1324,8 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                         onClick={() => setFormData({ ...formData, icon: ic, mdi: ic })}
                         className={`text-[10px] font-mono px-1.5 py-0.5 rounded border transition flex items-center gap-1 ${
                           (formData.icon === ic || formData.mdi === ic)
-                            ? 'bg-sky-500/20 text-sky-300 border-sky-500 font-bold'
-                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700'
+                            ? 'bg-accent-soft text-accent-soft-foreground border-accent font-bold'
+                            : 'bg-surface-tertiary text-muted border-border hover:border-border-secondary hover:text-foreground'
                         }`}
                       >
                         <MdiIcon icon={ic} className="w-2.5 h-2.5" />
@@ -1334,10 +1338,10 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                 {/* Device Class */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-slate-300">
-                      Device Class <span className="text-slate-500 font-normal text-[11px]">(Optional)</span>
+                    <label className="block text-xs font-semibold text-muted">
+                      Device Class <span className="text-muted font-normal text-[11px]">(Optional)</span>
                     </label>
-                    <span className="text-[10px] text-slate-500">HA component class</span>
+                    <span className="text-[10px] text-muted">HA component class</span>
                   </div>
                   <input
                     type="text"
@@ -1345,14 +1349,14 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                     placeholder="e.g. door, window, battery"
                     value={formData.device_class || ''}
                     onChange={e => setFormData({ ...formData, device_class: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-white focus:outline-none focus:border-[var(--md-sys-color-primary)] placeholder:text-slate-600"
+                    className="w-full px-3 py-2 rounded-[8px] bg-surface-tertiary border border-border font-mono text-xs text-foreground focus:outline-none focus:border-focus placeholder:text-field-placeholder"
                   />
                   <datalist id="device-class-suggestions">
                     {['door', 'window', 'battery', 'battery_charging', 'power', 'temperature', 'speed', 'lock', 'motion', 'problem', 'plug', 'heat'].map(dc => (
                       <option key={dc} value={dc} />
                     ))}
                   </datalist>
-                  <p className="text-[10px] text-slate-500 mt-1.5">
+                  <p className="text-[10px] text-muted mt-1.5">
                     Controls state display format & icons in Home Assistant.
                   </p>
                 </div>
@@ -1360,23 +1364,23 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
             </div>
 
             {/* Contributor Attribution */}
-            <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800 space-y-3">
+            <div className="p-4 rounded-xl bg-surface-secondary border border-border space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Github className="w-4 h-4 text-cyan-400" />
-                  <span className="text-xs font-bold text-white uppercase tracking-wider">
+                  <Github className="w-4 h-4 text-accent" />
+                  <span className="text-xs font-bold text-foreground uppercase tracking-wider">
                     Community Contributor Attribution (Optional)
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-slate-400 hidden sm:inline">
+                  <span className="text-[11px] text-muted hidden sm:inline">
                     Credited on card & detail modal
                   </span>
                   <Button
                     variant="primary"
                     size="sm"
                     onPress={handleAddContributor}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] bg-cyan-950/60 hover:bg-cyan-900/70 border border-cyan-700/60 text-cyan-300 text-xs font-semibold transition"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] bg-accent-soft hover:opacity-90 border border-accent/40 text-accent-soft-foreground text-xs font-semibold transition"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Contributor</span>
@@ -1388,11 +1392,11 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                 {contributorsList.map((contrib, idx) => (
                   <div
                     key={idx}
-                    className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 space-y-2.5 relative"
+                    className="p-3 rounded-lg bg-surface-tertiary border border-border space-y-2.5 relative"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <User className="w-3.5 h-3.5 text-cyan-400" />
+                      <span className="text-[11px] font-bold text-muted uppercase tracking-wider flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-accent" />
                         Contributor #{idx + 1}
                       </span>
                       {contributorsList.length > 1 && (
@@ -1401,7 +1405,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                           size="sm"
                           isIconOnly
                           onPress={() => handleRemoveContributor(idx)}
-                          className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-950/30 rounded transition"
+                          className="p-1 text-muted hover:text-danger hover:bg-danger-soft rounded transition"
                           aria-label="Remove contributor"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1411,39 +1415,39 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                       <div>
-                        <label className="block text-[10.5px] font-semibold text-slate-300 mb-1">
+                        <label className="block text-[10.5px] font-semibold text-muted mb-1">
                           Name / Alias
                         </label>
                         <div className="relative">
-                          <User className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                          <User className="w-3.5 h-3.5 text-muted absolute left-2.5 top-1/2 -translate-y-1/2" />
                           <input
                             type="text"
                             placeholder="e.g. Jane Doe"
                             value={contrib.name || ''}
                             onChange={e => handleUpdateContributor(idx, 'name', e.target.value)}
-                            className="w-full pl-8 pr-2 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-xs text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                            className="w-full pl-8 pr-2 py-1.5 rounded-[8px] bg-surface border border-border text-xs text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <label className="block text-[10.5px] font-semibold text-slate-300 mb-1">
+                        <label className="block text-[10.5px] font-semibold text-muted mb-1">
                           GitHub Username
                         </label>
                         <div className="relative">
-                          <span className="text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-mono">@</span>
+                          <span className="text-muted absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-mono">@</span>
                           <input
                             type="text"
                             placeholder="username"
                             value={contrib.github || ''}
                             onChange={e => handleUpdateContributor(idx, 'github', e.target.value.replace(/^@/, ''))}
-                            className="w-full pl-7 pr-2 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-cyan-300 focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                            className="w-full pl-7 pr-2 py-1.5 rounded-[8px] bg-surface border border-border font-mono text-xs text-accent placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <label className="block text-[10.5px] font-semibold text-slate-300 mb-1">
+                        <label className="block text-[10.5px] font-semibold text-muted mb-1">
                           Role / Tag
                         </label>
                         <input
@@ -1451,24 +1455,24 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                           placeholder="e.g. Discovery, Tester"
                           value={contrib.role || ''}
                           onChange={e => handleUpdateContributor(idx, 'role', e.target.value)}
-                          className="w-full px-2.5 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-xs text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                          className="w-full px-2.5 py-1.5 rounded-[8px] bg-surface border border-border text-xs text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                         />
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1.5 border-t border-slate-800/80">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1.5 border-t border-separator">
                       <div>
-                        <label className="block text-[10.5px] font-semibold text-emerald-400 mb-1 flex items-center gap-1.5">
-                          <Car className="w-3.5 h-3.5 text-emerald-400" />
+                        <label className="block text-[10.5px] font-semibold text-success mb-1 flex items-center gap-1.5">
+                          <Car className="w-3.5 h-3.5 text-success" />
                           <span>Tested Vehicle</span>
                         </label>
                         <div className="relative">
                           <select
                             value={contrib.tested_vehicle || ''}
                             onChange={e => handleUpdateContributor(idx, 'tested_vehicle', e.target.value)}
-                            className="w-full pl-2.5 pr-8 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-emerald-800/60 focus:border-emerald-500 text-xs text-emerald-200 focus:outline-none appearance-none cursor-pointer"
+                            className="w-full pl-2.5 pr-8 py-1.5 rounded-[8px] bg-surface border border-success/40 focus:border-success text-xs text-success focus:outline-none appearance-none cursor-pointer"
                           >
-                            <option value="" className="bg-slate-900 text-slate-400">
+                            <option value="" className="bg-overlay text-muted">
                               -- Select tested vehicle from catalog --
                             </option>
                             {contrib.tested_vehicle && !catalog.vehicles?.some(v => {
@@ -1477,7 +1481,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                                 : `${v.make} ${v.model}${v.trim ? ` ${v.trim}` : ''}${v.region && v.region !== 'universal' ? ` (${v.region.toUpperCase()})` : ''}`;
                               return contrib.tested_vehicle === label || contrib.tested_vehicle === v.id || contrib.tested_vehicle === v.name;
                             }) && (
-                              <option value={contrib.tested_vehicle} className="bg-slate-900 text-emerald-300">
+                              <option value={contrib.tested_vehicle} className="bg-overlay text-success">
                                 {contrib.tested_vehicle} (Custom)
                               </option>
                             )}
@@ -1486,19 +1490,19 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                                 ? (v.name || 'All Gen5W Models') 
                                 : `${v.make} ${v.model}${v.trim ? ` ${v.trim}` : ''}${v.region && v.region !== 'universal' ? ` (${v.region.toUpperCase()})` : ''}`;
                               return (
-                                <option key={v.id} value={label} className="bg-slate-900 text-white">
+                                <option key={v.id} value={label} className="bg-overlay text-overlay-foreground">
                                   {label}
                                 </option>
                               );
                             })}
                           </select>
-                          <ChevronDown className="w-3.5 h-3.5 text-emerald-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <ChevronDown className="w-3.5 h-3.5 text-success absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                         </div>
                       </div>
 
                       <div>
-                        <label className="block text-[10.5px] font-semibold text-cyan-400 mb-1 flex items-center gap-1.5">
-                          <FileText className="w-3.5 h-3.5 text-cyan-400" />
+                        <label className="block text-[10.5px] font-semibold text-accent mb-1 flex items-center gap-1.5">
+                          <FileText className="w-3.5 h-3.5 text-accent" />
                           <span>Notes</span>
                         </label>
                         <input
@@ -1506,7 +1510,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                           placeholder="e.g. Decoded from CAN-FD frame 463; requires ACC mode"
                           value={contrib.notes || ''}
                           onChange={e => handleUpdateContributor(idx, 'notes', e.target.value)}
-                          className="w-full px-2.5 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-cyan-800/60 focus:border-cyan-500 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none"
+                          className="w-full px-2.5 py-1.5 rounded-[8px] bg-surface border border-accent/40 focus:border-focus text-xs text-foreground placeholder:text-field-placeholder focus:outline-none"
                         />
                       </div>
                     </div>
@@ -1516,37 +1520,37 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
             </div>
 
             {/* Live Validation Box */}
-            <div className="p-3 rounded-[10px] bg-[var(--input-bg)] border border-[var(--border-color)] text-xs">
+            <div className="p-3 rounded-[10px] bg-surface-secondary border border-border text-xs">
               <div className="flex items-center justify-between mb-1">
-                <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                <span className="font-semibold text-foreground flex items-center gap-1.5">
                   {errors.length === 0 ? (
                     <>
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <span className="text-emerald-300">Catalog Validation: Valid</span>
+                      <CheckCircle2 className="w-4 h-4 text-success" />
+                      <span className="text-success">Catalog Validation: Valid</span>
                     </>
                   ) : (
                     <>
-                      <AlertCircle className="w-4 h-4 text-rose-400" />
-                      <span className="text-rose-300">
+                      <AlertCircle className="w-4 h-4 text-danger" />
+                      <span className="text-danger">
                         {errors.length} Error{errors.length > 1 ? 's' : ''} must be resolved
                       </span>
                     </>
                   )}
                 </span>
                 {warnings.length > 0 && (
-                  <span className="text-amber-400 font-medium">
+                  <span className="text-warning font-medium">
                     {warnings.length} Warning{warnings.length > 1 ? 's' : ''}
                   </span>
                 )}
               </div>
 
               {errors.map((err, i) => (
-                <div key={i} className="text-rose-300 pl-5">
+                <div key={i} className="text-danger pl-5">
                   • {err.message}
                 </div>
               ))}
               {warnings.map((w, i) => (
-                <div key={i} className="text-amber-300 pl-5">
+                <div key={i} className="text-warning pl-5">
                   • {w.message}
                 </div>
               ))}
@@ -1554,12 +1558,12 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
           </ModalBody>
 
           {/* Modal Footer */}
-          <ModalFooter className="flex items-center justify-between p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
+          <ModalFooter className="flex items-center justify-between p-4 px-6 border-t border-separator bg-surface shrink-0">
             <div>
               {!isNew && onDelete && initialCommand && (
                 confirmDelete ? (
-                  <div className="flex items-center gap-1.5 bg-rose-950/90 border border-rose-700/80 px-2.5 py-1 rounded-lg">
-                    <span className="text-xs font-semibold text-rose-200">Delete this command?</span>
+                  <div className="flex items-center gap-1.5 bg-danger-soft border border-danger/40 px-2.5 py-1 rounded-lg">
+                    <span className="text-xs font-semibold text-danger-soft-foreground">Delete this command?</span>
                     <Button
                       variant="danger"
                       size="sm"
@@ -1567,7 +1571,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                         onDelete(initialCommand.id);
                         onClose();
                       }}
-                      className="px-2 py-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-xs transition"
+                      className="px-2 py-0.5 bg-danger hover:bg-danger-hover text-danger-foreground rounded font-bold text-xs transition"
                     >
                       Confirm
                     </Button>
@@ -1575,7 +1579,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                       variant="secondary"
                       size="sm"
                       onPress={() => setConfirmDelete(false)}
-                      className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs transition"
+                      className="px-2 py-0.5 bg-surface-secondary hover:bg-default-hover text-foreground border border-border rounded text-xs transition"
                     >
                       Cancel
                     </Button>
@@ -1585,7 +1589,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                     variant="outline"
                     size="sm"
                     onPress={() => setConfirmDelete(true)}
-                    className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-2 px-3 text-slate-400 hover:text-rose-400 hover:border-rose-800/60"
+                    className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-2 px-3 text-muted hover:text-danger hover:border-danger/40"
                     aria-label="Delete this command"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -1611,8 +1615,8 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                 isDisabled={!canSave}
                 className={`px-5 py-2 rounded-full text-xs font-semibold shadow transition ${
                   canSave
-                    ? 'bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white'
-                    : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                    ? 'bg-accent hover:bg-accent-hover text-accent-foreground'
+                    : 'bg-surface-secondary text-muted cursor-not-allowed'
                 }`}
               >
                 {isNew ? 'Add to Catalog' : 'Save Changes'}

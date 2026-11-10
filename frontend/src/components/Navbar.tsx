@@ -100,19 +100,19 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-800 bg-slate-950/90 backdrop-blur-md">
+    <header className="sticky top-0 z-40 w-full border-b border-border bg-surface/90 backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-4">
           {/* Brand & Version */}
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3">
-              <div className="h-10 px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center shadow-inner hover:border-slate-700 transition">
+              <div className="h-10 px-2.5 py-1 rounded-xl bg-surface-secondary border border-border flex items-center justify-center hover:border-border-secondary transition">
                 <CanDoLogo className="h-7 w-auto" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-bold text-white tracking-tight">CAN Do</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-cyan-300 font-mono border border-slate-700">
+                  <span className="text-base font-bold text-foreground tracking-tight">CAN Do</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-foreground font-mono border border-accent/30">
                     {catalog.can_do_version || 'Loading...'}
                   </span>
                 </div>
@@ -126,38 +126,38 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onSelectionChange={key => onChangeMainTab(key as typeof activeMainTab)}
                 aria-label="Navbar Main Navigation"
               >
-                <Tabs.ListContainer className="p-1 rounded-xl bg-slate-900 border border-slate-800 text-xs">
+                <Tabs.ListContainer className="p-1 rounded-xl bg-surface-secondary border border-border text-xs">
                   <Tabs.List className="gap-1">
                     <Tabs.Tab
                       id="catalog"
                       className={`relative px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer flex items-center ${
                         activeMainTab === 'catalog'
-                          ? 'text-white'
-                          : 'text-slate-400 hover:text-slate-200'
+                          ? 'text-foreground'
+                          : 'text-muted hover:text-foreground'
                       }`}
                     >
                       <span>Commands ({catalog.commands.length})</span>
-                      <Tabs.Indicator className="rounded-lg bg-slate-800 shadow-sm" />
+                      <Tabs.Indicator className="rounded-lg bg-surface-tertiary shadow-sm" />
                     </Tabs.Tab>
 
                     <Tabs.Tab
                       id="vehicles"
                       className={`relative px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer flex items-center ${
                         activeMainTab === 'vehicles'
-                          ? 'text-white'
-                          : 'text-slate-400 hover:text-slate-200'
+                          ? 'text-foreground'
+                          : 'text-muted hover:text-foreground'
                       }`}
                     >
                       <span>Vehicles ({catalog.vehicles.length})</span>
-                      <Tabs.Indicator className="rounded-lg bg-slate-800 shadow-sm" />
+                      <Tabs.Indicator className="rounded-lg bg-surface-tertiary shadow-sm" />
                     </Tabs.Tab>
 
                     <Tabs.Tab
                       id="automations"
                       className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer ${
                         activeMainTab === 'automations'
-                          ? 'text-slate-950 font-bold'
-                          : 'text-cyan-400 hover:text-cyan-300'
+                          ? 'text-accent-foreground font-bold'
+                          : 'text-accent hover:text-accent/80'
                       }`}
                     >
                       <Zap className="w-3.5 h-3.5 fill-current" />
@@ -166,27 +166,27 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <span
                           className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
                             activeMainTab === 'automations'
-                              ? 'bg-slate-950 text-cyan-300'
-                              : 'bg-cyan-950 text-cyan-300 border border-cyan-800'
+                              ? 'bg-accent-foreground/20 text-accent-foreground'
+                              : 'bg-accent-soft text-accent-soft-foreground border border-accent/30'
                           }`}
                         >
                           {rulesCount}
                         </span>
                       )}
-                      <Tabs.Indicator className="rounded-lg bg-cyan-500 shadow-sm" />
+                      <Tabs.Indicator className="rounded-lg bg-accent shadow-sm" />
                     </Tabs.Tab>
 
                     <Tabs.Tab
                       id="device"
                       className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer ${
                         activeMainTab === 'device'
-                          ? 'text-slate-950 font-bold'
-                          : 'text-emerald-400 hover:text-emerald-300'
+                          ? 'text-success-foreground font-bold'
+                          : 'text-success hover:text-success/80'
                       }`}
                     >
                       <Radio className="w-3.5 h-3.5" />
                       <span>Device</span>
-                      <Tabs.Indicator className="rounded-lg bg-emerald-500 shadow-sm" />
+                      <Tabs.Indicator className="rounded-lg bg-success shadow-sm" />
                     </Tabs.Tab>
                   </Tabs.List>
                 </Tabs.ListContainer>
@@ -203,14 +203,14 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="Open Catalog Validation Report"
               className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
                 isValid
-                  ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/80 hover:bg-emerald-950/80'
-                  : 'bg-rose-950/40 text-rose-300 border-rose-800/80 hover:bg-rose-950/80 animate-pulse'
+                  ? 'bg-success-soft text-success-soft-foreground border-success/30 hover:bg-success/20'
+                  : 'bg-danger-soft text-danger-soft-foreground border-danger/30 hover:bg-danger/20 animate-pulse'
               }`}
             >
               {isValid ? (
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <ShieldCheck className="w-3.5 h-3.5 text-success" />
               ) : (
-                <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                <AlertTriangle className="w-3.5 h-3.5 text-danger" />
               )}
               <span>{isValid ? 'Valid Catalog' : 'Audit Issues'}</span>
             </button>
@@ -219,10 +219,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={onOpenImport}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-800 transition"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-foreground bg-surface-secondary hover:bg-surface-tertiary border border-border transition"
               title="Import or merge JSON catalog"
             >
-              <Upload className="w-3.5 h-3.5 text-cyan-400" />
+              <Upload className="w-3.5 h-3.5 text-accent" />
               <span className="hidden sm:inline">Import</span>
             </button>
 
@@ -243,12 +243,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={onOpenContribute}
-              className="relative inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-md shadow-cyan-500/20 transition"
+              className="relative inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-accent hover:bg-accent-hover text-accent-foreground shadow-sm transition"
             >
               <Github className="w-3.5 h-3.5" />
               <span>Contribute</span>
               {pendingCount > 0 && (
-                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-950 text-cyan-300 font-mono text-[10px] font-bold">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-accent-foreground/20 text-accent-foreground font-mono text-[10px] font-bold">
                   {pendingCount}
                 </span>
               )}
@@ -260,33 +260,33 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={handleToggle}
               title={`Switch to ${currentTheme === 'dark' ? 'light' : 'dark'} mode`}
               aria-label={`Switch to ${currentTheme === 'dark' ? 'light' : 'dark'} mode`}
-              className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-900 rounded-lg transition"
+              className="p-1.5 text-muted hover:text-foreground hover:bg-surface-secondary rounded-lg transition"
             >
               {currentTheme === 'dark' ? (
-                <Sun className="w-4 h-4 text-amber-400" />
+                <Sun className="w-4 h-4 text-warning" />
               ) : (
-                <Moon className="w-4 h-4 text-indigo-400" />
+                <Moon className="w-4 h-4 text-accent" />
               )}
             </button>
 
             {/* Reset Catalog */}
             {showResetConfirm ? (
-              <div className="flex items-center gap-1.5 bg-rose-950/90 border border-rose-700/80 px-2 py-1 rounded-lg text-xs animate-in fade-in">
-                <span className="text-[10px] text-rose-200 font-semibold">Reset all?</span>
+              <div className="flex items-center gap-1.5 bg-danger-soft border border-danger/40 px-2 py-1 rounded-lg text-xs animate-in fade-in">
+                <span className="text-[10px] text-danger-soft-foreground font-semibold">Reset all?</span>
                 <button
                   type="button"
                   onClick={() => {
                     onResetCatalog();
                     setShowResetConfirm(false);
                   }}
-                  className="px-1.5 py-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-[10px] transition"
+                  className="px-1.5 py-0.5 bg-danger hover:bg-danger-hover text-danger-foreground rounded font-bold text-[10px] transition"
                 >
                   Yes
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowResetConfirm(false)}
-                  className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] transition"
+                  className="px-1.5 py-0.5 bg-surface-tertiary hover:bg-default-hover text-foreground rounded text-[10px] transition"
                 >
                   No
                 </button>
@@ -296,7 +296,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 type="button"
                 onClick={() => setShowResetConfirm(true)}
                 title="Reset to default 3.1.0 catalog"
-                className="p-1.5 text-slate-500 hover:text-slate-300 hover:bg-slate-900 rounded-lg transition"
+                className="p-1.5 text-muted hover:text-foreground hover:bg-surface-secondary rounded-lg transition"
               >
                 <RotateCcw className="w-4 h-4" />
               </button>

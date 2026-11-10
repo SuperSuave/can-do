@@ -127,10 +127,10 @@ export function ConditionNodeEditor({
     <div
       className={`inline-flex items-center justify-center w-5 h-5 rounded-full border transition shrink-0 ${
         evalResult.state === 'valid'
-          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/70 shadow-sm shadow-emerald-500/20'
+          ? 'bg-success-soft text-success border-success/60 shadow-sm'
           : evalResult.state === 'invalid'
-          ? 'bg-rose-500/20 text-rose-400 border-rose-500/70 shadow-sm shadow-rose-500/20'
-          : 'bg-slate-800 text-slate-400 border-slate-700'
+          ? 'bg-danger-soft text-danger border-danger/60 shadow-sm'
+          : 'bg-surface-tertiary text-muted border-border'
       }`}
       title={evalResult.reason || `Status: ${evalResult.state.toUpperCase()}`}
     >
@@ -150,7 +150,7 @@ export function ConditionNodeEditor({
           type="button"
           onClick={onMoveUp}
           disabled={isFirst}
-          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition shrink-0"
+          className="p-1 text-muted hover:text-foreground disabled:opacity-30 disabled:hover:text-muted transition shrink-0"
           title="Move up"
         >
           <ArrowUp className="w-3.5 h-3.5" />
@@ -161,7 +161,7 @@ export function ConditionNodeEditor({
           type="button"
           onClick={onMoveDown}
           disabled={isLast}
-          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition shrink-0"
+          className="p-1 text-muted hover:text-foreground disabled:opacity-30 disabled:hover:text-muted transition shrink-0"
           title="Move down"
         >
           <ArrowDown className="w-3.5 h-3.5" />
@@ -171,7 +171,7 @@ export function ConditionNodeEditor({
         <button
           type="button"
           onClick={onDuplicate}
-          className="p-1 text-slate-500 hover:text-cyan-400 transition shrink-0"
+          className="p-1 text-muted hover:text-accent transition shrink-0"
           title="Duplicate condition"
         >
           <Copy className="w-3.5 h-3.5" />
@@ -180,7 +180,7 @@ export function ConditionNodeEditor({
       <button
         type="button"
         onClick={() => copyToClipboard('condition', cond, condDisplayName)}
-        className="p-1 text-slate-500 hover:text-purple-400 transition shrink-0"
+        className="p-1 text-muted hover:text-accent transition shrink-0"
         title="Copy condition to clipboard"
       >
         <ClipboardCopy className="w-3.5 h-3.5" />
@@ -188,7 +188,7 @@ export function ConditionNodeEditor({
       <button
         type="button"
         onClick={onDelete}
-        className="p-1 text-slate-500 hover:text-rose-400 transition shrink-0"
+        className="p-1 text-muted hover:text-danger transition shrink-0"
         title="Delete condition"
       >
         <Trash2 className="w-3.5 h-3.5" />
@@ -199,16 +199,16 @@ export function ConditionNodeEditor({
   if (isGroup) {
     const borderCls =
       groupLogic === 'and'
-        ? 'border-purple-800/80 bg-purple-950/20'
+        ? 'border-purple-500/40 bg-purple-500/5'
         : groupLogic === 'or'
-        ? 'border-indigo-800/80 bg-indigo-950/20'
-        : 'border-rose-800/80 bg-rose-950/20';
+        ? 'border-accent/40 bg-accent-soft/40'
+        : 'border-danger/40 bg-danger-soft/40';
     const tagCls =
       groupLogic === 'and'
-        ? 'bg-purple-900 text-purple-200 border-purple-700'
+        ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300 border-purple-500/40'
         : groupLogic === 'or'
-        ? 'bg-indigo-900 text-indigo-200 border-indigo-700'
-        : 'bg-rose-900 text-rose-200 border-rose-700';
+        ? 'bg-accent-soft text-accent-soft-foreground border-accent/40'
+        : 'bg-danger-soft text-danger-soft-foreground border-danger/40';
 
     return (
       <div className={`p-2.5 sm:p-3 rounded-xl border ${borderCls} space-y-2 text-xs transition-all min-w-0 overflow-hidden`}>
@@ -217,19 +217,19 @@ export function ConditionNodeEditor({
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
+              className="text-muted hover:text-foreground transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
             <span className={`px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] border ${tagCls} shrink-0`}>
               {groupLogic} Group {depth > 0 && `(L${depth + 1})`}
             </span>
-            <span className="text-slate-400 text-[11px] hidden sm:inline">
+            <span className="text-muted text-[11px] hidden sm:inline">
               {groupLogic === 'and' && '(ALL nested must match)'}
               {groupLogic === 'or' && '(ANY nested must match)'}
               {groupLogic === 'not' && '(Children must NOT match)'}
             </span>
-            <span className="text-slate-500 font-mono text-[10px] shrink-0">
+            <span className="text-muted font-mono text-[10px] shrink-0">
               [{(cond.conditions || []).length} items]
             </span>
           </div>
@@ -237,7 +237,7 @@ export function ConditionNodeEditor({
             <select
               value={groupLogic}
               onChange={e => onUpdate({ ...cond, logic: e.target.value as any })}
-              className="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-slate-300 text-[11px]"
+              className="bg-surface-secondary border border-border rounded px-2 py-0.5 text-foreground text-[11px]"
             >
               <option value="and">AND Logic</option>
               <option value="or">OR Logic</option>
@@ -248,7 +248,7 @@ export function ConditionNodeEditor({
         </div>
 
         {!collapsed && (
-          <div className="pl-1.5 sm:pl-2 border-l border-slate-800/80 min-w-0">
+          <div className="pl-1.5 sm:pl-2 border-l border-separator min-w-0">
             <ConditionListEditor
               conditions={cond.conditions || []}
               depth={depth + 1}
@@ -273,22 +273,22 @@ export function ConditionNodeEditor({
   if (cond.type === 'triggered_by' || cond.type === 'trigger' || cond.trigger_id !== undefined) {
     const matchedTrig = (availableTriggers || []).find(t => t.id === cond.trigger_id);
     return (
-      <div className="p-2.5 sm:p-3 rounded-xl bg-slate-950 border border-amber-900/60 space-y-2 text-xs min-w-0 overflow-hidden">
+      <div className="p-2.5 sm:p-3 rounded-xl bg-surface-secondary border border-warning/40 space-y-2 text-xs min-w-0 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
+              className="text-muted hover:text-foreground transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
-            <span className="w-5 h-5 rounded-full bg-amber-950 text-amber-300 font-bold text-[10px] flex items-center justify-center border border-amber-800 shrink-0">
+            <span className="w-5 h-5 rounded-full bg-warning-soft text-warning-soft-foreground font-bold text-[10px] flex items-center justify-center border border-warning/40 shrink-0">
               C{index + 1}
             </span>
             <div className="flex items-center gap-1.5 min-w-0">
-              <Radio className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span className="font-semibold text-white truncate">Triggered By</span>
+              <Radio className="w-3.5 h-3.5 text-warning shrink-0" />
+              <span className="font-semibold text-foreground truncate">Triggered By</span>
             </div>
           </div>
           <div className="shrink-0 ml-auto sm:ml-0">
@@ -300,11 +300,11 @@ export function ConditionNodeEditor({
           <>
             <div className="font-mono text-[11px]">
               <div>
-                <label className="block text-[10px] font-sans text-slate-400 mb-1">Select Trigger</label>
+                <label className="block text-[10px] font-sans text-muted mb-1">Select Trigger</label>
                 <select
                   value={cond.trigger_id || ''}
                   onChange={e => onUpdate({ ...cond, type: 'triggered_by', trigger_id: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-amber-300 font-mono text-xs focus:outline-none focus:border-amber-500"
+                  className="w-full bg-surface-tertiary border border-border rounded px-2.5 py-1.5 text-warning font-mono text-xs focus:outline-none focus:border-warning"
                 >
                   <option value="">-- Choose Rule Trigger --</option>
                   {(availableTriggers || []).map((t, tIdx) => {
@@ -322,11 +322,11 @@ export function ConditionNodeEditor({
               </div>
             </div>
             {matchedTrig && (
-              <div className="text-[11px] text-slate-400 font-sans flex items-center gap-1.5 pt-0.5 min-w-0 flex-wrap">
-                <span className="text-slate-500">Source:</span>
-                <span className="text-slate-300 font-semibold">{matchedTrig.source_command_name || matchedTrig.can_id}</span>
+              <div className="text-[11px] text-muted font-sans flex items-center gap-1.5 pt-0.5 min-w-0 flex-wrap">
+                <span className="text-muted">Source:</span>
+                <span className="text-foreground font-semibold">{matchedTrig.source_command_name || matchedTrig.can_id}</span>
                 {matchedTrig.option_label && (
-                  <span className="px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 text-[10px]">
+                  <span className="px-1.5 py-0.2 rounded bg-surface-tertiary text-foreground border border-border text-[10px]">
                     {matchedTrig.option_label}
                   </span>
                 )}
@@ -341,24 +341,24 @@ export function ConditionNodeEditor({
   // Time window condition
   if (cond.type === 'time_condition' || cond.type === 'time') {
     return (
-      <div className="p-2.5 sm:p-3 rounded-xl bg-slate-950 border border-cyan-900/60 space-y-2 text-xs min-w-0 overflow-hidden">
+      <div className="p-2.5 sm:p-3 rounded-xl bg-surface-secondary border border-accent/40 space-y-2 text-xs min-w-0 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
+              className="text-muted hover:text-foreground transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
-            <span className="w-5 h-5 rounded-full bg-cyan-950 text-cyan-300 font-bold text-[10px] flex items-center justify-center border border-cyan-800 shrink-0">
+            <span className="w-5 h-5 rounded-full bg-accent-soft text-accent-soft-foreground font-bold text-[10px] flex items-center justify-center border border-accent/40 shrink-0">
               C{index + 1}
             </span>
             <div className="flex items-center gap-1.5 min-w-0">
-              <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span className="font-semibold text-white truncate">Time Window</span>
+              <Clock className="w-3.5 h-3.5 text-accent shrink-0" />
+              <span className="font-semibold text-foreground truncate">Time Window</span>
               {(cond.start_time || cond.end_time) && (
-                <span className="px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 text-[10px] border border-cyan-800/60 font-mono shrink-0">
+                <span className="px-1.5 py-0.2 rounded bg-accent-soft text-accent-soft-foreground text-[10px] border border-accent/30 font-mono shrink-0">
                   {cond.start_time || '--:--'} - {cond.end_time || '--:--'}
                 </span>
               )}
@@ -373,21 +373,21 @@ export function ConditionNodeEditor({
           <>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[10px] font-sans text-slate-400 mb-1">Start Time (24h)</label>
+                <label className="block text-[10px] font-sans text-muted mb-1">Start Time (24h)</label>
                 <input
                   type="time"
                   value={cond.start_time || ''}
                   onChange={e => onUpdate({ ...cond, start_time: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-surface-tertiary border border-border rounded px-2.5 py-1 text-accent font-mono text-xs focus:outline-none focus:border-accent"
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-sans text-slate-400 mb-1">End Time (24h)</label>
+                <label className="block text-[10px] font-sans text-muted mb-1">End Time (24h)</label>
                 <input
                   type="time"
                   value={cond.end_time || ''}
                   onChange={e => onUpdate({ ...cond, end_time: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-surface-tertiary border border-border rounded px-2.5 py-1 text-accent font-mono text-xs focus:outline-none focus:border-accent"
                 />
               </div>
             </div>
@@ -406,23 +406,23 @@ export function ConditionNodeEditor({
   if (cond.type === 'device_state' || cond.type === 'wifi' || cond.type === 'wifi_condition') {
     const prop = cond.device_property || 'wifi_ssid';
     return (
-      <div className="p-2.5 sm:p-3 rounded-xl bg-slate-950 border border-sky-900/60 space-y-2 text-xs min-w-0 overflow-hidden">
+      <div className="p-2.5 sm:p-3 rounded-xl bg-surface-secondary border border-accent/40 space-y-2 text-xs min-w-0 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
+              className="text-muted hover:text-foreground transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
-            <span className="w-5 h-5 rounded-full bg-sky-950 text-sky-300 font-bold text-[10px] flex items-center justify-center border border-sky-800 shrink-0">
+            <span className="w-5 h-5 rounded-full bg-accent-soft text-accent-soft-foreground font-bold text-[10px] flex items-center justify-center border border-accent/40 shrink-0">
               C{index + 1}
             </span>
             <div className="flex items-center gap-1.5 min-w-0">
-              <Wifi className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-              <span className="font-semibold text-white truncate">ESP32 Wi-Fi / AP Mode</span>
-              <span className="px-1.5 py-0.2 rounded bg-sky-950 text-sky-300 text-[10px] border border-sky-800/60 font-mono shrink-0">
+              <Wifi className="w-3.5 h-3.5 text-accent shrink-0" />
+              <span className="font-semibold text-foreground truncate">ESP32 Wi-Fi / AP Mode</span>
+              <span className="px-1.5 py-0.2 rounded bg-accent-soft text-accent-soft-foreground text-[10px] border border-accent/30 font-mono shrink-0">
                 {prop}
               </span>
             </div>
@@ -433,14 +433,14 @@ export function ConditionNodeEditor({
         </div>
 
         {!collapsed && (
-          <div className="space-y-2 pt-1 border-t border-slate-900">
+          <div className="space-y-2 pt-1 border-t border-separator">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
-                <label className="block text-[10px] font-sans text-slate-400 mb-1">Device Property</label>
+                <label className="block text-[10px] font-sans text-muted mb-1">Device Property</label>
                 <select
                   value={prop}
                   onChange={e => onUpdate({ ...cond, device_property: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-sky-300 font-sans"
+                  className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-accent font-sans"
                 >
                   <option value="wifi_ssid">Connected Wi-Fi SSID</option>
                   <option value="wifi_connected">Wi-Fi Station Connection Status</option>
@@ -454,12 +454,12 @@ export function ConditionNodeEditor({
               {prop === 'wifi_ssid' && (
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-sans text-slate-400">Target Network SSID</label>
+                    <label className="block text-[10px] font-sans text-muted">Target Network SSID</label>
                     {liveWifiStatus?.sta_connected && (
                       <button
                         type="button"
                         onClick={() => onUpdate({ ...cond, target_string: liveWifiStatus.sta_ssid })}
-                        className="text-[10px] text-sky-400 hover:text-sky-300 underline font-mono flex items-center gap-0.5 cursor-pointer"
+                        className="text-[10px] text-accent hover:underline font-mono flex items-center gap-0.5 cursor-pointer"
                         title="Use current connected SSID"
                       >
                         📍 Use '{liveWifiStatus.sta_ssid}'
@@ -470,7 +470,7 @@ export function ConditionNodeEditor({
                     <select
                       value={cond.operator || 'equal'}
                       onChange={e => onUpdate({ ...cond, operator: e.target.value })}
-                      className="bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 font-mono w-24 shrink-0"
+                      className="bg-surface-tertiary border border-border rounded px-1.5 py-1 text-foreground font-mono w-24 shrink-0"
                     >
                       <option value="equal">== (Is)</option>
                       <option value="not_equal">!= (Not)</option>
@@ -480,7 +480,7 @@ export function ConditionNodeEditor({
                       value={cond.target_string || ''}
                       onChange={e => onUpdate({ ...cond, target_string: e.target.value })}
                       placeholder="e.g. Home_WiFi"
-                      className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                      className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground"
                     />
                   </div>
                 </div>
@@ -488,11 +488,11 @@ export function ConditionNodeEditor({
 
               {prop === 'wifi_connected' && (
                 <div>
-                  <label className="block text-[10px] font-sans text-slate-400 mb-1">Expected Status</label>
+                  <label className="block text-[10px] font-sans text-muted mb-1">Expected Status</label>
                   <select
                     value={cond.target_bool !== false ? 'true' : 'false'}
                     onChange={e => onUpdate({ ...cond, target_bool: e.target.value === 'true' })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                    className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground"
                   >
                     <option value="true">Connected to a Wi-Fi Network</option>
                     <option value="false">Disconnected (No Network)</option>
@@ -503,23 +503,23 @@ export function ConditionNodeEditor({
               {prop === 'wifi_rssi' && (
                 <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[10px] font-sans text-slate-400 mb-1">Target Network SSID (Optional)</label>
+                    <label className="block text-[10px] font-sans text-muted mb-1">Target Network SSID (Optional)</label>
                     <input
                       type="text"
                       value={cond.target_string || ''}
                       onChange={e => onUpdate({ ...cond, target_string: e.target.value })}
                       placeholder="e.g. Home_WiFi (blank = any connected network)"
-                      className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                      className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground"
                     />
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-[10px] font-sans text-slate-400">Signal RSSI Threshold</label>
+                      <label className="block text-[10px] font-sans text-muted">Signal RSSI Threshold</label>
                       {liveWifiStatus?.sta_connected && (
                         <button
                           type="button"
                           onClick={() => onUpdate({ ...cond, target_rssi: liveWifiStatus.sta_rssi })}
-                          className="text-[10px] text-sky-400 hover:text-sky-300 underline font-mono flex items-center gap-0.5 cursor-pointer"
+                          className="text-[10px] text-accent hover:underline font-mono flex items-center gap-0.5 cursor-pointer"
                           title="Populate with current live station RSSI"
                         >
                           📍 Use {liveWifiStatus.sta_rssi} dBm
@@ -530,7 +530,7 @@ export function ConditionNodeEditor({
                       <select
                         value={cond.operator || 'greater_than'}
                         onChange={e => onUpdate({ ...cond, operator: e.target.value })}
-                        className="bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 font-mono w-28 shrink-0"
+                        className="bg-surface-tertiary border border-border rounded px-1.5 py-1 text-foreground font-mono w-28 shrink-0"
                       >
                         <option value="greater_than">&gt; (Stronger than)</option>
                         <option value="less_than">&lt; (Weaker than)</option>
@@ -539,9 +539,9 @@ export function ConditionNodeEditor({
                         type="number"
                         value={cond.target_rssi ?? -65}
                         onChange={e => onUpdate({ ...cond, target_rssi: parseInt(e.target.value) || 0 })}
-                        className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-sky-300 font-mono font-bold text-center"
+                        className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-accent font-mono font-bold text-center"
                       />
-                      <span className="text-[10px] text-slate-500 shrink-0">dBm</span>
+                      <span className="text-[10px] text-muted shrink-0">dBm</span>
                     </div>
                   </div>
                 </div>
@@ -549,11 +549,11 @@ export function ConditionNodeEditor({
 
               {prop === 'wifi_mode' && (
                 <div>
-                  <label className="block text-[10px] font-sans text-slate-400 mb-1">Expected Mode</label>
+                  <label className="block text-[10px] font-sans text-muted mb-1">Expected Mode</label>
                   <select
                     value={cond.target_string || 'ap'}
                     onChange={e => onUpdate({ ...cond, target_string: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                    className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground"
                   >
                     <option value="ap">In SoftAP Mode (Standalone Hotspot)</option>
                     <option value="sta">Connected as Client (Station Mode)</option>
@@ -564,13 +564,13 @@ export function ConditionNodeEditor({
 
               {prop === 'ap_client_connected' && (
                 <div>
-                  <label className="block text-[10px] font-sans text-slate-400 mb-1">Client MAC Address (Optional)</label>
+                  <label className="block text-[10px] font-sans text-muted mb-1">Client MAC Address (Optional)</label>
                   <input
                     type="text"
                     value={cond.target_string || ''}
                     onChange={e => onUpdate({ ...cond, target_string: e.target.value })}
                     placeholder="e.g. AA:BB:CC:DD:EE:FF (blank = any client)"
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-mono"
+                    className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground font-mono"
                   />
                 </div>
               )}
@@ -578,22 +578,22 @@ export function ConditionNodeEditor({
               {prop === 'ap_client_rssi' && (
                 <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[10px] font-sans text-slate-400 mb-1">Client MAC Filter</label>
+                    <label className="block text-[10px] font-sans text-muted mb-1">Client MAC Filter</label>
                     <input
                       type="text"
                       value={cond.target_string || ''}
                       onChange={e => onUpdate({ ...cond, target_string: e.target.value })}
                       placeholder="e.g. AA:BB:CC:DD:EE:FF (or blank for closest)"
-                      className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-mono"
+                      className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground font-mono"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-sans text-slate-400 mb-1">Proximity RSSI Threshold</label>
+                    <label className="block text-[10px] font-sans text-muted mb-1">Proximity RSSI Threshold</label>
                     <div className="flex items-center gap-1">
                       <select
                         value={cond.operator || 'greater_than'}
                         onChange={e => onUpdate({ ...cond, operator: e.target.value })}
-                        className="bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 font-mono w-28 shrink-0"
+                        className="bg-surface-tertiary border border-border rounded px-1.5 py-1 text-foreground font-mono w-28 shrink-0"
                       >
                         <option value="greater_than">&gt; (Closer than)</option>
                         <option value="less_than">&lt; (Further than)</option>
@@ -602,9 +602,9 @@ export function ConditionNodeEditor({
                         type="number"
                         value={cond.target_rssi ?? -65}
                         onChange={e => onUpdate({ ...cond, target_rssi: parseInt(e.target.value) || 0 })}
-                        className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-sky-300 font-mono font-bold text-center"
+                        className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-accent font-mono font-bold text-center"
                       />
-                      <span className="text-[10px] text-slate-500 shrink-0">dBm</span>
+                      <span className="text-[10px] text-muted shrink-0">dBm</span>
                     </div>
                   </div>
                 </div>
@@ -613,24 +613,24 @@ export function ConditionNodeEditor({
 
             {/* Optional RSSI Filter for wifi_connected or wifi_ssid */}
             {(prop === 'wifi_connected' || prop === 'wifi_ssid') && (
-              <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-900/60 font-mono text-[11px] flex-wrap">
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-separator font-mono text-[11px] flex-wrap">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-sans text-slate-400">Signal RSSI Filter (Optional):</span>
+                  <span className="text-[10px] font-sans text-muted">Signal RSSI Filter (Optional):</span>
                   <input
                     type="number"
                     value={cond.target_rssi ?? 0}
                     onChange={e => onUpdate({ ...cond, target_rssi: parseInt(e.target.value) || 0 })}
                     placeholder="0 = ignore, e.g. -65"
-                    className="w-20 bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-sky-300 font-mono font-bold text-center text-[11px]"
+                    className="w-20 bg-surface-tertiary border border-border rounded px-2 py-0.5 text-accent font-mono font-bold text-center text-[11px]"
                   />
-                  <span className="text-[10px] text-slate-500 font-mono">dBm</span>
-                  <span className="text-[10px] text-slate-500 font-sans hidden sm:inline">(0 = check connection only)</span>
+                  <span className="text-[10px] text-muted font-mono">dBm</span>
+                  <span className="text-[10px] text-muted font-sans hidden sm:inline">(0 = check connection only)</span>
                 </div>
                 {liveWifiStatus?.sta_connected && (
                   <button
                     type="button"
                     onClick={() => onUpdate({ ...cond, target_rssi: liveWifiStatus.sta_rssi })}
-                    className="px-2 py-0.5 rounded bg-sky-950 hover:bg-sky-900 text-sky-300 border border-sky-800 text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                    className="px-2 py-0.5 rounded bg-accent-soft hover:bg-accent/20 text-accent-soft-foreground border border-accent/30 text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
                     title="Populate with current live station signal"
                   >
                     📍 Set to Current ({liveWifiStatus.sta_rssi} dBm)
@@ -640,24 +640,24 @@ export function ConditionNodeEditor({
             )}
 
             {/* Live Station Telemetry Bar */}
-            <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-900/60 font-mono text-[11px] flex-wrap">
+            <div className="flex items-center justify-between gap-2 pt-1 border-t border-separator font-mono text-[11px] flex-wrap">
               <div className="flex items-center gap-1.5">
-                <Wifi className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                <span className="text-[10px] font-sans text-slate-400">Live Station Status:</span>
+                <Wifi className="w-3.5 h-3.5 text-accent shrink-0" />
+                <span className="text-[10px] font-sans text-muted">Live Station Status:</span>
                 {liveWifiStatus?.sta_connected ? (
-                  <span className="px-1.5 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-800/80 font-bold flex items-center gap-1 text-[10px]">
-                    <Signal className="w-3 h-3 text-sky-400 animate-pulse" />
+                  <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent-soft-foreground border border-accent/30 font-bold flex items-center gap-1 text-[10px]">
+                    <Signal className="w-3 h-3 text-accent animate-pulse" />
                     {liveWifiStatus.sta_rssi} dBm ({liveWifiStatus.sta_ssid})
                   </span>
                 ) : (
-                  <span className="text-slate-500 text-[10px]">Disconnected</span>
+                  <span className="text-muted text-[10px]">Disconnected</span>
                 )}
               </div>
               {liveWifiStatus?.sta_connected && prop === 'wifi_rssi' && (
                 <button
                   type="button"
                   onClick={() => onUpdate({ ...cond, target_rssi: liveWifiStatus.sta_rssi })}
-                  className="px-2 py-0.5 rounded bg-sky-950 hover:bg-sky-900 text-sky-300 border border-sky-800 text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                  className="px-2 py-0.5 rounded bg-accent-soft hover:bg-accent/20 text-accent-soft-foreground border border-accent/30 text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
                   title="Autopopulate RSSI threshold with current station signal"
                 >
                   📍 Auto-Populate Current ({liveWifiStatus.sta_rssi} dBm)
@@ -676,23 +676,23 @@ export function ConditionNodeEditor({
     const currentMode = isDeviceMode ? 'paired_device' : 'phone_beacon';
 
     return (
-      <div className="p-2.5 sm:p-3 rounded-xl bg-slate-950 border border-purple-900/60 space-y-2 text-xs min-w-0 overflow-hidden">
+      <div className="p-2.5 sm:p-3 rounded-xl bg-surface-secondary border border-purple-500/40 space-y-2 text-xs min-w-0 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
+              className="text-muted hover:text-foreground transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
-            <span className="w-5 h-5 rounded-full bg-purple-950 text-purple-300 font-bold text-[10px] flex items-center justify-center border border-purple-800 shrink-0">
+            <span className="w-5 h-5 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-400 font-bold text-[10px] flex items-center justify-center border border-purple-500/40 shrink-0">
               C{index + 1}
             </span>
             <div className="flex items-center gap-1.5 min-w-0">
-              <Bluetooth className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-              <span className="font-semibold text-white truncate">Bluetooth Presence</span>
-              <span className="px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 text-[10px] border border-purple-800/60 font-mono shrink-0">
+              <Bluetooth className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+              <span className="font-semibold text-foreground truncate">Bluetooth Presence</span>
+              <span className="px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-600 dark:text-purple-400 text-[10px] border border-purple-500/30 font-mono shrink-0">
                 {currentMode === 'phone_beacon'
                   ? (cond.target_bool !== false && cond.device_property !== 'away' ? 'Beacon Present' : 'Beacon Absent (Away)')
                   : (cond.target_bool !== false && cond.device_property !== 'away' && cond.device_property !== 'disconnected' ? 'Device Connected (Present)' : 'Device Disconnected (Away)')}
@@ -705,10 +705,10 @@ export function ConditionNodeEditor({
         </div>
 
         {!collapsed && (
-          <div className="space-y-2 pt-1 border-t border-slate-900">
+          <div className="space-y-2 pt-1 border-t border-separator">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px] items-end">
               <div className="flex flex-col justify-end">
-                <label className="block text-[10px] font-sans text-slate-400 mb-1">Check Target</label>
+                <label className="block text-[10px] font-sans text-muted mb-1">Check Target</label>
                 <select
                   value={currentMode}
                   onChange={e => {
@@ -729,7 +729,7 @@ export function ConditionNodeEditor({
                       });
                     }
                   }}
-                  className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-purple-300 font-sans box-border"
+                  className="w-full h-8 bg-surface-tertiary border border-border rounded px-2 text-purple-600 dark:text-purple-400 font-sans box-border"
                 >
                   <option value="phone_beacon">Phone iBeacon / Key Fob</option>
                   <option value="paired_device">Paired Bluetooth Device</option>
@@ -737,7 +737,7 @@ export function ConditionNodeEditor({
               </div>
 
               <div className="flex flex-col justify-end">
-                <label className="block text-[10px] font-sans text-slate-400 mb-1">Expected State</label>
+                <label className="block text-[10px] font-sans text-muted mb-1">Expected State</label>
                 {currentMode === 'phone_beacon' ? (
                   <select
                     value={cond.target_bool !== false && cond.device_property !== 'away' ? 'true' : 'false'}
@@ -749,7 +749,7 @@ export function ConditionNodeEditor({
                         device_property: isTrue ? 'present' : 'away'
                       });
                     }}
-                    className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-slate-200 box-border"
+                    className="w-full h-8 bg-surface-tertiary border border-border rounded px-2 text-foreground box-border"
                   >
                     <option value="true">Beacon is Present (Near Car)</option>
                     <option value="false">Beacon is Absent (Away)</option>
@@ -765,7 +765,7 @@ export function ConditionNodeEditor({
                         device_property: isTrue ? 'connected' : 'disconnected'
                       });
                     }}
-                    className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-slate-200 box-border"
+                    className="w-full h-8 bg-surface-tertiary border border-border rounded px-2 text-foreground box-border"
                   >
                     <option value="true">Device is Connected (Present)</option>
                     <option value="false">Device is Disconnected (Away)</option>
@@ -823,33 +823,33 @@ export function ConditionNodeEditor({
               const liveRssi = matchedBle?.rssi;
 
               return (
-                <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-900/60 font-mono text-[11px] flex-wrap">
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-separator font-mono text-[11px] flex-wrap">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-sans text-slate-400">Min RSSI Filter:</span>
+                    <span className="text-[10px] font-sans text-muted">Min RSSI Filter:</span>
                     <input
                       type="number"
                       value={cond.target_rssi ?? 0}
                       onChange={e => onUpdate({ ...cond, target_rssi: parseInt(e.target.value) || 0 })}
                       placeholder="0 = ignore, -70 = in car"
-                      className="w-20 bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-purple-300 font-mono font-bold text-center text-[11px]"
+                      className="w-20 bg-surface-tertiary border border-border rounded px-2 py-0.5 text-purple-600 dark:text-purple-400 font-mono font-bold text-center text-[11px]"
                     />
-                    <span className="text-[10px] text-slate-500 font-mono">dBm</span>
+                    <span className="text-[10px] text-muted font-mono">dBm</span>
                     {cond.target_bool === false || cond.device_property === 'away' ? (
-                      <span className="text-[10px] text-amber-400 font-sans hidden sm:inline">(Ignored when checking Absent/Away)</span>
+                      <span className="text-[10px] text-warning font-sans hidden sm:inline">(Ignored when checking Absent/Away)</span>
                     ) : liveRssi !== undefined && liveRssi !== 0 ? (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 text-[10px] font-bold">
-                        <Signal className="w-3 h-3 text-purple-400 animate-pulse" />
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30 text-[10px] font-bold">
+                        <Signal className="w-3 h-3 animate-pulse" />
                         Live: {liveRssi} dBm
                       </span>
                     ) : (
-                      <span className="text-[10px] text-slate-500 font-sans hidden sm:inline">(0 = presence only)</span>
+                      <span className="text-[10px] text-muted font-sans hidden sm:inline">(0 = presence only)</span>
                     )}
                   </div>
                   {liveRssi !== undefined && liveRssi !== 0 && (
                     <button
                       type="button"
                       onClick={() => onUpdate({ ...cond, target_rssi: liveRssi })}
-                      className="px-2 py-0.5 rounded bg-purple-950 hover:bg-purple-900 text-purple-300 border border-purple-800 text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                      className="px-2 py-0.5 rounded bg-purple-500/15 hover:bg-purple-500/25 text-purple-600 dark:text-purple-400 border border-purple-500/30 text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
                       title="Set condition threshold to current live RSSI"
                     >
                       📍 Set to Current ({liveRssi} dBm)
@@ -869,23 +869,23 @@ export function ConditionNodeEditor({
     const btn = cond.ble_button || cond.target_string || 'volume_up';
     const act = cond.ble_action || 'press';
     return (
-      <div className="p-2.5 sm:p-3 rounded-xl bg-slate-950 border border-blue-900/60 space-y-2 text-xs min-w-0 overflow-hidden">
+      <div className="p-2.5 sm:p-3 rounded-xl bg-surface-secondary border border-accent/40 space-y-2 text-xs min-w-0 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
+              className="text-muted hover:text-foreground transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
-            <span className="w-5 h-5 rounded-full bg-blue-950 text-blue-300 font-bold text-[10px] flex items-center justify-center border border-blue-800 shrink-0">
+            <span className="w-5 h-5 rounded-full bg-accent-soft text-accent-soft-foreground font-bold text-[10px] flex items-center justify-center border border-accent/40 shrink-0">
               C{index + 1}
             </span>
             <div className="flex items-center gap-1.5 min-w-0">
-              <Bluetooth className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-              <span className="font-semibold text-white truncate">Bluetooth Button / Combo</span>
-              <span className="px-1.5 py-0.2 rounded bg-blue-950 text-blue-300 text-[10px] border border-blue-800/60 font-mono shrink-0">
+              <Bluetooth className="w-3.5 h-3.5 text-accent shrink-0" />
+              <span className="font-semibold text-foreground truncate">Bluetooth Button / Combo</span>
+              <span className="px-1.5 py-0.2 rounded bg-accent-soft text-accent-soft-foreground text-[10px] border border-accent/30 font-mono shrink-0">
                 {btn} • {act}
               </span>
             </div>
@@ -896,7 +896,7 @@ export function ConditionNodeEditor({
         </div>
 
         {!collapsed && (
-          <div className="space-y-2 pt-1 border-t border-slate-900">
+          <div className="space-y-2 pt-1 border-t border-separator">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px] items-end">
               <div className="flex flex-col justify-end">
                 <BleButtonComboPicker
@@ -906,11 +906,11 @@ export function ConditionNodeEditor({
                 />
               </div>
               <div className="flex flex-col justify-end">
-                <label className="block text-[10px] font-sans text-slate-400 mb-1">Action Event</label>
+                <label className="block text-[10px] font-sans text-muted mb-1">Action Event</label>
                 <select
                   value={act}
                   onChange={e => onUpdate({ ...cond, ble_action: e.target.value })}
-                  className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-slate-200 font-sans box-border"
+                  className="w-full h-8 bg-surface-tertiary border border-border rounded px-2 text-foreground font-sans box-border"
                 >
                   <option value="press">Press (or Combo)</option>
                   <option value="release">Release</option>
@@ -996,21 +996,21 @@ export function ConditionNodeEditor({
   const activeCondOptionLabel = (cond.option_label || matchedOption?.label || '').toLowerCase().trim();
 
   return (
-    <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 hover:border-slate-700/80 space-y-2.5 text-xs transition-all shadow-sm min-w-0 overflow-hidden">
+    <div className="p-2.5 sm:p-3.5 rounded-xl bg-surface-secondary border border-border hover:border-border-secondary space-y-2.5 text-xs transition-all shadow-sm min-w-0 overflow-hidden">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}
-            className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
+            className="text-muted hover:text-foreground transition p-0.5 shrink-0"
           >
             {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </button>
-          <span className="w-5 h-5 rounded-full bg-purple-950 text-purple-300 font-bold text-[10px] flex items-center justify-center border border-purple-800 shrink-0">
+          <span className="w-5 h-5 rounded-full bg-accent-soft text-accent-soft-foreground font-bold text-[10px] flex items-center justify-center border border-accent/40 shrink-0">
             C{index + 1}
           </span>
-          <span className="font-semibold text-white text-xs sm:text-sm tracking-tight truncate">{conditionName}</span>
+          <span className="font-semibold text-foreground text-xs sm:text-sm tracking-tight truncate">{conditionName}</span>
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
@@ -1022,12 +1022,12 @@ export function ConditionNodeEditor({
                   onClick={() => setMultiSelectMode(!multiSelectMode)}
                   className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
                     multiSelectMode
-                      ? 'bg-purple-950/80 text-purple-200 border-purple-500 shadow-sm ring-1 ring-purple-500/50 font-semibold'
-                      : 'bg-slate-900 text-slate-400 hover:text-slate-200 border-slate-800 hover:bg-slate-850'
+                      ? 'bg-accent-soft text-accent-soft-foreground border-accent shadow-sm ring-1 ring-accent/40 font-semibold'
+                      : 'bg-surface-tertiary text-muted hover:text-foreground border-border hover:bg-default-hover'
                   }`}
                   title="Toggle multi-state selection (e.g. check multiple doors simultaneously)"
                 >
-                  <CheckSquare className="w-3.5 h-3.5 text-purple-400" />
+                  <CheckSquare className="w-3.5 h-3.5 text-accent" />
                   <span className="hidden xs:inline sm:inline">{multiSelectMode ? 'Multi-State' : 'Multi-Select'}</span>
                 </button>
               )}
@@ -1036,12 +1036,12 @@ export function ConditionNodeEditor({
                 onClick={() => setShowAdvanced(!showAdvanced)}
                 className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
                   showAdvanced
-                    ? 'bg-purple-950/60 text-purple-300 border-purple-800/80 shadow'
-                    : 'bg-slate-900 text-slate-300 hover:text-white border-slate-800 hover:bg-slate-850'
+                    ? 'bg-accent-soft text-accent-soft-foreground border-accent/60 shadow'
+                    : 'bg-surface-tertiary text-muted hover:text-foreground border-border hover:bg-default-hover'
                 }`}
                 title="Toggle configuration details"
               >
-                <Sliders className="w-3.5 h-3.5 text-purple-400" />
+                <Sliders className="w-3.5 h-3.5 text-accent" />
                 <span className="hidden xs:inline sm:inline">{showAdvanced ? 'Simple' : 'Details'}</span>
               </button>
             </>
@@ -1087,13 +1087,13 @@ export function ConditionNodeEditor({
                         entityStates
                       );
 
-                      let pillStyle = 'bg-slate-900/90 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border-slate-800';
+                      let pillStyle = 'bg-surface-tertiary text-muted hover:text-foreground hover:bg-default-hover border-border';
                       if (isSelected && isLiveValid) {
-                        pillStyle = 'bg-purple-950/60 text-purple-200 border-emerald-400 font-semibold shadow-md shadow-emerald-950/50 ring-2 ring-emerald-500/70';
+                        pillStyle = 'bg-accent-soft text-accent-soft-foreground border-success font-semibold shadow-sm ring-2 ring-success/60';
                       } else if (isSelected) {
-                        pillStyle = 'bg-purple-500/20 text-purple-200 border-purple-500/80 font-semibold shadow-sm ring-1 ring-purple-500/40';
+                        pillStyle = 'bg-accent-soft text-accent-soft-foreground border-accent/70 font-semibold shadow-sm ring-1 ring-accent/35';
                       } else if (isLiveValid) {
-                        pillStyle = 'bg-emerald-950/40 text-emerald-300 border-emerald-500/80 font-medium shadow-sm shadow-emerald-950/40 ring-1 ring-emerald-500/50';
+                        pillStyle = 'bg-success-soft text-success-soft-foreground border-success/70 font-medium shadow-sm ring-1 ring-success/40';
                       }
 
                       return (
@@ -1123,14 +1123,14 @@ export function ConditionNodeEditor({
                         >
                           {isMulti && (
                             <span className={`w-3.5 h-3.5 rounded flex items-center justify-center border text-[9px] shrink-0 ${
-                              isSelected ? 'bg-purple-600 border-purple-400 text-white font-bold' : 'border-slate-700 bg-slate-900/60 text-transparent'
+                              isSelected ? 'bg-accent border-accent text-accent-foreground font-bold' : 'border-border bg-surface-secondary text-transparent'
                             }`}>
                               ✓
                             </span>
                           )}
                           <span className="truncate">{opt.label}</span>
                           {isLiveValid && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" title="Matches current live vehicle state" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse shrink-0" title="Matches current live vehicle state" />
                           )}
                         </button>
                       );
@@ -1143,24 +1143,24 @@ export function ConditionNodeEditor({
 
       {/* Advanced Details View */}
       {(!hasOptions || showAdvanced) && (
-        <div className={`space-y-3 ${hasOptions ? 'pt-2.5 border-t border-slate-850' : ''}`}>
+        <div className={`space-y-3 ${hasOptions ? 'pt-2.5 border-t border-separator' : ''}`}>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 font-mono text-[11px]">
             <div className="col-span-1">
-              <label className="block text-[10px] font-sans text-slate-500">CAN ID</label>
+              <label className="block text-[10px] font-sans text-muted">CAN ID</label>
               <input
                 type="text"
                 value={effectiveCondCanId}
                 onChange={e => onUpdate({ ...cond, can_id: e.target.value })}
                 placeholder="0x120"
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground"
               />
             </div>
             <div className="col-span-1">
-              <label className="block text-[10px] font-sans text-slate-500">Bus</label>
+              <label className="block text-[10px] font-sans text-muted">Bus</label>
               <select
                 value={effectiveCondBus}
                 onChange={e => onUpdate({ ...cond, bus: parseInt(e.target.value) || 0 })}
-                className="w-full bg-slate-900 border border-slate-800 rounded px-1 py-1 text-slate-200 font-sans"
+                className="w-full bg-surface-tertiary border border-border rounded px-1 py-1 text-foreground font-sans"
               >
                 <option value={0}>Bus 0</option>
                 <option value={1}>Bus 1</option>
@@ -1168,7 +1168,7 @@ export function ConditionNodeEditor({
               </select>
             </div>
             <div className="col-span-1">
-              <label className="block text-[10px] font-sans text-slate-500">Byte</label>
+              <label className="block text-[10px] font-sans text-muted">Byte</label>
               <input
                 type="text"
                 value={dKey}
@@ -1181,11 +1181,11 @@ export function ConditionNodeEditor({
                   });
                 }}
                 placeholder="D1"
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-purple-300 font-bold text-center"
+                className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-accent font-bold text-center"
               />
             </div>
             <div className="col-span-1">
-              <label className="block text-[10px] font-sans text-slate-500">Mask</label>
+              <label className="block text-[10px] font-sans text-muted">Mask</label>
               <input
                 type="text"
                 value={maskVal}
@@ -1197,11 +1197,11 @@ export function ConditionNodeEditor({
                   });
                 }}
                 placeholder="0xFF"
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-yellow-300 font-bold text-center"
+                className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-warning font-bold text-center"
               />
             </div>
             <div className="col-span-1">
-              <label className="block text-[10px] font-sans text-slate-500">Operator</label>
+              <label className="block text-[10px] font-sans text-muted">Operator</label>
               <select
                 value={opVal}
                 onChange={e => {
@@ -1211,7 +1211,7 @@ export function ConditionNodeEditor({
                     evaluate: { ...(cond.evaluate || { byte: dKey, mask: maskVal, value: targetVal }), operator: e.target.value }
                   });
                 }}
-                className="w-full bg-slate-900 border border-slate-800 rounded px-1 py-1 text-slate-200 font-sans"
+                className="w-full bg-surface-tertiary border border-border rounded px-1 py-1 text-foreground font-sans"
               >
                 <option value="equal">== (Equal)</option>
                 <option value="not_equal">!= (Not Equal)</option>
@@ -1222,7 +1222,7 @@ export function ConditionNodeEditor({
               </select>
             </div>
             <div className="col-span-2 sm:col-span-1">
-              <label className="block text-[10px] font-sans text-slate-500">Target Value</label>
+              <label className="block text-[10px] font-sans text-muted">Target Value</label>
               <input
                 type="text"
                 value={targetVal}
@@ -1236,7 +1236,7 @@ export function ConditionNodeEditor({
                   });
                 }}
                 placeholder="0x01"
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-purple-300 font-bold text-center"
+                className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-accent font-bold text-center"
               />
             </div>
           </div>
@@ -1284,14 +1284,14 @@ export function ConditionListEditor({
     <div className="space-y-2 min-w-0">
       {label && (
         <div className="flex items-center justify-between gap-2 min-w-0">
-          <span className="text-purple-300 font-bold text-[11px] uppercase tracking-wider truncate">
+          <span className="text-accent font-bold text-[11px] uppercase tracking-wider truncate">
             {label} ({conditions.length})
           </span>
         </div>
       )}
 
       {conditions.length === 0 ? (
-        <div className="p-3 rounded-xl bg-slate-950/40 border border-dashed border-slate-800 text-center text-xs text-slate-500 italic">
+        <div className="p-3 rounded-xl bg-surface-secondary/60 border border-dashed border-border text-center text-xs text-muted italic">
           {emptyText}
         </div>
       ) : (
@@ -1372,10 +1372,10 @@ export function ConditionListEditor({
               const pasted = pastePayload('condition');
               if (pasted) onUpdate([...conditions, pasted]);
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-950/60 hover:bg-purple-900/60 text-purple-200 border border-purple-700/60 transition cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-accent-soft hover:bg-accent/20 text-accent-soft-foreground border border-accent/40 transition cursor-pointer"
             title={`Paste copied condition "${clipboard.label}"`}
           >
-            <ClipboardPaste className="w-3.5 h-3.5 text-purple-300" />
+            <ClipboardPaste className="w-3.5 h-3.5 text-accent" />
             <span>Paste Condition ({clipboard.label})</span>
           </button>
         )}
@@ -1387,10 +1387,10 @@ export function ConditionListEditor({
               const pasted = pastePayload('condition');
               if (pasted) onUpdate([...conditions, pasted]);
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-950/50 hover:bg-amber-900/50 text-amber-200 border border-amber-700/60 transition cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-warning-soft hover:bg-warning/20 text-warning-soft-foreground border border-warning/40 transition cursor-pointer"
             title={`Convert & paste copied trigger "${clipboard.label}" as condition`}
           >
-            <ClipboardPaste className="w-3.5 h-3.5 text-amber-300" />
+            <ClipboardPaste className="w-3.5 h-3.5 text-warning" />
             <span>Paste as Condition ({clipboard.label})</span>
           </button>
         )}

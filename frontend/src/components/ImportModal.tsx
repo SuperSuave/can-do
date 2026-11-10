@@ -235,19 +235,19 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
   return (
     <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
-      <ModalBackdrop variant="blur" className="bg-black/80 backdrop-blur-sm">
+      <ModalBackdrop variant="blur" className="bg-backdrop backdrop-blur-sm">
         <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
-          <ModalDialog className="relative w-full max-w-2xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+          <ModalDialog className="relative w-full max-w-2xl rounded-[16px] border border-border bg-overlay text-overlay-foreground shadow-overlay overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
             {/* Header */}
-            <ModalHeader className="flex items-center justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] gap-0">
+            <ModalHeader className="flex items-center justify-between p-5 border-b border-separator bg-surface-secondary gap-0">
               <div>
-                <ModalHeading className="text-lg font-bold text-white flex items-center gap-2">
-                  <Upload className="w-5 h-5 text-[var(--md-sys-color-primary)]" />
+                <ModalHeading className="text-lg font-bold text-foreground flex items-center gap-2">
+                  <Upload className="w-5 h-5 text-accent" />
                   Import Catalog or Vector DBC
                 </ModalHeading>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                  Upload a <code className="text-cyan-300">catalog.json</code> or industry-standard{' '}
-                  <code className="text-emerald-300">.dbc</code> database file.
+                <p className="text-xs text-muted mt-0.5">
+                  Upload a <code className="text-accent">catalog.json</code> or industry-standard{' '}
+                  <code className="text-success">.dbc</code> database file.
                 </p>
               </div>
               <Button
@@ -256,7 +256,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                 isIconOnly
                 onPress={onClose}
                 aria-label="Close modal"
-                className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-[var(--md-sys-color-surface-container-high)] transition"
+                className="p-1.5 text-muted hover:text-foreground rounded-full hover:bg-default-hover transition"
               >
                 <X className="w-5 h-5" />
               </Button>
@@ -273,14 +273,14 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             onDrop={handleDrop}
             className={`border-2 border-dashed rounded-[12px] p-6 text-center transition ${
               dragOver
-                ? 'border-[var(--md-sys-color-primary)] bg-[var(--md-sys-color-primary)]/10'
-                : 'border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] hover:border-slate-500'
+                ? 'border-accent bg-accent/10'
+                : 'border-border bg-surface-secondary hover:border-accent/50'
             }`}
           >
-            <FileCode className="w-8 h-8 text-[var(--md-sys-color-primary)] mx-auto mb-2" />
-            <p className="text-sm font-medium text-white mb-1">
-              Drag and drop your JSON or <span className="text-emerald-300 font-semibold">.DBC</span> file here, or{' '}
-              <label className="text-cyan-400 hover:underline cursor-pointer">
+            <FileCode className="w-8 h-8 text-accent mx-auto mb-2" />
+            <p className="text-sm font-medium text-foreground mb-1">
+              Drag and drop your JSON or <span className="text-success font-semibold">.DBC</span> file here, or{' '}
+              <label className="text-accent hover:underline cursor-pointer">
                 browse file
                 <input
                   type="file"
@@ -290,7 +290,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                 />
               </label>
             </p>
-            <p className="text-xs text-[var(--text-muted)]">
+            <p className="text-xs text-muted">
               Auto-detects CAN Do catalogs (.json) and Vector CAN Databases (.dbc)
             </p>
           </div>
@@ -298,15 +298,15 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           {/* Paste Raw Content */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-muted">
                 Or Paste JSON or Vector DBC Content Directly
               </label>
               {detectedFormat && (
                 <span
                   className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold uppercase ${
                     detectedFormat === 'dbc'
-                      ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800'
-                      : 'bg-cyan-950/80 text-cyan-300 border border-cyan-800'
+                      ? 'bg-success/15 text-success border border-success/30'
+                      : 'bg-accent/15 text-accent border border-accent/30'
                   }`}
                 >
                   Detected: {detectedFormat === 'dbc' ? 'Vector CAN DBC' : 'CAN Do JSON'}
@@ -321,18 +321,18 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                 setJsonText(e.target.value);
                 handleProcessRaw(e.target.value);
               }}
-              className="w-full p-3 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-xs text-cyan-200 placeholder-slate-600 focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+              className="w-full p-3 rounded-[8px] bg-surface-tertiary border border-border font-mono text-xs text-accent placeholder:text-field-placeholder focus:outline-none focus:border-focus"
             />
           </div>
 
           {/* DBC Conversion Banner */}
           {dbcStats && (
-            <div className="p-3.5 rounded-[10px] bg-emerald-950/40 border border-emerald-800/80 text-xs text-emerald-200 space-y-1">
-              <div className="font-bold text-white flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-emerald-400" />
+            <div className="p-3.5 rounded-[10px] bg-success/10 border border-success/30 text-xs text-foreground space-y-1">
+              <div className="font-bold text-foreground flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-success" />
                 Vector DBC Successfully Converted to CAN Do Catalog
               </div>
-              <div className="flex flex-wrap items-center gap-3 text-emerald-300/90 text-[11px] pt-1">
+              <div className="flex flex-wrap items-center gap-3 text-success text-[11px] pt-1">
                 <span>CAN Messages (`BO_`): <strong>{dbcStats.messageCount}</strong></span>
                 <span>Signals (`SG_`): <strong>{dbcStats.signalCount}</strong></span>
                 <span>Value Enums (`VAL_`): <strong>{dbcStats.valueTableCount}</strong></span>
@@ -343,7 +343,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
           {/* Error Banner */}
           {error && (
-            <div className="p-3 rounded-[10px] bg-rose-950/50 border border-rose-800 text-xs text-rose-200 flex items-center gap-2">
+            <div className="p-3 rounded-[10px] bg-danger/15 border border-danger/40 text-xs text-danger flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
@@ -351,40 +351,40 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
           {/* Diff preview */}
           {diff && parsedData && (
-            <div className="p-4 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] space-y-3">
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
+            <div className="p-4 rounded-[12px] bg-surface-secondary border border-border space-y-3">
+              <div className="flex items-center justify-between text-xs font-semibold text-foreground">
                 <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <CheckCircle2 className="w-4 h-4 text-success" />
                   Diff Analysis Preview
                 </span>
-                <span className="text-[var(--text-muted)] font-mono">
+                <span className="text-muted font-mono">
                   {diff.totalImported} command(s) processed
                 </span>
               </div>
 
               <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="p-2.5 rounded-[8px] bg-emerald-950/40 border border-emerald-800">
-                  <div className="text-lg font-bold text-emerald-300">+{diff.newCommands.length}</div>
-                  <div className="text-[11px] text-slate-400">New Commands</div>
+                <div className="p-2.5 rounded-[8px] bg-success/10 border border-success/30">
+                  <div className="text-lg font-bold text-success">+{diff.newCommands.length}</div>
+                  <div className="text-[11px] text-muted">New Commands</div>
                 </div>
-                <div className="p-2.5 rounded-[8px] bg-amber-950/40 border border-amber-800">
-                  <div className="text-lg font-bold text-amber-300">~{diff.modifiedCommands.length}</div>
-                  <div className="text-[11px] text-slate-400">Modified</div>
+                <div className="p-2.5 rounded-[8px] bg-warning/10 border border-warning/30">
+                  <div className="text-lg font-bold text-warning">~{diff.modifiedCommands.length}</div>
+                  <div className="text-[11px] text-muted">Modified</div>
                 </div>
-                <div className="p-2.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)]">
-                  <div className="text-lg font-bold text-slate-400">={diff.unchangedCount}</div>
-                  <div className="text-[11px] text-slate-400">Unchanged</div>
+                <div className="p-2.5 rounded-[8px] bg-surface-tertiary border border-border">
+                  <div className="text-lg font-bold text-muted">={diff.unchangedCount}</div>
+                  <div className="text-[11px] text-muted">Unchanged</div>
                 </div>
               </div>
 
               {diff.newCommands.length > 0 && (
-                <div className="text-xs text-slate-400 space-y-1">
-                  <span className="font-semibold text-emerald-400">New additions:</span>
+                <div className="text-xs text-muted space-y-1">
+                  <span className="font-semibold text-success">New additions:</span>
                   <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
                     {diff.newCommands.map(c => (
                       <span
                         key={c.id}
-                        className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800"
+                        className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-success/15 text-success border border-success/30"
                       >
                         {c.name} ({c.id})
                       </span>
@@ -394,13 +394,13 @@ export const ImportModal: React.FC<ImportModalProps> = ({
               )}
 
               {diff.modifiedCommands.length > 0 && (
-                <div className="text-xs text-slate-400 space-y-1">
-                  <span className="font-semibold text-amber-400">Updates to existing:</span>
+                <div className="text-xs text-muted space-y-1">
+                  <span className="font-semibold text-warning">Updates to existing:</span>
                   <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
                     {diff.modifiedCommands.map(({ updated }) => (
                       <span
                         key={updated.id}
-                        className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-amber-950 text-amber-300 border border-amber-800"
+                        className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-warning/15 text-warning border border-warning/30"
                       >
                         {updated.name} ({updated.id})
                       </span>
@@ -413,7 +413,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         </ModalBody>
 
         {/* Modal Footer */}
-        <ModalFooter className="flex items-center justify-between p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
+        <ModalFooter className="flex items-center justify-between p-4 px-6 border-t border-separator bg-surface-secondary shrink-0">
           <Button
             variant="outline"
             size="sm"
@@ -431,16 +431,16 @@ export const ImportModal: React.FC<ImportModalProps> = ({
               onPress={() => handleApply('merge')}
               className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold shadow transition ${
                 parsedData
-                  ? 'bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white'
-                  : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                  ? 'bg-accent hover:opacity-90 text-accent-foreground'
+                  : 'bg-surface-tertiary text-muted cursor-not-allowed'
               }`}
             >
               <RefreshCw className="w-3.5 h-3.5" />
               Merge into Catalog
             </Button>
             {confirmReplace ? (
-              <div className="flex items-center gap-1.5 bg-rose-950/90 border border-rose-700/80 px-2.5 py-1 rounded-lg text-xs">
-                <span className="text-xs text-rose-200 font-semibold">Overwrite all?</span>
+              <div className="flex items-center gap-1.5 bg-danger/15 border border-danger/40 px-2.5 py-1 rounded-lg text-xs">
+                <span className="text-xs text-danger font-semibold">Overwrite all?</span>
                 <Button
                   variant="danger"
                   size="sm"
@@ -448,7 +448,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                     handleApply('replace');
                     setConfirmReplace(false);
                   }}
-                  className="px-2 py-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-xs transition"
+                  className="px-2 py-0.5 bg-danger hover:opacity-90 text-danger-foreground rounded font-bold text-xs transition"
                 >
                   Yes, Replace
                 </Button>
@@ -456,7 +456,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                   variant="secondary"
                   size="sm"
                   onPress={() => setConfirmReplace(false)}
-                  className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs transition"
+                  className="px-2 py-0.5 bg-surface-tertiary hover:bg-default-hover text-foreground rounded text-xs transition"
                 >
                   Cancel
                 </Button>
@@ -467,7 +467,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                 size="sm"
                 isDisabled={!parsedData}
                 onPress={() => setConfirmReplace(true)}
-                className={`dash-outline-btn px-3 py-2 text-xs font-medium text-rose-300 border-rose-800/60 hover:bg-rose-950/40 ${
+                className={`dash-outline-btn px-3 py-2 text-xs font-medium text-danger border-danger/40 hover:bg-danger/15 ${
                   !parsedData ? 'opacity-40 cursor-not-allowed' : ''
                 }`}
               >

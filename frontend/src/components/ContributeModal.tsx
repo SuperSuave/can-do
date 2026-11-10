@@ -136,22 +136,22 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
 
   return (
     <Modal isOpen={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
-      <ModalBackdrop variant="blur" className="bg-black/80 backdrop-blur-sm">
+      <ModalBackdrop variant="blur" className="bg-backdrop backdrop-blur-sm">
         <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
-          <ModalDialog className="relative w-full max-w-3xl rounded-[16px] border border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-heading)] shadow-2xl overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+          <ModalDialog className="relative w-full max-w-3xl rounded-[16px] border border-border bg-overlay text-overlay-foreground shadow-overlay overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
             {/* Header */}
-            <ModalHeader className="flex items-start justify-between p-5 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] gap-0">
+            <ModalHeader className="flex items-start justify-between p-5 border-b border-separator bg-surface-secondary gap-0">
               <div>
                 <div className="flex items-center gap-3">
-                  <div className="h-7 px-1.5 py-0.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] flex items-center justify-center">
+                  <div className="h-7 px-1.5 py-0.5 rounded-[8px] bg-surface-tertiary border border-border flex items-center justify-center">
                     <CanDoLogo className="h-4.5 w-auto" />
                   </div>
-                  <ModalHeading className="text-lg md:text-xl font-bold text-white">
+                  <ModalHeading className="text-lg md:text-xl font-bold text-foreground">
                     Contribute to CAN Do Message Catalog
                   </ModalHeading>
                 </div>
-                <p className="text-xs text-[var(--text-muted)] mt-1">
-                  Submit your proposed CAN messages to <code className="text-cyan-300">{configState.owner}/{configState.repo}</code> on GitHub.
+                <p className="text-xs text-muted mt-1">
+                  Submit your proposed CAN messages to <code className="text-accent">{configState.owner}/{configState.repo}</code> on GitHub.
                 </p>
               </div>
 
@@ -172,7 +172,7 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
               isIconOnly
               onPress={onClose}
               aria-label="Close modal"
-              className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-[var(--md-sys-color-surface-container-high)] transition"
+              className="p-1.5 text-muted hover:text-foreground rounded-full hover:bg-default-hover transition"
             >
               <X className="w-5 h-5" />
             </Button>
@@ -181,43 +181,43 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
 
         {/* Repository Settings Panel */}
         {showConfig && (
-          <div className="p-4 bg-[var(--md-sys-color-surface-container-low)] border-b border-[var(--border-color)] text-xs space-y-3">
-            <div className="font-semibold text-slate-200">Target GitHub Repository Configuration:</div>
+          <div className="p-4 bg-surface-secondary border-b border-separator text-xs space-y-3">
+            <div className="font-semibold text-foreground">Target GitHub Repository Configuration:</div>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
-                <label className="block text-slate-400 mb-1">Owner / Org</label>
+                <label className="block text-muted mb-1">Owner / Org</label>
                 <input
                   type="text"
                   value={configState.owner}
                   onChange={e => setConfigState({ ...configState, owner: e.target.value })}
-                  className="w-full px-2.5 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-white font-mono"
+                  className="w-full px-2.5 py-1.5 rounded-[8px] bg-surface-tertiary border border-border text-foreground font-mono focus:outline-none focus:border-focus"
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Repository Name</label>
+                <label className="block text-muted mb-1">Repository Name</label>
                 <input
                   type="text"
                   value={configState.repo}
                   onChange={e => setConfigState({ ...configState, repo: e.target.value })}
-                  className="w-full px-2.5 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-white font-mono"
+                  className="w-full px-2.5 py-1.5 rounded-[8px] bg-surface-tertiary border border-border text-foreground font-mono focus:outline-none focus:border-focus"
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Target Branch</label>
+                <label className="block text-muted mb-1">Target Branch</label>
                 <input
                   type="text"
                   value={configState.branch}
                   onChange={e => setConfigState({ ...configState, branch: e.target.value })}
-                  className="w-full px-2.5 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-white font-mono"
+                  className="w-full px-2.5 py-1.5 rounded-[8px] bg-surface-tertiary border border-border text-foreground font-mono focus:outline-none focus:border-focus"
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Catalog File Path</label>
+                <label className="block text-muted mb-1">Catalog File Path</label>
                 <input
                   type="text"
                   value={configState.filePath}
                   onChange={e => setConfigState({ ...configState, filePath: e.target.value })}
-                  className="w-full px-2.5 py-1.5 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-white font-mono"
+                  className="w-full px-2.5 py-1.5 rounded-[8px] bg-surface-tertiary border border-border text-foreground font-mono focus:outline-none focus:border-focus"
                 />
               </div>
             </div>
@@ -234,7 +234,7 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
                 variant="primary"
                 size="sm"
                 onPress={handleSaveConfig}
-                className="px-4 py-1.5 rounded-full bg-[var(--md-sys-color-primary)] text-white font-semibold hover:opacity-90 transition"
+                className="px-4 py-1.5 rounded-full bg-accent text-accent-foreground font-semibold hover:opacity-90 transition"
               >
                 Save Repo Settings
               </Button>
@@ -243,31 +243,31 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
         )}
 
         {/* Change stats banner */}
-        <div className="p-3.5 bg-[var(--card-bg)] border-b border-[var(--border-color)] flex items-center justify-between text-xs px-6">
+        <div className="p-3.5 bg-surface border-b border-separator flex items-center justify-between text-xs px-6">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <span className="font-semibold text-slate-200">Pending Changes:</span>
+            <span className="font-semibold text-foreground">Pending Changes:</span>
             {pendingAdded.length > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono text-[11px]">
+              <span className="px-2 py-0.5 rounded-full bg-success/15 text-success border border-success/30 font-mono text-[11px]">
                 +{pendingAdded.length} Commands
               </span>
             )}
             {pendingModified.length > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-800 font-mono text-[11px]">
+              <span className="px-2 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/30 font-mono text-[11px]">
                 ~{pendingModified.length} Commands
               </span>
             )}
             {pendingAddedVehicles.length > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono text-[11px]">
+              <span className="px-2 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/30 font-mono text-[11px]">
                 +{pendingAddedVehicles.length} Vehicles
               </span>
             )}
             {pendingModifiedVehicles.length > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono text-[11px]">
+              <span className="px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30 font-mono text-[11px]">
                 ~{pendingModifiedVehicles.length} Vehicles
               </span>
             )}
             {totalChanges === 0 && (
-              <span className="text-[var(--text-muted)] italic">
+              <span className="text-muted italic">
                 (No uncommitted draft changes. Full catalog will be shared.)
               </span>
             )}
@@ -275,8 +275,8 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
 
           {totalChanges > 0 && (
             confirmResetDrafts ? (
-              <div className="flex items-center gap-1.5 bg-rose-950/90 border border-rose-700/80 px-2 py-0.5 rounded text-xs">
-                <span className="text-[10px] text-rose-200 font-semibold">Clear marks?</span>
+              <div className="flex items-center gap-1.5 bg-danger/15 border border-danger/40 px-2 py-0.5 rounded text-xs">
+                <span className="text-[10px] text-danger font-semibold">Clear marks?</span>
                 <Button
                   variant="danger"
                   size="sm"
@@ -284,7 +284,7 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
                     onClearDrafts();
                     setConfirmResetDrafts(false);
                   }}
-                  className="px-1.5 py-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-[10px] h-auto transition"
+                  className="px-1.5 py-0.5 bg-danger hover:opacity-90 text-danger-foreground rounded font-bold text-[10px] h-auto transition"
                 >
                   Yes
                 </Button>
@@ -292,7 +292,7 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
                   variant="secondary"
                   size="sm"
                   onPress={() => setConfirmResetDrafts(false)}
-                  className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] h-auto transition"
+                  className="px-1.5 py-0.5 bg-surface-tertiary hover:bg-default-hover text-foreground rounded text-[10px] h-auto transition"
                 >
                   No
                 </Button>
@@ -302,7 +302,7 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
                 variant="ghost"
                 size="sm"
                 onPress={() => setConfirmResetDrafts(true)}
-                className="text-[11px] text-slate-500 hover:text-rose-400 transition h-auto p-0"
+                className="text-[11px] text-muted hover:text-danger transition h-auto p-0"
               >
                 Reset Draft Marks
               </Button>
@@ -311,7 +311,7 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
         </div>
 
         {/* Tab Selection */}
-        <div className="px-6 border-b border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] text-xs">
+        <div className="px-6 border-b border-separator bg-surface-secondary text-xs">
           <Tabs
             selectedKey={activeTab}
             onSelectionChange={key => setActiveTab(key as 'issue' | 'webedit' | 'download')}
@@ -323,36 +323,36 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
                   id="issue"
                   className={`relative py-3 px-3 font-semibold transition cursor-pointer flex items-center ${
                     activeTab === 'issue'
-                      ? 'text-white'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'text-foreground'
+                      : 'text-muted hover:text-foreground'
                   }`}
                 >
                   <span>1. One-Click GitHub Issue (Recommended)</span>
-                  <Tabs.Indicator className="h-0.5 bg-[var(--md-sys-color-primary)] bottom-0 rounded-full" />
+                  <Tabs.Indicator className="h-0.5 bg-accent bottom-0 rounded-full" />
                 </Tabs.Tab>
 
                 <Tabs.Tab
                   id="webedit"
                   className={`relative py-3 px-3 font-semibold transition cursor-pointer flex items-center ${
                     activeTab === 'webedit'
-                      ? 'text-white'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'text-foreground'
+                      : 'text-muted hover:text-foreground'
                   }`}
                 >
                   <span>2. Web Editor / PR Fork</span>
-                  <Tabs.Indicator className="h-0.5 bg-[var(--md-sys-color-primary)] bottom-0 rounded-full" />
+                  <Tabs.Indicator className="h-0.5 bg-accent bottom-0 rounded-full" />
                 </Tabs.Tab>
 
                 <Tabs.Tab
                   id="download"
                   className={`relative py-3 px-3 font-semibold transition cursor-pointer flex items-center ${
                     activeTab === 'download'
-                      ? 'text-white'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'text-foreground'
+                      : 'text-muted hover:text-foreground'
                   }`}
                 >
                   <span>3. Download / Export JSON</span>
-                  <Tabs.Indicator className="h-0.5 bg-[var(--md-sys-color-primary)] bottom-0 rounded-full" />
+                  <Tabs.Indicator className="h-0.5 bg-accent bottom-0 rounded-full" />
                 </Tabs.Tab>
               </Tabs.List>
             </Tabs.ListContainer>
@@ -363,8 +363,8 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
         <ModalBody className="p-6 max-h-[64vh] overflow-y-auto space-y-4">
           {activeTab === 'issue' && (
             <div className="space-y-4 text-xs">
-              <div className="p-3.5 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] text-slate-300 space-y-1">
-                <div className="font-semibold text-cyan-300 flex items-center gap-1.5">
+              <div className="p-3.5 rounded-[12px] bg-surface-secondary border border-border text-muted space-y-1">
+                <div className="font-semibold text-accent flex items-center gap-1.5">
                   <FileCheck className="w-4 h-4" />
                   Easiest method for community contributors
                 </div>
@@ -376,7 +376,7 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1 font-medium">
+                  <label className="block text-muted mb-1 font-medium">
                     Contributor Name or GitHub Handle (Optional)
                   </label>
                   <input
@@ -384,11 +384,11 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
                     placeholder="@your-username"
                     value={contributorName}
                     onChange={e => setContributorName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                    className="w-full px-3 py-2 rounded-[8px] bg-surface-tertiary border border-border text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1 font-medium">
+                  <label className="block text-muted mb-1 font-medium">
                     Testing Notes or Vehicle Tested (Optional)
                   </label>
                   <input
@@ -396,23 +396,23 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
                     placeholder="e.g. Tested on 2023 Ioniq 5 Limited (Gen5W)"
                     value={testingNotes}
                     onChange={e => setTestingNotes(e.target.value)}
-                    className="w-full px-3 py-2 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] text-white focus:outline-none focus:border-[var(--md-sys-color-primary)]"
+                    className="w-full px-3 py-2 rounded-[8px] bg-surface-tertiary border border-border text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                   />
                 </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="font-medium text-slate-400">
+                  <label className="font-medium text-muted">
                     Generated Issue Body Preview
                   </label>
                   <Button
                     variant="ghost"
                     size="sm"
                     onPress={handleCopyIssueBody}
-                    className="text-cyan-400 hover:underline flex items-center gap-1 h-auto p-1"
+                    className="text-accent hover:underline flex items-center gap-1 h-auto p-1"
                   >
-                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
                     {copied ? 'Copied' : 'Copy Markdown'}
                   </Button>
                 </div>
@@ -420,7 +420,7 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
                   readOnly
                   rows={8}
                   value={issueMarkdown}
-                  className="w-full p-3 rounded-[8px] bg-[var(--input-bg)] border border-[var(--border-color)] font-mono text-[11px] text-slate-300 focus:outline-none"
+                  className="w-full p-3 rounded-[8px] bg-surface-tertiary border border-border font-mono text-[11px] text-foreground focus:outline-none focus:border-focus"
                 />
               </div>
 
@@ -429,7 +429,7 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
                   href={issueUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white font-semibold text-sm shadow transition"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent hover:opacity-90 text-accent-foreground font-semibold text-sm shadow transition"
                 >
                   <Send className="w-4 h-4" />
                   Open Pre-Filled Issue on GitHub
@@ -441,21 +441,21 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
 
           {/* Tab 2: Web Editor / PR Fork */}
           {activeTab === 'webedit' && (
-            <div className="space-y-4 text-xs text-slate-300">
-              <div className="p-3.5 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] space-y-2">
-                <div className="font-semibold text-white flex items-center gap-1.5">
-                  <GitPullRequest className="w-4 h-4 text-cyan-400" />
+            <div className="space-y-4 text-xs text-muted">
+              <div className="p-3.5 rounded-[12px] bg-surface-secondary border border-border space-y-2">
+                <div className="font-semibold text-foreground flex items-center gap-1.5">
+                  <GitPullRequest className="w-4 h-4 text-accent" />
                   Edit directly on GitHub Web Editor
                 </div>
-                <ol className="list-decimal pl-5 space-y-1.5 text-slate-400">
+                <ol className="list-decimal pl-5 space-y-1.5 text-muted">
                   <li>
-                    Click <strong className="text-white">"Copy Full Updated Catalog JSON"</strong> below.
+                    Click <strong className="text-foreground">"Copy Full Updated Catalog JSON"</strong> below.
                   </li>
                   <li>
-                    Click <strong className="text-white">"Open catalog.json in GitHub Web Editor"</strong>.
+                    Click <strong className="text-foreground">"Open catalog.json in GitHub Web Editor"</strong>.
                   </li>
                   <li>
-                    Paste into the GitHub editor (Ctrl+A / Cmd+A then Ctrl+V / Cmd+V) and click <strong className="text-cyan-400">"Propose changes"</strong> to open a Pull Request!
+                    Paste into the GitHub editor (Ctrl+A / Cmd+A then Ctrl+V / Cmd+V) and click <strong className="text-accent">"Propose changes"</strong> to open a Pull Request!
                   </li>
                 </ol>
               </div>
@@ -465,9 +465,9 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
                   variant="primary"
                   size="sm"
                   onPress={handleCopyFullCatalog}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white font-semibold transition"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-accent hover:opacity-90 text-accent-foreground font-semibold transition"
                 >
-                  {copiedCatalog ? <Check className="w-4 h-4 text-white" /> : <Copy className="w-4 h-4" />}
+                  {copiedCatalog ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                   {copiedCatalog ? 'Catalog JSON Copied!' : '1. Copy Full Catalog JSON'}
                 </Button>
 
@@ -478,7 +478,7 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
                   className="w-full sm:w-auto dash-outline-btn inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold"
                 >
                   2. Open in GitHub Editor
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                  <ExternalLink className="w-3.5 h-3.5 text-muted" />
                 </a>
               </div>
             </div>
@@ -486,14 +486,14 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
 
           {/* Tab 3: Download catalog.json & Patch */}
           {activeTab === 'download' && (
-            <div className="space-y-4 text-xs text-slate-300">
-              <div className="p-4 rounded-[12px] bg-[var(--md-sys-color-surface-container-low)] border border-[var(--border-color)] space-y-2">
-                <div className="font-semibold text-white flex items-center gap-1.5">
-                  <Download className="w-4 h-4 text-cyan-400" />
+            <div className="space-y-4 text-xs text-muted">
+              <div className="p-4 rounded-[12px] bg-surface-secondary border border-border space-y-2">
+                <div className="font-semibold text-foreground flex items-center gap-1.5">
+                  <Download className="w-4 h-4 text-accent" />
                   Save File Locally
                 </div>
-                <p className="text-[var(--text-muted)]">
-                  Download the complete validated <code className="text-cyan-300">catalog.json</code> containing all {catalog.vehicles.length} vehicles and {catalog.commands.length} commands, or copy your changes.
+                <p className="text-muted">
+                  Download the complete validated <code className="text-accent">catalog.json</code> containing all {catalog.vehicles.length} vehicles and {catalog.commands.length} commands, or copy your changes.
                   You can deploy this directly into your local CAN Do automation platform directory, submit it to GitHub, or share it with the community.
                 </p>
               </div>
@@ -503,7 +503,7 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
                   variant="primary"
                   size="sm"
                   onPress={handleDownloadCatalog}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[var(--md-sys-color-primary)] hover:opacity-90 text-white font-semibold transition"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent hover:opacity-90 text-accent-foreground font-semibold transition"
                 >
                   <Download className="w-4 h-4" />
                   Download catalog.json
@@ -514,7 +514,7 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
                   onPress={handleCopyFullCatalog}
                   className="dash-outline-btn inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold"
                 >
-                  {copiedCatalog ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                  {copiedCatalog ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
                   {copiedCatalog ? 'Copied to Clipboard' : 'Copy JSON'}
                 </Button>
               </div>
@@ -523,8 +523,8 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
         </ModalBody>
 
         {/* Modal Footer */}
-        <ModalFooter className="flex items-center justify-between p-4 px-6 border-t border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
-          <span className="text-[11px] text-[var(--text-muted)] font-mono">
+        <ModalFooter className="flex items-center justify-between p-4 px-6 border-t border-separator bg-surface-secondary shrink-0">
+          <span className="text-[11px] text-muted font-mono">
             CAN Do Version: {catalog.can_do_version || 'unknown'} • {catalog.commands.length} Commands
           </span>
           <Button

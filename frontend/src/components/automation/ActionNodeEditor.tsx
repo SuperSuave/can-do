@@ -165,12 +165,12 @@ export function ActionNodeEditor({
           disabled={testFiring}
           className={`p-1 sm:p-1.5 rounded-lg border transition flex items-center gap-1 shrink-0 ${
             testFiring
-              ? 'bg-emerald-500 text-slate-950 border-emerald-400 animate-pulse'
-              : 'bg-emerald-950/40 text-emerald-300 hover:text-emerald-100 hover:bg-emerald-900/60 border-emerald-800/60 hover:border-emerald-500'
+              ? 'bg-success text-success-foreground border-success animate-pulse'
+              : 'bg-success-soft text-success-soft-foreground hover:bg-success/20 border-success/40 hover:border-success'
           }`}
           title="Manual Trigger: Test this individual action now"
         >
-          <Play className={`w-3 h-3 ${testFiring ? 'fill-slate-950' : 'fill-emerald-400'}`} />
+          <Play className={`w-3 h-3 ${testFiring ? 'fill-current' : 'fill-success text-success'}`} />
           <span className="text-[10px] font-bold hidden sm:inline">Test</span>
         </button>
       )}
@@ -179,7 +179,7 @@ export function ActionNodeEditor({
           type="button"
           onClick={onMoveUp}
           disabled={isFirst}
-          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition shrink-0"
+          className="p-1 text-muted hover:text-foreground disabled:opacity-30 disabled:hover:text-muted transition shrink-0"
           title="Move up"
         >
           <ArrowUp className="w-3.5 h-3.5" />
@@ -190,7 +190,7 @@ export function ActionNodeEditor({
           type="button"
           onClick={onMoveDown}
           disabled={isLast}
-          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition shrink-0"
+          className="p-1 text-muted hover:text-foreground disabled:opacity-30 disabled:hover:text-muted transition shrink-0"
           title="Move down"
         >
           <ArrowDown className="w-3.5 h-3.5" />
@@ -200,7 +200,7 @@ export function ActionNodeEditor({
         <button
           type="button"
           onClick={onDuplicate}
-          className="p-1 text-slate-500 hover:text-cyan-400 transition shrink-0"
+          className="p-1 text-muted hover:text-accent transition shrink-0"
           title="Duplicate action"
         >
           <Copy className="w-3.5 h-3.5" />
@@ -209,7 +209,7 @@ export function ActionNodeEditor({
       <button
         type="button"
         onClick={() => copyToClipboard('action', act, actionName)}
-        className="p-1 text-slate-500 hover:text-emerald-400 transition shrink-0"
+        className="p-1 text-muted hover:text-success transition shrink-0"
         title="Copy action to clipboard"
       >
         <ClipboardCopy className="w-3.5 h-3.5" />
@@ -217,7 +217,7 @@ export function ActionNodeEditor({
       <button
         type="button"
         onClick={onDelete}
-        className="p-1 text-slate-500 hover:text-rose-400 transition shrink-0"
+        className="p-1 text-muted hover:text-danger transition shrink-0"
         title="Delete action"
       >
         <Trash2 className="w-3.5 h-3.5" />
@@ -228,17 +228,17 @@ export function ActionNodeEditor({
   // If IF_THEN:
   if (act.type === 'if_then') {
     return (
-      <div className={`p-2.5 sm:p-3 rounded-xl border border-cyan-800/80 bg-cyan-950/20 space-y-3 text-xs min-w-0 overflow-hidden`}>
+      <div className="p-2.5 sm:p-3 rounded-xl border border-accent/40 bg-accent-soft/30 space-y-3 text-xs min-w-0 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
+              className="text-muted hover:text-foreground transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
-            <span className="px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] bg-cyan-900 text-cyan-200 border border-cyan-700 flex items-center gap-1 min-w-0">
+            <span className="px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] bg-accent-soft text-accent-soft-foreground border border-accent/40 flex items-center gap-1 min-w-0">
               <GitFork className="w-3 h-3 shrink-0" />
               <span className="truncate">IF - THEN - ELSE</span> {depth > 0 && `(L${depth + 1})`}
             </span>
@@ -251,7 +251,7 @@ export function ActionNodeEditor({
         {!collapsed && (
           <div className="space-y-3 min-w-0">
             {/* IF CONDITIONS */}
-            <div className="p-2 sm:p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2 min-w-0 overflow-hidden">
+            <div className="p-2 sm:p-2.5 rounded-lg bg-surface-secondary border border-border space-y-2 min-w-0 overflow-hidden">
               <ConditionListEditor
                 conditions={act.conditions || []}
                 depth={depth + 1}
@@ -270,7 +270,7 @@ export function ActionNodeEditor({
             </div>
 
             {/* THEN ACTIONS */}
-            <div className="p-2 sm:p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2 min-w-0 overflow-hidden">
+            <div className="p-2 sm:p-2.5 rounded-lg bg-surface-secondary border border-border space-y-2 min-w-0 overflow-hidden">
               <ActionListEditor
                 actions={act.then || []}
                 depth={depth + 1}
@@ -291,7 +291,7 @@ export function ActionNodeEditor({
             </div>
 
             {/* ELSE ACTIONS */}
-            <div className="p-2 sm:p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2 min-w-0 overflow-hidden">
+            <div className="p-2 sm:p-2.5 rounded-lg bg-surface-secondary border border-border space-y-2 min-w-0 overflow-hidden">
               <ActionListEditor
                 actions={act.else || []}
                 depth={depth + 1}
@@ -319,17 +319,17 @@ export function ActionNodeEditor({
   // If CHOOSE:
   if (act.type === 'choose') {
     return (
-      <div className={`p-2 sm:p-3 rounded-xl border border-blue-800/80 bg-blue-950/20 space-y-3 text-xs min-w-0 overflow-hidden`}>
+      <div className="p-2 sm:p-3 rounded-xl border border-purple-500/40 bg-purple-500/5 space-y-3 text-xs min-w-0 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
+              className="text-muted hover:text-foreground transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
-            <span className="px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] bg-blue-900 text-blue-200 border border-blue-700 flex items-center gap-1 min-w-0">
+            <span className="px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/40 flex items-center gap-1 min-w-0">
               <Split className="w-3 h-3 shrink-0" />
               <span className="truncate">CHOOSE (Sequential Branching)</span> {depth > 0 && `(L${depth + 1})`}
             </span>
@@ -371,18 +371,18 @@ export function ActionNodeEditor({
                 };
 
                 return (
-                  <div key={ch._clientId || chIdx} className="p-2 sm:p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2 min-w-0 overflow-hidden">
+                  <div key={ch._clientId || chIdx} className="p-2 sm:p-2.5 rounded-lg bg-surface-secondary border border-border space-y-2 min-w-0 overflow-hidden">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <div className="flex items-center gap-1.5 flex-1 min-w-0">
                         <button
                           type="button"
                           onClick={() => toggleBranchCollapse(chIdx)}
-                          className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
+                          className="text-muted hover:text-foreground transition p-0.5 shrink-0"
                           title={isBranchCollapsed ? "Expand branch" : "Collapse branch"}
                         >
                           {isBranchCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
                         </button>
-                        <span className="w-5 h-5 rounded-full bg-blue-950 text-blue-300 font-bold text-[10px] flex items-center justify-center border border-blue-800 shrink-0">
+                        <span className="w-5 h-5 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-400 font-bold text-[10px] flex items-center justify-center border border-purple-500/40 shrink-0">
                           #{chIdx + 1}
                         </span>
                         <input
@@ -394,7 +394,7 @@ export function ActionNodeEditor({
                             onUpdate({ ...act, choices });
                           }}
                           placeholder={`Branch #${chIdx + 1} (e.g. Low Heat ➔ Med Heat)`}
-                          className="bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-blue-200 text-xs font-semibold focus:outline-none focus:border-blue-500 flex-1 min-w-0 truncate"
+                          className="bg-surface-tertiary border border-border rounded px-2 py-0.5 text-foreground text-xs font-semibold focus:outline-none focus:border-purple-500 flex-1 min-w-0 truncate"
                         />
                       </div>
 
@@ -403,7 +403,7 @@ export function ActionNodeEditor({
                           type="button"
                           disabled={chIdx === 0}
                           onClick={() => moveBranch(-1)}
-                          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition shrink-0 cursor-pointer"
+                          className="p-1 text-muted hover:text-foreground disabled:opacity-30 disabled:hover:text-muted transition shrink-0 cursor-pointer"
                           title="Move branch up (higher priority)"
                         >
                           <ArrowUp className="w-3 h-3" />
@@ -412,7 +412,7 @@ export function ActionNodeEditor({
                           type="button"
                           disabled={chIdx === (act.choices || []).length - 1}
                           onClick={() => moveBranch(1)}
-                          className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition shrink-0 cursor-pointer"
+                          className="p-1 text-muted hover:text-foreground disabled:opacity-30 disabled:hover:text-muted transition shrink-0 cursor-pointer"
                           title="Move branch down (lower priority)"
                         >
                           <ArrowDown className="w-3 h-3" />
@@ -420,7 +420,7 @@ export function ActionNodeEditor({
                         <button
                           type="button"
                           onClick={duplicateBranch}
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-900 hover:bg-slate-850 text-cyan-300 border border-slate-700 hover:border-cyan-500 transition shrink-0 cursor-pointer"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-surface-tertiary hover:bg-default-hover text-accent border border-border hover:border-accent transition shrink-0 cursor-pointer"
                           title="Duplicate this branch and all its conditions & sequence actions"
                         >
                           <Copy className="w-3 h-3" />
@@ -429,7 +429,7 @@ export function ActionNodeEditor({
                         <button
                           type="button"
                           onClick={copyBranch}
-                          className="p-1 text-slate-500 hover:text-blue-300 transition shrink-0 cursor-pointer"
+                          className="p-1 text-muted hover:text-purple-500 transition shrink-0 cursor-pointer"
                           title="Copy branch to universal clipboard"
                         >
                           <ClipboardCopy className="w-3 h-3" />
@@ -440,7 +440,7 @@ export function ActionNodeEditor({
                             const choices = (act.choices || []).filter((_, i) => i !== chIdx);
                             onUpdate({ ...act, choices });
                           }}
-                          className="p-1 text-slate-500 hover:text-rose-400 transition shrink-0 cursor-pointer"
+                          className="p-1 text-muted hover:text-danger transition shrink-0 cursor-pointer"
                           title="Delete Branch"
                         >
                           <Trash2 className="w-3 h-3" />
@@ -449,7 +449,7 @@ export function ActionNodeEditor({
                     </div>
 
                     {isBranchCollapsed ? (
-                      <div className="text-[11px] text-slate-400 pl-7 font-mono flex items-center gap-2">
+                      <div className="text-[11px] text-muted pl-7 font-mono flex items-center gap-2">
                         <span>
                           {condCount === 0 ? 'No conditions (always matches)' : `${condCount} condition(s)`} ➔ {actCount} action(s)
                         </span>
@@ -457,7 +457,7 @@ export function ActionNodeEditor({
                     ) : (
                       <>
                         {/* Conditions in Choice */}
-                        <div className="pl-1.5 sm:pl-2 border-l border-slate-800 min-w-0">
+                        <div className="pl-1.5 sm:pl-2 border-l border-separator min-w-0">
                           <ConditionListEditor
                             conditions={ch.conditions || []}
                             depth={depth + 1}
@@ -480,7 +480,7 @@ export function ActionNodeEditor({
                         </div>
 
                         {/* Sequence in Choice */}
-                        <div className="pl-1.5 sm:pl-2 border-l border-slate-800 pt-2 min-w-0">
+                        <div className="pl-1.5 sm:pl-2 border-l border-separator pt-2 min-w-0">
                           <ActionListEditor
                             actions={ch.sequence || []}
                             depth={depth + 1}
@@ -536,17 +536,17 @@ export function ActionNodeEditor({
                       onUpdate({ ...act, choices: [...(act.choices || []), pasted] });
                     }
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-950/60 hover:bg-blue-900/60 text-blue-200 border border-blue-700/60 transition cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-500/15 hover:bg-purple-500/25 text-purple-600 dark:text-purple-400 border border-purple-500/40 transition cursor-pointer"
                   title={`Paste copied choice branch "${clipboard.label}"`}
                 >
-                  <ClipboardPaste className="w-3.5 h-3.5 text-blue-300" />
+                  <ClipboardPaste className="w-3.5 h-3.5" />
                   <span>Paste Branch ({clipboard.label})</span>
                 </button>
               )}
             </div>
 
             {/* DEFAULT SEQUENCE */}
-            <div className="p-2 sm:p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2 min-w-0 overflow-hidden">
+            <div className="p-2 sm:p-2.5 rounded-lg bg-surface-secondary border border-border space-y-2 min-w-0 overflow-hidden">
               <ActionListEditor
                 actions={act.default || []}
                 depth={depth + 1}
@@ -602,21 +602,21 @@ export function ActionNodeEditor({
     };
 
     return (
-      <div className="p-2 sm:p-3 rounded-xl border border-violet-800/80 bg-violet-950/20 space-y-3 text-xs min-w-0 overflow-hidden">
+      <div className="p-2 sm:p-3 rounded-xl border border-purple-500/40 bg-purple-500/5 space-y-3 text-xs min-w-0 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
+              className="text-muted hover:text-foreground transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
-            <span className="px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] bg-violet-900 text-violet-200 border border-violet-700 flex items-center gap-1 min-w-0">
+            <span className="px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/40 flex items-center gap-1 min-w-0">
               <Clock className="w-3 h-3 shrink-0" />
               <span className="truncate">WAIT (Condition or Delay)</span>
             </span>
-            <span className="px-1.5 py-0.5 rounded bg-violet-950 text-violet-300 text-[10px] font-mono border border-violet-800/60 truncate">
+            <span className="px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-600 dark:text-purple-400 text-[10px] font-mono border border-purple-500/30 truncate">
               {isDelayMode 
                 ? `Delay: ${displayVal} ${defaultUnit}` 
                 : `Wait For Condition (timeout: ${act.timeout_ms || 10000}ms)`}
@@ -658,18 +658,18 @@ export function ActionNodeEditor({
               aria-label="Delay Execution Mode"
               className="w-full"
             >
-              <Tabs.ListContainer className="p-1 bg-slate-900/80 border border-slate-800 rounded-lg w-full">
+              <Tabs.ListContainer className="p-1 bg-surface-secondary border border-border rounded-lg w-full">
                 <Tabs.List className="gap-2 w-full">
                   <Tabs.Tab
                     id="delay"
                     className={`relative flex-1 py-1 px-2.5 rounded text-xs font-medium transition cursor-pointer flex items-center justify-center ${
                       isDelayMode
                         ? 'text-white'
-                        : 'text-slate-400 hover:text-slate-200'
+                        : 'text-muted hover:text-foreground'
                     }`}
                   >
                     <span>Fixed Delay Duration</span>
-                    <Tabs.Indicator className="rounded bg-violet-600 shadow-sm" />
+                    <Tabs.Indicator className="rounded bg-purple-600 shadow-sm" />
                   </Tabs.Tab>
 
                   <Tabs.Tab
@@ -677,11 +677,11 @@ export function ActionNodeEditor({
                     className={`relative flex-1 py-1 px-2.5 rounded text-xs font-medium transition cursor-pointer flex items-center justify-center ${
                       !isDelayMode
                         ? 'text-white'
-                        : 'text-slate-400 hover:text-slate-200'
+                        : 'text-muted hover:text-foreground'
                     }`}
                   >
                     <span>Wait For Condition / Button Press</span>
-                    <Tabs.Indicator className="rounded bg-violet-600 shadow-sm" />
+                    <Tabs.Indicator className="rounded bg-purple-600 shadow-sm" />
                   </Tabs.Tab>
                 </Tabs.List>
               </Tabs.ListContainer>
@@ -691,7 +691,7 @@ export function ActionNodeEditor({
               <div className="space-y-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[11px] items-end">
                   <div className="flex flex-col justify-end">
-                    <label className="block text-[10px] font-sans text-slate-400 mb-1">Delay Duration Value</label>
+                    <label className="block text-[10px] font-sans text-muted mb-1">Delay Duration Value</label>
                     <input
                       type="number"
                       min="0"
@@ -704,11 +704,11 @@ export function ActionNodeEditor({
                         onUpdate({ ...act, type: 'delay', delay_ms: total, ms: total });
                       }}
                       placeholder="0"
-                      className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2.5 text-slate-200 font-mono text-xs focus:outline-none focus:border-violet-500 box-border"
+                      className="w-full h-8 bg-surface-secondary border border-border rounded px-2.5 text-foreground font-mono text-xs focus:outline-none focus:border-purple-500 box-border"
                     />
                   </div>
                   <div className="flex flex-col justify-end">
-                    <label className="block text-[10px] font-sans text-slate-400 mb-1">Duration Unit</label>
+                    <label className="block text-[10px] font-sans text-muted mb-1">Duration Unit</label>
                     <select
                       value={defaultUnit}
                       onChange={e => {
@@ -717,7 +717,7 @@ export function ActionNodeEditor({
                         const total = Math.round(displayVal * newFactor);
                         onUpdate({ ...act, type: 'delay', delay_ms: total, ms: total });
                       }}
-                      className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-violet-400 font-sans text-xs focus:outline-none focus:border-violet-500 box-border"
+                      className="w-full h-8 bg-surface-secondary border border-border rounded px-2 text-purple-600 dark:text-purple-400 font-sans text-xs focus:outline-none focus:border-purple-500 box-border"
                     >
                       <option value="ms">Milliseconds (ms)</option>
                       <option value="s">Seconds (s)</option>
@@ -729,7 +729,7 @@ export function ActionNodeEditor({
 
                 {/* Quick Presets */}
                 <div className="flex items-center gap-1.5 flex-wrap pt-1 font-mono text-[10px]">
-                  <span className="text-slate-500 font-sans">Quick Presets:</span>
+                  <span className="text-muted font-sans">Quick Presets:</span>
                   {[
                     { label: '250ms', val: 250 },
                     { label: '500ms', val: 500 },
@@ -744,15 +744,15 @@ export function ActionNodeEditor({
                       onClick={() => onUpdate({ ...act, type: 'delay', delay_ms: p.val, ms: p.val })}
                       className={`px-2 py-0.5 rounded border transition ${
                         currentTotalMs === p.val
-                          ? 'bg-violet-900 text-violet-100 border-violet-500 font-bold'
-                          : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                          ? 'bg-purple-600 text-white border-purple-500 font-bold'
+                          : 'bg-surface-secondary text-muted border-border hover:text-foreground'
                       }`}
                     >
                       {p.label}
                     </button>
                   ))}
                   {currentTotalMs > 0 && (
-                    <span className="text-slate-500 ml-auto">
+                    <span className="text-muted ml-auto">
                       = {currentTotalMs.toLocaleString()} ms ({currentTotalMs >= 1000 ? `${(currentTotalMs / 1000).toFixed(1)}s` : `${currentTotalMs}ms`})
                     </span>
                   )}
@@ -762,29 +762,29 @@ export function ActionNodeEditor({
               <div className="space-y-3 min-w-0">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[11px] items-end">
                   <div className="flex flex-col justify-end">
-                    <label className="block text-[10px] font-sans text-slate-400 mb-1">Timeout (ms)</label>
+                    <label className="block text-[10px] font-sans text-muted mb-1">Timeout (ms)</label>
                     <input
                       type="number"
                       value={act.timeout_ms || 10000}
                       onChange={e => onUpdate({ ...act, timeout_ms: parseInt(e.target.value) || 10000 })}
                       placeholder="10000 (10 seconds)"
-                      className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-slate-200 font-mono box-border"
+                      className="w-full h-8 bg-surface-secondary border border-border rounded px-2 text-foreground font-mono box-border"
                     />
                   </div>
                   <div className="flex flex-col justify-end">
-                    <label className="block text-[10px] font-sans text-slate-400 mb-1">Check Interval (ms)</label>
+                    <label className="block text-[10px] font-sans text-muted mb-1">Check Interval (ms)</label>
                     <input
                       type="number"
                       value={act.interval_ms || 50}
                       onChange={e => onUpdate({ ...act, interval_ms: parseInt(e.target.value) || 50 })}
                       placeholder="50"
-                      className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-slate-200 font-mono box-border"
+                      className="w-full h-8 bg-surface-secondary border border-border rounded px-2 text-foreground font-mono box-border"
                     />
                   </div>
                 </div>
 
                 {/* Target Condition in WAIT_FOR */}
-                <div className="p-2 sm:p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2 min-w-0 overflow-hidden">
+                <div className="p-2 sm:p-2.5 rounded-lg bg-surface-secondary border border-border space-y-2 min-w-0 overflow-hidden">
                   <ConditionListEditor
                     conditions={condList}
                     depth={depth + 1}
@@ -901,14 +901,14 @@ export function ActionNodeEditor({
               key={k}
               className={`flex flex-col items-center justify-center py-1 px-0.5 rounded border text-[10px] font-mono transition-colors ${
                 isNonZero
-                  ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200 font-bold shadow-sm'
+                  ? 'bg-success-soft border-success/50 text-success-soft-foreground font-bold shadow-sm'
                   : hasVal
-                  ? 'bg-slate-900 border-slate-700/80 text-slate-300'
-                  : 'bg-slate-950/60 border-slate-800/60 text-slate-600'
+                  ? 'bg-surface-tertiary border-border text-foreground'
+                  : 'bg-surface border-border text-muted/60'
               }`}
               title={`Byte ${k}: ${val || '*'}`}
             >
-              <span className="text-[8px] text-slate-500 leading-none mb-0.5">{k}</span>
+              <span className="text-[8px] text-muted leading-none mb-0.5">{k}</span>
               <span className="leading-none">{val || '*'}</span>
             </div>
           );
@@ -918,23 +918,23 @@ export function ActionNodeEditor({
   };
 
   return (
-    <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 hover:border-slate-700/80 space-y-2.5 text-xs transition-all shadow-sm min-w-0 overflow-hidden">
+    <div className="p-2.5 sm:p-3.5 rounded-xl bg-surface-secondary border border-border hover:border-border-secondary space-y-2.5 text-xs transition-all shadow-sm min-w-0 overflow-hidden">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}
-            className="text-slate-400 hover:text-white transition p-0.5 shrink-0"
+            className="text-muted hover:text-foreground transition p-0.5 shrink-0"
           >
             {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </button>
-          <span className="w-5 h-5 rounded-full bg-emerald-950 text-emerald-300 font-bold text-[10px] flex items-center justify-center border border-emerald-800 shrink-0">
+          <span className="w-5 h-5 rounded-full bg-success-soft text-success-soft-foreground font-bold text-[10px] flex items-center justify-center border border-success/40 shrink-0">
             A{index + 1}
           </span>
-          <span className="font-semibold text-white text-xs sm:text-sm tracking-tight truncate">{actionName}</span>
+          <span className="font-semibold text-foreground text-xs sm:text-sm tracking-tight truncate">{actionName}</span>
           {effectiveSteps && effectiveSteps.length > 1 && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-900/40 text-emerald-300 border border-emerald-700/60 shrink-0">
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-success-soft text-success-soft-foreground border border-success/40 shrink-0">
               {effectiveSteps.length} Steps
             </span>
           )}
@@ -947,12 +947,12 @@ export function ActionNodeEditor({
               onClick={() => setShowAdvanced(!showAdvanced)}
               className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-medium border transition cursor-pointer ${
                 showAdvanced
-                  ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80 shadow'
-                  : 'bg-slate-900 text-slate-300 hover:text-white border-slate-800 hover:bg-slate-850'
+                  ? 'bg-success-soft text-success-soft-foreground border-success/50 shadow'
+                  : 'bg-surface-tertiary text-muted hover:text-foreground border-border hover:bg-default-hover'
               }`}
               title="Toggle configuration details"
             >
-              <Sliders className="w-3.5 h-3.5 text-emerald-400" />
+              <Sliders className="w-3.5 h-3.5 text-success" />
               <span className="hidden xs:inline sm:inline">{showAdvanced ? 'Simple' : 'Details'}</span>
             </button>
           )}
@@ -998,8 +998,8 @@ export function ActionNodeEditor({
                         itemCount === 1 ? 'px-4 min-w-[90px]' : 'w-full px-2'
                       } py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 border cursor-pointer text-center ${
                         isSelected
-                          ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/80 font-semibold shadow-sm ring-1 ring-emerald-500/40'
-                          : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border-slate-800'
+                          ? 'bg-success-soft text-success-soft-foreground border-success/60 font-semibold shadow-sm ring-1 ring-success/30'
+                          : 'bg-surface-tertiary text-muted hover:text-foreground hover:bg-default-hover border-border'
                       }`}
                     >
                       <span className="truncate">{opt.label}</span>
@@ -1021,14 +1021,14 @@ export function ActionNodeEditor({
         const hasMultipleSteps = isCanTx && !!(effectiveSteps && effectiveSteps.length > 1);
 
         return (
-        <div className={`space-y-3 ${hasOptions ? 'pt-2.5 border-t border-slate-850' : ''}`}>
+        <div className={`space-y-3 ${hasOptions ? 'pt-2.5 border-t border-separator' : ''}`}>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 font-mono text-[11px]">
             <div>
-              <label className="block text-[10px] font-sans text-slate-500">Action Type</label>
+              <label className="block text-[10px] font-sans text-muted">Action Type</label>
               <select
                 value={isCanTx ? 'can_tx' : act.type}
                 onChange={e => onUpdate({ ...act, type: e.target.value as any })}
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+                className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground font-sans"
               >
                 <option value="can_tx">can_tx (CAN Transmit)</option>
                 <option value="precondition">precondition (E-GMP)</option>
@@ -1044,11 +1044,11 @@ export function ActionNodeEditor({
             {act.type === 'precondition' && (
               <>
                 <div>
-                  <label className="block text-[10px] font-sans text-slate-500">Operation</label>
+                  <label className="block text-[10px] font-sans text-muted">Operation</label>
                   <select
                     value={act.precon_action || 'start'}
                     onChange={e => onUpdate({ ...act, precon_action: e.target.value as any })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+                    className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground font-sans"
                   >
                     <option value="start">Start Preconditioning</option>
                     <option value="stop">Stop / Cancel</option>
@@ -1056,11 +1056,11 @@ export function ActionNodeEditor({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-sans text-slate-500">Operating Mode</label>
+                  <label className="block text-[10px] font-sans text-muted">Operating Mode</label>
                   <select
                     value={act.precon_mode || 'persistent'}
                     onChange={e => onUpdate({ ...act, precon_mode: e.target.value as any })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-orange-300 font-medium font-sans"
+                    className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-warning font-medium font-sans"
                   >
                     <option value="persistent">Persistent (21°C / 70°F)</option>
                     <option value="continuous">Continuous (High Demand)</option>
@@ -1073,11 +1073,11 @@ export function ActionNodeEditor({
             {act.type === 'climate_target' && (
               <>
                 <div>
-                  <label className="block text-[10px] font-sans text-slate-500">Zone</label>
+                  <label className="block text-[10px] font-sans text-muted">Zone</label>
                   <select
                     value={act.zone || 'driver'}
                     onChange={e => onUpdate({ ...act, zone: e.target.value as any })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+                    className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground font-sans"
                   >
                     <option value="driver">Driver Zone</option>
                     <option value="passenger">Passenger Zone</option>
@@ -1085,8 +1085,8 @@ export function ActionNodeEditor({
                 </div>
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <label className="block text-[10px] font-sans text-slate-500">Target Temp</label>
-                    <span className="text-[9px] text-teal-400 font-mono">
+                    <label className="block text-[10px] font-sans text-muted">Target Temp</label>
+                    <span className="text-[9px] text-accent font-mono">
                       {act.target_temp_c !== undefined || act.target_c !== undefined
                         ? `${Math.round(((act.target_temp_c ?? act.target_c ?? 21.0) * 9 / 5 + 32) * 10) / 10}°F`
                         : '--°F'}
@@ -1105,9 +1105,9 @@ export function ActionNodeEditor({
                       aria-label="Target Temperature Slider"
                       className="flex-1"
                     >
-                      <Slider.Track className="h-1.5 bg-slate-800 rounded-full cursor-pointer relative">
-                        <Slider.Fill className="bg-teal-500 rounded-full h-full" />
-                        <Slider.Thumb className="w-3.5 h-3.5 bg-teal-400 border-2 border-slate-900 rounded-full shadow cursor-grab active:cursor-grabbing focus:outline-none" />
+                      <Slider.Track className="h-1.5 bg-surface-tertiary rounded-full cursor-pointer relative">
+                        <Slider.Fill className="bg-accent rounded-full h-full" />
+                        <Slider.Thumb className="w-3.5 h-3.5 bg-accent border-2 border-surface rounded-full shadow cursor-grab active:cursor-grabbing focus:outline-none" />
                       </Slider.Track>
                     </Slider>
                     <div className="flex items-center gap-1 shrink-0 w-20">
@@ -1122,9 +1122,9 @@ export function ActionNodeEditor({
                           onUpdate({ ...act, target_temp_c: val, target_c: val });
                         }}
                         placeholder="21.0"
-                        className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-teal-300 font-bold text-xs"
+                        className="w-full bg-surface-tertiary border border-border rounded px-2 py-0.5 text-accent font-bold text-xs"
                       />
-                      <span className="text-slate-400 font-sans text-[10px]">°C</span>
+                      <span className="text-muted font-sans text-[10px]">°C</span>
                     </div>
                   </div>
                 </div>
@@ -1134,11 +1134,11 @@ export function ActionNodeEditor({
             {(act.type === 'track_popup' || act.type === 'popup') && (
               <>
                 <div>
-                  <label className="block text-[10px] font-sans text-slate-500">Severity Level</label>
+                  <label className="block text-[10px] font-sans text-muted">Severity Level</label>
                   <select
                     value={act.level || 'info'}
                     onChange={e => onUpdate({ ...act, level: e.target.value as any })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+                    className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground font-sans"
                   >
                     <option value="info">Info</option>
                     <option value="warning">Warning</option>
@@ -1147,8 +1147,8 @@ export function ActionNodeEditor({
                 </div>
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className="block text-[10px] font-sans text-slate-500">Popup Text</label>
-                    <span className="text-[9px] text-slate-500 font-mono">
+                    <label className="block text-[10px] font-sans text-muted">Popup Text</label>
+                    <span className="text-[9px] text-muted font-mono">
                       {(act.text || act.popup_message || '').length}/50
                     </span>
                   </div>
@@ -1158,72 +1158,72 @@ export function ActionNodeEditor({
                     value={act.text || act.popup_message || ''}
                     onChange={e => onUpdate({ ...act, text: e.target.value, popup_message: e.target.value })}
                     placeholder="Message text..."
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-amber-300 font-medium"
+                    className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-warning font-medium"
                   />
                 </div>
               </>
             )}
 
             {act.type === 'cycle_entity' && (
-              <div className="col-span-full space-y-2.5 p-3 rounded-lg bg-slate-900/90 border border-amber-900/60 font-sans">
+              <div className="col-span-full space-y-2.5 p-3 rounded-lg bg-surface-tertiary border border-warning/40 font-sans">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
-                    <RotateCw className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-[11px] font-bold text-warning flex items-center gap-1.5">
+                    <RotateCw className="w-3.5 h-3.5 text-warning" />
                     <span>Cyclic Stepper Configuration</span>
                   </span>
-                  <span className="text-[10px] text-slate-400 font-mono">
+                  <span className="text-[10px] text-muted font-mono">
                     {act.direction === 'reverse' ? 'Reverse ◀' : 'Forward ▶'} · {act.wrap !== false ? 'Wrap: ON' : 'Wrap: OFF'}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
                   <div>
-                    <label className="block text-[10px] text-slate-400 mb-1">Target Entity ID</label>
+                    <label className="block text-[10px] text-muted mb-1">Target Entity ID</label>
                     <input
                       type="text"
                       value={act.entity_id || 'drivers_seat_comfort'}
                       onChange={e => onUpdate({ ...act, entity_id: e.target.value })}
                       placeholder="drivers_seat_comfort"
-                      className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-amber-300 font-mono font-bold"
+                      className="w-full bg-surface-secondary border border-border rounded px-2 py-1 text-warning font-mono font-bold"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-400 mb-1">Step Direction</label>
+                    <label className="block text-[10px] text-muted mb-1">Step Direction</label>
                     <select
                       value={act.direction || 'forward'}
                       onChange={e => onUpdate({ ...act, direction: e.target.value as any })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                      className="w-full bg-surface-secondary border border-border rounded px-2 py-1 text-foreground"
                     >
                       <option value="forward">Forward (Increment)</option>
                       <option value="reverse">Reverse (Decrement)</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-400 mb-1">Wrap on Overflow</label>
+                    <label className="block text-[10px] text-muted mb-1">Wrap on Overflow</label>
                     <select
                       value={act.wrap !== false ? 'true' : 'false'}
                       onChange={e => onUpdate({ ...act, wrap: e.target.value === 'true' })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                      className="w-full bg-surface-secondary border border-border rounded px-2 py-1 text-foreground"
                     >
                       <option value="true">Yes (High ➔ Off)</option>
                       <option value="false">No (Clamp at High)</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-400 mb-1">Fallback State (Unknown State)</label>
+                    <label className="block text-[10px] text-muted mb-1">Fallback State (Unknown State)</label>
                     <input
                       type="text"
                       value={act.fallback_state || (act.states && act.states[0]) || 'Off'}
                       onChange={e => onUpdate({ ...act, fallback_state: e.target.value })}
                       placeholder="Off"
-                      className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 font-mono"
+                      className="w-full bg-surface-secondary border border-border rounded px-2 py-1 text-foreground font-mono"
                     />
                   </div>
                 </div>
 
                 {/* State Options Sequence */}
                 <div>
-                  <label className="block text-[10px] text-slate-400 mb-1">
+                  <label className="block text-[10px] text-muted mb-1">
                     Cycle Sequence States (Comma-separated):
                   </label>
                   <input
@@ -1234,12 +1234,12 @@ export function ActionNodeEditor({
                       onUpdate({ ...act, states: parsed });
                     }}
                     placeholder="Off, Low Heat, Medium Heat, High Heat"
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-amber-200 font-mono text-xs"
+                    className="w-full bg-surface-secondary border border-border rounded px-2 py-1 text-warning font-mono text-xs"
                   />
                 </div>
 
                 {/* In-Cabin Confirmation Popup */}
-                <div className="pt-2 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] items-center">
+                <div className="pt-2 border-t border-separator grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] items-center">
                   <Switch
                     isSelected={act.show_popup ?? true}
                     onChange={(isSelected) => onUpdate({ ...act, show_popup: isSelected })}
@@ -1250,18 +1250,18 @@ export function ActionNodeEditor({
                       <Switch.Control>
                         <Switch.Thumb />
                       </Switch.Control>
-                      <span className="text-slate-300">Auto-show Cluster / HUD Popup Toast</span>
+                      <span className="text-foreground">Auto-show Cluster / HUD Popup Toast</span>
                     </Switch.Content>
                   </Switch>
                   {act.show_popup !== false && (
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-slate-500 shrink-0">Popup Prefix:</span>
+                      <span className="text-[10px] text-muted shrink-0">Popup Prefix:</span>
                       <input
                         type="text"
                         value={act.popup_prefix !== undefined ? act.popup_prefix : 'Driver Seat: '}
                         onChange={e => onUpdate({ ...act, popup_prefix: e.target.value })}
                         placeholder="Driver Seat: "
-                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-amber-300 font-medium text-[11px]"
+                        className="w-full bg-surface-secondary border border-border rounded px-2 py-0.5 text-warning font-medium text-[11px]"
                       />
                     </div>
                   )}
@@ -1272,21 +1272,21 @@ export function ActionNodeEditor({
             {isCanTx && !hasMultipleSteps && (
               <>
                 <div>
-                  <label className="block text-[10px] font-sans text-slate-500">Target CAN ID</label>
+                  <label className="block text-[10px] font-sans text-muted">Target CAN ID</label>
                   <input
                     type="text"
                     value={effectiveCanId}
                     onChange={e => onUpdate({ ...act, can_id: e.target.value, type: 'can_tx' })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                    className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground"
                     placeholder="0x524"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-sans text-slate-500">Bus</label>
+                  <label className="block text-[10px] font-sans text-muted">Bus</label>
                   <select
                     value={effectiveBus}
                     onChange={e => onUpdate({ ...act, bus: parseInt(e.target.value) || 0, type: 'can_tx' })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+                    className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground font-sans"
                   >
                     <option value={0}>Bus 0</option>
                     <option value={1}>Bus 1</option>
@@ -1294,21 +1294,21 @@ export function ActionNodeEditor({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-sans text-slate-500">Repeat × Delay</label>
+                  <label className="block text-[10px] font-sans text-muted">Repeat × Delay</label>
                   <div className="flex items-center gap-1">
                     <input
                       type="number"
                       value={effectiveRepeat}
                       onChange={e => onUpdate({ ...act, repeat: parseInt(e.target.value) || 1, type: 'can_tx' })}
-                      className="w-12 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-200"
+                      className="w-12 bg-surface-tertiary border border-border rounded px-1.5 py-1 text-foreground"
                     />
-                    <span className="text-slate-500 font-sans">×</span>
+                    <span className="text-muted font-sans">×</span>
                     <input
                       type="number"
                       value={effectiveDelayMs}
                       onChange={e => onUpdate({ ...act, delay_ms: parseInt(e.target.value) || 0, type: 'can_tx' })}
                       placeholder="ms"
-                      className="w-16 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-200"
+                      className="w-16 bg-surface-tertiary border border-border rounded px-1.5 py-1 text-foreground"
                     />
                   </div>
                 </div>
@@ -1317,7 +1317,7 @@ export function ActionNodeEditor({
           </div>
 
           {act.type === 'climate_target' && (
-            <div className="flex items-center gap-4 pt-1 font-sans text-[11px] text-slate-400">
+            <div className="flex items-center gap-4 pt-1 font-sans text-[11px] text-muted">
               <Switch
                 isSelected={act.sync_on ?? true}
                 onChange={(isSelected) => onUpdate({ ...act, sync_on: isSelected })}
@@ -1350,7 +1350,7 @@ export function ActionNodeEditor({
           {isCanTx && !hasMultipleSteps && (
             <div className="space-y-2 font-mono text-[11px]">
               <div>
-                <label className="block text-[10px] font-sans text-slate-500">Payload (1-based D1..D8)</label>
+                <label className="block text-[10px] font-sans text-muted">Payload (1-based D1..D8)</label>
                 <input
                   type="text"
                   value={
@@ -1365,7 +1365,7 @@ export function ActionNodeEditor({
                     onUpdate({ ...act, payload: Object.keys(compiled).length > 0 ? compiled : e.target.value, type: 'can_tx' });
                   }}
                   placeholder='{"D1":"0x02","D2":"0x01"}'
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-emerald-300 font-bold"
+                  className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-success font-bold"
                 />
                 {renderByteBoxes(effectivePayload)}
               </div>
@@ -1393,9 +1393,9 @@ export function ActionNodeEditor({
                       steps: [currentStep, secondStep]
                     });
                   }}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white border border-slate-800 transition cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-surface-tertiary hover:bg-default-hover text-foreground border border-border transition cursor-pointer"
                 >
-                  <Plus className="w-3 h-3 text-emerald-400" />
+                  <Plus className="w-3 h-3 text-success" />
                   <span>Add Step (Convert to Sequence)</span>
                 </button>
               </div>
@@ -1405,13 +1405,13 @@ export function ActionNodeEditor({
           {/* Dedicated Multi-Step Sequence Editor */}
           {hasMultipleSteps && (
             <div className="space-y-3 pt-1">
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
+              <div className="flex items-center justify-between border-b border-separator pb-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-white flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-success" />
                     Sequence Steps ({effectiveSteps!.length})
                   </span>
-                  <span className="text-[10px] text-slate-500 font-sans">Frames will transmit sequentially in order</span>
+                  <span className="text-[10px] text-muted font-sans">Frames will transmit sequentially in order</span>
                 </div>
                 <button
                   type="button"
@@ -1429,7 +1429,7 @@ export function ActionNodeEditor({
                       steps: [...effectiveSteps!, newStep]
                     });
                   }}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800/80 hover:bg-emerald-900 hover:text-white transition cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-success-soft text-success-soft-foreground border border-success/40 hover:bg-success/20 transition cursor-pointer"
                 >
                   <Plus className="w-3 h-3" />
                   <span>Add Step</span>
@@ -1509,20 +1509,20 @@ export function ActionNodeEditor({
                   };
 
                   return (
-                    <div key={sIdx} className="p-2.5 rounded-lg bg-slate-900/70 border border-slate-800 space-y-2">
+                    <div key={sIdx} className="p-2.5 rounded-lg bg-surface-tertiary border border-border space-y-2">
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-1.5">
-                          <span className="w-5 h-5 rounded-full bg-emerald-950 text-emerald-300 font-bold text-[10px] flex items-center justify-center border border-emerald-800">
+                          <span className="w-5 h-5 rounded-full bg-success-soft text-success-soft-foreground font-bold text-[10px] flex items-center justify-center border border-success/40">
                             {sIdx + 1}
                           </span>
-                          <span className="font-semibold text-slate-200 text-[11px] font-sans">Step {sIdx + 1} of {effectiveSteps!.length}</span>
+                          <span className="font-semibold text-foreground text-[11px] font-sans">Step {sIdx + 1} of {effectiveSteps!.length}</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
                             disabled={sIdx === 0}
                             onClick={() => moveStep(-1)}
-                            className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition cursor-pointer"
+                            className="p-1 text-muted hover:text-foreground disabled:opacity-30 disabled:hover:text-muted transition cursor-pointer"
                             title="Move step up"
                           >
                             <ArrowUp className="w-3 h-3" />
@@ -1531,7 +1531,7 @@ export function ActionNodeEditor({
                             type="button"
                             disabled={sIdx === effectiveSteps!.length - 1}
                             onClick={() => moveStep(1)}
-                            className="p-1 text-slate-500 hover:text-white disabled:opacity-30 disabled:hover:text-slate-500 transition cursor-pointer"
+                            className="p-1 text-muted hover:text-foreground disabled:opacity-30 disabled:hover:text-muted transition cursor-pointer"
                             title="Move step down"
                           >
                             <ArrowDown className="w-3 h-3" />
@@ -1539,7 +1539,7 @@ export function ActionNodeEditor({
                           <button
                             type="button"
                             onClick={removeStep}
-                            className="p-1 text-slate-500 hover:text-rose-400 transition cursor-pointer ml-1"
+                            className="p-1 text-muted hover:text-danger transition cursor-pointer ml-1"
                             title="Remove this step"
                           >
                             <Trash2 className="w-3 h-3" />
@@ -1549,21 +1549,21 @@ export function ActionNodeEditor({
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px]">
                         <div>
-                          <label className="block text-[10px] font-sans text-slate-500">Target CAN ID</label>
+                          <label className="block text-[10px] font-sans text-muted">Target CAN ID</label>
                           <input
                             type="text"
                             value={step.can_id || ''}
                             onChange={e => updateStep({ can_id: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                            className="w-full bg-surface-secondary border border-border rounded px-2 py-1 text-foreground"
                             placeholder={effectiveCanId || "0x524"}
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-sans text-slate-500">Bus</label>
+                          <label className="block text-[10px] font-sans text-muted">Bus</label>
                           <select
                             value={step.bus ?? 0}
                             onChange={e => updateStep({ bus: parseInt(e.target.value) || 0 })}
-                            className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 font-sans"
+                            className="w-full bg-surface-secondary border border-border rounded px-2 py-1 text-foreground font-sans"
                           >
                             <option value={0}>Bus 0</option>
                             <option value={1}>Bus 1</option>
@@ -1571,28 +1571,28 @@ export function ActionNodeEditor({
                           </select>
                         </div>
                         <div>
-                          <label className="block text-[10px] font-sans text-slate-500">Repeat × Delay</label>
+                          <label className="block text-[10px] font-sans text-muted">Repeat × Delay</label>
                           <div className="flex items-center gap-1">
                             <input
                               type="number"
                               value={step.repeat !== undefined ? step.repeat : 1}
                               onChange={e => updateStep({ repeat: parseInt(e.target.value) || 1 })}
-                              className="w-12 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-200"
+                              className="w-12 bg-surface-secondary border border-border rounded px-1.5 py-1 text-foreground"
                             />
-                            <span className="text-slate-500 font-sans">×</span>
+                            <span className="text-muted font-sans">×</span>
                             <input
                               type="number"
                               value={step.delay_ms !== undefined ? step.delay_ms : 0}
                               onChange={e => updateStep({ delay_ms: parseInt(e.target.value) || 0 })}
                               placeholder="ms"
-                              className="w-16 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-200"
+                              className="w-16 bg-surface-secondary border border-border rounded px-1.5 py-1 text-foreground"
                             />
                           </div>
                         </div>
                       </div>
 
                       <div className="space-y-1 font-mono text-[11px]">
-                        <label className="block text-[10px] font-sans text-slate-500">Step {sIdx + 1} Payload (1-based D1..D8)</label>
+                        <label className="block text-[10px] font-sans text-muted">Step {sIdx + 1} Payload (1-based D1..D8)</label>
                         <input
                           type="text"
                           value={payloadStr}
@@ -1601,7 +1601,7 @@ export function ActionNodeEditor({
                             updateStep({ payload: Object.keys(compiled).length > 0 ? compiled : e.target.value });
                           }}
                           placeholder='{"D1":"0x02","D2":"0x01"}'
-                          className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-emerald-300 font-bold"
+                          className="w-full bg-surface-secondary border border-border rounded px-2 py-1 text-success font-bold"
                         />
                         {renderByteBoxes(step.payload)}
                       </div>
@@ -1657,14 +1657,14 @@ export function ActionListEditor({
     <div className="space-y-2 min-w-0">
       {label && (
         <div className="flex items-center justify-between gap-2 min-w-0">
-          <span className="text-emerald-400 font-bold text-[11px] uppercase tracking-wider truncate">
+          <span className="text-success font-bold text-[11px] uppercase tracking-wider truncate">
             {label} ({actions.length})
           </span>
         </div>
       )}
 
       {actions.length === 0 ? (
-        <div className="p-3 rounded-xl bg-slate-950/40 border border-dashed border-slate-800 text-center text-xs text-slate-500 italic">
+        <div className="p-3 rounded-xl bg-surface-secondary/60 border border-dashed border-border text-center text-xs text-muted italic">
           {emptyText}
         </div>
       ) : (
@@ -1747,10 +1747,10 @@ export function ActionListEditor({
               const pasted = pastePayload('action');
               if (pasted) onUpdate([...actions, pasted]);
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-200 border border-emerald-700/60 transition cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-success-soft hover:bg-success/20 text-success-soft-foreground border border-success/40 transition cursor-pointer"
             title={`Paste copied action: "${clipboard.label}"`}
           >
-            <ClipboardPaste className="w-3.5 h-3.5 text-emerald-300" />
+            <ClipboardPaste className="w-3.5 h-3.5 text-success" />
             <span>Paste Action ({clipboard.label})</span>
           </button>
         )}

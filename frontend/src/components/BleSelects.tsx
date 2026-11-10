@@ -107,11 +107,11 @@ export const BleDeviceSelect: React.FC<BleDeviceSelectProps> = ({
   return (
     <div className={`space-y-1 font-sans ${className}`}>
       <div className="flex items-center justify-between">
-        <label className="block text-[10px] text-slate-400 font-medium truncate">{label}</label>
+        <label className="block text-[10px] text-muted font-medium truncate">{label}</label>
         <button
           type="button"
           onClick={() => setIsManual(!isManual)}
-          className="text-[9px] text-blue-400 hover:text-blue-300 font-mono transition flex items-center gap-0.5"
+          className="text-[9px] text-accent hover:opacity-80 font-mono transition flex items-center gap-0.5"
           title={isManual ? 'Select from detected devices' : 'Enter custom MAC address'}
         >
           {isManual ? 'Choose List' : 'Custom MAC'}
@@ -124,7 +124,7 @@ export const BleDeviceSelect: React.FC<BleDeviceSelectProps> = ({
           value={value}
           onChange={e => onChange(e.target.value)}
           placeholder="e.g. D1:01:B1:F6:8C:34 or MK321BT"
-          className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2.5 text-xs text-slate-200 font-mono focus:border-blue-500 focus:outline-none box-border"
+          className="w-full h-8 bg-surface-secondary border border-border rounded px-2.5 text-xs text-foreground font-mono focus:border-focus focus:outline-none box-border"
         />
       ) : (
         <select
@@ -138,7 +138,7 @@ export const BleDeviceSelect: React.FC<BleDeviceSelectProps> = ({
               onChange(val, matched?.name);
             }
           }}
-          className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-xs text-slate-200 font-mono focus:border-blue-500 focus:outline-none box-border"
+          className="w-full h-8 bg-surface-secondary border border-border rounded px-2 text-xs text-foreground font-mono focus:border-focus focus:outline-none box-border"
         >
           <option value="">{placeholder} (No Filter)</option>
 
@@ -206,11 +206,11 @@ export const BleBeaconSelect: React.FC<BleBeaconSelectProps> = ({
   return (
     <div className={`space-y-1 font-sans ${className}`}>
       <div className="flex items-center justify-between">
-        <label className="block text-[10px] text-slate-400 font-medium truncate">{label}</label>
+        <label className="block text-[10px] text-muted font-medium truncate">{label}</label>
         <button
           type="button"
           onClick={() => setIsManual(!isManual)}
-          className="text-[9px] text-purple-400 hover:text-purple-300 font-mono transition flex items-center gap-0.5"
+          className="text-[9px] text-purple-600 dark:text-purple-400 hover:opacity-80 font-mono transition flex items-center gap-0.5"
           title={isManual ? 'Select from detected beacons' : 'Enter custom UUID / MAC'}
         >
           {isManual ? 'Choose List' : 'Custom UUID'}
@@ -223,7 +223,7 @@ export const BleBeaconSelect: React.FC<BleBeaconSelectProps> = ({
           value={value}
           onChange={e => onChange(e.target.value)}
           placeholder="e.g. 46bc57c2-8fb0-4c2c-a13e-30f00b387701"
-          className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2.5 text-xs text-purple-300 font-mono focus:border-purple-500 focus:outline-none box-border"
+          className="w-full h-8 bg-surface-secondary border border-border rounded px-2.5 text-xs text-purple-600 dark:text-purple-400 font-mono focus:border-purple-500 focus:outline-none box-border"
         />
       ) : (
         <select
@@ -237,7 +237,7 @@ export const BleBeaconSelect: React.FC<BleBeaconSelectProps> = ({
               onChange(val, matched?.name);
             }
           }}
-          className="w-full h-8 bg-slate-900 border border-slate-800 rounded px-2 text-xs text-purple-300 font-mono focus:border-purple-500 focus:outline-none box-border"
+          className="w-full h-8 bg-surface-secondary border border-border rounded px-2 text-xs text-purple-600 dark:text-purple-400 font-mono focus:border-purple-500 focus:outline-none box-border"
         >
           <option value="">{placeholder} (No Filter)</option>
 

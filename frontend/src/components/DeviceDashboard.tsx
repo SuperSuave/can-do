@@ -885,10 +885,10 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
   // RSSI Icon helper
   const getSignalIcon = (rssi: number) => {
-    if (rssi >= -60) return <SignalHigh className="w-3.5 h-3.5 text-emerald-400" />;
-    if (rssi >= -75) return <SignalMedium className="w-3.5 h-3.5 text-cyan-400" />;
-    if (rssi >= -85) return <SignalLow className="w-3.5 h-3.5 text-amber-400" />;
-    return <SignalZero className="w-3.5 h-3.5 text-rose-400" />;
+    if (rssi >= -60) return <SignalHigh className="w-3.5 h-3.5 text-success" />;
+    if (rssi >= -75) return <SignalMedium className="w-3.5 h-3.5 text-accent" />;
+    if (rssi >= -85) return <SignalLow className="w-3.5 h-3.5 text-warning" />;
+    return <SignalZero className="w-3.5 h-3.5 text-danger" />;
   };
 
   return (
@@ -897,13 +897,13 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       <div className="can-do-card p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         {/* Device Identity & Connection state */}
         <div className="flex items-center gap-3.5 min-w-0">
-          <div className="h-11 w-11 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 flex items-center justify-center shrink-0 shadow-inner">
+          <div className="h-11 w-11 rounded-xl bg-accent-soft border border-accent/30 text-accent flex items-center justify-center shrink-0 shadow-inner">
             <Radio className="w-6 h-6 animate-pulse" />
           </div>
 
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-base sm:text-lg font-bold text-[var(--text-heading)] tracking-tight">
+              <h1 className="text-base sm:text-lg font-bold text-foreground tracking-tight">
                 CAN Do Edge Engine
               </h1>
               <Chip
@@ -912,8 +912,8 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 variant="soft"
                 className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
                   connected
-                    ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/80'
-                    : 'bg-rose-950/40 text-rose-300 border-rose-800/80'
+                    ? 'bg-success-soft text-success-soft-foreground border-success/40'
+                    : 'bg-danger-soft text-danger-soft-foreground border-danger/40'
                 }`}
               >
                 <span className={`status-dot mr-1 ${connected ? 'green' : 'red'}`} />
@@ -926,30 +926,30 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   variant="soft"
                   className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
                     wsConnected
-                      ? 'bg-cyan-950/40 text-cyan-300 border-cyan-800/80'
-                      : 'bg-amber-950/40 text-amber-300 border-amber-800/80'
+                      ? 'bg-accent-soft text-accent-soft-foreground border-accent/40'
+                      : 'bg-warning-soft text-warning-soft-foreground border-warning/40'
                   }`}
                   title={wsConnected ? 'WebSocket live CAN/log stream active' : `Connecting WebSocket to ${currentWsUrl}`}
                 >
-                  <span className={`w-1.5 h-1.5 rounded-full mr-1 ${wsConnected ? 'bg-cyan-400 animate-pulse' : 'bg-amber-400 animate-ping'}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full mr-1 ${wsConnected ? 'bg-accent animate-pulse' : 'bg-warning animate-ping'}`} />
                   {wsConnected ? 'WS Stream Active' : 'WS Connecting...'}
                 </Chip>
               )}
               {lastPingMs !== null && (
-                <Chip size="sm" variant="secondary" className="text-[11px] font-mono text-[var(--text-muted)]">
+                <Chip size="sm" variant="secondary" className="text-[11px] font-mono text-muted">
                   {lastPingMs}ms latency
                 </Chip>
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--text-muted)] font-mono mt-1">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted font-mono mt-1">
               <span>
-                Node: <strong className="text-cyan-300 font-bold">{status?.device_id || 'esp32-node'}</strong>
+                Node: <strong className="text-accent font-bold">{status?.device_id || 'esp32-node'}</strong>
               </span>
               <span>•</span>
-              <span>Uptime: <strong className="text-[var(--text-heading)]">{formatUptime(status?.uptime_sec)}</strong></span>
+              <span>Uptime: <strong className="text-foreground">{formatUptime(status?.uptime_sec)}</strong></span>
               <span>•</span>
-              <span>Heap: <strong className="text-[var(--text-heading)]">{formatHeap(status?.free_heap)}</strong></span>
+              <span>Heap: <strong className="text-foreground">{formatHeap(status?.free_heap)}</strong></span>
               <span>•</span>
               <button
                 type="button"
@@ -963,15 +963,15 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                       : 'Firmware update required to read NTP state\nClick to sync from browser')
                 }
               >
-                <Clock className={`w-3.5 h-3.5 ${status?.time_synced ? 'text-emerald-400' : 'text-amber-400 animate-pulse'}`} />
-                <span className={status?.time_synced ? 'text-[var(--text-heading)] group-hover:underline' : 'text-amber-300 font-semibold group-hover:underline'}>
+                <Clock className={`w-3.5 h-3.5 ${status?.time_synced ? 'text-success' : 'text-warning animate-pulse'}`} />
+                <span className={status?.time_synced ? 'text-foreground group-hover:underline' : 'text-warning font-semibold group-hover:underline'}>
                   {status?.time_synced ? (status?.system_time || 'NTP Synced') : (status?.time_synced === false ? 'NTP Pending' : 'Sync Clock')}
                 </span>
               </button>
               {status?.gvret_clients !== undefined && status.gvret_clients > 0 && (
                 <>
                   <span>•</span>
-                  <Chip size="sm" color="warning" variant="soft" className="text-amber-300 bg-amber-950/40 border border-amber-800/80 text-[11px] font-mono">
+                  <Chip size="sm" color="warning" variant="soft" className="text-warning-soft-foreground bg-warning-soft border border-warning/40 text-[11px] font-mono">
                     GVRET TCP: {status.gvret_clients}
                   </Chip>
                 </>
@@ -983,8 +983,8 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
         {/* Right: Host Connection Config & Quick Sync Actions */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Host Endpoint Selector */}
-          <div className="flex items-center gap-1.5 bg-[var(--input-bg)] px-2 py-1 rounded-lg border border-[var(--border-color)]">
-            <Globe className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
+          <div className="flex items-center gap-1.5 bg-surface-secondary px-2 py-1 rounded-lg border border-border">
+            <Globe className="w-3.5 h-3.5 text-muted shrink-0" />
             <select
               value={
                 deviceHost === 'auto' || deviceHost === (typeof window !== 'undefined' ? window.location.origin : '')
@@ -1003,12 +1003,12 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   localStorage.setItem('cando_device_host', val);
                 }
               }}
-              className="bg-transparent text-xs font-mono text-[var(--text-heading)] focus:outline-none cursor-pointer pr-1"
+              className="bg-transparent text-xs font-mono text-foreground focus:outline-none cursor-pointer pr-1"
               title="Quick select device endpoint"
             >
-              <option value="auto" className="bg-slate-900 text-slate-100">Auto (Current Host)</option>
-              <option value="http://192.168.4.1" className="bg-slate-900 text-slate-100">CAN Do SoftAP (192.168.4.1)</option>
-              <option value="custom" className="bg-slate-900 text-slate-100">Custom IP / URL...</option>
+              <option value="auto" className="bg-surface text-foreground">Auto (Current Host)</option>
+              <option value="http://192.168.4.1" className="bg-surface text-foreground">CAN Do SoftAP (192.168.4.1)</option>
+              <option value="custom" className="bg-surface text-foreground">Custom IP / URL...</option>
             </select>
           </div>
 
@@ -1021,7 +1021,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               localStorage.setItem('cando_device_host', e.target.value);
             }}
             placeholder="http://192.168.4.1"
-            className="px-2.5 py-1 rounded-lg bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-heading)] font-mono text-xs w-36 sm:w-44 focus:outline-none focus:border-[var(--md-sys-color-primary)] transition"
+            className="px-2.5 py-1 rounded-lg bg-surface-secondary border border-border text-foreground font-mono text-xs w-36 sm:w-44 focus:outline-none focus:border-focus transition"
             title="Device IP or mDNS hostname"
           />
 
@@ -1033,7 +1033,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               fetchStatus();
               fetchWifi();
             }}
-            className="dash-outline-btn text-xs py-1 px-2.5 inline-flex items-center gap-1 text-[var(--text-heading)]"
+            className="dash-outline-btn text-xs py-1 px-2.5 inline-flex items-center gap-1 text-foreground"
             aria-label="Reconnect WebSocket & Poll Status"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -1049,7 +1049,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   size="sm"
                   onPress={handleDeploy}
                   isDisabled={isDeployingRules}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-semibold text-xs shadow transition"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-foreground font-semibold text-xs shadow transition"
                   aria-label="Push current local automations down to device LittleFS"
                 >
                   <ArrowUpFromLine className={`w-3.5 h-3.5 ${isDeployingRules ? 'animate-bounce' : ''}`} />
@@ -1062,7 +1062,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   size="sm"
                   onPress={handlePull}
                   isDisabled={isPullingRules}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-semibold text-xs shadow transition"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-foreground font-semibold text-xs shadow transition"
                   aria-label="Load automations saved on device into the web builder"
                 >
                   <ArrowDownToLine className={`w-3.5 h-3.5 ${isPullingRules ? 'animate-bounce' : ''}`} />
@@ -1088,7 +1088,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               URL.revokeObjectURL(url);
               showNotice('Logs downloaded as .txt', 'info');
             }}
-            className="dash-outline-btn text-xs py-1.5 px-2.5 inline-flex items-center gap-1 text-[var(--text-heading)] hover:text-cyan-300"
+            className="dash-outline-btn text-xs py-1.5 px-2.5 inline-flex items-center gap-1 text-foreground hover:text-accent"
             aria-label="Download device session log as .txt"
           >
             <Download className="w-3.5 h-3.5" />
@@ -1109,7 +1109,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             <button
               type="button"
               onClick={() => setActionNotice(null)}
-              className="text-slate-400 hover:text-white ml-3 text-xs"
+              className="text-muted hover:text-foreground ml-3 text-xs"
             >
               ✕
             </button>
@@ -1121,23 +1121,23 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Metric 1: Automations Rule Engine */}
         <Card className="can-do-card p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-[var(--text-muted)] mb-1">
+          <div className="flex items-center justify-between text-xs text-muted mb-1">
             <span>Automations Engine</span>
-            <Zap className="w-4 h-4 text-amber-400" />
+            <Zap className="w-4 h-4 text-warning" />
           </div>
           <div className="flex items-baseline gap-2 mt-1">
             <span
               className={`text-lg font-bold font-mono ${
-                status?.automations_enabled ? 'text-emerald-400' : 'text-slate-500'
+                status?.automations_enabled ? 'text-success' : 'text-muted'
               }`}
             >
               {status?.automations_enabled ? 'ACTIVE' : 'MUTED'}
             </span>
-            <span className="text-[11px] font-mono text-[var(--text-muted)]">
+            <span className="text-[11px] font-mono text-muted">
               ({automations.length > 0 ? automations.length : automationRules.length} rules)
             </span>
           </div>
-          <div className="text-[11px] text-[var(--text-muted)] mt-1.5 flex items-center justify-between">
+          <div className="text-[11px] text-muted mt-1.5 flex items-center justify-between">
             <span>Edge evaluation loop</span>
             <Switch
               isSelected={status?.automations_enabled ?? false}
@@ -1156,9 +1156,9 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
         {/* Metric 2: CAN Controller / Dual-CAN HAT */}
         <Card className="can-do-card p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-[var(--text-muted)] mb-1">
+          <div className="flex items-center justify-between text-xs text-muted mb-1">
             <span>{status?.can0 || status?.can1 ? 'CAN HAT Channels' : 'CAN Controller'}</span>
-            <Activity className="w-4 h-4 text-cyan-400" />
+            <Activity className="w-4 h-4 text-accent" />
           </div>
           {status?.can0 || status?.can1 ? (
             <>
@@ -1172,10 +1172,10 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                       key={key}
                       className={`px-2 py-0.5 rounded text-xs font-mono font-bold border ${
                         isBusOff
-                          ? 'bg-rose-950/60 text-rose-300 border-rose-700/50'
+                          ? 'bg-danger-soft text-danger-soft-foreground border-danger/40'
                           : isOk
-                          ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/50'
-                          : 'bg-slate-800/70 text-slate-400 border-slate-700/50'
+                          ? 'bg-success-soft text-success-soft-foreground border-success/40'
+                          : 'bg-surface-secondary text-muted border-border'
                       }`}
                     >
                       CAN{idx}: {isBusOff ? 'BUS-OFF' : bus?.online ? 'ON' : 'OFF'}
@@ -1183,7 +1183,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   );
                 })}
               </div>
-              <div className="text-[11px] text-[var(--text-muted)] mt-1.5 flex items-center justify-between">
+              <div className="text-[11px] text-muted mt-1.5 flex items-center justify-between">
                 <span className="font-mono truncate">
                   {status?.hardware_listen_only ? 'Listen-Only (Stealth)' : 'Normal ACK'}
                 </span>
@@ -1204,11 +1204,11 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           ) : (
             <>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-lg font-bold font-mono text-cyan-300 uppercase">
+                <span className="text-lg font-bold font-mono text-accent uppercase">
                   {status?.twai_state || (connected ? 'RUNNING' : 'STOPPED')}
                 </span>
               </div>
-              <div className="text-[11px] text-[var(--text-muted)] mt-1.5 flex items-center justify-between">
+              <div className="text-[11px] text-muted mt-1.5 flex items-center justify-between">
                 <span className="font-mono truncate">
                   {status?.hardware_listen_only ? 'Stealth Listen-Only' : 'Normal PHY ACK'}
                 </span>
@@ -1231,18 +1231,18 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
         {/* Metric 3: Wi-Fi Link */}
         <Card className="can-do-card p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-[var(--text-muted)] mb-1">
+          <div className="flex items-center justify-between text-xs text-muted mb-1">
             <span>Wi-Fi Connection</span>
             <div className="flex items-center gap-1">
-              {wifi?.sta_rssi ? getSignalIcon(wifi.sta_rssi) : <Wifi className="w-4 h-4 text-sky-400" />}
+              {wifi?.sta_rssi ? getSignalIcon(wifi.sta_rssi) : <Wifi className="w-4 h-4 text-accent" />}
             </div>
           </div>
           <div className="mt-1">
-            <div className="text-base font-bold text-[var(--text-heading)] truncate font-mono">
+            <div className="text-base font-bold text-foreground truncate font-mono">
               {wifi?.sta_connected ? wifi.sta_ssid : (wifi?.ap_active ? 'CAN Do SoftAP' : 'No Link')}
             </div>
           </div>
-          <div className="text-[11px] text-[var(--text-muted)] mt-1.5 font-mono truncate flex items-center gap-1.5">
+          <div className="text-[11px] text-muted mt-1.5 font-mono truncate flex items-center gap-1.5">
             <span>{wifi?.sta_ip || wifi?.ap_ip || '192.168.4.1'}</span>
             {wifi?.sta_rssi ? (
               <Chip size="sm" variant="secondary" className="font-mono text-[10px]">
@@ -1254,20 +1254,20 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
         {/* Metric 4: Passive Sniffer Protection */}
         <Card className="can-do-card p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-[var(--text-muted)] mb-1">
+          <div className="flex items-center justify-between text-xs text-muted mb-1">
             <span>Bus Protection</span>
-            <Shield className={`w-4 h-4 ${status?.sniffer_mode ? 'text-amber-400' : 'text-emerald-400'}`} />
+            <Shield className={`w-4 h-4 ${status?.sniffer_mode ? 'text-warning' : 'text-success'}`} />
           </div>
           <div className="flex items-baseline gap-2 mt-1">
             <span
               className={`text-lg font-bold font-mono ${
-                status?.sniffer_mode ? 'text-amber-400' : 'text-emerald-400'
+                status?.sniffer_mode ? 'text-warning' : 'text-success'
               }`}
             >
               {status?.sniffer_mode ? 'PASSIVE (No Tx)' : 'BIDIRECTIONAL'}
             </span>
           </div>
-          <div className="text-[11px] text-[var(--text-muted)] mt-1.5 flex items-center justify-between">
+          <div className="text-[11px] text-muted mt-1.5 flex items-center justify-between">
             <span>{status?.sniffer_mode ? 'Zero bus collision risk' : 'Transmit commands active'}</span>
             <Switch
               isSelected={status?.sniffer_mode ?? false}
@@ -1298,78 +1298,78 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       )}
 
       {/* Sub-Navigation Segmented Tabs Bar */}
-      <div className="flex items-center justify-center border-b border-slate-800/80 pb-3 overflow-x-auto no-scrollbar">
+      <div className="flex items-center justify-center border-b border-separator pb-3 overflow-x-auto no-scrollbar">
         <Tabs
           selectedKey={activeTab}
           onSelectionChange={key => setActiveTab(key as 'automations' | 'mqtt' | 'wifi' | 'bluetooth' | 'ota')}
           aria-label="Device Console Tabs"
         >
-          <Tabs.ListContainer className="bg-slate-900/90 border border-slate-800/80 shadow-inner rounded-xl overflow-x-auto no-scrollbar">
+          <Tabs.ListContainer className="bg-surface border border-border shadow-inner rounded-xl overflow-x-auto no-scrollbar">
             <Tabs.List className="gap-1 p-1">
               <Tabs.Tab
                 id="automations"
                 className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                  activeTab === 'automations' ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
+                  activeTab === 'automations' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
                 }`}
               >
-                <Zap className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeTab === 'automations' ? 'text-amber-400' : 'text-slate-400'}`} />
+                <Zap className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeTab === 'automations' ? 'text-warning' : 'text-muted'}`} />
                 <span>Diagnostics</span>
-                <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
+                <Tabs.Indicator className="rounded-lg bg-surface-secondary border border-border shadow-sm" />
               </Tabs.Tab>
 
               <Tabs.Tab
                 id="mqtt"
                 className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                  activeTab === 'mqtt' ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
+                  activeTab === 'mqtt' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
                 }`}
               >
-                <Radio className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeTab === 'mqtt' ? 'text-amber-400' : 'text-slate-400'}`} />
+                <Radio className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeTab === 'mqtt' ? 'text-warning' : 'text-muted'}`} />
                 <span>HA & MQTT</span>
                 {mqttConfig.enabled && (
                   <span
                     className={`w-2 h-2 rounded-full ${
-                      mqttConfig.connected ? 'bg-emerald-400' : 'bg-amber-400/80 animate-pulse'
+                      mqttConfig.connected ? 'bg-success' : 'bg-warning animate-pulse'
                     }`}
                     title={mqttConfig.connected ? 'MQTT Connected' : 'Connecting / Disconnected'}
                   />
                 )}
-                <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
+                <Tabs.Indicator className="rounded-lg bg-surface-secondary border border-border shadow-sm" />
               </Tabs.Tab>
 
               <Tabs.Tab
                 id="wifi"
                 className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                  activeTab === 'wifi' ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
+                  activeTab === 'wifi' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
                 }`}
               >
-                <Wifi className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeTab === 'wifi' ? 'text-sky-400' : 'text-slate-400'}`} />
+                <Wifi className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeTab === 'wifi' ? 'text-accent' : 'text-muted'}`} />
                 <span>Wi-Fi & AP</span>
-                <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
+                <Tabs.Indicator className="rounded-lg bg-surface-secondary border border-border shadow-sm" />
               </Tabs.Tab>
 
               <Tabs.Tab
                 id="bluetooth"
                 className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                  activeTab === 'bluetooth' ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
+                  activeTab === 'bluetooth' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
                 }`}
               >
-                <Bluetooth className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeTab === 'bluetooth' ? 'text-blue-400' : 'text-slate-400'}`} />
+                <Bluetooth className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeTab === 'bluetooth' ? 'text-accent' : 'text-muted'}`} />
                 <span>Bluetooth</span>
-                <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
+                <Tabs.Indicator className="rounded-lg bg-surface-secondary border border-border shadow-sm" />
               </Tabs.Tab>
 
               <Tabs.Tab
                 id="ota"
                 className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                  activeTab === 'ota' ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
+                  activeTab === 'ota' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
                 }`}
               >
-                <RefreshCw className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeTab === 'ota' ? 'text-cyan-400' : 'text-slate-400'}`} />
+                <RefreshCw className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeTab === 'ota' ? 'text-accent' : 'text-muted'}`} />
                 <span>System & Updates</span>
                 {updateResult?.has_update && (
-                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                  <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
                 )}
-                <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
+                <Tabs.Indicator className="rounded-lg bg-surface-secondary border border-border shadow-sm" />
               </Tabs.Tab>
             </Tabs.List>
           </Tabs.ListContainer>
@@ -1383,10 +1383,10 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
         <div className="can-do-card p-4 sm:p-5 space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm sm:text-base font-bold text-[var(--text-heading)]">
+              <h3 className="text-sm sm:text-base font-bold text-foreground">
                 Edge Automations Diagnostics
               </h3>
-              <p className="text-xs text-[var(--text-muted)]">
+              <p className="text-xs text-muted">
                 Real-time trigger counters, execution latencies, and condition states running on ESP32 LittleFS
               </p>
             </div>
@@ -1398,7 +1398,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   size="sm"
                   onPress={handleDeploy}
                   isDisabled={isDeployingRules}
-                  className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-semibold text-xs flex items-center gap-1.5 shadow"
+                  className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-foreground font-semibold text-xs flex items-center gap-1.5 shadow"
                 >
                   <ArrowUpFromLine className="w-3.5 h-3.5" />
                   <span>Deploy to Device</span>
@@ -1434,12 +1434,12 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             {(!Array.isArray(automations) || automations.length === 0) ? (
-              <div className="col-span-2 text-center py-12 text-[var(--text-muted)] border border-dashed border-[var(--border-color)] rounded-xl">
-                <Zap className="w-8 h-8 text-amber-500/50 mx-auto mb-2" />
-                <h4 className="text-sm font-semibold text-[var(--text-heading)]">
+              <div className="col-span-2 text-center py-12 text-muted border border-dashed border-border rounded-xl">
+                <Zap className="w-8 h-8 text-warning/60 mx-auto mb-2" />
+                <h4 className="text-sm font-semibold text-foreground">
                   {automationsLoading ? 'Querying device diagnostic endpoint...' : 'No active automation rules on device'}
                 </h4>
-                <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto mt-1 mb-4">
+                <p className="text-xs text-muted max-w-sm mx-auto mt-1 mb-4">
                   Deploy your rules from the web automation builder or check connection status.
                 </p>
                 {onNavigateToAutomations && (
@@ -1447,7 +1447,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                     variant="outline"
                     size="sm"
                     onPress={onNavigateToAutomations}
-                    className="dash-outline-btn text-xs py-1.5 px-4 font-semibold text-cyan-300"
+                    className="dash-outline-btn text-xs py-1.5 px-4 font-semibold text-accent"
                   >
                     Open Automation Builder
                   </Button>
@@ -1457,42 +1457,42 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               automations.map((rule) => (
                 <div
                   key={rule.id}
-                  className="p-4 rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)] space-y-3"
+                  className="p-4 rounded-xl bg-surface-secondary border border-border space-y-3"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
-                      <Zap className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span className="font-bold text-xs text-[var(--text-heading)] truncate" title={rule.name || rule.id}>
+                      <Zap className="w-4 h-4 text-warning shrink-0" />
+                      <span className="font-bold text-xs text-foreground truncate" title={rule.name || rule.id}>
                         {rule.name || rule.id}
                       </span>
                     </div>
                     <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase shrink-0 ${
+                      className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase shrink-0 border ${
                         rule.enabled
-                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                          : 'bg-slate-800 text-slate-400'
+                          ? 'bg-success-soft text-success-soft-foreground border-success/40'
+                          : 'bg-surface-tertiary text-muted border-border'
                       }`}
                     >
                       {rule.enabled ? 'ACTIVE' : 'MUTED'}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-2 border-t border-[var(--border-color)]/60 text-[var(--text-muted)]">
+                  <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-2 border-t border-separator text-muted">
                     <div>
-                      Mode: <strong className="text-cyan-300 uppercase">{rule.exec_mode || 'one_shot'}</strong>
+                      Mode: <strong className="text-accent uppercase">{rule.exec_mode || 'one_shot'}</strong>
                     </div>
                     <div>
-                      Cooldown: <strong className="text-slate-300">{rule.cooldown_ms ?? 500}ms</strong>
+                      Cooldown: <strong className="text-foreground">{rule.cooldown_ms ?? 500}ms</strong>
                     </div>
                     <div>
-                      Triggers: <strong className="text-amber-300">{rule.triggers?.length || 0}</strong>
+                      Triggers: <strong className="text-warning">{rule.triggers?.length || 0}</strong>
                     </div>
                     <div>
-                      Actions: <strong className="text-amber-300">{rule.actions?.length || 0}</strong>
+                      Actions: <strong className="text-warning">{rule.actions?.length || 0}</strong>
                     </div>
                     <div>
                       Last Fired:{' '}
-                      <strong className="text-[var(--text-heading)]">
+                      <strong className="text-foreground">
                         {rule.last_exec_sec_ago !== undefined && rule.last_exec_sec_ago >= 0
                           ? `${rule.last_exec_sec_ago}s ago`
                           : rule.last_fired || 'Never'}
@@ -1512,13 +1512,13 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       {activeTab === 'mqtt' && (
         <div className="can-do-card p-4 sm:p-5 space-y-6">
           {/* Header & Status */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[var(--border-color)]">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-separator">
             <div>
-              <h3 className="text-sm sm:text-base font-bold text-[var(--text-heading)] flex items-center gap-2">
-                <Radio className="w-4 h-4 text-amber-400" />
+              <h3 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-2">
+                <Radio className="w-4 h-4 text-warning" />
                 Home Assistant & MQTT Integration
               </h3>
-              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+              <p className="text-[11px] text-muted mt-0.5">
                 Integrates CAN Do directly into Home Assistant using MQTT Auto-Discovery. Vehicle entities appear automatically.
               </p>
             </div>
@@ -1530,19 +1530,19 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 variant="soft"
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
                   mqttConfig.connected
-                    ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80'
+                    ? 'bg-success-soft text-success-soft-foreground border-success/40'
                     : mqttConfig.enabled
-                    ? 'bg-amber-950/60 text-amber-300 border-amber-800/80'
-                    : 'bg-slate-800 text-slate-400 border-slate-700/60'
+                    ? 'bg-warning-soft text-warning-soft-foreground border-warning/40'
+                    : 'bg-surface-secondary text-muted border-border'
                 }`}
               >
                 <span
                   className={`w-2 h-2 rounded-full mr-1.5 ${
                     mqttConfig.connected
-                      ? 'bg-emerald-400'
+                      ? 'bg-success'
                       : mqttConfig.enabled
-                      ? 'bg-amber-400 animate-pulse'
-                      : 'bg-slate-500'
+                      ? 'bg-warning animate-pulse'
+                      : 'bg-muted/50'
                   }`}
                 />
                 {mqttConfig.connected
@@ -1558,10 +1558,10 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 isIconOnly
                 onPress={fetchMqtt}
                 isDisabled={mqttLoading}
-                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+                className="p-1.5 rounded-lg bg-surface-secondary hover:bg-default-hover text-muted hover:text-foreground border border-border transition"
                 aria-label="Refresh MQTT Status"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${mqttLoading ? 'animate-spin text-cyan-400' : ''}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${mqttLoading ? 'animate-spin text-accent' : ''}`} />
               </Button>
             </div>
           </div>
@@ -1569,12 +1569,12 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           {/* Configuration Form */}
           <form onSubmit={handleSaveMqtt} className="space-y-5 max-w-2xl">
             {/* Toggle Enable */}
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)]">
+            <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-secondary border border-border">
               <div>
-                <span className="text-xs font-bold text-[var(--text-heading)] block">
+                <span className="text-xs font-bold text-foreground block">
                   Enable MQTT Client
                 </span>
-                <span className="text-[11px] text-[var(--text-muted)]">
+                <span className="text-[11px] text-muted">
                   Connect to MQTT broker and stream real-time vehicle telemetry states
                 </span>
               </div>
@@ -1594,13 +1594,13 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             </div>
 
             {/* Toggle HA Generic Discovery */}
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)]">
+            <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-secondary border border-border">
               <div>
-                <span className="text-xs font-bold text-[var(--text-heading)] block">
+                <span className="text-xs font-bold text-foreground block">
                   Broadcast Generic MQTT Auto-Discovery
                 </span>
-                <span className="text-[11px] text-[var(--text-muted)]">
-                  Publish legacy <code className="text-cyan-400 font-mono">homeassistant/.../config</code> topics. <strong className="text-amber-400 font-semibold">Leave disabled (recommended)</strong> when using the native CAN Do Home Assistant integration to avoid duplicate entities.
+                <span className="text-[11px] text-muted">
+                  Publish legacy <code className="text-accent font-mono">homeassistant/.../config</code> topics. <strong className="text-warning font-semibold">Leave disabled (recommended)</strong> when using the native CAN Do Home Assistant integration to avoid duplicate entities.
                 </span>
               </div>
               <Switch
@@ -1621,7 +1621,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             {/* Broker Fields */}
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-[var(--text-heading)] mb-1">
+                <label className="block text-xs font-bold text-foreground mb-1">
                   Broker URL (URI)
                 </label>
                 <input
@@ -1629,57 +1629,57 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   value={mqttConfig.broker_url}
                   onChange={(e) => setMqttConfig((prev) => ({ ...prev, broker_url: e.target.value }))}
                   placeholder="mqtt://homeassistant.local:1883 or mqtt://192.168.1.100:1883"
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-cyan-500/80 font-mono"
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-focus font-mono"
                   required
                 />
-                <span className="text-[10px] text-[var(--text-muted)] mt-1 block">
-                  Supported formats: <code className="text-cyan-400">mqtt://host:1883</code> or <code className="text-cyan-400">mqtts://host:8883</code>
+                <span className="text-[10px] text-muted mt-1 block">
+                  Supported formats: <code className="text-accent">mqtt://host:1883</code> or <code className="text-accent">mqtts://host:8883</code>
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-[var(--text-heading)] mb-1">
-                    Username <span className="text-[10px] font-normal text-[var(--text-muted)]">(optional)</span>
+                  <label className="block text-xs font-bold text-foreground mb-1">
+                    Username <span className="text-[10px] font-normal text-muted">(optional)</span>
                   </label>
                   <input
                     type="text"
                     value={mqttConfig.username}
                     onChange={(e) => setMqttConfig((prev) => ({ ...prev, username: e.target.value }))}
                     placeholder="homeassistant"
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-cyan-500/80 font-mono"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-focus font-mono"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-[var(--text-heading)] mb-1">
-                    Password {mqttConfig.has_password && <span className="text-emerald-400 text-[10px] font-normal">(Password set)</span>}
+                  <label className="block text-xs font-bold text-foreground mb-1">
+                    Password {mqttConfig.has_password && <span className="text-success text-[10px] font-normal">(Password set)</span>}
                   </label>
                   <input
                     type="password"
                     value={mqttPasswordInput}
                     onChange={(e) => setMqttPasswordInput(e.target.value)}
                     placeholder={mqttConfig.has_password ? '•••••••• (leave blank to keep)' : 'Enter broker password'}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-cyan-500/80 font-mono"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-focus font-mono"
                   />
                 </div>
               </div>
             </div>
 
             {/* Info Callout */}
-            <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 text-[11px] text-[var(--text-muted)] space-y-1.5">
-              <div className="flex items-center gap-1.5 font-bold text-slate-200">
-                <Info className="w-3.5 h-3.5 text-cyan-400" />
+            <div className="p-3.5 rounded-xl bg-surface-secondary border border-border text-[11px] text-muted space-y-1.5">
+              <div className="flex items-center gap-1.5 font-bold text-foreground">
+                <Info className="w-3.5 h-3.5 text-accent" />
                 <span>Home Assistant MQTT Auto-Discovery</span>
               </div>
               <p>
-                When enabled and connected, CAN Do publishes telemetry and discovery topics under <code className="text-cyan-300 font-mono">homeassistant/sensor/cando/...</code> and commands to <code className="text-cyan-300 font-mono">cando/set/...</code>.
+                When enabled and connected, CAN Do publishes telemetry and discovery topics under <code className="text-accent font-mono">homeassistant/sensor/cando/...</code> and commands to <code className="text-accent font-mono">cando/set/...</code>.
               </p>
             </div>
 
             {/* Actions */}
             <div className="flex items-center justify-between pt-2">
-              <span className={`text-xs font-medium ${mqttSaveStatus.includes('Error') || mqttSaveStatus.includes('Failed') ? 'text-rose-400' : 'text-emerald-400'}`}>
+              <span className={`text-xs font-medium ${mqttSaveStatus.includes('Error') || mqttSaveStatus.includes('Failed') ? 'text-danger' : 'text-success'}`}>
                 {mqttSaveStatus}
               </span>
 
@@ -1688,7 +1688,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 variant="primary"
                 size="sm"
                 isDisabled={mqttSaving}
-                className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-xs transition shadow-md shadow-cyan-600/20 inline-flex items-center gap-2"
+                className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-foreground font-bold text-xs transition shadow-sm inline-flex items-center gap-2"
               >
                 {mqttSaving ? (
                   <>
@@ -1714,54 +1714,54 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
         <div className="can-do-card p-4 sm:p-5 space-y-6">
           {/* Active Connection Information */}
           <div className="space-y-3">
-            <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+            <h3 className="text-xs font-bold text-muted uppercase tracking-wider">
               Active Network Interfaces
             </h3>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-mono">
-              <div className="p-3.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)]">
-                <div className="text-[var(--text-muted)]">Station Status</div>
-                <div className="text-base font-bold text-[var(--text-heading)] mt-0.5">
+              <div className="p-3.5 rounded-xl bg-surface-secondary border border-border">
+                <div className="text-muted">Station Status</div>
+                <div className="text-base font-bold text-foreground mt-0.5">
                   {wifi?.sta_connected ? 'CONNECTED' : 'STANDALONE'}
                 </div>
-                <div className="text-[11px] text-[var(--text-muted)] mt-1 truncate">
+                <div className="text-[11px] text-muted mt-1 truncate">
                   SSID: {wifi?.sta_ssid || 'None'}
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)]">
-                <div className="text-[var(--text-muted)]">Station IP</div>
+              <div className="p-3.5 rounded-xl bg-surface-secondary border border-border">
+                <div className="text-muted">Station IP</div>
                 <div className="mt-1">
-                  <Chip size="sm" color="accent" variant="soft" className="font-mono text-cyan-300 font-bold text-sm px-2 py-0.5">
+                  <Chip size="sm" color="accent" variant="soft" className="font-mono text-accent-soft-foreground font-bold text-sm px-2 py-0.5">
                     {wifi?.sta_ip || '--'}
                   </Chip>
                 </div>
-                <div className="text-[11px] text-[var(--text-muted)] mt-1 truncate">
+                <div className="text-[11px] text-muted mt-1 truncate">
                   Gateway: {wifi?.sta_gw || '--'}
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)]">
-                <div className="text-[var(--text-muted)]">Access Point (SoftAP)</div>
-                <div className="text-base font-bold text-[var(--text-heading)] mt-0.5">
+              <div className="p-3.5 rounded-xl bg-surface-secondary border border-border">
+                <div className="text-muted">Access Point (SoftAP)</div>
+                <div className="text-base font-bold text-foreground mt-0.5">
                   {wifi?.ap_ssid || 'CAN Do'}
                 </div>
                 <div className="mt-1">
-                  <Chip size="sm" variant="secondary" className="font-mono text-[11px] text-[var(--text-muted)]">
+                  <Chip size="sm" variant="secondary" className="font-mono text-[11px] text-muted">
                     AP IP: {wifi?.ap_ip || '192.168.4.1'}
                   </Chip>
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)]">
-                <div className="text-[var(--text-muted)]">Signal & Clients</div>
+              <div className="p-3.5 rounded-xl bg-surface-secondary border border-border">
+                <div className="text-muted">Signal & Clients</div>
                 <div className="mt-1 flex items-center gap-1.5">
                   {wifi?.sta_rssi ? (
-                    <Chip size="sm" color="accent" variant="soft" className="inline-flex items-center gap-1.5 font-bold font-mono text-cyan-300">
+                    <Chip size="sm" color="accent" variant="soft" className="inline-flex items-center gap-1.5 font-bold font-mono text-accent-soft-foreground">
                       {getSignalIcon(wifi.sta_rssi)}
                       <span>{wifi.sta_rssi} dBm</span>
                     </Chip>
                   ) : (
-                    <span className="text-base font-bold text-[var(--text-heading)]">--</span>
+                    <span className="text-base font-bold text-foreground">--</span>
                   )}
                 </div>
                 <div className="mt-1">
@@ -1774,8 +1774,8 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           </div>
 
           {/* Add Known Network Form */}
-          <div className="p-4 rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)] space-y-3">
-            <h4 className="text-xs font-bold text-[var(--text-heading)]">
+          <div className="p-4 rounded-xl bg-surface-secondary border border-border space-y-3">
+            <h4 className="text-xs font-bold text-foreground">
               Add Vehicle / Home Wi-Fi Network (Auto-Roaming)
             </h4>
             <form onSubmit={handleAddNetwork} className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
@@ -1785,27 +1785,27 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 onChange={(e) => setNewSsid(e.target.value)}
                 placeholder="Network SSID"
                 required
-                className="px-3 py-2 rounded-lg bg-[var(--md-sys-color-surface-container-lowest)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-[var(--md-sys-color-primary)] transition"
+                className="px-3 py-2 rounded-lg bg-surface-tertiary border border-border text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus transition"
               />
               <input
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Password (optional for open networks)"
-                className="px-3 py-2 rounded-lg bg-[var(--md-sys-color-surface-container-lowest)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-[var(--md-sys-color-primary)] transition"
+                className="px-3 py-2 rounded-lg bg-surface-tertiary border border-border text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus transition"
               />
               <input
                 type="number"
                 value={newPriority}
                 onChange={(e) => setNewPriority(Number(e.target.value))}
                 placeholder="Priority (1-100)"
-                className="px-3 py-2 rounded-lg bg-[var(--md-sys-color-surface-container-lowest)] border border-[var(--border-color)] text-[var(--text-heading)] focus:outline-none focus:border-[var(--md-sys-color-primary)] transition"
+                className="px-3 py-2 rounded-lg bg-surface-tertiary border border-border text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus transition"
               />
               <Button
                 type="submit"
                 variant="primary"
                 size="sm"
-                className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition shadow"
+                className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-accent-foreground font-bold transition shadow"
               >
                 Save Roaming Network
               </Button>
@@ -1814,21 +1814,21 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
           {/* Known Networks List */}
           <div className="space-y-2.5">
-            <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+            <h4 className="text-xs font-bold text-muted uppercase tracking-wider">
               Saved Roaming Profiles
             </h4>
-            <div className="divide-y divide-[var(--border-color)]/60 rounded-xl border border-[var(--border-color)] bg-[var(--md-sys-color-surface-container-lowest)]">
+            <div className="divide-y divide-separator rounded-xl border border-border bg-surface-secondary">
               {(!Array.isArray(networks) || networks.length === 0) ? (
-                <div className="p-4 text-center text-xs text-[var(--text-muted)]">
+                <div className="p-4 text-center text-xs text-muted">
                   No known roaming networks configured on device LittleFS.
                 </div>
               ) : (
                 networks.map((net) => (
                   <div key={net.ssid} className="p-3 flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2.5">
-                      <Wifi className="w-4 h-4 text-cyan-400" />
-                      <span className="font-bold text-[var(--text-heading)]">{net.ssid}</span>
-                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">
+                      <Wifi className="w-4 h-4 text-accent" />
+                      <span className="font-bold text-foreground">{net.ssid}</span>
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-surface-tertiary text-foreground border border-border font-mono">
                         Priority: {net.priority}
                       </span>
                     </div>
@@ -1836,7 +1836,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                       variant="danger-soft"
                       size="sm"
                       onPress={() => handleDeleteNetwork(net.ssid)}
-                      className="text-rose-400 hover:text-rose-300 text-xs font-semibold p-1 h-auto"
+                      className="text-danger hover:opacity-80 text-xs font-semibold p-1 h-auto"
                     >
                       Delete
                     </Button>
@@ -1849,7 +1849,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           {/* Wi-Fi Scanner */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+              <h4 className="text-xs font-bold text-muted uppercase tracking-wider">
                 Nearby Wi-Fi Airwaves
               </h4>
               <Button
@@ -1865,7 +1865,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {(!Array.isArray(scanResults) || scanResults.length === 0) ? (
-                <div className="col-span-full p-4 text-center text-xs text-[var(--text-muted)] border border-dashed border-[var(--border-color)] rounded-xl">
+                <div className="col-span-full p-4 text-center text-xs text-muted border border-dashed border-border rounded-xl">
                   {scanning ? 'Scanning nearby channels...' : 'No networks scanned yet. Click "Scan Networks" to search airwaves.'}
                 </div>
               ) : (
@@ -1873,20 +1873,20 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 <div
                   key={`${res.ssid}-${i}`}
                   onClick={() => setNewSsid(res.ssid)}
-                  className="p-3 rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)] hover:border-cyan-500/50 cursor-pointer transition text-xs space-y-1"
+                  className="p-3 rounded-xl bg-surface-secondary border border-border hover:border-accent cursor-pointer transition text-xs space-y-1"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5 min-w-0 pr-1">
                       {getSignalIcon(res.rssi)}
-                      <span className="font-bold text-[var(--text-heading)] truncate">{res.ssid}</span>
+                      <span className="font-bold text-foreground truncate">{res.ssid}</span>
                     </div>
-                    <Chip size="sm" variant="secondary" className="text-[var(--text-muted)] font-mono text-[10px] shrink-0">
+                    <Chip size="sm" variant="secondary" className="text-muted font-mono text-[10px] shrink-0">
                       {res.rssi} dBm
                     </Chip>
                   </div>
-                  <div className="text-[10px] text-[var(--text-muted)] flex items-center justify-between">
+                  <div className="text-[10px] text-muted flex items-center justify-between">
                     <span>{res.authmode === 0 ? 'Open (No password)' : 'WPA2/WPA3 Secured'}</span>
-                    <span className="text-cyan-400">Click to fill</span>
+                    <span className="text-accent">Click to fill</span>
                   </div>
                 </div>
               ))
@@ -1902,14 +1902,14 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       {activeTab === 'bluetooth' && (
         <div className="space-y-4">
           {!isS3Device && connected && status?.device && (
-            <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-800/60 text-xs text-amber-200 flex items-start gap-2.5">
-              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <div className="p-3.5 rounded-xl bg-warning-soft border border-warning/40 text-xs text-warning-soft-foreground flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <p className="font-semibold text-amber-300">
+                <p className="font-semibold">
                   Notice: Native Bluetooth (BLE HID & Beacon tracking) requires ESP32-S3 hardware.
                 </p>
-                <p className="text-[11px] text-amber-400/80 leading-relaxed">
-                  The currently connected device reports as <span className="font-mono text-white font-bold">{status.device}</span>.
+                <p className="text-[11px] opacity-85 leading-relaxed">
+                  The currently connected device reports as <span className="font-mono text-foreground font-bold">{status.device}</span>.
                 </p>
               </div>
             </div>
@@ -1936,11 +1936,11 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           {/* Header */}
           <div className="can-do-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h3 className="text-sm sm:text-base font-bold text-[var(--text-heading)] flex items-center gap-2">
-                <RefreshCw className="w-4 h-4 text-cyan-400" />
+              <h3 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 text-accent" />
                 System & Software Updates
               </h3>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+              <p className="text-xs text-muted mt-0.5">
                 Manage OTA firmware upgrades, vehicle message catalog sync, and web dashboard updates without requiring a PC
               </p>
             </div>
@@ -1951,7 +1951,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 size="sm"
                 isDisabled={isCheckingUpdate || isExecutingUpdate}
                 onPress={handleCheckForUpdates}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 text-white text-xs font-bold transition shadow-md shadow-cyan-600/20"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-foreground text-xs font-bold transition shadow-sm"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
                 <span>{isCheckingUpdate ? 'Checking...' : 'Check for Updates'}</span>
@@ -1961,10 +1961,10 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 variant="outline"
                 size="sm"
                 onPress={handleManualReboot}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium transition border border-slate-700/60"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-secondary hover:bg-default-hover text-foreground text-xs font-medium transition border border-border"
                 aria-label="Restart CAN Do hardware processor"
               >
-                <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                <RotateCcw className="w-3.5 h-3.5 text-warning" />
                 <span>Reboot</span>
               </Button>
 
@@ -1973,10 +1973,10 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   variant="outline"
                   size="sm"
                   onPress={onRerunOnboarding}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-secondary hover:bg-default-hover text-foreground text-xs font-medium transition border border-border"
                   aria-label="Re-run the initial vehicle & unit setup wizard"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                  <Sparkles className="w-3.5 h-3.5 text-accent" />
                   <span>Setup Wizard</span>
                 </Button>
               )}
@@ -1986,79 +1986,79 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           {/* 3-Card Version Deck */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {/* Card 1: Firmware */}
-            <div className="p-4 rounded-2xl bg-[var(--input-bg)] border border-[var(--border-color)] space-y-2">
+            <div className="p-4 rounded-2xl bg-surface border border-border space-y-2 shadow-sm">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs font-bold text-white">
-                  <Cpu className="w-4 h-4 text-cyan-400" />
+                <div className="flex items-center gap-2 text-xs font-bold text-foreground">
+                  <Cpu className="w-4 h-4 text-accent" />
                   <span>ESP32 Firmware</span>
                 </div>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950/60 text-cyan-300 border border-cyan-800/40">
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-accent-soft text-accent-soft-foreground border border-accent/30">
                   {status?.can_do_version || (status ? 'unknown' : 'Loading...')}
                 </span>
               </div>
-              <div className="text-xs text-[var(--text-muted)] space-y-1">
-                <div>Device ID: <span className="font-mono text-slate-200">{status?.device_id || 'ESP32-C3'}</span></div>
+              <div className="text-xs text-muted space-y-1">
+                <div>Device ID: <span className="font-mono text-foreground">{status?.device_id || 'ESP32-C3'}</span></div>
                 {status?.can0 || status?.can1 ? (
                   <div>
                     Dual-CAN HAT:{' '}
-                    <span className={`font-mono ${status?.can0?.online ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    <span className={`font-mono ${status?.can0?.online ? 'text-success' : 'text-warning'}`}>
                       C0:{status?.can0?.online ? 'OK' : 'OFF'}
                     </span>
                     {' / '}
-                    <span className={`font-mono ${status?.can1?.online ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    <span className={`font-mono ${status?.can1?.online ? 'text-success' : 'text-warning'}`}>
                       C1:{status?.can1?.online ? 'OK' : 'OFF'}
                     </span>
                   </div>
                 ) : (
-                  <div>TWAI Driver: <span className="font-mono text-emerald-400">{status?.twai_state || 'Active'}</span></div>
+                  <div>TWAI Driver: <span className="font-mono text-success">{status?.twai_state || 'Active'}</span></div>
                 )}
               </div>
             </div>
 
             {/* Card 2: Catalog */}
-            <div className="p-4 rounded-2xl bg-[var(--input-bg)] border border-[var(--border-color)] space-y-2">
+            <div className="p-4 rounded-2xl bg-surface border border-border space-y-2 shadow-sm">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs font-bold text-white">
-                  <HardDrive className="w-4 h-4 text-teal-400" />
+                <div className="flex items-center gap-2 text-xs font-bold text-foreground">
+                  <HardDrive className="w-4 h-4 text-success" />
                   <span>Message Catalog</span>
                 </div>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-teal-950/60 text-teal-300 border border-teal-800/40">
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-success-soft text-success-soft-foreground border border-success/30">
                   {catalog?.can_do_version || 'Loading...'}
                 </span>
               </div>
-              <div className="text-xs text-[var(--text-muted)] space-y-1">
-                <div>Vehicle Decoders: <span className="font-mono text-slate-200">{catalog?.commands?.length || 0} CAN Signals</span></div>
-                <div>Supported Models: <span className="font-mono text-slate-200">{catalog?.vehicles?.length || 0} Trims</span></div>
+              <div className="text-xs text-muted space-y-1">
+                <div>Vehicle Decoders: <span className="font-mono text-foreground">{catalog?.commands?.length || 0} CAN Signals</span></div>
+                <div>Supported Models: <span className="font-mono text-foreground">{catalog?.vehicles?.length || 0} Trims</span></div>
               </div>
             </div>
 
             {/* Card 3: Web Dashboard */}
-            <div className="p-4 rounded-2xl bg-[var(--input-bg)] border border-[var(--border-color)] space-y-2">
+            <div className="p-4 rounded-2xl bg-surface border border-border space-y-2 shadow-sm">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs font-bold text-white">
-                  <Globe className="w-4 h-4 text-indigo-400" />
+                <div className="flex items-center gap-2 text-xs font-bold text-foreground">
+                  <Globe className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                   <span>Web Front-End</span>
                 </div>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-indigo-950/60 text-indigo-300 border border-indigo-800/40">
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/40">
                   {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '—'}
                 </span>
               </div>
-              <div className="text-xs text-[var(--text-muted)] space-y-1">
-                <div>Serving Mode: <span className="font-mono text-slate-200">{isRunningOnDevice() ? 'Embedded Device' : 'Cloud / Dev'}</span></div>
-                <div>Storage Health: <span className="font-mono text-emerald-400">Optimized</span></div>
+              <div className="text-xs text-muted space-y-1">
+                <div>Serving Mode: <span className="font-mono text-foreground">{isRunningOnDevice() ? 'Embedded Device' : 'Cloud / Dev'}</span></div>
+                <div>Storage Health: <span className="font-mono text-success">Optimized</span></div>
               </div>
             </div>
           </div>
 
           {/* Staged Execution Progress Banner */}
           {isExecutingUpdate && (
-            <div className="p-4 rounded-2xl bg-cyan-950/40 border border-cyan-800/80 space-y-3 animate-fade-in">
-              <div className="flex items-center justify-between text-xs font-bold text-white">
+            <div className="p-4 rounded-2xl bg-accent-soft border border-accent/40 space-y-3 animate-fade-in">
+              <div className="flex items-center justify-between text-xs font-bold text-foreground">
                 <span className="flex items-center gap-2">
-                  <Spinner size="sm" className="text-cyan-400" />
+                  <Spinner size="sm" className="text-accent" />
                   <span>{updateMessage || 'Applying Updates...'}</span>
                 </span>
-                <span className="font-mono text-cyan-300">{updateProgressPct}%</span>
+                <span className="font-mono text-accent">{updateProgressPct}%</span>
               </div>
               <ProgressBar
                 value={updateProgressPct}
@@ -2067,11 +2067,11 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 aria-label="Firmware Update Progress"
                 className="w-full"
               >
-                <ProgressBar.Track className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden relative">
-                  <ProgressBar.Fill className="bg-gradient-to-r from-cyan-500 to-teal-400 h-2.5 rounded-full transition-all duration-300" />
+                <ProgressBar.Track className="w-full bg-surface-tertiary rounded-full h-2.5 overflow-hidden relative">
+                  <ProgressBar.Fill className="bg-accent h-2.5 rounded-full transition-all duration-300" />
                 </ProgressBar.Track>
               </ProgressBar>
-              <div className="flex justify-between text-[11px] text-slate-400 font-mono">
+              <div className="flex justify-between text-[11px] text-muted font-mono">
                 <span>1. Clean & Front-End</span>
                 <span>2. Message Catalog</span>
                 <span>3. Firmware Binary</span>
@@ -2081,22 +2081,22 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
           {/* Available Update Notification Card */}
           {updateResult?.has_update && !isExecutingUpdate && (
-            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-cyan-950/50 via-slate-900 to-teal-950/50 border border-cyan-500/50 space-y-3 animate-fade-in">
+            <div className="p-4 sm:p-5 rounded-2xl bg-accent-soft border border-accent/40 space-y-3 animate-fade-in">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+                  <div className="w-9 h-9 rounded-xl bg-accent/15 border border-accent/30 flex items-center justify-center text-accent shrink-0">
                     <Sparkles className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                    <h4 className="text-xs sm:text-sm font-bold text-foreground flex items-center gap-2">
                       <span>{updateResult.release_name || updateResult.version}</span>
                       {updateResult.is_rebuild && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-warning-soft text-warning-soft-foreground border border-warning/40">
                           Rebuilt Build Available
                         </span>
                       )}
                     </h4>
-                    <p className="text-[11px] text-slate-300 mt-0.5">
+                    <p className="text-[11px] text-muted mt-0.5">
                       {updateResult.is_rebuild
                         ? 'A newer build was published under the current release tag.'
                         : (updateResult.notes || 'Verified stability and vehicle definition enhancements.')}
@@ -2110,7 +2110,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                       href={updateResult.assets.firmware_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/60 text-xs font-bold transition shrink-0"
+                      className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-surface hover:bg-default-hover text-accent border border-accent/40 text-xs font-bold transition shrink-0"
                     >
                       <Download className="w-3.5 h-3.5" />
                       <span>{isS3Device ? 'Download S3 .bin' : 'Download WiCAN .bin'}</span>
@@ -2120,7 +2120,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                     variant="primary"
                     size="md"
                     onPress={handleInstallCloudUpdates}
-                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-slate-950 text-xs font-bold transition shadow-lg shadow-cyan-950/50 shrink-0"
+                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-foreground text-xs font-bold transition shadow-md shrink-0"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
                     <span>{updateResult.is_rebuild ? 'Re-sync & Update Now' : 'Install Updates Now'}</span>
@@ -2129,21 +2129,21 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               </div>
 
               <div className="flex flex-wrap gap-2 pt-1 text-[10px]">
-                <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                <span className="px-2 py-0.5 rounded-full bg-surface text-foreground border border-border">
                   Execution: Front-End &rarr; Catalog &rarr; Firmware
                 </span>
                 {updateResult.components.frontend && (
-                  <span className="px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800">
+                  <span className="px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-foreground border border-accent/30">
                     Web Dashboard
                   </span>
                 )}
                 {updateResult.components.catalog && (
-                  <span className="px-2 py-0.5 rounded-full bg-teal-950 text-teal-300 border border-teal-800">
+                  <span className="px-2 py-0.5 rounded-full bg-success-soft text-success-soft-foreground border border-success/30">
                     Message Catalog
                   </span>
                 )}
                 {updateResult.components.firmware && (
-                  <span className="px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800">
+                  <span className="px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/40">
                     Firmware Binary
                   </span>
                 )}
@@ -2153,10 +2153,10 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
           {/* Up to date state with manual re-sync button */}
           {updateResult && !updateResult.has_update && !isExecutingUpdate && (
-            <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2.5 text-xs text-slate-300">
-                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Device is up to date on version <strong className="text-white font-mono">{updateResult.version}</strong></span>
+            <div className="p-4 rounded-2xl bg-surface border border-border flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2.5 text-xs text-muted">
+                <Check className="w-4 h-4 text-success shrink-0" />
+                <span>Device is up to date on version <strong className="text-foreground font-mono">{updateResult.version}</strong></span>
               </div>
               <button
                 type="button"
@@ -2168,7 +2168,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                     components: { frontend: true, catalog: true, firmware: !!updateResult.assets.firmware_url }
                   });
                 }}
-                className="text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 underline underline-offset-2 shrink-0 transition"
+                className="text-[11px] font-semibold text-accent hover:opacity-80 underline underline-offset-2 shrink-0 transition"
               >
                 Force Re-sync Current Version
               </button>
@@ -2178,11 +2178,11 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           {/* Update Policy & Off-Hours Schedule Settings */}
           <div className="can-do-card p-4 sm:p-5 space-y-4">
             <div>
-              <h4 className="text-xs sm:text-sm font-bold text-[var(--text-heading)] flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-cyan-400" />
+              <h4 className="text-xs sm:text-sm font-bold text-foreground flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-accent" />
                 Update Preferences & Scheduling
               </h4>
-              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+              <p className="text-[11px] text-muted mt-0.5">
                 Configure whether updates install automatically, prompt you first, or run on an overnight schedule
               </p>
             </div>
@@ -2194,15 +2194,15 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 onClick={() => handleSavePreferences({ update_policy: 'auto' })}
                 className={`p-3 rounded-xl border text-left transition ${
                   localPrefs.update_policy === 'auto'
-                    ? 'bg-cyan-950/40 border-cyan-500 text-white'
-                    : 'bg-slate-800/40 border-slate-700/60 text-slate-400 hover:bg-slate-800'
+                    ? 'bg-accent-soft border-accent text-foreground'
+                    : 'bg-surface-secondary border-border text-muted hover:bg-default-hover'
                 }`}
               >
                 <div className="flex justify-between items-center text-xs font-bold">
                   <span>Full Auto</span>
-                  {localPrefs.update_policy === 'auto' && <Check className="w-3.5 h-3.5 text-cyan-400" />}
+                  {localPrefs.update_policy === 'auto' && <Check className="w-3.5 h-3.5 text-accent" />}
                 </div>
-                <div className="text-[10px] text-slate-400 mt-1">Automatic overnight installs</div>
+                <div className="text-[10px] text-muted mt-1">Automatic overnight installs</div>
               </button>
 
               {/* Option 2: Prompt */}
@@ -2211,15 +2211,15 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 onClick={() => handleSavePreferences({ update_policy: 'prompt' })}
                 className={`p-3 rounded-xl border text-left transition ${
                   localPrefs.update_policy === 'prompt'
-                    ? 'bg-cyan-950/40 border-cyan-500 text-white'
-                    : 'bg-slate-800/40 border-slate-700/60 text-slate-400 hover:bg-slate-800'
+                    ? 'bg-accent-soft border-accent text-foreground'
+                    : 'bg-surface-secondary border-border text-muted hover:bg-default-hover'
                 }`}
               >
                 <div className="flex justify-between items-center text-xs font-bold">
                   <span>Prompt Me</span>
-                  {localPrefs.update_policy === 'prompt' && <Check className="w-3.5 h-3.5 text-cyan-400" />}
+                  {localPrefs.update_policy === 'prompt' && <Check className="w-3.5 h-3.5 text-accent" />}
                 </div>
-                <div className="text-[10px] text-slate-400 mt-1">Notify in dashboard before updating</div>
+                <div className="text-[10px] text-muted mt-1">Notify in dashboard before updating</div>
               </button>
 
               {/* Option 3: Manual */}
@@ -2228,23 +2228,23 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 onClick={() => handleSavePreferences({ update_policy: 'manual' })}
                 className={`p-3 rounded-xl border text-left transition ${
                   localPrefs.update_policy === 'manual'
-                    ? 'bg-cyan-950/40 border-cyan-500 text-white'
-                    : 'bg-slate-800/40 border-slate-700/60 text-slate-400 hover:bg-slate-800'
+                    ? 'bg-accent-soft border-accent text-foreground'
+                    : 'bg-surface-secondary border-border text-muted hover:bg-default-hover'
                 }`}
               >
                 <div className="flex justify-between items-center text-xs font-bold">
                   <span>Manual Only</span>
-                  {localPrefs.update_policy === 'manual' && <Check className="w-3.5 h-3.5 text-cyan-400" />}
+                  {localPrefs.update_policy === 'manual' && <Check className="w-3.5 h-3.5 text-accent" />}
                 </div>
-                <div className="text-[10px] text-slate-400 mt-1">Never check automatically</div>
+                <div className="text-[10px] text-muted mt-1">Never check automatically</div>
               </button>
             </div>
 
             {/* Granular Component Toggles & Schedule Time */}
             {localPrefs.update_policy !== 'manual' && (
-              <div className="pt-2 border-t border-[var(--border-color)] grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="pt-2 border-t border-separator grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <span className="text-[11px] font-semibold text-slate-300">Active Update Components:</span>
+                  <span className="text-[11px] font-semibold text-foreground">Active Update Components:</span>
                   <div className="flex flex-wrap gap-3 text-xs">
                     <Switch
                       isSelected={localPrefs.update_components.frontend}
@@ -2260,7 +2260,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                         <Switch.Control>
                           <Switch.Thumb />
                         </Switch.Control>
-                        <span className="text-slate-300">Web Front-End</span>
+                        <span className="text-foreground">Web Front-End</span>
                       </Switch.Content>
                     </Switch>
 
@@ -2278,7 +2278,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                         <Switch.Control>
                           <Switch.Thumb />
                         </Switch.Control>
-                        <span className="text-slate-300">Message Catalog</span>
+                        <span className="text-foreground">Message Catalog</span>
                       </Switch.Content>
                     </Switch>
 
@@ -2296,7 +2296,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                         <Switch.Control>
                           <Switch.Thumb />
                         </Switch.Control>
-                        <span className="text-slate-300">Firmware Binary</span>
+                        <span className="text-foreground">Firmware Binary</span>
                       </Switch.Content>
                     </Switch>
                   </div>
@@ -2304,8 +2304,8 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                    <span className="text-[11px] font-semibold text-foreground flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-accent" />
                       Off-Hours Scheduled Time:
                     </span>
                     <Switch
@@ -2322,7 +2322,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                         <Switch.Control>
                           <Switch.Thumb />
                         </Switch.Control>
-                        <span className="text-[10px] font-bold text-slate-300">
+                        <span className="text-[10px] font-bold text-foreground">
                           {localPrefs.update_schedule.enabled ? 'ENABLED' : 'DISABLED'}
                         </span>
                       </Switch.Content>
@@ -2338,9 +2338,9 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                             update_schedule: { ...localPrefs.update_schedule, time: e.target.value },
                           })
                         }
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white font-mono"
+                        className="px-2.5 py-1 rounded-lg bg-surface-secondary border border-border text-xs text-foreground font-mono"
                       />
-                      <span className="text-[10px] text-slate-400">(Device local time)</span>
+                      <span className="text-[10px] text-muted">(Device local time)</span>
                     </div>
                   )}
                 </div>
@@ -2351,28 +2351,28 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           {/* Smart Low-Power & 12V Battery Gate */}
           <div className="can-do-card p-4 sm:p-5 space-y-4">
             <div>
-              <h4 className="text-xs sm:text-sm font-bold text-[var(--text-heading)] flex items-center gap-2">
-                <Battery className="w-4 h-4 text-emerald-400" />
+              <h4 className="text-xs sm:text-sm font-bold text-foreground flex items-center gap-2">
+                <Battery className="w-4 h-4 text-success" />
                 Power Management & 12V Protection Gate
               </h4>
-              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+              <p className="text-[11px] text-muted mt-0.5">
                 Protect your 12V auxiliary battery, throttle Wi-Fi power when vehicle is silent, and configure quiet hours
               </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* 12V Battery Cutoff Gate */}
-              <div className="p-3.5 rounded-xl border border-slate-700/60 bg-slate-800/30 space-y-2">
+              <div className="p-3.5 rounded-xl border border-border bg-surface-secondary space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <ShieldAlert className="w-4 h-4 text-amber-400" />
-                    <span className="text-xs font-semibold text-white">12V Cutoff Gate</span>
+                    <ShieldAlert className="w-4 h-4 text-warning" />
+                    <span className="text-xs font-semibold text-foreground">12V Cutoff Gate</span>
                   </div>
-                  <span className="text-xs font-mono font-bold text-amber-400">
+                  <span className="text-xs font-mono font-bold text-warning">
                     {(localPrefs.min_12v_gate_voltage ?? 12.2).toFixed(1)} V
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 leading-relaxed">
+                <p className="text-[10px] text-muted leading-relaxed">
                   Halts all active UDS diagnostic requests and suspends wake cycles if 12V drops below this voltage.
                 </p>
                 <div className="pt-1">
@@ -2388,20 +2388,20 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                     aria-label="12V Cutoff Gate Voltage"
                     className="w-full"
                   >
-                    <Slider.Track className="h-1.5 bg-slate-700 rounded-full cursor-pointer relative">
-                      <Slider.Fill className="bg-amber-400 rounded-full h-full" />
-                      <Slider.Thumb className="w-3.5 h-3.5 bg-amber-400 border-2 border-slate-900 rounded-full shadow cursor-grab active:cursor-grabbing focus:outline-none" />
+                    <Slider.Track className="h-1.5 bg-surface-tertiary rounded-full cursor-pointer relative">
+                      <Slider.Fill className="bg-warning rounded-full h-full" />
+                      <Slider.Thumb className="w-3.5 h-3.5 bg-warning border-2 border-surface rounded-full shadow cursor-grab active:cursor-grabbing focus:outline-none" />
                     </Slider.Track>
                   </Slider>
                 </div>
               </div>
 
               {/* Quiet / Offline Hours */}
-              <div className="p-3.5 rounded-xl border border-slate-700/60 bg-slate-800/30 space-y-2">
+              <div className="p-3.5 rounded-xl border border-border bg-surface-secondary space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Moon className="w-4 h-4 text-indigo-400" />
-                    <span className="text-xs font-semibold text-white">Quiet / Offline Hours</span>
+                    <Moon className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <span className="text-xs font-semibold text-foreground">Quiet / Offline Hours</span>
                   </div>
                   <Switch
                     isSelected={localPrefs.quiet_hours_enabled}
@@ -2415,13 +2415,13 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                       <Switch.Control>
                         <Switch.Thumb />
                       </Switch.Control>
-                      <span className="text-[10px] font-bold text-slate-300">
+                      <span className="text-[10px] font-bold text-foreground">
                         {localPrefs.quiet_hours_enabled ? 'ENABLED' : 'DISABLED'}
                       </span>
                     </Switch.Content>
                   </Switch>
                 </div>
-                <p className="text-[10px] text-slate-400 leading-relaxed">
+                <p className="text-[10px] text-muted leading-relaxed">
                   Suspends all active vehicle polling overnight and optimizes low-power modem sleep.
                 </p>
                 {localPrefs.quiet_hours_enabled && (
@@ -2430,28 +2430,28 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                       type="time"
                       value={localPrefs.quiet_hours_start || '22:00'}
                       onChange={(e) => handleSavePreferences({ quiet_hours_start: e.target.value })}
-                      className="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-xs text-white font-mono"
+                      className="px-2 py-1 rounded bg-surface-tertiary border border-border text-xs text-foreground font-mono"
                     />
-                    <span className="text-xs text-slate-400">to</span>
+                    <span className="text-xs text-muted">to</span>
                     <input
                       type="time"
                       value={localPrefs.quiet_hours_end || '07:00'}
                       onChange={(e) => handleSavePreferences({ quiet_hours_end: e.target.value })}
-                      className="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-xs text-white font-mono"
+                      className="px-2 py-1 rounded bg-surface-tertiary border border-border text-xs text-foreground font-mono"
                     />
                   </div>
                 )}
               </div>
 
               {/* Inactivity Sleep Delay */}
-              <div className="p-3.5 rounded-xl border border-slate-700/60 bg-slate-800/30 space-y-1.5">
+              <div className="p-3.5 rounded-xl border border-border bg-surface-secondary space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-white">Car-Off Sleep Timeout</span>
-                  <span className="text-xs font-mono font-bold text-cyan-400">
+                  <span className="text-xs font-semibold text-foreground">Car-Off Sleep Timeout</span>
+                  <span className="text-xs font-mono font-bold text-accent">
                     {localPrefs.uds_sleep_delay_sec ?? 10}s
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 leading-relaxed">
+                <p className="text-[10px] text-muted leading-relaxed">
                   Delay after CAN traffic stops before halting UDS and entering modem sleep.
                 </p>
                 <div className="flex items-center gap-2 pt-1">
@@ -2464,20 +2464,20 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                     onChange={(e) =>
                       handleSavePreferences({ uds_sleep_delay_sec: parseInt(e.target.value, 10) })
                     }
-                    className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-slate-700 rounded-lg"
+                    className="w-full accent-[var(--accent)] cursor-pointer h-1.5 bg-surface-tertiary rounded-lg"
                   />
                 </div>
               </div>
 
               {/* Awake Polling Interval */}
-              <div className="p-3.5 rounded-xl border border-slate-700/60 bg-slate-800/30 space-y-1.5">
+              <div className="p-3.5 rounded-xl border border-border bg-surface-secondary space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-white">Awake Polling Interval</span>
-                  <span className="text-xs font-mono font-bold text-cyan-400">
+                  <span className="text-xs font-semibold text-foreground">Awake Polling Interval</span>
+                  <span className="text-xs font-mono font-bold text-accent">
                     {localPrefs.uds_awake_interval_sec ?? 15}s
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 leading-relaxed">
+                <p className="text-[10px] text-muted leading-relaxed">
                   Frequency of high-voltage BMS queries while driving or charging.
                 </p>
                 <div className="flex items-center gap-2 pt-1">
@@ -2490,7 +2490,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                     onChange={(e) =>
                       handleSavePreferences({ uds_awake_interval_sec: parseInt(e.target.value, 10) })
                     }
-                    className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-slate-700 rounded-lg"
+                    className="w-full accent-[var(--accent)] cursor-pointer h-1.5 bg-surface-tertiary rounded-lg"
                   />
                 </div>
               </div>
@@ -2501,11 +2501,11 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           <div className="can-do-card p-4 sm:p-5 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <h4 className="text-xs sm:text-sm font-bold text-[var(--text-heading)] flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-cyan-400" />
+                <h4 className="text-xs sm:text-sm font-bold text-foreground flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-accent" />
                   System Timezone & Clock
                 </h4>
-                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                <p className="text-[11px] text-muted mt-0.5">
                   Controls scheduled automations, quiet hours evaluation, and live device timestamps
                 </p>
               </div>
@@ -2513,18 +2513,18 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 variant="outline"
                 size="sm"
                 onPress={handleSyncTime}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-cyan-950/40 text-cyan-300 border border-cyan-800/80 hover:bg-cyan-900/40 transition w-fit"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-accent-soft text-accent-soft-foreground border border-accent/40 hover:opacity-90 transition w-fit"
                 aria-label="Synchronize time and timezone from your browser"
               >
-                <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                <Clock className="w-3.5 h-3.5 text-accent" />
                 <span>Sync Time from Browser</span>
               </Button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="p-3.5 rounded-xl border border-slate-700/60 bg-slate-800/30 space-y-2">
-                <label className="block text-xs font-semibold text-white">Device Timezone</label>
-                <p className="text-[10px] text-slate-400 leading-relaxed">
+              <div className="p-3.5 rounded-xl border border-border bg-surface-secondary space-y-2">
+                <label className="block text-xs font-semibold text-foreground">Device Timezone</label>
+                <p className="text-[10px] text-muted leading-relaxed">
                   Used by the ESP32 coprocessor for local daylight savings and time schedule rules.
                 </p>
                 <select
@@ -2538,7 +2538,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                       body: JSON.stringify({ epoch: Math.floor(Date.now() / 1000), timezone: newTz })
                     }).then(() => fetchStatus());
                   }}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  className="w-full px-3 py-2 rounded-xl bg-surface-tertiary border border-border text-xs text-foreground focus:outline-none focus:border-focus"
                 >
                   {STANDARD_TIMEZONES.map((tz) => (
                     <option key={tz.id} value={tz.id}>
@@ -2548,18 +2548,18 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 </select>
               </div>
 
-              <div className="p-3.5 rounded-xl border border-slate-700/60 bg-slate-800/30 flex flex-col justify-center text-xs space-y-2">
+              <div className="p-3.5 rounded-xl border border-border bg-surface-secondary flex flex-col justify-center text-xs space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Device Clock:</span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${status?.time_synced ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-amber-950 text-amber-400 border border-amber-800'}`}>
+                  <span className="text-muted">Device Clock:</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${status?.time_synced ? 'bg-success-soft text-success-soft-foreground border-success/40' : 'bg-warning-soft text-warning-soft-foreground border-warning/40'}`}>
                     {status?.time_synced ? 'SYNCHRONIZED' : 'PENDING'}
                   </span>
                 </div>
-                <div className="font-mono text-cyan-300 font-bold text-sm">
+                <div className="font-mono text-accent font-bold text-sm">
                   {status?.system_time || 'Unsynchronized'}
                 </div>
-                <div className="text-[10px] text-slate-400">
-                  Active Zone: <strong className="text-slate-200">{getTimezoneLabel(status?.timezone || localPrefs.timezone)}</strong>
+                <div className="text-[10px] text-muted">
+                  Active Zone: <strong className="text-foreground">{getTimezoneLabel(status?.timezone || localPrefs.timezone)}</strong>
                 </div>
               </div>
             </div>
@@ -2569,11 +2569,11 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           <div className="can-do-card p-4 sm:p-5 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h4 className="text-xs sm:text-sm font-bold text-[var(--text-heading)] flex items-center gap-2">
-                  <Upload className="w-4 h-4 text-cyan-400" />
+                <h4 className="text-xs sm:text-sm font-bold text-foreground flex items-center gap-2">
+                  <Upload className="w-4 h-4 text-accent" />
                   Manual Firmware Binary Flash
                 </h4>
-                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                <p className="text-[11px] text-muted mt-0.5">
                   Flash a custom or release ESP32 binary directly over Wi-Fi without a USB cable
                 </p>
               </div>
@@ -2583,7 +2583,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   href={updateResult.assets.firmware_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/60 text-xs font-semibold shrink-0 transition"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-secondary hover:bg-default-hover text-accent border border-accent/40 text-xs font-semibold shrink-0 transition"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>{isS3Device ? 'Download Latest S3 .bin' : 'Download Latest WiCAN .bin'}</span>
@@ -2592,13 +2592,13 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             </div>
 
             <form onSubmit={handleOtaUpload} className="space-y-4 max-w-lg">
-              <div className="p-4 rounded-xl border-2 border-dashed border-[var(--border-color)] hover:border-cyan-500/50 transition-colors text-center bg-[var(--input-bg)]">
-                <Upload className="w-6 h-6 text-cyan-400 mx-auto mb-1.5" />
-                <div className="text-xs font-semibold text-[var(--text-heading)]">
+              <div className="p-4 rounded-xl border-2 border-dashed border-border hover:border-accent transition-colors text-center bg-surface-secondary">
+                <Upload className="w-6 h-6 text-accent mx-auto mb-1.5" />
+                <div className="text-xs font-semibold text-foreground">
                   {otaFile ? otaFile.name : 'Select firmware binary (.bin)'}
                 </div>
                 {otaFile && (
-                  <div className="text-[10px] text-[var(--text-muted)] font-mono mt-0.5">
+                  <div className="text-[10px] text-muted font-mono mt-0.5">
                     Size: {Math.round(otaFile.size / 1024)} KB
                   </div>
                 )}
@@ -2606,19 +2606,19 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   type="file"
                   accept=".bin"
                   onChange={(e) => setOtaFile(e.target.files?.[0] || null)}
-                  className="mt-2 block w-full text-xs text-[var(--text-muted)] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-cyan-300 hover:file:bg-slate-700 cursor-pointer"
+                  className="mt-2 block w-full text-xs text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-border file:text-xs file:font-semibold file:bg-surface-tertiary file:text-accent hover:file:bg-default-hover cursor-pointer"
                 />
               </div>
 
               {otaUploading && (
                 <div className="space-y-1">
-                  <div className="flex justify-between text-xs font-mono text-[var(--text-muted)]">
+                  <div className="flex justify-between text-xs font-mono text-muted">
                     <span>Uploading Image...</span>
                     <span>{otaProgress}%</span>
                   </div>
-                  <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                  <div className="w-full bg-surface-tertiary rounded-full h-2 overflow-hidden">
                     <div
-                      className="bg-cyan-500 h-2 rounded-full transition-all duration-300"
+                      className="bg-accent h-2 rounded-full transition-all duration-300"
                       style={{ width: `${otaProgress}%` }}
                     />
                   </div>
@@ -2626,7 +2626,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               )}
 
               {otaStatus && (
-                <div className="text-xs font-mono text-cyan-300 bg-cyan-950/30 p-2.5 rounded-lg border border-cyan-800/50">
+                <div className="text-xs font-mono text-accent-soft-foreground bg-accent-soft p-2.5 rounded-lg border border-accent/30">
                   {otaStatus}
                 </div>
               )}
@@ -2636,7 +2636,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 variant="primary"
                 size="md"
                 isDisabled={!otaFile || otaUploading}
-                className="w-full py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-xs transition shadow-md shadow-cyan-600/20"
+                className="w-full py-2 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-foreground font-bold text-xs transition shadow-sm"
               >
                 {otaUploading ? 'Flashing Firmware...' : 'Flash Firmware Binary'}
               </Button>
