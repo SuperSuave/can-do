@@ -1,5 +1,6 @@
 #include "remote_climate.h"
 #include "can.h"
+#include "can_engine.h"
 #include "api.h"
 #include "mqtt_mgr.h"
 #include "driver/twai.h"
@@ -35,7 +36,7 @@ static const uint8_t AUTOSAR_NM_63[8] = { 0x63, 0x01, 0x00, 0x00, 0x00, 0x00, 0x
 
 static void send_can_frame(uint32_t id, const uint8_t* data, uint8_t dlc) {
     twai_status_info_t info;
-    if (twai_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING || info.tx_error_counter >= 128) {
+    if (can_engine_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING || info.tx_error_counter >= 128) {
         return;
     }
     twai_message_t tx_msg = {};

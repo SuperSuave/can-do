@@ -1,5 +1,6 @@
 #include "ambient_anim.h"
 #include "can.h"
+#include "can_engine.h"
 #include "driver/twai.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -107,7 +108,7 @@ static TaskHandle_t s_anim_task_handle = nullptr;
 
 static void send_raw_frame(uint32_t id, const uint8_t* data, uint8_t dlc) {
     twai_status_info_t info;
-    if (twai_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING || info.tx_error_counter >= 128) {
+    if (can_engine_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING || info.tx_error_counter >= 128) {
         return;
     }
     twai_message_t tx_msg = {};

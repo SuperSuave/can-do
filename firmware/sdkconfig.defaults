@@ -17,8 +17,7 @@ CONFIG_HTTPD_WS_SUPPORT=y
 # FreeRTOS configuration
 CONFIG_FREERTOS_HZ=1000
 
-# CRITICAL FIX: Route console exclusively to native USB Serial/JTAG (GPIO 18/19)
-# Frees GPIO 20/21 completely from UART0 to prevent hardware conflict with UART1 bridge
+# Route console to native USB Serial/JTAG (GPIO 18/19)
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
 CONFIG_BOOT_ROM_LOG_ALWAYS_OFF=y

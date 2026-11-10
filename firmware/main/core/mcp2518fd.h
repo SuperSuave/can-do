@@ -101,6 +101,7 @@ typedef struct {
     bool initialized;
     uint32_t tx_fail_count;
     uint32_t rx_overflow_count;
+    uint32_t last_rx_poll_ms;
 } mcp2518fd_t;
 
 // Controller initialization and control API
@@ -117,8 +118,11 @@ esp_err_t dual_can_init(void);
 esp_err_t dual_can_send(can_bus_t bus, const can_fd_frame_t *frame, TickType_t wait_ticks);
 esp_err_t dual_can_send_twai(can_bus_t bus, const twai_message_t *msg, TickType_t wait_ticks);
 esp_err_t dual_can_receive(can_bus_t bus, can_fd_frame_t *frame, TickType_t wait_ticks);
+esp_err_t dual_can_poll_receive(can_bus_t bus, can_fd_frame_t *frame);
 bool dual_can_is_available(can_bus_t bus);
 mcp2518fd_t* dual_can_get_device(can_bus_t bus);
+esp_err_t dual_can_set_listen_only(bool listen_only);
+void dual_can_shutdown(void);
 
 #ifdef __cplusplus
 }

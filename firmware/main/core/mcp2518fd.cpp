@@ -96,18 +96,32 @@ static esp_err_t mcp2518fd_write_bytes(mcp2518fd_t *dev, uint16_t reg, const uin
 esp_err_t mcp2518fd_set_mode(mcp2518fd_t *dev, mcp2518fd_mode_t mode) {
     if (!dev || !dev->spi) return ESP_ERR_INVALID_ARG;
 
+    bool locked = false;
+    if (dev->initialized && dev->mutex) {
+        if (xSemaphoreTake(dev->mutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+            return ESP_ERR_TIMEOUT;
+        }
+        locked = true;
+    }
+
     uint32_t cicon = 0;
     esp_err_t ret = mcp2518fd_read_32(dev, MCP2518FD_REG_CiCON, &cicon);
-    if (ret != ESP_OK) return ret;
+    if (ret != ESP_OK) {
+        if (locked) xSemaphoreGive(dev->mutex);
+        return ret;
+    }
 
     // Clear REQOP (bits 26:24) and set requested mode
     cicon &= ~(0x7 << 24);
     cicon |= ((uint32_t)mode & 0x7) << 24;
-    // Ensure ISO CRC is enabled
-    cicon |= (1 << 9);
+    // Enable ISO CRC (ISOCRCEN = BIT(5)) and Restricted Retransmission Attempts (RTXAT = BIT(16))
+    cicon |= (1 << 5) | (1 << 16);
 
     ret = mcp2518fd_write_32(dev, MCP2518FD_REG_CiCON, cicon);
-    if (ret != ESP_OK) return ret;
+    if (ret != ESP_OK) {
+        if (locked) xSemaphoreGive(dev->mutex);
+        return ret;
+    }
 
     // Wait for OPMOD (bits 23:21) to reflect requested mode
     uint32_t start_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
@@ -116,12 +130,14 @@ esp_err_t mcp2518fd_set_mode(mcp2518fd_t *dev, mcp2518fd_mode_t mode) {
         if (ret == ESP_OK) {
             uint8_t opmod = (cicon >> 21) & 0x7;
             if (opmod == (uint8_t)mode) {
+                if (locked) xSemaphoreGive(dev->mutex);
                 return ESP_OK;
             }
         }
         vTaskDelay(pdMS_TO_TICKS(2));
     }
 
+    if (locked) xSemaphoreGive(dev->mutex);
     ESP_LOGW(TAG, "CS=%d: Mode change timeout (requested=%d, opmod=%lu)",
              (int)dev->config.cs_pin, (int)mode, (unsigned long)((cicon >> 21) & 0x7));
     return ESP_ERR_TIMEOUT;
@@ -129,9 +145,12 @@ esp_err_t mcp2518fd_set_mode(mcp2518fd_t *dev, mcp2518fd_mode_t mode) {
 
 esp_err_t mcp2518fd_init(mcp2518fd_t *dev, const mcp2518fd_config_t *config) {
     if (!dev || !config) return ESP_ERR_INVALID_ARG;
+    spi_device_handle_t existing_spi = dev->spi;
+    SemaphoreHandle_t existing_mutex = dev->mutex;
     memset(dev, 0, sizeof(mcp2518fd_t));
     dev->config = *config;
-    dev->mutex = xSemaphoreCreateMutex();
+    dev->spi = existing_spi;
+    dev->mutex = existing_mutex ? existing_mutex : xSemaphoreCreateMutex();
 
     // Configure INT GPIO (Active LOW)
     if (config->int_pin >= 0) {
@@ -143,20 +162,22 @@ esp_err_t mcp2518fd_init(mcp2518fd_t *dev, const mcp2518fd_config_t *config) {
     }
 
     // Add device to SPI bus (10MHz standard clock for clean signal fidelity)
-    spi_device_interface_config_t dev_cfg = {};
-    dev_cfg.clock_speed_hz = 10 * 1000 * 1000;
-    dev_cfg.mode = 0; // SPI Mode 0,0
-    dev_cfg.spics_io_num = config->cs_pin;
-    dev_cfg.queue_size = 8;
+    if (!dev->spi) {
+        spi_device_interface_config_t dev_cfg = {};
+        dev_cfg.clock_speed_hz = 10 * 1000 * 1000;
+        dev_cfg.mode = 0; // SPI Mode 0,0
+        dev_cfg.spics_io_num = config->cs_pin;
+        dev_cfg.queue_size = 8;
 
-    esp_err_t ret = spi_bus_add_device(config->spi_host, &dev_cfg, &dev->spi);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed adding SPI device on CS=%d (%s)", config->cs_pin, esp_err_to_name(ret));
-        return ret;
+        esp_err_t ret = spi_bus_add_device(config->spi_host, &dev_cfg, &dev->spi);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed adding SPI device on CS=%d (%s)", config->cs_pin, esp_err_to_name(ret));
+            return ret;
+        }
     }
 
     // 1. Hardware Reset
-    ret = mcp2518fd_cmd_reset(dev);
+    esp_err_t ret = mcp2518fd_cmd_reset(dev);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "SPI Reset command failed on CS=%d", config->cs_pin);
         return ret;
@@ -210,13 +231,14 @@ esp_err_t mcp2518fd_init(mcp2518fd_t *dev, const mcp2518fd_config_t *config) {
     }
 
     // 4. Configure Nominal Bit Rate (500 kbps for E-GMP vehicle bus)
-    // 40 MHz oscillator: 80 TQ, BRP=0, TSEG1=63 (64 TQ), TSEG2=15 (16 TQ), SJW=15
+    // Total bit time = 1 (Sync) + (TSEG1 + 1) + (TSEG2 + 1) TQ
+    // 40 MHz oscillator: 80 TQ (80% sample point), BRP=0, TSEG1=62 (63 TQ), TSEG2=15 (16 TQ), SJW=15
     uint32_t nbtcfg = 0;
     if (config->osc_freq == MCP2518FD_OSC_40MHZ) {
-        nbtcfg = (0 << 24) | (63 << 16) | (15 << 8) | 15;
+        nbtcfg = (0 << 24) | (62 << 16) | (15 << 8) | 15;
     } else {
-        // 20 MHz oscillator: 40 TQ, BRP=0, TSEG1=31 (32 TQ), TSEG2=7 (8 TQ), SJW=7
-        nbtcfg = (0 << 24) | (31 << 16) | (7 << 8) | 7;
+        // 20 MHz oscillator: 40 TQ (80% sample point), BRP=0, TSEG1=30 (31 TQ), TSEG2=7 (8 TQ), SJW=7
+        nbtcfg = (0 << 24) | (30 << 16) | (7 << 8) | 7;
     }
     mcp2518fd_write_32(dev, MCP2518FD_REG_CiNBTCFG, nbtcfg);
 
@@ -229,21 +251,27 @@ esp_err_t mcp2518fd_init(mcp2518fd_t *dev, const mcp2518fd_config_t *config) {
             dbtcfg = (0 << 24) | (14 << 16) | (3 << 8) | 3;
             tdc = (2 << 16) | (15 << 8); // TDC Auto, offset = 15
         } else {
-            // 20 MHz oscillator: 10 TQ, BRP=0, TSEG1=6 (7 TQ), TSEG2=2 (3 TQ), SJW=2
-            dbtcfg = (0 << 24) | (6 << 16) | (2 << 8) | 2;
+            // 20 MHz oscillator: 10 TQ, BRP=0, TSEG1=6 (7 TQ), TSEG2=1 (2 TQ), SJW=1
+            dbtcfg = (0 << 24) | (6 << 16) | (1 << 8) | 1;
             tdc = (2 << 16) | (7 << 8);
         }
         mcp2518fd_write_32(dev, MCP2518FD_REG_CiDBTCFG, dbtcfg);
         mcp2518fd_write_32(dev, MCP2518FD_REG_CiTDC, tdc);
     }
 
-    // 6. Configure FIFOs in RAM:
-    // FIFO 1: TX FIFO, 64-byte payload (PLSIZE=7), depth = 8 messages (FSIZE=7), TXEN=1
-    uint32_t fifocon1 = (7 << 29) | (7 << 24) | (1 << 7);
+    // 6. Configure FIFOs in RAM (2048 bytes max):
+    // Classic CAN uses PLSIZE=0 (8B payload = 16B/obj): 16 TX (256B) + 32 RX (512B) = 768B
+    // CAN FD uses PLSIZE=7 (64B payload = 72B/obj): 4 TX (288B) + 24 RX (1728B) = 2016B
+    uint32_t plsize = config->can_fd_enabled ? 7U : 0U;
+    uint32_t tx_fsize = config->can_fd_enabled ? 3U : 15U;
+    uint32_t rx_fsize = config->can_fd_enabled ? 23U : 31U;
+
+    // FIFO 1: TX FIFO, TXAT=1 (3 retries), TXEN=1
+    uint32_t fifocon1 = (plsize << 29) | (tx_fsize << 24) | (1 << 21) | (1 << 7);
     mcp2518fd_write_32(dev, MCP2518FD_REG_CiFIFOCON(1), fifocon1);
 
-    // FIFO 2: RX FIFO, 64-byte payload (PLSIZE=7), depth = 16 messages (FSIZE=15), RX Not Empty IRQ enable (TFNRFNIE=1)
-    uint32_t fifocon2 = (7 << 29) | (15 << 24) | (1 << 0);
+    // FIFO 2: RX FIFO, RX Not Empty IRQ enable (TFNRFNIE=1)
+    uint32_t fifocon2 = (plsize << 29) | (rx_fsize << 24) | (1 << 0);
     mcp2518fd_write_32(dev, MCP2518FD_REG_CiFIFOCON(2), fifocon2);
 
     // 7. Configure Filter 0: Accept All frames (standard + extended) and route to FIFO 2
@@ -251,10 +279,11 @@ esp_err_t mcp2518fd_init(mcp2518fd_t *dev, const mcp2518fd_config_t *config) {
     uint32_t fltcon0 = (1 << 7) | 2;
     mcp2518fd_write_32(dev, MCP2518FD_REG_CiFLTCON(0), fltcon0);
     mcp2518fd_write_32(dev, MCP2518FD_REG_CiFLTOBJ(0), 0x00000000);
-    mcp2518fd_write_32(dev, MCP2518FD_REG_CiMASK(0), 0x00000000); // 0 mask matches all
+    mcp2518fd_write_32(dev, MCP2518FD_REG_CiMASK(0), 0x00000000); // 0 mask (MIDE=0) matches all std & ext
 
-    // 8. Configure Pins: GPIO0 & GPIO1 as Interrupt outputs
-    mcp2518fd_write_32(dev, MCP2518FD_REG_IOCON, (1 << 9) | (1 << 8));
+    // 8. Enable RX FIFO Interrupt (RXIE = BIT(17) in CiINT) so hardware nINT pin asserts LOW on RX
+    // Leave IOCON at reset default (push-pull active-low nINT) to avoid multi-byte IOCON errata.
+    mcp2518fd_write_32(dev, MCP2518FD_REG_CiINT, (1 << 17));
 
     // 9. Transition to Operational Mode
     mcp2518fd_mode_t target_mode;
@@ -285,19 +314,27 @@ esp_err_t mcp2518fd_init(mcp2518fd_t *dev, const mcp2518fd_config_t *config) {
 bool mcp2518fd_rx_available(mcp2518fd_t *dev) {
     if (!dev || !dev->initialized) return false;
 
-    // Fast check via INT pin if available (active LOW)
+    // Fast path via active-LOW nINT pin; also fallback-poll SPI every 20ms in case INT line isn't seated
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
     if (dev->config.int_pin >= 0) {
-        if (gpio_get_level(dev->config.int_pin) != 0) {
+        if (gpio_get_level(dev->config.int_pin) != 0 && (now_ms - dev->last_rx_poll_ms) < 20) {
             return false;
         }
     }
+    dev->last_rx_poll_ms = now_ms;
 
-    // Verify RX FIFO 2 Not Empty status
-    uint32_t fifosta = 0;
-    if (mcp2518fd_read_32(dev, MCP2518FD_REG_CiFIFOSTA(2), &fifosta) == ESP_OK) {
-        return (fifosta & 0x01) != 0; // TFNRFNIF = 1 when RX FIFO has messages
+    if (dev->mutex && xSemaphoreTake(dev->mutex, pdMS_TO_TICKS(5)) != pdTRUE) {
+        return false;
     }
-    return false;
+
+    // Verify RX FIFO 2 Not Empty status (TFNRFNIF = BIT(0))
+    uint32_t fifosta = 0;
+    esp_err_t ret = mcp2518fd_read_32(dev, MCP2518FD_REG_CiFIFOSTA(2), &fifosta);
+
+    if (dev->mutex) {
+        xSemaphoreGive(dev->mutex);
+    }
+    return (ret == ESP_OK) && ((fifosta & 0x01) != 0);
 }
 
 esp_err_t mcp2518fd_transmit(mcp2518fd_t *dev, const can_fd_frame_t *frame, TickType_t wait_ticks) {
@@ -336,7 +373,9 @@ esp_err_t mcp2518fd_transmit(mcp2518fd_t *dev, const can_fd_frame_t *frame, Tick
         word0 = frame->identifier & 0x7FF;
     }
 
-    uint8_t dlc = bytes_to_dlc(frame->len);
+    uint8_t max_bytes = dev->config.can_fd_enabled ? 64 : 8;
+    uint8_t clamped_len = frame->len > max_bytes ? max_bytes : frame->len;
+    uint8_t dlc = bytes_to_dlc(clamped_len);
     uint32_t word1 = dlc & 0x0F;
     if (frame->flags.extd) word1 |= (1 << 4); // IDE
     if (frame->flags.rtr)  word1 |= (1 << 5); // RTR
@@ -355,22 +394,22 @@ esp_err_t mcp2518fd_transmit(mcp2518fd_t *dev, const can_fd_frame_t *frame, Tick
     tx_buf[7] = (uint8_t)((word1 >> 24) & 0xFF);
 
     uint8_t dlc_bytes = dlc_to_bytes(dlc);
-    if (frame->len > 0) {
-        memcpy(&tx_buf[8], frame->data, frame->len > dlc_bytes ? dlc_bytes : frame->len);
+    if (clamped_len > 0) {
+        memcpy(&tx_buf[8], frame->data, clamped_len > dlc_bytes ? dlc_bytes : clamped_len);
     }
 
-    ret = mcp2518fd_write_bytes(dev, ram_addr, tx_buf, 8 + dlc_bytes);
+    // MCP2518FD RAM writes must be 4-byte aligned
+    size_t write_len = (8 + dlc_bytes + 3U) & ~3U;
+    ret = mcp2518fd_write_bytes(dev, ram_addr, tx_buf, write_len);
     if (ret != ESP_OK) {
         xSemaphoreGive(dev->mutex);
         return ret;
     }
 
-    // 5. Request Transmission & Increment FIFO Pointer (UINC=1, TXREQ=1)
-    // In CiFIFOCON1: UINC is bit 8, TXREQ is bit 1
-    // Write byte 1 (UINC) and byte 0 (TXREQ)
+    // 5. Request Transmission & Increment FIFO Pointer (UINC = BIT(8), TXREQ = BIT(9))
     uint32_t fifocon1 = 0;
     mcp2518fd_read_32(dev, MCP2518FD_REG_CiFIFOCON(1), &fifocon1);
-    fifocon1 |= (1 << 8) | (1 << 1); // Set UINC and TXREQ
+    fifocon1 |= (1 << 8) | (1 << 9); // Set UINC and TXREQ
     ret = mcp2518fd_write_32(dev, MCP2518FD_REG_CiFIFOCON(1), fifocon1);
 
     xSemaphoreGive(dev->mutex);
@@ -408,9 +447,10 @@ esp_err_t mcp2518fd_receive(mcp2518fd_t *dev, can_fd_frame_t *frame, TickType_t 
     }
     uint16_t ram_addr = (uint16_t)(fifoua & 0x0FFF) + MCP2518FD_RAM_START;
 
-    // 3. Read Header (8 bytes) + maximum payload
+    // 3. Read Header (8 bytes) + configured object payload (8B Classic CAN, 64B CAN FD)
     uint8_t rx_buf[8 + 64] = {0};
-    ret = mcp2518fd_read_bytes(dev, ram_addr, rx_buf, sizeof(rx_buf));
+    size_t max_payload = dev->config.can_fd_enabled ? 64 : 8;
+    ret = mcp2518fd_read_bytes(dev, ram_addr, rx_buf, 8 + max_payload);
     if (ret != ESP_OK) {
         xSemaphoreGive(dev->mutex);
         return ret;
@@ -445,9 +485,12 @@ esp_err_t mcp2518fd_receive(mcp2518fd_t *dev, can_fd_frame_t *frame, TickType_t 
 
     uint8_t dlc = word1 & 0x0F;
     uint8_t num_bytes = dlc_to_bytes(dlc);
+    if (num_bytes > max_payload) {
+        num_bytes = (uint8_t)max_payload;
+    }
     frame->len = num_bytes;
     if (num_bytes > 0) {
-        memcpy(frame->data, &rx_buf[8], num_bytes > 64 ? 64 : num_bytes);
+        memcpy(frame->data, &rx_buf[8], num_bytes);
     }
 
     return ESP_OK;
@@ -455,12 +498,18 @@ esp_err_t mcp2518fd_receive(mcp2518fd_t *dev, can_fd_frame_t *frame, TickType_t 
 
 esp_err_t mcp2518fd_get_error_counts(mcp2518fd_t *dev, uint8_t *tec, uint8_t *rec, bool *bus_off) {
     if (!dev || !dev->initialized) return ESP_ERR_INVALID_ARG;
+    if (dev->mutex && xSemaphoreTake(dev->mutex, pdMS_TO_TICKS(10)) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
     uint32_t trec = 0;
     esp_err_t ret = mcp2518fd_read_32(dev, MCP2518FD_REG_CiTREC, &trec);
+    if (dev->mutex) {
+        xSemaphoreGive(dev->mutex);
+    }
     if (ret == ESP_OK) {
-        if (tec) *tec = trec & 0xFF;
-        if (rec) *rec = (trec >> 8) & 0xFF;
-        if (bus_off) *bus_off = (trec & (1 << 21)) != 0;
+        if (rec) *rec = trec & 0xFF;         // REC is bits 7:0
+        if (tec) *tec = (trec >> 8) & 0xFF;  // TEC is bits 15:8
+        if (bus_off) *bus_off = (trec & (1 << 21)) != 0; // TXBO bit 21
     }
     return ret;
 }
@@ -468,8 +517,16 @@ esp_err_t mcp2518fd_get_error_counts(mcp2518fd_t *dev, uint8_t *tec, uint8_t *re
 esp_err_t mcp2518fd_recover(mcp2518fd_t *dev) {
     if (!dev || !dev->initialized) return ESP_ERR_INVALID_ARG;
     ESP_LOGW(TAG, "CS=%d: Re-initializing MCP2518FD controller after fault...", dev->config.cs_pin);
+    SemaphoreHandle_t mtx = dev->mutex;
+    if (mtx && xSemaphoreTake(mtx, pdMS_TO_TICKS(50)) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
     mcp2518fd_config_t cfg = dev->config;
-    return mcp2518fd_init(dev, &cfg);
+    esp_err_t ret = mcp2518fd_init(dev, &cfg);
+    if (mtx) {
+        xSemaphoreGive(mtx);
+    }
+    return ret;
 }
 
 // =========================================================================
@@ -588,5 +645,85 @@ esp_err_t dual_can_send_twai(can_bus_t bus, const twai_message_t *msg, TickType_
 esp_err_t dual_can_receive(can_bus_t bus, can_fd_frame_t *frame, TickType_t wait_ticks) {
     if (bus >= CAN_BUS_COUNT || !s_can_bus[bus].initialized) return ESP_ERR_INVALID_STATE;
     return mcp2518fd_receive(&s_can_bus[bus], frame, wait_ticks);
+}
+
+esp_err_t dual_can_poll_receive(can_bus_t bus, can_fd_frame_t *frame) {
+    if (bus >= CAN_BUS_COUNT || !frame) return ESP_ERR_INVALID_ARG;
+    mcp2518fd_t *dev = &s_can_bus[bus];
+    if (!dev->initialized) return ESP_ERR_INVALID_STATE;
+
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    if (dev->config.int_pin >= 0) {
+        if (gpio_get_level(dev->config.int_pin) != 0 && (now_ms - dev->last_rx_poll_ms) < 20) {
+            return ESP_ERR_NOT_FOUND;
+        }
+    }
+    dev->last_rx_poll_ms = now_ms;
+    return mcp2518fd_receive(dev, frame, pdMS_TO_TICKS(5));
+}
+
+esp_err_t dual_can_set_listen_only(bool listen_only) {
+    esp_err_t overall = ESP_OK;
+    for (int i = 0; i < CAN_BUS_COUNT; i++) {
+        mcp2518fd_t *dev = &s_can_bus[i];
+        if (!dev->initialized) continue;
+        dev->config.listen_only = listen_only;
+        mcp2518fd_mode_t mode = listen_only
+            ? MCP2518FD_MODE_LISTEN_ONLY
+            : (dev->config.can_fd_enabled ? MCP2518FD_MODE_NORMAL : MCP2518FD_MODE_CLASSIC);
+        esp_err_t ret = mcp2518fd_set_mode(dev, mode);
+        if (ret != ESP_OK) {
+            overall = ret;
+        } else {
+            ESP_LOGI(TAG, "Dual-CAN bus %d switched to %s", i, listen_only ? "LISTEN_ONLY" : "ACTIVE");
+        }
+    }
+    return overall;
+}
+
+void dual_can_shutdown(void) {
+#if CONFIG_IDF_TARGET_ESP32S3
+    if (!s_dual_can_initialized) return;
+    s_dual_can_initialized = false;
+
+    for (int i = 0; i < CAN_BUS_COUNT; i++) {
+        mcp2518fd_t *dev = &s_can_bus[i];
+        if (dev->mutex) xSemaphoreTake(dev->mutex, pdMS_TO_TICKS(50));
+        bool was_init = dev->initialized;
+        dev->initialized = false;
+        if (was_init && dev->spi) {
+            mcp2518fd_write_32(dev, MCP2518FD_REG_CiINT, 0x00000000);
+            uint32_t cicon = 0;
+            if (mcp2518fd_read_32(dev, MCP2518FD_REG_CiCON, &cicon) == ESP_OK) {
+                cicon &= ~(0x7 << 24);
+                cicon |= ((uint32_t)MCP2518FD_MODE_CONFIG) << 24;
+                mcp2518fd_write_32(dev, MCP2518FD_REG_CiCON, cicon);
+            }
+        }
+        if (dev->spi) {
+            spi_bus_remove_device(dev->spi);
+            dev->spi = nullptr;
+        }
+        if (dev->mutex) xSemaphoreGive(dev->mutex);
+    }
+
+    spi_bus_free(CAN0_SPI_HOST);
+#if defined(CAN1_SPI_HOST)
+    if (CAN1_SPI_HOST != CAN0_SPI_HOST) {
+        spi_bus_free(CAN1_SPI_HOST);
+    }
+#endif
+
+    // Restore SPI pins (including strapping pins GPIO3 / GPIO46 on CAN0) to clean defaults before reset
+    gpio_reset_pin(CAN0_SPI_SCK_PIN);
+    gpio_reset_pin(CAN0_SPI_MOSI_PIN);
+    gpio_reset_pin(CAN0_SPI_MISO_PIN);
+    gpio_reset_pin(CAN0_CS_PIN);
+    gpio_reset_pin(CAN1_SPI_SCK_PIN);
+    gpio_reset_pin(CAN1_SPI_MOSI_PIN);
+    gpio_reset_pin(CAN1_SPI_MISO_PIN);
+    gpio_reset_pin(CAN1_CS_PIN);
+    ESP_LOGI(TAG, "Dual-CAN SPI buses and strapping pins quiesced for restart");
+#endif
 }
 

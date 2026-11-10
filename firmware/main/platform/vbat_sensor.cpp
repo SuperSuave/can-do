@@ -7,6 +7,9 @@
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
+#if CONFIG_IDF_TARGET_ESP32S3
+#include "driver/rtc_io.h"
+#endif
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <cmath>
@@ -15,7 +18,9 @@ static const char* TAG = "VBAT_ADC";
 
 static adc_oneshot_unit_handle_t s_adc1_handle = nullptr;
 static adc_cali_handle_t s_adc1_cali_handle = nullptr;
+static adc_channel_t s_adc_channel = ADC_CHANNEL_0;
 static bool s_adc_calibrated = false;
+static bool s_has_adc_divider = true;
 
 static float s_last_vbat_val = 0.0f;
 static char s_last_vbat_str[16] = "Unknown";
@@ -26,6 +31,14 @@ float vbat_sensor_get_last(void) {
 
 const char* vbat_sensor_get_last_str(void) {
     return s_last_vbat_str;
+}
+
+void vbat_sensor_set_from_can(float voltage) {
+    if (s_has_adc_divider) return;
+    if (voltage >= 5.0f && voltage <= 18.0f) {
+        s_last_vbat_val = voltage;
+        snprintf(s_last_vbat_str, sizeof(s_last_vbat_str), "%.1f V", voltage);
+    }
 }
 
 static void vbat_monitor_task(void* arg) {
@@ -65,12 +78,27 @@ static void vbat_monitor_task(void* arg) {
 }
 
 void vbat_sensor_init(void) {
+    if (VBAT_ADC_PIN < 0) {
+        s_has_adc_divider = false;
+        ESP_LOGI(TAG, "VBAT ADC disabled (no pin configured); relying on CAN 12V telemetry");
+        return;
+    }
+
+    adc_unit_t adc_unit = ADC_UNIT_1;
+    esp_err_t ret = adc_oneshot_io_to_channel(VBAT_ADC_PIN, &adc_unit, &s_adc_channel);
+    if (ret != ESP_OK || adc_unit != ADC_UNIT_1) {
+        s_has_adc_divider = false;
+        ESP_LOGW(TAG, "VBAT_ADC_PIN (GPIO %d) is not an ADC1 pin (%s)", (int)VBAT_ADC_PIN, esp_err_to_name(ret));
+        return;
+    }
+
     adc_oneshot_unit_init_cfg_t init_config = {};
     init_config.unit_id = ADC_UNIT_1;
     init_config.ulp_mode = ADC_ULP_MODE_DISABLE;
 
-    esp_err_t ret = adc_oneshot_new_unit(&init_config, &s_adc1_handle);
+    ret = adc_oneshot_new_unit(&init_config, &s_adc1_handle);
     if (ret != ESP_OK) {
+        s_has_adc_divider = false;
         ESP_LOGE(TAG, "Failed to initialize ADC1 unit (%s)", esp_err_to_name(ret));
         return;
     }
@@ -79,16 +107,17 @@ void vbat_sensor_init(void) {
     chan_cfg.atten = ADC_ATTEN_DB_12;
     chan_cfg.bitwidth = ADC_BITWIDTH_DEFAULT;
 
-    ret = adc_oneshot_config_channel(s_adc1_handle, ADC_CHANNEL_4, &chan_cfg);
+    ret = adc_oneshot_config_channel(s_adc1_handle, s_adc_channel, &chan_cfg);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to configure ADC1 channel 4 (%s)", esp_err_to_name(ret));
+        s_has_adc_divider = false;
+        ESP_LOGE(TAG, "Failed to configure ADC1 channel %d (%s)", (int)s_adc_channel, esp_err_to_name(ret));
         return;
     }
 
 #if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
     adc_cali_curve_fitting_config_t cali_cfg = {};
     cali_cfg.unit_id = ADC_UNIT_1;
-    cali_cfg.chan = ADC_CHANNEL_4;
+    cali_cfg.chan = s_adc_channel;
     cali_cfg.atten = ADC_ATTEN_DB_12;
     cali_cfg.bitwidth = ADC_BITWIDTH_DEFAULT;
 
@@ -112,21 +141,54 @@ void vbat_sensor_init(void) {
         ESP_LOGW(TAG, "ADC1 calibration scheme unavailable, falling back to nominal scaling");
     }
 
-    ESP_LOGI(TAG, "MeatPi WiCAN 12V Battery ADC initialized on GPIO 4 (ADC1_CH4)");
+#if CONFIG_IDF_TARGET_ESP32S3
+    // Detect floating/unwired ADC pin on prototype boards so phantom noise doesn't gate UDS or power_mgr
+    if (rtc_gpio_is_valid_gpio((gpio_num_t)VBAT_ADC_PIN)) {
+        auto read_pin_mv = []() -> int {
+            int raw = 0;
+            if (adc_oneshot_read(s_adc1_handle, s_adc_channel, &raw) != ESP_OK) return -1;
+            int mv = 0;
+            if (s_adc_calibrated && s_adc1_cali_handle) {
+                adc_cali_raw_to_voltage(s_adc1_cali_handle, raw, &mv);
+            } else {
+                mv = (raw * 3100) / 4095;
+            }
+            return mv;
+        };
+        rtc_gpio_pullup_en((gpio_num_t)VBAT_ADC_PIN);
+        vTaskDelay(pdMS_TO_TICKS(2));
+        int mv_pu = read_pin_mv();
+        rtc_gpio_pullup_dis((gpio_num_t)VBAT_ADC_PIN);
+
+        rtc_gpio_pulldown_en((gpio_num_t)VBAT_ADC_PIN);
+        vTaskDelay(pdMS_TO_TICKS(2));
+        int mv_pd = read_pin_mv();
+        rtc_gpio_pulldown_dis((gpio_num_t)VBAT_ADC_PIN);
+
+        if (mv_pu > 2600 && mv_pd >= 0 && mv_pd < 400) {
+            s_has_adc_divider = false;
+            ESP_LOGW(TAG, "VBAT GPIO %d appears floating (PU=%dmV, PD=%dmV); disabling ADC monitor and using CAN 12V telemetry",
+                     (int)VBAT_ADC_PIN, mv_pu, mv_pd);
+            return;
+        }
+    }
+#endif
+
+    ESP_LOGI(TAG, "12V Battery ADC initialized on GPIO %d (ADC1_CH%d)", (int)VBAT_ADC_PIN, (int)s_adc_channel);
 
     // Spawn 24/7 background voltage monitor task
     xTaskCreate(vbat_monitor_task, "VBAT_MON", 4096, nullptr, 2, nullptr);
 }
 
 float vbat_sensor_read(void) {
-    if (!s_adc1_handle) return 0.0f;
+    if (!s_adc1_handle || !s_has_adc_divider) return 0.0f;
 
     // Multisampling across 8 consecutive readings to eliminate transient noise
     int raw_sum = 0;
     const int samples = 8;
     for (int i = 0; i < samples; ++i) {
         int raw = 0;
-        if (adc_oneshot_read(s_adc1_handle, ADC_CHANNEL_4, &raw) == ESP_OK) {
+        if (adc_oneshot_read(s_adc1_handle, s_adc_channel, &raw) == ESP_OK) {
             raw_sum += raw;
         }
     }
@@ -136,11 +198,15 @@ float vbat_sensor_read(void) {
     if (s_adc_calibrated && s_adc1_cali_handle) {
         adc_cali_raw_to_voltage(s_adc1_cali_handle, raw_avg, &voltage_mv);
     } else {
-        // Fallback for 12dB attenuation (~2500mV max range across 4095 counts on ESP32-C3)
+        // Fallback for 12dB attenuation (~3100mV on S3, ~2500mV on C3)
+#if CONFIG_IDF_TARGET_ESP32S3
+        voltage_mv = (raw_avg * 3100) / 4095;
+#else
         voltage_mv = (raw_avg * 2500) / 4095;
+#endif
     }
 
-    // MeatPi WiCAN hardware voltage divider ratio: 100k / 16k => (100 + 16) / 16 = 116 / 16 = 7.25
+    // Hardware voltage divider ratio: 100k / 16k => (100 + 16) / 16 = 116 / 16 = 7.25
     float vbat = (static_cast<float>(voltage_mv) * 116.0f) / (16.0f * 1000.0f);
     return vbat;
 }

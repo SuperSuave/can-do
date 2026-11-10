@@ -223,12 +223,12 @@ static bool handle_client_rx(int sock) {
             }
             idx += 10;
         } else if (cmd == 0x06) {
-            uint8_t bus0_flags = 0x01;
-            if (g_hardware_listen_only.load()) bus0_flags |= 0x10;
-            uint32_t bus0_speed = 500000;
+            uint8_t bus0_flags = can_bus_is_available(CAN_BUS_0) ? 0x01 : 0x00;
+            if (g_hardware_listen_only.load() && bus0_flags) bus0_flags |= 0x10;
+            uint32_t bus0_speed = bus0_flags ? 500000 : 0;
             uint8_t bus1_flags = can_bus_is_available(CAN_BUS_1) ? 0x01 : 0x00;
             if (g_hardware_listen_only.load() && bus1_flags) bus1_flags |= 0x10;
-            uint32_t bus1_speed = can_bus_is_available(CAN_BUS_1) ? 500000 : 0;
+            uint32_t bus1_speed = bus1_flags ? 500000 : 0;
             uint8_t reply[12] = {
                 0xF1, 0x06,
                 bus0_flags,

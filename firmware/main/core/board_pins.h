@@ -39,12 +39,6 @@
 
 #define VBAT_ADC_PIN        GPIO_NUM_1
 
-// DevKitC-1 UART bridge (disabled / NC when bench testing standalone)
-#define UART_BRIDGE_PORT        UART_NUM_1
-#define UART_BRIDGE_TX_PIN      GPIO_NUM_NC
-#define UART_BRIDGE_RX_PIN      GPIO_NUM_NC
-#define UART_BRIDGE_BAUD_RATE   460800
-
 static inline void board_hardware_init(void) {
     // Configure DevKitC-1 Status LED
     if (LED_POWER_PIN >= 0) {
@@ -102,14 +96,6 @@ static inline void board_led_can_activity(void) {
 #define LED_MSG_PIN        GPIO_NUM_9   // Right: Envelope icon (Yellow LED, Active LOW)
 
 #define VBAT_ADC_PIN       GPIO_NUM_4   // OBD Battery voltage ADC
-
-// MeatPi WiCAN Corner 2.54mm Header Pins:
-// TX pad = GPIO_NUM_21 (Connect to Atom Lite RX / G21)
-// RX pad = GPIO_NUM_20 (Connect to Atom Lite TX / G25)
-#define UART_BRIDGE_PORT        UART_NUM_1
-#define UART_BRIDGE_TX_PIN      GPIO_NUM_21
-#define UART_BRIDGE_RX_PIN      GPIO_NUM_20
-#define UART_BRIDGE_BAUD_RATE   460800
 
 static inline void board_hardware_init(void) {
     gpio_config_t io_conf = {};

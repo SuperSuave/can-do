@@ -13,6 +13,7 @@ float vbat_sensor_read(void);
 // Get the latest cached battery voltage reading
 float vbat_sensor_get_last(void);
 const char* vbat_sensor_get_last_str(void);
+void vbat_sensor_set_from_can(float voltage);
 
 #ifdef __cplusplus
 }
