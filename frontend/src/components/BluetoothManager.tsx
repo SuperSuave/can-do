@@ -92,7 +92,7 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
     }
   };
 
-  // Subscribe to real-time WebSocket events from WiCAN / Atom Lite
+  // Subscribe to real-time WebSocket events from CAN Do hardware
   useEffect(() => {
     const unsub = deviceWs.subscribe((msg: any) => {
       if (msg && msg.type === 'ble_event') {
@@ -882,7 +882,7 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
           <div className="p-3 rounded-xl bg-purple-950/20 border border-purple-900/50 space-y-2">
             <span className="text-[11px] font-bold text-purple-300 flex items-center gap-1.5">
               <Signal className="w-3.5 h-3.5 text-purple-400" />
-              Nearby iBeacons Heard by Atom Lite (Click to Track):
+              Nearby iBeacons Heard by Device (Click to Track):
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
               {status.discovered_beacons.map((b, idx) => (

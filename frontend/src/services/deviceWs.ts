@@ -89,7 +89,7 @@ class DeviceWebSocketService {
           });
         };
 
-        // 1. Bare JSON array from Atom Lite initial connect: [{"entity":"...","state":"..."}]
+        // 1. Bare JSON array initial state snapshot: [{"entity":"...","state":"..."}]
         if (Array.isArray(parsed)) {
           dispatch({ type: 'states_dump', data: parsed });
           parsed.forEach((item: any) => {
@@ -100,7 +100,7 @@ class DeviceWebSocketService {
           return;
         }
 
-        // 2. WiCAN batch dump: {"type":"states_dump","data":[{"entity":"...","state":"..."}]}
+        // 2. Batch dump: {"type":"states_dump","data":[{"entity":"...","state":"..."}]}
         if (parsed && parsed.type === 'states_dump' && Array.isArray(parsed.data)) {
           dispatch(parsed);
           parsed.data.forEach((item: any) => {
@@ -111,7 +111,7 @@ class DeviceWebSocketService {
           return;
         }
 
-        // 3. BLE events: normalize button / button_name so listeners on WiCAN and Atom Lite work identically
+        // 3. BLE events: normalize button / button_name across firmware variants
         if (parsed && parsed.type === 'ble_event') {
           const btn = parsed.button || parsed.button_name || '';
           parsed.button = btn;

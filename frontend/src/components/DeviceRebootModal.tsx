@@ -21,7 +21,6 @@ import { resolveDeviceBaseUrl, isRunningOnDevice } from '../utils/hostUtils';
 export interface DeviceRebootModalProps {
   isOpen: boolean;
   deviceHost: string;
-  isAtomBridge?: boolean;
   version?: string;
   customTitle?: string;
   customMessage?: string;
@@ -32,7 +31,6 @@ export interface DeviceRebootModalProps {
 export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
   isOpen,
   deviceHost,
-  isAtomBridge = false,
   version,
   customTitle,
   customMessage,
@@ -119,7 +117,7 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2200);
 
-      // Probe /api/system/status (canonical status endpoint on both WiCAN ESP-IDF and Atom Lite)
+      // Probe /api/system/status (canonical status endpoint)
       const res = await fetch(`${targetUrl}/api/system/status?t=${Date.now()}`, {
         cache: 'no-store',
         signal: controller.signal
@@ -208,7 +206,7 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Estimated total reboot window is 12 seconds for ESP32-C3 / M5Stack Atom
+  // Estimated total reboot window is 12 seconds for ESP32
   const estimatedTotalSec = 12;
   const progressPct = isReconnected
     ? 100
@@ -290,9 +288,7 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
 
           <p className="text-xs text-slate-300 leading-relaxed max-w-sm mx-auto">
             {isReconnected
-              ? `Reconnection verified successfully! The new firmware and LittleFS assets are active on your ${
-                  isAtomBridge ? 'M5Stack Atom Lite Bridge' : 'ESP32'
-                }.`
+              ? 'Reconnection verified successfully! The new firmware and LittleFS assets are active on your ESP32.'
               : (customMessage ||
                   'The update was written to flash. The processor is currently resetting, mounting LittleFS partitions, and reconnecting to your Wi-Fi network.')}
           </p>
@@ -303,7 +299,7 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
           <div className="flex items-center justify-between text-xs font-mono">
             <span className="text-slate-400 flex items-center gap-1.5">
               <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-              <span>{isAtomBridge ? 'Atom Lite Bridge' : 'CAN Do ESP32'}</span>
+              <span>CAN Do ESP32</span>
             </span>
             <span className={isReconnected ? 'text-emerald-400 font-bold' : 'text-cyan-300'}>
               {isReconnected ? 'Reboot Verified' : `${secondsElapsed}s elapsed`}

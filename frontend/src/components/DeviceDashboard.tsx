@@ -60,8 +60,24 @@ import { BluetoothManager } from './BluetoothManager';
 import { DeviceRebootModal } from './DeviceRebootModal';
 import { STANDARD_TIMEZONES, detectBrowserTimezone, getTimezoneLabel } from '../utils/timezone';
 
+export interface CanBusStatus {
+  online: boolean;
+  driver: string;
+  mode?: string;
+  listen_only?: boolean;
+  tec: number;
+  rec: number;
+  bus_off: boolean;
+  tx_fail?: number;
+  rx_overflow?: number;
+}
+
 export interface SystemStatus {
   device?: string;
+  target?: string;
+  dual_can?: boolean;
+  can0?: CanBusStatus;
+  can1?: CanBusStatus;
   device_id: string;
   automations_enabled: boolean;
   sniffer_mode: boolean;
@@ -291,8 +307,10 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const [updateProgressPct, setUpdateProgressPct] = useState<number>(0);
   const [updateMessage, setUpdateMessage] = useState<string>('');
 
-  const isAtomBridge = Boolean(status?.device && (status.device.toLowerCase().includes('atom') || status.device.toLowerCase().includes('bridge')));
-  const isS3Device = Boolean(status?.device && (status.device.toLowerCase().includes('esp32s3') || status.device.toLowerCase().includes('s3') || status.device.toLowerCase().includes('dual can')));
+  const isS3Device = Boolean(
+    status?.target === 'esp32s3' ||
+    (status?.device && (status.device.toLowerCase().includes('esp32s3') || status.device.toLowerCase().includes('esp32-s3') || status.device.toLowerCase().includes('dual can')))
+  );
 
   useEffect(() => {
     if (preferences) {
@@ -317,7 +335,9 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       const currentFw = liveStatus?.can_do_version || '';
       const currentCat = catalog?.can_do_version || currentFront;
       const devName = (liveStatus?.device || '').toLowerCase();
-      const targetDev = (devName.includes('atom') || devName.includes('bridge')) ? 'atom' : 'esp32c3';
+      const targetDev = (liveStatus?.target === 'esp32s3' || devName.includes('esp32s3') || devName.includes('esp32-s3') || devName.includes('dual can'))
+        ? 'esp32s3'
+        : 'esp32c3';
       const res = await checkForUpdates(currentCat, currentFw, currentFront, targetDev);
       setUpdateResult(res);
       if (res.has_update) {
@@ -370,7 +390,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             setIsRebootModalOpen(true);
           }
         },
-        isAtomBridge ? 'atom' : isS3Device ? 'esp32s3' : 'esp32c3'
+        isS3Device ? 'esp32s3' : 'esp32c3'
       );
       setUpdateStage('complete');
       setUpdateProgressPct(100);
@@ -1134,21 +1154,53 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           </div>
         </Card>
 
-        {/* Metric 2: TWAI CAN State */}
+        {/* Metric 2: CAN Controller / Dual-CAN HAT */}
         <Card className="can-do-card p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs text-[var(--text-muted)] mb-1">
-            <span>CAN Controller</span>
+            <span>{status?.can0 || status?.can1 ? 'CAN HAT Channels' : 'CAN Controller'}</span>
             <Activity className="w-4 h-4 text-cyan-400" />
           </div>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-lg font-bold font-mono text-cyan-300 uppercase">
-              {status?.twai_state || (connected ? 'RUNNING' : 'STOPPED')}
-            </span>
-          </div>
-          <div className="text-[11px] text-[var(--text-muted)] mt-1.5 font-mono truncate">
-            {status?.hardware_listen_only ? 'Stealth Listen-Only' : 'Normal PHY ACK'}
-            {status?.bus_error_count ? ` • ${status.bus_error_count} errs` : ''}
-          </div>
+          {status?.can0 || status?.can1 ? (
+            <>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                {(['can0', 'can1'] as const).map((key, idx) => {
+                  const bus = status?.[key];
+                  const isOk = Boolean(bus?.online && !bus?.bus_off);
+                  const isBusOff = Boolean(bus?.bus_off);
+                  return (
+                    <span
+                      key={key}
+                      className={`px-2 py-0.5 rounded text-xs font-mono font-bold border ${
+                        isBusOff
+                          ? 'bg-rose-950/60 text-rose-300 border-rose-700/50'
+                          : isOk
+                          ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/50'
+                          : 'bg-slate-800/70 text-slate-400 border-slate-700/50'
+                      }`}
+                    >
+                      CAN{idx}: {isBusOff ? 'BUS-OFF' : bus?.online ? 'ON' : 'OFF'}
+                    </span>
+                  );
+                })}
+              </div>
+              <div className="text-[11px] text-[var(--text-muted)] mt-1.5 font-mono truncate">
+                {status?.hardware_listen_only ? 'Listen-Only' : 'Normal ACK'}
+                {` • TEC ${status?.tx_error_counter ?? 0} / REC ${status?.rx_error_counter ?? 0}`}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-lg font-bold font-mono text-cyan-300 uppercase">
+                  {status?.twai_state || (connected ? 'RUNNING' : 'STOPPED')}
+                </span>
+              </div>
+              <div className="text-[11px] text-[var(--text-muted)] mt-1.5 font-mono truncate">
+                {status?.hardware_listen_only ? 'Stealth Listen-Only' : 'Normal PHY ACK'}
+                {status?.bus_error_count ? ` • ${status.bus_error_count} errs` : ''}
+              </div>
+            </>
+          )}
         </Card>
 
         {/* Metric 3: Wi-Fi Link */}
@@ -1903,19 +1955,19 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       )}
 
       {/* =========================================================================
-          TAB: Bluetooth BLE HID Controllers & Automations (Atom Bridge)
+          TAB: Bluetooth BLE HID Controllers & Automations
          ========================================================================= */}
       {activeTab === 'bluetooth' && (
         <div className="space-y-4">
-          {!isAtomBridge && connected && status?.device && (
+          {!isS3Device && connected && status?.device && (
             <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-800/60 text-xs text-amber-200 flex items-start gap-2.5">
               <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <p className="font-semibold text-amber-300">
-                  Notice: Bluetooth (BLE HID) is currently supported on M5Stack Atom Lite Bridge firmware.
+                  Notice: Native Bluetooth (BLE HID & Beacon tracking) requires ESP32-S3 hardware.
                 </p>
                 <p className="text-[11px] text-amber-400/80 leading-relaxed">
-                  The currently connected device reports as <span className="font-mono text-white font-bold">{status.device}</span>. Wireless steering wheel buttons, BLE media controllers, and macro keypads communicate via the Atom Bridge BLE subsystem.
+                  The currently connected device reports as <span className="font-mono text-white font-bold">{status.device}</span>.
                 </p>
               </div>
             </div>
@@ -2004,7 +2056,20 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               </div>
               <div className="text-xs text-[var(--text-muted)] space-y-1">
                 <div>Device ID: <span className="font-mono text-slate-200">{status?.device_id || 'ESP32-C3'}</span></div>
-                <div>TWAI Driver: <span className="font-mono text-emerald-400">{status?.twai_state || 'Active'}</span></div>
+                {status?.can0 || status?.can1 ? (
+                  <div>
+                    Dual-CAN HAT:{' '}
+                    <span className={`font-mono ${status?.can0?.online ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      C0:{status?.can0?.online ? 'OK' : 'OFF'}
+                    </span>
+                    {' / '}
+                    <span className={`font-mono ${status?.can1?.online ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      C1:{status?.can1?.online ? 'OK' : 'OFF'}
+                    </span>
+                  </div>
+                ) : (
+                  <div>TWAI Driver: <span className="font-mono text-emerald-400">{status?.twai_state || 'Active'}</span></div>
+                )}
               </div>
             </div>
 
@@ -2106,7 +2171,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                       className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/60 text-xs font-bold transition shrink-0"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span>{isAtomBridge ? 'Download Atom .bin' : isS3Device ? 'Download S3 .bin' : 'Download WiCAN .bin'}</span>
+                      <span>{isS3Device ? 'Download S3 .bin' : 'Download WiCAN .bin'}</span>
                     </a>
                   )}
                   <Button
@@ -2579,7 +2644,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/60 text-xs font-semibold shrink-0 transition"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>{isAtomBridge ? 'Download Latest Atom .bin' : isS3Device ? 'Download Latest S3 .bin' : 'Download Latest WiCAN .bin'}</span>
+                  <span>{isS3Device ? 'Download Latest S3 .bin' : 'Download Latest WiCAN .bin'}</span>
                 </a>
               )}
             </div>
@@ -2642,7 +2707,6 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       <DeviceRebootModal
         isOpen={isRebootModalOpen}
         deviceHost={deviceHost}
-        isAtomBridge={isAtomBridge}
         version={updateResult?.version}
         customTitle={rebootModalInfo.title}
         customMessage={rebootModalInfo.message}
