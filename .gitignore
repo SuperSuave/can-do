@@ -14,7 +14,6 @@ firmware/sdkconfig.old
 firmware/dependencies.lock
 firmware/managed_components/
 .pio/
-atom-ui-bridge/.pio/
 release_assets/
 
 # Compiled Binaries & Object Files
@@ -85,7 +84,6 @@ desktop.ini
 custom_components/can_do/can_do_catalog.json
 firmware/data/catalog.json
 firmware/data/can_do_catalog.json
-atom-ui-bridge/data/can_do_catalog.json
 
 # Reference DBC files
 *.dbc

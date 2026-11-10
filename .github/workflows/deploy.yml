@@ -7,7 +7,7 @@ on:
       - "frontend/**"
       - "catalog/**"
       - "firmware/can-do-esp32c3.bin"
-      - "atom-ui-bridge/can-do-atom-bridge.bin"
+      - "firmware/can-do-esp32s3.bin"
       - ".github/workflows/deploy.yml"
 
   # Allows you to run this workflow manually from the Actions tab
@@ -61,8 +61,8 @@ jobs:
             cp ../firmware/can-do-esp32c3.bin dist/can-do-esp32c3.bin
             cp ../firmware/can-do-esp32c3.bin dist/can-do.bin
           fi
-          if [ -f ../atom-ui-bridge/can-do-atom-bridge.bin ]; then
-            cp ../atom-ui-bridge/can-do-atom-bridge.bin dist/can-do-atom-bridge.bin
+          if [ -f ../firmware/can-do-esp32s3.bin ]; then
+            cp ../firmware/can-do-esp32s3.bin dist/can-do-esp32s3.bin
           fi
 
       - name: Setup Pages

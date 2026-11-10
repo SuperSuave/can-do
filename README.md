@@ -2,7 +2,7 @@
 
 **CAN Do** is an edge-first automotive CAN bus integration and automation platform designed primarily for Hyundai, Kia, and Genesis (E-GMP) vehicles.
 
-It transforms an ESP32 (such as the WiCAN-OBD-C3 / WiCAN Pro or M5Stack Atom hardware) into a standalone, offline controller that evaluates network states and executes commands directly on the CAN bus, exposing bi-directional state synchronization via MQTT, WebSockets, UART, USB-CAN, and Home Assistant.
+It transforms an ESP32 (such as the ESP32-S3 Dual CAN FD HAT prototype or WiCAN-OBD-C3) into a standalone, offline controller that evaluates network states and executes commands directly on the CAN bus, exposing bi-directional state synchronization via MQTT, WebSockets, USB-CAN, and Home Assistant.
 
 ---
 
@@ -21,7 +21,7 @@ It transforms an ESP32 (such as the WiCAN-OBD-C3 / WiCAN Pro or M5Stack Atom har
    * **Remote Climate**: Wake and climate control state management (`remote_climate`). **This has not been fully implemented.**
 7. **Multi-Interface Connectivity**:
    * **Home Assistant Bridge**: Native custom component (`custom_components/can_do`, HACS-ready) plus MQTT Auto-Discovery grouping all entities under a unified vehicle device registry.
-   * **Diagnostic & UI Bridges**: Supports SavvyCAN via GVRET (`gvret_server`), USB-CAN (`usb_can`), and external display/controller hardware via `atom-ui-bridge` (`uart_bridge`).
+   * **Diagnostic & Telemetry Interfaces**: Supports SavvyCAN via GVRET (`gvret_server`) and USB-CAN (`usb_can`).
    * **Web Management & Real-time Logs**: Streams static gzipped assets from LittleFS, provides REST endpoints (`/api/states`, `/api/command`, `/api/test_automation`, `/api/upload`, `/api/ota`), and pipes system logs over `/ws` using an `esp_log_set_vprintf` hook.
 
 ---
@@ -53,7 +53,6 @@ It transforms an ESP32 (such as the WiCAN-OBD-C3 / WiCAN Pro or M5Stack Atom har
 │       │   ├── gvret_server.cpp/.h  # GVRET server for SavvyCAN integration
 │       │   ├── mqtt_mgr.cpp/.h      # MQTT client and Home Assistant Auto-Discovery
 │       │   ├── network_mgr.cpp/.h   # Wi-Fi AP/STA connection manager
-│       │   ├── uart_bridge.cpp/.h   # High-speed UART bridge to Atom UI hardware
 │       │   └── usb_can.cpp/.h       # USB-CAN / SLCAN serial interface
 │       ├── /platform                # Device power, NVS, and sensor management
 │       │   ├── persistent_settings.c/.h # NVS settings storage
@@ -77,12 +76,6 @@ It transforms an ESP32 (such as the WiCAN-OBD-C3 / WiCAN Pro or M5Stack Atom har
 │   ├── src/                         # Components, DBC converter, live evaluator, and WebSocket services
 │   ├── package.json                 # Frontend dependencies and scripts
 │   └── vite.config.ts               # Vite bundler configuration
-│
-├── /atom-ui-bridge                  # PlatformIO companion firmware for M5Stack Atom UI bridge
-│   ├── src/main.cpp                 # Bridge firmware source
-│   ├── data/                        # Synced web and catalog assets
-│   ├── sync_web_assets.py           # Asset synchronization script
-│   └── platformio.ini               # PlatformIO project configuration
 │
 ├── /custom_components/can_do        # Home Assistant custom integration (HACS ready)
 │   ├── manifest.json                # HA integration manifest

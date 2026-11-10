@@ -389,7 +389,7 @@ def can_burst_worker(ip: str):
 
 
 def ble_event_worker(ip: str):
-    """Simulates BLE button press events from Atom Lite UART bridge."""
+    """Simulates BLE button press events via /api/ble/test_event."""
     buttons = ["volume_up", "volume_down", "media_play_pause", "voice_command"]
     step = 0
     while not stop_event.is_set():

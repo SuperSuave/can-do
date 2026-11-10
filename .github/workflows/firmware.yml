@@ -122,35 +122,6 @@ jobs:
             firmware/build/flasher_args.json
           if-no-files-found: error
 
-      - name: Setup Python for PlatformIO
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Build M5Stack Atom Lite Bridge (PlatformIO)
-        run: |
-          pip install --upgrade platformio esptool
-          cd atom-ui-bridge
-          python3 sync_web_assets.py
-          pio run
-          pio run -t buildfs
-          cd .pio/build/m5stack-atom
-          esptool --chip esp32 merge-bin -o can-do-atom-bridge-merged.bin \
-            0x1000 bootloader.bin \
-            0x8000 partitions.bin \
-            0x10000 firmware.bin \
-            0x310000 littlefs.bin
-
-      - name: Upload Atom Lite firmware artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: can-do-atom-bridge
-          path: |
-            atom-ui-bridge/.pio/build/m5stack-atom/firmware.bin
-            atom-ui-bridge/.pio/build/m5stack-atom/littlefs.bin
-            atom-ui-bridge/.pio/build/m5stack-atom/can-do-atom-bridge-merged.bin
-          if-no-files-found: warn
-
       - name: Prepare Release Assets
         if: startsWith(github.ref, 'refs/tags/') || inputs.create_release == true
         run: |
@@ -167,16 +138,6 @@ jobs:
           cp catalog/can_do_catalog.json "release_assets/can_do_catalog.json"
           cp firmware/data/www/frontend_manifest.json "release_assets/frontend_manifest.json" 2>/dev/null || true
           (cd firmware/data/www && zip -r "../../../release_assets/can-do-web-${TAG}.zip" .)
-
-          # Atom Lite Bridge release assets
-          if [ -d "atom-ui-bridge/.pio/build/m5stack-atom" ]; then
-            cp atom-ui-bridge/.pio/build/m5stack-atom/firmware.bin "release_assets/can-do-atom-bridge-${TAG}.bin" 2>/dev/null || true
-            cp atom-ui-bridge/.pio/build/m5stack-atom/firmware.bin "release_assets/can-do-atom-bridge.bin" 2>/dev/null || true
-            cp atom-ui-bridge/.pio/build/m5stack-atom/littlefs.bin "release_assets/can-do-atom-littlefs-${TAG}.bin" 2>/dev/null || true
-            cp atom-ui-bridge/.pio/build/m5stack-atom/littlefs.bin "release_assets/can-do-atom-littlefs.bin" 2>/dev/null || true
-            cp atom-ui-bridge/.pio/build/m5stack-atom/can-do-atom-bridge-merged.bin "release_assets/can-do-atom-bridge-${TAG}-merged.bin" 2>/dev/null || true
-            cp atom-ui-bridge/.pio/build/m5stack-atom/can-do-atom-bridge-merged.bin "release_assets/can-do-atom-bridge-merged.bin" 2>/dev/null || true
-          fi
 
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/') || inputs.create_release == true
@@ -197,9 +158,6 @@ jobs:
           mkdir -p /tmp/can_do_binaries
           if [ -f firmware/build/can-do.bin ]; then
             cp firmware/build/can-do.bin /tmp/can_do_binaries/can-do.bin
-          fi
-          if [ -f atom-ui-bridge/.pio/build/m5stack-atom/firmware.bin ]; then
-            cp atom-ui-bridge/.pio/build/m5stack-atom/firmware.bin /tmp/can_do_binaries/can-do-atom-bridge.bin
           fi
 
           git config user.name "github-actions[bot]"
@@ -226,12 +184,8 @@ jobs:
           if [ -f /tmp/can_do_binaries/can-do.bin ]; then
             cp /tmp/can_do_binaries/can-do.bin "firmware/can-do-${{ inputs.target || 'esp32c3' }}.bin"
           fi
-          # Atom Lite app binary for CORS-friendly raw CDN serving (release assets are CORS-blocked in browsers)
-          if [ -f /tmp/can_do_binaries/can-do-atom-bridge.bin ]; then
-            cp /tmp/can_do_binaries/can-do-atom-bridge.bin atom-ui-bridge/can-do-atom-bridge.bin
-          fi
 
-          git add -f catalog/can_do_catalog.json frontend/package.json custom_components/can_do/manifest.json custom_components/can_do/const.py firmware/version.txt firmware/data/www/ firmware/can-do-${{ inputs.target || 'esp32c3' }}.bin atom-ui-bridge/can-do-atom-bridge.bin 2>/dev/null || true
+          git add -f catalog/can_do_catalog.json frontend/package.json custom_components/can_do/manifest.json custom_components/can_do/const.py firmware/version.txt firmware/data/www/ firmware/can-do-${{ inputs.target || 'esp32c3' }}.bin 2>/dev/null || true
           if git diff --staged --quiet; then
             echo "Main branch is already up to date with version ${{ env.RELEASE_TAG }}."
           else

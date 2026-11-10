@@ -35,13 +35,9 @@ This file (`GEMINI.md`) is automatically loaded as context into every conversati
 /can-do
 ├── catalog/
 │   └── can_do_catalog.json       # PRIMARY TRUTH: Entities, D1-D8 byte masks, commands, automations
-├── firmware/                     # ESP-IDF v5.x C++ engine (ESP32-C3 / S3 / vanilla ESP32)
-│   ├── partitions.csv            # 4MB partition table (dual OTA A/B + LittleFS storage)
+├── firmware/                     # ESP-IDF C++ engine (ESP32-S3 Dual CAN FD / ESP32-C3)
+│   ├── partitions.csv            # Partition table (dual OTA A/B + LittleFS storage)
 │   └── main/                     # FreeRTOS tasks (can_rx_task prio 5, can_tx_task prio 4, API, parser)
-├── atom-ui-bridge/               # PlatformIO / Arduino project for M5Stack Atom Lite
-│   ├── platformio.ini            # Espressif32 PlatformIO configuration (board = m5stack-atom)
-│   ├── sync_web_assets.py        # Compresses & stages frontend/dist + catalog into LittleFS data/
-│   └── data/                     # Staged LittleFS filesystem assets
 ├── frontend/                     # React 19 + Vite 6 + TypeScript + Tailwind 4 UI & Automation Builder
 │   ├── src/                      # Catalog explorer, live logs, automation builder
 │   └── dist/                     # Compiled web assets for LittleFS embedding
@@ -64,19 +60,10 @@ npm run build      # Production build to frontend/dist
 npm run lint       # Type check via tsc --noEmit
 ```
 
-### Atom Lite Bridge (`atom-ui-bridge/`)
-```bash
-cd atom-ui-bridge
-python sync_web_assets.py    # Sync and gzip frontend/dist into LittleFS data/
-pio run                      # Build firmware
-pio run -t buildfs           # Build LittleFS image
-pio run -t upload            # Flash firmware to Atom Lite
-```
-
 ### ESP-IDF Firmware (`firmware/`)
 ```bash
 cd firmware
-idf.py set-target esp32c3    # or esp32 / esp32s3
+idf.py set-target esp32s3    # or esp32c3
 idf.py build
 idf.py -p <PORT> flash monitor
 ```
@@ -98,6 +85,6 @@ idf.py -p <PORT> flash monitor
    - Check [`docs/architecture.md`](file:///d:/Documents/can-do/docs/architecture.md) and [`docs/egmp_can_reference.md`](file:///d:/Documents/can-do/docs/egmp_can_reference.md) before inventing CAN IDs, byte patterns, or altering state-machine conventions.
    - When adding entities or automations, adhere to existing schemas in [`catalog/can_do_catalog.json`](file:///d:/Documents/can-do/catalog/can_do_catalog.json).
 4. **Flash Budget Awareness**:
-   - Embedded LittleFS storage is constrained (e.g., 2MB on Atom Lite). Static frontend assets must remain lean and be gzip-compressed where appropriate.
+   - Embedded LittleFS storage is constrained (e.g., 960KB `storage` partition). Static frontend assets must remain lean and be gzip-compressed where appropriate.
 5. **Thread Context Handoff**:
    - When finishing complex or multi-step tasks, summarize modified files, current state, and the logical next action so new threads can resume without loss of context.
