@@ -9,11 +9,12 @@ on:
       target:
         description: "Target ESP32 chip"
         required: true
-        default: "esp32c3"
+        default: "all"
         type: choice
         options:
-          - "esp32c3"
+          - "all"
           - "esp32s3"
+          - "esp32c3"
           - "esp32"
       idf_version:
         description: "ESP-IDF version tag"
@@ -22,8 +23,8 @@ on:
         type: choice
         options:
           - "v5.3"
-          - "v5.2"
-          - "v5.1"
+          - "v5.4"
+          - "v5.5"
       create_release:
         description: "Create or update GitHub Release"
         required: false
@@ -44,8 +45,13 @@ concurrency:
 
 jobs:
   build:
-    name: Build Firmware (${{ inputs.target || 'esp32c3' }})
+    name: Build Firmware (${{ matrix.target }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson((!inputs.target || inputs.target == 'all') && '["esp32c3", "esp32s3"]' || format('["{0}"]', inputs.target)) }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -59,9 +65,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          key: esp-idf-ccache-${{ runner.os }}-${{ inputs.target || 'esp32c3' }}-${{ github.sha }}
+          key: esp-idf-ccache-${{ runner.os }}-${{ matrix.target }}-${{ github.sha }}
           restore-keys: |
-            esp-idf-ccache-${{ runner.os }}-${{ inputs.target || 'esp32c3' }}-
+            esp-idf-ccache-${{ runner.os }}-${{ matrix.target }}-
             esp-idf-ccache-${{ runner.os }}-
 
       - name: Setup Node.js
@@ -99,11 +105,11 @@ jobs:
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: ${{ inputs.idf_version || 'v5.3' }}
-          target: ${{ inputs.target || 'esp32c3' }}
+          target: ${{ matrix.target }}
           path: "firmware"
           extra_docker_args: "-e IDF_CCACHE_ENABLE=1 -v ~/.ccache:/root/.ccache"
           command: |
-            sh -c "idf.py -DPROJECT_VER=\"${{ env.RELEASE_TAG }}\" build && cd build && esptool.py --chip ${{ inputs.target || 'esp32c3' }} merge_bin -o can-do-${{ inputs.target || 'esp32c3' }}-merged.bin @flash_args"
+            sh -c "idf.py set-target ${{ matrix.target }} && idf.py -DPROJECT_VER=\"${{ env.RELEASE_TAG }}\" build && cd build && esptool.py --chip ${{ matrix.target }} merge_bin -o can-do-${{ matrix.target }}-merged.bin @flash_args"
 
       - name: Fix workspace permissions after Docker
         if: always()
@@ -112,7 +118,7 @@ jobs:
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: can-do-firmware-${{ inputs.target || 'esp32c3' }}
+          name: can-do-firmware-${{ matrix.target }}
           path: |
             firmware/build/can-do.bin
             firmware/build/can-do-*-merged.bin
@@ -122,25 +128,80 @@ jobs:
             firmware/build/flasher_args.json
           if-no-files-found: error
 
+  release:
+    name: Publish Release & Sync Main
+    needs: build
+    if: ${{ startsWith(github.ref, 'refs/tags/') || inputs.create_release == true }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Download built firmware artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: can-do-firmware-*
+          path: ${{ runner.temp }}/firmware-artifacts
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Determine Dynamic Release Version & Build Web Assets
+        run: |
+          TAG="${{ inputs.release_tag != '' && inputs.release_tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || '' }}"
+          if [ -z "$TAG" ]; then
+            TAG=$(cat firmware/version.txt 2>/dev/null || echo "2026.9.6")
+          fi
+          echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
+          echo "$TAG" > firmware/version.txt
+          node -e "const fs = require('fs'); const p = 'catalog/can_do_catalog.json'; const c = JSON.parse(fs.readFileSync(p)); c.can_do_version = '$TAG'; delete c.catalog_version; fs.writeFileSync(p, JSON.stringify(c, null, 2) + '\n');"
+          node -e "const fs = require('fs'); const p = 'frontend/package.json'; const pkg = JSON.parse(fs.readFileSync(p)); pkg.version = '$TAG'; fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');"
+          node -e "const fs = require('fs'); const p = 'custom_components/can_do/manifest.json'; const m = JSON.parse(fs.readFileSync(p)); m.version = '$TAG'; fs.writeFileSync(p, JSON.stringify(m, null, 2) + '\n');"
+          python3 -c "import re; p='custom_components/can_do/const.py'; s=open(p).read(); open(p,'w').write(re.sub(r'VERSION\s*=\s*[\"\'\'][^\"\'\']+[\"\'\']', f'VERSION = \"$TAG\"', s))"
+          cd frontend
+          npm ci || npm install
+          VITE_APP_VERSION="$TAG" npm run build
+
       - name: Prepare Release Assets
-        if: startsWith(github.ref, 'refs/tags/') || inputs.create_release == true
         run: |
           mkdir -p release_assets
           TAG="${{ env.RELEASE_TAG }}"
-          TARGET="${{ inputs.target || 'esp32c3' }}"
 
-          # Clean versioned WiCAN release assets
-          cp firmware/build/can-do.bin "release_assets/can-do-${TARGET}-${TAG}.bin"
-          cp firmware/build/can-do.bin "release_assets/can-do-${TARGET}.bin"
-          cp firmware/build/can-do.bin "release_assets/can-do.bin"
-          cp firmware/build/can-do-*-merged.bin "release_assets/can-do-${TARGET}-${TAG}-merged.bin" 2>/dev/null || true
+          for dir in "${{ runner.temp }}/firmware-artifacts"/can-do-firmware-*; do
+            [ -d "$dir" ] || continue
+            TARGET="${dir##*can-do-firmware-}"
+            APP_BIN=$(find "$dir" -name "can-do.bin" | head -n 1)
+            MERGED_BIN=$(find "$dir" -name "can-do-${TARGET}-merged.bin" | head -n 1)
+
+            if [ -n "$APP_BIN" ] && [ -f "$APP_BIN" ]; then
+              cp "$APP_BIN" "release_assets/can-do-${TARGET}-${TAG}.bin"
+              cp "$APP_BIN" "release_assets/can-do-${TARGET}.bin"
+              if [ "$TARGET" = "esp32c3" ]; then
+                cp "$APP_BIN" "release_assets/can-do.bin"
+              fi
+            fi
+
+            if [ -n "$MERGED_BIN" ] && [ -f "$MERGED_BIN" ]; then
+              cp "$MERGED_BIN" "release_assets/can-do-${TARGET}-${TAG}-merged.bin"
+              cp "$MERGED_BIN" "release_assets/can-do-${TARGET}-merged.bin"
+            fi
+          done
+
           cp catalog/can_do_catalog.json "release_assets/can_do_catalog-${TAG}.json"
           cp catalog/can_do_catalog.json "release_assets/can_do_catalog.json"
           cp firmware/data/www/frontend_manifest.json "release_assets/frontend_manifest.json" 2>/dev/null || true
           (cd firmware/data/www && zip -r "../../../release_assets/can-do-web-${TAG}.zip" .)
+          ls -la release_assets
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/') || inputs.create_release == true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
@@ -150,22 +211,14 @@ jobs:
             release_assets/*
 
       - name: Sync Version Changes Back to Main Branch
-        if: startsWith(github.ref, 'refs/tags/') || inputs.create_release == true
         continue-on-error: true
         run: |
-          sudo chown -R $USER:$USER .
-          # Preserve built binaries in /tmp across git clean/reset/checkout
-          mkdir -p /tmp/can_do_binaries
-          if [ -f firmware/build/can-do.bin ]; then
-            cp firmware/build/can-do.bin /tmp/can_do_binaries/can-do.bin
-          fi
-
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git reset --hard
           git clean -fd
           git fetch origin main
-          git checkout -f main
+          git checkout -B main origin/main
 
           # Re-apply version stamp on main in case tag was detached
           node -e "const fs = require('fs'); const p = 'catalog/can_do_catalog.json'; const c = JSON.parse(fs.readFileSync(p)); c.can_do_version = '${{ env.RELEASE_TAG }}'; delete c.catalog_version; fs.writeFileSync(p, JSON.stringify(c, null, 2) + '\n');"
@@ -180,16 +233,20 @@ jobs:
           VITE_APP_VERSION="${{ env.RELEASE_TAG }}" npm run build
           cd ..
 
-          # Copy binaries from preservation directory for static raw GitHub CDN serving
-          if [ -f /tmp/can_do_binaries/can-do.bin ]; then
-            cp /tmp/can_do_binaries/can-do.bin "firmware/can-do-${{ inputs.target || 'esp32c3' }}.bin"
-          fi
+          # Copy built target binaries for CORS-friendly raw CDN serving
+          for dir in "${{ runner.temp }}/firmware-artifacts"/can-do-firmware-*; do
+            [ -d "$dir" ] || continue
+            TARGET="${dir##*can-do-firmware-}"
+            APP_BIN=$(find "$dir" -name "can-do.bin" | head -n 1)
+            if [ -n "$APP_BIN" ] && [ -f "$APP_BIN" ]; then
+              cp "$APP_BIN" "firmware/can-do-${TARGET}.bin"
+            fi
+          done
 
-          git add -f catalog/can_do_catalog.json frontend/package.json custom_components/can_do/manifest.json custom_components/can_do/const.py firmware/version.txt firmware/data/www/ firmware/can-do-${{ inputs.target || 'esp32c3' }}.bin 2>/dev/null || true
+          git add -f catalog/can_do_catalog.json frontend/package.json custom_components/can_do/manifest.json custom_components/can_do/const.py firmware/version.txt firmware/data/www/ firmware/can-do-*.bin 2>/dev/null || true
           if git diff --staged --quiet; then
             echo "Main branch is already up to date with version ${{ env.RELEASE_TAG }}."
           else
             git commit -m "chore(release): sync version ${{ env.RELEASE_TAG }} and web assets to main [skip ci]"
             git push origin main || echo "Sync push skipped"
           fi
-
