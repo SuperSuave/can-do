@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Tabs, Switch, Button, ButtonGroup, Chip, Badge, Card, Alert, ProgressBar, Spinner, Slider } from '@heroui/react';
+import { Tabs, Switch, Button, ButtonGroup, Chip, Card, Alert, ProgressBar, Spinner, Slider } from '@heroui/react';
 import { isRunningOnDevice, getDefaultDeviceHost, resolveDeviceBaseUrl } from '../utils/hostUtils';
 import { deviceWs, DeviceWsMessage } from '../services/deviceWs';
 import {
@@ -906,7 +906,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               <h1 className="text-base sm:text-lg font-bold text-[var(--text-heading)] tracking-tight">
                 CAN Do Edge Engine
               </h1>
-              <Badge
+              <Chip
                 size="sm"
                 color={connected ? 'success' : 'danger'}
                 variant="soft"
@@ -918,7 +918,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               >
                 <span className={`status-dot mr-1 ${connected ? 'green' : 'red'}`} />
                 <span>{connected ? (wsConnected ? 'ONLINE' : 'ONLINE (HTTP)') : 'OFFLINE'}</span>
-              </Badge>
+              </Chip>
               {connected && (
                 <Chip
                   size="sm"
@@ -1058,15 +1058,15 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               )}
               {onPullAutomationsFromDevice && (
                 <Button
-                  variant="outline"
+                  variant="primary"
                   size="sm"
                   onPress={handlePull}
                   isDisabled={isPullingRules}
-                  className="dash-outline-btn text-xs py-1.5 px-3 inline-flex items-center gap-1.5 text-slate-300 hover:text-white"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-semibold text-xs shadow transition"
                   aria-label="Load automations saved on device into the web builder"
                 >
                   <ArrowDownToLine className={`w-3.5 h-3.5 ${isPullingRules ? 'animate-bounce' : ''}`} />
-                  <span className="hidden sm:inline">Pull</span>
+                  <span>Pull</span>
                 </Button>
               )}
             </ButtonGroup>
@@ -1183,9 +1183,22 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   );
                 })}
               </div>
-              <div className="text-[11px] text-[var(--text-muted)] mt-1.5 font-mono truncate">
-                {status?.hardware_listen_only ? 'Listen-Only' : 'Normal ACK'}
-                {` • TEC ${status?.tx_error_counter ?? 0} / REC ${status?.rx_error_counter ?? 0}`}
+              <div className="text-[11px] text-[var(--text-muted)] mt-1.5 flex items-center justify-between">
+                <span className="font-mono truncate">
+                  {status?.hardware_listen_only ? 'Listen-Only (Stealth)' : 'Normal ACK'}
+                </span>
+                <Switch
+                  isSelected={status?.hardware_listen_only ?? false}
+                  onChange={handleToggleListenOnly}
+                  size="sm"
+                  aria-label="Toggle Listen-Only Mode"
+                >
+                  <Switch.Content>
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
+                  </Switch.Content>
+                </Switch>
               </div>
             </>
           ) : (
@@ -1195,9 +1208,22 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   {status?.twai_state || (connected ? 'RUNNING' : 'STOPPED')}
                 </span>
               </div>
-              <div className="text-[11px] text-[var(--text-muted)] mt-1.5 font-mono truncate">
-                {status?.hardware_listen_only ? 'Stealth Listen-Only' : 'Normal PHY ACK'}
-                {status?.bus_error_count ? ` • ${status.bus_error_count} errs` : ''}
+              <div className="text-[11px] text-[var(--text-muted)] mt-1.5 flex items-center justify-between">
+                <span className="font-mono truncate">
+                  {status?.hardware_listen_only ? 'Stealth Listen-Only' : 'Normal PHY ACK'}
+                </span>
+                <Switch
+                  isSelected={status?.hardware_listen_only ?? false}
+                  onChange={handleToggleListenOnly}
+                  size="sm"
+                  aria-label="Toggle Listen-Only Mode"
+                >
+                  <Switch.Content>
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
+                  </Switch.Content>
+                </Switch>
               </div>
             </>
           )}
@@ -1219,9 +1245,9 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           <div className="text-[11px] text-[var(--text-muted)] mt-1.5 font-mono truncate flex items-center gap-1.5">
             <span>{wifi?.sta_ip || wifi?.ap_ip || '192.168.4.1'}</span>
             {wifi?.sta_rssi ? (
-              <Badge size="sm" variant="secondary" className="font-mono text-[10px]">
+              <Chip size="sm" variant="secondary" className="font-mono text-[10px]">
                 {wifi.sta_rssi} dBm
-              </Badge>
+              </Chip>
             ) : null}
           </div>
         </Card>
@@ -1259,101 +1285,17 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
         </Card>
       </div>
 
-      {/* Hardware & Engine Safety Controls */}
-      <Card className="can-do-card p-4 sm:p-5 space-y-3.5">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-2">
-            <Sliders className="w-4 h-4 text-cyan-400" />
-            Hardware & Firmware Engine Controls
-          </h2>
-          <span className="text-[11px] text-[var(--text-muted)]">
-            Instant ESP32 hardware register switching
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {/* Toggle 1: Automations */}
-          <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)]">
-            <div className="space-y-0.5 min-w-0 pr-2">
-              <div className="text-xs font-semibold text-[var(--text-heading)]">Rule Execution</div>
-              <div className="text-[11px] text-[var(--text-muted)]">Local triggers & condition evaluation</div>
-            </div>
-            <Switch
-              isSelected={status?.automations_enabled ?? false}
-              onChange={handleToggleAutomations}
-              size="sm"
-              aria-label="Rule Execution"
-            >
-              <Switch.Content>
-                <Switch.Control>
-                  <Switch.Thumb />
-                </Switch.Control>
-                <span className="text-xs font-bold text-[var(--text-heading)]">
-                  {status?.automations_enabled ? 'ENABLED' : 'MUTED'}
-                </span>
-              </Switch.Content>
-            </Switch>
-          </div>
-
-          {/* Toggle 2: Passive Sniffer */}
-          <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)]">
-            <div className="space-y-0.5 min-w-0 pr-2">
-              <div className="text-xs font-semibold text-[var(--text-heading)]">Passive Sniffer</div>
-              <div className="text-[11px] text-[var(--text-muted)]">Silence all CAN Tx transmission</div>
-            </div>
-            <Switch
-              isSelected={status?.sniffer_mode ?? false}
-              onChange={handleToggleSniffer}
-              size="sm"
-              aria-label="Passive Sniffer"
-            >
-              <Switch.Content>
-                <Switch.Control>
-                  <Switch.Thumb />
-                </Switch.Control>
-                <span className="text-xs font-bold text-[var(--text-heading)]">
-                  {status?.sniffer_mode ? 'ACTIVE' : 'OFF'}
-                </span>
-              </Switch.Content>
-            </Switch>
-          </div>
-
-          {/* Toggle 3: Hardware Listen Only */}
-          <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-color)]">
-            <div className="space-y-0.5 min-w-0 pr-2">
-              <div className="text-xs font-semibold text-[var(--text-heading)]">Listen-Only (Stealth)</div>
-              <div className="text-[11px] text-[var(--text-muted)]">Zero PHY ACK bits sent to bus</div>
-            </div>
-            <Switch
-              isSelected={status?.hardware_listen_only ?? false}
-              onChange={handleToggleListenOnly}
-              size="sm"
-              aria-label="Hardware Listen Only"
-            >
-              <Switch.Content>
-                <Switch.Control>
-                  <Switch.Thumb />
-                </Switch.Control>
-                <span className="text-xs font-bold text-[var(--text-heading)]">
-                  {status?.hardware_listen_only ? 'STEALTH' : 'NORMAL'}
-                </span>
-              </Switch.Content>
-            </Switch>
-          </div>
-        </div>
-
-        {/* Advisory banner when sniffer mode is active */}
-        {status?.sniffer_mode && (
-          <Alert status="warning" className="p-3 rounded-xl border text-xs font-medium">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Description>
-                Passive Sniffer Mode is active: Outgoing CAN packets are strictly silenced to protect diagnostic stability on sensitive vehicle buses.
-              </Alert.Description>
-            </Alert.Content>
-          </Alert>
-        )}
-      </Card>
+      {/* Advisory banner when sniffer mode is active */}
+      {status?.sniffer_mode && (
+        <Alert status="warning" className="p-3 rounded-xl border text-xs font-medium">
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Description>
+              Passive Sniffer Mode is active: Outgoing CAN packets are strictly silenced to protect diagnostic stability on sensitive vehicle buses.
+            </Alert.Description>
+          </Alert.Content>
+        </Alert>
+      )}
 
       {/* Sub-Navigation Segmented Tabs Bar */}
       <div className="flex items-center justify-center border-b border-slate-800/80 pb-3 overflow-x-auto no-scrollbar">
@@ -1382,7 +1324,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 }`}
               >
                 <Radio className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeTab === 'mqtt' ? 'text-amber-400' : 'text-slate-400'}`} />
-                <span>Home Assistant & MQTT</span>
+                <span>HA & MQTT</span>
                 {mqttConfig.enabled && (
                   <span
                     className={`w-2 h-2 rounded-full ${
@@ -1814,10 +1756,10 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 <div className="text-[var(--text-muted)]">Signal & Clients</div>
                 <div className="mt-1 flex items-center gap-1.5">
                   {wifi?.sta_rssi ? (
-                    <Badge size="sm" color="accent" variant="soft" className="inline-flex items-center gap-1.5 font-bold font-mono text-cyan-300">
+                    <Chip size="sm" color="accent" variant="soft" className="inline-flex items-center gap-1.5 font-bold font-mono text-cyan-300">
                       {getSignalIcon(wifi.sta_rssi)}
                       <span>{wifi.sta_rssi} dBm</span>
-                    </Badge>
+                    </Chip>
                   ) : (
                     <span className="text-base font-bold text-[var(--text-heading)]">--</span>
                   )}
@@ -1938,9 +1880,9 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                       {getSignalIcon(res.rssi)}
                       <span className="font-bold text-[var(--text-heading)] truncate">{res.ssid}</span>
                     </div>
-                    <Badge size="sm" variant="secondary" className="text-[var(--text-muted)] font-mono text-[10px] shrink-0">
+                    <Chip size="sm" variant="secondary" className="text-[var(--text-muted)] font-mono text-[10px] shrink-0">
                       {res.rssi} dBm
-                    </Badge>
+                    </Chip>
                   </div>
                   <div className="text-[10px] text-[var(--text-muted)] flex items-center justify-between">
                     <span>{res.authmode === 0 ? 'Open (No password)' : 'WPA2/WPA3 Secured'}</span>

@@ -111,6 +111,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           color: 'text-amber-400 bg-amber-950/40 border-amber-800/60',
           create: (): AutomationTrigger => ({
             id: `trig_${Date.now().toString(36)}`,
+            name: 'Custom CAN Trigger',
             source: 'can',
             can_id: '',
             bus: 0,
@@ -125,7 +126,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         {
           id: 'clock_schedule',
           title: 'Time / Clock Schedule',
-          desc: 'Fire at specific daily clock time (24h) on designated days of week',
+          desc: 'Fire at specific time and days',
           icon: Clock,
           color: 'text-cyan-400 bg-cyan-950/40 border-cyan-800/60',
           create: (): AutomationTrigger => ({
@@ -139,7 +140,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         {
           id: 'ble_button',
           title: 'Bluetooth Remote / Keypad Button or Combo',
-          desc: 'Fire on wireless media buttons (Volume +/-, Next/Prev), macro keys, or multi-button combo chords (e.g. mute+volume_down)',
+          desc: 'Trigger based on specified buttons from paired BT device',
           icon: Bluetooth,
           color: 'text-blue-400 bg-blue-950/40 border-blue-800/60',
           create: (): AutomationTrigger => ({
@@ -153,7 +154,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         {
           id: 'ble_presence',
           title: 'Bluetooth Presence / Proximity',
-          desc: 'Trigger when your phone (iBeacon / Home Assistant), BLE key fob, or paired device enters or exits range (RSSI walk-up/walk-away)',
+          desc: 'Trigger when your phone, BLE key fob, or paired device enters or exits range',
           icon: Bluetooth,
           color: 'text-purple-400 bg-purple-950/40 border-purple-800/60',
           create: (): AutomationTrigger => ({
@@ -219,7 +220,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         {
           id: 'time_window',
           title: 'Time Window / Schedule',
-          desc: 'Permit execution only during designated hours or weekdays',
+          desc: 'Specify valid hours and days for actions to run',
           icon: Clock,
           color: 'text-cyan-400 bg-cyan-950/40 border-cyan-800/60',
           create: (): AutomationCondition => ({
@@ -261,8 +262,8 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         },
         {
           id: 'ble_button_cond',
-          title: 'Bluetooth Button Pressed (Wait For / If-Then)',
-          desc: 'Evaluate if a specific Bluetooth button or multi-button combo chord was pressed (ideal for WAIT_FOR step)',
+          title: 'Bluetooth Button',
+          desc: 'Evaluate if a specific Bluetooth button/combo was pressed',
           icon: Bluetooth,
           color: 'text-blue-400 bg-blue-950/40 border-blue-800/60',
           create: (): AutomationCondition => ({
@@ -275,7 +276,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         {
           id: 'ble_presence_cond',
           title: 'Bluetooth Presence / Proximity Condition',
-          desc: 'Check whether phone beacon, key fob, or paired device is present in range or within RSSI proximity',
+          desc: 'Check whether phone beacon, key fob, or paired device is present or in specified range',
           icon: Bluetooth,
           color: 'text-purple-400 bg-purple-950/40 border-purple-800/60',
           create: (): AutomationCondition => ({
@@ -291,7 +292,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         {
           id: 'logic_and',
           title: 'AND Logic Block',
-          desc: 'Group multiple child conditions; ALL must evaluate to true',
+          desc: 'Group multiple conditions; ALL must evaluate to true',
           icon: Code,
           color: 'text-purple-400 bg-purple-950/40 border-purple-800/60',
           create: (): AutomationCondition => ({
@@ -303,7 +304,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         {
           id: 'logic_or',
           title: 'OR Logic Block',
-          desc: 'Group multiple child conditions; AT LEAST ONE must evaluate to true',
+          desc: 'Group multiple conditions; AT LEAST ONE must evaluate to true',
           icon: Code,
           color: 'text-indigo-400 bg-indigo-950/40 border-indigo-800/60',
           create: (): AutomationCondition => ({
@@ -315,7 +316,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         {
           id: 'logic_not',
           title: 'NOT Logic Block',
-          desc: 'Invert condition outcome; nested condition must evaluate to false',
+          desc: 'Invert condition outcome; condition must evaluate to false',
           icon: Code,
           color: 'text-rose-400 bg-rose-950/40 border-rose-800/60',
           create: (): AutomationCondition => ({
@@ -359,7 +360,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
       {
         id: 'flow_waitfor',
         title: 'Wait (Condition or Delay)',
-        desc: 'Pause execution until a button or condition is met (with timeout), or pause for a specified delay duration',
+        desc: 'Pause until a button or condition is met, or pause for a specified delay duration',
         icon: Clock,
         color: 'text-violet-400 bg-violet-950/40 border-violet-800/60',
         create: (): AutomationAction => ({
@@ -379,7 +380,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
       {
         id: 'act_can_tx',
         title: 'Custom CAN Transmit',
-        desc: 'Inject raw or custom CAN frames with repeat and delay timing',
+        desc: 'Specify custom CAN frames with repeat and delay timing',
         icon: Radio,
         color: 'text-emerald-400 bg-emerald-950/40 border-emerald-800/60',
         create: (): AutomationAction => ({
@@ -395,7 +396,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
       {
         id: 'act_popup',
         title: 'Cluster Popup (OSD)',
-        desc: 'Show notification toast message on vehicle cluster or WiCAN UI',
+        desc: 'Show notification vehicle cluster or CAN Do UI',
         icon: MessageSquare,
         color: 'text-cyan-400 bg-cyan-950/40 border-cyan-800/60',
         create: (): AutomationAction => ({
@@ -421,7 +422,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
       {
         id: 'cycle_entity',
         title: 'Cycle Entity State (Stepper)',
-        desc: 'Cycle through levels/states (e.g. Off -> Low -> Med -> High) with optional HUD toast feedback',
+        desc: 'Cycle through levels/states (e.g. Off -> Low -> Med -> High) with optional Notification',
         icon: RotateCw,
         color: 'text-amber-400 bg-amber-950/40 border-amber-800/60',
         create: (): AutomationAction => ({
@@ -438,7 +439,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
       {
         id: 'precondition',
         title: 'Battery Preconditioning',
-        desc: 'Trigger vehicle persistent battery preconditioning state machine',
+        desc: 'Trigger battery preconditioning',
         icon: Zap,
         color: 'text-yellow-400 bg-yellow-950/40 border-yellow-800/60',
         create: (): AutomationAction => ({

@@ -92,11 +92,17 @@ import {
   Clipboard,
   ClipboardCopy,
   ClipboardPaste,
-  ClipboardCheck
+  ClipboardCheck,
+  Tag
 } from 'lucide-react';
 import { AddElementModal, AddElementTarget } from './AddElementModal';
 import { CommunityAutomationsModal } from './CommunityAutomationsModal';
 import { AutomationImportModal } from './AutomationImportModal';
+import { HaToggleSwitch } from './automation/HaToggleSwitch';
+import { AutomationActionMenu } from './automation/AutomationActionMenu';
+import { AutomationMoreInfoModal } from './automation/AutomationMoreInfoModal';
+import { AutomationCategoryModal } from './automation/AutomationCategoryModal';
+import { AutomationSettingsModal } from './automation/AutomationSettingsModal';
 
 interface AutomationBuilderProps {
   catalog: Catalog;
@@ -149,9 +155,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   );
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedRuleIdsForDelete, setSelectedRuleIdsForDelete] = useState<Set<string>>(new Set());
-  const [isJsonInspectorOpen, setIsJsonInspectorOpen] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [addElementTarget, setAddElementTarget] = useState<AddElementTarget | null>(null);
   const [showSimulateModal, setShowSimulateModal] = useState(false);
   const [showCommunityModal, setShowCommunityModal] = useState(false);
@@ -160,6 +164,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [communityModalTab, setCommunityModalTab] = useState<'browse' | 'share'>('browse');
+  const [moreInfoRule, setMoreInfoRule] = useState<AutomationRule | null>(null);
+  const [editingCategoryRule, setEditingCategoryRule] = useState<AutomationRule | null>(null);
+  const [editingSettingsRule, setEditingSettingsRule] = useState<AutomationRule | null>(null);
   const lastPushedJsonRef = useRef<string>(JSON.stringify(rules));
   const hasUnpushedChanges = lastPushedJsonRef.current !== JSON.stringify(rules);
 
@@ -836,6 +843,81 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     onUpdateRules(newRules);
   };
 
+  const handleUpdateRule = (ruleId: string, updated: Partial<AutomationRule>) => {
+    const newRules = rules.map(r => (r.id === ruleId ? { ...r, ...updated } : r));
+    onUpdateRules(newRules);
+  };
+
+  const handleRunAllRuleActions = async (targetRule: AutomationRule) => {
+    const acts = targetRule.actions || [];
+    if (acts.length === 0) {
+      setActionTestToast({ message: `Rule "${targetRule.name}" has no actions configured.`, type: 'info' });
+      setTimeout(() => setActionTestToast(null), 3000);
+      return;
+    }
+    setActionTestToast({ message: `Executing ${acts.length} action(s) for "${targetRule.name}"...`, type: 'info' });
+    try {
+      for (const act of acts) {
+        await handleTestSingleAction(act);
+      }
+      setActionTestToast({ message: `Executed actions for "${targetRule.name}" successfully!`, type: 'success' });
+    } catch (err: any) {
+      setActionTestToast({ message: `Error running actions: ${err?.message || err}`, type: 'error' });
+    }
+    setTimeout(() => setActionTestToast(null), 4000);
+  };
+
+  const handleSimulateRuleFor = async (targetRule: AutomationRule) => {
+    setSelectedRuleId(targetRule.id);
+    setShowSimulateModal(true);
+    setSimulationLog([`[Dry Run / Trace Diagnostics] Rule: "${targetRule.name}" (${targetRule.id})...`]);
+
+    try {
+      const base = resolveDeviceBaseUrl(espIp);
+      const res = await fetch(`${base}/api/automations/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: targetRule.id, mode: 'dry_run' })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const logs = [
+          `[ESP32 Diagnostics] Target Rule: "${targetRule.name}" (${targetRule.id})`,
+          `[Engine Evaluation] Result: ${data.passed ? 'PASSED (Rule armed)' : 'FAILED / INACTIVE'}`,
+          `[Message] ${data.message || 'No additional details'}`
+        ];
+        setSimulationLog(logs);
+        return;
+      }
+    } catch {
+      // Offline fallback: evaluate locally
+    }
+
+    const trigs = targetRule.triggers || [];
+    const conds = targetRule.conditions || [];
+    const acts = targetRule.actions || [];
+    const logs = [
+      `[Local Evaluator] Rule: "${targetRule.name}"`,
+      `[Trigger Engine] Monitoring ${trigs.length} trigger pattern(s)...`
+    ];
+
+    let allCondsPass = true;
+    conds.forEach((cond, idx) => {
+      const res = evaluateConditionState(cond, liveFrames, entityStates, lastFiredTriggerId, catalog, liveWifiStatus, liveBleMap);
+      logs.push(`  [Condition #${idx + 1}] ${res.state.toUpperCase()}: ${res.reason || ''}`);
+      if (res.state === 'invalid') allCondsPass = false;
+    });
+
+    if (allCondsPass) {
+      logs.push(`[Condition Evaluator] ALL PASS: Rule conditions satisfied for ${acts.length} action(s).`);
+    } else {
+      logs.push(`[Condition Evaluator] CONDITIONS FAILED: Rule actions will NOT fire.`);
+    }
+
+    logs.push(`[Status] Cooldown configured for ${targetRule.cooldown_ms || 0}ms.`);
+    setSimulationLog(logs);
+  };
+
   const handleAddRule = () => {
     const newId = `rule_${Date.now().toString(36)}`;
     const newRule: AutomationRule = {
@@ -932,13 +1014,6 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     }
     setSelectedRuleIdsForDelete(new Set());
     setIsSelectMode(false);
-  };
-
-  const handleCopyJson = () => {
-    const textToCopy = exportToCandoJson(rules, settings, catalog);
-    navigator.clipboard.writeText(textToCopy);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleDownloadJson = () => {
@@ -1239,7 +1314,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         {activeRule ? (
           <div className="order-2 lg:order-1 lg:col-span-8 space-y-4 min-w-0">
             {/* Active Rule Action Strip & Properties */}
-            <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-900 border border-slate-800 shadow-sm space-y-3 min-w-0 overflow-hidden">
+            <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-900 border border-slate-800 shadow-sm space-y-3 min-w-0">
               <div className="flex items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <span
@@ -1254,53 +1329,50 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     placeholder="Automation Name"
                     className="bg-transparent text-sm font-bold text-white focus:outline-none focus:ring-1 focus:ring-cyan-500/50 rounded px-1.5 py-0.5 w-full min-w-0 truncate"
                   />
+                  {activeRule.category ? (
+                    <button
+                      type="button"
+                      onClick={() => setEditingCategoryRule(activeRule)}
+                      className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-cyan-950/70 text-cyan-300 border border-cyan-800/60 hover:bg-cyan-900/60 transition flex-shrink-0"
+                      title="Edit category"
+                    >
+                      <Tag className="w-2.5 h-2.5" />
+                      <span>{activeRule.category}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setEditingCategoryRule(activeRule)}
+                      className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] text-slate-500 hover:text-cyan-300 hover:bg-slate-850 transition flex-shrink-0"
+                      title="Add category"
+                    >
+                      <Tag className="w-2.5 h-2.5" />
+                      <span>+ Category</span>
+                    </button>
+                  )}
                 </div>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onPress={() => { setCommunityModalTab('share'); setShowCommunityModal(true); }}
-                    aria-label="Share or contribute to Community Automations"
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
-                  >
-                    <Share2 className="w-3.5 h-3.5 text-cyan-400" />
-                    <span className="hidden sm:inline">Share</span>
-                  </Button>
-                  <Switch
-                    isSelected={activeRule.enabled}
-                    onChange={(isSelected) => handleUpdateActiveRule({ enabled: isSelected })}
-                    size="sm"
-                    aria-label="Enable automation rule"
-                  >
-                    <Switch.Content>
-                      <Switch.Control>
-                        <Switch.Thumb />
-                      </Switch.Control>
-                      <span className="text-xs font-semibold text-slate-300">
-                        {activeRule.enabled ? 'Enabled' : 'Disabled'}
-                      </span>
-                    </Switch.Content>
-                  </Switch>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    isIconOnly
-                    onPress={() => handleDuplicateRule(activeRule)}
-                    aria-label="Duplicate active rule"
-                    className="p-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
-                  >
-                    <Copy className="w-3.5 h-3.5 text-cyan-400" />
-                  </Button>
-                  <Button
-                    variant="danger-soft"
-                    size="sm"
-                    onPress={() => handleDeleteRule(activeRule.id)}
-                    aria-label="Delete active rule"
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition active:scale-95"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                    <span className="hidden sm:inline">Delete</span>
-                  </Button>
+
+                {/* Right side: Emulate the screenshot with HaToggleSwitch + 3-dots Dropdown Menu */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <HaToggleSwitch
+                    checked={activeRule.enabled}
+                    onChange={(enabled) => handleUpdateActiveRule({ enabled })}
+                    ariaLabel="Toggle automation enabled state"
+                  />
+
+                  <AutomationActionMenu
+                    rule={activeRule}
+                    buttonSize="md"
+                    align="right"
+                    onToggleEnabled={(enabled) => handleUpdateActiveRule({ enabled })}
+                    onDuplicate={() => handleDuplicateRule(activeRule)}
+                    onDelete={() => handleDeleteRule(activeRule.id)}
+                    onRunActions={() => handleRunAllRuleActions(activeRule)}
+                    onShowTraces={() => handleSimulateRuleFor(activeRule)}
+                    onMoreInfo={() => setMoreInfoRule(activeRule)}
+                    onEditSettings={() => setEditingSettingsRule(activeRule)}
+                    onEditCategory={() => setEditingCategoryRule(activeRule)}
+                  />
                 </div>
               </div>
 
@@ -1682,75 +1754,77 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           {/* Card 1: Automations List (Appears at top on single-column mobile) */}
           <div className="order-1 lg:order-none p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-3">
             {!isSelectMode ? (
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Automations ({rules.length})
-                </span>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <ButtonGroup size="sm">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onPress={() => { setCommunityModalTab('browse'); setShowCommunityModal(true); }}
-                      aria-label="Explore Community Automations"
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-gradient-to-r from-amber-500/20 to-cyan-500/20 text-amber-300 hover:from-amber-500/30 hover:to-cyan-500/30 border border-amber-500/30 transition shadow-sm"
-                    >
-                      <Sparkles className="w-3 h-3 text-amber-400" />
-                      <span>Community</span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onPress={() => {
-                        setIsSelectMode(true);
-                        setSelectedRuleIdsForDelete(new Set());
-                      }}
-                      aria-label="Select automations to delete"
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
-                    >
-                      <CheckSquare className="w-3 h-3 text-cyan-400" />
-                      <span>Select</span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onPress={handleSimulateRule}
-                      aria-label="Dry run active rule simulation"
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 transition"
-                    >
-                      <Play className="w-3 h-3 fill-current" />
-                      <span>Dry Run</span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onPress={() => setShowImportModal(true)}
-                      aria-label="Import automations from file or paste JSON"
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
-                    >
-                      <Upload className="w-3 h-3 text-cyan-400" />
-                      <span>Import</span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onPress={handleDownloadJson}
-                      aria-label="Export and download automations.json"
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
-                    >
-                      <Download className="w-3 h-3 text-cyan-400" />
-                      <span>Export</span>
-                    </Button>
-                  </ButtonGroup>
-
+              <div className="space-y-2.5">
+                {/* Header Top Row: Title + Primary Action */}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Automations ({rules.length})
+                  </span>
                   <Button
                     variant="primary"
                     size="sm"
                     onPress={handleAddRule}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/40 transition"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/40 transition shadow-sm shrink-0"
                   >
-                    <Plus className="w-3 h-3" />
+                    <Plus className="w-3.5 h-3.5" />
                     <span>New Rule</span>
+                  </Button>
+                </div>
+
+                {/* Secondary Action Toolbar: Community, Dry Run, Select, Import, Export (Left-justified) */}
+                <div className="flex flex-wrap items-center justify-start gap-1.5 pt-2 border-t border-slate-800/80">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onPress={() => { setCommunityModalTab('browse'); setShowCommunityModal(true); }}
+                    aria-label="Explore Community Automations"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-gradient-to-r from-amber-500/15 to-cyan-500/15 text-amber-300 hover:from-amber-500/25 hover:to-cyan-500/25 border border-amber-500/30 transition shadow-sm"
+                  >
+                    <Sparkles className="w-3 h-3 text-amber-400" />
+                    <span>Community</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onPress={handleSimulateRule}
+                    aria-label="Dry run active rule simulation"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 transition"
+                  >
+                    <Play className="w-3 h-3 fill-current" />
+                    <span>Dry Run</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onPress={() => {
+                      setIsSelectMode(true);
+                      setSelectedRuleIdsForDelete(new Set());
+                    }}
+                    aria-label="Select automations to delete"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                  >
+                    <CheckSquare className="w-3 h-3 text-cyan-400" />
+                    <span>Select</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onPress={() => setShowImportModal(true)}
+                    aria-label="Import automations from file or paste JSON"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                  >
+                    <Upload className="w-3 h-3 text-cyan-400" />
+                    <span className="hidden sm:inline">Import</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onPress={handleDownloadJson}
+                    aria-label="Export and download automations.json"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                  >
+                    <Download className="w-3 h-3 text-cyan-400" />
+                    <span className="hidden sm:inline">Export</span>
                   </Button>
                 </div>
               </div>
@@ -1905,7 +1979,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               )}
             </div>
 
-            <div className="space-y-1.5 max-h-[340px] overflow-y-auto pr-1">
+            <div className="space-y-1.5 max-h-[380px] overflow-y-auto pr-1">
               {rules.map((rule, idx) => (
                 <SwipeableRuleItem
                   key={rule.id}
@@ -1918,93 +1992,15 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   onSelect={setSelectedRuleId}
                   onDuplicate={handleDuplicateRule}
                   onDelete={handleDeleteRule}
+                  onToggleEnabled={(id, enabled) => handleUpdateRule(id, { enabled })}
+                  onRunActions={handleRunAllRuleActions}
+                  onShowTraces={handleSimulateRuleFor}
+                  onMoreInfo={(r) => setMoreInfoRule(r)}
+                  onEditSettings={(r) => setEditingSettingsRule(r)}
+                  onEditCategory={(r) => setEditingCategoryRule(r)}
                 />
               ))}
             </div>
-
-            {/* Mobile swipe hint */}
-            {!isSelectMode && rules.length > 0 && (
-              <p className="text-[10px] text-slate-500 text-center pt-1 block sm:hidden">
-                Swipe left to delete · Swipe right to duplicate
-              </p>
-            )}
-          </div>
-
-          {/* Card 2: Collapsible JSON Inspector & Export (Compact, order-3 on single-column) */}
-          <div className="order-3 lg:order-none rounded-2xl bg-slate-900 border border-slate-800 shadow-lg overflow-hidden transition-all">
-            <div className="flex items-center justify-between gap-2 p-3 bg-slate-950/60 border-b border-slate-800/80">
-              <button
-                type="button"
-                onClick={() => setIsJsonInspectorOpen(!isJsonInspectorOpen)}
-                className="flex items-center gap-2 text-left flex-1 min-w-0 group"
-              >
-                <FileJson className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                <span className="text-xs font-bold text-slate-200 group-hover:text-white transition truncate">
-                  automations.json
-                </span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 flex-shrink-0">
-                  {rules.length} {rules.length === 1 ? 'rule' : 'rules'}
-                </span>
-                {isJsonInspectorOpen ? (
-                  <ChevronUp className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition ml-auto" />
-                ) : (
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition ml-auto" />
-                )}
-              </button>
-
-              <ButtonGroup size="sm" className="flex-shrink-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onPress={handleCopyJson}
-                  aria-label="Copy automations.json to clipboard"
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition border border-slate-700"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-3 h-3 text-emerald-400" />
-                      <span className="text-emerald-400">Copied!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3 h-3 text-cyan-400" />
-                      <span>Copy</span>
-                    </>
-                  )}
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onPress={handleDownloadJson}
-                  aria-label="Download automations.json file"
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition border border-slate-700"
-                >
-                  <Download className="w-3 h-3 text-cyan-400" />
-                  <span className="hidden sm:inline">Download</span>
-                </Button>
-              </ButtonGroup>
-            </div>
-
-            {isJsonInspectorOpen && (
-              <div className="p-3 space-y-2 animate-in fade-in">
-                <div className="relative h-[220px] max-h-[220px] overflow-hidden rounded-xl bg-slate-950 border border-slate-800">
-                  <pre className="w-full h-full p-2.5 font-mono text-[11px] text-slate-300 overflow-auto leading-relaxed select-text">
-                    <code>{exportToCandoJson(rules, settings, catalog)}</code>
-                  </pre>
-                </div>
-                <div className="text-[11px] text-slate-400 flex items-center justify-between">
-                  <span>Ready for ESP32 / LittleFS storage</span>
-                  <button
-                    type="button"
-                    onClick={handleDownloadJson}
-                    className="text-cyan-400 hover:underline font-semibold"
-                  >
-                    Download .json file
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -2096,6 +2092,34 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           </div>
         </div>
       )}
+
+      {/* MODAL: Automation More Info */}
+      <AutomationMoreInfoModal
+        rule={moreInfoRule}
+        isOpen={Boolean(moreInfoRule)}
+        onClose={() => setMoreInfoRule(null)}
+        onToggleEnabled={(id, enabled) => handleUpdateRule(id, { enabled })}
+        onRunActions={handleRunAllRuleActions}
+        onShowTraces={handleSimulateRuleFor}
+        onEditCategory={(r) => setEditingCategoryRule(r)}
+        onEditSettings={(r) => setEditingSettingsRule(r)}
+      />
+
+      {/* MODAL: Edit Category */}
+      <AutomationCategoryModal
+        rule={editingCategoryRule}
+        isOpen={Boolean(editingCategoryRule)}
+        onClose={() => setEditingCategoryRule(null)}
+        onSaveCategory={(id, category) => handleUpdateRule(id, { category })}
+      />
+
+      {/* MODAL: Automation Settings */}
+      <AutomationSettingsModal
+        rule={editingSettingsRule}
+        isOpen={Boolean(editingSettingsRule)}
+        onClose={() => setEditingSettingsRule(null)}
+        onSaveSettings={(id, updates) => handleUpdateRule(id, updates)}
+      />
 
       {/* Floating Clipboard Indicator */}
       {clipboard && (

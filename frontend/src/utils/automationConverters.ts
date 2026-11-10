@@ -809,6 +809,7 @@ export function compileAutomationRule(
     triggers: (rule.triggers || []).map(trig => {
       const baseTrigger = {
         id: trig.id,
+        ...(trig.name ? { name: trig.name } : {}),
         ...(trig.source_command_id ? { source_command_id: trig.source_command_id } : {}),
         ...(trig.source_command_name ? { source_command_name: trig.source_command_name } : {}),
         ...(trig.option_label ? { option_label: trig.option_label } : {})

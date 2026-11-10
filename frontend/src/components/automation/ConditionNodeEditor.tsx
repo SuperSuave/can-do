@@ -311,6 +311,7 @@ export function ConditionNodeEditor({
                     const { command: tCmd, matchedOption: tOpt } = catalog ? resolveCatalogCommandForTrigger(t, catalog) : {};
                     let tName = tCmd?.ha_metadata?.name || tCmd?.name || t.source_command_name || t.can_id || `Trigger ${tIdx + 1}`;
                     if (tOpt) tName += ` (${tOpt.label})`;
+                    if (t.id) tName = `[${t.id}] ${tName}`;
                     return (
                       <option key={t.id || tIdx} value={t.id}>
                         {tName}

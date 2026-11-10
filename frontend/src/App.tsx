@@ -1184,18 +1184,6 @@ export default function App() {
                     >
                       <Layers className={`w-3.5 h-3.5 ${catalogSubTab === 'messages' ? 'text-cyan-400' : 'text-slate-400'}`} />
                       <span>Messages</span>
-                      <Badge
-                        size="sm"
-                        variant={catalogSubTab === 'messages' ? 'soft' : 'secondary'}
-                        color={catalogSubTab === 'messages' ? 'accent' : 'default'}
-                        className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono transition-colors ${
-                          catalogSubTab === 'messages'
-                            ? 'bg-slate-900 text-cyan-300 border border-slate-700/70'
-                            : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
-                        }`}
-                      >
-                        {catalog.commands.length}
-                      </Badge>
                       <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
                     </Tabs.Tab>
 
@@ -1207,17 +1195,6 @@ export default function App() {
                     >
                       <Car className={`w-3.5 h-3.5 ${catalogSubTab === 'vehicles' ? 'text-indigo-400' : 'text-slate-400'}`} />
                       <span>Vehicles</span>
-                      <Badge
-                        size="sm"
-                        variant={catalogSubTab === 'vehicles' ? 'soft' : 'secondary'}
-                        className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono transition-colors ${
-                          catalogSubTab === 'vehicles'
-                            ? 'bg-slate-900 text-indigo-300 border border-slate-700/70'
-                            : 'bg-slate-950/60 text-slate-400 border border-slate-800/60'
-                        }`}
-                      >
-                        {catalog.vehicles.length}
-                      </Badge>
                       <Tabs.Indicator className="rounded-lg bg-slate-800 border border-slate-700/80 shadow-sm" />
                     </Tabs.Tab>
                   </Tabs.List>
