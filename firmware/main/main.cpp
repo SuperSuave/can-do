@@ -203,7 +203,7 @@ extern "C" void app_main(void) {
 
     // 8. Init TWAI / Dual-CAN Hardware and launch RX/TX tasks immediately to prevent boot RX overflow
     ESP_ERROR_CHECK(init_twai());
-    xTaskCreate(can_rx_task, "CAN_RX", 8192, nullptr, 5, nullptr);
+    xTaskCreate(can_rx_task, "CAN_RX", 8192, nullptr, 4, nullptr);
     xTaskCreate(can_tx_task, "CAN_TX", 4096, nullptr, 4, nullptr);
     xTaskCreate(time_scheduler_task, "TIME_SCHED", 4096, nullptr, 3, nullptr);
 

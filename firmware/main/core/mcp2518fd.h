@@ -102,6 +102,7 @@ typedef struct {
     uint32_t tx_fail_count;
     uint32_t rx_overflow_count;
     uint32_t last_rx_poll_ms;
+    uint32_t rx_fifocon_cached;
 } mcp2518fd_t;
 
 // Controller initialization and control API

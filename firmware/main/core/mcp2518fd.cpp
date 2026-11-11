@@ -273,6 +273,7 @@ esp_err_t mcp2518fd_init(mcp2518fd_t *dev, const mcp2518fd_config_t *config) {
     // FIFO 2: RX FIFO, RX Not Empty IRQ enable (TFNRFNIE=1)
     uint32_t fifocon2 = (plsize << 29) | (rx_fsize << 24) | (1 << 0);
     mcp2518fd_write_32(dev, MCP2518FD_REG_CiFIFOCON(2), fifocon2);
+    dev->rx_fifocon_cached = fifocon2;
 
     // 7. Configure Filter 0: Accept All frames (standard + extended) and route to FIFO 2
     // FLTEN=1, F0BP=2 (FIFO 2)
@@ -423,51 +424,76 @@ esp_err_t mcp2518fd_receive(mcp2518fd_t *dev, can_fd_frame_t *frame, TickType_t 
         return ESP_ERR_TIMEOUT;
     }
 
-    // 1. Check if RX FIFO 2 has a message (TFNRFNIF = 1)
-    uint32_t fifosta = 0;
-    esp_err_t ret = mcp2518fd_read_32(dev, MCP2518FD_REG_CiFIFOSTA(2), &fifosta);
-    if (ret != ESP_OK || !(fifosta & 0x01)) {
+    // 1. Sequentially read CiFIFOSTA(2) (0x06C) + CiFIFOUA(2) (0x070) in one SPI transfer
+    uint8_t sta_ua[8] = {0};
+    esp_err_t ret = mcp2518fd_read_bytes(dev, MCP2518FD_REG_CiFIFOSTA(2), sta_ua, sizeof(sta_ua));
+    if (ret != ESP_OK) {
+        xSemaphoreGive(dev->mutex);
+        return ret;
+    }
+
+    uint32_t fifosta = (uint32_t)sta_ua[0] | ((uint32_t)sta_ua[1] << 8) | ((uint32_t)sta_ua[2] << 16) | ((uint32_t)sta_ua[3] << 24);
+    if (!(fifosta & 0x01)) {
         xSemaphoreGive(dev->mutex);
         return ESP_ERR_NOT_FOUND;
     }
 
-    // Check overflow
-    if (fifosta & (1 << 3)) {
-        dev->rx_overflow_count++;
-        // Clear overflow bit
-        mcp2518fd_write_32(dev, MCP2518FD_REG_CiFIFOSTA(2), fifosta & ~(1 << 3));
-    }
-
-    // 2. Read User Address in RAM
-    uint32_t fifoua = 0;
-    ret = mcp2518fd_read_32(dev, MCP2518FD_REG_CiFIFOUA(2), &fifoua);
-    if (ret != ESP_OK) {
+    uint32_t fifoua = (uint32_t)sta_ua[4] | ((uint32_t)sta_ua[5] << 8) | ((uint32_t)sta_ua[6] << 16) | ((uint32_t)sta_ua[7] << 24);
+    uint16_t ram_off = (uint16_t)(fifoua & 0x0FFFU);
+    if (ram_off + 16U > MCP2518FD_RAM_SIZE) {
         xSemaphoreGive(dev->mutex);
-        return ret;
+        return ESP_ERR_INVALID_RESPONSE;
     }
-    uint16_t ram_addr = (uint16_t)(fifoua & 0x0FFF) + MCP2518FD_RAM_START;
+    uint16_t ram_addr = ram_off + MCP2518FD_RAM_START;
 
-    // 3. Read Header (8 bytes) + configured object payload (8B Classic CAN, 64B CAN FD)
+    // 2. Read Header (8B) + first 8B payload; fetch extended CAN FD tail only when len > 8
     uint8_t rx_buf[8 + 64] = {0};
     size_t max_payload = dev->config.can_fd_enabled ? 64 : 8;
-    ret = mcp2518fd_read_bytes(dev, ram_addr, rx_buf, 8 + max_payload);
+    ret = mcp2518fd_read_bytes(dev, ram_addr, rx_buf, 16);
     if (ret != ESP_OK) {
         xSemaphoreGive(dev->mutex);
         return ret;
     }
 
-    // 4. Increment RX FIFO Pointer (UINC=1) so controller frees this message slot
-    uint32_t fifocon2 = 0;
-    mcp2518fd_read_32(dev, MCP2518FD_REG_CiFIFOCON(2), &fifocon2);
-    fifocon2 |= (1 << 8); // UINC
-    mcp2518fd_write_32(dev, MCP2518FD_REG_CiFIFOCON(2), fifocon2);
-
-    xSemaphoreGive(dev->mutex);
-
-    // 5. Decode Header
     uint32_t word0 = (uint32_t)rx_buf[0] | ((uint32_t)rx_buf[1] << 8) | ((uint32_t)rx_buf[2] << 16) | ((uint32_t)rx_buf[3] << 24);
     uint32_t word1 = (uint32_t)rx_buf[4] | ((uint32_t)rx_buf[5] << 8) | ((uint32_t)rx_buf[6] << 16) | ((uint32_t)rx_buf[7] << 24);
 
+    uint8_t dlc = word1 & 0x0F;
+    uint8_t num_bytes = dlc_to_bytes(dlc);
+    if (num_bytes > max_payload) {
+        num_bytes = (uint8_t)max_payload;
+    }
+
+    if (num_bytes > 8) {
+        size_t rem_len = ((size_t)(num_bytes - 8) + 3U) & ~3U;
+        if (ram_off + 16U + rem_len <= MCP2518FD_RAM_SIZE) {
+            ret = mcp2518fd_read_bytes(dev, ram_addr + 16, &rx_buf[16], rem_len);
+            if (ret != ESP_OK) {
+                xSemaphoreGive(dev->mutex);
+                return ret;
+            }
+        } else {
+            num_bytes = 8;
+        }
+    }
+
+    // 3. Increment RX FIFO Pointer (UINC=1) using cached CiFIFOCON(2) before clearing overflow
+    uint32_t fifocon2 = dev->rx_fifocon_cached;
+    if (fifocon2 == 0) {
+        mcp2518fd_read_32(dev, MCP2518FD_REG_CiFIFOCON(2), &fifocon2);
+        dev->rx_fifocon_cached = fifocon2;
+    }
+    mcp2518fd_write_32(dev, MCP2518FD_REG_CiFIFOCON(2), fifocon2 | (1 << 8));
+
+    // 4. Clear overflow flag (RXOVIF = BIT(3)) after UINC has freed a slot
+    if (fifosta & (1 << 3)) {
+        dev->rx_overflow_count++;
+        mcp2518fd_write_32(dev, MCP2518FD_REG_CiFIFOSTA(2), fifosta & ~(1 << 3));
+    }
+
+    xSemaphoreGive(dev->mutex);
+
+    // 5. Decode Header & Payload
     memset(frame, 0, sizeof(can_fd_frame_t));
     bool is_ext = (word1 & (1 << 4)) != 0;
     if (is_ext) {
@@ -483,11 +509,6 @@ esp_err_t mcp2518fd_receive(mcp2518fd_t *dev, can_fd_frame_t *frame, TickType_t 
     frame->flags.fdf = (word1 >> 7) & 1;
     frame->flags.esi = (word1 >> 8) & 1;
 
-    uint8_t dlc = word1 & 0x0F;
-    uint8_t num_bytes = dlc_to_bytes(dlc);
-    if (num_bytes > max_payload) {
-        num_bytes = (uint8_t)max_payload;
-    }
     frame->len = num_bytes;
     if (num_bytes > 0) {
         memcpy(frame->data, &rx_buf[8], num_bytes);

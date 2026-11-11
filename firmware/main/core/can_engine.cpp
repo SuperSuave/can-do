@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cctype>
 #include <mutex>
+#include <unordered_set>
 #include <sys/time.h>
 #include "esp_log.h"
 #include "mqtt_client.h"
@@ -185,6 +186,16 @@ const RtcCrashInfo* get_rtc_crash_info(void) {
     return nullptr;
 }
 
+static inline void copy_rtc_str(char* dst, const char* src, size_t max_len) {
+    if (!dst || !src || max_len == 0) return;
+    size_t i = 0;
+    while (i + 1 < max_len && src[i] != '\0') {
+        dst[i] = src[i];
+        i++;
+    }
+    dst[i] = '\0';
+}
+
 void rtc_crash_record(uint32_t can_id, uint8_t dlc, const uint8_t* data, uint32_t step, const char* decoder) {
     s_rtc_crash.magic = 0xDEADBEEF;
     s_rtc_crash.can_id = can_id;
@@ -194,8 +205,14 @@ void rtc_crash_record(uint32_t can_id, uint8_t dlc, const uint8_t* data, uint32_
     }
     s_rtc_crash.step_marker = step;
     if (decoder) {
-        strncpy(s_rtc_crash.last_decoder, decoder, sizeof(s_rtc_crash.last_decoder) - 1);
-        s_rtc_crash.last_decoder[sizeof(s_rtc_crash.last_decoder) - 1] = '\0';
+        copy_rtc_str(s_rtc_crash.last_decoder, decoder, sizeof(s_rtc_crash.last_decoder));
+    }
+}
+
+static inline void rtc_crash_step_label(uint32_t step, const char* decoder) {
+    s_rtc_crash.step_marker = step;
+    if (decoder) {
+        copy_rtc_str(s_rtc_crash.last_decoder, decoder, sizeof(s_rtc_crash.last_decoder));
     }
 }
 
@@ -309,6 +326,22 @@ void update_state_cache(uint32_t can_id, const uint8_t* data) {
     memcpy(payload.data(), data, 8);
     std::lock_guard<std::mutex> lock(s_cache_mutex);
     can_state_cache[can_id] = payload;
+}
+
+static bool exchange_cached_can_frame(uint32_t can_id, const uint8_t* new_data, uint8_t prev_out[8]) {
+    std::lock_guard<std::mutex> lock(s_cache_mutex);
+    auto it = can_state_cache.find(can_id);
+    if (it != can_state_cache.end()) {
+        if (prev_out) {
+            memcpy(prev_out, it->second.data(), 8);
+        }
+        memcpy(it->second.data(), new_data, 8);
+        return true;
+    }
+    std::array<uint8_t, 8> payload;
+    memcpy(payload.data(), new_data, 8);
+    can_state_cache.emplace(can_id, payload);
+    return false;
 }
 
 bool evaluate_condition(const AutomationCondition& cond) {
@@ -1415,6 +1448,17 @@ void can_rx_task(void* arg) {
     const bool use_dual_can = dual_can_is_available(CAN_BUS_0) || dual_can_is_available(CAN_BUS_1);
     bool prefer_bus1 = false;
     uint32_t last_dual_can_health_ms = 0;
+    int64_t burst_start_us = esp_timer_get_time();
+
+    // Index automation CAN IDs once so non-automation frames skip rule traversal in O(1)
+    std::unordered_set<uint32_t> watched_auto_ids;
+    for (const auto& rule : global_automations) {
+        for (const auto& trig : rule.triggers) {
+            if (trig.type == "can_rx" || trig.type == "byte_transition") {
+                watched_auto_ids.insert(trig.can_id);
+            }
+        }
+    }
 
     while (true) {
         esp_task_wdt_reset();
@@ -1631,39 +1675,38 @@ void can_rx_task(void* arg) {
 
         if (has_frame) {
             consecutive_rx_frames++;
-            if (consecutive_rx_frames >= 75) {
+            if (consecutive_rx_frames >= 24 || (esp_timer_get_time() - burst_start_us) >= 10000) {
                 vTaskDelay(1);
                 consecutive_rx_frames = 0;
+                burst_start_us = esp_timer_get_time();
             }
             s_last_can_frame_ms = now_ms;
             s_last_can_rx_ms.store(now_ms, std::memory_order_relaxed);
             s_can_led_idle_cleared = false;
             board_led_can_activity();
 
-            rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 1, "precondition_rx");
+            rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 1, "rx_decode");
             precondition_can_rx_hook(&rx_msg, frame_bus);
 
-            rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 3, "hud_nav_rx");
+            s_rtc_crash.step_marker = 3;
             hud_nav_rx(&rx_msg, frame_bus);
 
-            rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 4, "uds_engine_rx");
+            s_rtc_crash.step_marker = 4;
             uds_engine_on_can_rx(&rx_msg);
 
             // Stream raw frame to connected SavvyCAN/GVRET client with bus metadata
-            rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 6, "gvret_enqueue");
+            s_rtc_crash.step_marker = 6;
             gvret_enqueue_fd_frame(&rx_fd_msg);
 
             if (rx_msg.rtr) {
-                rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 999, "rtr_done");
+                rtc_crash_step_label(999, "rtr_done");
                 continue;
             }
 
+            // 1. Exchange previous & current state cache in a single lock/lookup
+            s_rtc_crash.step_marker = 7;
             uint8_t prev_data[8] = {0};
-            bool has_prev = get_cached_can_frame(rx_msg.identifier, prev_data);
-
-            // 1. Always update state cache
-            rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 7, "update_state_cache");
-            update_state_cache(rx_msg.identifier, rx_msg.data);
+            bool has_prev = exchange_cached_can_frame(rx_msg.identifier, rx_msg.data, prev_data);
 
             // Helper: Mask out rolling counter and checksum bytes during MQTT change detection
             auto get_can_comparison_mask = [](uint32_t can_id, uint8_t mask_out[8]) {
@@ -1728,8 +1771,8 @@ void can_rx_task(void* arg) {
                 }
             }
 
-            // 2. Evaluate automations if globally enabled
-            if (g_automations_enabled.load()) {
+            // 2. Evaluate automations if globally enabled and CAN ID is referenced by a trigger
+            if (g_automations_enabled.load() && watched_auto_ids.find(rx_msg.identifier) != watched_auto_ids.end()) {
                 uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
                 for (auto& rule : global_automations) {
                     if (!rule.enabled) continue;
@@ -2404,9 +2447,10 @@ void can_rx_task(void* arg) {
                     emit_live_entity_state("sunroof_extended", s_state);
                 }
             }
-            rtc_crash_record(rx_msg.identifier, rx_msg.data_length_code, rx_msg.data, 900, "frame_done");
+            rtc_crash_step_label(900, "frame_done");
         } else {
             consecutive_rx_frames = 0;
+            burst_start_us = esp_timer_get_time();
             // Cleanly extinguish yellow CAN activity LED once when bus becomes idle (>200ms)
             if (!s_can_led_idle_cleared && s_last_can_frame_ms > 0 && (now_ms - s_last_can_frame_ms > 200)) {
                 s_can_led_idle_cleared = true;
