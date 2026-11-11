@@ -5,10 +5,15 @@
 #include <vector>
 #include <unordered_map>
 #include <functional>
+#include <mutex>
+#include <atomic>
 
 extern std::vector<CanEntity> global_catalog;
 extern std::unordered_map<uint32_t, std::vector<CanEntity*>> catalog_by_can_id;
 extern std::vector<AutomationRule> global_automations;
+extern std::mutex g_catalog_mutex;
+extern std::mutex g_automations_mutex;
+extern std::atomic<uint32_t> g_automations_gen;
 
 void rebuild_catalog_can_id_index(void);
 

@@ -57,10 +57,13 @@ static void vbat_monitor_task(void* arg) {
         snprintf(s_last_vbat_str, sizeof(s_last_vbat_str), "%.1f V", v);
 
         // Update catalog entity current_state
-        for (auto& entity : global_catalog) {
-            if (entity.id == "cond_aux_12v_battery") {
-                entity.current_state = s_last_vbat_str;
-                break;
+        {
+            std::lock_guard<std::mutex> lock(g_catalog_mutex);
+            for (auto& entity : global_catalog) {
+                if (entity.id == "cond_aux_12v_battery") {
+                    entity.current_state = s_last_vbat_str;
+                    break;
+                }
             }
         }
 

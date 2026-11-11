@@ -31,6 +31,9 @@ static MqttConfig s_mqtt_cfg;
 static std::atomic<bool> s_mqtt_connected{false};
 static std::atomic<bool> s_sync_task_running{false};
 static std::atomic<bool> s_need_clear_discovery{false};
+static std::atomic<bool> s_auto_reload_task_running{false};
+static std::atomic<bool> s_auto_reload_pending{false};
+static std::unordered_set<std::string> s_exposed_auto_ids;
 static std::string s_lwt_topic;
 
 static FILE* s_automations_tmp_file = nullptr;
@@ -180,10 +183,14 @@ static void publish_ha_automation_discovery(esp_mqtt_client_handle_t client, con
     cJSON_Delete(root);
 }
 
-static void clear_ha_automation_discovery(esp_mqtt_client_handle_t client, const AutomationRule& rule) {
-    if (!client || rule.id.empty()) return;
-    std::string topic = "homeassistant/switch/" + DEVICE_ID + "/" + rule.id + "/config";
+static void clear_ha_automation_topic(esp_mqtt_client_handle_t client, const std::string& rule_id) {
+    if (!client || rule_id.empty()) return;
+    std::string topic = "homeassistant/switch/" + DEVICE_ID + "/" + rule_id + "/config";
     mqtt_enqueue_nonblocking(topic.c_str(), "", 0, 0, 1);
+}
+
+static void clear_ha_automation_discovery(esp_mqtt_client_handle_t client, const AutomationRule& rule) {
+    clear_ha_automation_topic(client, rule.id);
 }
 
 static void publish_automations_json_state(void) {
@@ -350,33 +357,17 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     }
                     s_receiving_automations = false;
 
-                    bool valid = true;
-                    cJSON* root = nullptr;
-                    FILE* f = fopen("/spiffs/automations.json.tmp", "r");
-                    if (f) {
-                        fseek(f, 0, SEEK_END);
-                        long len = ftell(f);
-                        fseek(f, 0, SEEK_SET);
-                        if (len > 0 && len <= 32768) {
-                            char* buf = (char*)malloc(len + 1);
-                            if (buf) {
-                                fread(buf, 1, len, f);
-                                buf[len] = '\0';
-                                root = cJSON_Parse(buf);
-                                if (!root) valid = false;
-                                else cJSON_Delete(root);
-                                free(buf);
-                            }
-                        } else if (len > 32768) {
-                            valid = false;
-                        }
-                        fclose(f);
+                    bool valid = false;
+                    struct stat st;
+                    if (stat("/spiffs/automations.json.tmp", &st) == 0 && st.st_size > 0 && st.st_size <= 32768) {
+                        valid = load_automations_from_fs("/spiffs/automations.json.tmp");
                     }
 
                     if (valid) {
+                        unlink("/spiffs/automations.json");
                         rename("/spiffs/automations.json.tmp", "/spiffs/automations.json");
                         mqtt_enqueue_nonblocking(status_topic.c_str(), "{\"status\":\"ok\"}", 15, 0, 0);
-                        power_mgr_schedule_restart(1000);
+                        mqtt_mgr_on_automations_reloaded();
                     } else {
                         unlink("/spiffs/automations.json.tmp");
                         mqtt_enqueue_nonblocking(status_topic.c_str(), "{\"status\":\"error\",\"message\":\"Invalid JSON syntax\"}", 50, 0, 0);
@@ -793,6 +784,71 @@ bool mqtt_mgr_save_config(const MqttConfig& cfg) {
     return true;
 }
 
+static std::vector<AutomationRule> snapshot_automations_for_mqtt(void) {
+    std::lock_guard<std::mutex> lock(g_automations_mutex);
+    return global_automations;
+}
+
+static void refresh_automation_discovery_locked_check(void) {
+    bool disco_en = false;
+    std::unordered_set<std::string> prev_exposed;
+    {
+        std::lock_guard<std::mutex> lock(s_mqtt_mutex);
+        disco_en = s_mqtt_cfg.ha_discovery_enabled;
+        prev_exposed = s_exposed_auto_ids;
+    }
+    if (!disco_en) return;
+
+    std::vector<AutomationRule> rules_snapshot = snapshot_automations_for_mqtt();
+    std::unordered_set<std::string> new_exposed;
+    for (const auto& rule : rules_snapshot) {
+        if (rule.ha_expose && !rule.id.empty()) {
+            new_exposed.insert(rule.id);
+        }
+    }
+
+    for (const auto& old_id : prev_exposed) {
+        if (!global_mqtt_client || !s_mqtt_connected.load()) break;
+        if (new_exposed.find(old_id) == new_exposed.end()) {
+            clear_ha_automation_topic(global_mqtt_client, old_id);
+            vTaskDelay(pdMS_TO_TICKS(15));
+        }
+    }
+
+    for (const auto& rule : rules_snapshot) {
+        if (!global_mqtt_client || !s_mqtt_connected.load()) break;
+        if (rule.ha_expose && !rule.id.empty()) {
+            publish_ha_automation_discovery(global_mqtt_client, rule);
+            vTaskDelay(pdMS_TO_TICKS(25));
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(s_mqtt_mutex);
+        s_exposed_auto_ids.swap(new_exposed);
+    }
+}
+
+static void mqtt_auto_reload_task(void* arg) {
+    while (s_auto_reload_pending.exchange(false)) {
+        if (!global_mqtt_client || !s_mqtt_connected.load()) break;
+        publish_automations_json_state();
+        refresh_automation_discovery_locked_check();
+    }
+    s_auto_reload_task_running.store(false);
+    vTaskDelete(NULL);
+}
+
+void mqtt_mgr_on_automations_reloaded(void) {
+    if (!global_mqtt_client || !s_mqtt_connected.load(std::memory_order_relaxed)) return;
+    s_auto_reload_pending.store(true);
+    if (!s_auto_reload_task_running.exchange(true)) {
+        if (xTaskCreate(mqtt_auto_reload_task, "mqtt_auto", 4096, nullptr, 2, nullptr) != pdPASS) {
+            s_auto_reload_task_running.store(false);
+        }
+    }
+}
+
 void mqtt_mgr_publish_discovery(void) {
     if (global_mqtt_client && s_mqtt_connected.load()) {
         stream_catalog_entities([](const CanEntity& entity) -> bool {
@@ -802,10 +858,19 @@ void mqtt_mgr_publish_discovery(void) {
             return true;
         });
 
-        for (const auto& rule : global_automations) {
+        std::vector<AutomationRule> rules_snapshot = snapshot_automations_for_mqtt();
+        std::unordered_set<std::string> new_exposed;
+        for (const auto& rule : rules_snapshot) {
             if (!global_mqtt_client || !s_mqtt_connected.load()) break;
-            publish_ha_automation_discovery(global_mqtt_client, rule);
-            vTaskDelay(pdMS_TO_TICKS(25));
+            if (rule.ha_expose && !rule.id.empty()) {
+                new_exposed.insert(rule.id);
+                publish_ha_automation_discovery(global_mqtt_client, rule);
+                vTaskDelay(pdMS_TO_TICKS(25));
+            }
+        }
+        {
+            std::lock_guard<std::mutex> lock(s_mqtt_mutex);
+            s_exposed_auto_ids.swap(new_exposed);
         }
     }
 }
@@ -819,10 +884,15 @@ void mqtt_mgr_clear_discovery(void) {
             return true;
         });
 
-        for (const auto& rule : global_automations) {
+        std::vector<AutomationRule> rules_snapshot = snapshot_automations_for_mqtt();
+        for (const auto& rule : rules_snapshot) {
             if (!global_mqtt_client || !s_mqtt_connected.load()) break;
             clear_ha_automation_discovery(global_mqtt_client, rule);
             vTaskDelay(pdMS_TO_TICKS(15));
+        }
+        {
+            std::lock_guard<std::mutex> lock(s_mqtt_mutex);
+            s_exposed_auto_ids.clear();
         }
     }
 }

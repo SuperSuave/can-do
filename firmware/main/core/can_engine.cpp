@@ -716,19 +716,29 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
 
         if (step.type == ActionType::ENTITY_COMMAND) {
             bool executed_inline = false;
-            for (const auto& entity : global_catalog) {
-                if (strcasecmp(entity.id.c_str(), step.entity_id.c_str()) == 0) {
-                    for (const auto& option : entity.options) {
-                        if (strcasecmp(option.label.c_str(), step.command.c_str()) == 0 || (entity.options.size() == 1 && step.command.empty())) {
-                            execute_can_burst(entity.action_can_id, option.steps, entity.delay_ms);
-                            executed_inline = true;
-                            break;
+            uint32_t tx_can_id = 0;
+            uint32_t tx_delay_ms = 0;
+            std::vector<ActionStep> tx_steps;
+            {
+                std::lock_guard<std::mutex> lock(g_catalog_mutex);
+                for (const auto& entity : global_catalog) {
+                    if (strcasecmp(entity.id.c_str(), step.entity_id.c_str()) == 0) {
+                        for (const auto& option : entity.options) {
+                            if (strcasecmp(option.label.c_str(), step.command.c_str()) == 0 || (entity.options.size() == 1 && step.command.empty())) {
+                                tx_can_id = entity.action_can_id;
+                                tx_delay_ms = entity.delay_ms;
+                                tx_steps = option.steps;
+                                executed_inline = true;
+                                break;
+                            }
                         }
+                        break;
                     }
-                    break;
                 }
             }
-            if (!executed_inline) {
+            if (executed_inline) {
+                execute_can_burst(tx_can_id, tx_steps, tx_delay_ms);
+            } else {
                 ESP_LOGW(TAG, "Entity '%s' command '%s' not found for inline execution",
                          step.entity_id.c_str(), step.command.c_str());
             }
@@ -898,34 +908,37 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
 
 bool queue_entity_command(const std::string& entity_id, const std::string& command_label) {
     // Check if entity_id matches an active automation rule
-    for (auto& rule : global_automations) {
-        if (rule.id == entity_id) {
-            std::string cmd_lower = command_label;
-            std::transform(cmd_lower.begin(), cmd_lower.end(), cmd_lower.begin(), ::tolower);
-            if (cmd_lower == "off" || cmd_lower == "0" || cmd_lower == "false" || cmd_lower == "disable") {
-                rule.enabled = false;
-                mqtt_mgr_publish_entity_state(rule.id, "OFF");
-                broadcast_ws_state(rule.id, "OFF");
-                ESP_LOGI(TAG, "Automation rule '%s' disabled via entity command", rule.id.c_str());
-                return true;
-            } else if (cmd_lower == "on" || cmd_lower == "1" || cmd_lower == "true" || cmd_lower == "enable") {
-                rule.enabled = true;
-                mqtt_mgr_publish_entity_state(rule.id, "ON");
-                broadcast_ws_state(rule.id, "ON");
-                ESP_LOGI(TAG, "Automation rule '%s' enabled via entity command", rule.id.c_str());
-                return true;
-            } else {
-                // Trigger/run the automation sequence directly
-                ESP_LOGI(TAG, "Triggering automation rule '%s' manually via command '%s'", rule.id.c_str(), command_label.c_str());
-                uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-                rule.last_exec_time_ms = now_ms;
-                broadcast_ws_automation_event(rule.id, rule.name);
-                if (rule.is_running && rule.is_running->load()) {
-                    ESP_LOGW(TAG, "Rule '%s' is already executing; skipping manual trigger", rule.name.c_str());
-                    return false;
+    {
+        std::lock_guard<std::mutex> lock(g_automations_mutex);
+        for (auto& rule : global_automations) {
+            if (rule.id == entity_id) {
+                std::string cmd_lower = command_label;
+                std::transform(cmd_lower.begin(), cmd_lower.end(), cmd_lower.begin(), ::tolower);
+                if (cmd_lower == "off" || cmd_lower == "0" || cmd_lower == "false" || cmd_lower == "disable") {
+                    rule.enabled = false;
+                    mqtt_mgr_publish_entity_state(rule.id, "OFF");
+                    broadcast_ws_state(rule.id, "OFF");
+                    ESP_LOGI(TAG, "Automation rule '%s' disabled via entity command", rule.id.c_str());
+                    return true;
+                } else if (cmd_lower == "on" || cmd_lower == "1" || cmd_lower == "true" || cmd_lower == "enable") {
+                    rule.enabled = true;
+                    mqtt_mgr_publish_entity_state(rule.id, "ON");
+                    broadcast_ws_state(rule.id, "ON");
+                    ESP_LOGI(TAG, "Automation rule '%s' enabled via entity command", rule.id.c_str());
+                    return true;
+                } else {
+                    // Trigger/run the automation sequence directly
+                    ESP_LOGI(TAG, "Triggering automation rule '%s' manually via command '%s'", rule.id.c_str(), command_label.c_str());
+                    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+                    rule.last_exec_time_ms = now_ms;
+                    broadcast_ws_automation_event(rule.id, rule.name);
+                    if (rule.is_running && rule.is_running->load()) {
+                        ESP_LOGW(TAG, "Rule '%s' is already executing; skipping manual trigger", rule.name.c_str());
+                        return false;
+                    }
+                    bool ok = queue_action_steps_ptr(0, 20, &rule.actions, "manual_ha", rule.is_running);
+                    return ok;
                 }
-                bool ok = queue_action_steps_ptr(0, 20, &rule.actions, "manual_ha", rule.is_running);
-                return ok;
             }
         }
     }
@@ -1416,10 +1429,13 @@ bool queue_action_steps_ptr(uint32_t can_id, uint32_t delay_ms, const std::vecto
 }
 
 static void emit_live_entity_state(const std::string& entity_id, const std::string& state) {
-    for (auto& entity : global_catalog) {
-        if (entity.id == entity_id) {
-            entity.current_state = state;
-            break;
+    {
+        std::lock_guard<std::mutex> lock(g_catalog_mutex);
+        for (auto& entity : global_catalog) {
+            if (entity.id == entity_id) {
+                entity.current_state = state;
+                break;
+            }
         }
     }
     mqtt_mgr_publish_entity_state(entity_id, state);
@@ -1450,15 +1466,22 @@ void can_rx_task(void* arg) {
     uint32_t last_dual_can_health_ms = 0;
     int64_t burst_start_us = esp_timer_get_time();
 
-    // Index automation CAN IDs once so non-automation frames skip rule traversal in O(1)
+    // Index automation CAN IDs and rebuild cleanly whenever automations hot-reload
+    uint32_t auto_gen = 0;
     std::unordered_set<uint32_t> watched_auto_ids;
-    for (const auto& rule : global_automations) {
-        for (const auto& trig : rule.triggers) {
-            if (trig.type == "can_rx" || trig.type == "byte_transition") {
-                watched_auto_ids.insert(trig.can_id);
+    auto refresh_watched_auto_ids = [&]() {
+        std::lock_guard<std::mutex> lock(g_automations_mutex);
+        watched_auto_ids.clear();
+        for (const auto& rule : global_automations) {
+            for (const auto& trig : rule.triggers) {
+                if (trig.type == "can_rx" || trig.type == "byte_transition") {
+                    watched_auto_ids.insert(trig.can_id);
+                }
             }
         }
-    }
+        auto_gen = g_automations_gen.load(std::memory_order_acquire);
+    };
+    refresh_watched_auto_ids();
 
     while (true) {
         esp_task_wdt_reset();
@@ -1772,34 +1795,40 @@ void can_rx_task(void* arg) {
             }
 
             // 2. Evaluate automations if globally enabled and CAN ID is referenced by a trigger
-            if (g_automations_enabled.load() && watched_auto_ids.find(rx_msg.identifier) != watched_auto_ids.end()) {
-                uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-                for (auto& rule : global_automations) {
-                    if (!rule.enabled) continue;
-                    if (rule.is_running && rule.is_running->load()) continue;
+            if (g_automations_enabled.load()) {
+                if (g_automations_gen.load(std::memory_order_acquire) != auto_gen) {
+                    refresh_watched_auto_ids();
+                }
+                if (watched_auto_ids.find(rx_msg.identifier) != watched_auto_ids.end()) {
+                    std::lock_guard<std::mutex> lock(g_automations_mutex);
+                    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+                    for (auto& rule : global_automations) {
+                        if (!rule.enabled) continue;
+                        if (rule.is_running && rule.is_running->load()) continue;
 
-                    for (const auto& trig : rule.triggers) {
-                        if ((trig.type == "can_rx" || trig.type == "byte_transition") && trig.can_id == rx_msg.identifier) {
-                            if (is_trigger_match(rx_msg.data, has_prev ? prev_data : nullptr, trig)) {
-                                // Check cooldown
-                                if (rule.last_exec_time_ms != 0 && (now_ms - rule.last_exec_time_ms < rule.cooldown_ms)) {
-                                    continue;
-                                }
-
-                                // Check conditions
-                                bool passed = true;
-                                for (const auto& cond : rule.conditions) {
-                                    if (!evaluate_condition(cond)) {
-                                        passed = false;
-                                        break;
+                        for (const auto& trig : rule.triggers) {
+                            if ((trig.type == "can_rx" || trig.type == "byte_transition") && trig.can_id == rx_msg.identifier) {
+                                if (is_trigger_match(rx_msg.data, has_prev ? prev_data : nullptr, trig)) {
+                                    // Check cooldown
+                                    if (rule.last_exec_time_ms != 0 && (now_ms - rule.last_exec_time_ms < rule.cooldown_ms)) {
+                                        continue;
                                     }
-                                }
 
-                                if (passed) {
-                                    ESP_LOGI(TAG, "Automation fired: %s (trigger: %s)", rule.name.c_str(), trig.id.c_str());
-                                    rule.last_exec_time_ms = now_ms;
-                                    broadcast_ws_automation_event(rule.id, rule.name);
-                                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id, rule.is_running);
+                                    // Check conditions
+                                    bool passed = true;
+                                    for (const auto& cond : rule.conditions) {
+                                        if (!evaluate_condition(cond)) {
+                                            passed = false;
+                                            break;
+                                        }
+                                    }
+
+                                    if (passed) {
+                                        ESP_LOGI(TAG, "Automation fired: %s (trigger: %s)", rule.name.c_str(), trig.id.c_str());
+                                        rule.last_exec_time_ms = now_ms;
+                                        broadcast_ws_automation_event(rule.id, rule.name);
+                                        queue_action_steps_ptr(0, 20, &rule.actions, trig.id, rule.is_running);
+                                    }
                                 }
                             }
                         }
@@ -1808,35 +1837,38 @@ void can_rx_task(void* arg) {
             }
 
             // 3. Match against catalog entities for state updates (O(1) indexed lookup)
-            auto cat_it = catalog_by_can_id.find(rx_msg.identifier);
-            if (cat_it != catalog_by_can_id.end()) {
-                for (auto* entity_ptr : cat_it->second) {
-                    if (!entity_ptr) continue;
-                    auto& entity = *entity_ptr;
+            {
+                std::lock_guard<std::mutex> lock(g_catalog_mutex);
+                auto cat_it = catalog_by_can_id.find(rx_msg.identifier);
+                if (cat_it != catalog_by_can_id.end()) {
+                    for (auto* entity_ptr : cat_it->second) {
+                        if (!entity_ptr) continue;
+                        auto& entity = *entity_ptr;
 
-                    for (const auto& opt : entity.options) {
-                        if (is_match(rx_msg.data, opt)) {
-                            if (entity.current_state != opt.label) {
-                                entity.current_state = opt.label;
-                                ESP_LOGD(TAG, "State change: %s -> %s", entity.id.c_str(), opt.label.c_str());
+                        for (const auto& opt : entity.options) {
+                            if (is_match(rx_msg.data, opt)) {
+                                if (entity.current_state != opt.label) {
+                                    entity.current_state = opt.label;
+                                    ESP_LOGD(TAG, "State change: %s -> %s", entity.id.c_str(), opt.label.c_str());
 
-                                // MQTT Publish
-                                std::string payload = opt.label;
-                                if (entity.ha_domain == "switch") {
-                                    std::string l_lower = opt.label;
-                                    std::transform(l_lower.begin(), l_lower.end(), l_lower.begin(), ::tolower);
-                                    if (l_lower.find("off") != std::string::npos || l_lower.find("disable") != std::string::npos || l_lower.find("inactive") != std::string::npos) {
-                                        payload = "OFF";
-                                    } else {
-                                        payload = "ON";
+                                    // MQTT Publish
+                                    std::string payload = opt.label;
+                                    if (entity.ha_domain == "switch") {
+                                        std::string l_lower = opt.label;
+                                        std::transform(l_lower.begin(), l_lower.end(), l_lower.begin(), ::tolower);
+                                        if (l_lower.find("off") != std::string::npos || l_lower.find("disable") != std::string::npos || l_lower.find("inactive") != std::string::npos) {
+                                            payload = "OFF";
+                                        } else {
+                                            payload = "ON";
+                                        }
                                     }
-                                }
-                                mqtt_mgr_publish_entity_state(entity.id, payload);
+                                    mqtt_mgr_publish_entity_state(entity.id, payload);
 
-                                // WebSocket Broadcast
-                                broadcast_ws_state(entity.id, opt.label);
+                                    // WebSocket Broadcast
+                                    broadcast_ws_state(entity.id, opt.label);
+                                }
+                                break;
                             }
-                            break;
                         }
                     }
                 }
@@ -2548,6 +2580,7 @@ void time_scheduler_task(void* arg) {
         }
 
         uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+        std::lock_guard<std::mutex> lock(g_automations_mutex);
         for (auto& rule : global_automations) {
             if (!rule.enabled) continue;
             if (rule.is_running && rule.is_running->load()) continue;
@@ -2584,6 +2617,7 @@ void can_engine_on_device_event(const std::string& event_type, const std::string
     if (!g_automations_enabled.load()) return;
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
 
+    std::lock_guard<std::mutex> lock(g_automations_mutex);
     for (auto& rule : global_automations) {
         if (!rule.enabled) continue;
         if (rule.is_running && rule.is_running->load()) continue;
@@ -2664,6 +2698,7 @@ void can_engine_on_ble_event(const std::string& address, const std::string& butt
 
     if (!g_automations_enabled.load()) return;
 
+    std::lock_guard<std::mutex> lock(g_automations_mutex);
     for (auto& rule : global_automations) {
         if (!rule.enabled) continue;
         if (rule.is_running && rule.is_running->load()) continue;
@@ -2741,6 +2776,7 @@ void can_engine_on_ble_device_event(const std::string& address, const std::strin
 
     if (!g_automations_enabled.load()) return;
 
+    std::lock_guard<std::mutex> lock(g_automations_mutex);
     for (auto& rule : global_automations) {
         if (!rule.enabled) continue;
         if (rule.is_running && rule.is_running->load()) continue;
@@ -2838,6 +2874,7 @@ void can_engine_on_ble_beacon_event(const std::string& uuid, const std::string& 
 
     if (!g_automations_enabled.load()) return;
 
+    std::lock_guard<std::mutex> lock(g_automations_mutex);
     for (auto& rule : global_automations) {
         if (!rule.enabled) continue;
         if (rule.is_running && rule.is_running->load()) continue;

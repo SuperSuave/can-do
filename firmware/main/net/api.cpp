@@ -384,17 +384,20 @@ static esp_err_t api_states_handler(httpd_req_t *req) {
 
     std::unordered_map<std::string, std::string> cache_snapshot = get_live_state_cache();
 
-    for (const auto& entity : global_catalog) {
-        cJSON *item = cJSON_CreateObject();
-        cJSON_AddStringToObject(item, "entity", entity.id.c_str());
-        std::string st = entity.current_state;
-        auto it = cache_snapshot.find(entity.id);
-        if (it != cache_snapshot.end()) {
-            st = it->second;
+    {
+        std::lock_guard<std::mutex> lock(g_catalog_mutex);
+        for (const auto& entity : global_catalog) {
+            cJSON *item = cJSON_CreateObject();
+            cJSON_AddStringToObject(item, "entity", entity.id.c_str());
+            std::string st = entity.current_state;
+            auto it = cache_snapshot.find(entity.id);
+            if (it != cache_snapshot.end()) {
+                st = it->second;
+            }
+            cJSON_AddStringToObject(item, "state", st.empty() ? "Unknown" : st.c_str());
+            cJSON_AddItemToArray(root, item);
+            included.insert(entity.id);
         }
-        cJSON_AddStringToObject(item, "state", st.empty() ? "Unknown" : st.c_str());
-        cJSON_AddItemToArray(root, item);
-        included.insert(entity.id);
     }
 
     for (const auto& pair : cache_snapshot) {
@@ -526,35 +529,48 @@ static esp_err_t api_test_automation_handler(httpd_req_t *req) {
     cJSON *mode_item = cJSON_GetObjectItem(root, "mode");
     const char* req_id = cJSON_IsString(id_item) ? id_item->valuestring : "";
     const char* mode = cJSON_IsString(mode_item) ? mode_item->valuestring : "dry_run";
+    bool is_dry_run = (strcmp(mode, "dry_run") == 0);
+    bool is_live_fire = (!is_dry_run && strcmp(mode, "live_fire") == 0);
 
-    for (const auto& rule : global_automations) {
-        if (rule.id == req_id) {
-            if (strcmp(mode, "dry_run") == 0) {
-                bool passed = true;
-                std::string debug_msg = "All conditions passed";
-                for (const auto& cond : rule.conditions) {
-                    if (!evaluate_condition(cond)) {
-                        passed = false;
-                        char tmp[64];
-                        snprintf(tmp, sizeof(tmp), "Condition failed on CAN ID 0x%03lX", (unsigned long)cond.can_id);
-                        debug_msg = tmp;
-                        break;
+    bool found = false;
+    bool dry_passed = true;
+    std::string debug_msg = "All conditions passed";
+
+    if (is_dry_run || is_live_fire) {
+        std::lock_guard<std::mutex> lock(g_automations_mutex);
+        for (const auto& rule : global_automations) {
+            if (rule.id == req_id) {
+                found = true;
+                if (is_dry_run) {
+                    for (const auto& cond : rule.conditions) {
+                        if (!evaluate_condition(cond)) {
+                            dry_passed = false;
+                            char tmp[64];
+                            snprintf(tmp, sizeof(tmp), "Condition failed on CAN ID 0x%03lX", (unsigned long)cond.can_id);
+                            debug_msg = tmp;
+                            break;
+                        }
                     }
+                } else {
+                    queue_action_steps_ptr(0, 20, &rule.actions);
                 }
-                cJSON_Delete(root);
-                std::string resp = std::string("{\"status\":\"ok\",\"passed\":") + (passed ? "true" : "false") + ",\"message\":\"" + debug_msg + "\"}";
-                httpd_resp_sendstr(req, resp.c_str());
-                return ESP_OK;
-            } else if (strcmp(mode, "live_fire") == 0) {
-                queue_action_steps_ptr(0, 20, &rule.actions);
-                cJSON_Delete(root);
-                httpd_resp_sendstr(req, "{\"status\":\"ok\",\"message\":\"Live fire actions queued\"}");
-                return ESP_OK;
+                break;
             }
         }
     }
 
     cJSON_Delete(root);
+    if (found) {
+        httpd_resp_set_type(req, "application/json");
+        if (is_dry_run) {
+            std::string resp = std::string("{\"status\":\"ok\",\"passed\":") + (dry_passed ? "true" : "false") + ",\"message\":\"" + debug_msg + "\"}";
+            httpd_resp_sendstr(req, resp.c_str());
+        } else {
+            httpd_resp_sendstr(req, "{\"status\":\"ok\",\"message\":\"Live fire actions queued\"}");
+        }
+        return ESP_OK;
+    }
+
     httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Automation rule not found");
     return ESP_FAIL;
 }
@@ -569,7 +585,9 @@ static esp_err_t api_automations_diagnostics_handler(httpd_req_t *req) {
 
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
 
-    for (const auto& rule : global_automations) {
+    {
+        std::lock_guard<std::mutex> lock(g_automations_mutex);
+        for (const auto& rule : global_automations) {
         cJSON *rule_obj = cJSON_CreateObject();
         cJSON_AddStringToObject(rule_obj, "id", rule.id.c_str());
         cJSON_AddStringToObject(rule_obj, "name", rule.name.c_str());
@@ -765,6 +783,7 @@ static esp_err_t api_automations_diagnostics_handler(httpd_req_t *req) {
         }
 
         cJSON_AddItemToArray(rules_arr, rule_obj);
+        }
     }
 
     char *json_str = cJSON_PrintUnformatted(root);
@@ -1247,6 +1266,14 @@ static esp_err_t api_post_automations_handler(httpd_req_t *req) {
     }
     fclose(fd);
 
+    if (!load_automations_from_fs(temp_filepath)) {
+        if (temp_filepath != target_filepath) {
+            remove(temp_filepath);
+        }
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid automations JSON");
+        return ESP_FAIL;
+    }
+
     if (temp_filepath != target_filepath) {
         remove(target_filepath);
         if (rename(temp_filepath, target_filepath) != 0) {
@@ -1256,8 +1283,11 @@ static esp_err_t api_post_automations_handler(httpd_req_t *req) {
         }
     }
 
-    ESP_LOGI(TAG, "New automations.json written (%d bytes). Triggering soft-reset...", req->content_len);
-    return send_reboot_json_response(req, "{\"status\":\"success\",\"message\":\"Automations saved successfully. Soft-resetting engine...\"}");
+    mqtt_mgr_on_automations_reloaded();
+    ESP_LOGI(TAG, "New automations.json written (%d bytes) and hot-reloaded.", req->content_len);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"status\":\"success\",\"hot_reloaded\":true,\"message\":\"Automations saved and hot-reloaded.\"}");
+    return ESP_OK;
 }
 
 static esp_err_t api_get_preferences_handler(httpd_req_t *req) {
@@ -1653,11 +1683,21 @@ static esp_err_t api_system_control_handler(httpd_req_t *req) {
             int stat_res = stat("/spiffs/catalog.json", &st);
             bool ok = load_catalog_from_fs("/spiffs/catalog.json");
             g_automations_enabled.store(prev_auto);
+            size_t cat_cnt = 0;
+            size_t auto_cnt = 0;
+            {
+                std::lock_guard<std::mutex> lock(g_catalog_mutex);
+                cat_cnt = global_catalog.size();
+            }
+            {
+                std::lock_guard<std::mutex> lock(g_automations_mutex);
+                auto_cnt = global_automations.size();
+            }
             char resp_buf[256];
             snprintf(resp_buf, sizeof(resp_buf), 
                      "{\"status\":\"%s\",\"stat_res\":%d,\"size\":%ld,\"entities\":%zu,\"automations\":%zu}",
                      ok ? "ok" : "fail", stat_res, stat_res == 0 ? (long)st.st_size : -1L,
-                     global_catalog.size(), global_automations.size());
+                     cat_cnt, auto_cnt);
             cJSON_Delete(root);
             httpd_resp_set_type(req, "application/json");
             httpd_resp_sendstr(req, resp_buf);
@@ -2367,7 +2407,7 @@ static esp_err_t api_ble_beacons_delete_handler(httpd_req_t *req) {
 httpd_handle_t start_webserver(void) {
     httpd_handle_t server = nullptr;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.stack_size = 6144;
+    config.stack_size = 8192;
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.max_uri_handlers = 48;
     config.lru_purge_enable = true;

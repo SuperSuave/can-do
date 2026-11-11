@@ -17,8 +17,11 @@ std::vector<CanEntity> global_catalog;
 static std::list<CanEntity> s_dynamic_entities;
 std::unordered_map<uint32_t, std::vector<CanEntity*>> catalog_by_can_id;
 std::vector<AutomationRule> global_automations;
+std::mutex g_catalog_mutex;
+std::mutex g_automations_mutex;
+std::atomic<uint32_t> g_automations_gen{1};
 
-void rebuild_catalog_can_id_index(void) {
+static void rebuild_catalog_can_id_index_locked(void) {
     catalog_by_can_id.clear();
     for (auto& entity : global_catalog) {
         if (entity.state_can_id != 0) {
@@ -30,6 +33,11 @@ void rebuild_catalog_can_id_index(void) {
             catalog_by_can_id[entity.state_can_id].push_back(&entity);
         }
     }
+}
+
+void rebuild_catalog_can_id_index(void) {
+    std::lock_guard<std::mutex> lock(g_catalog_mutex);
+    rebuild_catalog_can_id_index_locked();
 }
 
 
@@ -1297,9 +1305,30 @@ bool load_catalog_from_fs(const char* filepath) {
     // Heap-backed 4KB I/O buffer (automatically freed on fclose by libc)
     setvbuf(f, nullptr, _IOFBF, 4096);
 
-    global_catalog.clear();
-    global_automations.clear();
-    catalog_by_can_id.clear();
+    std::vector<CanEntity> new_catalog;
+    std::vector<AutomationRule> new_autos;
+
+    auto commit_catalog = [&]() {
+        size_t cat_count = 0;
+        size_t auto_count = 0;
+        size_t id_count = 0;
+        {
+            std::lock_guard<std::mutex> cat_lock(g_catalog_mutex);
+            std::lock_guard<std::mutex> auto_lock(g_automations_mutex);
+            global_catalog.swap(new_catalog);
+            s_dynamic_entities.clear();
+            rebuild_catalog_can_id_index_locked();
+            if (!new_autos.empty()) {
+                global_automations.swap(new_autos);
+                g_automations_gen.fetch_add(1, std::memory_order_release);
+            }
+            cat_count = global_catalog.size();
+            auto_count = global_automations.size();
+            id_count = catalog_by_can_id.size();
+        }
+        ESP_LOGI(TAG, "Catalog loaded: %zu entities, %zu automations, %zu indexed CAN IDs",
+                 cat_count, auto_count, id_count);
+    };
 
     // For large catalog files (> 16KB), use low-RAM streaming parser
     if (size > 16384) {
@@ -1308,19 +1337,19 @@ bool load_catalog_from_fs(const char* filepath) {
         // 1. Parse "commands" (fallback to "entities")
         fseek(f, 0, SEEK_SET);
         clearerr(f);
-        bool ok = stream_parse_array_from_file(f, "commands", [](cJSON* cmd_json) {
+        bool ok = stream_parse_array_from_file(f, "commands", [&](cJSON* cmd_json) {
             CanEntity entity;
             if (parse_entity(cmd_json, entity)) {
-                global_catalog.push_back(entity);
+                new_catalog.push_back(entity);
             }
         });
         if (!ok) {
             fseek(f, 0, SEEK_SET);
             clearerr(f);
-            stream_parse_array_from_file(f, "entities", [](cJSON* cmd_json) {
+            stream_parse_array_from_file(f, "entities", [&](cJSON* cmd_json) {
                 CanEntity entity;
                 if (parse_entity(cmd_json, entity)) {
-                    global_catalog.push_back(entity);
+                    new_catalog.push_back(entity);
                 }
             });
         }
@@ -1328,18 +1357,19 @@ bool load_catalog_from_fs(const char* filepath) {
         // 2. Parse "automations" if present
         fseek(f, 0, SEEK_SET);
         clearerr(f);
-        stream_parse_array_from_file(f, "automations", [](cJSON* auto_json) {
+        stream_parse_array_from_file(f, "automations", [&](cJSON* auto_json) {
             AutomationRule rule;
             if (parse_automation(auto_json, rule)) {
-                global_automations.push_back(rule);
+                new_autos.push_back(rule);
             }
         });
 
         fclose(f);
-        rebuild_catalog_can_id_index();
-        ESP_LOGI(TAG, "Catalog loaded: %zu entities, %zu automations, %zu indexed CAN IDs", 
-                 global_catalog.size(), global_automations.size(), catalog_by_can_id.size());
-        return !global_catalog.empty();
+        if (new_catalog.empty()) {
+            return false;
+        }
+        commit_catalog();
+        return true;
     }
 
     // Standard fallback parser for smaller files
@@ -1371,7 +1401,7 @@ bool load_catalog_from_fs(const char* filepath) {
         cJSON_ArrayForEach(cmd_json, cmds_array) {
             CanEntity entity;
             if (parse_entity(cmd_json, entity)) {
-                global_catalog.push_back(entity);
+                new_catalog.push_back(entity);
             }
         }
     }
@@ -1383,15 +1413,13 @@ bool load_catalog_from_fs(const char* filepath) {
         cJSON_ArrayForEach(auto_json, autos_array) {
             AutomationRule rule;
             if (parse_automation(auto_json, rule)) {
-                global_automations.push_back(rule);
+                new_autos.push_back(rule);
             }
         }
     }
 
     cJSON_Delete(root);
-    rebuild_catalog_can_id_index();
-    ESP_LOGI(TAG, "Catalog loaded: %zu entities, %zu automations, %zu indexed CAN IDs", 
-             global_catalog.size(), global_automations.size(), catalog_by_can_id.size());
+    commit_catalog();
     return true;
 }
 
@@ -1443,19 +1471,22 @@ bool stream_catalog_entities(std::function<bool(const CanEntity&)> callback) {
 bool find_entity_in_catalog(const std::string& entity_id, CanEntity& out_entity) {
     if (entity_id.empty()) return false;
 
-    // 1. Check global_catalog
-    for (const auto& ent : global_catalog) {
-        if (ent.id == entity_id) {
-            out_entity = ent;
-            return true;
+    {
+        std::lock_guard<std::mutex> lock(g_catalog_mutex);
+        // 1. Check global_catalog
+        for (const auto& ent : global_catalog) {
+            if (ent.id == entity_id) {
+                out_entity = ent;
+                return true;
+            }
         }
-    }
 
-    // 2. Check dynamic loaded entities
-    for (const auto& ent : s_dynamic_entities) {
-        if (ent.id == entity_id) {
-            out_entity = ent;
-            return true;
+        // 2. Check dynamic loaded entities
+        for (const auto& ent : s_dynamic_entities) {
+            if (ent.id == entity_id) {
+                out_entity = ent;
+                return true;
+            }
         }
     }
 
@@ -1493,13 +1524,29 @@ bool find_entity_in_catalog(const std::string& entity_id, CanEntity& out_entity)
     fclose(f);
 
     if (found) {
-        if (s_dynamic_entities.size() >= 32) {
-            s_dynamic_entities.pop_front();
+        std::lock_guard<std::mutex> lock(g_catalog_mutex);
+        bool exists = false;
+        for (const auto& ent : s_dynamic_entities) {
+            if (ent.id == out_entity.id) {
+                exists = true;
+                break;
+            }
         }
-        s_dynamic_entities.push_back(out_entity);
-        CanEntity* ptr = &s_dynamic_entities.back();
-        if (ptr->state_can_id > 0) {
-            catalog_by_can_id[ptr->state_can_id].push_back(ptr);
+        if (!exists) {
+            bool evicted = false;
+            if (s_dynamic_entities.size() >= 32) {
+                s_dynamic_entities.pop_front();
+                evicted = true;
+            }
+            s_dynamic_entities.push_back(out_entity);
+            if (evicted) {
+                rebuild_catalog_can_id_index_locked();
+            } else {
+                CanEntity* ptr = &s_dynamic_entities.back();
+                if (ptr->state_can_id > 0) {
+                    catalog_by_can_id[ptr->state_can_id].push_back(ptr);
+                }
+            }
         }
         return true;
     }
@@ -1545,7 +1592,7 @@ bool load_automations_from_fs(const char* filepath) {
         return false;
     }
 
-    global_automations.clear();
+    std::vector<AutomationRule> new_rules;
 
     cJSON* rules_array = nullptr;
     if (cJSON_IsArray(root)) {
@@ -1567,14 +1614,14 @@ bool load_automations_from_fs(const char* filepath) {
         cJSON_ArrayForEach(auto_json, rules_array) {
             AutomationRule rule;
             if (parse_automation(auto_json, rule)) {
-                global_automations.push_back(rule);
+                new_rules.push_back(rule);
             }
         }
     }
 
     cJSON_Delete(root);
 
-    // Preload entities referenced in automations (triggers, actions)
+    // Preload entities referenced in automations (triggers, actions) before acquiring g_automations_mutex
     std::unordered_set<std::string> referenced_entities;
     std::function<void(const std::vector<ActionStep>&)> collect_from_steps;
     collect_from_steps = [&](const std::vector<ActionStep>& steps) {
@@ -1589,20 +1636,28 @@ bool load_automations_from_fs(const char* filepath) {
         }
     };
 
-    for (const auto& rule : global_automations) {
+    for (const auto& rule : new_rules) {
         collect_from_steps(rule.actions);
     }
 
     if (!referenced_entities.empty()) {
         ESP_LOGI(TAG, "Pre-loading %zu entities referenced in automations...", referenced_entities.size());
+        CanEntity ent;
         for (const auto& eid : referenced_entities) {
-            CanEntity ent;
+            ent = CanEntity{};
             find_entity_in_catalog(eid, ent);
         }
-        rebuild_catalog_can_id_index();
     }
 
-    ESP_LOGI(TAG, "Automations loaded: %zu active rules from %s", global_automations.size(), filepath);
+    size_t active_count = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_automations_mutex);
+        global_automations.swap(new_rules);
+        active_count = global_automations.size();
+        g_automations_gen.fetch_add(1, std::memory_order_release);
+    }
+
+    ESP_LOGI(TAG, "Automations loaded: %zu active rules from %s", active_count, filepath);
     return true;
 }
 
