@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, Suspense, lazy } from 'rea
 import { Catalog, Command, CommandRole, CommandOption, GitHubRepoConfig, Vehicle, getCommandContributors } from './types/catalog';
 import { DEFAULT_CATALOG, normalizeCatalog } from './data/defaultCatalog';
 import { validateCatalog } from './utils/canValidator';
-import { commandToAction, commandToTrigger, exportToCandoJson } from './utils/automationConverters';
+import { commandToAction, commandToTrigger, exportToCandoJson, decompileAutomationRules } from './utils/automationConverters';
 import { resolveVariant, formatCommandForCatalog } from './utils/catalogUtils';
 import { getSavedRepoConfig, saveRepoConfig } from './utils/githubHelper';
 import { isRunningOnDevice, resolveDeviceBaseUrl } from './utils/hostUtils';
@@ -287,7 +287,7 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((rule: AutomationRule) => ({
+          const migrated = parsed.map((rule: AutomationRule) => ({
             ...rule,
             triggers: (rule.triggers || []).map(trig => {
               const srcId = trig.source_command_id;
@@ -330,15 +330,16 @@ export default function App() {
               return act;
             })
           }));
+          return decompileAutomationRules(migrated, DEFAULT_CATALOG);
         }
       }
     } catch (e) {
       console.error('Failed to load automation rules from storage', e);
     }
     if ((DEFAULT_CATALOG as any).automations && Array.isArray((DEFAULT_CATALOG as any).automations) && (DEFAULT_CATALOG as any).automations.length > 0) {
-      return (DEFAULT_CATALOG as any).automations;
+      return decompileAutomationRules((DEFAULT_CATALOG as any).automations, DEFAULT_CATALOG);
     }
-    return DEFAULT_AUTOMATION_RULES;
+    return decompileAutomationRules(DEFAULT_AUTOMATION_RULES, DEFAULT_CATALOG);
   });
 
   const [automationSettings, setAutomationSettings] = useState<AutomationSettings>(() => {
@@ -889,7 +890,9 @@ export default function App() {
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       const data = await res.json();
       if (data && Array.isArray(data.rules)) {
-        setAutomationRules(data.rules);
+        setAutomationRules(decompileAutomationRules(data.rules, catalog));
+      } else if (Array.isArray(data)) {
+        setAutomationRules(decompileAutomationRules(data, catalog));
       }
       if (data && data.settings) {
         setAutomationSettings(data.settings);

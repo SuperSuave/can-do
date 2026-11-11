@@ -36,7 +36,9 @@ import {
   convertConditionToTrigger,
   deepClone,
   normalizeCanId,
-  formatCanId
+  formatCanId,
+  decompileAutomationRule,
+  decompileAutomationRules
 } from '../utils/automationConverters';
 import { getDefaultEspIp, resolveDeviceBaseUrl, isRunningOnDevice } from '../utils/hostUtils';
 import { deviceWs } from '../services/deviceWs';
@@ -1143,14 +1145,18 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             try {
               const data = JSON.parse(message.toString());
               if (data.rules && Array.isArray(data.rules)) {
-                onUpdateRules(data.rules);
+                const decompiled = decompileAutomationRules(data.rules, catalog);
+                lastPushedJsonRef.current = JSON.stringify(decompiled);
+                onUpdateRules(decompiled);
                 if (data.settings) onUpdateSettings(data.settings);
-                if (data.rules[0]?.id) setSelectedRuleId(data.rules[0].id);
-                setSyncStatus(`Imported ${data.rules.length} rule(s) via MQTT!`);
+                if (decompiled[0]?.id) setSelectedRuleId(decompiled[0].id);
+                setSyncStatus(`Imported ${decompiled.length} rule(s) via MQTT!`);
               } else if (Array.isArray(data)) {
-                onUpdateRules(data);
-                if (data[0]?.id) setSelectedRuleId(data[0].id);
-                setSyncStatus(`Imported ${data.length} rule(s) via MQTT!`);
+                const decompiled = decompileAutomationRules(data, catalog);
+                lastPushedJsonRef.current = JSON.stringify(decompiled);
+                onUpdateRules(decompiled);
+                if (decompiled[0]?.id) setSelectedRuleId(decompiled[0].id);
+                setSyncStatus(`Imported ${decompiled.length} rule(s) via MQTT!`);
               } else {
                 setSyncStatus('No rules array found in device response.');
               }
@@ -1185,14 +1191,18 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       const data = await res.json();
       if (data.rules && Array.isArray(data.rules)) {
-        onUpdateRules(data.rules);
+        const decompiled = decompileAutomationRules(data.rules, catalog);
+        lastPushedJsonRef.current = JSON.stringify(decompiled);
+        onUpdateRules(decompiled);
         if (data.settings) onUpdateSettings(data.settings);
-        if (data.rules[0]?.id) setSelectedRuleId(data.rules[0].id);
-        setSyncStatus(`Imported ${data.rules.length} rule(s)!`);
+        if (decompiled[0]?.id) setSelectedRuleId(decompiled[0].id);
+        setSyncStatus(`Imported ${decompiled.length} rule(s)!`);
       } else if (Array.isArray(data)) {
-        onUpdateRules(data);
-        if (data[0]?.id) setSelectedRuleId(data[0].id);
-        setSyncStatus(`Imported ${data.length} rule(s)!`);
+        const decompiled = decompileAutomationRules(data, catalog);
+        lastPushedJsonRef.current = JSON.stringify(decompiled);
+        onUpdateRules(decompiled);
+        if (decompiled[0]?.id) setSelectedRuleId(decompiled[0].id);
+        setSyncStatus(`Imported ${decompiled.length} rule(s)!`);
       } else {
         setSyncStatus('No rules array found in device response.');
       }
@@ -1204,26 +1214,18 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     }
   };
 
-  // Automatically pull automations from device when running directly on-device
-  const hasAutoPulled = useRef(false);
-  React.useEffect(() => {
-    if (isRunningOnDevice() && !hasAutoPulled.current) {
-      hasAutoPulled.current = true;
-      handlePullFromEsp();
-    }
-  }, []);
-
   const handleApplyImport = (
     importedRules: AutomationRule[],
     mode: 'merge' | 'replace',
     importedSettings?: AutomationSettings
   ) => {
-    onUpdateRules(importedRules);
+    const decompiled = decompileAutomationRules(importedRules, catalog);
+    onUpdateRules(decompiled);
     if (importedSettings) {
       onUpdateSettings({ ...settings, ...importedSettings });
     }
-    if (importedRules.length > 0 && importedRules[0]?.id) {
-      setSelectedRuleId(importedRules[0].id);
+    if (decompiled.length > 0 && decompiled[0]?.id) {
+      setSelectedRuleId(decompiled[0].id);
     }
   };
 
@@ -2022,10 +2024,11 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           currentRules={rules}
           activeRule={activeRule}
           onInstallRule={(newRule) => {
-            const existing = rules.find(r => r.id === newRule.id);
+            const decompiledRule = decompileAutomationRule(newRule, catalog);
+            const existing = rules.find(r => r.id === decompiledRule.id);
             const ruleToInstall = existing
-              ? { ...newRule, id: `rule_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}` }
-              : newRule;
+              ? { ...decompiledRule, id: `rule_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}` }
+              : decompiledRule;
             onUpdateRules([ruleToInstall, ...rules]);
             setSelectedRuleId(ruleToInstall.id);
           }}
@@ -2038,6 +2041,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         <AutomationImportModal
           isOpen={showImportModal}
           existingRules={rules}
+          catalog={catalog}
           onClose={() => setShowImportModal(false)}
           onImport={handleApplyImport}
         />

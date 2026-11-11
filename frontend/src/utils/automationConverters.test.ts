@@ -15,7 +15,12 @@ import {
   formatCanId,
   compileCondition,
   compileAction,
+  compileActionList,
   compileAutomationRule,
+  decompileCondition,
+  decompileActionList,
+  decompileAutomationRule,
+  commandToAction,
   applyOptionsToCondition,
 } from './automationConverters.js';
 import type { Catalog, Command } from '../types/catalog.js';
@@ -1038,3 +1043,198 @@ test('compileAutomationRule and compileCondition properly serialize ble_presence
   assert.strictEqual(convertedTrig.type, 'ble_presence');
   assert.strictEqual(convertedTrig.ble_event, 'away');
 });
+
+test('compileAutomationRule and decompileAutomationRule preserve multi-step catalog commands as a single unified action across push/pull', () => {
+  const catalog: Catalog = {
+    can_do_version: '1.0.0',
+    vehicles: [],
+    commands: [
+      {
+        id: 'drivers_seat_comfort',
+        name: 'Driver Seat Comfort',
+        category: 'Climate & Comfort',
+        roles: ['action'],
+        network: { action_can_id: '0x4A2', state_can_id: '0x496', delay_ms: 20 },
+        options: [
+          { label: 'Medium Cool', steps: [{ payload: { D5: '0x4F' }, repeat: 3 }, { payload: { D5: '0xFF' }, repeat: 1 }] },
+          { label: 'High Heat', steps: [{ payload: { D5: '0x8F' }, repeat: 3 }, { payload: { D5: '0xFF' }, repeat: 1 }] }
+        ]
+      },
+      {
+        id: 'ambient_mood_lighting',
+        name: 'Ambient Mood Lighting',
+        category: 'Lighting',
+        roles: ['action'],
+        network: { action_can_id: '0x4AD', state_can_id: '0x3C6', delay_ms: 25 },
+        options: [
+          {
+            label: 'Christmas Dual-Tone (Red Dash / Green Doors)',
+            steps: [
+              { payload: 'EB02371700000000', repeat: 2, delay_ms: 25 },
+              { payload: '0002082000000000', repeat: 2, delay_ms: 0 }
+            ]
+          }
+        ]
+      }
+    ]
+  };
+
+  const seatAction = commandToAction(catalog.commands[0], catalog.commands[0].options![0]);
+  const ambientAction = commandToAction(catalog.commands[1], catalog.commands[1].options![0]);
+
+  const rule: AutomationRule = {
+    id: 'rule_multistep_roundtrip',
+    name: 'Comfort & Lighting Combo',
+    enabled: true,
+    ha_expose: true,
+    ha_icon: 'mdi:car-seat-cooler',
+    exec_mode: 'one_shot',
+    cooldown_ms: 500,
+    triggers: [{ id: 'trig_1', source: 'can', can_id: '0x448', byte: 'D7', from: '0x00', to: '0x10', mask: '0xF0' }],
+    conditions: [],
+    actions: [seatAction, ambientAction]
+  };
+
+  // 1. Compile for ESP32 automations.json: steps are flattened for C++ firmware execution
+  const compiled = compileAutomationRule(rule, catalog);
+  // seatAction (2 transmits + 1 delay = 3) + ambientAction (2 0x4AD transmits + 1 delay + 2 0x48F transmits + 2 delays = 7) = 10 flat items
+  assert.strictEqual(compiled.actions.length, 10);
+
+  // 2. Decompile when pulled back from ESP32 or imported: must coalesce back into 2 unified actions!
+  const decompiled = decompileAutomationRule(compiled, catalog);
+  assert.strictEqual(decompiled.actions.length, 2);
+
+  assert.strictEqual(decompiled.actions[0].source_command_id, 'drivers_seat_comfort');
+  assert.strictEqual(decompiled.actions[0].option_label, 'Medium Cool');
+  assert.strictEqual(decompiled.actions[0].steps?.length, 2);
+  assert.deepStrictEqual(decompiled.actions[0].steps?.[0].payload, { D5: '0x4F' });
+  assert.deepStrictEqual(decompiled.actions[0].steps?.[1].payload, { D5: '0xFF' });
+
+  assert.strictEqual(decompiled.actions[1].source_command_id, 'ambient_mood_lighting');
+  assert.strictEqual(decompiled.actions[1].option_label, 'Christmas Dual-Tone (Red Dash / Green Doors)');
+  assert.strictEqual(decompiled.actions[1].steps?.length, 2);
+  assert.strictEqual((decompiled.actions[1].steps?.[0].payload as any).D1, '0xEB');
+  assert.strictEqual((decompiled.actions[1].steps?.[1].payload as any).D4, '0x20');
+});
+
+test('decompileAutomationRule coalesces legacy untagged flattened actions and cleans up duplicate orphaned release steps', () => {
+  const catalog: Catalog = {
+    can_do_version: '1.0.0',
+    vehicles: [],
+    commands: [
+      {
+        id: 'drivers_seat_comfort',
+        name: 'Driver Seat Comfort',
+        category: 'Climate & Comfort',
+        roles: ['action'],
+        network: { action_can_id: '0x4A2', state_can_id: '0x496', delay_ms: 20 },
+        options: [
+          { label: 'Medium Cool', steps: [{ payload: { D5: '0x4F' }, repeat: 3 }, { payload: { D5: '0xFF' }, repeat: 1 }] }
+        ]
+      }
+    ]
+  };
+
+  // Simulate a legacy automations.json rule without _step_group_id that also suffered duplicate orphaned [delay, transmit(0xFF)] from prior push/pull cycles
+  const legacyFlattenedRule = {
+    id: 'rule_legacy_broken',
+    name: 'Legacy Broken Seat Rule',
+    enabled: true,
+    ha_expose: true,
+    ha_icon: 'mdi:car-seat-cooler',
+    exec_mode: 'one_shot',
+    cooldown_ms: 500,
+    triggers: [{ id: 'trig_1', type: 'byte_transition', can_id: '0x448', bus: 0, byte: 'D7', mask: '0xF0', from: '0x00', to: '0x10' }],
+    conditions: [],
+    actions: [
+      {
+        type: 'transmit',
+        can_id: '0x4A2',
+        bus: 0,
+        payload: { D5: '0x4F' },
+        repeat: 3,
+        source_command_id: 'drivers_seat_comfort',
+        source_command_name: 'Driver Seat Comfort',
+        option_label: 'Medium Cool',
+        entity_id: 'drivers_seat_comfort'
+      },
+      { type: 'delay', ms: 20 },
+      { type: 'transmit', can_id: '0x4A2', bus: 0, payload: { D5: '0xFF' }, repeat: 1 },
+      // Orphaned duplicate release step from an earlier edit/re-push cycle
+      { type: 'delay', ms: 20 },
+      { type: 'transmit', can_id: '0x4A2', bus: 0, payload: { D5: '0xFF' }, repeat: 1 },
+      { type: 'track_popup', level: 'info', text: 'Seat Cool Med' }
+    ]
+  };
+
+  const decompiled = decompileAutomationRule(legacyFlattenedRule, catalog);
+  assert.strictEqual(decompiled.actions.length, 2);
+  assert.strictEqual(decompiled.actions[0].type, 'can_tx');
+  assert.strictEqual(decompiled.actions[0].source_command_id, 'drivers_seat_comfort');
+  assert.strictEqual(decompiled.actions[0].option_label, 'Medium Cool');
+  assert.strictEqual(decompiled.actions[0].steps?.length, 2);
+  assert.strictEqual(decompiled.actions[1].type, 'track_popup');
+  assert.strictEqual(decompiled.actions[1].text, 'Seat Cool Med');
+});
+
+test('decompileActionList preserves cycle_entity and nested choose/if_then multi-step sequences across compilation', () => {
+  const catalog: Catalog = {
+    can_do_version: '1.0.0',
+    vehicles: [],
+    commands: [
+      {
+        id: 'drivers_seat_comfort',
+        name: 'Driver Seat Comfort',
+        category: 'Climate & Comfort',
+        roles: ['action', 'condition'],
+        network: { action_can_id: '0x4A2', state_can_id: '0x496', delay_ms: 20 },
+        options: [
+          { label: 'Off', match: { D3: '0x00' }, steps: [{ payload: { D5: '0x2F' } }, { payload: { D5: '0xFF' } }] },
+          { label: 'Low Cool', match: { D3: '0x01' }, steps: [{ payload: { D5: '0x3F' } }, { payload: { D5: '0xFF' } }] }
+        ]
+      }
+    ]
+  };
+
+  const cycleAct: AutomationAction = {
+    id: 'act_cycle_seat',
+    type: 'cycle_entity',
+    entity_id: 'drivers_seat_comfort',
+    states: ['Off', 'Low Cool'],
+    wrap: true,
+    show_popup: true,
+    popup_prefix: 'Seat: '
+  };
+
+  const chooseAct: AutomationAction = {
+    id: 'act_choose_seat',
+    type: 'choose',
+    choices: [
+      {
+        _clientId: 'br_1',
+        label: 'Turn On Cool',
+        conditions: [],
+        sequence: [commandToAction(catalog.commands[0], catalog.commands[0].options![1])]
+      }
+    ],
+    default: [commandToAction(catalog.commands[0], catalog.commands[0].options![0])]
+  };
+
+  const compiledList = compileActionList([cycleAct, chooseAct], catalog);
+  const decompiledList = decompileActionList(compiledList, catalog);
+
+  assert.strictEqual(decompiledList.length, 2);
+  assert.strictEqual(decompiledList[0].type, 'cycle_entity');
+  assert.strictEqual(decompiledList[0].entity_id, 'drivers_seat_comfort');
+  assert.deepStrictEqual(decompiledList[0].states, ['Off', 'Low Cool']);
+
+  assert.strictEqual(decompiledList[1].type, 'choose');
+  assert.strictEqual(decompiledList[1].choices?.[0].label, 'Turn On Cool');
+  assert.strictEqual(decompiledList[1].choices?.[0].sequence.length, 1);
+  assert.strictEqual(decompiledList[1].choices?.[0].sequence[0].option_label, 'Low Cool');
+  assert.strictEqual(decompiledList[1].choices?.[0].sequence[0].steps?.length, 2);
+  assert.strictEqual(decompiledList[1].default?.length, 1);
+  assert.strictEqual(decompiledList[1].default?.[0].option_label, 'Off');
+  assert.strictEqual(decompiledList[1].default?.[0].steps?.length, 2);
+});
+

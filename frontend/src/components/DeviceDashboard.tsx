@@ -221,15 +221,6 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     return `${base}${endpoint}`;
   }, [deviceHost]);
 
-  // Auto-pull automations if running directly on device
-  const hasAutoPulled = useRef(false);
-  useEffect(() => {
-    if (isRunningOnDevice() && onPullAutomationsFromDevice && !hasAutoPulled.current) {
-      hasAutoPulled.current = true;
-      onPullAutomationsFromDevice(true).catch(() => {});
-    }
-  }, [onPullAutomationsFromDevice]);
-
   // Connection & Telemetry state
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [restConnected, setRestConnected] = useState<boolean>(false);

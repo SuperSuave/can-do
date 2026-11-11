@@ -155,7 +155,14 @@ export function compileCondition(cond: AutomationCondition, catalog: Catalog = D
         }
         if (hasConflict) {
           const subConds = matchedOpts.map(opt => compileCondition(commandToCondition(cmd, opt), catalog));
-          return { or: subConds };
+          return {
+            or: subConds,
+            ...(cond.id ? { id: cond.id } : {}),
+            source_command_id: cond.source_command_id,
+            ...(cond.source_command_name ? { source_command_name: cond.source_command_name } : {}),
+            ...(cond.option_label ? { option_label: cond.option_label } : {}),
+            selected_options: cond.selected_options
+          };
         }
       }
     }
@@ -273,7 +280,8 @@ export function compileCondition(cond: AutomationCondition, catalog: Catalog = D
       operator: op,
       ...(cond.source_command_id ? { source_command_id: cond.source_command_id } : {}),
       ...(cond.source_command_name ? { source_command_name: cond.source_command_name } : {}),
-      ...(cond.option_label ? { option_label: cond.option_label } : {})
+      ...(cond.option_label ? { option_label: cond.option_label } : {}),
+      ...(cond.selected_options && cond.selected_options.length > 0 ? { selected_options: cond.selected_options } : {})
     };
   }
 
@@ -292,7 +300,8 @@ export function compileCondition(cond: AutomationCondition, catalog: Catalog = D
     value: targetVal,
     ...(cond.source_command_id ? { source_command_id: cond.source_command_id } : {}),
     ...(cond.source_command_name ? { source_command_name: cond.source_command_name } : {}),
-    ...(cond.option_label ? { option_label: cond.option_label } : {})
+    ...(cond.option_label ? { option_label: cond.option_label } : {}),
+    ...(cond.selected_options && cond.selected_options.length > 0 ? { selected_options: cond.selected_options } : {})
   };
 }
 
@@ -302,6 +311,7 @@ export function compileCondition(cond: AutomationCondition, catalog: Catalog = D
 export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_CATALOG): any | any[] {
   if (act.type === 'if_then') {
     return {
+      ...(act.id ? { id: act.id } : {}),
       type: 'if_then',
       conditions: (act.conditions || []).map(c => compileCondition(c, catalog)),
       then: compileActionList(act.then || [], catalog),
@@ -311,8 +321,10 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
 
   if (act.type === 'choose') {
     return {
+      ...(act.id ? { id: act.id } : {}),
       type: 'choose',
       choices: (act.choices || []).map(c => ({
+        ...(c.label ? { label: c.label } : {}),
         conditions: (c.conditions || []).map(cond => compileCondition(cond, catalog)),
         sequence: compileActionList(c.sequence || [], catalog)
       })),
@@ -322,6 +334,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
 
   if (act.type === 'repeat_until' || act.type === 'wait_for') {
     return {
+      ...(act.id ? { id: act.id } : {}),
       type: act.type,
       interval_ms: act.interval_ms || 1000,
       timeout_ms: act.timeout_ms || 30000,
@@ -332,6 +345,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
 
   if (act.type === 'delay') {
     return {
+      ...(act.id ? { id: act.id } : {}),
       type: 'delay',
       ms: act.delay_ms || act.ms || 500
     };
@@ -339,6 +353,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
 
   if (act.type === 'track_popup' || act.type === 'popup') {
     return {
+      ...(act.id ? { id: act.id } : {}),
       type: 'track_popup',
       level: act.level || 'info',
       text: act.text || act.popup_message || ''
@@ -348,6 +363,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
   if (act.type === 'climate_target' || act.type === 'remote_climate') {
     const tempC = act.target_temp_c ?? act.target_c ?? 22.0;
     return {
+      ...(act.id ? { id: act.id } : {}),
       type: 'climate_target',
       target_temp_c: tempC,
       defrost: !!act.defrost,
@@ -422,14 +438,27 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
     }
 
     return {
+      ...(act.id ? { id: act.id } : {}),
       type: 'choose',
       choices,
-      default: compileActionList(defaultActs, catalog)
+      default: compileActionList(defaultActs, catalog),
+      _cycle_entity: {
+        ...(act.id ? { id: act.id } : {}),
+        entity_id: entId,
+        ...(act.target_command_id ? { target_command_id: act.target_command_id } : {}),
+        states,
+        ...(act.direction ? { direction: act.direction } : {}),
+        wrap,
+        ...(act.fallback_state ? { fallback_state: act.fallback_state } : {}),
+        show_popup: act.show_popup !== false,
+        ...(act.popup_prefix !== undefined ? { popup_prefix: act.popup_prefix } : {})
+      }
     };
   }
 
   if (act.type === 'precondition') {
     return {
+      ...(act.id ? { id: act.id } : {}),
       type: 'precondition',
       mode: act.precon_mode || 'persistent',
       action: act.precon_action || (act.precon_mode === 'cancel' ? 'stop' : 'start')
@@ -459,14 +488,39 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
     const isAmbient = (act.entity_id || act.source_command_id) === 'ambient_mood_lighting' || formatCanId(act.can_id) === '0x4AD';
     const resolvedForFallback = catalog ? resolveCatalogCommandForAction(act, catalog) : {};
     const fallbackOptSteps = resolvedForFallback.matchedOption?.steps;
+    const fallbackCmd = resolvedForFallback.command;
+    const fallbackOpt = resolvedForFallback.matchedOption;
 
-    if (act.steps && act.steps.length > 1) {
+    // If act has no explicit steps yet, but resolves to a catalog option with multi-step burst, use those steps
+    const effectiveSteps =
+      act.steps && act.steps.length > 1
+        ? act.steps
+        : !act.steps && fallbackOptSteps && fallbackOptSteps.length > 1
+          ? fallbackOptSteps
+          : undefined;
+
+    if (effectiveSteps && effectiveSteps.length > 1) {
+      const stepGroupId = act.id || generateBlockId('grp');
       const inlinedSteps: any[] = [];
-      act.steps.forEach((step: any, idx: number) => {
+      const defaultDelayMs = fallbackCmd?.network?.delay_ms ?? fallbackCmd?.delay_ms ?? act.delay_ms ?? 20;
+
+      effectiveSteps.forEach((step: any, idx: number) => {
         if (step.type === 'delay') {
           inlinedSteps.push({
             type: 'delay',
-            ms: step.delay_ms || step.dwell_ms || step.ms || 500
+            ms: step.delay_ms || step.dwell_ms || step.ms || 500,
+            _step_group_id: stepGroupId
+          });
+          return;
+        }
+        if (step.type === 'repeat_until' || step.type === 'wait_for') {
+          inlinedSteps.push({
+            type: step.type,
+            interval_ms: step.interval_ms || 1000,
+            timeout_ms: step.timeout_ms || 30000,
+            condition: step.condition ? compileCondition(step.condition, catalog) : undefined,
+            sequence: step.sequence ? compileActionList(step.sequence, catalog) : undefined,
+            _step_group_id: stepGroupId
           });
           return;
         }
@@ -474,24 +528,29 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
         if (Object.keys(stepPayload).length === 0 && fallbackOptSteps && fallbackOptSteps[idx]?.payload) {
           stepPayload = compileToByteMap(fallbackOptSteps[idx].payload);
         }
+        const resolvedSourceId = act.source_command_id || act.entity_id || fallbackCmd?.id;
+        const resolvedSourceName = act.source_command_name || fallbackCmd?.ha_metadata?.name || fallbackCmd?.name;
+        const resolvedOptLabel = act.option_label || act.command || fallbackOpt?.label;
         inlinedSteps.push({
           type: 'transmit',
-          can_id: formatCanId(step.can_id || act.can_id || '0x000'),
-          bus: step.bus ?? act.bus ?? 0,
+          can_id: formatCanId(step.can_id || act.can_id || fallbackCmd?.network?.action_can_id || fallbackCmd?.action_can_id || '0x000'),
+          bus: step.bus ?? act.bus ?? fallbackCmd?.network?.bus ?? 0,
           payload: Object.keys(stepPayload).length > 0 ? stepPayload : { D1: '0x01' },
           repeat: step.repeat ?? act.repeat ?? 1,
+          _step_group_id: stepGroupId,
           ...(idx === 0 ? {
-            ...(act.source_command_id ? { source_command_id: act.source_command_id } : {}),
-            ...(act.source_command_name ? { source_command_name: act.source_command_name } : {}),
-            ...(act.option_label ? { option_label: act.option_label } : {}),
-            ...(act.entity_id ? { entity_id: act.entity_id } : {})
+            ...(resolvedSourceId ? { source_command_id: resolvedSourceId } : {}),
+            ...(resolvedSourceName ? { source_command_name: resolvedSourceName } : {}),
+            ...(resolvedOptLabel ? { option_label: resolvedOptLabel } : {}),
+            ...(resolvedSourceId ? { entity_id: resolvedSourceId } : {})
           } : {})
         });
-        const delayBetween = step.delay_ms ?? act.delay_ms ?? 0;
-        if (idx < act.steps!.length - 1 && delayBetween > 0) {
+        const delayBetween = (step.delay_ms !== undefined && step.delay_ms > 0) ? step.delay_ms : defaultDelayMs;
+        if (idx < effectiveSteps.length - 1 && delayBetween > 0) {
           inlinedSteps.push({
             type: 'delay',
-            ms: delayBetween
+            ms: delayBetween,
+            _step_group_id: stepGroupId
           });
         }
       });
@@ -504,10 +563,10 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
         const latchCommit = compileToByteMap('0002082000000000');
         const busVal = act.bus ?? 0;
         inlinedSteps.push(
-          { type: 'delay', ms: 25 },
-          { type: 'transmit', can_id: '0x48F', bus: busVal, payload: doorStage1, repeat: 2 },
-          { type: 'delay', ms: 25 },
-          { type: 'transmit', can_id: '0x48F', bus: busVal, payload: latchCommit, repeat: 2 }
+          { type: 'delay', ms: 25, _step_group_id: stepGroupId, _auto_ambient_48f: true },
+          { type: 'transmit', can_id: '0x48F', bus: busVal, payload: doorStage1, repeat: 2, _step_group_id: stepGroupId, _auto_ambient_48f: true },
+          { type: 'delay', ms: 25, _step_group_id: stepGroupId, _auto_ambient_48f: true },
+          { type: 'transmit', can_id: '0x48F', bus: busVal, payload: latchCommit, repeat: 2, _step_group_id: stepGroupId, _auto_ambient_48f: true }
         );
       }
 
@@ -516,6 +575,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
 
     const payload = compileToByteMap(act.payload || act.to_payload);
     return {
+      ...(act.id ? { id: act.id } : {}),
       type: 'transmit',
       can_id: formatCanId(act.can_id || '0x000'),
       bus: act.bus ?? 0,
@@ -543,6 +603,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
         const rawVal = Math.min(0x1A, Math.max(0x06, 0x06 + Math.round((clamped - 17.0) * 2.0)));
         const hexVal = '0x' + rawVal.toString(16).toUpperCase().padStart(2, '0');
         return {
+          ...(act.id ? { id: act.id } : {}),
           type: 'transmit',
           can_id: '0x4A0',
           bus: 0,
@@ -553,6 +614,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
 
       if (cmd.type === 'precondition' || cmd.id === 'battery_preconditioning') {
         return {
+          ...(act.id ? { id: act.id } : {}),
           type: 'precondition',
           mode: act.precon_mode || (cmd as any).precon_mode || 'persistent',
           action: act.precon_action || (act.precon_mode === 'cancel' ? 'stop' : 'start')
@@ -568,12 +630,14 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
 
       // Case A: Option defines multi-step burst (e.g. heated/cooled seat sequence or remote climate)
       if (opt?.steps && opt.steps.length > 0) {
+        const stepGroupId = opt.steps.length > 1 ? (act.id || generateBlockId('grp')) : undefined;
         const inlinedSteps: any[] = [];
         opt.steps.forEach((step: any, idx: number) => {
           if (step.type === 'delay') {
             inlinedSteps.push({
               type: 'delay',
-              ms: step.delay_ms || step.dwell_ms || step.ms || 500
+              ms: step.delay_ms || step.dwell_ms || step.ms || 500,
+              ...(stepGroupId ? { _step_group_id: stepGroupId } : {})
             });
             return;
           }
@@ -582,8 +646,9 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
               type: step.type,
               interval_ms: step.interval_ms || 1000,
               timeout_ms: step.timeout_ms || 30000,
-              condition: step.condition ? compileCondition(step.condition) : undefined,
-              sequence: step.sequence ? compileActionList(step.sequence, catalog) : undefined
+              condition: step.condition ? compileCondition(step.condition, catalog) : undefined,
+              sequence: step.sequence ? compileActionList(step.sequence, catalog) : undefined,
+              ...(stepGroupId ? { _step_group_id: stepGroupId } : {})
             });
             return;
           }
@@ -594,6 +659,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
             bus: step.bus ?? bus,
             payload: Object.keys(stepPayload).length > 0 ? stepPayload : { D1: '0x01' },
             repeat: step.repeat || 1,
+            ...(stepGroupId ? { _step_group_id: stepGroupId } : {}),
             ...(idx === 0 ? {
               source_command_id: entityId,
               source_command_name: cmd.ha_metadata?.name || cmd.name || cmd.id,
@@ -604,12 +670,14 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
           if (step.delay_ms && step.delay_ms > 0) {
             inlinedSteps.push({
               type: 'delay',
-              ms: step.delay_ms
+              ms: step.delay_ms,
+              ...(stepGroupId ? { _step_group_id: stepGroupId } : {})
             });
           } else if (idx < opt.steps.length - 1 && delayMs > 0) {
             inlinedSteps.push({
               type: 'delay',
-              ms: delayMs
+              ms: delayMs,
+              ...(stepGroupId ? { _step_group_id: stepGroupId } : {})
             });
           }
         });
@@ -620,10 +688,10 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
           const doorStage1 = getAmbientDoorPayload(opt?.label || commandLabel, dashStage1);
           const latchCommit = compileToByteMap('0002082000000000');
           inlinedSteps.push(
-            { type: 'delay', ms: 25 },
-            { type: 'transmit', can_id: '0x48F', bus: bus, payload: doorStage1, repeat: 2 },
-            { type: 'delay', ms: 25 },
-            { type: 'transmit', can_id: '0x48F', bus: bus, payload: latchCommit, repeat: 2 }
+            { type: 'delay', ms: 25, ...(stepGroupId ? { _step_group_id: stepGroupId } : {}), _auto_ambient_48f: true },
+            { type: 'transmit', can_id: '0x48F', bus: bus, payload: doorStage1, repeat: 2, ...(stepGroupId ? { _step_group_id: stepGroupId } : {}), _auto_ambient_48f: true },
+            { type: 'delay', ms: 25, ...(stepGroupId ? { _step_group_id: stepGroupId } : {}), _auto_ambient_48f: true },
+            { type: 'transmit', can_id: '0x48F', bus: bus, payload: latchCommit, repeat: 2, ...(stepGroupId ? { _step_group_id: stepGroupId } : {}), _auto_ambient_48f: true }
           );
         }
 
@@ -634,6 +702,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
       if (opt?.payload) {
         const p = compileToByteMap(opt.payload);
         return {
+          ...(act.id ? { id: act.id } : {}),
           type: 'transmit',
           can_id: canId,
           bus: bus,
@@ -648,6 +717,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
 
       // Case C: Command defines root steps
       if (cmd.steps && cmd.steps.length > 0) {
+        const stepGroupId = cmd.steps.length > 1 ? (act.id || generateBlockId('grp')) : undefined;
         const inlinedSteps: any[] = [];
         cmd.steps.forEach((step: any, idx: number) => {
           const stepPayload = compileToByteMap(step.payload);
@@ -657,6 +727,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
             bus: step.bus ?? bus,
             payload: Object.keys(stepPayload).length > 0 ? stepPayload : { D1: '0x01' },
             repeat: step.repeat || 1,
+            ...(stepGroupId ? { _step_group_id: stepGroupId } : {}),
             ...(idx === 0 ? {
               source_command_id: entityId,
               source_command_name: cmd.ha_metadata?.name || cmd.name || cmd.id,
@@ -667,7 +738,8 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
           if (idx < cmd.steps.length - 1 && delayMs > 0) {
             inlinedSteps.push({
               type: 'delay',
-              ms: delayMs
+              ms: delayMs,
+              ...(stepGroupId ? { _step_group_id: stepGroupId } : {})
             });
           }
         });
@@ -678,6 +750,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
       if (cmd.payload) {
         const p = compileToByteMap(cmd.payload);
         return {
+          ...(act.id ? { id: act.id } : {}),
           type: 'transmit',
           can_id: canId,
           bus: bus,
@@ -695,6 +768,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
     if (act.can_id && act.payload) {
       const payload = compileToByteMap(act.payload || act.to_payload);
       return {
+        ...(act.id ? { id: act.id } : {}),
         type: 'transmit',
         can_id: act.can_id,
         bus: act.bus ?? 0,
@@ -708,6 +782,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
     }
 
     return {
+      ...(act.id ? { id: act.id } : {}),
       type: 'entity_command',
       entity_id: entityId || '',
       command: commandLabel || ''
@@ -716,6 +791,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
 
   const payload = compileToByteMap(act.payload || act.to_payload);
   return {
+    ...(act.id ? { id: act.id } : {}),
     type: 'transmit',
     can_id: act.can_id || '',
     bus: act.bus ?? 0,
@@ -778,8 +854,9 @@ export function compileActionList(
   actions: AutomationAction[],
   catalog: Catalog = DEFAULT_CATALOG
 ): any[] {
+  const normalizedActions = decompileActionList(actions, catalog);
   const result: any[] = [];
-  for (const act of actions) {
+  for (const act of normalizedActions) {
     const compiled = compileAction(act, catalog);
     if (Array.isArray(compiled)) {
       result.push(...compiled);
@@ -788,6 +865,633 @@ export function compileActionList(
     }
   }
   return deduplicateActionSequence(result);
+}
+
+function payloadsEqual(a: any, b: any): boolean {
+  const mapA = compileToByteMap(a);
+  const mapB = compileToByteMap(b);
+  const keysA = Object.keys(mapA);
+  const keysB = Object.keys(mapB);
+  if (keysA.length !== keysB.length) return false;
+  for (const k of keysA) {
+    if ((mapA[k] || '').toLowerCase() !== (mapB[k] || '').toLowerCase()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Decompiles a condition from automations.json back into a UI AutomationCondition,
+ * coalescing multi-option OR groups when applicable.
+ */
+export function decompileCondition(rawCond: any, catalog: Catalog = DEFAULT_CATALOG): AutomationCondition {
+  if (!rawCond || typeof rawCond !== 'object') return rawCond;
+
+  // Check if this is an OR group representing a multi-option state selection on a single entity
+  if (Array.isArray(rawCond.or) && rawCond.or.length > 0 && !rawCond.logic) {
+    const subConds = rawCond.or.map((c: any) => decompileCondition(c, catalog));
+    const explicitCmdId = rawCond.source_command_id || subConds[0]?.source_command_id;
+    const allSameCommand =
+      explicitCmdId &&
+      subConds.every((sc: AutomationCondition) => (sc.source_command_id || explicitCmdId) === explicitCmdId);
+
+    if (allSameCommand) {
+      const cmd = (catalog?.commands || []).find(c => c.id === explicitCmdId);
+      const selectedOpts: string[] =
+        Array.isArray(rawCond.selected_options) && rawCond.selected_options.length > 0
+          ? rawCond.selected_options
+          : subConds
+              .map((sc: AutomationCondition) => {
+                if (sc.option_label) return sc.option_label;
+                if (cmd) {
+                  const resolved = resolveCatalogCommandForCondition(sc, catalog);
+                  return resolved.matchedOption?.label;
+                }
+                return undefined;
+              })
+              .filter((lbl: string | undefined): lbl is string => !!lbl);
+
+      if (selectedOpts.length > 1 && cmd && cmd.options) {
+        const matchedOpts = cmd.options.filter(o =>
+          selectedOpts.some(sel => sel.toLowerCase() === o.label.toLowerCase())
+        );
+        if (matchedOpts.length > 0) {
+          const baseCond: AutomationCondition = {
+            id: rawCond.id || subConds[0]?.id || generateBlockId('cond'),
+            type: 'can_state',
+            source_command_id: cmd.id,
+            source_command_name: rawCond.source_command_name || cmd.ha_metadata?.name || cmd.name || cmd.id
+          };
+          return applyOptionsToCondition(baseCond, cmd, matchedOpts);
+        }
+      }
+    }
+
+    return {
+      ...rawCond,
+      id: rawCond.id || generateBlockId('cond'),
+      or: subConds
+    };
+  }
+
+  const clone: AutomationCondition = {
+    ...rawCond,
+    id: rawCond.id || generateBlockId('cond')
+  };
+
+  if (Array.isArray(clone.conditions)) {
+    clone.conditions = clone.conditions.map(c => decompileCondition(c, catalog));
+  }
+  if (Array.isArray(clone.and)) {
+    clone.and = clone.and.map(c => decompileCondition(c, catalog));
+  }
+  if (Array.isArray(clone.or)) {
+    clone.or = clone.or.map(c => decompileCondition(c, catalog));
+  }
+  if (Array.isArray(clone.not)) {
+    clone.not = clone.not.map(c => decompileCondition(c, catalog));
+  } else if (clone.not && typeof clone.not === 'object') {
+    clone.not = decompileCondition(clone.not, catalog);
+  }
+
+  if (clone.can_id !== undefined && clone.can_id !== null) {
+    clone.can_id = formatCanId(clone.can_id);
+  }
+  if (clone.type === 'ble_beacon' || clone.type === 'ble_device') {
+    clone.type = 'ble_presence';
+  }
+  if (!clone.type && clone.can_id) {
+    clone.type = 'can_state';
+  }
+
+  return clone;
+}
+
+/**
+ * Helper to check and consume trailing flattened steps in rawActions starting at `startIndex`
+ * that match `expectedSteps.slice(1)` (plus any auto-appended 0x48F ambient mood lighting frames).
+ */
+function matchAndConsumeRemainingCatalogSteps(
+  rawActions: any[],
+  startIndex: number,
+  catalogCmd: Command,
+  expectedSteps: any[],
+  defaultCanId: string,
+  defaultBus: number,
+  defaultDelayMs: number
+): { matched: boolean; nextIndex: number; extractedSteps?: AutomationActionStep[] } {
+  let cursor = startIndex;
+  const extractedSteps: AutomationActionStep[] = [];
+
+  for (let sIdx = 1; sIdx < expectedSteps.length; sIdx++) {
+    const expStep = expectedSteps[sIdx];
+
+    if (expStep.type === 'delay') {
+      const cand = rawActions[cursor];
+      if (!cand || cand.type !== 'delay') {
+        return { matched: false, nextIndex: startIndex };
+      }
+      extractedSteps.push({
+        type: 'delay',
+        delay_ms: cand.ms ?? cand.delay_ms ?? expStep.delay_ms ?? expStep.ms ?? 500
+      });
+      cursor++;
+      continue;
+    }
+
+    if (expStep.type === 'repeat_until' || expStep.type === 'wait_for') {
+      if (rawActions[cursor]?.type === 'delay' && !rawActions[cursor]?.source_command_id) {
+        cursor++;
+      }
+      const cand = rawActions[cursor];
+      if (!cand || cand.type !== expStep.type) {
+        return { matched: false, nextIndex: startIndex };
+      }
+      extractedSteps.push({
+        ...cand,
+        condition: cand.condition ? decompileCondition(cand.condition) : undefined,
+        sequence: Array.isArray(cand.sequence) ? decompileActionList(cand.sequence) : undefined
+      });
+      cursor++;
+      continue;
+    }
+
+    // Optional inter-step delay before this transmit step
+    let interDelayMs = expStep.delay_ms ?? defaultDelayMs;
+    if (rawActions[cursor]?.type === 'delay' && !rawActions[cursor]?.source_command_id) {
+      interDelayMs = rawActions[cursor].ms ?? rawActions[cursor].delay_ms ?? interDelayMs;
+      cursor++;
+    }
+
+    const cand = rawActions[cursor];
+    if (!cand || (cand.type !== 'transmit' && cand.type !== 'can_tx')) {
+      return { matched: false, nextIndex: startIndex };
+    }
+    // Must not belong to a different explicit catalog command
+    if (cand.source_command_id && cand.source_command_id !== catalogCmd.id) {
+      return { matched: false, nextIndex: startIndex };
+    }
+
+    const expCanId = formatCanId(expStep.can_id || expStep.action_can_id || defaultCanId);
+    const candCanId = formatCanId(cand.can_id || defaultCanId);
+    if (expCanId !== candCanId) {
+      return { matched: false, nextIndex: startIndex };
+    }
+
+    if (!payloadsEqual(cand.payload, expStep.payload)) {
+      return { matched: false, nextIndex: startIndex };
+    }
+
+    // Record the inter-step delay onto the previous step if applicable
+    if (extractedSteps.length > 0 && extractedSteps[extractedSteps.length - 1].delay_ms === undefined) {
+      extractedSteps[extractedSteps.length - 1].delay_ms = interDelayMs;
+    }
+
+    extractedSteps.push({
+      can_id: candCanId,
+      bus: cand.bus ?? expStep.bus ?? defaultBus,
+      payload: compileToByteMap(cand.payload),
+      repeat: cand.repeat ?? expStep.repeat ?? 1,
+      delay_ms: expStep.delay_ms ?? (sIdx < expectedSteps.length - 1 ? defaultDelayMs : 0)
+    });
+    cursor++;
+  }
+
+  // If this is ambient_mood_lighting, also consume trailing auto-synthesized 0x48F door zone frames if present
+  if (catalogCmd.id === 'ambient_mood_lighting' || formatCanId(defaultCanId) === '0x4AD') {
+    while (cursor < rawActions.length) {
+      let probe = cursor;
+      if (rawActions[probe]?.type === 'delay' && !rawActions[probe]?.source_command_id) {
+        probe++;
+      }
+      const frame1 = rawActions[probe];
+      if (
+        frame1 &&
+        (frame1.type === 'transmit' || frame1.type === 'can_tx') &&
+        !frame1.source_command_id &&
+        formatCanId(frame1.can_id) === '0x48F'
+      ) {
+        cursor = probe + 1;
+        continue;
+      }
+      break;
+    }
+  }
+
+  return { matched: true, nextIndex: cursor, extractedSteps };
+}
+
+/**
+ * Reconstructs unified UI AutomationAction[] from a flattened automations.json action array.
+ * Handles both explicit `_step_group_id` tags and heuristic catalog multi-step matching
+ * (including cleanup of duplicate orphaned release/latch steps from prior push/pull cycles).
+ */
+export function decompileActionList(
+  rawActions: any[],
+  catalog: Catalog = DEFAULT_CATALOG
+): AutomationAction[] {
+  if (!Array.isArray(rawActions) || rawActions.length === 0) return [];
+
+  const result: AutomationAction[] = [];
+  let i = 0;
+
+  while (i < rawActions.length) {
+    const raw = rawActions[i];
+    if (!raw || typeof raw !== 'object') {
+      i++;
+      continue;
+    }
+
+    // Skip standalone auto-generated 0x48F ambient frames if encountered directly
+    if (raw._auto_ambient_48f) {
+      i++;
+      continue;
+    }
+
+    // 1. Control-flow actions: choose (including _cycle_entity restoration), if_then, repeat_until, wait_for
+    if (raw.type === 'choose') {
+      if (raw._cycle_entity && typeof raw._cycle_entity === 'object') {
+        const ce = raw._cycle_entity;
+        result.push({
+          id: ce.id || raw.id || generateBlockId('act'),
+          type: 'cycle_entity',
+          entity_id: ce.entity_id || 'drivers_seat_comfort',
+          ...(ce.target_command_id ? { target_command_id: ce.target_command_id } : {}),
+          states: Array.isArray(ce.states) ? ce.states : ['Off', 'Low Heat', 'Medium Heat', 'High Heat'],
+          ...(ce.direction ? { direction: ce.direction } : {}),
+          wrap: ce.wrap !== false,
+          ...(ce.fallback_state ? { fallback_state: ce.fallback_state } : {}),
+          show_popup: ce.show_popup !== false,
+          ...(ce.popup_prefix !== undefined ? { popup_prefix: ce.popup_prefix } : {})
+        });
+        i++;
+        continue;
+      }
+
+      result.push({
+        ...raw,
+        id: raw.id || generateBlockId('act'),
+        type: 'choose',
+        choices: Array.isArray(raw.choices)
+          ? raw.choices.map((ch: any) => ({
+              ...ch,
+              _clientId: ch._clientId || generateBlockId('branch'),
+              conditions: Array.isArray(ch.conditions)
+                ? ch.conditions.map((c: any) => decompileCondition(c, catalog))
+                : [],
+              sequence: Array.isArray(ch.sequence)
+                ? decompileActionList(ch.sequence, catalog)
+                : []
+            }))
+          : [],
+        default: Array.isArray(raw.default) ? decompileActionList(raw.default, catalog) : []
+      });
+      i++;
+      continue;
+    }
+
+    if (raw.type === 'if_then') {
+      const rawConds = Array.isArray(raw.conditions) ? raw.conditions : Array.isArray(raw.if) ? raw.if : [];
+      result.push({
+        ...raw,
+        id: raw.id || generateBlockId('act'),
+        type: 'if_then',
+        conditions: rawConds.map((c: any) => decompileCondition(c, catalog)),
+        then: Array.isArray(raw.then) ? decompileActionList(raw.then, catalog) : [],
+        else: Array.isArray(raw.else) ? decompileActionList(raw.else, catalog) : []
+      });
+      i++;
+      continue;
+    }
+
+    if (raw.type === 'repeat_until' || raw.type === 'wait_for') {
+      result.push({
+        ...raw,
+        id: raw.id || generateBlockId('act'),
+        type: raw.type,
+        condition: raw.condition ? decompileCondition(raw.condition, catalog) : undefined,
+        sequence: Array.isArray(raw.sequence) ? decompileActionList(raw.sequence, catalog) : undefined
+      });
+      i++;
+      continue;
+    }
+
+    // 2. Pass 1: Explicit `_step_group_id` coalescing
+    if (raw._step_group_id) {
+      const groupId = raw._step_group_id;
+      const groupItems: any[] = [];
+      while (i < rawActions.length && rawActions[i]?._step_group_id === groupId) {
+        if (!rawActions[i]._auto_ambient_48f) {
+          groupItems.push(rawActions[i]);
+        }
+        i++;
+      }
+
+      if (groupItems.length > 0) {
+        const firstTx = groupItems.find(x => x.type === 'transmit' || x.type === 'can_tx') || groupItems[0];
+        const steps: AutomationActionStep[] = [];
+
+        for (let gIdx = 0; gIdx < groupItems.length; gIdx++) {
+          const item = groupItems[gIdx];
+          if (item.type === 'transmit' || item.type === 'can_tx') {
+            let stepDelayMs = item.delay_ms ?? 0;
+            if (gIdx + 1 < groupItems.length && groupItems[gIdx + 1].type === 'delay') {
+              stepDelayMs = groupItems[gIdx + 1].ms ?? groupItems[gIdx + 1].delay_ms ?? 20;
+              gIdx++; // consume inter-step delay
+            }
+            steps.push({
+              can_id: formatCanId(item.can_id || firstTx.can_id || '0x000'),
+              bus: item.bus ?? firstTx.bus ?? 0,
+              payload: compileToByteMap(item.payload),
+              repeat: item.repeat ?? 1,
+              delay_ms: stepDelayMs
+            });
+          } else if (item.type === 'delay') {
+            steps.push({
+              type: 'delay',
+              delay_ms: item.ms ?? item.delay_ms ?? 500
+            });
+          } else {
+            steps.push({ ...item });
+          }
+        }
+
+        const candidateAction: AutomationAction = {
+          id: firstTx.id || groupId,
+          type: 'can_tx',
+          can_id: formatCanId(firstTx.can_id || '0x000'),
+          bus: firstTx.bus ?? 0,
+          payload: steps[0]?.payload || compileToByteMap(firstTx.payload),
+          repeat: steps[0]?.repeat ?? firstTx.repeat ?? 1,
+          delay_ms: steps[0]?.delay_ms ?? 20,
+          ...(steps.length > 1 ? { steps } : {}),
+          ...(firstTx.source_command_id ? { source_command_id: firstTx.source_command_id } : {}),
+          ...(firstTx.source_command_name ? { source_command_name: firstTx.source_command_name } : {}),
+          ...(firstTx.option_label ? { option_label: firstTx.option_label } : {}),
+          ...(firstTx.entity_id ? { entity_id: firstTx.entity_id } : {}),
+          ...(firstTx.command || firstTx.option_label ? { command: firstTx.command || firstTx.option_label } : {})
+        };
+
+        const resolved = resolveCatalogCommandForAction(candidateAction, catalog);
+        if (resolved.command) {
+          candidateAction.source_command_id = candidateAction.source_command_id || resolved.command.id;
+          candidateAction.entity_id = candidateAction.entity_id || resolved.command.id;
+          candidateAction.source_command_name =
+            candidateAction.source_command_name ||
+            resolved.command.ha_metadata?.name ||
+            resolved.command.name ||
+            resolved.command.id;
+          if (resolved.matchedOption) {
+            candidateAction.option_label = candidateAction.option_label || resolved.matchedOption.label;
+            candidateAction.command = candidateAction.command || resolved.matchedOption.label;
+          }
+        }
+
+        result.push(candidateAction);
+      }
+      continue;
+    }
+
+    // 3. Pass 2: Heuristic catalog multi-step coalescing for untagged/legacy automations.json rules
+    if (raw.type === 'transmit' || raw.type === 'can_tx' || raw.type === 'entity_command') {
+      const normalizedRaw: AutomationAction = {
+        ...raw,
+        id: raw.id || generateBlockId('act'),
+        type: 'can_tx',
+        ...(raw.can_id !== undefined && raw.can_id !== null ? { can_id: formatCanId(raw.can_id) } : {}),
+        ...(raw.payload ? { payload: compileToByteMap(raw.payload) } : {})
+      };
+
+      const { command: catalogCmd, matchedOption } = resolveCatalogCommandForAction(normalizedRaw, catalog);
+      const expectedSteps =
+        matchedOption?.steps && matchedOption.steps.length > 1
+          ? matchedOption.steps
+          : !matchedOption?.payload && catalogCmd?.steps && catalogCmd.steps.length > 1
+            ? catalogCmd.steps
+            : undefined;
+
+      if (catalogCmd && expectedSteps && expectedSteps.length > 1) {
+        const defaultCanId = formatCanId(
+          catalogCmd.network?.action_can_id ||
+            catalogCmd.action_can_id ||
+            catalogCmd.network?.state_can_id ||
+            catalogCmd.state_can_id ||
+            normalizedRaw.can_id ||
+            '0x000'
+        );
+        const defaultBus = catalogCmd.network?.bus ?? catalogCmd.action_bus ?? catalogCmd.bus ?? normalizedRaw.bus ?? 0;
+        const defaultDelayMs = catalogCmd.network?.delay_ms ?? catalogCmd.delay_ms ?? normalizedRaw.delay_ms ?? 20;
+
+        // Consume one or more consecutive occurrences of the remaining flattened steps (healing prior duplicate push/pull cycles)
+        let nextCursor = i + 1;
+        let firstDelayMs = expectedSteps[0]?.delay_ms ?? defaultDelayMs;
+        if (rawActions[nextCursor]?.type === 'delay' && !rawActions[nextCursor]?.source_command_id) {
+          firstDelayMs = rawActions[nextCursor].ms ?? rawActions[nextCursor].delay_ms ?? firstDelayMs;
+        }
+
+        let matchedTailSteps: AutomationActionStep[] | undefined;
+        while (nextCursor < rawActions.length) {
+          const matchResult = matchAndConsumeRemainingCatalogSteps(
+            rawActions,
+            nextCursor,
+            catalogCmd,
+            expectedSteps,
+            defaultCanId,
+            defaultBus,
+            defaultDelayMs
+          );
+          if (matchResult.matched) {
+            if (!matchedTailSteps) {
+              matchedTailSteps = matchResult.extractedSteps;
+            }
+            nextCursor = matchResult.nextIndex;
+          } else {
+            break;
+          }
+        }
+
+        // Build the unified steps array from expectedSteps (preserving custom bus/repeat/delays where matched)
+        const unifiedSteps: AutomationActionStep[] =
+          Array.isArray(normalizedRaw.steps) && normalizedRaw.steps.length > 1
+            ? normalizedRaw.steps.map((s: any) => ({
+                ...s,
+                ...(s.can_id ? { can_id: formatCanId(s.can_id) } : { can_id: defaultCanId }),
+                bus: s.bus ?? defaultBus,
+                ...(s.payload ? { payload: compileToByteMap(s.payload) } : {})
+              }))
+            : expectedSteps.map((s: any, idx: number) => {
+                if (s.type === 'delay') {
+                  return {
+                    type: 'delay',
+                    delay_ms: s.delay_ms ?? s.dwell_ms ?? s.ms ?? 500
+                  };
+                }
+                if (s.type === 'repeat_until' || s.type === 'wait_for') {
+                  return { ...s };
+                }
+                const tailOverride = idx >= 1 && matchedTailSteps ? matchedTailSteps[idx - 1] : undefined;
+                return {
+                  can_id: formatCanId(s.can_id || s.action_can_id || defaultCanId),
+                  bus: tailOverride?.bus ?? s.bus ?? normalizedRaw.bus ?? defaultBus,
+                  payload: compileToByteMap(s.payload),
+                  repeat: idx === 0 ? (normalizedRaw.repeat ?? s.repeat ?? 1) : (tailOverride?.repeat ?? s.repeat ?? 1),
+                  delay_ms:
+                    idx === 0
+                      ? firstDelayMs
+                      : tailOverride?.delay_ms ?? s.delay_ms ?? (idx < expectedSteps.length - 1 ? defaultDelayMs : 0)
+                };
+              });
+
+        const { _step_group_id: _sg, _auto_ambient_48f: _af, ...cleanRaw } = normalizedRaw as any;
+        result.push({
+          ...cleanRaw,
+          id: cleanRaw.id || generateBlockId('act'),
+          type: 'can_tx',
+          can_id: defaultCanId,
+          bus: cleanRaw.bus ?? defaultBus,
+          payload: unifiedSteps[0]?.payload || cleanRaw.payload || compileToByteMap(expectedSteps[0]?.payload),
+          repeat: unifiedSteps[0]?.repeat ?? cleanRaw.repeat ?? expectedSteps[0]?.repeat ?? 1,
+          delay_ms: firstDelayMs,
+          steps: unifiedSteps,
+          source_command_id: catalogCmd.id,
+          source_command_name:
+            cleanRaw.source_command_name || catalogCmd.ha_metadata?.name || catalogCmd.name || catalogCmd.id,
+          entity_id: catalogCmd.id,
+          option_label: matchedOption?.label || cleanRaw.option_label || cleanRaw.command,
+          command: matchedOption?.label || cleanRaw.command || cleanRaw.option_label
+        });
+
+        i = nextCursor;
+        continue;
+      }
+
+      // Single-step catalog or raw CAN transmit action
+      const { _step_group_id: _sg, _auto_ambient_48f: _af, ...cleanSingle } = normalizedRaw as any;
+      if (catalogCmd) {
+        cleanSingle.source_command_id = cleanSingle.source_command_id || catalogCmd.id;
+        cleanSingle.entity_id = cleanSingle.entity_id || catalogCmd.id;
+        cleanSingle.source_command_name =
+          cleanSingle.source_command_name || catalogCmd.ha_metadata?.name || catalogCmd.name || catalogCmd.id;
+        if (matchedOption) {
+          cleanSingle.option_label = cleanSingle.option_label || matchedOption.label;
+          cleanSingle.command = cleanSingle.command || matchedOption.label;
+        }
+      }
+      result.push(cleanSingle);
+      i++;
+      continue;
+    }
+
+    // 4. Other action types (delay, track_popup, climate_target, precondition, webhook, etc.)
+    if (raw.type === 'delay') {
+      result.push({
+        ...raw,
+        id: raw.id || generateBlockId('act'),
+        type: 'delay',
+        delay_ms: raw.delay_ms ?? raw.ms ?? 500,
+        ms: raw.ms ?? raw.delay_ms ?? 500
+      });
+      i++;
+      continue;
+    }
+
+    if (raw.type === 'precondition') {
+      result.push({
+        ...raw,
+        id: raw.id || generateBlockId('act'),
+        type: 'precondition',
+        precon_mode: raw.precon_mode || raw.mode || 'persistent',
+        precon_action: raw.precon_action || raw.action || 'start'
+      });
+      i++;
+      continue;
+    }
+
+    result.push({
+      ...raw,
+      id: raw.id || generateBlockId('act')
+    });
+    i++;
+  }
+
+  return result;
+}
+
+/**
+ * Decompiles a single AutomationRule from automations.json or storage into a normalized UI AutomationRule
+ * with multi-step commands coalesced into single AutomationAction items.
+ */
+export function decompileAutomationRule(
+  rawRule: any,
+  catalog: Catalog = DEFAULT_CATALOG
+): AutomationRule {
+  if (!rawRule || typeof rawRule !== 'object') return rawRule;
+
+  const triggers: AutomationTrigger[] = Array.isArray(rawRule.triggers)
+    ? rawRule.triggers.map((trig: any) => {
+        if (!trig || typeof trig !== 'object') return trig;
+        const clone: AutomationTrigger = {
+          ...trig,
+          id: trig.id || generateBlockId('trig')
+        };
+        if (clone.can_id !== undefined && clone.can_id !== null) {
+          clone.can_id = formatCanId(clone.can_id);
+        }
+        if (clone.type === 'ble_beacon') {
+          clone.type = 'ble_presence';
+          clone.source = clone.source || 'ble';
+        } else if (clone.type === 'ble_button' || clone.type === 'ble_key' || clone.type === 'ble_device_event') {
+          clone.source = clone.source || 'ble';
+        } else if (clone.type === 'wifi_event' || clone.type === 'wifi') {
+          clone.source = clone.source || 'wifi';
+        } else if (clone.type === 'time_schedule') {
+          clone.source = clone.source || 'time';
+        } else if (!clone.source) {
+          clone.source = clone.source_command_id ? 'preset' : 'can';
+        }
+        return clone;
+      })
+    : [];
+
+  const conditions: AutomationCondition[] = Array.isArray(rawRule.conditions)
+    ? rawRule.conditions.map((c: any) => decompileCondition(c, catalog))
+    : [];
+
+  const actions: AutomationAction[] = Array.isArray(rawRule.actions)
+    ? decompileActionList(rawRule.actions, catalog)
+    : [];
+
+  const offActions: AutomationAction[] | undefined = Array.isArray(rawRule.off_actions)
+    ? decompileActionList(rawRule.off_actions, catalog)
+    : undefined;
+
+  return {
+    ...rawRule,
+    id: rawRule.id || generateBlockId('rule'),
+    name: rawRule.name || 'Automation Rule',
+    enabled: rawRule.enabled ?? true,
+    ha_expose: rawRule.ha_expose ?? true,
+    ha_icon: rawRule.ha_icon || 'mdi:car-cog',
+    exec_mode: rawRule.exec_mode || 'one_shot',
+    trigger_mode: rawRule.trigger_mode || 'any',
+    cooldown_ms: rawRule.cooldown_ms ?? 500,
+    triggers,
+    conditions,
+    actions,
+    ...(offActions ? { off_actions: offActions } : {})
+  };
+}
+
+/**
+ * Decompiles an array of AutomationRules from automations.json or localStorage.
+ */
+export function decompileAutomationRules(
+  rawRules: any[],
+  catalog: Catalog = DEFAULT_CATALOG
+): AutomationRule[] {
+  if (!Array.isArray(rawRules)) return [];
+  return rawRules.map(r => decompileAutomationRule(r, catalog));
 }
 
 /**
@@ -806,13 +1510,19 @@ export function compileAutomationRule(
     exec_mode: rule.exec_mode || 'one_shot',
     trigger_mode: rule.trigger_mode || 'any',
     cooldown_ms: rule.cooldown_ms ?? 500,
+    ...(rule.timeout_reset_ms ? { timeout_reset_ms: rule.timeout_reset_ms } : {}),
+    ...(rule.category ? { category: rule.category } : {}),
+    ...(rule.description ? { description: rule.description } : {}),
     triggers: (rule.triggers || []).map(trig => {
       const baseTrigger = {
         id: trig.id,
         ...(trig.name ? { name: trig.name } : {}),
         ...(trig.source_command_id ? { source_command_id: trig.source_command_id } : {}),
         ...(trig.source_command_name ? { source_command_name: trig.source_command_name } : {}),
-        ...(trig.option_label ? { option_label: trig.option_label } : {})
+        ...(trig.option_label ? { option_label: trig.option_label } : {}),
+        ...(trig.click_count && trig.click_count > 1 ? { click_count: trig.click_count } : {}),
+        ...(trig.for_ms ? { for_ms: trig.for_ms } : {}),
+        ...(trig.for_sec ? { for_sec: trig.for_sec } : {})
       };
 
       if (trig.type === 'time_schedule' || trig.source === 'time' || trig.time) {
@@ -917,7 +1627,10 @@ export function compileAutomationRule(
       };
     }),
     conditions: (rule.conditions || []).map(c => compileCondition(c, catalog)),
-    actions: compileActionList(rule.actions || [], catalog)
+    actions: compileActionList(rule.actions || [], catalog),
+    ...(rule.off_actions && rule.off_actions.length > 0
+      ? { off_actions: compileActionList(rule.off_actions, catalog) }
+      : {})
   };
 }
 
@@ -1120,13 +1833,14 @@ export function commandToAction(rawCmd: Command, opt?: CommandOption): Automatio
   }
 
   const rawSteps = chosenOpt?.steps || (chosenOpt?.payload ? undefined : cmd.steps);
+  const defaultStepDelay = cmd.network?.delay_ms ?? cmd.delay_ms ?? 20;
   const cleanSteps: AutomationActionStep[] | undefined = rawSteps && rawSteps.length > 0
-    ? rawSteps.map(s => ({
+    ? rawSteps.map((s, idx) => ({
         can_id: s.can_id || canId,
         bus: s.bus ?? (cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? 0),
         payload: compileToByteMap(s.payload),
         repeat: s.repeat ?? 1,
-        delay_ms: s.delay_ms ?? 0
+        delay_ms: s.delay_ms ?? (idx < rawSteps.length - 1 ? defaultStepDelay : 0)
       }))
     : undefined;
 
@@ -1784,13 +2498,14 @@ export function applyOptionToAction(act: AutomationAction, rawCmd: Command, opt:
   const canId = cmd.network?.action_can_id || cmd.action_can_id || cmd.network?.state_can_id || cmd.state_can_id || act.can_id || '0x000';
   const cmdDisplayName = cmd.ha_metadata?.name || cmd.name || cmd.id;
   const rawSteps = opt.steps || (opt.payload ? undefined : cmd.steps);
+  const defaultStepDelay = cmd.network?.delay_ms ?? cmd.delay_ms ?? act.delay_ms ?? 20;
   const cleanSteps: AutomationActionStep[] | undefined = rawSteps && rawSteps.length > 0
-    ? rawSteps.map(s => ({
+    ? rawSteps.map((s, idx) => ({
         can_id: s.can_id || canId,
         bus: s.bus ?? (cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? act.bus ?? 0),
         payload: compileToByteMap(s.payload),
         repeat: s.repeat ?? 1,
-        delay_ms: s.delay_ms ?? 0
+        delay_ms: s.delay_ms ?? (idx < rawSteps.length - 1 ? defaultStepDelay : 0)
       }))
     : undefined;
 

@@ -10,7 +10,9 @@ import {
   ModalFooter
 } from '@heroui/react';
 import { AutomationRule, AutomationSettings, AutomationTrigger, AutomationCondition, AutomationAction } from '../types/automation';
-import { formatCanId, formatHexByte, compileToByteMap } from '../utils/automationConverters';
+import { Catalog } from '../types/catalog';
+import { DEFAULT_CATALOG } from '../data/defaultCatalog';
+import { formatCanId, formatHexByte, compileToByteMap, decompileAutomationRule } from '../utils/automationConverters';
 import {
   X,
   Upload,
@@ -26,6 +28,7 @@ import {
 interface AutomationImportModalProps {
   isOpen: boolean;
   existingRules: AutomationRule[];
+  catalog?: Catalog;
   onClose: () => void;
   onImport: (
     importedRules: AutomationRule[],
@@ -37,6 +40,7 @@ interface AutomationImportModalProps {
 export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
   isOpen,
   existingRules,
+  catalog = DEFAULT_CATALOG,
   onClose,
   onImport
 }) => {
@@ -168,7 +172,7 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
   };
 
   const normalizeImportedRule = (rawRule: any, idx: number): AutomationRule => {
-    return {
+    const sanitized: AutomationRule = {
       id:
         typeof rawRule.id === 'string' && rawRule.id.trim()
           ? rawRule.id.trim()
@@ -184,11 +188,14 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
       trigger_mode: rawRule.trigger_mode || 'any',
       cooldown_ms: Number(rawRule.cooldown_ms) || 0,
       timeout_reset_ms: Number(rawRule.timeout_reset_ms) || 0,
+      ...(typeof rawRule.category === 'string' && rawRule.category.trim() ? { category: rawRule.category.trim() } : {}),
+      ...(typeof rawRule.description === 'string' && rawRule.description.trim() ? { description: rawRule.description.trim() } : {}),
       triggers: Array.isArray(rawRule.triggers) ? rawRule.triggers.map(sanitizeTrigger) : [],
       conditions: Array.isArray(rawRule.conditions) ? rawRule.conditions.map(sanitizeCondition) : [],
       actions: Array.isArray(rawRule.actions) ? rawRule.actions.map(sanitizeAction) : [],
       off_actions: Array.isArray(rawRule.off_actions) ? rawRule.off_actions.map(sanitizeAction) : undefined
     };
+    return decompileAutomationRule(sanitized, catalog);
   };
 
   const handleProcessRaw = (raw: string) => {
