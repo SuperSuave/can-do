@@ -8,7 +8,7 @@
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 #if CONFIG_IDF_TARGET_ESP32S3
-#include "driver/rtc_io.h"
+#include "driver/gpio.h"
 #endif
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -142,35 +142,60 @@ void vbat_sensor_init(void) {
     }
 
 #if CONFIG_IDF_TARGET_ESP32S3
-    // Detect floating/unwired ADC pin on prototype boards so phantom noise doesn't gate UDS or power_mgr
-    if (rtc_gpio_is_valid_gpio((gpio_num_t)VBAT_ADC_PIN)) {
+    // Detect floating/unwired ADC pin on prototype boards so phantom noise doesn't gate UDS or power_mgr.
+    // adc_oneshot_config_channel() invokes gpio_config_as_analog() -> rtc_gpio_deinit(), routing pulls to IO_MUX.
+    if (GPIO_IS_VALID_OUTPUT_GPIO((gpio_num_t)VBAT_ADC_PIN)) {
         auto read_pin_mv = []() -> int {
-            int raw = 0;
-            if (adc_oneshot_read(s_adc1_handle, s_adc_channel, &raw) != ESP_OK) return -1;
+            int raw_sum = 0;
+            int valid = 0;
+            for (int i = 0; i < 4; ++i) {
+                int raw = 0;
+                if (adc_oneshot_read(s_adc1_handle, s_adc_channel, &raw) == ESP_OK) {
+                    raw_sum += raw;
+                    valid++;
+                }
+            }
+            if (valid == 0) return -1;
+            int raw_avg = raw_sum / valid;
             int mv = 0;
             if (s_adc_calibrated && s_adc1_cali_handle) {
-                adc_cali_raw_to_voltage(s_adc1_cali_handle, raw, &mv);
+                adc_cali_raw_to_voltage(s_adc1_cali_handle, raw_avg, &mv);
             } else {
-                mv = (raw * 3100) / 4095;
+                mv = (raw_avg * 3100) / 4095;
             }
             return mv;
         };
-        rtc_gpio_pullup_en((gpio_num_t)VBAT_ADC_PIN);
-        vTaskDelay(pdMS_TO_TICKS(2));
-        int mv_pu = read_pin_mv();
-        rtc_gpio_pullup_dis((gpio_num_t)VBAT_ADC_PIN);
 
-        rtc_gpio_pulldown_en((gpio_num_t)VBAT_ADC_PIN);
-        vTaskDelay(pdMS_TO_TICKS(2));
+        gpio_pullup_en((gpio_num_t)VBAT_ADC_PIN);
+        vTaskDelay(pdMS_TO_TICKS(5));
+        int mv_pu = read_pin_mv();
+        gpio_pullup_dis((gpio_num_t)VBAT_ADC_PIN);
+
+        gpio_pulldown_en((gpio_num_t)VBAT_ADC_PIN);
+        vTaskDelay(pdMS_TO_TICKS(5));
         int mv_pd = read_pin_mv();
-        rtc_gpio_pulldown_dis((gpio_num_t)VBAT_ADC_PIN);
+        gpio_pulldown_dis((gpio_num_t)VBAT_ADC_PIN);
 
         if (mv_pu > 2600 && mv_pd >= 0 && mv_pd < 400) {
             s_has_adc_divider = false;
+            if (s_adc1_cali_handle) {
+#if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
+                adc_cali_delete_scheme_curve_fitting(s_adc1_cali_handle);
+#elif ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
+                adc_cali_delete_scheme_line_fitting(s_adc1_cali_handle);
+#endif
+                s_adc1_cali_handle = nullptr;
+                s_adc_calibrated = false;
+            }
+            adc_oneshot_del_unit(s_adc1_handle);
+            s_adc1_handle = nullptr;
             ESP_LOGW(TAG, "VBAT GPIO %d appears floating (PU=%dmV, PD=%dmV); disabling ADC monitor and using CAN 12V telemetry",
                      (int)VBAT_ADC_PIN, mv_pu, mv_pd);
             return;
         }
+
+        // Restore pure high-Z analog configuration when an external divider is present
+        adc_oneshot_config_channel(s_adc1_handle, s_adc_channel, &chan_cfg);
     }
 #endif
 

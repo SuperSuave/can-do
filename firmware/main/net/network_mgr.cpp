@@ -206,6 +206,7 @@ static void start_softap(void) {
     }
 
     esp_wifi_set_config(WIFI_IF_AP, &ap_config);
+    esp_wifi_set_ps(WIFI_PS_NONE);
     s_ap_active = true;
     board_led_wifi(true);
     ESP_LOGI(TAG, "SoftAP active: Gateway=192.168.4.1");
@@ -748,6 +749,7 @@ void network_mgr_set_ap_credentials(const std::string& ssid, const std::string& 
 
 bool network_mgr_start_scan(void) {
     if (s_is_scanning.exchange(true)) return false;
+    esp_wifi_set_ps(WIFI_PS_NONE);
     wifi_scan_config_t scan_cfg = {};
     scan_cfg.show_hidden = false;
     scan_cfg.scan_type = WIFI_SCAN_TYPE_ACTIVE;

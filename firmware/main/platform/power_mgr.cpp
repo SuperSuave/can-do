@@ -18,26 +18,32 @@
 
 static const char* TAG = "POWER_MGR";
 static power_tier_t s_current_tier = POWER_TIER_ACTIVE;
+static bool s_wifi_ps_modem = false;
 static std::atomic<bool> s_restart_scheduled{false};
 static std::atomic<bool> s_restarting{false};
 
 void power_mgr_set_tier(power_tier_t tier) {
-    if (s_current_tier == tier) return;
-
+    bool want_modem_sleep = false;
+#if !CONFIG_BT_ENABLED
     if (tier == POWER_TIER_STANDBY) {
         NetworkStatusInfo net_st = network_mgr_get_status();
         // Only enable 802.11 Modem Sleep when connected as pure Station (SoftAP inactive and not scanning)
-        if (net_st.sta_connected && !net_st.ap_active && !network_mgr_is_scanning()) {
-            esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
-            ESP_LOGI(TAG, "Entering Tier 2 Standby (Wi-Fi Modem Sleep enabled)");
-        } else {
-            esp_wifi_set_ps(WIFI_PS_NONE);
-            ESP_LOGI(TAG, "Entering Tier 2 Standby (SoftAP/Scan active, keeping Wi-Fi PS NONE)");
+        want_modem_sleep = net_st.sta_connected && !net_st.ap_active && !network_mgr_is_scanning();
+    }
+#endif
+
+    bool tier_changed = (s_current_tier != tier);
+    if (tier_changed || s_wifi_ps_modem != want_modem_sleep) {
+        esp_wifi_set_ps(want_modem_sleep ? WIFI_PS_MIN_MODEM : WIFI_PS_NONE);
+        s_wifi_ps_modem = want_modem_sleep;
+        if (tier_changed) {
+            if (tier == POWER_TIER_STANDBY) {
+                ESP_LOGI(TAG, "Entering Tier 2 Standby (%s)",
+                         want_modem_sleep ? "Wi-Fi Modem Sleep enabled" : "Coex/SoftAP/Scan active, keeping Wi-Fi PS NONE");
+            } else {
+                ESP_LOGI(TAG, "Entering Tier 1 Active (Full performance)");
+            }
         }
-    } else if (tier == POWER_TIER_ACTIVE) {
-        // Disable power-save for minimal latency during active driving/telemetry
-        esp_wifi_set_ps(WIFI_PS_NONE);
-        ESP_LOGI(TAG, "Entering Tier 1 Active (Full performance)");
     }
     s_current_tier = tier;
 }

@@ -91,6 +91,7 @@ static std::vector<std::string> s_held_buttons;
 
 static bool s_ble_scanning = false;
 static std::atomic<bool> s_ble_shutting_down{false};
+static std::atomic<bool> s_bg_scan_has_targets{false};
 static uint32_t s_ble_scan_start_ms = 0;
 static uint32_t s_ble_scan_duration_ms = 10000;
 static bool s_ble_client_connected = false;
@@ -114,6 +115,37 @@ static bool iequals(const std::string& a, const std::string& b) {
         if (tolower((unsigned char)a[i]) != tolower((unsigned char)b[i])) return false;
     }
     return true;
+}
+
+static void start_background_ble_scan(void) {
+    if (s_ble_shutting_down.load(std::memory_order_relaxed) || s_ble_client_connected || s_ble_scanning) {
+        return;
+    }
+    if (!NimBLEDevice::isInitialized()) return;
+
+    bool has_targets = false;
+    {
+        std::lock_guard<std::mutex> lock(s_ble_mutex);
+        has_targets = !s_paired_devices.empty() || !s_beacon_targets.empty();
+    }
+    s_bg_scan_has_targets.store(has_targets, std::memory_order_relaxed);
+
+    NimBLEScan* pScan = NimBLEDevice::getScan();
+    if (!pScan) return;
+    pScan->clearResults();
+    pScan->setMaxResults(0);
+    pScan->setActiveScan(false); // Passive scan
+    pScan->setDuplicateFilter(false);
+    if (has_targets) {
+        // Track paired buttons and beacon RSSI while leaving ~80% RF airtime for Wi-Fi coexistence
+        pScan->setInterval(160); // 100ms
+        pScan->setWindow(32);    // 20ms
+    } else {
+        // Low-overhead passive iBeacon discovery (~8% RF duty cycle) when no targets are configured
+        pScan->setInterval(400); // 250ms
+        pScan->setWindow(32);    // 20ms
+    }
+    pScan->start(0, false, true);
 }
 
 // ============================================================================
@@ -548,12 +580,7 @@ class ClientCallbacks : public NimBLEClientCallbacks {
         can_engine_on_ble_device_event(disc_addr, "disconnected", 0, "");
 
         // Resume continuous background scan
-        NimBLEScan* pScan = NimBLEDevice::getScan();
-        pScan->clearResults();
-        pScan->setMaxResults(0);
-        pScan->setDuplicateFilter(false);
-        pScan->setActiveScan(false);
-        pScan->start(0, false, true);
+        start_background_ble_scan();
     }
 } s_client_callbacks;
 
@@ -671,14 +698,7 @@ static void connect_ble_device(const std::string& address, uint8_t addr_type = 0
         }
     } else {
         ESP_LOGW(TAG, "Connection to %s failed. Resuming continuous scan.", address.c_str());
-        if (!s_ble_scanning) {
-            NimBLEScan* pScan = NimBLEDevice::getScan();
-            pScan->clearResults();
-            pScan->setMaxResults(0);
-            pScan->setDuplicateFilter(false);
-            pScan->setActiveScan(false);
-            pScan->start(0, false, true);
-        }
+        start_background_ble_scan();
     }
 }
 
@@ -687,16 +707,25 @@ static void connect_ble_device(const std::string& address, uint8_t addr_type = 0
 // ============================================================================
 class ScanCallbacks : public NimBLEScanCallbacks {
     void onDiscovered(const NimBLEAdvertisedDevice* advertisedDevice) override {
-        std::string addr = advertisedDevice->getAddress().toString();
-        std::string name = advertisedDevice->getName();
-        if (name.empty() || name == "Unknown Device") {
-            char short_buf[32];
-            std::string end_addr = addr.length() > 8 ? addr.substr(addr.length() - 8) : addr;
-            snprintf(short_buf, sizeof(short_buf), "BLE Device [%s]", end_addr.c_str());
-            name = short_buf;
+        bool has_mfg = advertisedDevice->getManufacturerDataCount() > 0;
+        bool has_targets = s_bg_scan_has_targets.load(std::memory_order_relaxed);
+        if (!s_ble_scanning && !has_targets && !has_mfg) {
+            return;
         }
+
+        std::string addr = advertisedDevice->getAddress().toString();
         int8_t rssi = advertisedDevice->getRSSI();
         uint8_t a_type = advertisedDevice->getAddressType();
+        std::string name;
+        if (s_ble_scanning || has_targets) {
+            name = advertisedDevice->getName();
+            if (name.empty() || name == "Unknown Device") {
+                char short_buf[32];
+                std::string end_addr = addr.length() > 8 ? addr.substr(addr.length() - 8) : addr;
+                snprintf(short_buf, sizeof(short_buf), "BLE Device [%s]", end_addr.c_str());
+                name = short_buf;
+            }
+        }
 
         // 1. Discovery filtering: active user-initiated scan within vehicle range
         if (s_ble_scanning && rssi >= BLE_MIN_RSSI_DISCOVERY) {
@@ -727,7 +756,7 @@ class ScanCallbacks : public NimBLEScanCallbacks {
         // 2. Check if device is paired and needs reconnection
         bool is_paired = false;
         std::string paired_name = "";
-        {
+        if (has_targets) {
             std::lock_guard<std::mutex> lock(s_ble_mutex);
             for (auto& paired : s_paired_devices) {
                 if (iequals(paired.address, addr)) {
@@ -767,7 +796,7 @@ class ScanCallbacks : public NimBLEScanCallbacks {
         uint16_t adv_major = 0;
         uint16_t adv_minor = 0;
 
-        if (advertisedDevice->getManufacturerDataCount() > 0) {
+        if (has_mfg) {
             std::string mfg = advertisedDevice->getManufacturerData(0);
             if (mfg.length() >= 25 &&
                 (uint8_t)mfg[0] == 0x4C && (uint8_t)mfg[1] == 0x00 &&
@@ -814,7 +843,7 @@ class ScanCallbacks : public NimBLEScanCallbacks {
         }
 
         // 4. Match against configured beacon targets
-        {
+        if (has_targets) {
             uint32_t now_ms = get_time_ms();
             std::lock_guard<std::mutex> lock(s_ble_mutex);
             for (auto& target : s_beacon_targets) {
@@ -891,14 +920,7 @@ class ScanCallbacks : public NimBLEScanCallbacks {
         s_ble_scanning = false;
         ESP_LOGI(TAG, "Active scan ended (reason: %d, count: %d)", reason, scanResults.getCount());
 
-        if (!s_ble_client_connected && !s_ble_shutting_down.load(std::memory_order_relaxed)) {
-            NimBLEScan* pScan = NimBLEDevice::getScan();
-            pScan->clearResults();
-            pScan->setMaxResults(0);
-            pScan->setDuplicateFilter(false);
-            pScan->setActiveScan(false);
-            pScan->start(0, false, true);
-        }
+        start_background_ble_scan();
     }
 } s_scan_callbacks;
 
@@ -983,12 +1005,7 @@ void ble_mgr_init(void) {
 
     NimBLEScan* pScan = NimBLEDevice::getScan();
     pScan->setScanCallbacks(&s_scan_callbacks, false);
-    pScan->setActiveScan(false); // Passive scan
-    pScan->setInterval(160);     // 100ms
-    pScan->setWindow(80);        // 50ms (50% coex duty cycle)
-    pScan->setMaxResults(0);     // don't buffer in RAM
-    pScan->setDuplicateFilter(false);
-    pScan->start(0, false, true);
+    start_background_ble_scan();
 
     xTaskCreate(ble_worker_task, "ble_worker", 4096, nullptr, 3, nullptr);
     ESP_LOGI(TAG, "Native BLE Central & Observer Subsystem initialized successfully.");
@@ -1142,6 +1159,8 @@ void ble_mgr_start_scan(uint32_t duration_sec) {
     pScan->stop();
     pScan->clearResults();
     pScan->setMaxResults(0);
+    pScan->setInterval(160);
+    pScan->setWindow(64);
     pScan->setDuplicateFilter(true);
     pScan->setActiveScan(true);
     pScan->start(duration_sec * 1000, false, true);
@@ -1189,6 +1208,7 @@ bool ble_mgr_pair_device(const std::string& address, const std::string& in_name)
     }
 
     persist_paired_ble_devices();
+    s_bg_scan_has_targets.store(true, std::memory_order_relaxed);
     ESP_LOGI(TAG, "Paired device: %s (%s, type=%d)", address.c_str(), name.c_str(), addr_type);
 
     // Queue connection via worker
@@ -1222,6 +1242,7 @@ void ble_mgr_unpair_device(const std::string& address) {
     }
     persist_paired_ble_devices();
     ESP_LOGI(TAG, "Unpaired device(s): %s", address.empty() ? "all" : address.c_str());
+    start_background_ble_scan();
 }
 
 void ble_mgr_inject_test_event(const std::string& button, const std::string& action) {
@@ -1305,6 +1326,7 @@ bool ble_mgr_set_beacon(const std::string& uuid, const std::string& mac, const s
     }
 
     persist_beacon_targets();
+    start_background_ble_scan();
     return true;
 }
 
@@ -1322,6 +1344,7 @@ bool ble_mgr_delete_beacon(const std::string& uuid, const std::string& mac) {
     }
 
     persist_beacon_targets();
+    start_background_ble_scan();
     return true;
 }
 

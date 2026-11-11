@@ -164,12 +164,12 @@ static void usb_can_task(void* pvParameters) {
                 }
             }
         } else {
-            vTaskDelay(pdMS_TO_TICKS(2));
+            vTaskDelay(pdMS_TO_TICKS(10));
         }
     }
 }
 
 esp_err_t usb_can_init(void) {
-    BaseType_t res = xTaskCreate(usb_can_task, "USB_CAN", 4096, nullptr, 5, nullptr);
+    BaseType_t res = xTaskCreate(usb_can_task, "USB_CAN", 4096, nullptr, 3, nullptr);
     return (res == pdPASS) ? ESP_OK : ESP_FAIL;
 }
