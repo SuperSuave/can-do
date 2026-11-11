@@ -146,7 +146,8 @@ export const VehicleSilhouette: React.FC<VehicleOutlineProps> = ({
   onCycleSteeringHeat
 }) => {
   const isLightsActive = lights !== 'off';
-  const chargingActive = Boolean(isCharging || chargePortOpen);
+  const chargingActive = Boolean(isCharging);
+  const portOpenOrCharging = Boolean(isCharging || chargePortOpen);
 
   return (
     <svg
@@ -766,22 +767,24 @@ export const VehicleSilhouette: React.FC<VehicleOutlineProps> = ({
           width="9"
           height="20"
           rx="2"
-          fill={chargingActive ? '#10b981' : '#334155'}
-          stroke={chargingActive ? '#34d399' : '#475569'}
+          fill={chargingActive ? '#10b981' : chargePortOpen ? '#f59e0b' : '#334155'}
+          stroke={chargingActive ? '#34d399' : chargePortOpen ? '#fbbf24' : '#475569'}
           strokeWidth="1.5"
         />
-        {chargingActive && (
+        {portOpenOrCharging && (
           <>
-            <circle cx="296" cy="510" r="5" fill="#10b981" opacity="0.9" />
-            <circle
-              cx="296"
-              cy="510"
-              r="6"
-              fill="none"
-              stroke="#34d399"
-              strokeWidth="1.5"
-              className="charge-port-ripple"
-            />
+            <circle cx="296" cy="510" r="5" fill={chargingActive ? '#10b981' : '#f59e0b'} opacity="0.9" />
+            {chargingActive && (
+              <circle
+                cx="296"
+                cy="510"
+                r="6"
+                fill="none"
+                stroke="#34d399"
+                strokeWidth="1.5"
+                className="charge-port-ripple"
+              />
+            )}
           </>
         )}
       </g>

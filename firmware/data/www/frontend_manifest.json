@@ -2,21 +2,6 @@
   "version": "2026.11.4-b002",
   "files": [
     {
-      "name": "B1kDq-Q8.js.gz",
-      "path": "/spiffs/www/B1kDq-Q8.js.gz",
-      "size": 21468
-    },
-    {
-      "name": "BIxHzTYp.js.gz",
-      "path": "/spiffs/www/BIxHzTYp.js.gz",
-      "size": 32988
-    },
-    {
-      "name": "BYpuOiYM.js.gz",
-      "path": "/spiffs/www/BYpuOiYM.js.gz",
-      "size": 23350
-    },
-    {
       "name": "Bcqhkzbo.js.gz",
       "path": "/spiffs/www/Bcqhkzbo.js.gz",
       "size": 8432
@@ -27,9 +12,24 @@
       "size": 70567
     },
     {
-      "name": "DAVgWmo1.js.gz",
-      "path": "/spiffs/www/DAVgWmo1.js.gz",
+      "name": "BIxHzTYp.js.gz",
+      "path": "/spiffs/www/BIxHzTYp.js.gz",
+      "size": 32988
+    },
+    {
+      "name": "Ca5zr7fm.js.gz",
+      "path": "/spiffs/www/Ca5zr7fm.js.gz",
+      "size": 23382
+    },
+    {
+      "name": "CFHY8_0h.js.gz",
+      "path": "/spiffs/www/CFHY8_0h.js.gz",
       "size": 51427
+    },
+    {
+      "name": "Dz-U_7Wh.js.gz",
+      "path": "/spiffs/www/Dz-U_7Wh.js.gz",
+      "size": 23351
     },
     {
       "name": "FU6hrX0M.js.gz",
@@ -37,29 +37,29 @@
       "size": 979
     },
     {
-      "name": "LLc-6rSF.js.gz",
-      "path": "/spiffs/www/LLc-6rSF.js.gz",
-      "size": 237189
+      "name": "index-3Lc9wA.css.gz",
+      "path": "/spiffs/www/index-3Lc9wA.css.gz",
+      "size": 52516
     },
     {
-      "name": "index-BhJORU.css.gz",
-      "path": "/spiffs/www/index-BhJORU.css.gz",
-      "size": 52508
-    },
-    {
-      "name": "index-BsSTVd.js.gz",
-      "path": "/spiffs/www/index-BsSTVd.js.gz",
-      "size": 73753
+      "name": "index-D6Rey2.js.gz",
+      "path": "/spiffs/www/index-D6Rey2.js.gz",
+      "size": 73758
     },
     {
       "name": "index.html",
       "path": "/spiffs/www/index.html",
-      "size": 5220
+      "size": 5298
     },
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 2052
+      "size": 2060
+    },
+    {
+      "name": "LLc-6rSF.js.gz",
+      "path": "/spiffs/www/LLc-6rSF.js.gz",
+      "size": 237189
     },
     {
       "name": "logo.svg",

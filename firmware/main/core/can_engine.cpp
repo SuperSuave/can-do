@@ -2079,14 +2079,36 @@ void can_rx_task(void* arg) {
                 }
             }
 
-            // Charge Port Door (0x3AA)
-            if (rx_msg.identifier == 0x3AA && rx_msg.data_length_code >= 5) {
-                bool cp = (rx_msg.data[4] & 0x02);
-                static int s_last_cp = -1;
-                int cp_int = cp ? 1 : 0;
-                if (cp_int != s_last_cp) {
-                    s_last_cp = cp_int;
-                    emit_live_entity_state("charge_port", cp ? "Open" : "Closed");
+            // Charge Port Door (0x3AA Byte 3 / D4: 0x01 = Open, 0x02 = Closed)
+            if (rx_msg.identifier == 0x3AA && rx_msg.data_length_code >= 4) {
+                int cp_int = -1;
+                if (rx_msg.data[3] == 0x01) cp_int = 1;
+                else if (rx_msg.data[3] == 0x02) cp_int = 0;
+                if (cp_int >= 0) {
+                    static int s_last_cp = -1;
+                    if (cp_int != s_last_cp) {
+                        s_last_cp = cp_int;
+                        emit_live_entity_state("charge_port", cp_int ? "Open" : "Closed");
+                    }
+                }
+            }
+
+            // Power Tailgate Module Status (0x3A6 Byte 0 / D1 low nibble)
+            if (rx_msg.identifier == 0x3A6 && rx_msg.data_length_code >= 1) {
+                uint8_t ptgm = rx_msg.data[0] & 0x0F;
+                const char* ptgm_state = nullptr;
+                if (ptgm == 0x01) ptgm_state = "Fully Opened";
+                else if (ptgm == 0x02) ptgm_state = "Fully Closed & Latched";
+                else if (ptgm == 0x03) ptgm_state = "Opening in Motion";
+                else if (ptgm == 0x04) ptgm_state = "Closing in Motion";
+                else if (ptgm == 0x05) ptgm_state = "Stopped at Intermediate Position";
+                else if (ptgm == 0x08) ptgm_state = "Obstacle / Pinch Detected";
+                if (ptgm_state) {
+                    static const char* s_last_ptgm = nullptr;
+                    if (ptgm_state != s_last_ptgm) {
+                        s_last_ptgm = ptgm_state;
+                        emit_live_entity_state("ptgm_tailgate_status", ptgm_state);
+                    }
                 }
             }
 
@@ -2267,16 +2289,16 @@ void can_rx_task(void* arg) {
                 }
             }
 
-            // Cabin Target Temperatures (0x380)
+            // Cabin Target Temperatures (0x380: D2/D3 catalog primary, D5/D6 display fallback)
             if (rx_msg.identifier == 0x380 && rx_msg.data_length_code >= 4) {
                 int rawD = -1, rawP = -1;
-                for (int idx : {3, 4, 1}) {
+                for (int idx : {1, 4, 3}) {
                     if (rx_msg.data_length_code > idx && rx_msg.data[idx] >= 0x06 && rx_msg.data[idx] <= 0x1A) {
                         rawD = rx_msg.data[idx];
                         break;
                     }
                 }
-                for (int idx : {5, 6, 2}) {
+                for (int idx : {2, 5, 6}) {
                     if (rx_msg.data_length_code > idx && rx_msg.data[idx] >= 0x06 && rx_msg.data[idx] <= 0x1A) {
                         rawP = rx_msg.data[idx];
                         break;
@@ -2298,7 +2320,7 @@ void can_rx_task(void* arg) {
                 }
             }
 
-            // HVAC Blower Fan Speed (0x31B Byte 3)
+            // HVAC Blower Fan Speed, Airflow Direction & Recirculation (0x31B)
             if (rx_msg.identifier == 0x31B && rx_msg.data_length_code >= 4) {
                 uint8_t fan_raw = rx_msg.data[3] & 0x0F;
                 int speed = (fan_raw >= 2 && fan_raw <= 9) ? (fan_raw - 1) : 0;
@@ -2310,6 +2332,53 @@ void can_rx_task(void* arg) {
                     char fan_buf[16];
                     snprintf(fan_buf, sizeof(fan_buf), "Fan %d", speed);
                     emit_live_entity_state("climate_fan_speed_level", fan_buf);
+                }
+
+                uint8_t af_raw = rx_msg.data[3] & 0xF0;
+                const char* af_str = nullptr;
+                if (af_raw == 0x00) af_str = "Auto";
+                else if (af_raw == 0x10) af_str = "Body / Face Vents";
+                else if (af_raw == 0x20) af_str = "Body & Legs";
+                else if (af_raw == 0x30) af_str = "Legs / Floor Vents";
+                else if (af_raw == 0x40) af_str = "Legs & Windshield Defog";
+                if (af_str) {
+                    static const char* s_last_af = nullptr;
+                    if (af_str != s_last_af) {
+                        s_last_af = af_str;
+                        emit_live_entity_state("climate_airflow_direction", af_str);
+                    }
+                }
+
+                if (rx_msg.data_length_code >= 5) {
+                    int recirc_int = (rx_msg.data[4] & 0x40) ? 1 : 0;
+                    static int s_last_recirc = -1;
+                    if (recirc_int != s_last_recirc) {
+                        s_last_recirc = recirc_int;
+                        emit_live_entity_state("climate_recirc_on", recirc_int ? "ON" : "OFF");
+                    }
+                }
+            }
+
+            // Remote Climate Execution State (0x384 Byte 3 / D4 == 0x0A)
+            if (rx_msg.identifier == 0x384 && rx_msg.data_length_code >= 4) {
+                int rclim_int = (rx_msg.data[3] == 0x0A) ? 1 : 0;
+                static int s_last_rclim = -1;
+                if (rclim_int != s_last_rclim) {
+                    s_last_rclim = rclim_int;
+                    emit_live_entity_state("remote_climate_state", rclim_int ? "Remote Climate Active" : "Remote Climate Off");
+                }
+            }
+
+            // Exterior Power Mirrors / Welcome Unfold Setting (0x410 Byte 2 / D3 bits 0:1)
+            if (rx_msg.identifier == 0x410 && rx_msg.data_length_code >= 3) {
+                uint8_t wlight = rx_msg.data[2] & 0x03;
+                if (wlight == 0x00 || wlight == 0x02) {
+                    int m_int = (wlight == 0x00) ? 1 : 0;
+                    static int s_last_mirrors = -1;
+                    if (m_int != s_last_mirrors) {
+                        s_last_mirrors = m_int;
+                        emit_live_entity_state("power_mirrors", m_int ? "Fold" : "Unfold");
+                    }
                 }
             }
 
@@ -2335,7 +2404,7 @@ void can_rx_task(void* arg) {
                 }
             }
 
-            // Driver & Passenger Seat Heating / Ventilation (0x496 / 0x475 Byte 0)
+            // Driver & Passenger Seat Heating / Ventilation (0x496 Driver, 0x475/0x49C Passenger Byte 0)
             auto decode_seat_comfort = [](uint8_t b) -> const char* {
                 if (b == 0x46 || b == 0x02) return "High Heat";
                 if (b == 0x4E || b == 0x0A) return "Medium Heat";
@@ -2353,7 +2422,7 @@ void can_rx_task(void* arg) {
                     emit_live_entity_state("drivers_seat_comfort", lvl);
                 }
             }
-            if (rx_msg.identifier == 0x475 && rx_msg.data_length_code >= 1) {
+            if ((rx_msg.identifier == 0x475 || rx_msg.identifier == 0x49C) && rx_msg.data_length_code >= 1) {
                 const char* lvl = decode_seat_comfort(rx_msg.data[0]);
                 static const char* s_last_pass = nullptr;
                 if (lvl != s_last_pass) {
@@ -2362,23 +2431,23 @@ void can_rx_task(void* arg) {
                 }
             }
 
-            // Rear Heated Seats (0x438 Left, 0x453 Right)
+            // Rear Heated Seats (0x438 Left, 0x453 Right -> separate catalog entities)
             if (rx_msg.identifier == 0x438 && rx_msg.data_length_code >= 1) {
                 uint8_t b = rx_msg.data[0];
-                const char* lvl = (b == 0x41) ? "Rear Left High Heat" : (b == 0x31) ? "Rear Left Low Heat" : "Rear Left Off";
+                const char* lvl = (b == 0x41) ? "High Heat" : (b == 0x31) ? "Low Heat" : "Off";
                 static const char* s_last_rl = nullptr;
                 if (lvl != s_last_rl) {
                     s_last_rl = lvl;
-                    emit_live_entity_state("rear_seats_comfort", lvl);
+                    emit_live_entity_state("rear_left_seat_comfort", lvl);
                 }
             }
             if (rx_msg.identifier == 0x453 && rx_msg.data_length_code >= 1) {
                 uint8_t b = rx_msg.data[0];
-                const char* lvl = (b == 0x41) ? "Rear Right High Heat" : (b == 0x31) ? "Rear Right Low Heat" : "Rear Right Off";
+                const char* lvl = (b == 0x41) ? "High Heat" : (b == 0x31) ? "Low Heat" : "Off";
                 static const char* s_last_rr = nullptr;
                 if (lvl != s_last_rr) {
                     s_last_rr = lvl;
-                    emit_live_entity_state("rear_seats_comfort", lvl);
+                    emit_live_entity_state("rear_right_seat_comfort", lvl);
                 }
             }
 
