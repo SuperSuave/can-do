@@ -386,8 +386,8 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                         return 62 + (raw - 0x06)
                     return round(17.0 + (raw - 0x06) * 0.5, 1)
 
-        # 1D. Outdoor Ambient Temperature (0x226: Byte D4 = deg C + 40, [B3])
-        if "ambient_temp" in cid or cid == "cond_ambient_temperature" or (self.state_can_id.lower() == "0x226" and "temp" in cid):
+        # 1D. Outdoor Temperature (0x226: Byte D4 = deg C + 40, [B3])
+        if cid == "outdoor_temperature" or "ambient_temp" in cid or cid == "cond_ambient_temperature" or (self.state_can_id.lower() == "0x226" and "temp" in cid):
             if len(payload) >= 4:
                 raw = payload[3]
                 if 0 < raw < 255:

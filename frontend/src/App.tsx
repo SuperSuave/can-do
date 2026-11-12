@@ -473,6 +473,7 @@ export default function App() {
   const [selectedRole, setSelectedRole] = useState<CommandRole | 'all'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>('all');
+  const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<'grid' | 'grouped'>('grouped');
   const [expandAllSignal, setExpandAllSignal] = useState<number>(0);
   const [collapseAllSignal, setCollapseAllSignal] = useState<number>(0);
@@ -480,6 +481,7 @@ export default function App() {
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(() => !getUserPreferences().onboarding_completed);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>(() => getUserPreferences().vehicle_id || 'all');
   const [selectedMake, setSelectedMake] = useState<string>('all');
+  const [selectedModel, setSelectedModel] = useState<string>('all');
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
   const [selectedFeature, setSelectedFeature] = useState<string>('all');
 
@@ -704,7 +706,11 @@ export default function App() {
       }
 
       // Subcategory / Subsystem filter
-      if (selectedSubcategory !== 'all' && cmd.subcategory !== selectedSubcategory) {
+      if (selectedSubcategories.length > 0) {
+        if (!cmd.subcategory || !selectedSubcategories.includes(cmd.subcategory)) {
+          return false;
+        }
+      } else if (selectedSubcategory !== 'all' && cmd.subcategory !== selectedSubcategory) {
         return false;
       }
 
@@ -722,10 +728,11 @@ export default function App() {
         if (!isCmdCompatible(cmd, selectedVehicle)) {
           return false;
         }
-      } else if (selectedMake !== 'all' || selectedRegion !== 'all') {
-        // When filtering by Make or Region without a specific trim:
+      } else if (selectedMake !== 'all' || selectedModel !== 'all' || selectedRegion !== 'all') {
+        // When filtering by Make, Model, or Region without a specific trim:
         const candidateVehicles = catalog.vehicles.filter(v => {
           if (selectedMake !== 'all' && v.make !== selectedMake) return false;
+          if (selectedModel !== 'all' && v.model !== selectedModel) return false;
           if (selectedRegion !== 'all' && v.region !== selectedRegion) return false;
           return true;
         });
@@ -798,8 +805,10 @@ export default function App() {
     selectedRole,
     selectedCategory,
     selectedSubcategory,
+    selectedSubcategories,
     selectedVehicleId,
     selectedMake,
+    selectedModel,
     selectedRegion,
     selectedFeature
   ]);
@@ -1377,53 +1386,60 @@ export default function App() {
               <div className="space-y-5 sm:space-y-6 min-w-0">
                 {/* Filter and Search Bar */}
                 <CommandFilter
-              catalog={catalog}
-              search={search}
-              onSearchChange={setSearch}
-              selectedRole={selectedRole}
-              onRoleChange={setSelectedRole}
-              selectedCategory={selectedCategory}
-              onCategoryChange={setSelectedCategory}
-              selectedSubcategory={selectedSubcategory}
-              onSubcategoryChange={setSelectedSubcategory}
-              viewMode={viewMode}
-              onViewModeChange={setViewMode}
-              selectedVehicleId={selectedVehicleId}
-              onVehicleChange={setSelectedVehicleId}
-              selectedMake={selectedMake}
-              onMakeChange={setSelectedMake}
-              selectedRegion={selectedRegion}
-              onRegionChange={setSelectedRegion}
-              selectedFeature={selectedFeature}
-              onFeatureChange={setSelectedFeature}
-              onOpenCreateModal={() => {
-                setEditingCommand(null);
-                setIsEditorOpen(true);
-              }}
-              onOpenCategoryManager={() => setIsCategoryManagerOpen(true)}
-              onNavigateToVehicles={() => setCatalogSubTab('vehicles')}
-              filteredCount={filteredCommands.length}
-              totalCount={catalog.commands.length}
-              activeMainTab={activeMainTab}
-              onChangeMainTab={handleSetMainTab}
-              onExpandAll={() => setExpandAllSignal(s => s + 1)}
-              onCollapseAll={() => setCollapseAllSignal(s => s + 1)}
-            />
-
-            {/* Commands Rendering (Grouped by Subsystem vs Flat Grid) */}
-            {filteredCommands.length > 0 ? (
-              viewMode === 'grouped' ? (
-                <GroupedCommandView
-                  commands={filteredCommands}
+                  catalog={catalog}
+                  search={search}
+                  onSearchChange={setSearch}
+                  selectedRole={selectedRole}
+                  onRoleChange={setSelectedRole}
                   selectedCategory={selectedCategory}
-                  onSelectCommand={c => setSelectedCommand(c)}
-                  draftAddedIds={draftAddedIds}
-                  draftModifiedIds={draftModifiedIds}
-                  onSelectSubcategory={subcat => setSelectedSubcategory(subcat)}
-                  onAddToAutomation={handleAddToAutomation}
-                  expandAllSignal={expandAllSignal}
-                  collapseAllSignal={collapseAllSignal}
+                  onCategoryChange={setSelectedCategory}
+                  selectedSubcategory={selectedSubcategory}
+                  onSubcategoryChange={setSelectedSubcategory}
+                  selectedSubcategories={selectedSubcategories}
+                  onSubcategoriesChange={setSelectedSubcategories}
+                  viewMode={viewMode}
+                  onViewModeChange={setViewMode}
+                  selectedVehicleId={selectedVehicleId}
+                  onVehicleChange={setSelectedVehicleId}
+                  selectedMake={selectedMake}
+                  onMakeChange={setSelectedMake}
+                  selectedModel={selectedModel}
+                  onModelChange={setSelectedModel}
+                  selectedRegion={selectedRegion}
+                  onRegionChange={setSelectedRegion}
+                  selectedFeature={selectedFeature}
+                  onFeatureChange={setSelectedFeature}
+                  onOpenCreateModal={() => {
+                    setEditingCommand(null);
+                    setIsEditorOpen(true);
+                  }}
+                  onOpenCategoryManager={() => setIsCategoryManagerOpen(true)}
+                  onNavigateToVehicles={() => setCatalogSubTab('vehicles')}
+                  filteredCount={filteredCommands.length}
+                  totalCount={catalog.commands.length}
+                  activeMainTab={activeMainTab}
+                  onChangeMainTab={handleSetMainTab}
+                  onExpandAll={() => setExpandAllSignal(s => s + 1)}
+                  onCollapseAll={() => setCollapseAllSignal(s => s + 1)}
                 />
+
+                {/* Commands Rendering (Grouped by Subsystem vs Flat Grid) */}
+                {filteredCommands.length > 0 ? (
+                  viewMode === 'grouped' ? (
+                    <GroupedCommandView
+                      commands={filteredCommands}
+                      selectedCategory={selectedCategory}
+                      onSelectCommand={c => setSelectedCommand(c)}
+                      draftAddedIds={draftAddedIds}
+                      draftModifiedIds={draftModifiedIds}
+                      onSelectSubcategory={subcat => {
+                        setSelectedSubcategory(subcat);
+                        setSelectedSubcategories(subcat === 'all' ? [] : [subcat]);
+                      }}
+                      onAddToAutomation={handleAddToAutomation}
+                      expandAllSignal={expandAllSignal}
+                      collapseAllSignal={collapseAllSignal}
+                    />
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 min-w-0">
                   {filteredCommands.map(cmd => (
@@ -1453,8 +1469,10 @@ export default function App() {
                     setSelectedRole('all');
                     setSelectedCategory('all');
                     setSelectedSubcategory('all');
+                    setSelectedSubcategories([]);
                     setSelectedVehicleId('all');
                     setSelectedMake('all');
+                    setSelectedModel('all');
                     setSelectedRegion('all');
                     setSelectedFeature('all');
                   }}
@@ -1474,7 +1492,8 @@ export default function App() {
               const target = catalog.vehicles.find(v => v.id === vId);
               setSelectedVehicleId(vId);
               if (target) {
-                setSelectedMake(target.make);
+                setSelectedMake(target.make || 'Universal');
+                setSelectedModel(target.model);
                 setSelectedRegion(target.region);
               }
               setCatalogSubTab('messages');

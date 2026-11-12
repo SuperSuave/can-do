@@ -5,6 +5,7 @@ import {
   expandLinearScaleOptions,
   resolveVariant,
   resolveAllVariants,
+  formatPlatformFamily,
 } from './catalogUtils.js';
 import type { Command, CommandOption, Vehicle } from '../types/catalog.js';
 
@@ -300,4 +301,27 @@ test('resolveAllVariants maps resolveVariant across a list of commands', () => {
   assert.strictEqual(resolvedList.length, 2);
   assert.strictEqual(resolvedList[0].network?.action_can_id, '0xAAA');
   assert.strictEqual(resolvedList[1].id, 'cmd2');
+});
+
+test('formatPlatformFamily maps raw family slugs to friendly names', () => {
+  assert.strictEqual(formatPlatformFamily('kia_ev6'), 'EV6');
+  assert.strictEqual(formatPlatformFamily('hyundai_ioniq5'), 'Ioniq 5');
+  assert.strictEqual(formatPlatformFamily('hyundai_ioniq6'), 'Ioniq 6');
+  assert.strictEqual(formatPlatformFamily('genesis_gv60'), 'GV60');
+  assert.strictEqual(formatPlatformFamily('all_egmp'), 'All E-GMP');
+  assert.strictEqual(formatPlatformFamily('all'), 'All Platform Families');
+  assert.strictEqual(formatPlatformFamily(null), 'All Platform Families');
+  assert.strictEqual(formatPlatformFamily(undefined), 'All Platform Families');
+
+  // Dynamic derivation from catalog vehicles
+  const mockCatalog = {
+    vehicles: [
+      { id: 'v1', make: 'Rivian', model: 'R1T', trim: 'Adventure', region: 'us', family: 'rivian_r1t', features: [] }
+    ]
+  };
+  assert.strictEqual(formatPlatformFamily('rivian_r1t', mockCatalog as any), 'R1T');
+
+  // Fallback heuristic for unrecognized slugs
+  assert.strictEqual(formatPlatformFamily('kia_ev9'), 'EV9');
+  assert.strictEqual(formatPlatformFamily('custom_platform_slug'), 'Custom Platform Slug');
 });

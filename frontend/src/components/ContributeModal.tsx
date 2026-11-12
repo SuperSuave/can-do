@@ -140,44 +140,46 @@ export const ContributeModal: React.FC<ContributeModalProps> = ({
         <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
           <ModalDialog className="relative w-full max-w-3xl rounded-[16px] border border-border bg-overlay text-overlay-foreground shadow-overlay overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
             {/* Header */}
-            <ModalHeader className="flex items-start justify-between p-5 border-b border-separator bg-surface-secondary gap-0">
-              <div>
-                <div className="flex items-center gap-3">
-                  <div className="h-7 px-1.5 py-0.5 rounded-[8px] bg-surface-tertiary border border-border flex items-center justify-center">
-                    <CanDoLogo className="h-4.5 w-auto" />
+            <ModalHeader className="p-5 border-b border-separator bg-surface-secondary">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pr-12">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <div className="h-7 px-1.5 py-0.5 rounded-[8px] bg-surface-tertiary border border-border flex items-center justify-center shrink-0">
+                      <CanDoLogo className="h-4.5 w-auto" />
+                    </div>
+                    <ModalHeading className="text-lg md:text-xl font-bold text-foreground">
+                      Contribute to CAN Do Message Catalog
+                    </ModalHeading>
                   </div>
-                  <ModalHeading className="text-lg md:text-xl font-bold text-foreground">
-                    Contribute to CAN Do Message Catalog
-                  </ModalHeading>
+                  <p className="text-xs text-muted mt-1">
+                    Submit your proposed CAN messages to <code className="text-accent">{configState.owner}/{configState.repo}</code> on GitHub.
+                  </p>
                 </div>
-                <p className="text-xs text-muted mt-1">
-                  Submit your proposed CAN messages to <code className="text-accent">{configState.owner}/{configState.repo}</code> on GitHub.
-                </p>
-              </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onPress={() => setShowConfig(!showConfig)}
-              className="dash-outline-btn px-2.5 py-1 text-xs font-semibold flex items-center gap-1"
-              aria-label="Configure Target GitHub Repository"
-            >
-              <Settings className="w-4 h-4" />
-              <span className="hidden sm:inline">Repo Settings</span>
-            </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onPress={() => setShowConfig(!showConfig)}
+                  className="dash-outline-btn px-2.5 py-1 text-xs font-semibold flex items-center gap-1 shrink-0"
+                  aria-label="Configure Target GitHub Repository"
+                >
+                  <Settings className="w-4 h-4" />
+                  <span>Repo Settings</span>
+                </Button>
+              </div>
+            </ModalHeader>
+
+            {/* Upper Right Close Button */}
             <Button
               variant="ghost"
               size="sm"
               isIconOnly
               onPress={onClose}
               aria-label="Close modal"
-              className="p-1.5 text-muted hover:text-foreground rounded-full hover:bg-default-hover transition"
+              className="absolute top-4 right-4 z-20 !rounded-full w-8 h-8 flex items-center justify-center p-0 !bg-surface-secondary hover:!bg-surface-tertiary text-muted hover:text-foreground border border-border/50 shadow-sm transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </Button>
-          </div>
-        </ModalHeader>
 
         {/* Repository Settings Panel */}
         {showConfig && (

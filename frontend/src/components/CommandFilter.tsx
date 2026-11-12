@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Tabs, SearchField, Select, ListBox, ListBoxItem } from '@heroui/react';
 import { CommandRole, Catalog, Vehicle } from '../types/catalog';
 import { getAllKnownFeatures } from '../utils/canValidator';
@@ -9,6 +9,8 @@ import {
   X,
   Layers,
   Globe,
+  Check,
+  ChevronDown,
   CheckCircle2,
   Sparkles,
   ArrowRight,
@@ -30,12 +32,16 @@ interface CommandFilterProps {
   onCategoryChange: (cat: string) => void;
   selectedSubcategory?: string;
   onSubcategoryChange?: (subcat: string) => void;
+  selectedSubcategories?: string[];
+  onSubcategoriesChange?: (subs: string[]) => void;
   viewMode?: 'grid' | 'grouped';
   onViewModeChange?: (mode: 'grid' | 'grouped') => void;
   selectedVehicleId: string;
   onVehicleChange: (vId: string) => void;
   selectedMake?: string;
   onMakeChange?: (make: string) => void;
+  selectedModel?: string;
+  onModelChange?: (model: string) => void;
   selectedRegion?: string;
   onRegionChange?: (region: string) => void;
   selectedFeature?: string;
@@ -62,16 +68,20 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
   onCategoryChange,
   selectedSubcategory = 'all',
   onSubcategoryChange,
+  selectedSubcategories = [],
+  onSubcategoriesChange,
   viewMode = 'grid',
   onViewModeChange,
   selectedVehicleId,
   onVehicleChange,
   selectedMake = 'all',
-  onMakeChange = (_val: string) => {},
+  onMakeChange = (_val: string) => { },
+  selectedModel = 'all',
+  onModelChange = (_val: string) => { },
   selectedRegion = 'all',
-  onRegionChange = (_val: string) => {},
+  onRegionChange = (_val: string) => { },
   selectedFeature = 'all',
-  onFeatureChange = (_val: string) => {},
+  onFeatureChange = (_val: string) => { },
   onOpenCreateModal,
   onOpenCategoryManager,
   onOpenCanCapture,
@@ -83,6 +93,27 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
   onExpandAll,
   onCollapseAll
 }) => {
+  // State for Subsystems multi-select dropdown popover
+  const [isSubsystemsOpen, setIsSubsystemsOpen] = useState(false);
+  const subsystemsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isSubsystemsOpen) return;
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (subsystemsRef.current && !subsystemsRef.current.contains(e.target as Node)) {
+        setIsSubsystemsOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsSubsystemsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isSubsystemsOpen]);
   // Extract unique categories
   const categories = Array.from(new Set(catalog.commands.map(c => c.category))).sort();
 
@@ -104,14 +135,29 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
     return ['all', ...Array.from(makes).sort()];
   }, [catalog.vehicles]);
 
-  // Filter vehicles dropdown based on make & region
-  const availableVehicles = useMemo(() => {
+  // Available Models filtered by selected make & region
+  const availableModels = useMemo(() => {
+    const models = new Set(
+      catalog.vehicles
+        .filter(v => {
+          if (selectedMake !== 'all' && (v.make || 'Universal') !== selectedMake) return false;
+          if (selectedRegion !== 'all' && v.region !== selectedRegion) return false;
+          return true;
+        })
+        .map(v => v.model)
+    );
+    return Array.from(models).sort();
+  }, [catalog.vehicles, selectedMake, selectedRegion]);
+
+  // Available Trims filtered by selected make, model, & region
+  const availableTrims = useMemo(() => {
     return catalog.vehicles.filter(v => {
-      if (selectedMake !== 'all' && v.make !== selectedMake) return false;
+      if (selectedMake !== 'all' && (v.make || 'Universal') !== selectedMake) return false;
+      if (selectedModel !== 'all' && v.model !== selectedModel) return false;
       if (selectedRegion !== 'all' && v.region !== selectedRegion) return false;
       return true;
     });
-  }, [catalog.vehicles, selectedMake, selectedRegion]);
+  }, [catalog.vehicles, selectedMake, selectedModel, selectedRegion]);
 
   // Combined equipment features from catalog
   const featuresWithCommands = useMemo(() => {
@@ -160,6 +206,7 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
   const isVehicleFiltered =
     selectedVehicleId !== 'all' ||
     selectedMake !== 'all' ||
+    selectedModel !== 'all' ||
     selectedRegion !== 'all' ||
     selectedFeature !== 'all';
 
@@ -168,11 +215,13 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
     selectedRole !== 'all' ||
     selectedCategory !== 'all' ||
     selectedSubcategory !== 'all' ||
+    selectedSubcategories.length > 0 ||
     isVehicleFiltered;
 
   const handleResetVehicleFilters = () => {
     onVehicleChange('all');
     onMakeChange('all');
+    onModelChange('all');
     onRegionChange('all');
     onFeatureChange('all');
   };
@@ -182,26 +231,70 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
     onRoleChange('all');
     onCategoryChange('all');
     onSubcategoryChange?.('all');
+    onSubcategoriesChange?.([]);
     handleResetVehicleFilters();
   };
 
   const handleMakeSelectChange = (make: string) => {
     onMakeChange(make);
-    // If the currently selected vehicle is from a different make, reset vehicle selection
-    if (selectedVehicle && selectedVehicle.make !== make && make !== 'all') {
-      onVehicleChange('all');
+    if (make !== 'all') {
+      const makeModels = new Set(
+        catalog.vehicles.filter(v => (v.make || 'Universal') === make).map(v => v.model)
+      );
+      if (selectedModel !== 'all' && !makeModels.has(selectedModel)) {
+        onModelChange('all');
+        onVehicleChange('all');
+      } else if (selectedVehicle && (selectedVehicle.make || 'Universal') !== make) {
+        onVehicleChange('all');
+      }
     }
   };
 
-  const handleVehicleSelectChange = (vId: string) => {
+  const handleModelSelectChange = (model: string) => {
+    onModelChange(model);
+    if (model !== 'all') {
+      const matchingVehicles = catalog.vehicles.filter(v => v.model === model);
+      if (matchingVehicles.length > 0) {
+        const modelMake = matchingVehicles[0].make || 'Universal';
+        if (selectedMake === 'all' || selectedMake !== modelMake) {
+          onMakeChange(modelMake);
+        }
+      }
+      if (selectedVehicle && selectedVehicle.model !== model) {
+        onVehicleChange('all');
+      }
+    } else {
+      if (selectedVehicleId !== 'all') {
+        onVehicleChange('all');
+      }
+    }
+  };
+
+  const handleTrimSelectChange = (vId: string) => {
     onVehicleChange(vId);
     if (vId !== 'all') {
       const vehicle = catalog.vehicles.find(v => v.id === vId);
       if (vehicle) {
-        if (selectedMake !== 'all' && vehicle.make !== selectedMake) {
+        if (vehicle.make && selectedMake !== vehicle.make) {
           onMakeChange(vehicle.make);
         }
+        if (vehicle.model && selectedModel !== vehicle.model) {
+          onModelChange(vehicle.model);
+        }
+        if (vehicle.region && selectedRegion !== vehicle.region) {
+          onRegionChange(vehicle.region);
+        }
+        if (selectedFeature !== 'all' && !vehicle.features?.includes(selectedFeature)) {
+          onFeatureChange('all');
+        }
       }
+    }
+  };
+
+  const handleRegionSelectChange = (region: string) => {
+    onRegionChange(region);
+    if (selectedVehicle && selectedVehicle.region !== region && region !== 'all') {
+      onVehicleChange('all');
     }
   };
 
@@ -223,9 +316,37 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
                 Make: {selectedMake}
                 <button
                   type="button"
-                  onClick={() => onMakeChange('all')}
+                  onClick={() => handleMakeSelectChange('all')}
                   className="hover:text-foreground ml-0.5"
                   title="Clear make filter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {selectedModel !== 'all' && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-accent-soft text-accent-soft-foreground border border-accent/30 px-2 py-0.5 rounded-full">
+                Model: {selectedModel}
+                <button
+                  type="button"
+                  onClick={() => handleModelSelectChange('all')}
+                  className="hover:text-foreground ml-0.5"
+                  title="Clear model filter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {selectedVehicleId !== 'all' && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-accent-soft text-accent-soft-foreground border border-accent/30 px-2 py-0.5 rounded-full">
+                Trim: {selectedVehicle ? `${selectedVehicle.model} ${selectedVehicle.trim}` : selectedVehicleId}
+                <button
+                  type="button"
+                  onClick={() => handleTrimSelectChange('all')}
+                  className="hover:text-foreground ml-0.5"
+                  title="Clear trim filter"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -237,7 +358,7 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
                 Region: {selectedRegion.toUpperCase()}
                 <button
                   type="button"
-                  onClick={() => onRegionChange('all')}
+                  onClick={() => handleRegionSelectChange('all')}
                   className="hover:text-accent ml-0.5"
                   title="Clear region filter"
                 >
@@ -274,8 +395,8 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
           )}
         </div>
 
-        {/* 4 Coordinated Dropdowns matching the Vehicles Tab */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs min-w-0">
+        {/* 5 Coordinated Dropdowns: Make, Model, Trim, Region, Equipment Feature */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 text-xs min-w-0">
           {/* 1. Make Filter Dropdown */}
           <div className="relative min-w-0">
             <Select
@@ -284,7 +405,11 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
               aria-label="Filter by vehicle make"
               className="w-full min-w-0"
             >
-              <Select.Trigger className="w-full max-w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-accent transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer">
+              <Select.Trigger className={`w-full max-w-full px-3 py-2 rounded-[8px] bg-surface-secondary border transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer ${
+                selectedMake !== 'all'
+                  ? 'border-accent text-accent font-semibold'
+                  : 'border-border text-foreground focus:border-accent'
+              }`}>
                 <Select.Value className="truncate text-xs text-left" />
                 <Select.Indicator className="w-4 h-4 text-muted shrink-0" />
               </Select.Trigger>
@@ -303,12 +428,47 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
             </Select>
           </div>
 
-          {/* 2. Specific Vehicle Model & Trim Dropdown */}
+          {/* 2. Model Filter Dropdown */}
+          <div className="relative min-w-0">
+            <Select
+              selectedKey={selectedModel}
+              onSelectionChange={key => handleModelSelectChange(String(key))}
+              aria-label="Filter by vehicle model"
+              className="w-full min-w-0"
+            >
+              <Select.Trigger className={`w-full max-w-full px-3 py-2 rounded-[8px] bg-surface-secondary border transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer ${
+                selectedModel !== 'all'
+                  ? 'border-accent text-accent font-semibold'
+                  : 'border-border text-foreground focus:border-accent'
+              }`}>
+                <Select.Value className="truncate text-xs text-left" />
+                <Select.Indicator className="w-4 h-4 text-muted shrink-0" />
+              </Select.Trigger>
+              <Select.Popover className="min-w-[var(--trigger-width)] bg-overlay border border-border rounded-lg shadow-overlay z-50 p-1 max-h-60 overflow-y-auto">
+                <ListBox className="outline-none space-y-0.5">
+                  <ListBoxItem
+                    id="all"
+                    textValue={selectedMake !== 'all' ? `All ${selectedMake} Models (${availableModels.length})` : `All Models (${availableModels.length})`}
+                    className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none"
+                  >
+                    {selectedMake !== 'all' ? `All ${selectedMake} Models (${availableModels.length})` : `All Models (${availableModels.length})`}
+                  </ListBoxItem>
+                  {availableModels.map(model => (
+                    <ListBoxItem key={model} id={model} textValue={model} className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none">
+                      {model}
+                    </ListBoxItem>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+            </Select>
+          </div>
+
+          {/* 3. Trim Filter Dropdown */}
           <div className="relative min-w-0">
             <Select
               selectedKey={selectedVehicleId}
-              onSelectionChange={key => handleVehicleSelectChange(String(key))}
-              aria-label="Filter by specific vehicle model & trim"
+              onSelectionChange={key => handleTrimSelectChange(String(key))}
+              aria-label="Filter by specific vehicle trim"
               className="w-full min-w-0"
             >
               <Select.Trigger
@@ -325,15 +485,25 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
                 <ListBox className="outline-none space-y-0.5">
                   <ListBoxItem
                     id="all"
-                    textValue={selectedMake !== 'all' ? `Any ${selectedMake} Model (${availableVehicles.length})` : `Any Specific Model Trim (${catalog.vehicles.length})`}
+                    textValue={
+                      selectedModel !== 'all'
+                        ? `Any ${selectedModel} Trim (${availableTrims.length})`
+                        : selectedMake !== 'all'
+                          ? `Any ${selectedMake} Trim (${availableTrims.length})`
+                          : `Any Specific Trim (${catalog.vehicles.length})`
+                    }
                     className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none"
                   >
-                    {selectedMake !== 'all'
-                      ? `Any ${selectedMake} Model (${availableVehicles.length})`
-                      : `Any Specific Model Trim (${catalog.vehicles.length})`}
+                    {selectedModel !== 'all'
+                      ? `Any ${selectedModel} Trim (${availableTrims.length})`
+                      : selectedMake !== 'all'
+                        ? `Any ${selectedMake} Trim (${availableTrims.length})`
+                        : `Any Specific Trim (${catalog.vehicles.length})`}
                   </ListBoxItem>
-                  {availableVehicles.map(v => {
-                    const label = `${v.make !== selectedMake ? `${v.make} ` : ''}${v.model} (${v.trim}) [${v.region.toUpperCase()}]`;
+                  {availableTrims.map(v => {
+                    const label = selectedModel !== 'all'
+                      ? `${v.trim} [${v.region.toUpperCase()}]`
+                      : `${v.make !== selectedMake ? `${v.make} ` : ''}${v.model} (${v.trim}) [${v.region.toUpperCase()}]`;
                     return (
                       <ListBoxItem key={v.id} id={v.id} textValue={label} className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none">
                         {label}
@@ -345,15 +515,19 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
             </Select>
           </div>
 
-          {/* 3. Region Filter Dropdown */}
+          {/* 4. Region Filter Dropdown */}
           <div className="relative min-w-0">
             <Select
               selectedKey={selectedRegion}
-              onSelectionChange={key => onRegionChange(String(key))}
+              onSelectionChange={key => handleRegionSelectChange(String(key))}
               aria-label="Filter by region"
               className="w-full min-w-0"
             >
-              <Select.Trigger className="w-full max-w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-accent transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer">
+              <Select.Trigger className={`w-full max-w-full px-3 py-2 rounded-[8px] bg-surface-secondary border transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer ${
+                selectedRegion !== 'all'
+                  ? 'border-accent text-accent font-semibold'
+                  : 'border-border text-foreground focus:border-accent'
+              }`}>
                 <Select.Value className="truncate text-xs text-left" />
                 <Select.Indicator className="w-4 h-4 text-muted shrink-0" />
               </Select.Trigger>
@@ -379,7 +553,7 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
             </Select>
           </div>
 
-          {/* 4. Equipment / Feature Filter Dropdown */}
+          {/* 5. Equipment / Feature Filter Dropdown */}
           <div className="relative min-w-0">
             <Select
               selectedKey={selectedFeature}
@@ -388,11 +562,10 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
               className="w-full min-w-0"
             >
               <Select.Trigger
-                className={`w-full max-w-full px-3 py-2 rounded-[8px] bg-surface-secondary border focus:outline-none transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer ${
-                  selectedFeature !== 'all'
-                    ? 'border-success text-success font-semibold'
-                    : 'border-border text-foreground focus:border-accent'
-                }`}
+                className={`w-full max-w-full px-3 py-2 rounded-[8px] bg-surface-secondary border focus:outline-none transition min-w-0 text-xs flex items-center justify-between gap-1.5 cursor-pointer ${selectedFeature !== 'all'
+                  ? 'border-success text-success font-semibold'
+                  : 'border-border text-foreground focus:border-accent'
+                  }`}
               >
                 <Select.Value className="truncate text-xs text-left" />
                 <Select.Indicator className="w-4 h-4 text-muted shrink-0" />
@@ -420,132 +593,58 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
             </Select>
           </div>
         </div>
-
-        {/* Active Selected Vehicle Banner (When a specific vehicle trim is selected) */}
-        {selectedVehicle && (
-          <div className="mt-2.5 pt-2.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 bg-accent-soft p-3 rounded-lg border border-accent/30">
-            <div className="flex items-start gap-3 min-w-0">
-              <div className="p-2 rounded-lg bg-accent/15 border border-accent/30 text-accent shrink-0 mt-0.5">
-                <Car className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-bold text-foreground">
-                    {selectedVehicle.make} {selectedVehicle.model}
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-accent/20 text-accent-soft-foreground border border-accent/40">
-                    {selectedVehicle.trim}
-                  </span>
-                  <span className="px-1.5 py-0.2 rounded text-[10px] font-mono uppercase bg-surface-secondary text-foreground border border-border">
-                    {selectedVehicle.region}
-                  </span>
-                  <span className="text-[11px] text-muted font-mono">
-                    family: {selectedVehicle.family}
-                  </span>
-                </div>
-
-                {/* Equipped features on this vehicle */}
-                <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                  <span className="text-[11px] text-muted">Equipped:</span>
-                  {selectedVehicle.features.map(f => {
-                    const isFeatureSelected = selectedFeature === f;
-                    return (
-                      <button
-                        key={f}
-                        type="button"
-                        onClick={() => onFeatureChange(isFeatureSelected ? 'all' : f)}
-                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded transition ${
-                          isFeatureSelected
-                            ? 'bg-success text-success-foreground font-bold ring-2 ring-success/50'
-                            : 'bg-surface-secondary hover:bg-surface-tertiary text-foreground border border-border'
-                        }`}
-                        title={isFeatureSelected ? 'Click to clear feature filter' : `Filter commands requiring ${f}`}
-                      >
-                        {f}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 self-end md:self-center shrink-0">
-              <span className="text-xs font-mono text-accent-soft-foreground bg-surface-secondary px-2.5 py-1 rounded border border-accent/30">
-                <strong>{filteredCount}</strong> compatible
-              </span>
-              {onNavigateToVehicles && (
-                <button
-                  type="button"
-                  onClick={onNavigateToVehicles}
-                  className="dash-outline-btn text-xs py-1.5 px-3 inline-flex items-center gap-1"
-                  title="Inspect this vehicle in the Vehicles tab"
-                >
-                  <span>Specs</span>
-                  <ArrowRight className="w-3 h-3 text-accent" />
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => onVehicleChange('all')}
-                className="text-xs py-1.5 px-2.5 rounded-md bg-surface-secondary hover:bg-surface-tertiary text-muted hover:text-danger border border-border inline-flex items-center gap-1 transition"
-                title="Clear vehicle selection"
-              >
-                <X className="w-3.5 h-3.5" />
-                <span>Clear</span>
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* 2. MIDDLE: Streamlined Taxonomy & View Deck (Unified Rows 2 & 3) */}
-      <div className="space-y-2">
+      {/* 2. MIDDLE: Streamlined Taxonomy & View Deck */}
+      <div>
         {/* Main Taxonomy Controls Bar */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 min-w-0 bg-surface p-2 sm:p-2.5 rounded-xl border border-border">
-          {/* Left: View Switching & Role Segmentation */}
+          {/* Left: Role Filter Tabs (Styled to match Messages/Vehicles tabs without scroller clipping) */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 min-w-0">
-            {/* Role Filter Pills */}
-            <div className="flex flex-wrap items-center gap-1 p-1 rounded-full bg-surface-secondary border border-border text-xs">
+            <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-default border border-border shrink-0">
               <button
                 type="button"
                 onClick={() => onRoleChange('all')}
-                className={`px-2.5 sm:px-3 py-1 rounded-full font-semibold transition text-[11px] sm:text-xs ${
+                className={`relative flex items-center px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
                   selectedRole === 'all'
-                    ? 'bg-surface-tertiary text-foreground shadow-sm border border-border'
-                    : 'text-muted hover:text-foreground'
+                    ? 'bg-segment border border-border shadow-sm text-segment-foreground'
+                    : 'text-muted hover:text-foreground hover:bg-surface-secondary/50 border border-transparent'
                 }`}
               >
                 All Roles
               </button>
+
               <button
                 type="button"
                 onClick={() => onRoleChange('trigger')}
-                className={`px-2.5 sm:px-3 py-1 rounded-full font-semibold transition text-[11px] sm:text-xs ${
+                className={`relative flex items-center px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
                   selectedRole === 'trigger'
-                    ? 'trig-pill'
-                    : 'text-muted hover:text-warning'
+                    ? 'bg-segment border border-border shadow-sm text-warning font-bold'
+                    : 'text-muted hover:text-warning hover:bg-surface-secondary/50 border border-transparent'
                 }`}
               >
                 Triggers
               </button>
+
               <button
                 type="button"
                 onClick={() => onRoleChange('condition')}
-                className={`px-2.5 sm:px-3 py-1 rounded-full font-semibold transition text-[11px] sm:text-xs ${
+                className={`relative flex items-center px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
                   selectedRole === 'condition'
-                    ? 'cond-pill'
-                    : 'text-muted hover:text-accent'
+                    ? 'bg-segment border border-border shadow-sm text-accent font-bold'
+                    : 'text-muted hover:text-accent hover:bg-surface-secondary/50 border border-transparent'
                 }`}
               >
                 Conditions
               </button>
+
               <button
                 type="button"
                 onClick={() => onRoleChange('action')}
-                className={`px-2.5 sm:px-3 py-1 rounded-full font-semibold transition text-[11px] sm:text-xs ${
+                className={`relative flex items-center px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
                   selectedRole === 'action'
-                    ? 'act-pill'
-                    : 'text-muted hover:text-success'
+                    ? 'bg-segment border border-border shadow-sm text-success font-bold'
+                    : 'text-muted hover:text-success hover:bg-surface-secondary/50 border border-transparent'
                 }`}
               >
                 Actions
@@ -553,30 +652,31 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
             </div>
           </div>
 
-          {/* Right: Category Dropdown, View Mode & Result Metrics */}
+          {/* Right: Category Dropdown, Subsystems Multi-Select, View Mode & Result Metrics */}
           <div className="flex flex-wrap items-center justify-between sm:justify-start lg:justify-end gap-2 text-xs w-full lg:w-auto min-w-0">
             {/* Category Dropdown */}
-            <div className="relative flex-1 sm:flex-initial min-w-[140px] max-w-full">
+            <div className="relative flex-1 sm:flex-initial min-w-[130px] max-w-full">
               <Select
                 selectedKey={selectedCategory}
                 onSelectionChange={key => {
                   onCategoryChange(String(key));
                   onSubcategoryChange?.('all');
+                  onSubcategoriesChange?.([]);
                 }}
                 aria-label="Filter by category"
                 className="w-full min-w-0"
               >
-                <Select.Trigger className="w-full px-3 py-1.5 rounded-[8px] bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-accent text-xs min-w-0 flex items-center justify-between gap-1.5 cursor-pointer">
+                <Select.Trigger className="w-full h-9 px-3 rounded-xl bg-default border border-border text-foreground focus:outline-none focus:border-focus text-xs min-w-0 flex items-center justify-between gap-1.5 cursor-pointer transition hover:border-accent/40">
                   <Select.Value className="truncate text-xs text-left" />
-                  <Select.Indicator className="w-4 h-4 text-muted shrink-0" />
+                  <Select.Indicator className="w-3.5 h-3.5 text-muted shrink-0" />
                 </Select.Trigger>
-                <Select.Popover className="min-w-[var(--trigger-width)] bg-overlay border border-border rounded-lg shadow-overlay z-50 p-1 max-h-60 overflow-y-auto">
+                <Select.Popover className="min-w-[var(--trigger-width)] bg-overlay border border-border rounded-xl shadow-overlay z-50 p-1 max-h-60 overflow-y-auto">
                   <ListBox className="outline-none space-y-0.5">
-                    <ListBoxItem id="all" textValue={`All Categories (${categories.length})`} className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none">
+                    <ListBoxItem id="all" textValue={`All Categories (${categories.length})`} className="px-2.5 py-1.5 text-xs rounded-lg hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none">
                       All Categories ({categories.length})
                     </ListBoxItem>
                     {categories.map(cat => (
-                      <ListBoxItem key={cat} id={cat} textValue={cat} className="px-2.5 py-1.5 text-xs rounded hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none">
+                      <ListBoxItem key={cat} id={cat} textValue={cat} className="px-2.5 py-1.5 text-xs rounded-lg hover:bg-surface-secondary text-overlay-foreground cursor-pointer outline-none">
                         {cat}
                       </ListBoxItem>
                     ))}
@@ -585,45 +685,150 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
               </Select>
             </div>
 
-            {/* View Mode Toggle: Grid vs Grouped */}
-            {onViewModeChange && (
-              <Tabs
-                selectedKey={viewMode}
-                onSelectionChange={key => onViewModeChange(key as 'grid' | 'grouped')}
-                aria-label="View Mode"
+            {/* Subsystems Multi-Select Dropdown (Directly next to Category Dropdown) */}
+            <div className="relative flex-1 sm:flex-initial min-w-[150px] max-w-full" ref={subsystemsRef}>
+              <button
+                type="button"
+                onClick={() => setIsSubsystemsOpen(prev => !prev)}
+                aria-expanded={isSubsystemsOpen}
+                aria-label="Filter by subsystems"
+                className={`w-full h-9 px-3 rounded-xl bg-default border text-xs min-w-0 flex items-center justify-between gap-1.5 cursor-pointer transition hover:border-accent/40 ${
+                  selectedSubcategories.length > 0
+                    ? 'border-accent text-accent font-semibold bg-accent-soft/20'
+                    : 'border-border text-foreground'
+                }`}
               >
-                <Tabs.ListContainer className="p-0.5 rounded-lg bg-default border border-border text-xs shrink-0">
-                  <Tabs.List className="gap-0.5">
-                    <Tabs.Tab
-                      id="grid"
-                      className={`relative px-2 py-1 rounded font-semibold transition cursor-pointer flex items-center gap-1 text-[11px] ${
-                        viewMode === 'grid'
-                          ? 'text-accent'
-                          : 'text-muted hover:text-accent'
-                      }`}
-                      aria-label="Standard Grid View"
-                    >
-                      <LayoutGrid className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Grid</span>
-                      <Tabs.Indicator className="rounded bg-accent-soft border border-accent/50 shadow-sm" />
-                    </Tabs.Tab>
+                <div className="flex items-center gap-1.5 truncate">
+                  <Layers className={`w-3.5 h-3.5 shrink-0 ${selectedSubcategories.length > 0 ? 'text-accent' : 'text-muted'}`} />
+                  <span className="truncate">
+                    {selectedSubcategories.length === 0
+                      ? `All Subsystems (${availableSubcategories.length})`
+                      : selectedSubcategories.length === 1
+                        ? selectedSubcategories[0]
+                        : `${selectedSubcategories.length} Subsystems`}
+                  </span>
+                </div>
+                <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${
+                  isSubsystemsOpen ? 'rotate-180 text-foreground' : 'text-muted'
+                }`} />
+              </button>
 
-                    <Tabs.Tab
-                      id="grouped"
-                      className={`relative px-2 py-1 rounded font-semibold transition cursor-pointer flex items-center gap-1 text-[11px] ${
-                        viewMode === 'grouped'
-                          ? 'text-accent'
-                          : 'text-muted hover:text-accent'
-                      }`}
-                      aria-label="Group commands by subsystem & function"
-                    >
-                      <FolderKanban className="w-3.5 h-3.5" />
-                      <span>Grouped</span>
-                      <Tabs.Indicator className="rounded bg-accent-soft border border-accent/50 shadow-sm" />
-                    </Tabs.Tab>
-                  </Tabs.List>
-                </Tabs.ListContainer>
-              </Tabs>
+              {isSubsystemsOpen && (
+                <div className="absolute right-0 sm:right-auto sm:left-0 top-full mt-1.5 w-64 max-w-[calc(100vw-2rem)] bg-overlay border border-border rounded-xl shadow-overlay z-50 p-2 space-y-2 text-overlay-foreground">
+                  {/* Top Header & Actions */}
+                  <div className="flex items-center justify-between pb-1.5 border-b border-separator text-xs">
+                    <span className="font-semibold text-muted text-[11px] uppercase tracking-wider">
+                      {selectedSubcategories.length > 0
+                        ? `${selectedSubcategories.length} of ${availableSubcategories.length} selected`
+                        : `All Subsystems (${availableSubcategories.length})`}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {selectedSubcategories.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSubcategoriesChange?.([]);
+                            onSubcategoryChange?.('all');
+                          }}
+                          className="text-[11px] text-accent hover:underline font-semibold cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSubcategoriesChange?.([...availableSubcategories]);
+                            onSubcategoryChange?.('all');
+                          }}
+                          className="text-[11px] text-accent hover:underline font-semibold cursor-pointer"
+                        >
+                          Select All
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Subsystems List */}
+                  <div className="max-h-60 overflow-y-auto space-y-0.5 custom-scrollbar pr-0.5">
+                    {availableSubcategories.map(subcat => {
+                      const isSelected = selectedSubcategories.includes(subcat);
+                      const count = catalog.commands.filter(
+                        c => (selectedCategory === 'all' || c.category === selectedCategory) && c.subcategory === subcat
+                      ).length;
+
+                      return (
+                        <button
+                          key={subcat}
+                          type="button"
+                          onClick={() => {
+                            let next: string[];
+                            if (isSelected) {
+                              next = selectedSubcategories.filter(s => s !== subcat);
+                            } else {
+                              next = [...selectedSubcategories, subcat];
+                            }
+                            onSubcategoriesChange?.(next);
+                            onSubcategoryChange?.('all');
+                          }}
+                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer text-left ${
+                            isSelected
+                              ? 'bg-accent-soft text-accent font-semibold'
+                              : 'hover:bg-surface-secondary text-overlay-foreground'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`w-4 h-4 rounded flex items-center justify-center border transition shrink-0 ${
+                              isSelected
+                                ? 'bg-accent border-accent text-accent-foreground'
+                                : 'border-border bg-field'
+                            }`}>
+                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                            </div>
+                            <span className="truncate">{subcat}</span>
+                          </div>
+                          <span className="text-[10px] font-mono text-muted shrink-0 ml-2">
+                            ({count})
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* View Mode Toggle: Grid vs Grouped (Styled matching Messages/Vehicles tabs without scroller clipping) */}
+            {onViewModeChange && (
+              <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-default border border-border shrink-0">
+                <button
+                  type="button"
+                  onClick={() => onViewModeChange('grid')}
+                  aria-label="Standard Grid View"
+                  className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                    viewMode === 'grid'
+                      ? 'bg-segment border border-border shadow-sm text-segment-foreground'
+                      : 'text-muted hover:text-foreground hover:bg-surface-secondary/50 border border-transparent'
+                  }`}
+                >
+                  <LayoutGrid className={`w-3.5 h-3.5 ${viewMode === 'grid' ? 'text-accent' : 'text-muted'}`} />
+                  <span className="hidden sm:inline">Grid</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onViewModeChange('grouped')}
+                  aria-label="Group commands by subsystem & function"
+                  className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                    viewMode === 'grouped'
+                      ? 'bg-segment border border-border shadow-sm text-segment-foreground'
+                      : 'text-muted hover:text-foreground hover:bg-surface-secondary/50 border border-transparent'
+                  }`}
+                >
+                  <FolderKanban className={`w-3.5 h-3.5 ${viewMode === 'grouped' ? 'text-accent' : 'text-muted'}`} />
+                  <span>Grouped</span>
+                </button>
+              </div>
             )}
 
             {/* Stats & Reset Filter */}
@@ -632,61 +837,19 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
                 <button
                   type="button"
                   onClick={handleResetAllFilters}
-                  className="text-xs text-accent hover:underline px-1.5 py-0.5 flex items-center gap-1 font-medium"
+                  className="h-9 px-2.5 rounded-xl text-xs text-accent hover:text-accent-hover hover:bg-surface-secondary flex items-center gap-1 font-semibold transition cursor-pointer"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="w-3.5 h-3.5" />
                   <span>Reset</span>
                 </button>
               )}
 
-              <span className="text-muted font-mono text-[11px] bg-surface-secondary px-2 py-1 rounded border border-border shrink-0">
+              <span className="h-9 px-3 rounded-xl bg-default border border-border text-muted font-mono text-xs flex items-center justify-center shrink-0">
                 {filteredCount}/{totalCount}
               </span>
             </div>
           </div>
         </div>
-
-        {/* Subsystem / Subcategory Chips Bar (Integrated directly beneath Category) */}
-        {availableSubcategories.length > 0 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 px-1 text-xs min-w-0">
-            <span className="text-muted text-[11px] font-medium flex items-center gap-1 shrink-0 mr-1">
-              <Layers className="w-3.5 h-3.5 text-accent" />
-              <span className="hidden sm:inline">Subsystems:</span>
-            </span>
-            <button
-              type="button"
-              onClick={() => onSubcategoryChange?.('all')}
-              className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium shrink-0 transition ${
-                selectedSubcategory === 'all'
-                  ? 'bg-accent-soft text-accent-soft-foreground border border-accent/40 font-semibold'
-                  : 'bg-surface text-muted hover:text-foreground border border-border'
-              }`}
-            >
-              All Subsystems
-            </button>
-            {availableSubcategories.map(subcat => {
-              const count = catalog.commands.filter(
-                c => (selectedCategory === 'all' || c.category === selectedCategory) && c.subcategory === subcat
-              ).length;
-              const isSelected = selectedSubcategory === subcat;
-              return (
-                <button
-                  key={subcat}
-                  type="button"
-                  onClick={() => onSubcategoryChange?.(isSelected ? 'all' : subcat)}
-                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium shrink-0 transition flex items-center gap-1.5 ${
-                    isSelected
-                      ? 'bg-accent/20 text-accent-soft-foreground border border-accent/60 font-semibold shadow-sm'
-                      : 'bg-surface text-muted hover:text-foreground border border-border'
-                  }`}
-                >
-                  <span>{subcat}</span>
-                  <span className="text-[10px] opacity-75 font-mono">({count})</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* 3. BOTTOM: Search & Primary Action Row (Right above the Command Cards) */}

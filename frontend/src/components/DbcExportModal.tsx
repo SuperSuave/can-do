@@ -9,7 +9,8 @@ import {
   ModalHeader,
   ModalHeading,
   ModalBody,
-  ModalFooter
+  ModalFooter,
+  Button
 } from '@heroui/react';
 import { Catalog } from '../types/catalog';
 import { exportToDbc } from '../utils/dbcConverter';
@@ -105,9 +106,9 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
         <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
           <ModalDialog className="relative w-full max-w-4xl rounded-[16px] border border-border bg-overlay text-overlay-foreground shadow-overlay overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
             {/* Header */}
-            <ModalHeader className="flex items-center justify-between p-5 border-b border-separator bg-surface shrink-0 gap-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-accent-soft border border-accent/30 flex items-center justify-center text-accent">
+            <ModalHeader className="p-5 border-b border-separator bg-surface shrink-0">
+              <div className="flex items-center gap-3 pr-10">
+                <div className="w-10 h-10 rounded-xl bg-accent-soft border border-accent/30 flex items-center justify-center text-accent shrink-0">
                   <FileCode className="w-5 h-5" />
                 </div>
                 <div>
@@ -122,13 +123,19 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
                   </p>
                 </div>
               </div>
-              <button
-                onClick={onClose}
-                className="p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-default-hover transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
             </ModalHeader>
+
+            {/* Upper Right Close Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              isIconOnly
+              onPress={onClose}
+              aria-label="Close modal"
+              className="absolute top-4 right-4 z-20 !rounded-full w-8 h-8 flex items-center justify-center p-0 !bg-surface-secondary hover:!bg-surface-tertiary text-muted hover:text-foreground border border-border/50 shadow-sm transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </Button>
 
         {/* Filter Toolbar */}
         <div className="p-4 border-b border-separator bg-surface-secondary grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs shrink-0">

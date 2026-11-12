@@ -527,12 +527,12 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
     >
       <div
         onClick={e => e.stopPropagation()}
-        className={`w-full max-w-2xl bg-overlay text-overlay-foreground border border-border rounded-2xl shadow-overlay overflow-hidden flex flex-col max-h-[88vh] transition-all duration-200 ease-out transform ${
+        className={`relative w-full max-w-2xl bg-overlay text-overlay-foreground border border-border rounded-2xl shadow-overlay overflow-hidden flex flex-col max-h-[88vh] transition-all duration-200 ease-out transform ${
           isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-3'
         }`}
       >
         {/* Header */}
-        <div className="p-4 border-b border-separator flex items-center justify-between gap-3 bg-surface">
+        <div className="p-4 border-b border-separator flex items-center justify-between gap-3 bg-surface pr-12">
           <div className="flex items-center gap-2.5">
             <span className={`px-2 py-0.5 rounded-full font-bold uppercase text-[10px] tracking-wider border font-mono ${typeConfig.pillClass}`}>
               {typeConfig.pillText}
@@ -546,14 +546,17 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleClose}
-            className="text-muted hover:text-foreground p-1.5 rounded-lg hover:bg-default-hover transition"
-          >
-            <X className="w-4 h-4" />
-          </button>
         </div>
+
+        {/* Upper Right Close Button */}
+        <button
+          type="button"
+          onClick={handleClose}
+          aria-label="Close modal"
+          className="absolute top-3.5 right-3.5 z-20 w-8 h-8 rounded-full bg-surface-secondary hover:bg-surface-tertiary text-muted hover:text-foreground flex items-center justify-center transition border border-border/50 shadow-sm"
+        >
+          <X className="w-4 h-4" />
+        </button>
 
         {/* Search Bar & Nav Filter */}
         <div className="p-3 border-b border-separator bg-surface flex flex-col sm:flex-row gap-2">
@@ -588,7 +591,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
                 <Tabs.List className="gap-0.5">
                   <Tabs.Tab
                     id="all"
-                    className={`relative px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+                    className={`relative px-2.5 py-1 rounded-lg font-medium transition cursor-pointer whitespace-nowrap shrink-0 ${
                       activeTab === 'all'
                         ? 'text-accent-foreground font-semibold'
                         : 'text-muted hover:text-foreground'
@@ -600,7 +603,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
 
                   <Tabs.Tab
                     id="blocks"
-                    className={`relative px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+                    className={`relative px-2.5 py-1 rounded-lg font-medium transition cursor-pointer whitespace-nowrap shrink-0 ${
                       activeTab === 'blocks'
                         ? 'text-accent-foreground font-semibold'
                         : 'text-muted hover:text-foreground'
@@ -612,7 +615,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
 
                   <Tabs.Tab
                     id="catalog"
-                    className={`relative px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+                    className={`relative px-2.5 py-1 rounded-lg font-medium transition cursor-pointer whitespace-nowrap shrink-0 ${
                       activeTab === 'catalog'
                         ? 'text-accent-foreground font-semibold'
                         : 'text-muted hover:text-foreground'

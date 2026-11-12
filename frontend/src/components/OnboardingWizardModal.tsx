@@ -14,6 +14,7 @@ import {
 import { Catalog, Vehicle } from '../types/catalog';
 import { UserPreferences, UpdatePolicy, DEFAULT_USER_PREFERENCES } from '../types/settings';
 import { isRunningOnDevice } from '../utils/hostUtils';
+import { formatPlatformFamily } from '../utils/catalogUtils';
 import { STANDARD_TIMEZONES, detectBrowserTimezone, getTimezoneLabel } from '../utils/timezone';
 import {
   Car,
@@ -74,6 +75,50 @@ export function OnboardingWizardModal({
     return catalog.vehicles?.find((v) => v.id === vehicleId) || catalog.vehicles?.[0];
   }, [catalog.vehicles, vehicleId]);
 
+  const selectedMake = selectedVehicle?.make || 'Universal';
+  const selectedModel = selectedVehicle?.model || '';
+
+  // 1. Available Makes
+  const availableMakes = useMemo(() => {
+    const makes = new Set(catalog.vehicles?.map(v => v.make || 'Universal') || []);
+    return Array.from(makes).sort();
+  }, [catalog.vehicles]);
+
+  // 2. Available Models for current Make
+  const availableModels = useMemo(() => {
+    const models = new Set(
+      catalog.vehicles
+        ?.filter(v => (v.make || 'Universal') === selectedMake)
+        .map(v => v.model) || []
+    );
+    return Array.from(models).sort();
+  }, [catalog.vehicles, selectedMake]);
+
+  // 3. Available Trims for current Make & Model
+  const availableTrims = useMemo(() => {
+    return (
+      catalog.vehicles?.filter(
+        v => (v.make || 'Universal') === selectedMake && v.model === selectedModel
+      ) || []
+    );
+  }, [catalog.vehicles, selectedMake, selectedModel]);
+
+  const handleMakeChange = (newMake: string) => {
+    const candidates = catalog.vehicles?.filter(v => (v.make || 'Universal') === newMake) || [];
+    if (candidates.length === 0) return;
+    const matchingModel = candidates.find(v => v.model === selectedModel);
+    setVehicleId((matchingModel || candidates[0]).id);
+  };
+
+  const handleModelChange = (newModel: string) => {
+    const candidates = catalog.vehicles?.filter(
+      v => (v.make || 'Universal') === selectedMake && v.model === newModel
+    ) || [];
+    if (candidates.length === 0) return;
+    const matchingTrim = candidates.find(v => v.trim === selectedVehicle?.trim);
+    setVehicleId((matchingTrim || candidates[0]).id);
+  };
+
   if (!isOpen) return null;
 
   const handleFinish = () => {
@@ -125,9 +170,9 @@ export function OnboardingWizardModal({
                 onClick={onClose}
                 aria-label="Close setup"
                 title="Close setup"
-                className="absolute top-3.5 right-3.5 sm:top-4 sm:right-4 p-2 rounded-xl text-muted hover:text-foreground hover:bg-default-hover transition"
+                className="absolute top-4 right-4 z-20 w-8 h-8 rounded-full bg-surface-secondary hover:bg-surface-tertiary text-muted hover:text-foreground flex items-center justify-center transition border border-border/50 shadow-sm"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </ModalHeader>
 
@@ -213,27 +258,68 @@ export function OnboardingWizardModal({
                   <div>
                     <h3 className="text-sm sm:text-base font-semibold text-foreground flex items-center gap-2">
                       <Car className="w-4 h-4 text-accent" />
-                      Select Your Vehicle & Units
+                      Select Your Vehicle & Preferred Units
                     </h3>
-                    <p className="text-xs text-muted mt-1">
-                      Choose your vehicle profile for optimized CAN bus message decoding, telemetry graphs, and dashboard layouts.
-                    </p>
                   </div>
 
-                  {/* Vehicle Dropdown */}
+                  {/* Make / Model / Trim Cascading Selectors */}
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-foreground">Vehicle Model & Trim</label>
-                    <select
-                      value={vehicleId}
-                      onChange={(e) => setVehicleId(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl bg-surface-secondary border border-border text-sm text-foreground focus:outline-none focus:border-focus transition"
-                    >
-                      {catalog.vehicles?.map((v) => (
-                        <option key={v.id} value={v.id} className="bg-overlay text-overlay-foreground">
-                          {v.make} {v.model} - {v.trim} ({v.region.toUpperCase()})
-                        </option>
-                      ))}
-                    </select>
+                    <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                      <span>Vehicle Specification</span>
+                      <span className="text-[11px] font-normal text-muted">
+                        Select Make, Model, and Trim Variant
+                      </span>
+                    </label>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* 1. Manufacturer / Make */}
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-muted">Manufacturer</label>
+                        <select
+                          value={selectedMake}
+                          onChange={(e) => handleMakeChange(e.target.value)}
+                          className="w-full px-3 py-2.5 rounded-xl bg-surface-secondary border border-border text-xs sm:text-sm text-foreground focus:outline-none focus:border-focus transition"
+                        >
+                          {availableMakes.map((m) => (
+                            <option key={m} value={m} className="bg-overlay text-overlay-foreground">
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* 2. Model */}
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-muted">Model</label>
+                        <select
+                          value={selectedModel}
+                          onChange={(e) => handleModelChange(e.target.value)}
+                          className="w-full px-3 py-2.5 rounded-xl bg-surface-secondary border border-border text-xs sm:text-sm text-foreground focus:outline-none focus:border-focus transition"
+                        >
+                          {availableModels.map((m) => (
+                            <option key={m} value={m} className="bg-overlay text-overlay-foreground">
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* 3. Trim & Region */}
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-muted">Trim & Region</label>
+                        <select
+                          value={vehicleId}
+                          onChange={(e) => setVehicleId(e.target.value)}
+                          className="w-full px-3 py-2.5 rounded-xl bg-surface-secondary border border-border text-xs sm:text-sm text-foreground focus:outline-none focus:border-focus transition"
+                        >
+                          {availableTrims.map((v) => (
+                            <option key={v.id} value={v.id} className="bg-overlay text-overlay-foreground">
+                              {v.trim} ({v.region.toUpperCase()})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Vehicle Badge & Features Preview */}
@@ -250,7 +336,7 @@ export function OnboardingWizardModal({
                           {selectedVehicle.make} {selectedVehicle.model} {selectedVehicle.trim}
                         </div>
                         <div className="text-[11px] text-muted">
-                          Platform: <span className="font-mono text-accent">{selectedVehicle.family}</span>
+                          Platform: <span className="font-mono text-accent" title={selectedVehicle.family}>{formatPlatformFamily(selectedVehicle.family)}</span>
                         </div>
                         <div className="flex flex-wrap gap-1 justify-center sm:justify-start pt-1">
                           {selectedVehicle.features.slice(0, 4).map((f) => (
@@ -687,7 +773,9 @@ export function OnboardingWizardModal({
                   <div className="p-4 rounded-2xl bg-surface-secondary border border-border text-left max-w-md mx-auto space-y-2 text-xs">
                     <div className="flex justify-between border-b border-separator pb-2">
                       <span className="text-muted">Vehicle:</span>
-                      <span className="font-semibold text-foreground">{selectedVehicle?.make} {selectedVehicle?.model}</span>
+                      <span className="font-semibold text-foreground">
+                        {selectedVehicle?.make} {selectedVehicle?.model} ({selectedVehicle?.trim})
+                      </span>
                     </div>
                     <div className="flex justify-between border-b border-separator pb-2">
                       <span className="text-muted">Units:</span>

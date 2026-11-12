@@ -8,7 +8,61 @@
  *   // resolved.network and resolved.options now reflect the correct variant.
  */
 
-import { Command, CommandOption, Vehicle, ByteMap } from '../types/catalog';
+import { Command, CommandOption, Vehicle, ByteMap, Catalog } from '../types/catalog';
+
+/**
+ * Friendly display name mappings for common platform family slugs.
+ */
+const KNOWN_FAMILY_DISPLAY_NAMES: Record<string, string> = {
+  all_egmp: 'All E-GMP',
+  kia_ev6: 'EV6',
+  hyundai_ioniq5: 'Ioniq 5',
+  hyundai_ioniq6: 'Ioniq 6',
+  genesis_gv60: 'GV60',
+  kia_ev9: 'EV9',
+  genesis_gv70: 'GV70',
+  genesis_gv80: 'GV80',
+  genesis_g80: 'G80',
+};
+
+/**
+ * Format a platform family slug into a friendly human-readable name.
+ * e.g. 'kia_ev6' -> 'EV6', 'hyundai_ioniq5' -> 'Ioniq 5', 'all_egmp' -> 'All E-GMP'.
+ */
+export function formatPlatformFamily(
+  family: string | null | undefined,
+  catalog?: { vehicles?: Vehicle[] } | null
+): string {
+  if (!family || family === 'all') return 'All Platform Families';
+
+  // 1. Check known dictionary
+  if (KNOWN_FAMILY_DISPLAY_NAMES[family]) {
+    return KNOWN_FAMILY_DISPLAY_NAMES[family];
+  }
+
+  // 2. Check catalog vehicles for a clean model name matching this family
+  if (catalog?.vehicles && Array.isArray(catalog.vehicles)) {
+    const matching = catalog.vehicles.filter(v => v.family === family && v.family !== 'all_egmp');
+    if (matching.length > 0) {
+      const model = matching.find(v => Boolean(v.model))?.model;
+      if (model) return model;
+    }
+  }
+
+  // 3. Fallback heuristic: strip make prefixes (kia_, hyundai_, genesis_, etc.)
+  const stripped = family.replace(/^(kia|hyundai|genesis|universal)_/i, '');
+
+  // If it's an alphanumeric model code like ev6, gv60, g80, ev9, etc., uppercase it
+  if (/^[a-z]{1,3}\d+[a-z]?$/i.test(stripped)) {
+    return stripped.toUpperCase();
+  }
+
+  // Otherwise title-case words separated by underscores or dashes
+  return stripped
+    .split(/[_-]+/)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
 
 /**
  * Resolve a command's `variants` for the given vehicle, returning a new

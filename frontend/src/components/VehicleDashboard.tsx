@@ -202,6 +202,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   const [chargePortOpen, setChargePortOpen] = useState(false);
   const [locked, setLocked] = useState(true);
   const [mirrorsFolded, setMirrorsFolded] = useState(false);
+  const [autoFoldEnabled, setAutoFoldEnabled] = useState(true);
+  const autoFoldEnabledRef = useRef(true);
 
   // Exterior Lighting
   const [lights, setLights] = useState<LightMode>('auto');
@@ -354,8 +356,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       speed: getCanId('cluster_vehicle_speed', '1ac'),
       speedName: findCmd('cluster_vehicle_speed')?.ha_metadata?.name || 'Cluster Speedometer',
       wheelSpeeds: getCanId('wheel_speeds', '0a2'),
-      ambientTemp: getCanId('cond_ambient_temperature', '226'),
-      ambientTempName: findCmd('cond_ambient_temperature')?.ha_metadata?.name || 'Ambient Temperature',
+      ambientTemp: getCanId('outdoor_temperature', getCanId('cond_ambient_temperature', '226')),
+      ambientTempName: findCmd('outdoor_temperature')?.ha_metadata?.name || findCmd('cond_ambient_temperature')?.ha_metadata?.name || 'Outdoor Temperature',
       hvSoc: getCanId('cond_hv_battery_soc', '2fc'),
       hvSocName: findCmd('cond_hv_battery_soc')?.ha_metadata?.name || 'Traction Battery SOC',
       hvTemps: getCanId('hv_battery_temperatures', '152'),
@@ -396,8 +398,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       defrostName: findCmd('climate_rear_defog')?.ha_metadata?.name || 'Rear Defroster',
       hazards: getCanId('hazard_lights', '413'),
       hazardsName: findCmd('hazard_lights')?.ha_metadata?.name || 'Hazard Flashers',
-      mirrors: getCanId('power_mirrors', '410'),
-      mirrorsName: findCmd('power_mirrors')?.ha_metadata?.name || 'Exterior Power Mirrors',
+      welcomeMirrors: getCanId('cgw_welcome_mirror_light', '410'),
+      welcomeMirrorsName: findCmd('cgw_welcome_mirror_light')?.ha_metadata?.name || 'Welcome Mirror Auto-Fold',
       steeringHeat: getCanId('heated_steering_wheel_toggle', '418'),
       steeringHeatName: findCmd('heated_steering_wheel_toggle')?.ha_metadata?.name || 'Steering Wheel Heat',
       driverSeat: getCanId('drivers_seat_comfort', '496'),
@@ -614,8 +616,15 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       setSteeringWheelHeat(parseBooleanEntityState(stateStr) ? 'on' : 'off');
     } else if (entity === 'hazard_lights') {
       setHazards(parseBooleanEntityState(stateStr));
-    } else if (entity === 'power_mirrors' || entity === 'mirrors') {
-      setMirrorsFolded(normState.includes('fold') && !normState.includes('unfold') && !normState.includes('extend'));
+    } else if (entity === 'cgw_welcome_mirror_light' || entity === 'power_mirrors' || entity === 'mirrors') {
+      const isEnabled = normState.includes('approach') || normState.includes('enable') || normState.includes('on') || (!normState.includes('disable') && !normState.includes('off'));
+      setAutoFoldEnabled(isEnabled);
+      autoFoldEnabledRef.current = isEnabled;
+      if (isEnabled && locked) {
+        setMirrorsFolded(true);
+      } else if (!locked) {
+        setMirrorsFolded(false);
+      }
     } else if (entity === 'turn_signal_left') {
       if (parseBooleanEntityState(stateStr)) setTurnSignal('left');
       else setTurnSignal(prev => prev === 'left' ? 'off' : prev);
@@ -657,7 +666,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       entity === 'climate_fan_active'
     ) {
       setHvacPower(parseBooleanEntityState(stateStr));
-    } else if (entity === 'cond_ambient_temperature' || entity === 'ambient_temperature') {
+    } else if (entity === 'outdoor_temperature' || entity === 'cond_ambient_temperature' || entity === 'ambient_temperature') {
       const match = stateStr.match(/(-?\d+(\.\d+)?)/);
       if (match) setAmbientTempC(parseFloat(match[1]));
     } else if (entity === 'wheel_speeds' || entity === 'tpms_tire_pressures' || entity === 'tpms') {
@@ -968,6 +977,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       setDoors({ frontLeft: fl, frontRight: fr, rearLeft: rl, rearRight: rr });
       setHoodOpen(hood);
       setLocked(isLocked);
+      if (autoFoldEnabledRef.current) {
+        setMirrorsFolded(isLocked);
+      }
       recordLog(idFormatted, canMappings.doorsName, `Doors: ${fl || fr || rl || rr ? 'Open' : 'Closed'}, Locks: ${isLocked ? 'Locked' : 'Unlocked'}`, hexPayload, now);
     }
 
@@ -1075,16 +1087,18 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       recordLog(idFormatted, canMappings.sunroofName, `Sunroof State: ${sState.toUpperCase()}`, hexPayload, now);
     }
 
-    // Exterior Power Mirrors & Approach Light (0x410: CGW_USM1 Byte D3 bits 0-1)
-    else if ((normId === canMappings.mirrors || normId === '410') && bytes.length >= 3) {
+    // Exterior Power Mirrors Setting & Approach Light (0x410: CGW_USM1 Byte D3 bits 0-1)
+    else if ((normId === canMappings.welcomeMirrors || normId === '410') && bytes.length >= 3) {
       const wlight = bytes[2] & 0x03;
-      if (wlight === 0x00) {
+      const isEnabled = wlight === 0x02;
+      setAutoFoldEnabled(isEnabled);
+      autoFoldEnabledRef.current = isEnabled;
+      if (isEnabled && locked) {
         setMirrorsFolded(true);
-        recordLog(idFormatted, canMappings.mirrorsName, 'MIRRORS FOLDED', hexPayload, now);
-      } else if (wlight === 0x02) {
+      } else if (!locked) {
         setMirrorsFolded(false);
-        recordLog(idFormatted, canMappings.mirrorsName, 'MIRRORS UNFOLDED', hexPayload, now);
       }
+      recordLog(idFormatted, canMappings.welcomeMirrorsName, isEnabled ? 'Auto-Fold on Lock: ENABLED' : 'Auto-Fold on Lock: DISABLED', hexPayload, now);
     }
 
     // Lighting, Turn Signals & Hazards (0x413, 0x3C1)
@@ -1689,22 +1703,6 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   </button>
                 </div>
 
-                <button
-                  type="button"
-                  id="mirror-fold-btn"
-                  onClick={() => {
-                    const nextMirrors = !mirrorsFolded;
-                    setMirrorsFolded(nextMirrors);
-                    dispatchCommand('power_mirrors', nextMirrors ? 'Fold' : 'Unfold', nextMirrors ? 'Mirrors Folded' : 'Mirrors Unfolded');
-                  }}
-                  className={`px-2.5 py-1.5 rounded-xl border transition-colors text-[11px] font-medium ${mirrorsFolded
-                    ? 'bg-accent-soft text-accent-soft-foreground border-accent/40'
-                    : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                    }`}
-                  title="Exterior Power Mirrors (CAN 0x410 / 0x4A2)"
-                >
-                  {mirrorsFolded ? 'Mirrors Folded' : 'Fold Mirrors'}
-                </button>
                 {/* Vehicle Lock/Unlock Master Action */}
                 <button
                   type="button"
@@ -1716,6 +1714,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                       setDoors({ frontLeft: false, frontRight: false, rearLeft: false, rearRight: false });
                       setHoodOpen(false);
                       setTrunkOpen(false);
+                    }
+                    if (autoFoldEnabledRef.current) {
+                      setMirrorsFolded(next);
                     }
                     dispatchCommand('door_locks', next ? 'lock' : 'unlock', next ? 'All Doors Locked & Secured' : 'Vehicle Unlocked');
                   }}

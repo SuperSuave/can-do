@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Tabs,
   Button,
   Modal,
   ModalBackdrop,
@@ -60,6 +59,8 @@ const SUGGESTED_FEATURES = [
   'hda2'
 ];
 
+const STANDARD_MAKES = ['Hyundai', 'Kia', 'Genesis', 'Universal'];
+
 export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
   isOpen,
   initialVehicle,
@@ -83,6 +84,7 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
     features: ['heated_seats', 'preconditioning']
   });
 
+  const [isCustomMake, setIsCustomMake] = useState(false);
   const [customFeatureInput, setCustomFeatureInput] = useState('');
   const [featureSearch, setFeatureSearch] = useState('');
   const [errors, setErrors] = useState<ValidationIssue[]>([]);
@@ -93,6 +95,7 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
     if (initialVehicle) {
       setForm({ ...initialVehicle, features: [...initialVehicle.features] });
       setAutoIdLocked(false);
+      setIsCustomMake(!STANDARD_MAKES.includes(initialVehicle.make || ''));
     } else {
       setForm({
         id: '',
@@ -105,6 +108,7 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
         features: ['heated_seats', 'preconditioning']
       });
       setAutoIdLocked(true);
+      setIsCustomMake(false);
     }
     setCustomFeatureInput('');
     setFeatureSearch('');
@@ -218,9 +222,9 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
         <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
           <ModalDialog className="relative w-full max-w-2xl rounded-[16px] border border-border bg-overlay text-overlay-foreground shadow-overlay overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
             {/* Header */}
-            <ModalHeader className="flex items-center justify-between p-5 border-b border-separator bg-surface gap-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-surface-secondary border border-border flex items-center justify-center text-accent">
+            <ModalHeader className="p-5 border-b border-separator bg-surface">
+              <div className="flex items-center gap-2.5 pr-10">
+                <div className="w-8 h-8 rounded-full bg-surface-secondary border border-border flex items-center justify-center text-accent shrink-0">
                   <Car className="w-4 h-4" />
                 </div>
                 <div>
@@ -232,18 +236,19 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
                   </p>
                 </div>
               </div>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                isIconOnly
-                onPress={onClose}
-                aria-label="Close modal"
-                className="p-1.5 text-muted hover:text-foreground rounded-full hover:bg-default-hover transition"
-              >
-                <X className="w-5 h-5" />
-              </Button>
             </ModalHeader>
+
+            {/* Upper Right Close Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              isIconOnly
+              onPress={onClose}
+              aria-label="Close modal"
+              className="absolute top-4 right-4 z-20 !rounded-full w-8 h-8 flex items-center justify-center p-0 !bg-surface-secondary hover:!bg-surface-tertiary text-muted hover:text-foreground border border-border/50 shadow-sm transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </Button>
 
             {/* Form Body */}
             <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
@@ -262,43 +267,48 @@ export const VehicleEditorModal: React.FC<VehicleEditorModalProps> = ({
             </div>
           )}
 
-          {/* Make & Quick buttons */}
+          {/* Manufacturer / Make */}
           <div>
             <label className="block text-foreground font-semibold mb-1">
               Manufacturer / Make <span className="text-danger">*</span>
             </label>
-            <Tabs
-              selectedKey={form.make || 'Hyundai'}
-              onSelectionChange={key => setForm({ ...form, make: String(key) })}
-              aria-label="Manufacturer / Make"
-            >
-              <Tabs.ListContainer className="p-0.5 rounded-full bg-surface-secondary border border-border text-xs mb-2 inline-block">
-                <Tabs.List className="gap-1 flex-wrap">
-                  {['Hyundai', 'Kia', 'Genesis', 'Universal'].map(m => (
-                    <Tabs.Tab
-                      key={m}
-                      id={m}
-                      className={`relative px-3 py-1 rounded-full text-xs font-semibold transition cursor-pointer flex items-center ${
-                        form.make === m
-                          ? 'text-accent-foreground'
-                          : 'text-muted hover:text-foreground'
-                      }`}
-                    >
-                      <span>{m}</span>
-                      <Tabs.Indicator className="rounded-full bg-accent shadow-sm" />
-                    </Tabs.Tab>
-                  ))}
-                </Tabs.List>
-              </Tabs.ListContainer>
-            </Tabs>
-            <input
-              type="text"
-              required
-              placeholder="e.g. Hyundai, Kia, Genesis"
-              value={form.make || ''}
-              onChange={e => setForm({ ...form, make: e.target.value })}
-              className="w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
-            />
+            <div className={`grid gap-3 ${isCustomMake ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+              <select
+                value={isCustomMake ? '__custom__' : (form.make || 'Hyundai')}
+                onChange={e => {
+                  const val = e.target.value;
+                  if (val === '__custom__') {
+                    setIsCustomMake(true);
+                    setForm(prev => ({
+                      ...prev,
+                      make: STANDARD_MAKES.includes(prev.make || '') ? '' : prev.make
+                    }));
+                  } else {
+                    setIsCustomMake(false);
+                    setForm(prev => ({ ...prev, make: val }));
+                  }
+                }}
+                className="w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-focus"
+              >
+                <option value="Hyundai">Hyundai</option>
+                <option value="Kia">Kia</option>
+                <option value="Genesis">Genesis</option>
+                <option value="Universal">Universal (Cross-Platform)</option>
+                <option value="__custom__">Custom / Other Manufacturer...</option>
+              </select>
+
+              {isCustomMake && (
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="e.g. Lucid, Rivian, Ford, Toyota"
+                  value={form.make || ''}
+                  onChange={e => setForm({ ...form, make: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
+                />
+              )}
+            </div>
           </div>
 
           {/* Model and Trim */}

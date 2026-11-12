@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.11.5-b001",
+  "can_do_version": "2026.11.5-b002",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -1217,8 +1217,8 @@
     {
       "id": "ev6_mode_strip",
       "ha_metadata": {
-        "name": "EV6 Touch Bar Mode Switch",
-        "domain": "event",
+        "name": "EV6 Touch Bar Mode",
+        "domain": "select",
         "icon": "mdi:car-info"
       },
       "tags": [
@@ -1226,23 +1226,74 @@
       ],
       "requires_feature": "touch_bar",
       "category": "Cockpit & Controls",
+      "roles": [
+        "trigger",
+        "action"
+      ],
       "network": {
         "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x652"
+        "type": "can_rx_tx",
+        "state_can_id": "0x652",
+        "action_can_id": "0x652",
+        "delay_ms": 40
       },
-      "match": {
-        "D4": "0x50"
-      },
-      "roles": [
-        "trigger"
-      ],
-      "mask": "0xF0",
       "contributor": {
-        "name": "Unknown",
-        "github": ""
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "EV6 center HVAC / Media touch bar mode toggle on CAN ID 0x652 Byte D4. To Media Mode: transmits 5F -> 4F -> 7F -> FF (release). To Climate Mode: transmits BF -> FF (release)."
       },
+      "options": [
+        {
+          "label": "Media Mode",
+          "match": {
+            "D4": "0x5F"
+          },
+          "mask": "0xFF",
+          "steps": [
+            {
+              "payload": "FFFFFF5F07000000",
+              "repeat": 1,
+              "delay_ms": 40
+            },
+            {
+              "payload": "FFFFFF4F07000000",
+              "repeat": 1,
+              "delay_ms": 40
+            },
+            {
+              "payload": "FFFFFF7F07000000",
+              "repeat": 1,
+              "delay_ms": 40
+            },
+            {
+              "payload": "FFFFFFFF07000000",
+              "repeat": 3,
+              "delay_ms": 40
+            }
+          ]
+        },
+        {
+          "label": "Climate Mode",
+          "match": {
+            "D4": "0xBF"
+          },
+          "mask": "0xFF",
+          "steps": [
+            {
+              "payload": "FFFFFFBF07000000",
+              "repeat": 3,
+              "delay_ms": 40
+            },
+            {
+              "payload": "FFFFFFFF07000000",
+              "repeat": 3,
+              "delay_ms": 40
+            }
+          ]
+        }
+      ],
       "subcategory": "Center Console & AVN",
+      "action_can_id": "0x652",
       "state_can_id": "0x652"
     },
     {
@@ -1715,7 +1766,7 @@
         "domain": "climate",
         "icon": "mdi:thermometer"
       },
-      "type": "linear_scale",
+      "type": "param_range",
       "tags": [
         "all_egmp"
       ],
@@ -1729,7 +1780,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Driver cabin target temperature. State on CAN ID 0x380 Byte D2, Command on CAN ID 0x4A0 Byte D2 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments, raw = temp_F - 56)."
       },
       "network": {
         "bus": 0,
@@ -1746,429 +1797,6 @@
         "raw_max": "0x1A",
         "delay_ms": 20
       },
-      "options": [
-        {
-          "label": "62°F",
-          "match": {
-            "D2": "0x06"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x06"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "63°F",
-          "match": {
-            "D2": "0x07"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x07"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "64°F",
-          "match": {
-            "D2": "0x08"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x08"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "65°F",
-          "match": {
-            "D2": "0x09"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x09"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "66°F",
-          "match": {
-            "D2": "0x0A"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x0A"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "67°F",
-          "match": {
-            "D2": "0x0B"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x0B"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "68°F",
-          "match": {
-            "D2": "0x0C"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x0C"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "69°F",
-          "match": {
-            "D2": "0x0D"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x0D"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "70°F",
-          "match": {
-            "D2": "0x0E"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x0E"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ],
-          "default": true
-        },
-        {
-          "label": "71°F",
-          "match": {
-            "D2": "0x0F"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x0F"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "72°F",
-          "match": {
-            "D2": "0x10"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x10"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "73°F",
-          "match": {
-            "D2": "0x11"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x11"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "74°F",
-          "match": {
-            "D2": "0x12"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x12"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "75°F",
-          "match": {
-            "D2": "0x13"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x13"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "76°F",
-          "match": {
-            "D2": "0x14"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x14"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "77°F",
-          "match": {
-            "D2": "0x15"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x15"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "78°F",
-          "match": {
-            "D2": "0x16"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x16"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "79°F",
-          "match": {
-            "D2": "0x17"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x17"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "80°F",
-          "match": {
-            "D2": "0x18"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x18"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "81°F",
-          "match": {
-            "D2": "0x19"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x19"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "82°F",
-          "match": {
-            "D2": "0x1A"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D2": "0x1A"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D2": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        }
-      ],
       "subcategory": "HVAC Controls",
       "action_can_id": "0x4A0",
       "state_can_id": "0x380"
@@ -2180,7 +1808,7 @@
         "domain": "climate",
         "icon": "mdi:thermometer"
       },
-      "type": "linear_scale",
+      "type": "param_range",
       "tags": [
         "all_egmp"
       ],
@@ -2194,7 +1822,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments)"
+        "notes": "Passenger cabin target temperature. State on CAN ID 0x380 Byte D3, Command on CAN ID 0x4A0 Byte D8 (Range 0x06 to 0x1A: 62°F to 82°F in 1°F increments, raw = temp_F - 56)."
       },
       "network": {
         "bus": 0,
@@ -2211,429 +1839,6 @@
         "raw_max": "0x1A",
         "delay_ms": 20
       },
-      "options": [
-        {
-          "label": "62°F",
-          "match": {
-            "D3": "0x06"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x06"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "63°F",
-          "match": {
-            "D3": "0x07"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x07"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "64°F",
-          "match": {
-            "D3": "0x08"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x08"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "65°F",
-          "match": {
-            "D3": "0x09"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x09"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "66°F",
-          "match": {
-            "D3": "0x0A"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x0A"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "67°F",
-          "match": {
-            "D3": "0x0B"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x0B"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "68°F",
-          "match": {
-            "D3": "0x0C"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x0C"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "69°F",
-          "match": {
-            "D3": "0x0D"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x0D"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "70°F",
-          "match": {
-            "D3": "0x0E"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x0E"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ],
-          "default": true
-        },
-        {
-          "label": "71°F",
-          "match": {
-            "D3": "0x0F"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x0F"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "72°F",
-          "match": {
-            "D3": "0x10"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x10"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "73°F",
-          "match": {
-            "D3": "0x11"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x11"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "74°F",
-          "match": {
-            "D3": "0x12"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x12"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "75°F",
-          "match": {
-            "D3": "0x13"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x13"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "76°F",
-          "match": {
-            "D3": "0x14"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x14"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "77°F",
-          "match": {
-            "D3": "0x15"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x15"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "78°F",
-          "match": {
-            "D3": "0x16"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x16"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "79°F",
-          "match": {
-            "D3": "0x17"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x17"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "80°F",
-          "match": {
-            "D3": "0x18"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x18"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "81°F",
-          "match": {
-            "D3": "0x19"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x19"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        },
-        {
-          "label": "82°F",
-          "match": {
-            "D3": "0x1A"
-          },
-          "steps": [
-            {
-              "payload": {
-                "D8": "0x1A"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D8": "0xFF"
-              },
-              "repeat": 3
-            }
-          ]
-        }
-      ],
       "subcategory": "HVAC Controls",
       "action_can_id": "0x4A0",
       "state_can_id": "0x380"
@@ -7152,9 +6357,9 @@
       ]
     },
     {
-      "id": "cond_ambient_temperature",
+      "id": "outdoor_temperature",
       "ha_metadata": {
-        "name": "Outdoor Ambient Temperature",
+        "name": "Outdoor Temperature",
         "domain": "sensor",
         "icon": "mdi:thermometer"
       },
@@ -7164,6 +6369,7 @@
       "type": "param_range",
       "category": "Vehicle State & Telematics",
       "roles": [
+        "trigger",
         "condition",
         "state"
       ],
@@ -7171,40 +6377,20 @@
         "bus": 0,
         "type": "can_rx",
         "state_can_id": "0x226",
-        "unit": "°C"
+        "state_byte": "D4",
+        "mask": "0xFF",
+        "unit": "°C",
+        "factor": 1,
+        "offset": -40,
+        "min": -40,
+        "max": 215,
+        "step": 1
       },
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 °C"
+        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 °C (Start Bit 24, Length 8)."
       },
-      "options": [
-        {
-          "label": "Freezing (<= 0°C / 32°F)",
-          "evaluate": {
-            "byte": "D4",
-            "operator": "<=",
-            "value": "0x28"
-          },
-          "default": true
-        },
-        {
-          "label": "Cold (< 15°C / 59°F)",
-          "evaluate": {
-            "byte": "D4",
-            "operator": "<",
-            "value": "0x37"
-          }
-        },
-        {
-          "label": "Warm (> 25°C / 77°F)",
-          "evaluate": {
-            "byte": "D4",
-            "operator": ">",
-            "value": "0x41"
-          }
-        }
-      ],
       "subcategory": "Environment",
       "state_can_id": "0x226"
     },
@@ -7281,45 +6467,28 @@
       "type": "param_range",
       "category": "High Voltage & Charging",
       "roles": [
-        "condition"
+        "trigger",
+        "condition",
+        "state"
       ],
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x2FC"
+        "state_can_id": "0x2FC",
+        "state_byte": "D8",
+        "mask": "0xFF",
+        "unit": "%",
+        "factor": 0.5,
+        "offset": 0,
+        "min": 0,
+        "max": 100,
+        "step": 1
       },
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Consolidated traction battery state-of-charge thresholds"
+        "notes": "Decoded traction battery state-of-charge from BMS frame 0x2FC Byte D8: raw * 0.5 %"
       },
-      "options": [
-        {
-          "label": "Safe for Preconditioning (SOC >= 20%)",
-          "evaluate": {
-            "byte": "D8",
-            "operator": ">=",
-            "value": "0x28"
-          },
-          "default": true
-        },
-        {
-          "label": "High Battery (SOC >= 50%)",
-          "evaluate": {
-            "byte": "D8",
-            "operator": ">=",
-            "value": "0x64"
-          }
-        },
-        {
-          "label": "Low Battery (SOC < 20%)",
-          "evaluate": {
-            "byte": "D8",
-            "operator": "<",
-            "value": "0x28"
-          }
-        }
-      ],
       "subcategory": "BMS & Telemetry",
       "state_can_id": "0x2FC"
     },
@@ -11967,13 +11136,13 @@
         "bus": 0,
         "type": "can_rx_tx",
         "state_can_id": "0x465",
-        "action_can_id": "0x465",
-        "delay_ms": 20
+        "action_can_id": "0x41D",
+        "delay_ms": 25
       },
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Driver Only HVAC toggle on CAN ID 0x465 (Climate_Button_Status) Byte 6 (D7: 0x04 = ON, 0x0C = OFF). Turns 'Driver Only' mode on and off to shut off passenger vents and conserve battery when driving solo. (Also accepts DATC injection on 0x41D)."
+        "notes": "Driver Only HVAC toggle: commands via 0x41D Byte D5 (0x0D=On, 0x0C=Off, with 0x0F release). Status monitored from Climate_Button_Status frame 0x465 Byte D7 (0x04=On, 0x0C=Off)."
       },
       "options": [
         {
@@ -11982,14 +11151,22 @@
             "D7": "0x04"
           },
           "payload": {
-            "D7": "0x04"
+            "D5": "0x0D"
           },
           "steps": [
             {
               "payload": {
-                "D7": "0x04"
+                "D5": "0x0D"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": {
+                "D5": "0x0F"
+              },
+              "repeat": 3,
+              "delay_ms": 25
             }
           ],
           "default": true
@@ -12000,19 +11177,27 @@
             "D7": "0x0C"
           },
           "payload": {
-            "D7": "0x0C"
+            "D5": "0x0C"
           },
           "steps": [
             {
               "payload": {
-                "D7": "0x0C"
+                "D5": "0x0C"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": {
+                "D5": "0x0F"
+              },
+              "repeat": 3,
+              "delay_ms": 25
             }
           ]
         }
       ],
-      "action_can_id": "0x465",
+      "action_can_id": "0x41D",
       "state_can_id": "0x465"
     },
     {
@@ -14227,114 +13412,6 @@
         "notes": "EV_CP5 (0x578) Byte 2 (D3 bits 1:0) setting maximum continuous current draw during Level 2 AC charging."
       },
       "state_can_id": "0x578"
-    },
-    {
-      "id": "power_mirrors",
-      "ha_metadata": {
-        "name": "Exterior Power Mirrors",
-        "domain": "cover",
-        "icon": "mdi:car-side"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Doors, Access & Security",
-      "subcategory": "Doors & Latches",
-      "roles": [
-        "trigger",
-        "condition",
-        "state",
-        "action"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_rx_tx",
-        "state_can_id": "0x410",
-        "action_can_id": "0x4A2",
-        "delay_ms": 20
-      },
-      "state_can_id": "0x410",
-      "action_can_id": "0x4A2",
-      "contributors": [
-        {
-          "name": "SuaveEV",
-          "github": "supersuave",
-          "notes": "Commands exterior power mirror fold/unfold via BCM frame 0x4A2 Byte D7 and monitors state via CGW_USM1 (0x410) Byte D3."
-        }
-      ],
-      "options": [
-        {
-          "label": "Fold",
-          "match": {
-            "D3": "0x00"
-          },
-          "mask": "0x03",
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x00",
-                "D2": "0x00",
-                "D3": "0xFF",
-                "D4": "0x03",
-                "D5": "0xFF",
-                "D6": "0xFF",
-                "D7": "0x10",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D1": "0x00",
-                "D2": "0x00",
-                "D3": "0xFF",
-                "D4": "0x03",
-                "D5": "0xFF",
-                "D6": "0xFF",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 2
-            }
-          ],
-          "default": true
-        },
-        {
-          "label": "Unfold",
-          "match": {
-            "D3": "0x02"
-          },
-          "mask": "0x03",
-          "steps": [
-            {
-              "payload": {
-                "D1": "0x00",
-                "D2": "0x00",
-                "D3": "0xFF",
-                "D4": "0x03",
-                "D5": "0xFF",
-                "D6": "0xFF",
-                "D7": "0x20",
-                "D8": "0x00"
-              },
-              "repeat": 3
-            },
-            {
-              "payload": {
-                "D1": "0x00",
-                "D2": "0x00",
-                "D3": "0xFF",
-                "D4": "0x03",
-                "D5": "0xFF",
-                "D6": "0xFF",
-                "D7": "0x00",
-                "D8": "0x00"
-              },
-              "repeat": 2
-            }
-          ]
-        }
-      ]
     }
   ],
   "automations": [
@@ -14445,71 +13522,6 @@
           "type": "track_popup",
           "level": "info",
           "text": "Battery Precon Started"
-        }
-      ]
-    },
-    {
-      "id": "auto_fold_mirrors_on_lock",
-      "name": "Auto-Fold Power Mirrors When Vehicle Locks",
-      "description": "When vehicle door security transitions to Locked and all doors/closures are confirmed shut, automatically fold exterior power mirrors.",
-      "category": "Closures & Security",
-      "tags": [
-        "all_egmp",
-        "hyundai_ioniq5",
-        "kia_ev6",
-        "genesis_gv60"
-      ],
-      "enabled": true,
-      "ha_expose": true,
-      "ha_icon": "mdi:car-side",
-      "exec_mode": "one_shot",
-      "cooldown_ms": 1500,
-      "contributor": {
-        "name": "CAN Do Community",
-        "github": "SuperSuave"
-      },
-      "triggers": [
-        {
-          "id": "trig_lock_state",
-          "source": "can",
-          "type": "byte_transition",
-          "can_id": "0x411",
-          "bus": 0,
-          "byte": "D3",
-          "mask": "0x40",
-          "from": "0x40",
-          "to": "0x00"
-        }
-      ],
-      "conditions": [
-        {
-          "id": "cond_doors_status_closed",
-          "type": "can_state",
-          "can_id": "0x411",
-          "bus": 0,
-          "match": {
-            "D4": "0x00",
-            "D5": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "mask": {
-            "D4": "0x01",
-            "D5": "0x04",
-            "D7": "0x10",
-            "D8": "0x01"
-          },
-          "operator": "==",
-          "source_command_id": "doors_status",
-          "option_label": "All Doors Closed"
-        }
-      ],
-      "actions": [
-        {
-          "id": "act_fold_mirrors",
-          "type": "entity_command",
-          "entity_id": "power_mirrors",
-          "command": "Fold"
         }
       ]
     },
@@ -14691,12 +13703,6 @@
           "command": "Locked / Lock"
         },
         {
-          "id": "act_fold_mirrors",
-          "type": "entity_command",
-          "entity_id": "power_mirrors",
-          "command": "Fold"
-        },
-        {
           "id": "act_toast_locked",
           "type": "track_popup",
           "level": "info",
@@ -14753,12 +13759,6 @@
           "type": "entity_command",
           "entity_id": "door_locks",
           "command": "Unlocked / Unlock"
-        },
-        {
-          "id": "act_unfold_mirrors",
-          "type": "entity_command",
-          "entity_id": "power_mirrors",
-          "command": "Unfold"
         },
         {
           "id": "act_toast_unlocked",

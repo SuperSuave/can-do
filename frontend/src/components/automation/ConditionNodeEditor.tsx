@@ -43,6 +43,7 @@ import { BleButtonComboPicker } from '../BleButtonComboPicker';
 import { BleDeviceSelect, BleBeaconSelect, BleActionSelect } from '../BleSelects';
 import { SustainedDurationInput, formatSustainedBadge } from './SustainedDurationInput';
 import { AutomationClipboardContext } from './AutomationClipboardContext';
+import { NumericRangeNodeEditor } from './NumericRangeNodeEditor';
 
 export interface ConditionNodeEditorProps {
   key?: React.Key;
@@ -1021,6 +1022,13 @@ export function ConditionNodeEditor({
     '';
   const effectiveCondBus = cond.bus ?? catalogCmd?.network?.bus ?? catalogCmd?.bus ?? 0;
   const activeCondOptionLabel = (cond.option_label || matchedOption?.label || '').toLowerCase().trim();
+  const isRangeEntity = !hasOptions && Boolean(
+    catalogCmd?.type === 'param_range' ||
+    catalogCmd?.type === 'linear_scale' ||
+    (catalogCmd?.network?.min !== undefined && catalogCmd?.network?.max !== undefined) ||
+    catalogCmd?.network?.factor !== undefined ||
+    cond.type === 'param_range'
+  );
 
   return (
     <div className="p-2.5 sm:p-3.5 rounded-xl bg-surface-secondary border border-border hover:border-border-secondary space-y-2.5 text-xs transition-all shadow-sm min-w-0 overflow-hidden">
@@ -1046,9 +1054,9 @@ export function ConditionNodeEditor({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
-          {hasOptions && !collapsed && (
+          {(hasOptions || isRangeEntity) && !collapsed && (
             <>
-              {catalogCmd.options && catalogCmd.options.length > 1 && (
+              {hasOptions && catalogCmd.options && catalogCmd.options.length > 1 && (
                 <button
                   type="button"
                   onClick={() => setMultiSelectMode(!multiSelectMode)}
@@ -1173,9 +1181,20 @@ export function ConditionNodeEditor({
             </div>
           )}
 
+          {/* Numeric Range Comparator for param_range / continuous telemetry */}
+          {isRangeEntity && (
+            <NumericRangeNodeEditor
+              item={cond}
+              catalogCmd={catalogCmd}
+              liveFrames={liveFrames}
+              entityStates={entityStates}
+              onUpdate={onUpdate}
+            />
+          )}
+
       {/* Advanced Details View */}
-      {(!hasOptions || showAdvanced) && (
-        <div className={`space-y-3 ${hasOptions ? 'pt-2.5 border-t border-separator' : ''}`}>
+      {((!hasOptions && !isRangeEntity) || showAdvanced) && (
+        <div className={`space-y-3 ${hasOptions || isRangeEntity ? 'pt-2.5 border-t border-separator' : ''}`}>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 font-mono text-[11px]">
             <div className="col-span-1">
               <label className="block text-[10px] font-sans text-muted">CAN ID</label>

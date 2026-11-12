@@ -2174,7 +2174,7 @@ void can_rx_task(void* arg) {
                 }
             }
 
-            // Outdoor Ambient Temperature (0x226 Byte 3 = raw - 40 C)
+            // Outdoor Temperature (0x226 Byte 3 = raw - 40 C)
             if (rx_msg.identifier == 0x226 && rx_msg.data_length_code >= 4) {
                 uint8_t raw = rx_msg.data[3];
                 if (raw > 0 && raw < 255) {
@@ -2186,7 +2186,7 @@ void can_rx_task(void* arg) {
                         s_last_amb_ms = now_ms;
                         char temp_str[16];
                         snprintf(temp_str, sizeof(temp_str), "%d °C", c);
-                        emit_live_entity_state("cond_ambient_temperature", temp_str);
+                        emit_live_entity_state("outdoor_temperature", temp_str);
                     }
                 }
             }
@@ -2625,16 +2625,13 @@ void can_rx_task(void* arg) {
                 }
             }
 
-            // Exterior Power Mirrors / Welcome Unfold Setting (0x410 Byte 2 / D3 bits 0:1)
+            // Welcome Mirror / Auto-Fold Setting (0x410 Byte 2 / D3 bits 0:1: CF_Gway_WlightRValue)
             if (rx_msg.identifier == 0x410 && rx_msg.data_length_code >= 3) {
                 uint8_t wlight = rx_msg.data[2] & 0x03;
-                if (wlight == 0x00 || wlight == 0x02) {
-                    int m_int = (wlight == 0x00) ? 1 : 0;
-                    static int s_last_mirrors = -1;
-                    if (m_int != s_last_mirrors) {
-                        s_last_mirrors = m_int;
-                        emit_live_entity_state("power_mirrors", m_int ? "Fold" : "Unfold");
-                    }
+                static int s_last_wlight = -1;
+                if ((int)wlight != s_last_wlight) {
+                    s_last_wlight = (int)wlight;
+                    emit_live_entity_state("cgw_welcome_mirror_light", (wlight == 0x02) ? "Welcome Unfold On Approach" : "Disabled / Off");
                 }
             }
 

@@ -1,16 +1,14 @@
 import React, { useState } from 'react';
-import { Tabs, Table } from '@heroui/react';
+import { Table } from '@heroui/react';
 import { CommandOption, CommandStep } from '../types/catalog';
 import { PayloadByteEditor } from './PayloadByteEditor';
 import { MdiIcon } from './MdiIcon';
-import { STATE_PRESETS, StatePreset } from '../data/statePresets';
 import { compileToByteMap } from '../utils/automationConverters';
 import { formatPayloadDisplay } from './CommandDetailModal';
 import {
   Layers,
   Plus,
   Trash2,
-  Sparkles,
   Sliders,
   ChevronDown,
   ChevronUp,
@@ -44,7 +42,6 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
   onChange
 }) => {
   const [expandedActionIndex, setExpandedActionIndex] = useState<number | null>(null);
-  const [showPresetsDropdown, setShowPresetsDropdown] = useState(false);
   const [previewActiveByteIndex, setPreviewActiveByteIndex] = useState<number | null>(null);
   const [actionTabMap, setActionTabMap] = useState<Record<number, 'single' | 'steps'>>({});
   const [pastingOptIdx, setPastingOptIdx] = useState<number | null>(null);
@@ -140,10 +137,10 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
     const newStep: CommandStep = isDelay
       ? { type: 'delay', delay_ms: 500 }
       : {
-          type: 'transmit_frame',
-          payload: '* * * * * * * *',
-          repeat: 1
-        };
+        type: 'transmit_frame',
+        payload: '* * * * * * * *',
+        repeat: 1
+      };
     handleUpdateState(optIdx, { steps: [...curSteps, newStep] });
   };
 
@@ -238,86 +235,30 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
     onChange(next);
   };
 
-  const handleApplyPreset = (preset: StatePreset) => {
-    onChange(preset.options);
-    setShowPresetsDropdown(false);
-  };
-
   return (
     <div className="p-4 sm:p-5 rounded-[12px] bg-surface border border-border space-y-5">
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-separator">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-separator">
         <div>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-accent-soft border border-accent/30 flex items-center justify-center text-accent">
+            <div className="w-7 h-7 rounded-lg bg-accent-soft border border-accent/30 flex items-center justify-center text-accent shrink-0">
               <Layers className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2 flex-wrap">
                 <span>State Definitions</span>
                 <span className="text-accent font-mono text-xs font-semibold">
                   ({stateCanId || 'RX CAN ID'}{bus !== undefined ? ` • Bus ${bus}` : ''})
                 </span>
-                <span className="text-muted text-xs font-normal">
-                  — "What state is what"
-                </span>
               </h3>
               <p className="text-xs text-muted mt-0.5">
-                Map human-readable states (e.g. Park, Drive, Open, Closed, Heated Level) to CAN byte patterns.
+                Map states (e.g. Park, Drive, Open, Closed) to CAN byte patterns.
               </p>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {/* Quick Presets Dropdown */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setShowPresetsDropdown(!showPresetsDropdown)}
-              className="px-3 py-1.5 rounded-[8px] bg-surface-secondary hover:bg-default-hover text-foreground border border-border text-xs font-semibold transition flex items-center gap-1.5 shadow-sm"
-              title="Load vehicle state template preset"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-warning" />
-              <span>Load Template Preset</span>
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showPresetsDropdown ? 'rotate-180' : ''}`} />
-            </button>
-
-            {showPresetsDropdown && (
-              <div className="absolute right-0 top-full mt-1.5 w-72 sm:w-80 rounded-[12px] bg-overlay text-overlay-foreground border border-border shadow-overlay p-2 z-50 space-y-1">
-                <div className="px-2 py-1.5 text-[11px] font-bold uppercase tracking-wider text-muted border-b border-separator">
-                  Select a State Template Preset
-                </div>
-                <div className="max-h-72 overflow-y-auto space-y-1 py-1">
-                  {STATE_PRESETS.map(preset => (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => handleApplyPreset(preset)}
-                      className="w-full text-left p-2 rounded-lg hover:bg-default-hover transition flex items-start gap-2.5 group"
-                    >
-                      <MdiIcon icon={preset.icon} className="w-5 h-5 text-accent shrink-0 mt-0.5" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-semibold text-foreground group-hover:text-accent transition flex items-center justify-between">
-                          <span>{preset.name}</span>
-                          <span className="text-[10px] font-mono text-accent-soft-foreground bg-accent-soft px-1.5 py-0.2 rounded border border-accent/30">
-                            {preset.options.length} states
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-muted line-clamp-1 mt-0.5">
-                          {preset.description}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                <div className="p-1.5 text-[10px] text-muted border-t border-separator text-center">
-                  Applies pre-configured states matching E-GMP / CAN-Do catalog standards.
-                </div>
-              </div>
-            )}
-          </div>
-
           <button
             type="button"
             onClick={handleAddState}
@@ -338,25 +279,17 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
               No states defined yet for this CAN ID
             </p>
             <p className="text-xs text-muted mt-1 max-w-md mx-auto">
-              Define "what state is what" so CAN-Do can decode live messages or trigger automations when specific states occur.
+              Define discrete states so CAN-Do can decode live messages or trigger automations when specific states occur.
             </p>
           </div>
-          <div className="flex items-center justify-center gap-2 pt-2">
+          <div className="flex items-center justify-center pt-2">
             <button
               type="button"
               onClick={handleAddState}
               className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-accent-foreground text-xs font-semibold flex items-center gap-1.5 transition"
             >
               <Plus className="w-3.5 h-3.5" />
-              Add Blank State
-            </button>
-            <button
-              type="button"
-              onClick={() => handleApplyPreset(STATE_PRESETS[0])}
-              className="px-3 py-1.5 rounded-lg bg-surface-tertiary text-foreground hover:bg-default-hover border border-border text-xs font-semibold flex items-center gap-1.5 transition"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-warning" />
-              Load Gear Shifter Preset
+              <span>Add First State</span>
             </button>
           </div>
         </div>
@@ -365,11 +298,10 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
           {options.map((opt, idx) => (
             <div
               key={idx}
-              className={`p-4 rounded-[12px] bg-surface-secondary border transition-all ${
-                opt.default
-                  ? 'border-accent/60 shadow-sm'
-                  : 'border-border'
-              } space-y-3.5`}
+              className={`p-4 rounded-[12px] bg-surface-secondary border transition-all ${opt.default
+                ? 'border-accent/60 shadow-sm'
+                : 'border-border'
+                } space-y-3.5`}
             >
               {/* State Header Bar */}
               <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3.5 border-b border-separator">
@@ -395,11 +327,10 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                 <div className="flex items-center gap-1.5 shrink-0">
                   {/* Default Radio */}
                   <label
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] text-xs cursor-pointer border transition ${
-                      opt.default
-                        ? 'bg-accent-soft text-accent-soft-foreground border-accent/40 font-semibold'
-                        : 'bg-surface-tertiary text-muted border-border hover:text-foreground'
-                    }`}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] text-xs cursor-pointer border transition ${opt.default
+                      ? 'bg-accent-soft text-accent-soft-foreground border-accent/40 font-semibold'
+                      : 'bg-surface-tertiary text-muted border-border hover:text-foreground'
+                      }`}
                     title="Set this state as default/initial"
                   >
                     <input
@@ -458,7 +389,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
                 <div className="sm:col-span-5">
                   <label className="block text-[11px] font-semibold text-muted mb-1">
-                    State Name / Meaning <span className="text-danger">*</span>
+                    State Name<span className="text-danger">*</span>
                   </label>
                   <input
                     type="text"
@@ -519,7 +450,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
 
                 <div>
                   <label className="block text-[11px] font-semibold text-muted mb-1">
-                    Cluster OSD Toast / Message (Optional)
+                    Cluster OSD Notification (Optional)
                   </label>
                   <input
                     type="text"
@@ -593,55 +524,45 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                           </p>
                         </div>
 
-                        {/* Mode Selector Tabs */}
-                        <Tabs
-                          selectedKey={currentMode}
-                          onSelectionChange={key => {
-                            const newMode = key as 'single' | 'steps';
-                            setActionTabMap(prev => ({ ...prev, [idx]: newMode }));
-                            if (newMode === 'steps' && (!opt.steps || opt.steps.length === 0)) {
-                              const initialPayload = opt.to_payload || opt.payload || '* * * * * * * *';
-                              handleUpdateState(idx, {
-                                steps: [{ payload: initialPayload, repeat: opt.repeat || 1 }]
-                              });
-                            }
-                          }}
-                          aria-label="Action Transmission Mode"
-                        >
-                          <Tabs.ListContainer className="p-0.5 rounded-lg bg-default border border-border text-[11px] self-start sm:self-auto shrink-0">
-                            <Tabs.List className="gap-1">
-                              <Tabs.Tab
-                                id="single"
-                                className={`relative px-2.5 py-1 rounded-md font-medium transition cursor-pointer flex items-center ${
-                                  currentMode === 'single'
-                                    ? 'text-accent font-semibold'
-                                    : 'text-muted hover:text-foreground'
-                                }`}
-                              >
-                                <span>Single Frame</span>
-                                <Tabs.Indicator className="rounded-md bg-accent-soft border border-accent/50 shadow-sm" />
-                              </Tabs.Tab>
-
-                              <Tabs.Tab
-                                id="steps"
-                                className={`relative px-2.5 py-1 rounded-md font-medium flex items-center gap-1.5 transition cursor-pointer ${
-                                  currentMode === 'steps'
-                                    ? 'text-success-soft-foreground font-semibold'
-                                    : 'text-muted hover:text-foreground'
-                                }`}
-                              >
-                                <ListOrdered className="w-3 h-3 text-success" />
-                                <span>Multi-Step Sequence</span>
-                                {opt.steps && opt.steps.length > 0 && (
-                                  <span className="text-[10px] font-mono px-1 rounded bg-success text-success-foreground">
-                                    {opt.steps.length}
-                                  </span>
-                                )}
-                                <Tabs.Indicator className="rounded-md bg-success-soft border border-success/50 shadow-sm" />
-                              </Tabs.Tab>
-                            </Tabs.List>
-                          </Tabs.ListContainer>
-                        </Tabs>
+                        {/* Mode Selector Segmented Buttons */}
+                        <div className="inline-flex items-center p-0.5 rounded-lg bg-surface-tertiary border border-border text-xs self-start sm:self-auto shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActionTabMap(prev => ({ ...prev, [idx]: 'single' }));
+                            }}
+                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${currentMode === 'single'
+                              ? 'bg-accent-soft text-accent-soft-foreground border border-accent/40 font-semibold shadow-sm'
+                              : 'text-muted hover:text-foreground border border-transparent'
+                              }`}
+                          >
+                            Single Frame
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActionTabMap(prev => ({ ...prev, [idx]: 'steps' }));
+                              if (!opt.steps || opt.steps.length === 0) {
+                                const initialPayload = opt.to_payload || opt.payload || '* * * * * * * *';
+                                handleUpdateState(idx, {
+                                  steps: [{ payload: initialPayload, repeat: opt.repeat || 1 }]
+                                });
+                              }
+                            }}
+                            className={`px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap ${currentMode === 'steps'
+                              ? 'bg-success-soft text-success-soft-foreground border border-success/40 font-semibold shadow-sm'
+                              : 'text-muted hover:text-foreground border border-transparent'
+                              }`}
+                          >
+                            <ListOrdered className="w-3.5 h-3.5 text-success shrink-0" />
+                            <span>Multi-Step Sequence</span>
+                            {opt.steps && opt.steps.length > 0 && (
+                              <span className="text-[10px] font-mono px-1 rounded bg-success text-success-foreground font-bold shrink-0">
+                                {opt.steps.length}
+                              </span>
+                            )}
+                          </button>
+                        </div>
                       </div>
 
                       {/* Single Frame Mode */}
@@ -707,7 +628,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                           <div className="flex flex-wrap items-center justify-between gap-2 bg-surface-secondary p-2 rounded-lg border border-border text-xs">
                             <span className="text-[11px] text-foreground flex items-center gap-1.5">
                               <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
-                              <span>Frames will be transmitted sequentially in this exact order:</span>
+                              <span>Frames will be transmitted sequentially:</span>
                             </span>
                             <div className="flex items-center gap-2">
                               <button
@@ -822,9 +743,6 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                           <span className="font-semibold text-warning-soft-foreground">
                                             Delay Step #{sIdx + 1}
                                           </span>
-                                          <span className="text-[10px] text-warning-soft-foreground/80 font-mono">
-                                            (Dwell pause before next step)
-                                          </span>
                                         </div>
 
                                         <div className="flex items-center gap-2">
@@ -906,11 +824,6 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                             TX: {step.can_id}
                                           </span>
                                         )}
-                                        {step.repeat && step.repeat > 1 && (
-                                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warning-soft text-warning-soft-foreground border border-warning/30 font-bold">
-                                            Repeated {step.repeat}x
-                                          </span>
-                                        )}
                                         {step.delay_ms && step.delay_ms > 0 && (
                                           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/40 font-bold">
                                             +{step.delay_ms}ms dwell
@@ -930,8 +843,8 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                               const rawVal = e.target.value.trim();
                                               const formatted = rawVal
                                                 ? (rawVal.toLowerCase().startsWith('0x')
-                                                    ? `0x${rawVal.slice(2).toUpperCase()}`
-                                                    : `0x${rawVal.toUpperCase()}`)
+                                                  ? `0x${rawVal.slice(2).toUpperCase()}`
+                                                  : `0x${rawVal.toUpperCase()}`)
                                                 : undefined;
                                               handleUpdateOptionStep(idx, sIdx, {
                                                 can_id: formatted
@@ -1086,8 +999,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
               <Table.Header className="bg-surface-tertiary text-muted border-b border-border font-mono text-[11px]">
                 <Table.Column id="idx" className="p-2.5">#</Table.Column>
                 <Table.Column id="label" isRowHeader className="p-2.5">State Name</Table.Column>
-                <Table.Column id="code" className="p-2.5">Code</Table.Column>
-                <Table.Column id="rx" className="p-2.5">RX CAN Match Pattern</Table.Column>
+                <Table.Column id="rx" className="p-2.5">RX Match / Condition</Table.Column>
                 <Table.Column id="desc" className="p-2.5">Description</Table.Column>
                 <Table.Column id="def" className="p-2.5 text-right">Default</Table.Column>
               </Table.Header>
@@ -1098,25 +1010,24 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                     <Table.Cell className="p-2.5 font-sans font-semibold text-foreground">
                       {opt.label}
                     </Table.Cell>
-                    <Table.Cell className="p-2.5 text-accent">
-                      {opt.state_value !== undefined && opt.state_value !== '' ? (
-                        <span className="bg-accent-soft border border-accent/30 text-accent-soft-foreground px-1.5 py-0.5 rounded text-[11px]">
-                          {opt.state_value}
-                        </span>
-                      ) : (
-                        <span className="text-muted">-</span>
-                      )}
-                    </Table.Cell>
                     <Table.Cell className="p-2.5">
                       <div className="flex flex-col gap-1">
                         {opt.match || opt.match_payload ? (
                           <span className="text-accent-soft-foreground bg-accent-soft px-2 py-0.5 rounded border border-accent/30 font-mono text-[11px] inline-block w-fit">
                             RX: {formatPayloadDisplay(opt.match || opt.match_payload)}
                           </span>
+                        ) : opt.evaluate ? (
+                          <span className="text-warning-soft-foreground bg-warning-soft px-2 py-0.5 rounded border border-warning/30 font-mono text-[11px] inline-block w-fit">
+                            RX: {formatPayloadDisplay(opt.evaluate)}
+                          </span>
+                        ) : opt.state_value !== undefined && opt.state_value !== '' ? (
+                          <span className="text-accent-soft-foreground bg-accent-soft px-2 py-0.5 rounded border border-accent/30 font-mono text-[11px] inline-block w-fit">
+                            Val: {opt.state_value}
+                          </span>
                         ) : null}
                         {opt.steps && opt.steps.length > 0 ? (
                           <span className="text-success-soft-foreground bg-success-soft px-2 py-0.5 rounded border border-success/30 font-mono text-[11px] inline-block w-fit">
-                            TX: {opt.steps.length} sequential steps ({opt.steps.map(s => `x${s.repeat || 1}`).join(', ')})
+                            TX: {opt.steps.length} sequential steps
                           </span>
                         ) : (opt.to_payload || opt.payload) ? (
                           <span className="text-success-soft-foreground bg-success-soft px-2 py-0.5 rounded border border-success/30 font-mono text-[11px] inline-block w-fit">

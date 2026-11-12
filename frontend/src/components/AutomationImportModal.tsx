@@ -7,7 +7,8 @@ import {
   ModalHeader,
   ModalHeading,
   ModalBody,
-  ModalFooter
+  ModalFooter,
+  Button
 } from '@heroui/react';
 import { AutomationRule, AutomationSettings, AutomationTrigger, AutomationCondition, AutomationAction } from '../types/automation';
 import { Catalog } from '../types/catalog';
@@ -316,24 +317,29 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
         <ModalContainer placement="center" scroll="inside" className="p-3 sm:p-6">
           <ModalDialog className="relative w-full max-w-2xl rounded-2xl border border-border bg-overlay text-overlay-foreground shadow-overlay overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
             {/* Header */}
-            <ModalHeader className="flex items-center justify-between p-4 sm:p-5 border-b border-separator bg-surface shrink-0 gap-0">
-              <div>
+            <ModalHeader className="p-4 sm:p-5 border-b border-separator bg-surface shrink-0">
+              <div className="pr-10">
                 <ModalHeading className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
-                  <Upload className="w-5 h-5 text-accent" />
-                  Import Automations
+                  <Upload className="w-5 h-5 text-accent shrink-0" />
+                  <span>Import Automations</span>
                 </ModalHeading>
                 <p className="text-xs text-muted mt-0.5">
                   Upload an <code className="text-accent">automations.json</code> file or paste a single rule snippet.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="p-1.5 text-muted hover:text-foreground rounded-lg hover:bg-default-hover transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
             </ModalHeader>
+
+            {/* Upper Right Close Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              isIconOnly
+              onPress={onClose}
+              aria-label="Close modal"
+              className="absolute top-4 right-4 z-20 !rounded-full w-8 h-8 flex items-center justify-center p-0 !bg-surface-secondary hover:!bg-surface-tertiary text-muted hover:text-foreground border border-border/50 shadow-sm transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </Button>
 
             <ModalBody className="p-4 sm:p-6 max-h-[75vh] overflow-y-auto space-y-4">
           {/* Drag & Drop or File Select Box */}

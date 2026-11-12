@@ -180,10 +180,10 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
     <Modal isOpen={true} onOpenChange={open => { if (!open) onClose(); }}>
       <ModalBackdrop variant="blur" className="bg-backdrop backdrop-blur-md">
         <ModalContainer placement="center" scroll="inside" className="p-3 sm:p-4">
-          <ModalDialog className="w-full max-w-4xl bg-overlay text-overlay-foreground border border-border rounded-2xl shadow-overlay overflow-hidden flex flex-col max-h-[90vh] p-0">
+          <ModalDialog className="relative w-full max-w-4xl bg-overlay text-overlay-foreground border border-border rounded-2xl shadow-overlay overflow-hidden flex flex-col max-h-[90vh] p-0">
             {/* Header Strip */}
-            <ModalHeader className="p-4 sm:p-5 border-b border-separator flex items-center justify-between gap-3 bg-surface shrink-0">
-              <div className="flex items-center gap-3 min-w-0">
+            <ModalHeader className="p-4 sm:p-5 border-b border-separator bg-surface shrink-0">
+              <div className="flex items-center gap-3 min-w-0 pr-10">
                 <div className="w-10 h-10 rounded-xl bg-accent-soft text-accent flex items-center justify-center border border-accent/30 shrink-0">
                   <Sparkles className="w-5 h-5" />
                 </div>
@@ -201,17 +201,19 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                   </p>
                 </div>
               </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            isIconOnly
-            onPress={onClose}
-            aria-label="Close modal"
-            className="p-1.5 text-muted hover:text-foreground rounded-lg hover:bg-default-hover transition shrink-0"
-          >
-            <X className="w-5 h-5" />
-          </Button>
-        </ModalHeader>
+            </ModalHeader>
+
+            {/* Upper Right Close Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              isIconOnly
+              onPress={onClose}
+              aria-label="Close modal"
+              className="absolute top-4 right-4 z-20 !rounded-full w-8 h-8 flex items-center justify-center p-0 !bg-surface-secondary hover:!bg-surface-tertiary text-muted hover:text-foreground border border-border/50 shadow-sm transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </Button>
 
         {/* Tab Navigation */}
         <div className="px-4 sm:px-5 border-b border-separator bg-surface text-xs font-semibold shrink-0">

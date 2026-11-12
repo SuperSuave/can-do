@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Tabs, Chip, Badge } from '@heroui/react';
 import { Catalog, Vehicle } from '../types/catalog';
 import { getAllKnownFeatures } from '../utils/canValidator';
+import { formatPlatformFamily } from '../utils/catalogUtils';
 import { VehicleEditorModal } from './VehicleEditorModal';
 import {
   Car,
@@ -41,7 +42,7 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
   draftAddedVehicleIds = [],
   draftModifiedVehicleIds = [],
   allDiscoveredFeatures = [],
-  onRegisterDiscoveredFeature = (_feat: string) => {},
+  onRegisterDiscoveredFeature = (_feat: string) => { },
   activeMainTab = 'vehicles',
   onChangeMainTab
 }) => {
@@ -100,9 +101,13 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
 
   // 5. Unique families
   const availableFamilies = useMemo(() => {
-    const families = new Set(catalog.vehicles.map(v => v.family));
+    const families = new Set(
+      catalog.vehicles
+        .filter(v => selectedMake === 'all' || v.make === selectedMake)
+        .map(v => v.family)
+    );
     return Array.from(families).sort();
-  }, [catalog.vehicles]);
+  }, [catalog.vehicles, selectedMake]);
 
   // 6. Filtered vehicles list
   const filteredVehicles = useMemo(() => {
@@ -247,6 +252,41 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
     setActiveFeatureFilter(null);
   };
 
+  const handleMakeChange = (make: string) => {
+    setSelectedMake(make);
+    if (make !== 'all' && selectedFamily !== 'all') {
+      const famVehicles = catalog.vehicles.filter(v => v.family === selectedFamily);
+      const makes = new Set(famVehicles.map(v => v.make));
+      if (!makes.has(make)) {
+        setSelectedFamily('all');
+      }
+    }
+  };
+
+  const handleFamilyChange = (fam: string) => {
+    setSelectedFamily(fam);
+    if (fam !== 'all') {
+      const famVehicles = catalog.vehicles.filter(v => v.family === fam);
+      if (famVehicles.length > 0) {
+        const uniqueMakes = Array.from(new Set(famVehicles.map(v => v.make)));
+        if (uniqueMakes.length === 1 && selectedMake !== uniqueMakes[0]) {
+          setSelectedMake(uniqueMakes[0]);
+        }
+      }
+    }
+  };
+
+  const handleRegionChange = (region: string) => {
+    setSelectedRegion(region);
+    if (region !== 'all' && selectedFamily !== 'all') {
+      const famVehicles = catalog.vehicles.filter(v => v.family === selectedFamily);
+      const regions = new Set(famVehicles.map(v => v.region));
+      if (!regions.has(region)) {
+        setSelectedFamily('all');
+      }
+    }
+  };
+
   return (
     <div className="space-y-3.5">
       {/* Primary search & quick action row */}
@@ -312,21 +352,19 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
                 <Tabs.List className="gap-1">
                   <Tabs.Tab
                     id="catalog"
-                    className={`relative px-3.5 py-1.5 rounded-full font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                      activeMainTab === 'catalog'
+                    className={`relative px-3.5 py-1.5 rounded-full font-bold transition cursor-pointer flex items-center gap-1.5 ${activeMainTab === 'catalog'
                         ? 'text-accent-foreground'
                         : 'text-muted hover:text-foreground'
-                    }`}
+                      }`}
                   >
                     <span>Commands</span>
                     <Badge
                       size="sm"
                       variant="secondary"
-                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
-                        activeMainTab === 'catalog'
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${activeMainTab === 'catalog'
                           ? 'bg-accent-foreground/20 text-accent-foreground'
                           : 'bg-surface-tertiary text-foreground'
-                      }`}
+                        }`}
                     >
                       {catalog.commands.length}
                     </Badge>
@@ -335,21 +373,19 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
 
                   <Tabs.Tab
                     id="vehicles"
-                    className={`relative px-3.5 py-1.5 rounded-full font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                      activeMainTab === 'vehicles'
+                    className={`relative px-3.5 py-1.5 rounded-full font-bold transition cursor-pointer flex items-center gap-1.5 ${activeMainTab === 'vehicles'
                         ? 'text-accent-foreground'
                         : 'text-muted hover:text-foreground'
-                    }`}
+                      }`}
                   >
                     <span>Vehicles</span>
                     <Badge
                       size="sm"
                       variant="secondary"
-                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
-                        activeMainTab === 'vehicles'
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${activeMainTab === 'vehicles'
                           ? 'bg-accent-foreground/20 text-accent-foreground'
                           : 'bg-surface-tertiary text-foreground'
-                      }`}
+                        }`}
                     >
                       {catalog.vehicles.length}
                     </Badge>
@@ -372,9 +408,6 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
               Reset All
             </button>
           )}
-          <span className="text-[11px] font-mono text-muted bg-surface-secondary border border-border px-2.5 py-1 rounded-[6px]">
-            {filteredVehicles.length} / {catalog.vehicles.length} vehicles
-          </span>
         </div>
       </div>
 
@@ -414,7 +447,7 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
                 variant="soft"
                 className="inline-flex items-center gap-1 text-[11px] font-medium bg-accent-soft text-accent-soft-foreground border border-accent/30 px-2 py-0.5 rounded-full"
               >
-                Family: {selectedFamily}
+                Platform: {formatPlatformFamily(selectedFamily, catalog)}
                 <button
                   type="button"
                   onClick={() => setSelectedFamily('all')}
@@ -488,7 +521,7 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
           <div className="relative">
             <select
               value={selectedMake}
-              onChange={e => setSelectedMake(e.target.value)}
+              onChange={e => handleMakeChange(e.target.value)}
               className="w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-accent transition"
             >
               <option value="all">All Makes ({catalog.vehicles.length} models)</option>
@@ -504,17 +537,16 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
           <div className="relative">
             <select
               value={selectedFamily}
-              onChange={e => setSelectedFamily(e.target.value)}
-              className={`w-full px-3 py-2 rounded-[8px] bg-surface-secondary border focus:outline-none transition ${
-                selectedFamily !== 'all'
+              onChange={e => handleFamilyChange(e.target.value)}
+              className={`w-full px-3 py-2 rounded-[8px] bg-surface-secondary border focus:outline-none transition ${selectedFamily !== 'all'
                   ? 'border-accent text-accent font-semibold'
                   : 'border-border text-foreground focus:border-accent'
-              }`}
+                }`}
             >
               <option value="all">All Platform Families ({availableFamilies.length})</option>
               {availableFamilies.map(fam => (
                 <option key={fam} value={fam}>
-                  {fam}
+                  {formatPlatformFamily(fam, catalog)}
                 </option>
               ))}
             </select>
@@ -524,7 +556,7 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
           <div className="relative">
             <select
               value={selectedRegion}
-              onChange={e => setSelectedRegion(e.target.value)}
+              onChange={e => handleRegionChange(e.target.value)}
               className="w-full px-3 py-2 rounded-[8px] bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-accent transition"
             >
               <option value="all">All Regions</option>
@@ -540,11 +572,10 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
             <select
               value={activeFeatureFilter || 'all'}
               onChange={e => setActiveFeatureFilter(e.target.value === 'all' ? null : e.target.value)}
-              className={`w-full px-3 py-2 rounded-[8px] bg-surface-secondary border focus:outline-none transition ${
-                activeFeatureFilter !== null
+              className={`w-full px-3 py-2 rounded-[8px] bg-surface-secondary border focus:outline-none transition ${activeFeatureFilter !== null
                   ? 'border-success text-success font-semibold'
                   : 'border-border text-foreground focus:border-accent'
-              }`}
+                }`}
             >
               <option value="all">All Equipment Features ({combinedFeatures.length})</option>
               {combinedFeatures.map(feat => {
@@ -618,13 +649,12 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
             return (
               <div
                 key={vehicle.id}
-                className={`p-4 sm:p-5 rounded-[12px] border transition flex flex-col justify-between overflow-hidden min-w-0 ${
-                  isAddedDraft
+                className={`p-4 sm:p-5 rounded-[12px] border transition flex flex-col justify-between overflow-hidden min-w-0 ${isAddedDraft
                     ? 'border-success/60 bg-success-soft/40'
                     : isModifiedDraft
-                    ? 'border-warning/60 bg-warning-soft/40'
-                    : 'border-border bg-surface hover:border-border-secondary shadow-surface'
-                }`}
+                      ? 'border-warning/60 bg-warning-soft/40'
+                      : 'border-border bg-surface hover:border-border-secondary shadow-surface'
+                  }`}
               >
                 <div className="min-w-0">
                   {/* Top card bar: Make, draft status, region */}
@@ -689,7 +719,7 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
                       ID: <span className="text-accent" title={vehicle.id}>{vehicle.id}</span>
                     </div>
                     <div className="shrink-0 text-right">
-                      Family: <span className="text-foreground">{vehicle.family}</span>
+                      Platform: <span className="text-foreground" title={vehicle.family}>{formatPlatformFamily(vehicle.family, catalog)}</span>
                     </div>
                   </div>
 
@@ -744,11 +774,10 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
                                   key={feat}
                                   type="button"
                                   onClick={() => handleToggleCardFeature(vehicle, feat)}
-                                  className={`flex items-center justify-between px-2 py-1 rounded text-[10px] font-mono border transition ${
-                                    isChecked
+                                  className={`flex items-center justify-between px-2 py-1 rounded text-[10px] font-mono border transition ${isChecked
                                       ? 'bg-accent-soft text-accent-soft-foreground border-accent/40 font-bold'
                                       : 'bg-surface-tertiary text-muted border-border hover:text-foreground'
-                                  }`}
+                                    }`}
                                 >
                                   <span className="truncate">{feat}</span>
                                   {isChecked && <Check className="w-2.5 h-2.5 text-accent shrink-0" />}
@@ -770,11 +799,10 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
                               size="sm"
                               color={isFeatureFiltered ? 'success' : 'default'}
                               variant={isFeatureFiltered ? 'soft' : 'secondary'}
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[10px] font-mono border transition ${
-                                isFeatureFiltered
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[10px] font-mono border transition ${isFeatureFiltered
                                   ? 'bg-success-soft text-success-soft-foreground border-success font-semibold ring-1 ring-success/50'
                                   : 'bg-surface-secondary text-success-soft-foreground border-border group hover:border-border-secondary'
-                              }`}
+                                }`}
                             >
                               <button
                                 type="button"
@@ -945,7 +973,7 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
                   <option value="all">Equip to ALL vehicles in catalog</option>
                   {availableFamilies.map(fam => (
                     <option key={fam} value={fam}>
-                      Equip to all '{fam}' trims
+                      Equip to all '{formatPlatformFamily(fam, catalog)}' trims
                     </option>
                   ))}
                 </select>

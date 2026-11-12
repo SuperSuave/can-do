@@ -62,7 +62,7 @@ This document constitutes an exhaustive technical audit of all **154 entities** 
 | 13 | **`avn_star`** | `event` | `0x652` | 0x652 | - | {'D3': '0x04'} | 46 pkts | VERIFIED_EGMP_CANFD |
 | 14 | **`avn_knob_buttons`** | `event` | `0x651` | 0x651 | - | 2 options | 0 pkts | VERIFIED_EGMP_CANFD |
 | 15 | **`avn_dash_media_buttons`** | `event` | `0x652` | 0x652 | - | 6 options | 46 pkts | VERIFIED_EGMP_CANFD |
-| 16 | **`ev6_mode_strip`** | `event` | `0x652` | 0x652 | - | {'D4': '0x50'} | 46 pkts | VERIFIED_EGMP_CANFD |
+| 16 | **`ev6_mode_strip`** | `select` | `0x652` | 0x652 | - | 2 options: Media (D4: 5F->4F->7F->FF), Climate (D4: BF->FF) | 46 pkts | VERIFIED_EGMP_CANFD |
 | 17 | **`camera_btn`** | `event` | `0x476` | 0x476 | - | {'D3': '0x40'} | 1,528 pkts | VERIFIED_EGMP_CANFD |
 | 18 | **`cluster_brightness`** | `event` | `0x474` | 0x474 | - | 3 options | 665 pkts | VERIFIED_EGMP_CANFD |
 | 19 | **`head_unit_media_source`** | `sensor` | `0x4CE` | 0x4CE | - | 11 options | 2,427 pkts | VERIFIED_EGMP_CANFD |
@@ -109,7 +109,7 @@ This document constitutes an exhaustive technical audit of all **154 entities** 
 | 60 | **`ambient_mood_lighting`** | `light` | `None` | - | - | 75 options | 0 pkts | VIRTUAL_OR_UDS |
 | 61 | **`vehicle_gear_state`** | `sensor` | `0x45` | 0x45 | - | D6 (mask 0x70) | 0 pkts | CUSTOM_OR_UNCONFIRMED |
 | 62 | **`cond_charging`** | `sensor` | `0x594` | **0x326** / **0x30B** | - | {'D3': '0x01'} | 0 pkts | **UPGRADED (Gen3 0x326 / 0x30B)** |
-| 63 | **`cond_ambient_temperature`** | `sensor` | `0x226` | 0x226 | CLU_02_100ms_1 | 3 options | 666 pkts | VERIFIED_GEN3_NATIVE |
+| 63 | **`outdoor_temperature`** | `sensor` | `0x226` | 0x226 | CLU_02_100ms_1 | D4 (raw - 40°C) | 666 pkts | VERIFIED_GEN3_NATIVE |
 | 64 | **`hv_battery_temperatures`** | `sensor` | `0x152` | 0x152 | BMS_10_100ms_2 | 4 options | 819 pkts | VERIFIED_GEN3_NATIVE |
 | 65 | **`cond_hv_battery_soc`** | `sensor` | `0x2FC` | 0x2FC | BMS_02_100ms_2 | 3 options | 815 pkts | VERIFIED_GEN3_NATIVE |
 | 66 | **`cond_aux_12v_battery`** | `sensor` | `0x1CF` | 0x1CF | - | D6 (mask -) | 0 pkts | CUSTOM_OR_UNCONFIRMED |
@@ -200,7 +200,7 @@ This document constitutes an exhaustive technical audit of all **154 entities** 
 | 151 | **`pdw_sensor_front_center`** | `sensor` | `0x436` | 0x436 | - | D2 (mask 0x07) | 0 pkts | LEGACY_GEN2A (PAS11) |
 | 152 | **`pdw_sensor_rear_center`** | `sensor` | `0x436` | 0x436 | - | D2 (mask 0x38) | 0 pkts | LEGACY_GEN2A (PAS11) |
 | 153 | **`ac_charging_current_limit`** | `select` | `0x578` | 0x578 | - | D3 (mask 0x03) | 0 pkts | LEGACY_GEN2A (EV_CP5) |
-| 154 | **`power_mirrors`** | `cover` | `0x410` | 0x410 | ICU_10_200ms | 2 options | 2,436 pkts | VERIFIED_GEN3_NATIVE |
+| 154 | **`power_mirrors`** | `cover` | `0x410` | 0x410 | ICU_10_200ms | DEPRECATED (No TX actuator; telemetry is USM auto-fold setting `cgw_welcome_mirror_light`) | 2,436 pkts | UNLINKED_USM_ONLY |
 
 ---
 

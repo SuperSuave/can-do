@@ -67,9 +67,9 @@ export const AutomationMoreInfoModal: React.FC<AutomationMoreInfoModalProps> = (
     <Modal isOpen={isOpen} onOpenChange={(open) => !open && onClose()}>
       <ModalBackdrop className="bg-backdrop backdrop-blur-sm fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
         <ModalContainer className="w-full max-w-lg">
-          <ModalDialog className="bg-overlay border border-border rounded-2xl shadow-overlay overflow-hidden flex flex-col max-h-[90vh]">
-            <ModalHeader className="px-5 py-4 border-b border-separator flex items-center justify-between bg-surface">
-              <div className="flex items-center gap-2.5 min-w-0">
+          <ModalDialog className="relative bg-overlay border border-border rounded-2xl shadow-overlay overflow-hidden flex flex-col max-h-[90vh]">
+            <ModalHeader className="px-5 py-4 border-b border-separator bg-surface">
+              <div className="flex items-center gap-2.5 min-w-0 pr-10">
                 <span
                   className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
                     rule.enabled ? 'bg-success' : 'bg-muted/50'
@@ -79,15 +79,19 @@ export const AutomationMoreInfoModal: React.FC<AutomationMoreInfoModalProps> = (
                   {rule.name || 'Automation Details'}
                 </ModalHeading>
               </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="p-1 rounded-lg text-muted hover:text-foreground hover:bg-surface-secondary transition"
-                aria-label="Close modal"
-              >
-                <X className="w-5 h-5" />
-              </button>
             </ModalHeader>
+
+            {/* Upper Right Close Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              isIconOnly
+              onPress={onClose}
+              aria-label="Close modal"
+              className="absolute top-3.5 right-3.5 z-20 !rounded-full w-8 h-8 flex items-center justify-center p-0 !bg-surface-secondary hover:!bg-surface-tertiary text-muted hover:text-foreground border border-border/50 shadow-sm transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </Button>
 
             <ModalBody className="p-5 space-y-4 overflow-y-auto text-sm text-foreground">
               {/* Primary Status Banner */}

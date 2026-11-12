@@ -80,27 +80,29 @@ Shared / Multiplexed CAN Frames: ${sharedCanIds.length}
         <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
           <ModalDialog className="relative w-full max-w-2xl rounded-[16px] border border-border bg-overlay text-overlay-foreground shadow-overlay overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
             {/* Header */}
-            <ModalHeader className="flex items-center justify-between p-5 border-b border-separator bg-surface gap-0">
-              <div>
+            <ModalHeader className="p-5 border-b border-separator bg-surface">
+              <div className="pr-10">
                 <ModalHeading className="text-lg font-bold text-foreground flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-accent" />
-                  Catalog Validation & Health Audit
+                  <ShieldCheck className="w-5 h-5 text-accent shrink-0" />
+                  <span>Catalog Validation & Health Audit</span>
                 </ModalHeading>
                 <p className="text-xs text-muted mt-0.5">
                   Comprehensive scan of CAN IDs, payload masks, multiplexing, and vehicle compatibility.
                 </p>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                isIconOnly
-                onPress={onClose}
-                aria-label="Close modal"
-                className="p-1.5 text-muted hover:text-foreground rounded-full hover:bg-default-hover transition"
-              >
-                <X className="w-5 h-5" />
-              </Button>
             </ModalHeader>
+
+            {/* Upper Right Close Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              isIconOnly
+              onPress={onClose}
+              aria-label="Close modal"
+              className="absolute top-4 right-4 z-20 !rounded-full w-8 h-8 flex items-center justify-center p-0 !bg-surface-secondary hover:!bg-surface-tertiary text-muted hover:text-foreground border border-border/50 shadow-sm transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </Button>
 
             {/* Content */}
             <ModalBody className="p-6 max-h-[70vh] overflow-y-auto space-y-5 text-xs">

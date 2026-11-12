@@ -8,7 +8,8 @@ import {
   ModalHeading,
   ModalBody,
   ModalFooter,
-  Checkbox
+  Checkbox,
+  Button
 } from '@heroui/react';
 import { Catalog, Command } from '../types/catalog';
 import {
@@ -211,9 +212,9 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
         <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
           <ModalDialog className="relative w-full max-w-3xl rounded-[16px] border border-border bg-overlay text-overlay-foreground shadow-overlay overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
             {/* Header */}
-            <ModalHeader className="flex items-center justify-between p-5 border-b border-separator bg-surface gap-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-surface-secondary border border-border flex items-center justify-center text-accent">
+            <ModalHeader className="p-5 border-b border-separator bg-surface">
+              <div className="flex items-center gap-2.5 pr-10">
+                <div className="w-8 h-8 rounded-full bg-surface-secondary border border-border flex items-center justify-center text-accent shrink-0">
                   <Layers className="w-4 h-4" />
                 </div>
                 <div>
@@ -223,15 +224,19 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                   </p>
                 </div>
               </div>
-
-              <button
-                type="button"
-                onClick={onClose}
-                className="p-1.5 text-muted hover:text-foreground rounded-full hover:bg-default-hover transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
             </ModalHeader>
+
+            {/* Upper Right Close Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              isIconOnly
+              onPress={onClose}
+              aria-label="Close modal"
+              className="absolute top-4 right-4 z-20 !rounded-full w-8 h-8 flex items-center justify-center p-0 !bg-surface-secondary hover:!bg-surface-tertiary text-muted hover:text-foreground border border-border/50 shadow-sm transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </Button>
 
             {/* Modal Body */}
             <ModalBody className="p-6 max-h-[72vh] overflow-y-auto space-y-5 text-xs">

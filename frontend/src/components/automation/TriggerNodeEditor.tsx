@@ -23,6 +23,7 @@ import { BleButtonComboPicker } from '../BleButtonComboPicker';
 import { BleDeviceSelect, BleBeaconSelect, BleActionSelect } from '../BleSelects';
 import { SustainedDurationInput, formatSustainedBadge } from './SustainedDurationInput';
 import { AutomationClipboardContext } from './AutomationClipboardContext';
+import { NumericRangeNodeEditor } from './NumericRangeNodeEditor';
 
 export interface TriggerNodeEditorProps {
   key?: React.Key;
@@ -700,6 +701,13 @@ export function TriggerNodeEditor({
   // CAN Trigger: Dual-View with Catalog recognition
   const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForTrigger(trig, catalog) : {};
   const hasOptions = !!(catalogCmd?.options && catalogCmd.options.length > 0);
+  const isRangeEntity = !hasOptions && Boolean(
+    catalogCmd?.type === 'param_range' ||
+    catalogCmd?.type === 'linear_scale' ||
+    (catalogCmd?.network?.min !== undefined && catalogCmd?.network?.max !== undefined) ||
+    catalogCmd?.network?.factor !== undefined ||
+    trig.type === 'param_range'
+  );
   const isCustomCan = !catalogCmd;
   const defaultCanName = isCustomCan
     ? (trig.can_id ? `Custom CAN (${trig.can_id})` : 'Custom CAN Trigger')
@@ -752,7 +760,7 @@ export function TriggerNodeEditor({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
-          {hasOptions && !collapsed && (
+          {(hasOptions || isRangeEntity) && !collapsed && (
             <button
               type="button"
               onClick={toggleAdvanced}
@@ -824,8 +832,17 @@ export function TriggerNodeEditor({
         </div>
       )}
 
+      {/* Numeric Range Comparator for param_range / continuous telemetry */}
+      {isRangeEntity && (
+        <NumericRangeNodeEditor
+          item={trig}
+          catalogCmd={catalogCmd}
+          onUpdate={onUpdate}
+        />
+      )}
+
       {/* Advanced Details View */}
-      {(!hasOptions || showAdvanced) && (() => {
+      {((!hasOptions && !isRangeEntity) || showAdvanced) && (() => {
         const effectiveTrigCanId =
           trig.can_id ||
           catalogCmd?.network?.state_can_id ||

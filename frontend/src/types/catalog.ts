@@ -37,6 +37,9 @@ export interface CommandNetwork {
   max?: number;
   step?: number;
   offset?: number;
+  factor?: number;
+  raw_min?: string | number;
+  raw_max?: string | number;
   unit?: string;
   base_payload?: (string | number)[];
 }
