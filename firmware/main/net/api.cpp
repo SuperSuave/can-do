@@ -2225,6 +2225,22 @@ static esp_err_t ws_handler(httpd_req_t *req) {
             return ret;
         }
         rx_buf[max_read] = '\0';
+        if (ws_pkt.type == HTTPD_WS_TYPE_TEXT) {
+            cJSON *msg = cJSON_Parse(reinterpret_cast<const char*>(rx_buf));
+            if (msg) {
+                cJSON *type_item = cJSON_GetObjectItem(msg, "type");
+                if (type_item && cJSON_IsString(type_item) && strcmp(type_item->valuestring, "ble_learn") == 0) {
+                    cJSON *active_item = cJSON_GetObjectItem(msg, "active");
+                    cJSON *dur_item = cJSON_GetObjectItem(msg, "duration_ms");
+                    bool active = cJSON_IsTrue(active_item);
+                    uint32_t dur = (dur_item && cJSON_IsNumber(dur_item) && dur_item->valueint > 0)
+                                       ? (uint32_t)dur_item->valueint
+                                       : 30000;
+                    can_engine_set_ble_learn_mode(active, dur);
+                }
+                cJSON_Delete(msg);
+            }
+        }
     }
 
     return ESP_OK;

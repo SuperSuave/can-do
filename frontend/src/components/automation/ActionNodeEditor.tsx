@@ -649,7 +649,7 @@ export function ActionNodeEditor({
                     conditions: condList.length > 0 ? condList : [{
                       id: `cond_wait_${Date.now().toString(36)}`,
                       type: 'ble_button',
-                      ble_button: 'volume_up',
+                      ble_button: 'any',
                       ble_action: 'press'
                     }]
                   });

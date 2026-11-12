@@ -147,7 +147,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
             id: `trig_ble_${Date.now().toString(36)}`,
             source: 'ble',
             type: 'ble_button',
-            ble_button: 'volume_up',
+            ble_button: 'any',
             ble_action: 'press'
           })
         },
@@ -269,7 +269,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           create: (): AutomationCondition => ({
             id: `cond_ble_btn_${Date.now().toString(36)}`,
             type: 'ble_button',
-            ble_button: 'volume_up',
+            ble_button: 'any',
             ble_action: 'press'
           })
         },
@@ -372,7 +372,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           condition: {
             id: `cond_wait_${Date.now().toString(36)}`,
             type: 'ble_button',
-            ble_button: 'volume_up',
+            ble_button: 'any',
             ble_action: 'press'
           }
         })

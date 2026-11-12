@@ -899,7 +899,7 @@ export function ConditionNodeEditor({
 
   // Bluetooth Button Pressed condition
   if (cond.type === 'ble_button' || cond.type === 'ble_key' || cond.type === 'ble') {
-    const btn = cond.ble_button || cond.target_string || 'volume_up';
+    const btn = cond.ble_button ?? cond.target_string ?? 'any';
     const act = cond.ble_action || 'press';
     return (
       <div className="p-2.5 sm:p-3 rounded-xl bg-surface-secondary border border-accent/40 space-y-2 text-xs min-w-0 overflow-hidden">
@@ -919,7 +919,7 @@ export function ConditionNodeEditor({
               <Bluetooth className="w-3.5 h-3.5 text-accent shrink-0" />
               <span className="font-semibold text-foreground truncate">Bluetooth Button / Combo</span>
               <span className="px-1.5 py-0.2 rounded bg-accent-soft text-accent-soft-foreground text-[10px] border border-accent/30 font-mono shrink-0">
-                {btn} • {act}
+                {btn || 'any'} • {act}
               </span>
             </div>
           </div>

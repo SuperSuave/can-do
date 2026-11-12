@@ -256,6 +256,7 @@ struct BleDeviceInfo {
 };
 static std::unordered_map<std::string, BleDeviceInfo> s_ble_devices;
 static uint32_t s_wait_for_start_ms = 0;
+static std::atomic<uint32_t> s_ble_learn_until_ms{0};
 
 struct BleBeaconState {
     std::string uuid;
@@ -3016,6 +3017,20 @@ void can_engine_on_device_event(const std::string& event_type, const std::string
     }
 }
 
+void can_engine_set_ble_learn_mode(bool active, uint32_t duration_ms) {
+    if (!active) {
+        s_ble_learn_until_ms.store(0);
+        ESP_LOGI(TAG, "BLE button learn mode disabled");
+        return;
+    }
+    uint32_t dur = (duration_ms > 0 && duration_ms <= 60000) ? duration_ms : 30000;
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    uint32_t until = now_ms + dur;
+    if (until == 0) until = 1; // avoid 0 sentinel
+    s_ble_learn_until_ms.store(until);
+    ESP_LOGI(TAG, "BLE button learn mode enabled for %lu ms", (unsigned long)dur);
+}
+
 void can_engine_on_ble_event(const std::string& address, const std::string& button, const std::string& action, const std::string& combo, uint32_t hold_seconds) {
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
     {
@@ -3031,6 +3046,14 @@ void can_engine_on_ble_event(const std::string& address, const std::string& butt
     mqtt_mgr_publish_ble_button(address, button, action, combo, hold_seconds);
 
     if (!g_automations_enabled.load()) return;
+
+    uint32_t learn_until = s_ble_learn_until_ms.load();
+    if (learn_until != 0) {
+        if ((int32_t)(learn_until - now_ms) > 0) {
+            return;
+        }
+        s_ble_learn_until_ms.store(0);
+    }
 
     const bool is_hold_tick = (action == "hold" || action.rfind("hold_", 0) == 0);
     bool should_beep = false;

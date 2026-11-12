@@ -230,7 +230,7 @@ export function TriggerNodeEditor({
                 <span>Bluetooth Remote Button</span>
               </div>
               <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent-soft-foreground text-[10px] font-mono border border-accent/30">
-                {trig.ble_button || 'volume_up'} • {trig.ble_action || 'press'}
+                {trig.ble_button || 'any'} • {trig.ble_action || 'press'}
               </span>
             </div>
             <div className="flex items-center gap-1.5 font-mono text-[11px]">
@@ -262,7 +262,7 @@ export function TriggerNodeEditor({
 
             <div className="flex flex-col justify-end">
               <BleButtonComboPicker
-                value={trig.ble_button || 'volume_up'}
+                value={trig.ble_button ?? 'any'}
                 onChange={val => onUpdate({ ...trig, ble_button: val })}
                 label="Button or Multi-Button Combo Chord"
               />
