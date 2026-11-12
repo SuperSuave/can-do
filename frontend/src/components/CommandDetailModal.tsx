@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import {
   Tabs,
   Chip,
-  Badge,
+  Button,
+  Dropdown,
+  Label,
   Modal,
   ModalBackdrop,
   ModalContainer,
@@ -31,16 +33,14 @@ import {
   Code2,
   Cpu,
   Trash2,
-  Github,
-  User,
-  ExternalLink,
   FileCode,
   FileText,
   Home,
   Sparkles,
   Zap,
   Play,
-  Radio
+  Radio,
+  MoreVertical
 } from 'lucide-react';
 
 interface CommandDetailModalProps {
@@ -48,9 +48,63 @@ interface CommandDetailModalProps {
   catalog: Catalog;
   onClose: () => void;
   onEdit: (cmd: Command) => void;
+  onDuplicate?: (cmd: Command) => void;
   onDelete?: (cmdId: string) => void;
   onAddToAutomation?: (cmd: Command, role?: CommandRole, option?: CommandOption) => void;
+  queuedAutomationKeys?: Set<string>;
+  queuedAutomationCount?: number;
+  onToggleAutomationQueue?: (cmd: Command, role?: CommandRole, option?: CommandOption) => void;
+  onBuildFromAutomationQueue?: () => void;
+  onClearAutomationQueue?: () => void;
 }
+
+export const getAutomationQueueKey = (
+  commandId: string,
+  role?: CommandRole,
+  option?: CommandOption
+): string => {
+  const optKey = option
+    ? `${option.label ?? ''}#${option.state_value ?? ''}`
+    : '';
+  return `${commandId}::${role || 'auto'}::${optKey}`;
+};
+
+const ROLE_META: { role: CommandRole; letter: string; label: string; className: string }[] = [
+  { role: 'trigger', letter: 'T', label: 'Trigger', className: 'trig-pill' },
+  { role: 'condition', letter: 'C', label: 'Condition', className: 'cond-pill' },
+  { role: 'action', letter: 'A', label: 'Action', className: 'act-pill' }
+];
+
+const RoleSummaryPill: React.FC<{ roles?: CommandRole[]; size?: 'sm' | 'md' }> = ({
+  roles,
+  size = 'md'
+}) => {
+  const active = ROLE_META.filter(m => roles?.includes(m.role));
+  const items = active.length > 0 ? active : [ROLE_META[0]];
+
+  return (
+    <Chip
+      size="sm"
+      variant="secondary"
+      aria-label={items.map(i => i.label).join(', ')}
+      className={`inline-flex items-center rounded-full bg-surface-secondary border border-border shrink-0 ${
+        size === 'md' ? 'px-1.5 py-0.5 gap-1' : 'px-1 py-0.5 gap-0.5'
+      }`}
+    >
+      {items.map(item => (
+        <span
+          key={item.role}
+          title={item.label}
+          className={`inline-flex items-center justify-center rounded-full font-bold uppercase leading-none ${item.className} ${
+            size === 'md' ? 'w-5 h-5 text-[11px]' : 'w-4 h-4 text-[10px]'
+          }`}
+        >
+          {item.letter}
+        </span>
+      ))}
+    </Chip>
+  );
+};
 
 export const formatPayloadDisplay = (val: any): string => {
   if (val === undefined || val === null) return '';
@@ -69,13 +123,87 @@ export const formatPayloadDisplay = (val: any): string => {
   return String(val);
 };
 
+interface CommandActionMenuProps {
+  commandName: string;
+  copied: boolean;
+  onEdit: () => void;
+  onCopy: () => void;
+  onDuplicate?: () => void;
+  onRequestDelete?: () => void;
+}
+
+const CommandActionMenu: React.FC<CommandActionMenuProps> = ({
+  commandName,
+  copied,
+  onEdit,
+  onCopy,
+  onDuplicate,
+  onRequestDelete
+}) => {
+  return (
+    <Dropdown>
+      <Button
+        variant="ghost"
+        size="md"
+        isIconOnly
+        aria-label={`Actions for ${commandName}`}
+        className="!rounded-full w-8 h-8 flex items-center justify-center p-0 !bg-surface-secondary hover:!bg-surface-tertiary text-muted hover:text-foreground border-0 transition-colors"
+      >
+        <MoreVertical className="w-4 h-4" />
+      </Button>
+      <Dropdown.Popover placement="bottom end" className="min-w-[172px] bg-overlay border border-border shadow-overlay">
+        <Dropdown.Menu
+          aria-label="Command Actions"
+          onAction={key => {
+            if (key === 'edit') onEdit();
+            else if (key === 'duplicate') onDuplicate?.();
+            else if (key === 'copy') onCopy();
+            else if (key === 'delete') onRequestDelete?.();
+          }}
+        >
+          <Dropdown.Item id="edit" textValue="Edit command">
+            <Edit3 className="w-4 h-4 text-accent shrink-0" />
+            <Label className="text-accent font-semibold">Edit command</Label>
+          </Dropdown.Item>
+          {onDuplicate ? (
+            <Dropdown.Item id="duplicate" textValue="Duplicate">
+              <Layers className="w-4 h-4 text-muted shrink-0" />
+              <Label>Duplicate</Label>
+            </Dropdown.Item>
+          ) : null}
+          <Dropdown.Item id="copy" textValue={copied ? 'Copied JSON' : 'Copy JSON'}>
+            {copied ? (
+              <Check className="w-4 h-4 text-success shrink-0" />
+            ) : (
+              <Copy className="w-4 h-4 text-muted shrink-0" />
+            )}
+            <Label>{copied ? 'Copied JSON' : 'Copy JSON'}</Label>
+          </Dropdown.Item>
+          {onRequestDelete ? (
+            <Dropdown.Item id="delete" textValue="Delete" variant="danger">
+              <Trash2 className="w-4 h-4 text-danger shrink-0" />
+              <Label>Delete</Label>
+            </Dropdown.Item>
+          ) : null}
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown>
+  );
+};
+
 export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
   command,
   catalog,
   onClose,
   onEdit,
+  onDuplicate,
   onDelete,
-  onAddToAutomation
+  onAddToAutomation,
+  queuedAutomationKeys,
+  queuedAutomationCount = 0,
+  onToggleAutomationQueue,
+  onBuildFromAutomationQueue,
+  onClearAutomationQueue
 }) => {
   const [copied, setCopied] = useState(false);
   const [copiedDbc, setCopiedDbc] = useState(false);
@@ -178,184 +306,198 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
   return (
     <Modal isOpen={Boolean(command)} onOpenChange={open => { if (!open) onClose(); }}>
       <ModalBackdrop variant="blur" className="bg-backdrop backdrop-blur-sm">
-        <ModalContainer placement="center" scroll="inside" className="p-4 sm:p-6">
-          <ModalDialog className="relative w-full max-w-3xl rounded-[16px] border border-border bg-overlay text-overlay-foreground shadow-overlay overflow-hidden my-auto p-0 flex flex-col max-h-[90vh]">
+        <ModalContainer placement="top" scroll="inside" className="p-4 sm:p-6 sm:pt-8">
+          <ModalDialog className="relative w-full max-w-3xl rounded-[16px] border border-border bg-overlay text-overlay-foreground shadow-overlay overflow-hidden p-0 flex flex-col max-h-[90vh]">
             {/* Header */}
-            <ModalHeader className="flex items-start justify-between p-6 border-b border-separator bg-surface gap-0">
-              <div className="pr-6">
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  {command.roles.map(r => (
-                    <Chip
-                      key={r}
-                      size="sm"
-                      color={r === 'trigger' ? 'warning' : r === 'condition' ? 'accent' : 'success'}
-                      variant="soft"
-                      className={`can-do-ha-pill capitalize ${
-                        r === 'trigger' ? 'trig-pill' : r === 'condition' ? 'cond-pill' : 'act-pill'
-                      }`}
-                    >
-                      {r}
-                    </Chip>
-                  ))}
-                  {(command.state_can_id || command.network?.state_can_id || command.can_id) && (
-                    <Badge size="sm" color="accent" variant="soft" className="font-mono text-xs px-2.5 py-0.5 rounded-[6px] bg-surface-secondary text-accent border border-border">
-                      {(command.action_can_id || command.network?.action_can_id)
-                        ? `Rx: ${command.state_can_id || command.network?.state_can_id || command.can_id}`
-                        : (command.state_can_id || command.network?.state_can_id || command.can_id)} • Bus {command.bus ?? command.network?.bus ?? 0}
-                    </Badge>
-                  )}
-                  {(command.action_can_id || command.network?.action_can_id) && (
-                    <Badge size="sm" color="success" variant="soft" className="font-mono text-xs px-2.5 py-0.5 rounded-[6px] bg-success-soft text-success-soft-foreground border border-success/40">
-                      Tx: {command.action_can_id || command.network?.action_can_id} • Bus {command.action_bus ?? command.network?.bus ?? command.bus ?? 0}
-                    </Badge>
-                  )}
-                  {command.type && (
-                    <Chip size="sm" variant="secondary" className="text-xs font-mono px-2.5 py-0.5 rounded-[6px] bg-surface-secondary text-foreground border border-border">
-                      Type: {command.type}
-                    </Chip>
-                  )}
-                  {command.ha_domain && (() => {
-                    const domainStyle = getHaDomainBadgeStyle(command.ha_domain);
-                    return (
-                      <Chip
-                        size="sm"
-                        variant="secondary"
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-[6px] text-xs font-mono font-semibold border ${domainStyle.bg} ${domainStyle.text} ${domainStyle.border}`}
-                        title={`Home Assistant Domain: ${command.ha_domain}`}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${domainStyle.dot}`} />
-                        HA: {command.ha_domain}
-                      </Chip>
-                    );
-                  })()}
-                  {(command.ha_metadata?.icon || command.icon || command.mdi) && (
-                    <Chip
-                      size="sm"
-                      color="accent"
-                      variant="soft"
-                      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-[6px] text-xs font-mono font-medium bg-accent-soft text-accent-soft-foreground border border-accent/30"
-                      title={`MDI Icon: ${command.ha_metadata?.icon || command.icon || command.mdi}`}
-                    >
-                      <MdiIcon icon={command.ha_metadata?.icon || command.icon || command.mdi} className="w-3.5 h-3.5 text-accent" />
-                      {command.ha_metadata?.icon || command.icon || command.mdi}
-                    </Chip>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-3">
-                  {(command.ha_metadata?.icon || command.icon || command.mdi) && (
-                    <div className="w-9 h-9 rounded-xl bg-accent-soft border border-accent/30 flex items-center justify-center text-accent shrink-0 shadow-sm">
-                      <MdiIcon icon={command.ha_metadata?.icon || command.icon || command.mdi} className="w-5 h-5" />
-                    </div>
-                  )}
+            <ModalHeader className="p-6 border-b border-separator bg-surface">
+              <div className="flex flex-row items-start justify-between gap-4 w-full">
+                <div className="min-w-0 flex-1">
                   <ModalHeading className="text-xl md:text-2xl font-bold text-foreground tracking-tight">
                     {commandName}
                   </ModalHeading>
-                </div>
-                <p className="text-xs font-mono text-muted mt-1 flex items-center gap-1.5 flex-wrap">
-                  <span>ID: <span className="text-foreground">{command.id}</span></span>
-                  <span>•</span>
-                  <span>Category: <span className="text-accent font-sans">{command.category}</span></span>
-                  {command.subcategory && (
-                    <>
-                      <span>•</span>
-                      <span>Subsystem: <span className="text-accent-soft-foreground font-sans font-semibold bg-accent-soft px-1.5 py-0.5 rounded border border-accent/30">{command.subcategory}</span></span>
-                    </>
-                  )}
-                </p>
-              </div>
+                  <p className="text-xs font-mono text-muted mt-1 flex items-center gap-1.5 flex-wrap">
+                    <span>ID: <span className="text-foreground">{command.id}</span></span>
+                    <span>•</span>
+                    <span>Category: <span className="text-accent font-sans">{command.category}</span></span>
+                    {command.subcategory && (
+                      <>
+                        <span>•</span>
+                        <span>Subsystem: <span className="text-accent-soft-foreground font-sans font-semibold bg-accent-soft px-1.5 py-0.5 rounded border border-accent/30">{command.subcategory}</span></span>
+                      </>
+                    )}
+                  </p>
+                  {(() => {
+                    const contributors = getCommandContributors(command);
+                    if (contributors.length === 0) return null;
+                    return (
+                      <p className="text-xs text-muted mt-1.5 flex items-center gap-1.5 flex-wrap">
+                        <span>Discovered &amp; Contributed By:</span>
+                        {contributors.map((contrib, idx) => {
+                          const handle = contrib.github ? contrib.github.replace(/^@/, '') : '';
+                          const displayName = contrib.name || (handle ? `@${handle}` : 'Contributor');
+                          return (
+                            <React.Fragment key={idx}>
+                              {idx > 0 && <span>,</span>}
+                              {handle ? (
+                                <a
+                                  href={`https://github.com/${handle}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-accent hover:underline font-medium"
+                                >
+                                  {displayName}
+                                </a>
+                              ) : (
+                                <span className="text-foreground font-medium">{displayName}</span>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </p>
+                    );
+                  })()}
 
-              <button
-                onClick={onClose}
-                className="p-2 text-muted hover:text-foreground rounded-full hover:bg-default-hover transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
+                  {/* Role & CAN ID Metadata Pills below header text */}
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                    <RoleSummaryPill roles={command.roles} size="md" />
+                    {(command.state_can_id || command.network?.state_can_id || command.can_id) && (
+                      <Chip size="sm" color="accent" variant="soft" className="font-mono text-xs px-2.5 py-0.5 rounded-[6px] bg-surface-secondary text-accent border border-border">
+                        {(command.action_can_id || command.network?.action_can_id)
+                          ? `Rx: ${command.state_can_id || command.network?.state_can_id || command.can_id}`
+                          : (command.state_can_id || command.network?.state_can_id || command.can_id)}
+                      </Chip>
+                    )}
+                    {(command.action_can_id || command.network?.action_can_id) && (
+                      <Chip size="sm" color="success" variant="soft" className="font-mono text-xs px-2.5 py-0.5 rounded-[6px] bg-success-soft text-success-soft-foreground border border-success/40">
+                        Tx: {command.action_can_id || command.network?.action_can_id}
+                      </Chip>
+                    )}
+                    {command.type && (
+                      <Chip size="sm" variant="secondary" className="text-xs font-mono px-2.5 py-0.5 rounded-[6px] bg-surface-secondary text-foreground border border-border">
+                        Type: {command.type}
+                      </Chip>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <CommandActionMenu
+                    commandName={commandName}
+                    copied={copied}
+                    onEdit={() => {
+                      onClose();
+                      onEdit(command);
+                    }}
+                    onCopy={handleCopy}
+                    onDuplicate={
+                      onDuplicate
+                        ? () => {
+                            onDuplicate(command);
+                            onClose();
+                          }
+                        : undefined
+                    }
+                    onRequestDelete={onDelete ? () => setConfirmDelete(true) : undefined}
+                  />
+
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    isIconOnly
+                    onPress={onClose}
+                    aria-label="Close details modal"
+                    className="!rounded-full w-8 h-8 flex items-center justify-center p-0 !bg-surface-secondary hover:!bg-surface-tertiary text-muted hover:text-foreground border-0 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
             </ModalHeader>
 
         {/* Tab switcher */}
         <div className="px-6 border-b border-separator bg-surface text-sm">
           <Tabs
+            variant="secondary"
             selectedKey={activeTab}
             onSelectionChange={key => setActiveTab(key as typeof activeTab)}
             aria-label="Command Details Tabs"
           >
-            <Tabs.ListContainer className="overflow-x-auto no-scrollbar">
+            <Tabs.ListContainer className="overflow-x-auto no-scrollbar border-b-0">
               <Tabs.List className="gap-1 sm:gap-2">
                 <Tabs.Tab
                   id="overview"
-                  className={`relative py-3 px-3 font-medium transition cursor-pointer flex items-center ${
+                  className={`relative py-3 px-2.5 !w-auto font-medium transition cursor-pointer flex items-center whitespace-nowrap shrink-0 ${
                     activeTab === 'overview'
                       ? 'text-accent font-bold'
                       : 'text-muted hover:text-foreground'
                   }`}
                 >
-                  <Cpu className="w-4 h-4 inline-block mr-1.5" />
-                  <span>CAN Parameters</span>
+                  <Cpu className="w-4 h-4 inline-block mr-1.5 shrink-0" />
+                  <span>Parameters</span>
                   <Tabs.Indicator className="h-0.5 bg-accent bottom-0 rounded-full" />
                 </Tabs.Tab>
 
                 <Tabs.Tab
                   id="vehicles"
-                  className={`relative py-3 px-3 font-medium transition cursor-pointer flex items-center ${
+                  className={`relative py-3 px-2.5 !w-auto font-medium transition cursor-pointer flex items-center whitespace-nowrap shrink-0 ${
                     activeTab === 'vehicles'
                       ? 'text-accent font-bold'
                       : 'text-muted hover:text-foreground'
                   }`}
                 >
-                  <Car className="w-4 h-4 inline-block mr-1.5" />
-                  <span>Vehicle Compatibility ({compatibleVehicles.length}/{catalog.vehicles.length})</span>
+                  <Car className="w-4 h-4 inline-block mr-1.5 shrink-0" />
+                  <span>Vehicles ({compatibleVehicles.length}/{catalog.vehicles.length})</span>
                   <Tabs.Indicator className="h-0.5 bg-accent bottom-0 rounded-full" />
                 </Tabs.Tab>
 
                 <Tabs.Tab
                   id="cancapture"
-                  className={`relative py-3 px-3 font-medium transition cursor-pointer flex items-center ${
+                  className={`relative py-3 px-2.5 !w-auto font-medium transition cursor-pointer flex items-center whitespace-nowrap shrink-0 ${
                     activeTab === 'cancapture'
                       ? 'text-accent font-bold'
                       : 'text-muted hover:text-foreground'
                   }`}
                 >
-                  <FileText className="w-4 h-4 inline-block mr-1.5" />
-                  <span>Capture Note (D1–D8)</span>
+                  <FileText className="w-4 h-4 inline-block mr-1.5 shrink-0" />
+                  <span>Capture</span>
                   <Tabs.Indicator className="h-0.5 bg-accent bottom-0 rounded-full" />
                 </Tabs.Tab>
 
                 <Tabs.Tab
                   id="raw_json"
-                  className={`relative py-3 px-3 font-medium transition cursor-pointer flex items-center ${
+                  className={`relative py-3 px-2.5 !w-auto font-medium transition cursor-pointer flex items-center whitespace-nowrap shrink-0 ${
                     activeTab === 'raw_json'
                       ? 'text-accent font-bold'
                       : 'text-muted hover:text-foreground'
                   }`}
                 >
-                  <Code2 className="w-4 h-4 inline-block mr-1.5" />
-                  <span>Raw JSON</span>
+                  <Code2 className="w-4 h-4 inline-block mr-1.5 shrink-0" />
+                  <span>JSON</span>
                   <Tabs.Indicator className="h-0.5 bg-accent bottom-0 rounded-full" />
                 </Tabs.Tab>
 
                 <Tabs.Tab
                   id="dbc"
-                  className={`relative py-3 px-3 font-medium transition cursor-pointer flex items-center ${
+                  className={`relative py-3 px-2.5 !w-auto font-medium transition cursor-pointer flex items-center whitespace-nowrap shrink-0 ${
                     activeTab === 'dbc'
                       ? 'text-accent font-bold'
                       : 'text-muted hover:text-foreground'
                   }`}
                 >
-                  <FileCode className="w-4 h-4 inline-block mr-1.5" />
-                  <span>Vector DBC Signal</span>
+                  <FileCode className="w-4 h-4 inline-block mr-1.5 shrink-0" />
+                  <span>DBC</span>
                   <Tabs.Indicator className="h-0.5 bg-accent bottom-0 rounded-full" />
                 </Tabs.Tab>
 
                 <Tabs.Tab
                   id="homeassistant"
-                  className={`relative py-3 px-3 font-medium transition cursor-pointer flex items-center ${
+                  className={`relative py-3 px-2.5 !w-auto font-medium transition cursor-pointer flex items-center whitespace-nowrap shrink-0 ${
                     activeTab === 'homeassistant'
                       ? 'text-accent font-bold'
                       : 'text-muted hover:text-foreground'
                   }`}
                 >
-                  <Home className="w-4 h-4 inline-block mr-1.5 text-accent" />
+                  <Home className="w-4 h-4 inline-block mr-1.5 text-accent shrink-0" />
                   <span>Home Assistant</span>
                   <Tabs.Indicator className="h-0.5 bg-accent bottom-0 rounded-full" />
                 </Tabs.Tab>
@@ -392,90 +534,38 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
 
           {activeTab === 'overview' && (
             <div className="space-y-6">
-              {/* Community Contributor Credit */}
+              {/* Tested Vehicle & Research Notes (when present) */}
               {(() => {
                 const contributors = getCommandContributors(command);
-                if (contributors.length === 0) return null;
+                const testedVehicles = Array.from(
+                  new Set([
+                    ...contributors.map(c => c.tested_vehicle).filter(Boolean),
+                    ...(command.tested_vehicle ? [command.tested_vehicle] : [])
+                  ] as string[])
+                );
+                const notes = Array.from(
+                  new Set([
+                    ...contributors.map(c => c.notes).filter(Boolean),
+                    ...(command.notes ? [command.notes] : [])
+                  ] as string[])
+                );
+                if (testedVehicles.length === 0 && notes.length === 0) return null;
 
                 return (
-                  <div className="p-4 rounded-xl bg-surface-secondary border border-border shadow-sm space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Github className="w-4 h-4 text-accent" />
-                      <span className="text-[11px] uppercase font-bold tracking-wider text-foreground">
-                        {contributors.length > 1 ? 'Discovered & Contributed By (Research Credits)' : 'Discovered & Contributed By'}
-                      </span>
-                    </div>
-
-                    <div className={`grid gap-3 ${contributors.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
-                      {contributors.map((contrib, idx) => {
-                        const handle = contrib.github ? contrib.github.replace(/^@/, '') : '';
-                        return (
-                          <div 
-                            key={idx}
-                            className="p-3 rounded-lg bg-surface-tertiary border border-border flex flex-col justify-between gap-2"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div className="w-7 h-7 rounded-lg bg-surface border border-border flex items-center justify-center text-accent shrink-0">
-                                  {handle ? <Github className="w-4 h-4" /> : <User className="w-4 h-4" />}
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    {contrib.name && (
-                                      <span className="text-sm font-bold text-foreground truncate">
-                                        {contrib.name}
-                                      </span>
-                                    )}
-                                    {handle && (
-                                      <a
-                                        href={`https://github.com/${handle}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 text-xs font-mono text-accent-soft-foreground bg-accent-soft px-2 py-0.5 rounded border border-accent/30 hover:border-accent transition"
-                                      >
-                                        <span>@{handle}</span>
-                                        <ExternalLink className="w-2.5 h-2.5" />
-                                      </a>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {contrib.role && (
-                                <Badge size="sm" color="accent" variant="soft" className="text-[10px] text-accent-soft-foreground uppercase tracking-wider bg-accent-soft border border-accent/30 px-1.5 py-0.5 rounded font-semibold shrink-0">
-                                  {contrib.role}
-                                </Badge>
-                              )}
-                            </div>
-
-                            {/* Separate Tested Vehicle Box & Notes Box */}
-                            {(contrib.tested_vehicle || (contributors.length === 1 && command.tested_vehicle)) && (
-                              <div className="text-xs text-success-soft-foreground bg-success-soft px-2.5 py-1.5 rounded border border-success/40 flex items-center gap-2">
-                                <Car className="w-3.5 h-3.5 text-success shrink-0" />
-                                <span className="text-[10px] uppercase font-bold tracking-wider text-success shrink-0">Tested Vehicle:</span>
-                                <span className="font-medium">
-                                  {contrib.tested_vehicle || command.tested_vehicle}
-                                </span>
-                              </div>
-                            )}
-
-                            {(contrib.notes || (contributors.length === 1 && command.notes)) && (
-                              <div className="text-xs text-foreground bg-surface px-2.5 py-1.5 rounded border border-border flex items-start gap-2">
-                                <FileText className="w-3.5 h-3.5 text-accent shrink-0 mt-0.5" />
-                                <div>
-                                  <span className="text-[10px] text-accent font-bold uppercase tracking-wider block mb-0.5">
-                                    Notes:
-                                  </span>
-                                  <span className="leading-relaxed">
-                                    {contrib.notes || command.notes}
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                  <div className="space-y-2">
+                    {testedVehicles.length > 0 && (
+                      <div className="text-xs text-success-soft-foreground bg-success-soft px-3 py-2 rounded-lg border border-success/40 flex items-center gap-2 flex-wrap">
+                        <Car className="w-3.5 h-3.5 text-success shrink-0" />
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-success shrink-0">Tested Vehicle:</span>
+                        <span className="font-medium">{testedVehicles.join(' • ')}</span>
+                      </div>
+                    )}
+                    {notes.map((note, idx) => (
+                      <div key={idx} className="text-xs text-foreground bg-surface-secondary px-3 py-2 rounded-lg border border-border flex items-start gap-2">
+                        <FileText className="w-3.5 h-3.5 text-accent shrink-0 mt-0.5" />
+                        <span className="leading-relaxed">{note}</span>
+                      </div>
+                    ))}
                   </div>
                 );
               })()}
@@ -521,13 +611,13 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                   <Table className="w-full text-left text-xs overflow-hidden rounded-lg border border-border bg-surface-secondary">
                     <Table.Content aria-label="Defined Discrete States Table">
                       <Table.Header className="bg-surface-tertiary text-muted border-b border-border">
-                        <Table.Column id="label" isRowHeader className="p-3">State Meaning / Label</Table.Column>
-                        <Table.Column id="val" className="p-3 font-mono">Code / Value</Table.Column>
-                        <Table.Column id="rx" className="p-3 font-mono">RX CAN Match Pattern</Table.Column>
-                        <Table.Column id="tx" className="p-3 font-mono">Action Frame (TX)</Table.Column>
-                        <Table.Column id="desc" className="p-3">Description / Toast</Table.Column>
-                        <Table.Column id="def" className="p-3 text-center">Default</Table.Column>
-                        <Table.Column id="act" className="p-3 text-right">Automate</Table.Column>
+                        <Table.Column id="label" isRowHeader className="p-3 !text-center">State Meaning / Label</Table.Column>
+                        <Table.Column id="val" className="p-3 font-mono !text-center">Code / Value</Table.Column>
+                        <Table.Column id="rx" className="p-3 font-mono !text-center">RX CAN Match Pattern</Table.Column>
+                        <Table.Column id="tx" className="p-3 font-mono !text-center">Action Frame (TX)</Table.Column>
+                        <Table.Column id="desc" className="p-3 !text-center">Description / Toast</Table.Column>
+                        <Table.Column id="def" className="p-3 !text-center">Default</Table.Column>
+                        <Table.Column id="act" className="p-3 !text-center">Automate</Table.Column>
                       </Table.Header>
                       <Table.Body className="divide-y divide-separator font-mono">
                         {command.options.map((opt, idx) => (
@@ -619,34 +709,76 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                               )}
                             </Table.Cell>
                             <Table.Cell className="p-3 text-right">
-                              {onAddToAutomation && (
-                                <div className="inline-flex items-center gap-1.5 justify-end">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      onAddToAutomation(command, 'action', opt);
-                                      onClose();
-                                    }}
-                                    title={`Add "${opt.label}" as Action to Automation`}
-                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold bg-success-soft hover:opacity-90 text-success-soft-foreground border border-success/40 transition shadow-sm"
-                                  >
-                                    <Play className="w-3 h-3 fill-current" />
-                                    <span>Action</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      onAddToAutomation(command, 'trigger', opt);
-                                      onClose();
-                                    }}
-                                    title={`Add "${opt.label}" as Trigger to Automation`}
-                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold bg-warning-soft hover:opacity-90 text-warning-soft-foreground border border-warning/40 transition shadow-sm"
-                                  >
-                                    <Radio className="w-3 h-3" />
-                                    <span>Trigger</span>
-                                  </button>
-                                </div>
-                              )}
+                              {(onToggleAutomationQueue || onAddToAutomation) && (() => {
+                                const isActionQueued = Boolean(
+                                  queuedAutomationKeys?.has(getAutomationQueueKey(command.id, 'action', opt))
+                                );
+                                const isTriggerQueued = Boolean(
+                                  queuedAutomationKeys?.has(getAutomationQueueKey(command.id, 'trigger', opt))
+                                );
+                                return (
+                                  <div className="inline-flex items-center gap-1.5 justify-end">
+                                    <button
+                                      type="button"
+                                      aria-pressed={isActionQueued}
+                                      onClick={() => {
+                                        if (onToggleAutomationQueue) {
+                                          onToggleAutomationQueue(command, 'action', opt);
+                                        } else if (onAddToAutomation) {
+                                          onAddToAutomation(command, 'action', opt);
+                                          onClose();
+                                        }
+                                      }}
+                                      title={
+                                        isActionQueued
+                                          ? `Remove "${opt.label}" Action from Automation queue`
+                                          : `Add "${opt.label}" as Action to Automation queue`
+                                      }
+                                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold border transition shadow-sm ${
+                                        isActionQueued
+                                          ? 'bg-success text-success-foreground border-success'
+                                          : 'bg-success-soft hover:opacity-90 text-success-soft-foreground border-success/40'
+                                      }`}
+                                    >
+                                      {isActionQueued ? (
+                                        <Check className="w-3 h-3" />
+                                      ) : (
+                                        <Play className="w-3 h-3 fill-current" />
+                                      )}
+                                      <span>Action</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      aria-pressed={isTriggerQueued}
+                                      onClick={() => {
+                                        if (onToggleAutomationQueue) {
+                                          onToggleAutomationQueue(command, 'trigger', opt);
+                                        } else if (onAddToAutomation) {
+                                          onAddToAutomation(command, 'trigger', opt);
+                                          onClose();
+                                        }
+                                      }}
+                                      title={
+                                        isTriggerQueued
+                                          ? `Remove "${opt.label}" Trigger from Automation queue`
+                                          : `Add "${opt.label}" as Trigger to Automation queue`
+                                      }
+                                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold border transition shadow-sm ${
+                                        isTriggerQueued
+                                          ? 'bg-warning text-warning-foreground border-warning'
+                                          : 'bg-warning-soft hover:opacity-90 text-warning-soft-foreground border-warning/40'
+                                      }`}
+                                    >
+                                      {isTriggerQueued ? (
+                                        <Check className="w-3 h-3" />
+                                      ) : (
+                                        <Radio className="w-3 h-3" />
+                                      )}
+                                      <span>Trigger</span>
+                                    </button>
+                                  </div>
+                                );
+                              })()}
                             </Table.Cell>
                           </Table.Row>
                         ))}
@@ -695,6 +827,14 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                       Bus {command.bus ?? 0}
                     </div>
                   </div>
+                  {(command.state_can_id || command.network?.state_can_id || command.can_id || command.action_can_id || command.network?.action_can_id) && (
+                    <div className="p-3 rounded-lg bg-surface-secondary border border-border">
+                      <div className="text-muted mb-1">Frame Length (DLC)</div>
+                      <div className="font-mono text-foreground font-semibold">
+                        {(command.network as any)?.dlc || (command as any).dlc || 8} Bytes
+                      </div>
+                    </div>
+                  )}
                   <div className="p-3 rounded-lg bg-surface-secondary border border-border">
                     <div className="text-muted mb-1">Delay (ms)</div>
                     <div className="font-mono text-foreground font-semibold">
@@ -764,6 +904,27 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                   )}
                 </div>
               </div>
+
+              {/* Tags */}
+              {command.tags && command.tags.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted mb-2">
+                    Platform & Compatibility Tags
+                  </h4>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {command.tags.map(tag => (
+                      <Chip
+                        key={tag}
+                        size="sm"
+                        variant="secondary"
+                        className="text-xs font-mono text-muted bg-surface-secondary px-2 py-0.5 rounded border border-border"
+                      >
+                        #{tag}
+                      </Chip>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1020,28 +1181,32 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
         </ModalBody>
 
         {/* Modal Footer */}
-        <ModalFooter className="flex flex-wrap items-center justify-between gap-3 p-4 px-6 border-t border-separator bg-surface shrink-0">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="dash-outline-btn inline-flex items-center gap-2 text-xs py-2 px-3.5"
-            >
-              {copied ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-success" />
-                  Copied Snippet
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5" />
-                  Copy JSON
-                </>
+        {(onAddToAutomation || queuedAutomationCount > 0 || copied || (onDelete && confirmDelete)) && (
+          <ModalFooter className="flex flex-wrap items-center justify-between gap-3 p-4 px-6 border-t border-separator bg-surface shrink-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              {copied && (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-success">
+                  <Check className="w-3.5 h-3.5" />
+                  Copied JSON
+                </span>
               )}
-            </button>
 
-            {onDelete && (
-              confirmDelete ? (
+              {queuedAutomationCount > 0 && (
+                <div className="inline-flex items-center gap-1.5 bg-accent-soft border border-accent/30 px-2.5 py-1 rounded-full text-xs font-semibold text-accent-soft-foreground">
+                  <span>{queuedAutomationCount} queued</span>
+                  {onClearAutomationQueue && (
+                    <button
+                      type="button"
+                      onClick={onClearAutomationQueue}
+                      className="ml-0.5 text-muted hover:text-foreground transition underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {onDelete && confirmDelete && (
                 <div className="flex items-center gap-1.5 bg-danger-soft border border-danger/40 px-2.5 py-1 rounded-lg">
                   <span className="text-xs font-semibold text-danger-soft-foreground">Delete command?</span>
                   <button
@@ -1062,24 +1227,12 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                     Cancel
                   </button>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(true)}
-                  className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-2 px-3 text-muted hover:text-danger hover:border-danger/40"
-                  title="Delete this command"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Delete
-                </button>
-              )
-            )}
-          </div>
+              )}
+            </div>
 
-          <div className="flex items-center gap-2">
-            {onAddToAutomation && (
-              <div className="flex items-center gap-1.5">
-                {command.options && command.options.length > 0 && (
+            {(onAddToAutomation || (queuedAutomationCount > 0 && onBuildFromAutomationQueue)) && (
+              <div className="flex items-center gap-1.5 ml-auto">
+                {queuedAutomationCount === 0 && command.options && command.options.length > 0 && (
                   <select
                     value={selectedOptionIdx}
                     onChange={e => setSelectedOptionIdx(parseInt(e.target.value) || 0)}
@@ -1096,39 +1249,30 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    const chosenOpt = command.options && command.options.length > 0
-                      ? command.options[selectedOptionIdx] || command.options[0]
-                      : undefined;
-                    onAddToAutomation(command, undefined, chosenOpt);
-                    onClose();
+                    if (queuedAutomationCount > 0 && onBuildFromAutomationQueue) {
+                      onBuildFromAutomationQueue();
+                      onClose();
+                    } else if (onAddToAutomation) {
+                      const chosenOpt = command.options && command.options.length > 0
+                        ? command.options[selectedOptionIdx] || command.options[0]
+                        : undefined;
+                      onAddToAutomation(command, undefined, chosenOpt);
+                      onClose();
+                    }
                   }}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold text-accent-soft-foreground bg-accent-soft hover:bg-accent hover:text-accent-foreground border border-accent/40 transition shadow-sm"
                 >
                   <Zap className="w-3.5 h-3.5 fill-current" />
-                  <span>Add to Automation</span>
+                  <span>
+                    {queuedAutomationCount > 0
+                      ? `Add to Automation (${queuedAutomationCount})`
+                      : 'Add to Automation'}
+                  </span>
                 </button>
               </div>
             )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="dash-outline-btn px-4 py-2 text-xs font-semibold"
-            >
-              Close
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onEdit(command);
-              }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold text-accent-foreground bg-accent hover:bg-accent-hover transition shadow-sm"
-            >
-              <Edit3 className="w-3.5 h-3.5" />
-              Edit Command
-            </button>
-          </div>
-        </ModalFooter>
+          </ModalFooter>
+        )}
       </ModalDialog>
     </ModalContainer>
   </ModalBackdrop>

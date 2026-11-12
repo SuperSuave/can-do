@@ -882,6 +882,8 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     return <SignalZero className="w-3.5 h-3.5 text-danger" />;
   };
 
+  const deviceMacSuffix = status?.device_id?.match(/([0-9a-fA-F]{4})$/)?.[1]?.toUpperCase();
+
   return (
     <div className="space-y-5 sm:space-y-6 max-w-7xl mx-auto min-w-0">
       {/* Top Device Status Bar & Target Host Controller */}
@@ -895,7 +897,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-base sm:text-lg font-bold text-foreground tracking-tight">
-                CAN Do Edge Engine
+                {deviceMacSuffix ? `CAN Do ${deviceMacSuffix}` : 'CAN Do'}
               </h1>
               <Chip
                 size="sm"
@@ -1289,29 +1291,29 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       )}
 
       {/* Sub-Navigation Segmented Tabs Bar */}
-      <div className="flex items-center justify-center border-b border-separator pb-3 overflow-x-auto no-scrollbar">
+      <div className="flex items-center justify-center border-b border-separator pb-5 sm:pb-6 overflow-x-auto no-scrollbar">
         <Tabs
           selectedKey={activeTab}
           onSelectionChange={key => setActiveTab(key as 'automations' | 'mqtt' | 'wifi' | 'bluetooth' | 'ota')}
           aria-label="Device Console Tabs"
         >
-          <Tabs.ListContainer className="bg-surface border border-border shadow-inner rounded-xl overflow-x-auto no-scrollbar">
+          <Tabs.ListContainer className="bg-default border border-border rounded-xl overflow-x-auto no-scrollbar">
             <Tabs.List className="gap-1 p-1">
               <Tabs.Tab
                 id="automations"
                 className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                  activeTab === 'automations' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
+                  activeTab === 'automations' ? 'text-segment-foreground font-semibold' : 'text-muted hover:text-foreground'
                 }`}
               >
                 <Zap className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeTab === 'automations' ? 'text-warning' : 'text-muted'}`} />
                 <span>Diagnostics</span>
-                <Tabs.Indicator className="rounded-lg bg-surface-secondary border border-border shadow-sm" />
+                <Tabs.Indicator className="rounded-lg bg-segment border border-border shadow-sm" />
               </Tabs.Tab>
 
               <Tabs.Tab
                 id="mqtt"
                 className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                  activeTab === 'mqtt' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
+                  activeTab === 'mqtt' ? 'text-segment-foreground font-semibold' : 'text-muted hover:text-foreground'
                 }`}
               >
                 <Radio className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeTab === 'mqtt' ? 'text-warning' : 'text-muted'}`} />
@@ -1324,35 +1326,35 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                     title={mqttConfig.connected ? 'MQTT Connected' : 'Connecting / Disconnected'}
                   />
                 )}
-                <Tabs.Indicator className="rounded-lg bg-surface-secondary border border-border shadow-sm" />
+                <Tabs.Indicator className="rounded-lg bg-segment border border-border shadow-sm" />
               </Tabs.Tab>
 
               <Tabs.Tab
                 id="wifi"
                 className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                  activeTab === 'wifi' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
+                  activeTab === 'wifi' ? 'text-segment-foreground font-semibold' : 'text-muted hover:text-foreground'
                 }`}
               >
                 <Wifi className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeTab === 'wifi' ? 'text-accent' : 'text-muted'}`} />
                 <span>Wi-Fi & AP</span>
-                <Tabs.Indicator className="rounded-lg bg-surface-secondary border border-border shadow-sm" />
+                <Tabs.Indicator className="rounded-lg bg-segment border border-border shadow-sm" />
               </Tabs.Tab>
 
               <Tabs.Tab
                 id="bluetooth"
                 className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                  activeTab === 'bluetooth' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
+                  activeTab === 'bluetooth' ? 'text-segment-foreground font-semibold' : 'text-muted hover:text-foreground'
                 }`}
               >
                 <Bluetooth className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeTab === 'bluetooth' ? 'text-accent' : 'text-muted'}`} />
                 <span>Bluetooth</span>
-                <Tabs.Indicator className="rounded-lg bg-surface-secondary border border-border shadow-sm" />
+                <Tabs.Indicator className="rounded-lg bg-segment border border-border shadow-sm" />
               </Tabs.Tab>
 
               <Tabs.Tab
                 id="ota"
                 className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                  activeTab === 'ota' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
+                  activeTab === 'ota' ? 'text-segment-foreground font-semibold' : 'text-muted hover:text-foreground'
                 }`}
               >
                 <RefreshCw className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeTab === 'ota' ? 'text-accent' : 'text-muted'}`} />
@@ -1360,7 +1362,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 {updateResult?.has_update && (
                   <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
                 )}
-                <Tabs.Indicator className="rounded-lg bg-surface-secondary border border-border shadow-sm" />
+                <Tabs.Indicator className="rounded-lg bg-segment border border-border shadow-sm" />
               </Tabs.Tab>
             </Tabs.List>
           </Tabs.ListContainer>
@@ -1468,7 +1470,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-2 border-t border-separator text-muted">
+                  <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-3 border-t border-separator text-muted">
                     <div>
                       Mode: <strong className="text-accent uppercase">{rule.exec_mode || 'one_shot'}</strong>
                     </div>
@@ -1503,7 +1505,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       {activeTab === 'mqtt' && (
         <div className="can-do-card p-4 sm:p-5 space-y-6">
           {/* Header & Status */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-separator">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-6 border-b border-separator">
             <div>
               <h3 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-2">
                 <Radio className="w-4 h-4 text-warning" />
@@ -2233,7 +2235,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
             {/* Granular Component Toggles & Schedule Time */}
             {localPrefs.update_policy !== 'manual' && (
-              <div className="pt-2 border-t border-separator grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="pt-4 border-t border-separator grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <span className="text-[11px] font-semibold text-foreground">Active Update Components:</span>
                   <div className="flex flex-wrap gap-3 text-xs">

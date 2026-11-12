@@ -35,6 +35,7 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
   const [timeoutResetMs, setTimeoutResetMs] = useState(0);
   const [autoRevertSec, setAutoRevertSec] = useState(0);
   const [haExpose, setHaExpose] = useState(true);
+  const [holdBeep, setHoldBeep] = useState(false);
   const [haIcon, setHaIcon] = useState('mdi:car-cog');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
@@ -48,6 +49,7 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
       setTimeoutResetMs(rule.timeout_reset_ms || 0);
       setAutoRevertSec(rule.auto_revert_sec || 0);
       setHaExpose(rule.ha_expose !== false);
+      setHoldBeep(Boolean(rule.hold_beep));
       setHaIcon(rule.ha_icon || 'mdi:car-cog');
       setDescription(rule.description || '');
       setCategory(rule.category || '');
@@ -65,6 +67,7 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
       timeout_reset_ms: Number(timeoutResetMs) || 0,
       auto_revert_sec: Number(autoRevertSec) || 0,
       ha_expose: haExpose,
+      hold_beep: holdBeep,
       ha_icon: haIcon.trim() || 'mdi:car-cog',
       description: description.trim(),
       category: category.trim()
@@ -217,7 +220,7 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
                 </div>
 
                 {haExpose && (
-                  <div className="pt-2 border-t border-separator">
+                  <div className="pt-2.5 border-t border-separator">
                     <label className="block text-[11px] font-medium text-muted mb-1">
                       Material Design Icon
                     </label>
@@ -231,6 +234,25 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
                   </div>
                 )}
               </div>
+
+              {(holdBeep || rule.triggers?.some(t => t.type === 'ble_button' || t.type === 'ble_key' || (t.source === 'ble' && t.ble_button))) && (
+                <div className="p-3 rounded-xl bg-surface-secondary border border-border flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-foreground">
+                      Bluetooth Hold Beep (1/sec)
+                    </div>
+                    <div className="text-[11px] text-muted">
+                      Play a car head-unit beep every second while holding this button
+                    </div>
+                  </div>
+                  <HaToggleSwitch
+                    checked={holdBeep}
+                    onChange={setHoldBeep}
+                    size="sm"
+                    ariaLabel="Toggle Bluetooth hold beep"
+                  />
+                </div>
+              )}
 
               {/* Description */}
               <div>

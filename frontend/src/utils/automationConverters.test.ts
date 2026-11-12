@@ -1238,3 +1238,118 @@ test('decompileActionList preserves cycle_entity and nested choose/if_then multi
   assert.strictEqual(decompiledList[1].default?.[0].steps?.length, 2);
 });
 
+test('compileAutomationRule and decompileAutomationRule preserve hold_beep and BLE hold/tap actions', () => {
+  const catalog: Catalog = { can_do_version: '1.0', vehicles: [], commands: [] };
+  const rule: AutomationRule = {
+    id: 'ble_hold_rule',
+    name: 'BLE Hold Rule',
+    enabled: true,
+    ha_expose: true,
+    hold_beep: true,
+    ha_icon: 'mdi:bluetooth',
+    exec_mode: 'one_shot',
+    cooldown_ms: 0,
+    triggers: [
+      { id: 't1', source: 'ble', type: 'ble_button', ble_button: 'key_1+key_2', ble_action: 'hold_2s' },
+      { id: 't2', source: 'ble', type: 'ble_button', ble_button: 'key_3', ble_action: 'tap' }
+    ],
+    conditions: [
+      { id: 'c1', type: 'ble_button', ble_button: 'key_1+key_2', ble_action: 'hold_3s' }
+    ],
+    actions: []
+  };
+
+  const compiled = compileAutomationRule(rule, catalog);
+  assert.strictEqual(compiled.hold_beep, true);
+  assert.strictEqual(compiled.triggers[0].ble_button, 'key_1+key_2');
+  assert.strictEqual(compiled.triggers[0].ble_action, 'hold_2s');
+  assert.strictEqual(compiled.triggers[1].ble_action, 'tap');
+  assert.strictEqual(compiled.conditions[0].ble_action, 'hold_3s');
+
+  const decompiled = decompileAutomationRule(compiled, catalog);
+  assert.strictEqual(decompiled.hold_beep, true);
+  assert.strictEqual(decompiled.triggers[0].ble_action, 'hold_2s');
+  assert.strictEqual(decompiled.triggers[1].ble_action, 'tap');
+  assert.strictEqual(decompiled.conditions[0].ble_action, 'hold_3s');
+});
+
+test('compileAutomationRule and decompileAutomationRule preserve sustained for_sec across triggers and conditions', () => {
+  const catalog: Catalog = { can_do_version: '1.0', vehicles: [], commands: [] };
+  const rule: AutomationRule = {
+    id: 'sustained_rule',
+    name: 'Sustained State Rule',
+    enabled: true,
+    ha_expose: true,
+    ha_icon: 'mdi:timer',
+    exec_mode: 'one_shot',
+    cooldown_ms: 0,
+    triggers: [
+      {
+        id: 't_can',
+        source: 'can',
+        type: 'byte_transition',
+        can_id: '0x120',
+        byte: 'D1',
+        mask: '0xFF',
+        from: '0x00',
+        to: '0x01',
+        for_sec: 300
+      },
+      {
+        id: 't_beacon',
+        source: 'ble',
+        type: 'ble_presence',
+        ble_event: 'away',
+        beacon_uuid: '46BC57C2-8FB0-4C2C-A13E-30F00B387701',
+        for_sec: 120
+      }
+    ],
+    conditions: [
+      {
+        id: 'c_can',
+        type: 'can_state',
+        can_id: '0x226',
+        byte: 'D2',
+        mask: '0x0F',
+        operator: 'equal',
+        value: '0x00',
+        for_sec: 60
+      },
+      {
+        id: 'c_and',
+        logic: 'and',
+        for_sec: 15,
+        conditions: [
+          {
+            id: 'c_wifi',
+            type: 'device_state',
+            device_property: 'wifi_connected',
+            target_bool: false
+          }
+        ]
+      }
+    ],
+    actions: []
+  };
+
+  const compiled = compileAutomationRule(rule, catalog);
+  assert.strictEqual(compiled.triggers[0].for_sec, 300);
+  assert.strictEqual(compiled.triggers[1].for_sec, 120);
+  assert.strictEqual(compiled.conditions[0].for_sec, 60);
+  assert.strictEqual(compiled.conditions[1].for_sec, 15);
+  assert.strictEqual(compiled.conditions[1].and[0].device_property, 'wifi_connected');
+
+  const decompiled = decompileAutomationRule(compiled, catalog);
+  assert.strictEqual(decompiled.triggers[0].for_sec, 300);
+  assert.strictEqual(decompiled.triggers[1].for_sec, 120);
+  assert.strictEqual(decompiled.conditions[0].for_sec, 60);
+  assert.strictEqual(decompiled.conditions[1].for_sec, 15);
+
+  const condFromTrig = convertTriggerToCondition(decompiled.triggers[0]);
+  assert.strictEqual(condFromTrig.for_sec, 300);
+  const trigFromCond = convertConditionToTrigger(condFromTrig);
+  assert.strictEqual(trigFromCond.for_sec, 300);
+});
+
+
+

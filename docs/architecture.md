@@ -262,3 +262,24 @@ Authoring: Update catalog entries and automation definitions inside /catalog/can
 Compilation: A build-time script flattens the JS catalog into a wildcard-free catalog.json and packs it into a LittleFS binary image alongside the frontend assets.
 
 Flashing / Deployment: The binary is flashed via USB initially; subsequent updates are pushed wirelessly via the MD3 web dashboard (/api/upload or /api/ota).
+
+---
+
+## 🔒 Firmware Concurrency, Memory & Coexistence Invariants
+
+To prevent lock-order deadlocks, Task Watchdog (TWDT) resets, internal SRAM exhaustion, and Wi-Fi/BLE coexistence blackholes on ESP32-S3, strictly preserve these invariants:
+
+1. **Never Hold Module Mutexes Across External Dispatches (`s_ble_mutex`, `g_automations_mutex`, `g_catalog_mutex`)**:
+   - **Rule**: Copy any matched event/rule state to stack-local variables, release the mutex (`s_ble_mutex`, `g_automations_mutex`, or `g_catalog_mutex`), and *only then* invoke `mqtt_mgr_publish_*`, `broadcast_ws_*`, or `can_engine_on_*`.
+   - **Why**: ESP-IDF's `esp_mqtt_client_enqueue()` acquires `MQTT_API_LOCK(client)` internally, and `esp_mqtt_task` holds that same lock while dispatching `MQTT_EVENT_DATA` and writing to sockets. Calling `mqtt_mgr_publish_*` while holding `s_ble_mutex` or `g_automations_mutex` creates an AB-BA deadlock and stalls `nimble_host` / `httpd` / `can_rx_task`.
+2. **Keep `esp_mqtt_task` Event Callbacks Non-Blocking & Below TWDT**:
+   - Never call `load_automations_from_fs()` or heavy LittleFS parsers directly inside `MQTT_EVENT_DATA` (offload via `mqtt_auto_reload_task`).
+   - In `MQTT_EVENT_CONNECTED`, only set `s_mqtt_connected = true` *after* `esp_mqtt_client_subscribe_multiple()` returns.
+   - Keep `mqtt_cfg.network.timeout_ms <= 2000` so a stalled TCP write inside `esp_mqtt_task` never blocks `MQTT_API_LOCK` past `can_rx_task`'s 3,000 ms Task Watchdog.
+3. **Internal SRAM vs. PSRAM Threshold (`sdkconfig.defaults.esp32s3`)**:
+   - Keep `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096`, `CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=32768`, `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y`, and `CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=6144`.
+   - Raising `ALWAYSINTERNAL` to `16384` forces `cJSON`, `std::string`/`std::vector`, and socket buffers into internal DRAM and starves Wi-Fi/BLE DMA below the 32 KB reserve.
+4. **Wi-Fi Mesh Selection & BLE Coexistence (`network_mgr.cpp`, `ble_mgr.cpp`)**:
+   - `sta_config` must set `WIFI_ALL_CHANNEL_SCAN`, `WIFI_CONNECT_AP_BY_SIGNAL`, and `listen_interval = 1` so the STA associates with the strongest BSSID rather than the lowest channel mesh node under BLE coexistence sleep.
+   - `NimBLEScan::setInterval()` and `setWindow()` in `h2zero/esp-nimble-cpp` take **milliseconds** (not `0.625 ms` HCI units).
+   - When opening the serial port (`COM8`) from Python scripts without intending to reboot the board, set `dtr = False` and `rts = False` *before* calling `s.open()`.

@@ -139,7 +139,6 @@ static void init_mdns(void) {
 static void network_ready_task(void* pvParameters) {
     init_sntp();
     init_mdns();
-    mqtt_mgr_start();
     vTaskDelete(nullptr);
 }
 
@@ -147,7 +146,9 @@ static void app_ip_event_handler(void* arg, esp_event_base_t event_base, int32_t
     if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         auto event = static_cast<ip_event_got_ip_t*>(event_data);
         ESP_LOGI(TAG, "Network ready. IP: " IPSTR, IP2STR(&event->ip_info.ip));
-        xTaskCreate(network_ready_task, "net_ready", 4096, nullptr, 3, nullptr);
+        if (!s_sntp_initialized || !s_mdns_initialized) {
+            xTaskCreate(network_ready_task, "net_ready", 4096, nullptr, 3, nullptr);
+        }
     }
 }
 

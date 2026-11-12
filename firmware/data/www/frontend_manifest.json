@@ -1,10 +1,15 @@
 {
-  "version": "2026.11.4-b002",
+  "version": "2026.11.5-b001",
   "files": [
     {
-      "name": "Bcqhkzbo.js.gz",
-      "path": "/spiffs/www/Bcqhkzbo.js.gz",
-      "size": 8432
+      "name": "1apJk6jO.js.gz",
+      "path": "/spiffs/www/1apJk6jO.js.gz",
+      "size": 8498
+    },
+    {
+      "name": "1wuQETLs.js.gz",
+      "path": "/spiffs/www/1wuQETLs.js.gz",
+      "size": 975
     },
     {
       "name": "BdMWSxNz.js.gz",
@@ -12,39 +17,39 @@
       "size": 70567
     },
     {
-      "name": "BIxHzTYp.js.gz",
-      "path": "/spiffs/www/BIxHzTYp.js.gz",
-      "size": 32988
+      "name": "C2W0gXUP.js.gz",
+      "path": "/spiffs/www/C2W0gXUP.js.gz",
+      "size": 52707
     },
     {
-      "name": "Ca5zr7fm.js.gz",
-      "path": "/spiffs/www/Ca5zr7fm.js.gz",
-      "size": 23382
+      "name": "CcxKYB01.js.gz",
+      "path": "/spiffs/www/CcxKYB01.js.gz",
+      "size": 23377
     },
     {
-      "name": "CFHY8_0h.js.gz",
-      "path": "/spiffs/www/CFHY8_0h.js.gz",
-      "size": 51427
+      "name": "Cf4gqrDb.js.gz",
+      "path": "/spiffs/www/Cf4gqrDb.js.gz",
+      "size": 32895
     },
     {
-      "name": "Dz-U_7Wh.js.gz",
-      "path": "/spiffs/www/Dz-U_7Wh.js.gz",
-      "size": 23351
+      "name": "DHNC81bj.js.gz",
+      "path": "/spiffs/www/DHNC81bj.js.gz",
+      "size": 23476
     },
     {
-      "name": "FU6hrX0M.js.gz",
-      "path": "/spiffs/www/FU6hrX0M.js.gz",
-      "size": 979
+      "name": "DURp6PgD.js.gz",
+      "path": "/spiffs/www/DURp6PgD.js.gz",
+      "size": 242230
     },
     {
-      "name": "index-3Lc9wA.css.gz",
-      "path": "/spiffs/www/index-3Lc9wA.css.gz",
-      "size": 52516
+      "name": "index-BK9dPh.js.gz",
+      "path": "/spiffs/www/index-BK9dPh.js.gz",
+      "size": 72011
     },
     {
-      "name": "index-D6Rey2.js.gz",
-      "path": "/spiffs/www/index-D6Rey2.js.gz",
-      "size": 73758
+      "name": "index-CT-6vw.css.gz",
+      "path": "/spiffs/www/index-CT-6vw.css.gz",
+      "size": 52900
     },
     {
       "name": "index.html",
@@ -54,12 +59,7 @@
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 2060
-    },
-    {
-      "name": "LLc-6rSF.js.gz",
-      "path": "/spiffs/www/LLc-6rSF.js.gz",
-      "size": 237189
+      "size": 2061
     },
     {
       "name": "logo.svg",

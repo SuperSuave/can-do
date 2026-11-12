@@ -336,14 +336,14 @@ export const DeviceRebootModal: React.FC<DeviceRebootModalProps> = ({
           </div>
 
           {version && (
-            <div className="text-[10px] text-muted border-t border-separator pt-2 flex items-center justify-between">
+            <div className="text-[10px] text-muted border-t border-separator pt-3 flex items-center justify-between">
               <span>Target Version:</span>
               <span className="font-mono text-accent font-bold">{version}</span>
             </div>
           )}
 
           {reconnectedUptime !== null && (
-            <div className="text-[10px] text-muted border-t border-separator pt-2 flex items-center justify-between">
+            <div className="text-[10px] text-muted border-t border-separator pt-3 flex items-center justify-between">
               <span>Device Uptime:</span>
               <span className="font-mono text-success font-bold">{reconnectedUptime}s (Fresh Boot)</span>
             </div>

@@ -616,7 +616,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
 
                     {/* D1-D8 Byte Boxes Preview */}
                     {captureParseResult.command.options && captureParseResult.command.options.length > 0 && (
-                      <div className="space-y-2 mt-2 pt-2 border-t border-separator">
+                      <div className="space-y-2 pt-3 border-t border-separator">
                         <span className="text-[10px] font-semibold text-accent uppercase tracking-wider">
                           Decoded Byte Payload Preview:
                         </span>
@@ -1460,7 +1460,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1.5 border-t border-separator">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2.5 border-t border-separator">
                       <div>
                         <label className="block text-[10.5px] font-semibold text-success mb-1 flex items-center gap-1.5">
                           <Car className="w-3.5 h-3.5 text-success" />

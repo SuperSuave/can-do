@@ -1,0 +1,9 @@
+# ESP-IDF 8MB Flash Partition Table (ESP32-S3: Dual 3MB OTA + 1.94MB LittleFS)
+# Name,   Type, SubType, Offset,   Size,   Flags
+nvs,      data, nvs,     0x9000,   0x4000,
+otadata,  data, ota,     0xd000,   0x2000,
+phy_init, data, phy,     0xf000,   0x1000,
+ota_0,    app,  ota_0,   0x10000,  3072K,
+ota_1,    app,  ota_1,   0x310000, 3072K,
+storage,  data, spiffs,  0x610000, 1984K,
+

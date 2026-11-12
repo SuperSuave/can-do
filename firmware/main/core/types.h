@@ -6,6 +6,14 @@
 #include <array>
 #include <memory>
 #include <atomic>
+#include <mutex>
+
+struct SustainedState {
+    std::mutex mtx;
+    bool active = false;
+    uint32_t since_ms = 0;
+    bool fired = false;
+};
 
 enum class ConditionLogic {
     LEAF,
@@ -56,11 +64,15 @@ struct AutomationCondition {
 
     // Bluetooth BLE evaluation fields
     std::string ble_button;      // e.g. "volume_up", "mute+volume_down"
-    std::string ble_action;      // "press", "release", "hold", "any"
+    std::string ble_action;      // "press", "tap", "release", "hold", "hold_1s".."hold_Ns", "any"
     std::string ble_device;      // Optional device address or name filter
     std::string beacon_uuid;     // Optional iBeacon UUID or beacon MAC filter
     uint16_t beacon_major = 0;
     uint16_t beacon_minor = 0;
+
+    // Sustained state duration requirement (0 = immediate)
+    uint32_t for_ms = 0;
+    std::shared_ptr<SustainedState> sustained;
 
     // Nested sub-conditions for AND, OR, NOT groups
     std::vector<AutomationCondition> sub_conditions;
@@ -196,11 +208,15 @@ struct AutomationTrigger {
     // For Bluetooth BLE events
     std::string ble_event;          // "button", "connected", "disconnected", "proximity", "enter", "exit"
     std::string ble_button;         // "volume_up", "mute+volume_down", etc.
-    std::string ble_action = "press"; // "press", "release", "hold", "any"
+    std::string ble_action = "press"; // "press", "tap", "release", "hold", "hold_1s".."hold_Ns", "any"
     std::string ble_device;         // Optional device address or name filter
     std::string beacon_uuid;        // Optional iBeacon UUID or beacon MAC filter
     uint16_t beacon_major = 0;
     uint16_t beacon_minor = 0;
+
+    // Sustained state duration requirement (0 = immediate/edge)
+    uint32_t for_ms = 0;
+    std::shared_ptr<SustainedState> sustained;
 };
 
 struct AutomationRule {
@@ -208,6 +224,7 @@ struct AutomationRule {
     std::string name;
     bool enabled = true;
     bool ha_expose = true;
+    bool hold_beep = false;
     std::string ha_icon = "mdi:car-cog";
     uint32_t cooldown_ms = 0;
     std::string exec_mode = "one_shot"; // "one_shot", "toggle", "continuous_hold", etc.

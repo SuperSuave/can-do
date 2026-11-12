@@ -183,6 +183,7 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
           : `Imported Automation #${idx + 1}`,
       enabled: rawRule.enabled !== undefined ? Boolean(rawRule.enabled) : true,
       ha_expose: rawRule.ha_expose !== undefined ? Boolean(rawRule.ha_expose) : true,
+      ...(rawRule.hold_beep ? { hold_beep: true } : {}),
       ha_icon: typeof rawRule.ha_icon === 'string' ? rawRule.ha_icon : 'mdi:car-cog',
       exec_mode: rawRule.exec_mode || 'one_shot',
       trigger_mode: rawRule.trigger_mode || 'any',

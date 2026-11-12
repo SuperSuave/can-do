@@ -1379,7 +1379,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               </div>
 
               {/* Automation Properties Bar */}
-              <div className="pt-2 border-t border-separator grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+              <div className="pt-3 border-t border-separator grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -1429,7 +1429,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   />
                 </div>
 
-                <div className="flex flex-col justify-end">
+                <div className="flex flex-col justify-end gap-1.5">
                   <Switch
                     isSelected={activeRule.ha_expose ?? true}
                     onChange={(isSelected) => handleUpdateActiveRule({ ha_expose: isSelected })}
@@ -1444,6 +1444,22 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       <span className="text-[11px] font-medium text-foreground">Expose to HA</span>
                     </Switch.Content>
                   </Switch>
+                  {(activeRule.hold_beep || activeRule.triggers?.some(t => t.type === 'ble_button' || t.type === 'ble_key' || (t.source === 'ble' && t.ble_button))) && (
+                    <Switch
+                      isSelected={activeRule.hold_beep ?? false}
+                      onChange={(isSelected) => handleUpdateActiveRule({ hold_beep: isSelected })}
+                      size="sm"
+                      aria-label="Beep on 1-second Bluetooth hold ticks"
+                      className="p-1.5 rounded-lg bg-surface-secondary border border-border hover:border-border-secondary transition"
+                    >
+                      <Switch.Content>
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
+                        <span className="text-[11px] font-medium text-foreground">Hold Beep (1/s)</span>
+                      </Switch.Content>
+                    </Switch>
+                  )}
                 </div>
               </div>
             </div>
@@ -1774,7 +1790,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 </div>
 
                 {/* Secondary Action Toolbar: Community, Dry Run, Select, Import, Export (Left-justified) */}
-                <div className="flex flex-wrap items-center justify-start gap-1.5 pt-2 border-t border-separator">
+                <div className="flex flex-wrap items-center justify-start gap-1.5 pt-2.5 border-t border-separator">
                   <Button
                     variant="outline"
                     size="sm"
@@ -1940,7 +1956,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
               {/* MQTT Expanded Credentials if in MQTT mode */}
               {useMqttSync && (
-                <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-separator animate-in fade-in">
+                <div className="grid grid-cols-2 gap-1.5 pt-1.5 border-t border-separator animate-in fade-in">
                   <input
                     type="text"
                     value={mqttRemoteConfig.wsUrl}

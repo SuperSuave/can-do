@@ -86,5 +86,10 @@ idf.py -p <PORT> flash monitor
    - When adding entities or automations, adhere to existing schemas in [`catalog/can_do_catalog.json`](file:///d:/Documents/can-do/catalog/can_do_catalog.json).
 4. **Flash Budget Awareness**:
    - Embedded LittleFS storage is constrained (e.g., 960KB `storage` partition). Static frontend assets must remain lean and be gzip-compressed where appropriate.
-5. **Thread Context Handoff**:
+5. **Firmware Concurrency, Memory & Radio Guardrails (Do Not Regress)**:
+   - **Lock Ordering**: Never call `mqtt_mgr_publish_*`, `broadcast_ws_*`, or `can_engine_on_*` while holding `s_ble_mutex`, `g_automations_mutex`, or `g_catalog_mutex` (`esp_mqtt_client_enqueue` takes `MQTT_API_LOCK`, which causes AB-BA deadlocks and freezes `nimble_host`/`httpd`).
+   - **MQTT Timeouts & Callbacks**: Keep `mqtt_cfg.network.timeout_ms <= 2000` (< 3s `can_rx_task` TWDT), set `s_mqtt_connected = true` *after* `esp_mqtt_client_subscribe_multiple()`, and never run `load_automations_from_fs()` synchronously on `esp_mqtt_task`.
+   - **PSRAM & Stack Limits**: Keep `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096`, `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y`, and `CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=6144` in `sdkconfig.defaults.esp32s3` so internal DRAM stays well above the 32 KB DMA reserve.
+   - **Wi-Fi + BLE Coex**: Keep `WIFI_ALL_CHANNEL_SCAN` + `WIFI_CONNECT_AP_BY_SIGNAL` + `listen_interval = 1` in `network_mgr.cpp`, and remember `NimBLEScan::setInterval`/`setWindow` take **milliseconds** (not `0.625 ms` units).
+6. **Thread Context Handoff**:
    - When finishing complex or multi-step tasks, summarize modified files, current state, and the logical next action so new threads can resume without loss of context.

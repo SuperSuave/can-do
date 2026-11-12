@@ -592,20 +592,20 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
                 onSelectionChange={key => onViewModeChange(key as 'grid' | 'grouped')}
                 aria-label="View Mode"
               >
-                <Tabs.ListContainer className="p-0.5 rounded-lg bg-surface-secondary border border-border text-xs shrink-0">
+                <Tabs.ListContainer className="p-0.5 rounded-lg bg-default border border-border text-xs shrink-0">
                   <Tabs.List className="gap-0.5">
                     <Tabs.Tab
                       id="grid"
                       className={`relative px-2 py-1 rounded font-semibold transition cursor-pointer flex items-center gap-1 text-[11px] ${
                         viewMode === 'grid'
-                          ? 'text-foreground'
-                          : 'text-muted hover:text-foreground'
+                          ? 'text-accent'
+                          : 'text-muted hover:text-accent'
                       }`}
                       aria-label="Standard Grid View"
                     >
                       <LayoutGrid className="w-3.5 h-3.5" />
                       <span className="hidden sm:inline">Grid</span>
-                      <Tabs.Indicator className="rounded bg-surface-tertiary shadow-sm" />
+                      <Tabs.Indicator className="rounded bg-accent-soft border border-accent/50 shadow-sm" />
                     </Tabs.Tab>
 
                     <Tabs.Tab
@@ -619,7 +619,7 @@ export const CommandFilter: React.FC<CommandFilterProps> = ({
                     >
                       <FolderKanban className="w-3.5 h-3.5" />
                       <span>Grouped</span>
-                      <Tabs.Indicator className="rounded bg-accent-soft border border-accent/40 shadow-sm" />
+                      <Tabs.Indicator className="rounded bg-accent-soft border border-accent/50 shadow-sm" />
                     </Tabs.Tab>
                   </Tabs.List>
                 </Tabs.ListContainer>

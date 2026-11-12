@@ -805,7 +805,7 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
                 </div>
 
                 {/* Bottom Actions Row */}
-                <div className="pt-3 border-t border-separator flex items-center justify-between text-xs">
+                <div className="pt-4 border-t border-separator flex items-center justify-between text-xs">
                   <Chip size="sm" variant="secondary" className="text-muted font-mono text-[11px]">
                     <strong className="text-accent mr-1">{matchingCommandsCount}</strong> compatible cmds
                   </Chip>
@@ -900,7 +900,7 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
       {isDiscoverModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-backdrop backdrop-blur-sm">
           <div className="relative w-full max-w-md rounded-[16px] border border-border bg-overlay text-overlay-foreground shadow-overlay p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-separator pb-3">
+            <div className="flex items-center justify-between border-b border-separator pb-4">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-warning" />
                 <h3 className="text-base font-bold text-foreground">Discover & Register New Feature</h3>
@@ -951,7 +951,7 @@ export const VehiclesTab: React.FC<VehiclesTabProps> = ({
                 </select>
               </div>
 
-              <div className="pt-3 flex justify-end gap-2 border-t border-separator">
+              <div className="pt-4 flex justify-end gap-2 border-t border-separator">
                 <button
                   type="button"
                   onClick={() => setIsDiscoverModalOpen(false)}

@@ -96,16 +96,18 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
   useEffect(() => {
     const unsub = deviceWs.subscribe((msg: any) => {
       if (msg && msg.type === 'ble_event') {
-        const btn = msg.button_name || msg.button || 'button';
-        const act = (msg.action || 'press') as 'press' | 'release' | 'hold';
-        if (act === 'press') {
+        const btn = msg.combo || msg.button_name || msg.button || 'button';
+        const act = (msg.action || 'press') as string;
+        if (act === 'press' || act.startsWith('hold')) {
           setActivePressedButton(btn);
           setTimeout(() => setActivePressedButton(null), 600);
         }
         const eventItem: BleButtonEvent = {
           button_name: btn,
           action: act,
-          device_name: msg.name || status?.connected_device?.name || 'BLE Device',
+          combo: msg.combo,
+          hold_seconds: msg.hold_seconds,
+          device_name: msg.device_name || msg.name || status?.connected_device?.name || 'BLE Device',
           device_address: msg.address || status?.connected_device?.address || '',
           timestamp_ms: Date.now()
         };
@@ -631,7 +633,7 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
         </div>
 
         {/* Macro Keypad (1 - 9) */}
-        <div className="space-y-1.5 pt-2 border-t border-separator">
+        <div className="space-y-1.5 pt-4 border-t border-separator">
           <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">
             Macro Keyboard Keypad (Keys 1 - 9)
           </span>
@@ -669,7 +671,7 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
 
       {/* BLE Beacon & Phone Proximity Manager Card */}
       <div className="can-do-card p-4 sm:p-5 space-y-4 !border-purple-500/35">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-separator pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-separator pb-4">
           <div className="flex items-center gap-2">
             <Radio className="w-5 h-5 text-purple-600 dark:text-purple-400" />
             <div>

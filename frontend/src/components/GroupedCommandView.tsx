@@ -13,14 +13,9 @@ interface GroupedCommandViewProps {
   commands: Command[];
   selectedCategory: string;
   onSelectCommand: (cmd: Command) => void;
-  onEditCommand: (cmd: Command) => void;
-  onDuplicateCommand: (cmd: Command) => void;
-  onDeleteCommand: (cmdId: string) => void;
   draftAddedIds: string[];
   draftModifiedIds: string[];
   onSelectSubcategory?: (subcat: string) => void;
-  selectedCommandIdsForAutomation?: Set<string>;
-  onToggleSelectForAutomation?: (cmd: Command) => void;
   onAddToAutomation?: (cmd: Command, role?: CommandRole, option?: CommandOption) => void;
   expandAllSignal?: number;
   collapseAllSignal?: number;
@@ -48,14 +43,9 @@ export const GroupedCommandView: React.FC<GroupedCommandViewProps> = ({
   commands,
   selectedCategory: _selectedCategory,
   onSelectCommand,
-  onEditCommand,
-  onDuplicateCommand,
-  onDeleteCommand,
   draftAddedIds,
   draftModifiedIds,
   onSelectSubcategory,
-  selectedCommandIdsForAutomation,
-  onToggleSelectForAutomation,
   onAddToAutomation,
   expandAllSignal,
   collapseAllSignal
@@ -167,7 +157,7 @@ export const GroupedCommandView: React.FC<GroupedCommandViewProps> = ({
 
   return (
     <div className="space-y-4 sm:space-y-5 min-w-0">
-      {categoryGroups.map(catGroup => {
+      {categoryGroups.map((catGroup, catIdx) => {
         const isCollapsed = collapsedGroups.has(catGroup.id);
 
         return (
@@ -175,7 +165,9 @@ export const GroupedCommandView: React.FC<GroupedCommandViewProps> = ({
             key={catGroup.id}
             isExpanded={!isCollapsed}
             onExpandedChange={() => toggleGroupCollapse(catGroup.id)}
-            className="rounded-2xl border border-border bg-surface overflow-hidden shadow-surface transition min-w-0"
+            className={`rounded-2xl border border-border bg-surface overflow-hidden shadow-surface transition min-w-0 ${
+              catIdx > 1 ? 'catalog-group-deferred' : ''
+            }`}
           >
             {/* Top-Level Category Header */}
             <Disclosure.Heading className="m-0 p-0">
@@ -231,19 +223,14 @@ export const GroupedCommandView: React.FC<GroupedCommandViewProps> = ({
             <Disclosure.Content className="p-3.5 sm:p-4 bg-background/40 min-w-0">
                 {catGroup.subgroups.length <= 1 ? (
                   /* Single subcategory (or general): render grid directly without redundant headers */
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4 min-w-0">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 min-w-0">
                     {catGroup.subgroups[0]?.commands.map(cmd => (
                       <CommandCard
                         key={cmd.id}
                         command={cmd}
                         onSelect={onSelectCommand}
-                        onEdit={onEditCommand}
-                        onDuplicate={onDuplicateCommand}
-                        onDelete={onDeleteCommand}
                         isNew={draftAddedIds.includes(cmd.id)}
                         isModified={draftModifiedIds.includes(cmd.id)}
-                        isSelectedForAutomation={selectedCommandIdsForAutomation?.has(cmd.id)}
-                        onToggleSelectForAutomation={onToggleSelectForAutomation}
                         onAddToAutomation={onAddToAutomation}
                       />
                     ))}
@@ -254,7 +241,7 @@ export const GroupedCommandView: React.FC<GroupedCommandViewProps> = ({
                     {catGroup.subgroups.map(subgroup => (
                       <div key={subgroup.name} className="space-y-3 min-w-0">
                         {/* Nested Subgroup Header */}
-                        <div className="flex items-center justify-between gap-2 pb-2 border-b border-separator">
+                        <div className="flex items-center justify-between gap-2 pb-3 border-b border-separator">
                           <div className="flex items-center gap-2 min-w-0">
                             <div className="w-1.5 h-3.5 rounded-full bg-accent shrink-0" />
                             <h4 className="text-xs sm:text-sm font-semibold text-foreground tracking-tight">
@@ -298,19 +285,14 @@ export const GroupedCommandView: React.FC<GroupedCommandViewProps> = ({
                         </div>
 
                         {/* Nested Commands Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4 min-w-0">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 min-w-0">
                           {subgroup.commands.map(cmd => (
                             <CommandCard
                               key={cmd.id}
                               command={cmd}
                               onSelect={onSelectCommand}
-                              onEdit={onEditCommand}
-                              onDuplicate={onDuplicateCommand}
-                              onDelete={onDeleteCommand}
                               isNew={draftAddedIds.includes(cmd.id)}
                               isModified={draftModifiedIds.includes(cmd.id)}
-                              isSelectedForAutomation={selectedCommandIdsForAutomation?.has(cmd.id)}
-                              onToggleSelectForAutomation={onToggleSelectForAutomation}
                               onAddToAutomation={onAddToAutomation}
                             />
                           ))}

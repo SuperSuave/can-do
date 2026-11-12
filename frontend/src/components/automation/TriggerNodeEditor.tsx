@@ -20,7 +20,8 @@ import { compileToByteMap, resolveCatalogCommandForTrigger, applyOptionToTrigger
 import { groupOptionsIntoGridRows, OptionGridGroup, LiveWifiStatus, LiveBleItem } from './liveEvaluator';
 import { DayOfWeekPicker } from './DayOfWeekPicker';
 import { BleButtonComboPicker } from '../BleButtonComboPicker';
-import { BleDeviceSelect, BleBeaconSelect } from '../BleSelects';
+import { BleDeviceSelect, BleBeaconSelect, BleActionSelect } from '../BleSelects';
+import { SustainedDurationInput, formatSustainedBadge } from './SustainedDurationInput';
 import { AutomationClipboardContext } from './AutomationClipboardContext';
 
 export interface TriggerNodeEditorProps {
@@ -268,16 +269,10 @@ export function TriggerNodeEditor({
             </div>
 
             <div className="flex flex-col justify-end">
-              <label className="block text-[10px] font-sans text-muted mb-1">Action Event</label>
-              <select
+              <BleActionSelect
                 value={trig.ble_action || 'press'}
-                onChange={e => onUpdate({ ...trig, ble_action: e.target.value as any })}
-                className="w-full h-8 bg-surface-tertiary border border-border rounded px-2 text-foreground font-sans box-border"
-              >
-                <option value="press">Button Pressed (or Combo Chord)</option>
-                <option value="release">Button Released</option>
-                <option value="any">Any (Press or Release)</option>
-              </select>
+                onChange={val => onUpdate({ ...trig, ble_action: val })}
+              />
             </div>
 
             <div className="flex flex-col justify-end">
@@ -321,6 +316,11 @@ export function TriggerNodeEditor({
                 <Bluetooth className="w-3.5 h-3.5" />
                 <span>Presence / Proximity</span>
               </div>
+              {formatSustainedBadge(trig.for_sec, trig.for_ms) && (
+                <span className="px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-600 dark:text-purple-400 text-[10px] font-mono border border-purple-500/30">
+                  for {formatSustainedBadge(trig.for_sec, trig.for_ms)}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1.5 font-mono text-[11px]">
               <span className="text-[10px] text-muted font-sans">ID:</span>
@@ -521,6 +521,11 @@ export function TriggerNodeEditor({
                 </div>
               );
             })()}
+            <SustainedDurationInput
+              forSec={trig.for_sec}
+              forMs={trig.for_ms}
+              onChange={next => onUpdate({ ...trig, ...next })}
+            />
           </div>
         )}
       </div>
@@ -550,6 +555,7 @@ export function TriggerNodeEditor({
                 {trig.ssid ? ` • SSID: ${trig.ssid}` : ''}
                 {trig.client_mac ? ` • MAC: ${trig.client_mac}` : ''}
                 {trig.target_rssi ? ` • RSSI: ≥${trig.target_rssi} dBm` : ''}
+                {formatSustainedBadge(trig.for_sec, trig.for_ms) ? ` • for ${formatSustainedBadge(trig.for_sec, trig.for_ms)}` : ''}
               </span>
             </div>
             <div className="flex items-center gap-1.5 font-mono text-[11px]">
@@ -567,6 +573,7 @@ export function TriggerNodeEditor({
         </div>
 
         {!collapsed && (
+          <>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 font-mono text-[11px]">
             <div>
               <label className="block text-[10px] font-sans text-muted mb-1">Trigger ID</label>
@@ -679,6 +686,12 @@ export function TriggerNodeEditor({
               </>
             )}
           </div>
+          <SustainedDurationInput
+            forSec={trig.for_sec}
+            forMs={trig.for_ms}
+            onChange={next => onUpdate({ ...trig, ...next })}
+          />
+          </>
         )}
       </div>
     );
@@ -721,6 +734,11 @@ export function TriggerNodeEditor({
               {trig.can_id}
             </span>
           )}
+          {formatSustainedBadge(trig.for_sec, trig.for_ms) && (
+            <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent-soft-foreground text-[10px] border border-accent/30 font-mono">
+              for {formatSustainedBadge(trig.for_sec, trig.for_ms)}
+            </span>
+          )}
           <div className="flex items-center gap-1.5 font-mono text-[11px] shrink-0">
             <span className="text-[10px] text-muted font-sans">ID:</span>
             <input
@@ -740,8 +758,8 @@ export function TriggerNodeEditor({
               onClick={toggleAdvanced}
               className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
                 showAdvanced
-                  ? 'bg-warning-soft text-warning-soft-foreground border-warning/40 shadow'
-                  : 'bg-surface-tertiary text-muted hover:text-foreground border-border hover:bg-default-hover'
+                  ? 'bg-warning-soft text-warning-soft-foreground border-warning/50 shadow'
+                  : 'bg-surface-tertiary text-foreground/85 hover:text-foreground border-border hover:bg-default-hover'
               }`}
               title="Toggle configuration details"
             >
@@ -793,7 +811,7 @@ export function TriggerNodeEditor({
                       } py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 border cursor-pointer text-center ${
                         isSelected
                           ? 'bg-warning-soft text-warning-soft-foreground border-warning/60 font-semibold shadow-sm ring-1 ring-warning/30'
-                          : 'bg-surface-tertiary text-muted hover:text-foreground hover:bg-default-hover border-border'
+                          : 'bg-surface-tertiary text-foreground/85 hover:text-foreground hover:bg-default-hover border-border'
                       }`}
                     >
                       <span className="truncate">{opt.label}</span>
@@ -971,6 +989,11 @@ export function TriggerNodeEditor({
         </div>
         );
       })()}
+      <SustainedDurationInput
+        forSec={trig.for_sec}
+        forMs={trig.for_ms}
+        onChange={next => onUpdate({ ...trig, ...next })}
+      />
         </>
       )}
     </div>

@@ -113,7 +113,7 @@ export const AutomationCategoryModal: React.FC<AutomationCategoryModalProps> = (
               </div>
 
               {/* Custom category input */}
-              <div className="pt-2 border-t border-separator">
+              <div className="pt-4 border-t border-separator">
                 <label className="block text-xs font-semibold text-muted mb-1.5">
                   Or Custom Category Name
                 </label>

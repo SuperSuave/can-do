@@ -44,7 +44,7 @@ export interface AutomationTrigger {
   // Bluetooth BLE trigger fields
   ble_event?: 'button' | 'connected' | 'disconnected' | 'proximity' | 'enter' | 'exit' | 'present' | 'away' | string;
   ble_button?: string; // e.g. "volume_up", "mute+volume_down", "any", etc.
-  ble_action?: 'press' | 'release' | 'hold' | 'any' | string;
+  ble_action?: 'press' | 'tap' | 'release' | 'hold' | 'any' | string;
   ble_device?: string; // optional device name or address filter
   beacon_uuid?: string; // optional iBeacon UUID or beacon MAC filter
   beacon_major?: number;
@@ -106,11 +106,14 @@ export interface AutomationCondition {
   client_mac?: string;
   // Bluetooth BLE evaluation fields
   ble_button?: string; // e.g. "volume_up", "mute+volume_down"
-  ble_action?: 'press' | 'release' | 'hold' | 'any' | string;
+  ble_action?: 'press' | 'tap' | 'release' | 'hold' | 'any' | string;
   ble_device?: string; // optional device name or address filter
   beacon_uuid?: string; // optional iBeacon UUID or beacon MAC filter
   beacon_major?: number;
   beacon_minor?: number;
+  // Sustained state duration (0 or omitted = immediate)
+  for_sec?: number;
+  for_ms?: number;
 }
 
 export interface ChoiceBranch {
@@ -223,6 +226,7 @@ export interface AutomationRule {
   name: string;
   enabled: boolean;
   ha_expose: boolean;
+  hold_beep?: boolean;
   ha_icon: string;
   exec_mode: ExecutionMode;
   trigger_mode?: TriggerCombineMode;

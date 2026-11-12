@@ -658,7 +658,7 @@ export function ActionNodeEditor({
               aria-label="Delay Execution Mode"
               className="w-full"
             >
-              <Tabs.ListContainer className="p-1 bg-surface-secondary border border-border rounded-lg w-full">
+              <Tabs.ListContainer className="p-1 bg-default border border-border rounded-lg w-full">
                 <Tabs.List className="gap-2 w-full">
                   <Tabs.Tab
                     id="delay"
@@ -745,7 +745,7 @@ export function ActionNodeEditor({
                       className={`px-2 py-0.5 rounded border transition ${
                         currentTotalMs === p.val
                           ? 'bg-purple-600 text-white border-purple-500 font-bold'
-                          : 'bg-surface-secondary text-muted border-border hover:text-foreground'
+                          : 'bg-surface-tertiary text-foreground/85 border-border hover:text-foreground hover:bg-default-hover'
                       }`}
                     >
                       {p.label}
@@ -948,7 +948,7 @@ export function ActionNodeEditor({
               className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-medium border transition cursor-pointer ${
                 showAdvanced
                   ? 'bg-success-soft text-success-soft-foreground border-success/50 shadow'
-                  : 'bg-surface-tertiary text-muted hover:text-foreground border-border hover:bg-default-hover'
+                  : 'bg-surface-tertiary text-foreground/85 hover:text-foreground border-border hover:bg-default-hover'
               }`}
               title="Toggle configuration details"
             >
@@ -999,7 +999,7 @@ export function ActionNodeEditor({
                       } py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 border cursor-pointer text-center ${
                         isSelected
                           ? 'bg-success-soft text-success-soft-foreground border-success/60 font-semibold shadow-sm ring-1 ring-success/30'
-                          : 'bg-surface-tertiary text-muted hover:text-foreground hover:bg-default-hover border-border'
+                          : 'bg-surface-tertiary text-foreground/85 hover:text-foreground hover:bg-default-hover border-border'
                       }`}
                     >
                       <span className="truncate">{opt.label}</span>
@@ -1239,7 +1239,7 @@ export function ActionNodeEditor({
                 </div>
 
                 {/* In-Cabin Confirmation Popup */}
-                <div className="pt-2 border-t border-separator grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] items-center">
+                <div className="pt-2.5 border-t border-separator grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] items-center">
                   <Switch
                     isSelected={act.show_popup ?? true}
                     onChange={(isSelected) => onUpdate({ ...act, show_popup: isSelected })}

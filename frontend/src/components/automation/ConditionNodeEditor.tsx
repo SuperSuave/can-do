@@ -40,7 +40,8 @@ import {
 } from './liveEvaluator';
 import { DayOfWeekPicker } from './DayOfWeekPicker';
 import { BleButtonComboPicker } from '../BleButtonComboPicker';
-import { BleDeviceSelect, BleBeaconSelect } from '../BleSelects';
+import { BleDeviceSelect, BleBeaconSelect, BleActionSelect } from '../BleSelects';
+import { SustainedDurationInput, formatSustainedBadge } from './SustainedDurationInput';
 import { AutomationClipboardContext } from './AutomationClipboardContext';
 
 export interface ConditionNodeEditorProps {
@@ -232,6 +233,11 @@ export function ConditionNodeEditor({
             <span className="text-muted font-mono text-[10px] shrink-0">
               [{(cond.conditions || []).length} items]
             </span>
+            {formatSustainedBadge(cond.for_sec, cond.for_ms) && (
+              <span className="px-1.5 py-0.2 rounded bg-accent-soft text-accent-soft-foreground text-[10px] border border-accent/30 font-mono shrink-0">
+                for {formatSustainedBadge(cond.for_sec, cond.for_ms)}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
             <select
@@ -248,6 +254,7 @@ export function ConditionNodeEditor({
         </div>
 
         {!collapsed && (
+          <div className="space-y-2">
           <div className="pl-1.5 sm:pl-2 border-l border-separator min-w-0">
             <ConditionListEditor
               conditions={cond.conditions || []}
@@ -263,6 +270,12 @@ export function ConditionNodeEditor({
               onUpdate={updatedSubs => onUpdate({ ...cond, conditions: updatedSubs })}
               onOpenAddConditionDialog={onOpenAddConditionDialog}
             />
+          </div>
+          <SustainedDurationInput
+            forSec={cond.for_sec}
+            forMs={cond.for_ms}
+            onChange={next => onUpdate({ ...cond, ...next })}
+          />
           </div>
         )}
       </div>
@@ -425,6 +438,11 @@ export function ConditionNodeEditor({
               <span className="px-1.5 py-0.2 rounded bg-accent-soft text-accent-soft-foreground text-[10px] border border-accent/30 font-mono shrink-0">
                 {prop}
               </span>
+              {formatSustainedBadge(cond.for_sec, cond.for_ms) && (
+                <span className="px-1.5 py-0.2 rounded bg-accent-soft text-accent-soft-foreground text-[10px] border border-accent/30 font-mono shrink-0">
+                  for {formatSustainedBadge(cond.for_sec, cond.for_ms)}
+                </span>
+              )}
             </div>
           </div>
           <div className="shrink-0 ml-auto sm:ml-0">
@@ -433,7 +451,7 @@ export function ConditionNodeEditor({
         </div>
 
         {!collapsed && (
-          <div className="space-y-2 pt-1 border-t border-separator">
+          <div className="space-y-2 pt-2 border-t border-separator">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
                 <label className="block text-[10px] font-sans text-muted mb-1">Device Property</label>
@@ -613,7 +631,7 @@ export function ConditionNodeEditor({
 
             {/* Optional RSSI Filter for wifi_connected or wifi_ssid */}
             {(prop === 'wifi_connected' || prop === 'wifi_ssid') && (
-              <div className="flex items-center justify-between gap-2 pt-1 border-t border-separator font-mono text-[11px] flex-wrap">
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-separator font-mono text-[11px] flex-wrap">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-sans text-muted">Signal RSSI Filter (Optional):</span>
                   <input
@@ -640,7 +658,7 @@ export function ConditionNodeEditor({
             )}
 
             {/* Live Station Telemetry Bar */}
-            <div className="flex items-center justify-between gap-2 pt-1 border-t border-separator font-mono text-[11px] flex-wrap">
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-separator font-mono text-[11px] flex-wrap">
               <div className="flex items-center gap-1.5">
                 <Wifi className="w-3.5 h-3.5 text-accent shrink-0" />
                 <span className="text-[10px] font-sans text-muted">Live Station Status:</span>
@@ -664,6 +682,11 @@ export function ConditionNodeEditor({
                 </button>
               )}
             </div>
+            <SustainedDurationInput
+              forSec={cond.for_sec}
+              forMs={cond.for_ms}
+              onChange={next => onUpdate({ ...cond, ...next })}
+            />
           </div>
         )}
       </div>
@@ -697,6 +720,11 @@ export function ConditionNodeEditor({
                   ? (cond.target_bool !== false && cond.device_property !== 'away' ? 'Beacon Present' : 'Beacon Absent (Away)')
                   : (cond.target_bool !== false && cond.device_property !== 'away' && cond.device_property !== 'disconnected' ? 'Device Connected (Present)' : 'Device Disconnected (Away)')}
               </span>
+              {formatSustainedBadge(cond.for_sec, cond.for_ms) && (
+                <span className="px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-600 dark:text-purple-400 text-[10px] border border-purple-500/30 font-mono shrink-0">
+                  for {formatSustainedBadge(cond.for_sec, cond.for_ms)}
+                </span>
+              )}
             </div>
           </div>
           <div className="shrink-0 ml-auto sm:ml-0">
@@ -705,7 +733,7 @@ export function ConditionNodeEditor({
         </div>
 
         {!collapsed && (
-          <div className="space-y-2 pt-1 border-t border-separator">
+          <div className="space-y-2 pt-2 border-t border-separator">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px] items-end">
               <div className="flex flex-col justify-end">
                 <label className="block text-[10px] font-sans text-muted mb-1">Check Target</label>
@@ -823,7 +851,7 @@ export function ConditionNodeEditor({
               const liveRssi = matchedBle?.rssi;
 
               return (
-                <div className="flex items-center justify-between gap-2 pt-1 border-t border-separator font-mono text-[11px] flex-wrap">
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-separator font-mono text-[11px] flex-wrap">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-sans text-muted">Min RSSI Filter:</span>
                     <input
@@ -858,6 +886,11 @@ export function ConditionNodeEditor({
                 </div>
               );
             })()}
+            <SustainedDurationInput
+              forSec={cond.for_sec}
+              forMs={cond.for_ms}
+              onChange={next => onUpdate({ ...cond, ...next })}
+            />
           </div>
         )}
       </div>
@@ -896,7 +929,7 @@ export function ConditionNodeEditor({
         </div>
 
         {!collapsed && (
-          <div className="space-y-2 pt-1 border-t border-separator">
+          <div className="space-y-2 pt-2 border-t border-separator">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px] items-end">
               <div className="flex flex-col justify-end">
                 <BleButtonComboPicker
@@ -906,16 +939,10 @@ export function ConditionNodeEditor({
                 />
               </div>
               <div className="flex flex-col justify-end">
-                <label className="block text-[10px] font-sans text-muted mb-1">Action Event</label>
-                <select
+                <BleActionSelect
                   value={act}
-                  onChange={e => onUpdate({ ...cond, ble_action: e.target.value })}
-                  className="w-full h-8 bg-surface-tertiary border border-border rounded px-2 text-foreground font-sans box-border"
-                >
-                  <option value="press">Press (or Combo)</option>
-                  <option value="release">Release</option>
-                  <option value="any">Any Event</option>
-                </select>
+                  onChange={val => onUpdate({ ...cond, ble_action: val })}
+                />
               </div>
               <div className="flex flex-col justify-end">
                 <BleDeviceSelect
@@ -1011,6 +1038,11 @@ export function ConditionNodeEditor({
             C{index + 1}
           </span>
           <span className="font-semibold text-foreground text-xs sm:text-sm tracking-tight truncate">{conditionName}</span>
+          {formatSustainedBadge(cond.for_sec, cond.for_ms) && (
+            <span className="px-1.5 py-0.2 rounded bg-accent-soft text-accent-soft-foreground text-[10px] border border-accent/30 font-mono shrink-0">
+              for {formatSustainedBadge(cond.for_sec, cond.for_ms)}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
@@ -1023,7 +1055,7 @@ export function ConditionNodeEditor({
                   className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
                     multiSelectMode
                       ? 'bg-accent-soft text-accent-soft-foreground border-accent shadow-sm ring-1 ring-accent/40 font-semibold'
-                      : 'bg-surface-tertiary text-muted hover:text-foreground border-border hover:bg-default-hover'
+                      : 'bg-surface-tertiary text-foreground/85 hover:text-foreground border-border hover:bg-default-hover'
                   }`}
                   title="Toggle multi-state selection (e.g. check multiple doors simultaneously)"
                 >
@@ -1037,7 +1069,7 @@ export function ConditionNodeEditor({
                 className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
                   showAdvanced
                     ? 'bg-accent-soft text-accent-soft-foreground border-accent/60 shadow'
-                    : 'bg-surface-tertiary text-muted hover:text-foreground border-border hover:bg-default-hover'
+                    : 'bg-surface-tertiary text-foreground/85 hover:text-foreground border-border hover:bg-default-hover'
                 }`}
                 title="Toggle configuration details"
               >
@@ -1087,7 +1119,7 @@ export function ConditionNodeEditor({
                         entityStates
                       );
 
-                      let pillStyle = 'bg-surface-tertiary text-muted hover:text-foreground hover:bg-default-hover border-border';
+                      let pillStyle = 'bg-surface-tertiary text-foreground/85 hover:text-foreground hover:bg-default-hover border-border';
                       if (isSelected && isLiveValid) {
                         pillStyle = 'bg-accent-soft text-accent-soft-foreground border-success font-semibold shadow-sm ring-2 ring-success/60';
                       } else if (isSelected) {
@@ -1242,6 +1274,11 @@ export function ConditionNodeEditor({
           </div>
         </div>
       )}
+      <SustainedDurationInput
+        forSec={cond.for_sec}
+        forMs={cond.for_ms}
+        onChange={next => onUpdate({ ...cond, ...next })}
+      />
         </>
       )}
     </div>

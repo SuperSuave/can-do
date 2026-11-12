@@ -504,7 +504,11 @@ static void network_roam_task(void* pvParameters) {
                             wifi_config_t sta_config = {};
                             strncpy(reinterpret_cast<char*>(sta_config.sta.ssid), cand.first.ssid.c_str(), sizeof(sta_config.sta.ssid) - 1);
                             strncpy(reinterpret_cast<char*>(sta_config.sta.password), cand.first.password.c_str(), sizeof(sta_config.sta.password) - 1);
+                            sta_config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+                            sta_config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+                            sta_config.sta.threshold.rssi = -85;
                             sta_config.sta.threshold.authmode = cand.first.password.empty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
+                            sta_config.sta.listen_interval = 1;
                             sta_config.sta.pmf_cfg.capable = true;
                             sta_config.sta.pmf_cfg.required = false;
 
@@ -572,6 +576,23 @@ static void network_roam_task(void* pvParameters) {
         if (s_sta_connected) {
             if (uds_engine_is_vehicle_awake()) {
                 esp_wifi_set_ps(WIFI_PS_NONE);
+            }
+            static uint8_t s_weak_rssi_count = 0;
+            wifi_ap_record_t ap_info;
+            if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+                s_cur_sta_rssi.store(ap_info.rssi);
+                if (ap_info.rssi < -78) {
+                    if (++s_weak_rssi_count >= 3) {
+                        ESP_LOGW(TAG, "STA RSSI weak (%d dBm for 15s); roaming to stronger BSSID", (int)ap_info.rssi);
+                        s_weak_rssi_count = 0;
+                        esp_wifi_disconnect();
+                    }
+                } else {
+                    s_weak_rssi_count = 0;
+                }
+            } else {
+                s_sta_connected = false;
+                s_weak_rssi_count = 0;
             }
             mqtt_mgr_watchdog();
         }

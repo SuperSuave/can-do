@@ -148,8 +148,27 @@ static void parse_byte_match(cJSON* match_obj, uint8_t match_payload[8], uint8_t
     }
 }
 
+static uint32_t parse_sustained_for_ms(cJSON* item) {
+    if (!item) return 0;
+    uint32_t total_ms = 0;
+    cJSON* f_sec = cJSON_GetObjectItem(item, "for_sec");
+    if (cJSON_IsNumber(f_sec) && f_sec->valuedouble > 0) {
+        total_ms += static_cast<uint32_t>(f_sec->valuedouble * 1000.0);
+    }
+    cJSON* f_ms = cJSON_GetObjectItem(item, "for_ms");
+    if (cJSON_IsNumber(f_ms) && f_ms->valueint > 0) {
+        total_ms += static_cast<uint32_t>(f_ms->valueint);
+    }
+    return total_ms;
+}
+
 bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
     if (!c_item) return false;
+
+    cond.for_ms = parse_sustained_for_ms(c_item);
+    if (cond.for_ms > 0) {
+        cond.sustained = std::make_shared<SustainedState>();
+    }
 
     // Check for explicit "logic": "and" | "or" | "not" or "type": "and" | "or" | "not"
     cJSON* logic_item = cJSON_GetObjectItem(c_item, "logic");
@@ -975,6 +994,9 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
     cJSON* ha_exp = cJSON_GetObjectItem(auto_json, "ha_expose");
     if (cJSON_IsBool(ha_exp)) out_rule.ha_expose = cJSON_IsTrue(ha_exp);
 
+    cJSON* h_beep = cJSON_GetObjectItem(auto_json, "hold_beep");
+    if (cJSON_IsBool(h_beep)) out_rule.hold_beep = cJSON_IsTrue(h_beep);
+
     cJSON* ha_ic = cJSON_GetObjectItem(auto_json, "ha_icon");
     if (cJSON_IsString(ha_ic)) out_rule.ha_icon = ha_ic->valuestring;
 
@@ -987,6 +1009,10 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
         cJSON* t_item = nullptr;
         cJSON_ArrayForEach(t_item, trigs) {
             AutomationTrigger tr;
+            tr.for_ms = parse_sustained_for_ms(t_item);
+            if (tr.for_ms > 0) {
+                tr.sustained = std::make_shared<SustainedState>();
+            }
             cJSON* tid = cJSON_GetObjectItem(t_item, "id");
             if (cJSON_IsString(tid)) tr.id = tid->valuestring;
 

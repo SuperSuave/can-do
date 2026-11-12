@@ -2,13 +2,13 @@ import React, { useState, useEffect, useMemo, useRef, Suspense, lazy } from 'rea
 import { Catalog, Command, CommandRole, CommandOption, GitHubRepoConfig, Vehicle, getCommandContributors } from './types/catalog';
 import { DEFAULT_CATALOG, normalizeCatalog } from './data/defaultCatalog';
 import { validateCatalog } from './utils/canValidator';
-import { commandToAction, commandToTrigger, exportToCandoJson, decompileAutomationRules } from './utils/automationConverters';
+import { commandToAction, commandToCondition, commandToTrigger, exportToCandoJson, decompileAutomationRules } from './utils/automationConverters';
 import { resolveVariant, formatCommandForCatalog } from './utils/catalogUtils';
 import { getSavedRepoConfig, saveRepoConfig } from './utils/githubHelper';
 import { isRunningOnDevice, resolveDeviceBaseUrl } from './utils/hostUtils';
 import { CommandFilter } from './components/CommandFilter';
 import { CommandCard } from './components/CommandCard';
-import { CommandDetailModal } from './components/CommandDetailModal';
+import { CommandDetailModal, getAutomationQueueKey } from './components/CommandDetailModal';
 import { CommandEditorModal } from './components/CommandEditorModal';
 import { ExportDropdown } from './components/ExportDropdown';
 import { VehiclesTab } from './components/VehiclesTab';
@@ -113,6 +113,95 @@ export default function App() {
   const toggleTheme = () => {
     setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
   };
+
+  // Two-header architecture:
+  // 1) Normal in-flow static <header> (native compositor scrolling, zero JS overhead per frame).
+  // 2) Fixed drop-down bar with slight blur, shown after 120px upward scroll deep on the page
+  //    and hidden purely by scroll Y-position (hides on downward scroll, or once back at scrollY <= 4).
+  const staticHeaderRef = useRef<HTMLElement | null>(null);
+  const headerHeightRef = useRef(0);
+  const lastScrollYRef = useRef(0);
+  const upScrollAccumRef = useRef(0);
+  const isDropHeaderVisibleRef = useRef(false);
+  const isAtTopHandOffRef = useRef(true);
+
+  const [isDropHeaderVisible, setIsDropHeaderVisible] = useState(false);
+  const [isAtTopHandOff, setIsAtTopHandOff] = useState(true);
+
+  const setDropVisible = (visible: boolean, atTop = false) => {
+    if (atTop !== isAtTopHandOffRef.current) {
+      isAtTopHandOffRef.current = atTop;
+      setIsAtTopHandOff(atTop);
+    }
+    if (visible !== isDropHeaderVisibleRef.current) {
+      isDropHeaderVisibleRef.current = visible;
+      setIsDropHeaderVisible(visible);
+    }
+  };
+
+  useEffect(() => {
+    const el = staticHeaderRef.current;
+    if (!el || typeof window === 'undefined') return;
+
+    const measure = () => {
+      const h = Math.ceil(el.getBoundingClientRect().height);
+      if (h > 0) headerHeightRef.current = h;
+    };
+    measure();
+
+    window.addEventListener('resize', measure, { passive: true });
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(measure);
+      ro.observe(el);
+    }
+    return () => {
+      window.removeEventListener('resize', measure);
+      ro?.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    lastScrollYRef.current = Math.max(0, window.scrollY || 0);
+
+    const handleScroll = () => {
+      const currentY = Math.max(0, window.scrollY || 0);
+      const delta = currentY - lastScrollYRef.current;
+      lastScrollYRef.current = currentY;
+
+      const h = headerHeightRef.current || 68;
+      if (currentY <= 4) {
+        upScrollAccumRef.current = 0;
+        setDropVisible(false, true);
+        return;
+      }
+
+      const minDropY = Math.max(h + 140, 220);
+      if (currentY <= minDropY) {
+        upScrollAccumRef.current = 0;
+        if (delta >= 6 && isDropHeaderVisibleRef.current) {
+          setDropVisible(false, false);
+        }
+        return;
+      }
+
+      if (delta > 0) {
+        upScrollAccumRef.current = 0;
+        if (delta >= 6 && isDropHeaderVisibleRef.current) {
+          setDropVisible(false, false);
+        }
+      } else if (delta < 0) {
+        upScrollAccumRef.current += -delta;
+        if (upScrollAccumRef.current >= 120) {
+          setDropVisible(true, false);
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Page visibility state (suspends background tasks and polling when tab is hidden)
   const [isPageVisible, setIsPageVisible] = useState<boolean>(() => {
@@ -352,7 +441,14 @@ export default function App() {
     return DEFAULT_AUTOMATION_SETTINGS;
   });
 
-  const [selectedForAutomation, setSelectedForAutomation] = useState<Set<string>>(new Set());
+  const [automationQueue, setAutomationQueue] = useState<
+    { key: string; command: Command; role?: CommandRole; option?: CommandOption }[]
+  >([]);
+
+  const queuedAutomationKeys = useMemo(
+    () => new Set(automationQueue.map(item => item.key)),
+    [automationQueue]
+  );
 
   // Save automations to localStorage on change
   useEffect(() => {
@@ -960,25 +1056,37 @@ export default function App() {
     setActiveMainTab('automations');
   };
 
-  const handleToggleSelectForAutomation = (command: Command) => {
-    setSelectedForAutomation(prev => {
-      const next = new Set(prev);
-      if (next.has(command.id)) {
-        next.delete(command.id);
-      } else {
-        next.add(command.id);
+  const handleToggleAutomationQueueItem = (
+    command: Command,
+    role?: CommandRole,
+    option?: CommandOption
+  ) => {
+    const key = getAutomationQueueKey(command.id, role, option);
+    setAutomationQueue(prev => {
+      if (prev.some(item => item.key === key)) {
+        return prev.filter(item => item.key !== key);
       }
-      return next;
+      return [...prev, { key, command, role, option }];
     });
   };
 
-  const handleCreateAutomationFromSelected = () => {
-    const selectedCmds = catalog.commands.filter(c => selectedForAutomation.has(c.id));
-    if (selectedCmds.length === 0) return;
+  const handleBuildFromAutomationQueue = () => {
+    if (automationQueue.length === 0) return;
+
+    const uniqueNames = Array.from(
+      new Set(automationQueue.map(item => resolveVariant(item.command, selectedVehicle).name))
+    );
+    const ruleName =
+      automationQueue.length === 1
+        ? `Automate: ${uniqueNames[0]}${
+            automationQueue[0].option?.label ? ` (${automationQueue[0].option.label})` : ''
+          }`
+        : uniqueNames.slice(0, 2).join(' + ') +
+          (uniqueNames.length > 2 ? ` (+${uniqueNames.length - 2})` : '');
 
     const newRule: AutomationRule = {
       id: `rule_${Date.now()}`,
-      name: selectedCmds.map(c => c.name).slice(0, 2).join(' + ') + (selectedCmds.length > 2 ? ` (+${selectedCmds.length - 2})` : ''),
+      name: ruleName,
       enabled: true,
       ha_expose: true,
       ha_icon: 'mdi:car-cog',
@@ -991,22 +1099,28 @@ export default function App() {
       actions: []
     };
 
-    selectedCmds.forEach(rawCmd => {
-      const cmd = resolveVariant(rawCmd, selectedVehicle);
-      const isAction = cmd.roles?.includes('action') && !cmd.roles?.includes('trigger');
-      const defaultOpt = cmd.options && cmd.options.length > 0
-        ? (cmd.options.find(o => o.default) || cmd.options[0])
-        : undefined;
+    automationQueue.forEach(item => {
+      const resolvedCmd = resolveVariant(item.command, selectedVehicle);
+      const effectiveRole: CommandRole =
+        item.role ||
+        (resolvedCmd.roles?.includes('action') && !resolvedCmd.roles?.includes('trigger')
+          ? 'action'
+          : resolvedCmd.roles?.includes('condition') && !resolvedCmd.roles?.includes('trigger')
+          ? 'condition'
+          : 'trigger');
 
-      if (isAction) {
-        newRule.actions.push(commandToAction(cmd, defaultOpt));
+      if (effectiveRole === 'action') {
+        newRule.actions.push(commandToAction(resolvedCmd, item.option));
+      } else if (effectiveRole === 'condition') {
+        newRule.conditions.push(commandToCondition(resolvedCmd, item.option));
       } else {
-        newRule.triggers.push(commandToTrigger(cmd, defaultOpt));
+        newRule.triggers.push(commandToTrigger(resolvedCmd, item.option));
       }
     });
 
     setAutomationRules(prev => [newRule, ...prev]);
-    setSelectedForAutomation(new Set());
+    setAutomationQueue([]);
+    setSelectedCommand(null);
     setActiveMainTab('automations');
   };
 
@@ -1037,125 +1151,125 @@ export default function App() {
     downloadAnchor.remove();
   };
 
-  return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-accent selection:text-accent-foreground">
-      {/* Hero Banner / Header Area */}
-      <header className="border-b border-border bg-surface px-3.5 py-4 sm:px-6 sm:py-5 lg:px-8">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 items-center gap-4 py-1">
-
-          {/* Left: empty space to push logo to center */}
-          <div className="flex flex-col items-center justify-center text-center order-1 md:order-1">
-          </div>
-
-          {/* Center: Centered CAN Do Logo with 'CAN Do' text underneath */}
-          <div className="flex flex-col items-center justify-center text-center order-1 md:order-2">
-            <CanDoLogo className="h-12 sm:h-16 md:h-18 w-auto" />
-            <h1 className="mt-1.5 text-lg sm:text-xl font-bold text-foreground tracking-wide">
-              CAN Do
-            </h1>
-          </div>
-
-          {/* Right: Theme Toggle Button */}
-          <div className="flex flex-col items-center justify-center text-center order-1 md:order-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onPress={toggleTheme}
-              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-              className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-1.5 px-3 transition hover:border-accent"
-            >
-              {theme === 'dark' ? (
-                <>
-                  <Sun className="w-3.5 h-3.5 text-warning shrink-0" />
-                  <span className="hidden sm:inline">Light</span>
-                </>
-              ) : (
-                <>
-                  <Moon className="w-3.5 h-3.5 text-accent shrink-0" />
-                  <span className="hidden sm:inline">Dark</span>
-                </>
-              )}
-            </Button>
-          </div>
+  const renderHeaderBar = (navAriaLabel: string) => (
+    <div className="max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 pt-2.5 pb-2 md:pt-0 md:pb-3">
+      <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-3">
+        {/* Left Flank: Compact Logo + Wordmark flush with content */}
+        <div className="flex items-center gap-2.5 md:flex-1 min-w-0">
+          <CanDoLogo className="h-7 sm:h-8 w-auto shrink-0" />
+          <h1 className="text-base sm:text-lg font-bold text-foreground tracking-wide whitespace-nowrap">
+            CAN Do
+          </h1>
         </div>
-      </header>
 
-      {/* Main Tab Navigation Header */}
-      <div className="border-b border-border bg-surface/90 backdrop-blur-md sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-          <div className="relative flex items-center justify-center h-14">
-            {/* HeroUI Segmented Tab Navigation with Animated Indicator */}
+        {/* Center: EV6 Climate-Bar Nav Easter Egg */}
+        <div className="order-3 md:order-2 w-full md:w-auto flex justify-center min-w-0">
+          <div className="ev6-climate-bar max-w-full overflow-x-auto">
             <Tabs
               selectedKey={activeMainTab}
               onSelectionChange={key => handleSetMainTab(key as 'dashboard' | 'automations' | 'catalog' | 'device')}
-              aria-label="Main Navigation"
+              aria-label={navAriaLabel}
             >
-              <Tabs.ListContainer className="bg-surface-secondary border border-border rounded-xl">
-                <Tabs.List className="gap-1 p-1">
+              <Tabs.ListContainer className="bg-transparent border-0">
+                <Tabs.List className="gap-1.5 p-0.5">
                   <Tabs.Tab
                     id="dashboard"
-                    className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                      activeMainTab === 'dashboard' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
+                    className={`relative flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-[13px] font-medium cursor-pointer transition-colors ${
+                      activeMainTab === 'dashboard' ? 'text-segment-foreground font-semibold' : 'text-muted hover:text-foreground'
                     }`}
                   >
-                    <Gauge className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'dashboard' ? 'text-accent' : 'text-muted'}`} />
+                    <Gauge className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 transition-colors ${activeMainTab === 'dashboard' ? 'text-accent' : 'text-muted'}`} />
                     <span>Cockpit</span>
-                    <Tabs.Indicator className="rounded-lg bg-surface-tertiary border border-border shadow-sm" />
+                    <Tabs.Indicator className="rounded-lg bg-segment border border-border shadow-sm" />
                   </Tabs.Tab>
 
                   <Tabs.Tab
                     id="automations"
-                    className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                      activeMainTab === 'automations' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
+                    className={`relative flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-[13px] font-medium cursor-pointer transition-colors ${
+                      activeMainTab === 'automations' ? 'text-segment-foreground font-semibold' : 'text-muted hover:text-foreground'
                     }`}
                   >
-                    <Zap className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'automations' ? 'text-warning' : 'text-muted'}`} />
+                    <Zap className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 transition-colors ${activeMainTab === 'automations' ? 'text-warning' : 'text-muted'}`} />
                     <span>Automations</span>
-                    <Tabs.Indicator className="rounded-lg bg-surface-tertiary border border-border shadow-sm" />
+                    <Tabs.Indicator className="rounded-lg bg-segment border border-border shadow-sm" />
                   </Tabs.Tab>
 
                   <Tabs.Tab
                     id="catalog"
-                    className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                      activeMainTab === 'catalog' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
+                    className={`relative flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-[13px] font-medium cursor-pointer transition-colors ${
+                      activeMainTab === 'catalog' ? 'text-segment-foreground font-semibold' : 'text-muted hover:text-foreground'
                     }`}
                   >
-                    <Layers className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'catalog' ? 'text-accent' : 'text-muted'}`} />
+                    <Layers className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 transition-colors ${activeMainTab === 'catalog' ? 'text-accent' : 'text-muted'}`} />
                     <span>Catalog</span>
-                    <Tabs.Indicator className="rounded-lg bg-surface-tertiary border border-border shadow-sm" />
+                    <Tabs.Indicator className="rounded-lg bg-segment border border-border shadow-sm" />
                   </Tabs.Tab>
 
                   <Tabs.Tab
                     id="device"
-                    className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium cursor-pointer transition-colors ${
-                      activeMainTab === 'device' ? 'text-foreground font-semibold' : 'text-muted hover:text-foreground'
+                    className={`relative flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-[13px] font-medium cursor-pointer transition-colors ${
+                      activeMainTab === 'device' ? 'text-segment-foreground font-semibold' : 'text-muted hover:text-foreground'
                     }`}
                   >
-                    <Radio className={`w-3.5 h-3.5 shrink-0 transition-colors ${activeMainTab === 'device' ? 'text-success' : 'text-muted'}`} />
+                    <Radio className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 transition-colors ${activeMainTab === 'device' ? 'text-success' : 'text-muted'}`} />
                     <span>Settings</span>
-                    <Tabs.Indicator className="rounded-lg bg-surface-tertiary border border-border shadow-sm" />
+                    <Tabs.Indicator className="rounded-lg bg-segment border border-border shadow-sm" />
                   </Tabs.Tab>
                 </Tabs.List>
               </Tabs.ListContainer>
             </Tabs>
-
-            {/* Quick action button positioned to the right */}
-            {activeMainTab === 'catalog' && selectedForAutomation.size > 0 && (
-              <div className="absolute right-0 flex items-center gap-2 shrink-0">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onPress={handleCreateAutomationFromSelected}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-warning hover:bg-warning-hover text-warning-foreground text-xs font-bold transition shadow-sm"
-                >
-                  <Zap className="w-3.5 h-3.5 fill-current" />
-                  <span className="hidden sm:inline">Build with ({selectedForAutomation.size})</span>
-                  <span className="sm:hidden">({selectedForAutomation.size})</span>
-                </Button>
-              </div>
-            )}
           </div>
         </div>
+
+        {/* Right Flank: Theme Toggle Button */}
+        <div className="order-2 md:order-3 flex items-center justify-end md:flex-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={toggleTheme}
+            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            className="dash-outline-btn inline-flex items-center gap-1.5 text-xs py-1.5 px-3 transition hover:border-accent"
+          >
+            {theme === 'dark' ? (
+              <>
+                <Sun className="w-3.5 h-3.5 text-warning shrink-0" />
+                <span className="hidden sm:inline">Light</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-3.5 h-3.5 text-accent shrink-0" />
+                <span className="hidden sm:inline">Dark</span>
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-accent selection:text-accent-foreground">
+      {/* Static Top Header: native compositor scroll 1:1 with zero JS overhead */}
+      <header ref={staticHeaderRef} className="bg-background">
+        {renderHeaderBar('Main Navigation')}
+      </header>
+
+      {/* Floating Drop-Down Reveal Header: slight frosted blur on upward scroll, hides by Y-position */}
+      <div
+        role="region"
+        aria-label="Quick Navigation"
+        aria-hidden={!isDropHeaderVisible}
+        className={`fixed top-0 left-0 right-0 z-40 bg-background/80 backdrop-blur-sm shadow-sm ${
+          isAtTopHandOff && !isDropHeaderVisible
+            ? 'transition-none'
+            : 'transition-[translate,opacity] duration-500 ease-in-out'
+        } ${
+          isDropHeaderVisible
+            ? 'translate-y-0 opacity-100'
+            : '-translate-y-full opacity-0 pointer-events-none'
+        }`}
+      >
+        {renderHeaderBar('Quick Navigation Tabs')}
       </div>
 
       {/* Main App Content Area */}
@@ -1171,34 +1285,34 @@ export default function App() {
           {activeMainTab === 'catalog' ? (
           <div className="space-y-5 sm:space-y-6 min-w-0">
             {/* Catalog Sub-Tab Navigation Header (Messages vs Vehicles) */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-separator">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 sm:pb-6 border-b border-separator">
               <Tabs
                 selectedKey={catalogSubTab}
                 onSelectionChange={key => setCatalogSubTab(key as 'messages' | 'vehicles')}
                 aria-label="Catalog Sections"
               >
-                <Tabs.ListContainer className="bg-surface-secondary border border-border rounded-xl">
+                <Tabs.ListContainer className="bg-default border border-border rounded-xl">
                   <Tabs.List className="gap-1 p-1">
                     <Tabs.Tab
                       id="messages"
                       className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold cursor-pointer transition-colors ${
-                        catalogSubTab === 'messages' ? 'text-foreground' : 'text-muted hover:text-foreground'
+                        catalogSubTab === 'messages' ? 'text-segment-foreground' : 'text-muted hover:text-foreground'
                       }`}
                     >
                       <Layers className={`w-3.5 h-3.5 ${catalogSubTab === 'messages' ? 'text-accent' : 'text-muted'}`} />
                       <span>Messages</span>
-                      <Tabs.Indicator className="rounded-lg bg-surface-tertiary border border-border shadow-sm" />
+                      <Tabs.Indicator className="rounded-lg bg-segment border border-border shadow-sm" />
                     </Tabs.Tab>
 
                     <Tabs.Tab
                       id="vehicles"
                       className={`relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold cursor-pointer transition-colors ${
-                        catalogSubTab === 'vehicles' ? 'text-foreground' : 'text-muted hover:text-foreground'
+                        catalogSubTab === 'vehicles' ? 'text-segment-foreground' : 'text-muted hover:text-foreground'
                       }`}
                     >
                       <Car className={`w-3.5 h-3.5 ${catalogSubTab === 'vehicles' ? 'text-accent' : 'text-muted'}`} />
                       <span>Vehicles</span>
-                      <Tabs.Indicator className="rounded-lg bg-surface-tertiary border border-border shadow-sm" />
+                      <Tabs.Indicator className="rounded-lg bg-segment border border-border shadow-sm" />
                     </Tabs.Tab>
                   </Tabs.List>
                 </Tabs.ListContainer>
@@ -1303,38 +1417,22 @@ export default function App() {
                   commands={filteredCommands}
                   selectedCategory={selectedCategory}
                   onSelectCommand={c => setSelectedCommand(c)}
-                  onEditCommand={c => {
-                    setEditingCommand(c);
-                    setIsEditorOpen(true);
-                  }}
-                  onDuplicateCommand={handleDuplicateCommand}
-                  onDeleteCommand={handleDeleteCommand}
                   draftAddedIds={draftAddedIds}
                   draftModifiedIds={draftModifiedIds}
                   onSelectSubcategory={subcat => setSelectedSubcategory(subcat)}
-                  selectedCommandIdsForAutomation={selectedForAutomation}
-                  onToggleSelectForAutomation={handleToggleSelectForAutomation}
                   onAddToAutomation={handleAddToAutomation}
                   expandAllSignal={expandAllSignal}
                   collapseAllSignal={collapseAllSignal}
                 />
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4 min-w-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 min-w-0">
                   {filteredCommands.map(cmd => (
                     <CommandCard
                       key={cmd.id}
                       command={cmd}
                       onSelect={c => setSelectedCommand(c)}
-                      onEdit={c => {
-                        setEditingCommand(c);
-                        setIsEditorOpen(true);
-                      }}
-                      onDuplicate={handleDuplicateCommand}
-                      onDelete={handleDeleteCommand}
                       isNew={draftAddedIds.includes(cmd.id)}
                       isModified={draftModifiedIds.includes(cmd.id)}
-                      isSelectedForAutomation={selectedForAutomation.has(cmd.id)}
-                      onToggleSelectForAutomation={handleToggleSelectForAutomation}
                       onAddToAutomation={handleAddToAutomation}
                     />
                   ))}
@@ -1396,7 +1494,6 @@ export default function App() {
         onUpdateRules={setAutomationRules}
         settings={automationSettings}
         onUpdateSettings={setAutomationSettings}
-        initialSelectedCommandIds={Array.from(selectedForAutomation)}
         onNavigateToCatalog={() => {
           setActiveMainTab('catalog');
           setCatalogSubTab('messages');
@@ -1538,40 +1635,39 @@ export default function App() {
         {/* Automate FAB */}
         {activeMainTab === 'catalog' && (
           <div className="flex items-center gap-2">
-            {selectedForAutomation.size > 0 && (
+            {automationQueue.length > 0 && (
               <Button
                 variant="outline"
                 size="sm"
-                onPress={() => setSelectedForAutomation(new Set())}
-                aria-label="Clear selected commands"
+                onPress={() => setAutomationQueue([])}
+                aria-label="Clear queued automation items"
                 className="inline-flex items-center gap-1 h-9 px-3 rounded-full bg-overlay hover:bg-surface-secondary text-overlay-foreground border border-border text-xs font-semibold shadow-overlay backdrop-blur transition"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>Clear</span>
               </Button>
             )}
-
             <Button
               variant="primary"
               size="sm"
               onPress={() => {
-                if (selectedForAutomation.size > 0) {
-                  handleCreateAutomationFromSelected();
+                if (automationQueue.length > 0) {
+                  handleBuildFromAutomationQueue();
                 } else {
                   setActiveMainTab('automations');
                 }
               }}
-              className={`ha-automate-fab ${selectedForAutomation.size > 0 ? 'active' : ''}`}
+              className={`ha-automate-fab ${automationQueue.length > 0 ? 'active' : ''}`}
               aria-label={
-                selectedForAutomation.size > 0
-                  ? `Create Automation Rule with ${selectedForAutomation.size} selected command${selectedForAutomation.size > 1 ? 's' : ''}`
+                automationQueue.length > 0
+                  ? `Create Automation Rule with ${automationQueue.length} queued item${automationQueue.length > 1 ? 's' : ''}`
                   : 'Open Automation Builder'
               }
             >
-              <Zap className={`w-4 h-4 ${selectedForAutomation.size > 0 ? 'fill-current' : ''}`} />
+              <Zap className={`w-4 h-4 ${automationQueue.length > 0 ? 'fill-current' : ''}`} />
               <span>
-                {selectedForAutomation.size > 0
-                  ? `+ Automate (${selectedForAutomation.size})`
+                {automationQueue.length > 0
+                  ? `+ Automate (${automationQueue.length})`
                   : '+ Automate'}
               </span>
             </Button>
@@ -1590,6 +1686,7 @@ export default function App() {
               command={selectedCommand}
               catalog={catalog}
               onClose={() => setSelectedCommand(null)}
+              onDuplicate={handleDuplicateCommand}
               onDelete={handleDeleteCommand}
               onEdit={cmd => {
                 setSelectedCommand(null);
@@ -1600,6 +1697,11 @@ export default function App() {
                 setSelectedCommand(null);
                 handleAddToAutomation(cmd, role, opt);
               }}
+              queuedAutomationKeys={queuedAutomationKeys}
+              queuedAutomationCount={automationQueue.length}
+              onToggleAutomationQueue={handleToggleAutomationQueueItem}
+              onBuildFromAutomationQueue={handleBuildFromAutomationQueue}
+              onClearAutomationQueue={() => setAutomationQueue([])}
             />
           </ErrorBoundary>
         )}

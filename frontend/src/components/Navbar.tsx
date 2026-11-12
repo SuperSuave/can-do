@@ -126,30 +126,30 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onSelectionChange={key => onChangeMainTab(key as typeof activeMainTab)}
                 aria-label="Navbar Main Navigation"
               >
-                <Tabs.ListContainer className="p-1 rounded-xl bg-surface-secondary border border-border text-xs">
+                <Tabs.ListContainer className="p-1 rounded-xl bg-default border border-border text-xs">
                   <Tabs.List className="gap-1">
                     <Tabs.Tab
                       id="catalog"
                       className={`relative px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer flex items-center ${
                         activeMainTab === 'catalog'
-                          ? 'text-foreground'
+                          ? 'text-segment-foreground'
                           : 'text-muted hover:text-foreground'
                       }`}
                     >
                       <span>Commands ({catalog.commands.length})</span>
-                      <Tabs.Indicator className="rounded-lg bg-surface-tertiary shadow-sm" />
+                      <Tabs.Indicator className="rounded-lg bg-segment border border-border shadow-sm" />
                     </Tabs.Tab>
 
                     <Tabs.Tab
                       id="vehicles"
                       className={`relative px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer flex items-center ${
                         activeMainTab === 'vehicles'
-                          ? 'text-foreground'
+                          ? 'text-segment-foreground'
                           : 'text-muted hover:text-foreground'
                       }`}
                     >
                       <span>Vehicles ({catalog.vehicles.length})</span>
-                      <Tabs.Indicator className="rounded-lg bg-surface-tertiary shadow-sm" />
+                      <Tabs.Indicator className="rounded-lg bg-segment border border-border shadow-sm" />
                     </Tabs.Tab>
 
                     <Tabs.Tab

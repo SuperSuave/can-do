@@ -226,29 +226,29 @@ export const DbcExportModal: React.FC<DbcExportModalProps> = ({
             onSelectionChange={key => setActiveTab(key as 'preview' | 'help')}
             aria-label="Export Views"
           >
-            <Tabs.ListContainer className="p-0.5 rounded-lg bg-surface-secondary border border-border text-[11px]">
+            <Tabs.ListContainer className="p-0.5 rounded-lg bg-default border border-border text-[11px]">
               <Tabs.List className="gap-1">
                 <Tabs.Tab
                   id="preview"
                   className={`relative px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
                     activeTab === 'preview'
-                      ? 'text-foreground'
+                      ? 'text-segment-foreground'
                       : 'text-muted hover:text-foreground'
                   }`}
                 >
                   <span>DBC Preview</span>
-                  <Tabs.Indicator className="rounded-md bg-surface-tertiary border border-border shadow-sm" />
+                  <Tabs.Indicator className="rounded-md bg-segment border border-border shadow-sm" />
                 </Tabs.Tab>
                 <Tabs.Tab
                   id="help"
                   className={`relative px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
                     activeTab === 'help'
-                      ? 'text-foreground'
+                      ? 'text-segment-foreground'
                       : 'text-muted hover:text-foreground'
                   }`}
                 >
                   <span>Tool Setup Guide</span>
-                  <Tabs.Indicator className="rounded-md bg-surface-tertiary border border-border shadow-sm" />
+                  <Tabs.Indicator className="rounded-md bg-segment border border-border shadow-sm" />
                 </Tabs.Tab>
               </Tabs.List>
             </Tabs.ListContainer>

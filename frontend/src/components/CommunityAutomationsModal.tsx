@@ -140,6 +140,7 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
       tags: ruleToShare.tags || ['all_egmp'],
       enabled: ruleToShare.enabled,
       ha_expose: ruleToShare.ha_expose,
+      ...(ruleToShare.hold_beep ? { hold_beep: true } : {}),
       ha_icon: ruleToShare.ha_icon,
       exec_mode: ruleToShare.exec_mode,
       cooldown_ms: ruleToShare.cooldown_ms,
@@ -361,7 +362,7 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                           </div>
 
                           {/* Summary Chips */}
-                          <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] font-mono text-muted border-t border-separator">
+                          <div className="flex flex-wrap items-center gap-2 pt-2.5 text-[11px] font-mono text-muted border-t border-separator">
                             <Chip size="sm" color="warning" variant="soft" className="flex items-center gap-1 bg-warning-soft text-warning-soft-foreground border border-warning/30">
                               <Zap className="w-3 h-3 text-warning mr-1" />
                               {item.triggers.length} {item.triggers.length === 1 ? 'Trigger' : 'Triggers'}
@@ -380,7 +381,7 @@ export const CommunityAutomationsModal: React.FC<CommunityAutomationsModalProps>
                         </div>
 
                         {/* Action Bar */}
-                        <div className="pt-3 mt-2 flex items-center justify-between gap-2 border-t border-separator">
+                        <div className="pt-3 mt-3 flex items-center justify-between gap-2 border-t border-separator">
                           <Chip size="sm" variant="secondary" className="flex items-center gap-1 text-[10px] text-muted font-mono bg-surface-tertiary border border-border">
                             <Car className="w-3 h-3 mr-1" />
                             <span>{(item.tags || ['all_egmp']).join(', ')}</span>

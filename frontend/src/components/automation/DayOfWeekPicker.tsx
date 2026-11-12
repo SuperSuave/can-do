@@ -71,7 +71,7 @@ export function DayOfWeekPicker({
               className={`px-2 py-0.5 rounded text-[10px] font-bold transition border ${
                 active
                   ? 'bg-accent text-accent-foreground border-accent'
-                  : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                  : 'bg-surface-tertiary text-foreground/85 border-border hover:text-foreground hover:bg-default-hover'
               }`}
             >
               {d.label}

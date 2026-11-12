@@ -123,15 +123,23 @@ export function compileToByteMap(input: string | ByteMap | Record<string, unknow
   return result;
 }
 
+function pickSustainedFields(node: { for_sec?: number; for_ms?: number }): { for_sec?: number; for_ms?: number } {
+  return {
+    ...(node.for_ms ? { for_ms: node.for_ms } : {}),
+    ...(node.for_sec ? { for_sec: node.for_sec } : {})
+  };
+}
+
 /**
  * Compiles a condition into standard CAN Do schema
  */
 export function compileCondition(cond: AutomationCondition, catalog: Catalog = DEFAULT_CATALOG): any {
+  const sustained = pickSustainedFields(cond);
   if (cond.logic === 'and' || cond.logic === 'or' || cond.logic === 'not') {
     const subConds = (cond.conditions || []).map(c => compileCondition(c, catalog));
-    if (cond.logic === 'and') return { and: subConds };
-    if (cond.logic === 'or') return { or: subConds };
-    if (cond.logic === 'not') return { not: subConds[0] || {} };
+    if (cond.logic === 'and') return { and: subConds, ...sustained };
+    if (cond.logic === 'or') return { or: subConds, ...sustained };
+    if (cond.logic === 'not') return { not: subConds[0] || {}, ...sustained };
   }
 
   // Multi-option state check: if multiple options on the same entity touch the same byte, desugar to OR group
@@ -161,7 +169,8 @@ export function compileCondition(cond: AutomationCondition, catalog: Catalog = D
             source_command_id: cond.source_command_id,
             ...(cond.source_command_name ? { source_command_name: cond.source_command_name } : {}),
             ...(cond.option_label ? { option_label: cond.option_label } : {}),
-            selected_options: cond.selected_options
+            selected_options: cond.selected_options,
+            ...sustained
           };
         }
       }
@@ -194,7 +203,8 @@ export function compileCondition(cond: AutomationCondition, catalog: Catalog = D
       ...(cond.target_string ? { target_string: cond.target_string } : {}),
       ...(cond.operator ? { operator: cond.operator } : {}),
       ...(cond.target_bool !== undefined ? { target_bool: cond.target_bool } : {}),
-      ...(cond.target_rssi !== undefined ? { target_rssi: cond.target_rssi } : {})
+      ...(cond.target_rssi !== undefined ? { target_rssi: cond.target_rssi } : {}),
+      ...sustained
     };
   }
 
@@ -226,7 +236,8 @@ export function compileCondition(cond: AutomationCondition, catalog: Catalog = D
       ...(cond.target_string ? { target_string: cond.target_string } : {}),
       ...(cond.target_bool !== undefined ? { target_bool: cond.target_bool } : {}),
       ...(cond.target_rssi !== undefined ? { target_rssi: cond.target_rssi } : {}),
-      ...(cond.operator ? { operator: cond.operator } : {})
+      ...(cond.operator ? { operator: cond.operator } : {}),
+      ...sustained
     };
   }
 
@@ -238,7 +249,8 @@ export function compileCondition(cond: AutomationCondition, catalog: Catalog = D
       ...(cond.target_string ? { target_string: cond.target_string } : {}),
       ...(cond.target_bool !== undefined ? { target_bool: cond.target_bool } : {}),
       ...(cond.target_rssi !== undefined ? { target_rssi: cond.target_rssi } : {}),
-      ...(cond.operator ? { operator: cond.operator } : {})
+      ...(cond.operator ? { operator: cond.operator } : {}),
+      ...sustained
     };
   }
 
@@ -248,7 +260,8 @@ export function compileCondition(cond: AutomationCondition, catalog: Catalog = D
     return {
       type: 'voltage',
       operator: cond.operator || (cond.voltage_dir === 'below' ? 'less' : 'greater'),
-      value: numVal
+      value: numVal,
+      ...sustained
     };
   }
 
@@ -257,7 +270,8 @@ export function compileCondition(cond: AutomationCondition, catalog: Catalog = D
       type: 'param_range',
       can_id: cond.can_id || '0x100',
       operator: cond.operator || (cond.voltage_dir === 'above' ? 'greater' : 'less'),
-      value: cond.value || cond.voltage_val || '50'
+      value: cond.value || cond.voltage_val || '50',
+      ...sustained
     };
   }
 
@@ -281,7 +295,8 @@ export function compileCondition(cond: AutomationCondition, catalog: Catalog = D
       ...(cond.source_command_id ? { source_command_id: cond.source_command_id } : {}),
       ...(cond.source_command_name ? { source_command_name: cond.source_command_name } : {}),
       ...(cond.option_label ? { option_label: cond.option_label } : {}),
-      ...(cond.selected_options && cond.selected_options.length > 0 ? { selected_options: cond.selected_options } : {})
+      ...(cond.selected_options && cond.selected_options.length > 0 ? { selected_options: cond.selected_options } : {}),
+      ...sustained
     };
   }
 
@@ -301,7 +316,8 @@ export function compileCondition(cond: AutomationCondition, catalog: Catalog = D
     ...(cond.source_command_id ? { source_command_id: cond.source_command_id } : {}),
     ...(cond.source_command_name ? { source_command_name: cond.source_command_name } : {}),
     ...(cond.option_label ? { option_label: cond.option_label } : {}),
-    ...(cond.selected_options && cond.selected_options.length > 0 ? { selected_options: cond.selected_options } : {})
+    ...(cond.selected_options && cond.selected_options.length > 0 ? { selected_options: cond.selected_options } : {}),
+    ...sustained
   };
 }
 
@@ -921,7 +937,8 @@ export function decompileCondition(rawCond: any, catalog: Catalog = DEFAULT_CATA
             id: rawCond.id || subConds[0]?.id || generateBlockId('cond'),
             type: 'can_state',
             source_command_id: cmd.id,
-            source_command_name: rawCond.source_command_name || cmd.ha_metadata?.name || cmd.name || cmd.id
+            source_command_name: rawCond.source_command_name || cmd.ha_metadata?.name || cmd.name || cmd.id,
+            ...pickSustainedFields(rawCond)
           };
           return applyOptionsToCondition(baseCond, cmd, matchedOpts);
         }
@@ -1472,6 +1489,7 @@ export function decompileAutomationRule(
     name: rawRule.name || 'Automation Rule',
     enabled: rawRule.enabled ?? true,
     ha_expose: rawRule.ha_expose ?? true,
+    ...(rawRule.hold_beep ? { hold_beep: true } : {}),
     ha_icon: rawRule.ha_icon || 'mdi:car-cog',
     exec_mode: rawRule.exec_mode || 'one_shot',
     trigger_mode: rawRule.trigger_mode || 'any',
@@ -1506,6 +1524,7 @@ export function compileAutomationRule(
     name: rule.name,
     enabled: rule.enabled ?? true,
     ha_expose: rule.ha_expose ?? true,
+    ...(rule.hold_beep ? { hold_beep: true } : {}),
     ha_icon: rule.ha_icon || 'mdi:car-cog',
     exec_mode: rule.exec_mode || 'one_shot',
     trigger_mode: rule.trigger_mode || 'any',

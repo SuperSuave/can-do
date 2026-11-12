@@ -46,7 +46,9 @@ export interface BleButtonEvent {
   device_address: string;
   device_name: string;
   button_name: string;
-  action: 'press' | 'release' | 'hold';
+  action: 'press' | 'tap' | 'release' | 'hold' | string;
+  combo?: string;
+  hold_seconds?: number;
   key_code?: number;
   modifiers?: number;
   timestamp_ms?: number;

@@ -224,7 +224,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               onSelectionChange={key => setActiveFormat(key as ExportFormat)}
               aria-label="Export Format"
             >
-              <Tabs.ListContainer className="p-0.5 rounded-lg bg-surface-secondary border border-border text-xs">
+              <Tabs.ListContainer className="p-0.5 rounded-lg bg-default border border-border text-xs">
                 <Tabs.List className="gap-1">
                   <Tabs.Tab
                     id="dbc"
@@ -239,7 +239,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     <span className="text-[9px] px-1.5 py-0.2 rounded bg-accent-soft text-accent-soft-foreground border border-accent/30">
                       SavvyCAN / comma
                     </span>
-                    <Tabs.Indicator className="rounded-lg bg-accent-soft border border-accent/40 shadow-sm" />
+                    <Tabs.Indicator className="rounded-lg bg-accent-soft border border-accent/50 shadow-sm" />
                   </Tabs.Tab>
 
                   <Tabs.Tab
@@ -255,7 +255,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     <span className="text-[9px] px-1.5 py-0.2 rounded bg-success-soft text-success-soft-foreground border border-success/30">
                       Hub Schema
                     </span>
-                    <Tabs.Indicator className="rounded-lg bg-success-soft border border-success/40 shadow-sm" />
+                    <Tabs.Indicator className="rounded-lg bg-success-soft border border-success/50 shadow-sm" />
                   </Tabs.Tab>
                 </Tabs.List>
               </Tabs.ListContainer>
@@ -267,29 +267,29 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             onSelectionChange={key => setActiveTab(key as 'preview' | 'help')}
             aria-label="Export Views"
           >
-            <Tabs.ListContainer className="p-0.5 rounded-lg bg-surface-secondary border border-border text-[11px]">
+            <Tabs.ListContainer className="p-0.5 rounded-lg bg-default border border-border text-[11px]">
               <Tabs.List className="gap-1">
                 <Tabs.Tab
                   id="preview"
                   className={`relative px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
                     activeTab === 'preview'
-                      ? 'text-foreground'
+                      ? 'text-segment-foreground'
                       : 'text-muted hover:text-foreground'
                   }`}
                 >
                   <span>File Preview</span>
-                  <Tabs.Indicator className="rounded-md bg-surface-tertiary border border-border shadow-sm" />
+                  <Tabs.Indicator className="rounded-md bg-segment border border-border shadow-sm" />
                 </Tabs.Tab>
                 <Tabs.Tab
                   id="help"
                   className={`relative px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
                     activeTab === 'help'
-                      ? 'text-foreground'
+                      ? 'text-segment-foreground'
                       : 'text-muted hover:text-foreground'
                   }`}
                 >
                   <span>Tool Setup Guide</span>
-                  <Tabs.Indicator className="rounded-md bg-surface-tertiary border border-border shadow-sm" />
+                  <Tabs.Indicator className="rounded-md bg-segment border border-border shadow-sm" />
                 </Tabs.Tab>
               </Tabs.List>
             </Tabs.ListContainer>

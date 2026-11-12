@@ -92,7 +92,7 @@ export const PayloadByteEditor: React.FC<PayloadByteEditorProps> = ({
             onSelectionChange={key => setIsAdvanced(key === 'raw')}
             aria-label="Payload Representation Mode"
           >
-            <Tabs.ListContainer className="p-0.5 rounded-lg bg-surface-tertiary border border-border text-[10px]">
+            <Tabs.ListContainer className="p-0.5 rounded-lg bg-default border border-border text-[10px]">
               <Tabs.List className="gap-0.5">
                 <Tabs.Tab
                   id="boxes"
@@ -103,7 +103,7 @@ export const PayloadByteEditor: React.FC<PayloadByteEditorProps> = ({
                   }`}
                 >
                   <span>D1–D8 Boxes</span>
-                  <Tabs.Indicator className="rounded bg-accent-soft border border-accent/30 shadow-sm" />
+                  <Tabs.Indicator className="rounded bg-accent-soft border border-accent/50 shadow-sm" />
                 </Tabs.Tab>
 
                 <Tabs.Tab
@@ -115,7 +115,7 @@ export const PayloadByteEditor: React.FC<PayloadByteEditorProps> = ({
                   }`}
                 >
                   <span>Raw Text</span>
-                  <Tabs.Indicator className="rounded bg-accent-soft border border-accent/30 shadow-sm" />
+                  <Tabs.Indicator className="rounded bg-accent-soft border border-accent/50 shadow-sm" />
                 </Tabs.Tab>
               </Tabs.List>
             </Tabs.ListContainer>

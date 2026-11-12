@@ -246,7 +246,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
   return (
     <div className="p-4 sm:p-5 rounded-[12px] bg-surface border border-border space-y-5">
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-separator">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-separator">
         <div>
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-accent-soft border border-accent/30 flex items-center justify-center text-accent">
@@ -372,7 +372,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
               } space-y-3.5`}
             >
               {/* State Header Bar */}
-              <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-separator">
+              <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3.5 border-b border-separator">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="w-6 h-6 rounded-full bg-surface-tertiary border border-border flex items-center justify-center text-xs font-mono font-bold text-accent shrink-0">
                     {idx + 1}
@@ -532,7 +532,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
               </div>
 
               {/* CAN RX Match Payload Editor (The core mapping) */}
-              <div className="pt-2 border-t border-separator">
+              <div className="pt-3.5 border-t border-separator">
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-accent">
@@ -552,7 +552,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
               </div>
 
               {/* Action Transmission (TX) / Transition Steps (Optional) */}
-              <div className="pt-2 border-t border-separator">
+              <div className="pt-3.5 border-t border-separator">
                 <button
                   type="button"
                   onClick={() => setExpandedActionIndex(expandedActionIndex === idx ? null : idx)}
@@ -582,7 +582,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
 
                   return (
                     <div className="mt-2 p-3 sm:p-4 rounded-[10px] bg-surface-tertiary border border-border space-y-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-separator">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-separator">
                         <div>
                           <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                             <Sliders className="w-3.5 h-3.5 text-success" />
@@ -608,18 +608,18 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                           }}
                           aria-label="Action Transmission Mode"
                         >
-                          <Tabs.ListContainer className="p-0.5 rounded-lg bg-surface-secondary border border-border text-[11px] self-start sm:self-auto shrink-0">
+                          <Tabs.ListContainer className="p-0.5 rounded-lg bg-default border border-border text-[11px] self-start sm:self-auto shrink-0">
                             <Tabs.List className="gap-1">
                               <Tabs.Tab
                                 id="single"
                                 className={`relative px-2.5 py-1 rounded-md font-medium transition cursor-pointer flex items-center ${
                                   currentMode === 'single'
-                                    ? 'text-foreground'
+                                    ? 'text-accent font-semibold'
                                     : 'text-muted hover:text-foreground'
                                 }`}
                               >
                                 <span>Single Frame</span>
-                                <Tabs.Indicator className="rounded-md bg-surface border border-border shadow-sm" />
+                                <Tabs.Indicator className="rounded-md bg-accent-soft border border-accent/50 shadow-sm" />
                               </Tabs.Tab>
 
                               <Tabs.Tab
@@ -637,7 +637,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
                                     {opt.steps.length}
                                   </span>
                                 )}
-                                <Tabs.Indicator className="rounded-md bg-success-soft border border-success/40 shadow-sm" />
+                                <Tabs.Indicator className="rounded-md bg-success-soft border border-success/50 shadow-sm" />
                               </Tabs.Tab>
                             </Tabs.List>
                           </Tabs.ListContainer>
@@ -1070,7 +1070,7 @@ export const StateDefinitionsEditor: React.FC<StateDefinitionsEditorProps> = ({
 
       {/* Decoded State Matrix Summary Table */}
       {options.length > 0 && (
-        <div className="pt-4 border-t border-separator space-y-2.5">
+        <div className="pt-5 border-t border-separator space-y-2.5">
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
               <Check className="w-3.5 h-3.5 text-accent" />

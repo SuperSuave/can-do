@@ -28,13 +28,31 @@ static const char* TAG = "BLE_MGR";
 extern std::string g_device_id;
 
 #define BLE_MIN_RSSI_DISCOVERY -70
+#define BLE_COMBO_SETTLE_MS 85U
+#define BLE_HOLD_TICK_MS 1000U
 
 struct BleButtonEvent {
     std::string device_address;
     std::string device_name;
     std::string button_name;
-    std::string action; // "press", "release"
+    std::string action; // "press", "release", "hold_1s".."hold_Ns"
     uint32_t timestamp_ms;
+    std::string combo;
+    uint32_t hold_seconds = 0;
+};
+
+enum class ChordPhase { IDLE, SETTLING, PRESSED };
+
+struct BleChordState {
+    ChordPhase phase = ChordPhase::IDLE;
+    std::string addr;
+    std::string name;
+    std::vector<std::string> current_keys;
+    std::vector<std::string> peak_keys;
+    uint32_t first_down_ms = 0;
+    uint32_t settle_deadline_ms = 0;
+    uint32_t next_hold_tick_ms = 0;
+    uint32_t hold_seconds = 0;
 };
 
 struct PairedDevice {
@@ -87,7 +105,14 @@ static std::vector<DiscoveredBeacon> s_discovered_beacons;
 static std::vector<BleButtonEvent> s_recent_ble_events;
 static BleButtonEvent s_last_ble_event = {};
 static bool s_has_last_event = false;
-static std::vector<std::string> s_held_buttons;
+static BleChordState s_chord;
+static TaskHandle_t s_ble_worker_task = nullptr;
+
+static inline void wake_ble_worker(void) {
+    if (s_ble_worker_task) {
+        xTaskNotifyGive(s_ble_worker_task);
+    }
+}
 
 static bool s_ble_scanning = false;
 static std::atomic<bool> s_ble_shutting_down{false};
@@ -138,12 +163,12 @@ static void start_background_ble_scan(void) {
     pScan->setDuplicateFilter(false);
     if (has_targets) {
         // Track paired buttons and beacon RSSI while leaving ~80% RF airtime for Wi-Fi coexistence
-        pScan->setInterval(160); // 100ms
-        pScan->setWindow(32);    // 20ms
+        pScan->setInterval(100); // 100ms
+        pScan->setWindow(20);    // 20ms
     } else {
         // Low-overhead passive iBeacon discovery (~8% RF duty cycle) when no targets are configured
-        pScan->setInterval(400); // 250ms
-        pScan->setWindow(32);    // 20ms
+        pScan->setInterval(250); // 250ms
+        pScan->setWindow(20);    // 20ms
     }
     pScan->start(0, false, true);
 }
@@ -303,13 +328,36 @@ static void persist_beacon_targets(void) {
 // ============================================================================
 // Event Dispatching
 // ============================================================================
+static std::string format_chord(const std::vector<std::string>& keys) {
+    std::string out;
+    for (size_t i = 0; i < keys.size(); i++) {
+        if (i > 0) out += "+";
+        out += keys[i];
+    }
+    return out;
+}
+
+static void append_ble_event_json(cJSON* obj, const BleButtonEvent& ev) {
+    cJSON_AddStringToObject(obj, "device_address", ev.device_address.c_str());
+    cJSON_AddStringToObject(obj, "device_name", ev.device_name.c_str());
+    cJSON_AddStringToObject(obj, "button_name", ev.button_name.c_str());
+    cJSON_AddStringToObject(obj, "action", ev.action.c_str());
+    cJSON_AddNumberToObject(obj, "timestamp_ms", ev.timestamp_ms);
+    if (!ev.combo.empty()) {
+        cJSON_AddStringToObject(obj, "combo", ev.combo.c_str());
+    }
+    if (ev.hold_seconds > 0) {
+        cJSON_AddNumberToObject(obj, "hold_seconds", ev.hold_seconds);
+    }
+}
+
 static void fire_ble_button_event(const std::string& addr, const std::string& name,
                                   const std::string& btn, const std::string& act,
-                                  const std::string& combo = "") {
+                                  const std::string& combo = "", uint32_t hold_seconds = 0) {
     uint32_t now_ms = get_time_ms();
     {
         std::lock_guard<std::mutex> lock(s_ble_mutex);
-        s_last_ble_event = { addr, name, btn, act, now_ms };
+        s_last_ble_event = { addr, name, btn, act, now_ms, combo, hold_seconds };
         s_has_last_event = true;
         if (s_recent_ble_events.size() >= 30) {
             s_recent_ble_events.erase(s_recent_ble_events.begin());
@@ -326,6 +374,9 @@ static void fire_ble_button_event(const std::string& addr, const std::string& na
     if (!combo.empty()) {
         cJSON_AddStringToObject(root, "combo", combo.c_str());
     }
+    if (hold_seconds > 0) {
+        cJSON_AddNumberToObject(root, "hold_seconds", hold_seconds);
+    }
     cJSON_AddNumberToObject(root, "timestamp_ms", now_ms);
     char* json_str = cJSON_PrintUnformatted(root);
     if (json_str) {
@@ -334,32 +385,42 @@ static void fire_ble_button_event(const std::string& addr, const std::string& na
     }
     cJSON_Delete(root);
 
-    ESP_LOGI(TAG, "[BLE BTN] %s '%s' from %s (%s) combo=%s", act.c_str(), btn.c_str(), name.c_str(), addr.c_str(), combo.c_str());
-    can_engine_on_ble_event(addr, btn, act, combo);
+    ESP_LOGI(TAG, "[BLE BTN] %s '%s' from %s (%s) combo=%s hold_s=%lu",
+             act.c_str(), btn.c_str(), name.c_str(), addr.c_str(), combo.c_str(), (unsigned long)hold_seconds);
+    can_engine_on_ble_event(addr, btn, act, combo, hold_seconds);
 }
 
-// ============================================================================
-// HID Report Notification Parser
-// ============================================================================
-static void on_hid_report_notify(NimBLERemoteCharacteristic* pChar, uint8_t* pData, size_t length, bool isNotify) {
-    if (length == 0 || !pData) return;
-
-    std::string addr = s_connected_device_addr.empty() ? "BLE Device" : s_connected_device_addr;
-    std::string name = "BLE Controller";
-    {
-        std::lock_guard<std::mutex> lock(s_ble_mutex);
-        for (const auto& dev : s_paired_devices) {
-            if (iequals(dev.address, addr)) {
-                name = dev.name;
-                break;
-            }
-        }
+static void flush_chord_release_locked(bool* out_was_settling, bool* out_had_chord,
+                                       std::string* out_addr, std::string* out_name,
+                                       std::string* out_chord, bool* out_is_combo,
+                                       uint32_t* out_hold_s) {
+    *out_had_chord = (s_chord.phase != ChordPhase::IDLE && !s_chord.peak_keys.empty());
+    *out_was_settling = (s_chord.phase == ChordPhase::SETTLING);
+    if (*out_had_chord) {
+        *out_addr = s_chord.addr;
+        *out_name = s_chord.name;
+        *out_chord = format_chord(s_chord.peak_keys);
+        *out_is_combo = (s_chord.peak_keys.size() > 1);
+        *out_hold_s = s_chord.hold_seconds;
     }
+    s_chord = {};
+}
 
-    std::string btn = "volume_up";
-    std::string act = "press";
+static void emit_chord_release(bool was_settling, bool had_chord,
+                               const std::string& addr, const std::string& name,
+                               const std::string& chord, bool is_combo, uint32_t hold_s) {
+    if (!had_chord) return;
+    const std::string combo_str = is_combo ? chord : "";
+    if (was_settling) {
+        fire_ble_button_event(addr, name, chord, "press", combo_str, 0);
+    }
+    fire_ble_button_event(addr, name, chord, "release", combo_str, hold_s);
+}
 
-    // 1. Check for release event (all zeros in report)
+static std::vector<std::string> parse_hid_report_keys(const uint8_t* pData, size_t length) {
+    std::vector<std::string> keys;
+    if (!pData || length == 0) return keys;
+
     bool all_zero = true;
     for (size_t i = 0; i < length; i++) {
         if (pData[i] != 0) {
@@ -367,46 +428,24 @@ static void on_hid_report_notify(NimBLERemoteCharacteristic* pChar, uint8_t* pDa
             break;
         }
     }
+    if (all_zero) return keys;
 
-    if (all_zero) {
-        act = "release";
-        std::string combo_released = "";
-        std::vector<std::string> held_copy;
-        {
-            std::lock_guard<std::mutex> lock(s_ble_mutex);
-            held_copy = s_held_buttons;
-            s_held_buttons.clear();
-        }
-
-        if (held_copy.size() > 1) {
-            std::vector<std::string> sorted_held = held_copy;
-            std::sort(sorted_held.begin(), sorted_held.end());
-            for (size_t i = 0; i < sorted_held.size(); i++) {
-                if (i > 0) combo_released += "+";
-                combo_released += sorted_held[i];
+    bool has_kbd_keys = false;
+    if (length >= 8) {
+        for (size_t k = 2; k < 8; k++) {
+            if (pData[k] != 0) {
+                has_kbd_keys = true;
+                break;
             }
         }
+    }
 
-        if (!held_copy.empty()) {
-            for (const auto& h : held_copy) {
-                fire_ble_button_event(addr, name, h, "release", combo_released);
-            }
-        } else {
-            std::string last_btn;
-            {
-                std::lock_guard<std::mutex> lock(s_ble_mutex);
-                last_btn = s_has_last_event ? s_last_ble_event.button_name : "button";
-            }
-            fire_ble_button_event(addr, name, last_btn, "release");
-        }
-        return;
-    } else if (length >= 8 && (pData[2] != 0 || pData[3] != 0 || pData[4] != 0)) {
+    if (has_kbd_keys) {
         // Standard HID Keyboard report: 8 bytes [modifier, reserved, keycode1..6]
-        std::vector<std::string> packet_keys;
         for (size_t k = 2; k < length && k < 8; k++) {
             uint8_t kc = pData[k];
             if (kc == 0) continue;
-            std::string k_str = "";
+            std::string k_str;
             switch (kc) {
                 case 0x1E: k_str = "key_1"; break;
                 case 0x1F: k_str = "key_2"; break;
@@ -429,30 +468,17 @@ static void on_hid_report_notify(NimBLERemoteCharacteristic* pChar, uint8_t* pDa
                 case 0x52: k_str = "arrow_up"; break;
                 case 0x80: k_str = "volume_up"; break;
                 case 0x81: k_str = "volume_down"; break;
-                default: {
+                default:
                     if (kc >= 0x04 && kc <= 0x1D) {
-                        char c = 'a' + (kc - 0x04);
-                        k_str = std::string("key_") + c;
+                        k_str = std::string("key_") + static_cast<char>('a' + (kc - 0x04));
                     } else {
                         char hbuf[16];
                         snprintf(hbuf, sizeof(hbuf), "hid_%02X", kc);
                         k_str = hbuf;
                     }
-                }
+                    break;
             }
-            if (!k_str.empty()) {
-                packet_keys.push_back(k_str);
-            }
-        }
-
-        if (!packet_keys.empty()) {
-            btn = packet_keys[0];
-            std::lock_guard<std::mutex> lock(s_ble_mutex);
-            for (const auto& pk : packet_keys) {
-                if (std::find(s_held_buttons.begin(), s_held_buttons.end(), pk) == s_held_buttons.end()) {
-                    s_held_buttons.push_back(pk);
-                }
-            }
+            if (!k_str.empty()) keys.push_back(k_str);
         }
     } else {
         // Consumer Control / Media / Macro Keypad reports
@@ -465,48 +491,95 @@ static void on_hid_report_notify(NimBLERemoteCharacteristic* pChar, uint8_t* pDa
             usage = pData[0];
         }
 
-        std::vector<std::string> consumer_keys;
-        if (usage == 0xE9 || (usage & 0x01 && (usage <= 0xFF))) consumer_keys.push_back("volume_up");
-        if (usage == 0xEA || (usage & 0x02 && (usage <= 0xFF))) consumer_keys.push_back("volume_down");
-        if (usage == 0xE2 || (usage & 0x20 && (usage <= 0xFF))) consumer_keys.push_back("mute");
-        if (usage == 0xCD || (usage & 0x04 && (usage <= 0xFF))) consumer_keys.push_back("play_pause");
-        if (usage == 0xB5 || (usage & 0x08 && (usage <= 0xFF))) consumer_keys.push_back("next_track");
-        if (usage == 0xB6 || (usage & 0x10 && (usage <= 0xFF))) consumer_keys.push_back("prev_track");
-        if (usage == 0x28) consumer_keys.push_back("shutter");
-
-        if (!consumer_keys.empty()) {
-            btn = consumer_keys[0];
-            std::lock_guard<std::mutex> lock(s_ble_mutex);
-            for (const auto& ck : consumer_keys) {
-                if (std::find(s_held_buttons.begin(), s_held_buttons.end(), ck) == s_held_buttons.end()) {
-                    s_held_buttons.push_back(ck);
-                }
-            }
+        // Exact HID Consumer Page usages first; only apply 6-bit bitfield fallback when no upper bits are set.
+        if (usage == 0xE9) keys.push_back("volume_up");
+        else if (usage == 0xEA) keys.push_back("volume_down");
+        else if (usage == 0xE2) keys.push_back("mute");
+        else if (usage == 0xCD) keys.push_back("play_pause");
+        else if (usage == 0xB5) keys.push_back("next_track");
+        else if (usage == 0xB6) keys.push_back("prev_track");
+        else if (usage == 0x28) keys.push_back("shutter");
+        else if ((usage & ~0x3FU) == 0) {
+            if (usage & 0x01) keys.push_back("volume_up");
+            if (usage & 0x02) keys.push_back("volume_down");
+            if (usage & 0x04) keys.push_back("play_pause");
+            if (usage & 0x08) keys.push_back("next_track");
+            if (usage & 0x10) keys.push_back("prev_track");
+            if (usage & 0x20) keys.push_back("mute");
         } else {
             char hbuf[16];
             snprintf(hbuf, sizeof(hbuf), "hid_%02X", (uint8_t)(usage & 0xFF));
-            btn = hbuf;
-            std::lock_guard<std::mutex> lock(s_ble_mutex);
-            if (std::find(s_held_buttons.begin(), s_held_buttons.end(), btn) == s_held_buttons.end()) {
-                s_held_buttons.push_back(btn);
-            }
+            keys.push_back(hbuf);
         }
     }
 
-    std::string combo = "";
-    {
+    std::sort(keys.begin(), keys.end());
+    keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+    return keys;
+}
+
+// ============================================================================
+// HID Report Notification Parser
+// ============================================================================
+static void on_hid_report_notify(NimBLERemoteCharacteristic* pChar, uint8_t* pData, size_t length, bool isNotify) {
+    (void)pChar;
+    (void)isNotify;
+    if (length == 0 || !pData) return;
+
+    std::vector<std::string> keys = parse_hid_report_keys(pData, length);
+    uint32_t now_ms = get_time_ms();
+
+    if (!keys.empty()) {
         std::lock_guard<std::mutex> lock(s_ble_mutex);
-        if (s_held_buttons.size() > 1) {
-            std::vector<std::string> sorted_held = s_held_buttons;
-            std::sort(sorted_held.begin(), sorted_held.end());
-            for (size_t i = 0; i < sorted_held.size(); i++) {
-                if (i > 0) combo += "+";
-                combo += sorted_held[i];
+        std::string addr = s_connected_device_addr.empty() ? "BLE Device" : s_connected_device_addr;
+        std::string name = "BLE Controller";
+        for (const auto& dev : s_paired_devices) {
+            if (iequals(dev.address, addr)) {
+                name = dev.name;
+                break;
             }
         }
-    }
 
-    fire_ble_button_event(addr, name, btn, "press", combo);
+        if (s_chord.phase == ChordPhase::IDLE) {
+            s_chord.phase = ChordPhase::SETTLING;
+            s_chord.addr = addr;
+            s_chord.name = name;
+            s_chord.current_keys = keys;
+            s_chord.peak_keys = keys;
+            s_chord.first_down_ms = now_ms;
+            s_chord.settle_deadline_ms = now_ms + BLE_COMBO_SETTLE_MS;
+            s_chord.next_hold_tick_ms = 0;
+            s_chord.hold_seconds = 0;
+        } else if (s_chord.phase == ChordPhase::SETTLING) {
+            s_chord.current_keys = keys;
+            bool grew = false;
+            for (const auto& k : keys) {
+                if (std::find(s_chord.peak_keys.begin(), s_chord.peak_keys.end(), k) == s_chord.peak_keys.end()) {
+                    s_chord.peak_keys.push_back(k);
+                    grew = true;
+                }
+            }
+            if (grew) {
+                std::sort(s_chord.peak_keys.begin(), s_chord.peak_keys.end());
+                s_chord.settle_deadline_ms = now_ms + BLE_COMBO_SETTLE_MS;
+            }
+        } else {
+            // PRESSED: track active keys accurately so partial releases do not emit spurious presses.
+            s_chord.current_keys = keys;
+        }
+        wake_ble_worker();
+    } else {
+        bool was_settling = false;
+        bool had_chord = false;
+        bool is_combo = false;
+        uint32_t hold_s = 0;
+        std::string addr, name, chord;
+        {
+            std::lock_guard<std::mutex> lock(s_ble_mutex);
+            flush_chord_release_locked(&was_settling, &had_chord, &addr, &name, &chord, &is_combo, &hold_s);
+        }
+        emit_chord_release(was_settling, had_chord, addr, name, chord, is_combo, hold_s);
+    }
 }
 
 // ============================================================================
@@ -553,11 +626,16 @@ class ClientCallbacks : public NimBLEClientCallbacks {
         std::string disc_addr = s_connected_device_addr;
         ESP_LOGI(TAG, "Disconnected from %s (reason: %d)", disc_addr.c_str(), reason);
 
+        bool was_settling = false;
+        bool had_chord = false;
+        bool is_combo = false;
+        uint32_t hold_s = 0;
+        std::string ev_addr, ev_name, chord;
         {
             std::lock_guard<std::mutex> lock(s_ble_mutex);
             s_ble_client_connected = false;
             s_connected_device_addr = "";
-            s_held_buttons.clear();
+            flush_chord_release_locked(&was_settling, &had_chord, &ev_addr, &ev_name, &chord, &is_combo, &hold_s);
             for (auto& dev : s_paired_devices) {
                 if (iequals(dev.address, disc_addr)) {
                     dev.connected = false;
@@ -565,6 +643,7 @@ class ClientCallbacks : public NimBLEClientCallbacks {
                 }
             }
         }
+        emit_chord_release(was_settling, had_chord, ev_addr, ev_name, chord, is_combo, hold_s);
 
         cJSON* root = cJSON_CreateObject();
         cJSON_AddStringToObject(root, "type", "ble_device_event");
@@ -668,22 +747,19 @@ static void connect_ble_device(const std::string& address, uint8_t addr_type = 0
         const auto& services = s_ble_client->getServices(true);
         for (NimBLERemoteService* pService : services) {
             if (!pService) continue;
-            ESP_LOGD(TAG, "Service: %s", pService->getUUID().toString().c_str());
+            NimBLEUUID svcUuid = pService->getUUID();
+            bool skip_hid_sub = (svcUuid == NimBLEUUID((uint16_t)0x1800) ||
+                                 svcUuid == NimBLEUUID((uint16_t)0x1801) ||
+                                 svcUuid == NimBLEUUID((uint16_t)0x180A) ||
+                                 svcUuid == NimBLEUUID((uint16_t)0x180F));
+            ESP_LOGD(TAG, "Service: %s", svcUuid.toString().c_str());
             const auto& chars = pService->getCharacteristics(true);
             for (NimBLERemoteCharacteristic* pChar : chars) {
                 if (!pChar) continue;
-                if (pChar->canNotify()) {
-                    if (pChar->subscribe(true, on_hid_report_notify)) {
-                        ESP_LOGI(TAG, "  [+] Subscribed (notify) to %s", pChar->getUUID().toString().c_str());
-                    }
-                } else if (pChar->canIndicate()) {
-                    if (pChar->subscribe(false, on_hid_report_notify)) {
-                        ESP_LOGI(TAG, "  [+] Subscribed (indicate) to %s", pChar->getUUID().toString().c_str());
-                    }
-                }
+                NimBLEUUID charUuid = pChar->getUUID();
 
                 // Battery level characteristic (0x2A19)
-                if (pChar->getUUID() == NimBLEUUID((uint16_t)0x2A19) && pChar->canRead()) {
+                if (charUuid == NimBLEUUID((uint16_t)0x2A19) && pChar->canRead()) {
                     uint8_t batt = pChar->readValue<uint8_t>();
                     ESP_LOGI(TAG, "Battery level: %d%%", (int)batt);
                     std::lock_guard<std::mutex> lock(s_ble_mutex);
@@ -692,6 +768,23 @@ static void connect_ble_device(const std::string& address, uint8_t addr_type = 0
                             dev.battery_pct = batt;
                             break;
                         }
+                    }
+                    continue;
+                }
+
+                if (skip_hid_sub || charUuid == NimBLEUUID((uint16_t)0x2A05)) {
+                    continue;
+                }
+
+                if (pChar->canNotify()) {
+                    if (pChar->subscribe(true, on_hid_report_notify)) {
+                        ESP_LOGI(TAG, "  [+] Subscribed (notify) to svc=%s char=%s",
+                                 svcUuid.toString().c_str(), charUuid.toString().c_str());
+                    }
+                } else if (pChar->canIndicate()) {
+                    if (pChar->subscribe(false, on_hid_report_notify)) {
+                        ESP_LOGI(TAG, "  [+] Subscribed (indicate) to svc=%s char=%s",
+                                 svcUuid.toString().c_str(), charUuid.toString().c_str());
                     }
                 }
             }
@@ -784,10 +877,13 @@ class ScanCallbacks : public NimBLEScanCallbacks {
             static uint32_t s_last_connect_attempt = 0;
             if (!s_ble_client_connected && (now - s_last_connect_attempt > 15000)) {
                 s_last_connect_attempt = now;
-                std::lock_guard<std::mutex> clock(s_connect_mutex);
-                s_pending_connect_addr = addr;
-                s_pending_connect_type = a_type;
-                s_pending_connect_req = true;
+                {
+                    std::lock_guard<std::mutex> clock(s_connect_mutex);
+                    s_pending_connect_addr = addr;
+                    s_pending_connect_type = a_type;
+                    s_pending_connect_req = true;
+                }
+                wake_ble_worker();
             }
         }
 
@@ -842,76 +938,73 @@ class ScanCallbacks : public NimBLEScanCallbacks {
             }
         }
 
-        // 4. Match against configured beacon targets
+        // 4. Match against configured beacon targets (never hold s_ble_mutex across WS/CAN/MQTT dispatch)
         if (has_targets) {
+            struct PendingBeaconEvt {
+                const char* evt;
+                std::string uuid;
+                std::string name;
+                int last_rssi;
+                uint16_t major;
+                uint16_t minor;
+            };
+            std::vector<PendingBeaconEvt> pending_evts;
             uint32_t now_ms = get_time_ms();
-            std::lock_guard<std::mutex> lock(s_ble_mutex);
-            for (auto& target : s_beacon_targets) {
-                bool match = false;
-                if (!adv_uuid.empty() && !target.uuid.empty() && iequals(target.uuid, adv_uuid)) {
-                    match = true;
-                }
-                if (!target.mac.empty() && iequals(target.mac, addr)) {
-                    match = true;
-                }
-
-                if (match) {
-                    target.last_seen_ms = now_ms;
-                    if (target.smoothed_rssi < -99.0f) {
-                        target.smoothed_rssi = (float)rssi;
-                    } else {
-                        target.smoothed_rssi = 0.35f * (float)rssi + 0.65f * target.smoothed_rssi;
+            {
+                std::lock_guard<std::mutex> lock(s_ble_mutex);
+                for (auto& target : s_beacon_targets) {
+                    bool match = false;
+                    if (!adv_uuid.empty() && !target.uuid.empty() && iequals(target.uuid, adv_uuid)) {
+                        match = true;
                     }
-                    target.last_rssi = (int)roundf(target.smoothed_rssi);
-                    if (adv_major != 0) target.major = adv_major;
-                    if (adv_minor != 0) target.minor = adv_minor;
-                    target.mac = addr; // track dynamic MAC
+                    if (!target.mac.empty() && iequals(target.mac, addr)) {
+                        match = true;
+                    }
 
-                    if (!target.is_present && target.last_rssi >= target.enter_rssi) {
-                        target.is_present = true;
-                        target.last_prox_send_ms = now_ms;
-                        ESP_LOGI(TAG, "[BEACON] Target '%s' ENTERED (Smoothed RSSI %d dBm >= %d dBm)",
-                                 target.name.c_str(), target.last_rssi, target.enter_rssi);
-
-                        cJSON* b_evt = cJSON_CreateObject();
-                        cJSON_AddStringToObject(b_evt, "type", "ble_beacon");
-                        cJSON_AddStringToObject(b_evt, "event", "enter");
-                        cJSON_AddStringToObject(b_evt, "uuid", target.uuid.c_str());
-                        cJSON_AddStringToObject(b_evt, "mac", addr.c_str());
-                        cJSON_AddStringToObject(b_evt, "name", target.name.c_str());
-                        cJSON_AddNumberToObject(b_evt, "rssi", target.last_rssi);
-                        cJSON_AddNumberToObject(b_evt, "major", target.major);
-                        cJSON_AddNumberToObject(b_evt, "minor", target.minor);
-                        char* b_out = cJSON_PrintUnformatted(b_evt);
-                        if (b_out) {
-                            broadcast_ws_raw(b_out);
-                            free(b_out);
+                    if (match) {
+                        target.last_seen_ms = now_ms;
+                        if (target.smoothed_rssi < -99.0f) {
+                            target.smoothed_rssi = (float)rssi;
+                        } else {
+                            target.smoothed_rssi = 0.35f * (float)rssi + 0.65f * target.smoothed_rssi;
                         }
-                        cJSON_Delete(b_evt);
+                        target.last_rssi = (int)roundf(target.smoothed_rssi);
+                        if (adv_major != 0) target.major = adv_major;
+                        if (adv_minor != 0) target.minor = adv_minor;
+                        target.mac = addr; // track dynamic MAC
 
-                        can_engine_on_ble_beacon_event(target.uuid, "enter", target.last_rssi, target.major, target.minor, addr, target.name);
-                    } else if (target.is_present && (now_ms - target.last_prox_send_ms > 2500)) {
-                        target.last_prox_send_ms = now_ms;
-
-                        cJSON* b_evt = cJSON_CreateObject();
-                        cJSON_AddStringToObject(b_evt, "type", "ble_beacon");
-                        cJSON_AddStringToObject(b_evt, "event", "proximity");
-                        cJSON_AddStringToObject(b_evt, "uuid", target.uuid.c_str());
-                        cJSON_AddStringToObject(b_evt, "mac", addr.c_str());
-                        cJSON_AddStringToObject(b_evt, "name", target.name.c_str());
-                        cJSON_AddNumberToObject(b_evt, "rssi", target.last_rssi);
-                        cJSON_AddNumberToObject(b_evt, "major", target.major);
-                        cJSON_AddNumberToObject(b_evt, "minor", target.minor);
-                        char* b_out = cJSON_PrintUnformatted(b_evt);
-                        if (b_out) {
-                            broadcast_ws_raw(b_out);
-                            free(b_out);
+                        if (!target.is_present && target.last_rssi >= target.enter_rssi) {
+                            target.is_present = true;
+                            target.last_prox_send_ms = now_ms;
+                            ESP_LOGI(TAG, "[BEACON] Target '%s' ENTERED (Smoothed RSSI %d dBm >= %d dBm)",
+                                     target.name.c_str(), target.last_rssi, target.enter_rssi);
+                            pending_evts.push_back({"enter", target.uuid, target.name, target.last_rssi, target.major, target.minor});
+                        } else if (target.is_present && (now_ms - target.last_prox_send_ms > 2500)) {
+                            target.last_prox_send_ms = now_ms;
+                            pending_evts.push_back({"proximity", target.uuid, target.name, target.last_rssi, target.major, target.minor});
                         }
-                        cJSON_Delete(b_evt);
-
-                        can_engine_on_ble_beacon_event(target.uuid, "proximity", target.last_rssi, target.major, target.minor, addr, target.name);
                     }
                 }
+            }
+
+            for (const auto& pe : pending_evts) {
+                cJSON* b_evt = cJSON_CreateObject();
+                cJSON_AddStringToObject(b_evt, "type", "ble_beacon");
+                cJSON_AddStringToObject(b_evt, "event", pe.evt);
+                cJSON_AddStringToObject(b_evt, "uuid", pe.uuid.c_str());
+                cJSON_AddStringToObject(b_evt, "mac", addr.c_str());
+                cJSON_AddStringToObject(b_evt, "name", pe.name.c_str());
+                cJSON_AddNumberToObject(b_evt, "rssi", pe.last_rssi);
+                cJSON_AddNumberToObject(b_evt, "major", pe.major);
+                cJSON_AddNumberToObject(b_evt, "minor", pe.minor);
+                char* b_out = cJSON_PrintUnformatted(b_evt);
+                if (b_out) {
+                    broadcast_ws_raw(b_out);
+                    free(b_out);
+                }
+                cJSON_Delete(b_evt);
+
+                can_engine_on_ble_beacon_event(pe.uuid, pe.evt, pe.last_rssi, pe.major, pe.minor, addr, pe.name);
             }
         }
     }
@@ -925,16 +1018,49 @@ class ScanCallbacks : public NimBLEScanCallbacks {
 } s_scan_callbacks;
 
 // ============================================================================
-// BLE Worker Task (Handles deferred connections & 1s beacon exit watchdog)
+// BLE Worker Task (Chord settle/hold timers, deferred connections & beacon watchdog)
 // ============================================================================
 static void ble_worker_task(void* pvParameters) {
+    (void)pvParameters;
+    s_ble_worker_task = xTaskGetCurrentTaskHandle();
     uint32_t last_exit_check = get_time_ms();
 
     while (!s_ble_shutting_down.load(std::memory_order_relaxed)) {
-        vTaskDelay(pdMS_TO_TICKS(150));
-        if (s_ble_shutting_down.load(std::memory_order_relaxed)) break;
+        // 1. Service chord settle (85 ms) and 1-second hold ticks cleanly off the worker task
+        while (true) {
+            std::string ev_addr, ev_name, ev_btn, ev_act, ev_combo;
+            uint32_t ev_hold_s = 0;
+            bool has_event = false;
+            uint32_t now_ms = get_time_ms();
+            {
+                std::lock_guard<std::mutex> lock(s_ble_mutex);
+                if (s_chord.phase == ChordPhase::SETTLING && (int32_t)(now_ms - s_chord.settle_deadline_ms) >= 0) {
+                    s_chord.phase = ChordPhase::PRESSED;
+                    s_chord.hold_seconds = 0;
+                    s_chord.next_hold_tick_ms = s_chord.first_down_ms + BLE_HOLD_TICK_MS;
+                    ev_addr = s_chord.addr;
+                    ev_name = s_chord.name;
+                    ev_btn = format_chord(s_chord.peak_keys);
+                    ev_act = "press";
+                    ev_combo = (s_chord.peak_keys.size() > 1) ? ev_btn : "";
+                    has_event = true;
+                } else if (s_chord.phase == ChordPhase::PRESSED && (int32_t)(now_ms - s_chord.next_hold_tick_ms) >= 0) {
+                    s_chord.hold_seconds += 1;
+                    s_chord.next_hold_tick_ms += BLE_HOLD_TICK_MS;
+                    ev_addr = s_chord.addr;
+                    ev_name = s_chord.name;
+                    ev_btn = format_chord(s_chord.peak_keys);
+                    ev_act = "hold_" + std::to_string(s_chord.hold_seconds) + "s";
+                    ev_combo = (s_chord.peak_keys.size() > 1) ? ev_btn : "";
+                    ev_hold_s = s_chord.hold_seconds;
+                    has_event = true;
+                }
+            }
+            if (!has_event) break;
+            fire_ble_button_event(ev_addr, ev_name, ev_btn, ev_act, ev_combo, ev_hold_s);
+        }
 
-        // 1. Process deferred connect request
+        // 2. Process deferred connect request
         std::string connect_addr = "";
         uint8_t connect_type = 0;
         bool do_connect = false;
@@ -951,7 +1077,7 @@ static void ble_worker_task(void* pvParameters) {
             connect_ble_device(connect_addr, connect_type);
         }
 
-        // 2. Beacon Exit Watchdog (runs once per second)
+        // 3. Beacon Exit Watchdog (runs once per second)
         uint32_t now = get_time_ms();
         if (now - last_exit_check >= 1000) {
             last_exit_check = now;
@@ -987,7 +1113,22 @@ static void ble_worker_task(void* pvParameters) {
                 can_engine_on_ble_beacon_event(target.uuid, "exit", -100, target.major, target.minor, target.mac, target.name);
             }
         }
+
+        uint32_t wait_ms = 150;
+        {
+            std::lock_guard<std::mutex> lock(s_ble_mutex);
+            uint32_t wake_now = get_time_ms();
+            if (s_chord.phase == ChordPhase::SETTLING) {
+                int32_t rem = (int32_t)(s_chord.settle_deadline_ms - wake_now);
+                wait_ms = (rem <= 0) ? 1U : std::min<uint32_t>(wait_ms, (uint32_t)rem);
+            } else if (s_chord.phase == ChordPhase::PRESSED) {
+                int32_t rem = (int32_t)(s_chord.next_hold_tick_ms - wake_now);
+                wait_ms = (rem <= 0) ? 1U : std::min<uint32_t>(wait_ms, (uint32_t)rem);
+            }
+        }
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(wait_ms));
     }
+    s_ble_worker_task = nullptr;
     vTaskDelete(nullptr);
 }
 
@@ -1007,7 +1148,7 @@ void ble_mgr_init(void) {
     pScan->setScanCallbacks(&s_scan_callbacks, false);
     start_background_ble_scan();
 
-    xTaskCreate(ble_worker_task, "ble_worker", 4096, nullptr, 3, nullptr);
+    xTaskCreate(ble_worker_task, "ble_worker", 6144, nullptr, 3, &s_ble_worker_task);
     ESP_LOGI(TAG, "Native BLE Central & Observer Subsystem initialized successfully.");
 }
 
@@ -1080,11 +1221,7 @@ std::string ble_mgr_get_status_json(void) {
     // Last event
     if (s_has_last_event) {
         cJSON* ev = cJSON_CreateObject();
-        cJSON_AddStringToObject(ev, "device_address", s_last_ble_event.device_address.c_str());
-        cJSON_AddStringToObject(ev, "device_name", s_last_ble_event.device_name.c_str());
-        cJSON_AddStringToObject(ev, "button_name", s_last_ble_event.button_name.c_str());
-        cJSON_AddStringToObject(ev, "action", s_last_ble_event.action.c_str());
-        cJSON_AddNumberToObject(ev, "timestamp_ms", s_last_ble_event.timestamp_ms);
+        append_ble_event_json(ev, s_last_ble_event);
         cJSON_AddItemToObject(root, "last_event", ev);
     } else {
         cJSON_AddNullToObject(root, "last_event");
@@ -1094,11 +1231,7 @@ std::string ble_mgr_get_status_json(void) {
     cJSON* recent = cJSON_CreateArray();
     for (const auto& ev : s_recent_ble_events) {
         cJSON* itm = cJSON_CreateObject();
-        cJSON_AddStringToObject(itm, "device_address", ev.device_address.c_str());
-        cJSON_AddStringToObject(itm, "device_name", ev.device_name.c_str());
-        cJSON_AddStringToObject(itm, "button_name", ev.button_name.c_str());
-        cJSON_AddStringToObject(itm, "action", ev.action.c_str());
-        cJSON_AddNumberToObject(itm, "timestamp_ms", ev.timestamp_ms);
+        append_ble_event_json(itm, ev);
         cJSON_AddItemToArray(recent, itm);
     }
     cJSON_AddItemToObject(root, "recent_events", recent);
@@ -1218,6 +1351,7 @@ bool ble_mgr_pair_device(const std::string& address, const std::string& in_name)
         s_pending_connect_type = addr_type;
         s_pending_connect_req = true;
     }
+    wake_ble_worker();
     return true;
 }
 
@@ -1230,7 +1364,7 @@ void ble_mgr_unpair_device(const std::string& address) {
         std::lock_guard<std::mutex> lock(s_ble_mutex);
         if (address.empty()) {
             s_paired_devices.clear();
-            s_held_buttons.clear();
+            s_chord = {};
         } else {
             for (auto it = s_paired_devices.begin(); it != s_paired_devices.end(); ++it) {
                 if (iequals(it->address, address)) {
@@ -1248,7 +1382,12 @@ void ble_mgr_unpair_device(const std::string& address) {
 void ble_mgr_inject_test_event(const std::string& button, const std::string& action) {
     std::string btn = button.empty() ? "volume_up" : button;
     std::string act = action.empty() ? "press" : action;
-    fire_ble_button_event("00:00:00:00:00:00", "Simulated Controller", btn, act);
+    std::string combo = (btn.find('+') != std::string::npos) ? btn : "";
+    uint32_t hold_s = 0;
+    if (act.rfind("hold_", 0) == 0 && act.size() > 6 && act.back() == 's') {
+        hold_s = (uint32_t)atoi(act.substr(5, act.size() - 6).c_str());
+    }
+    fire_ble_button_event("00:00:00:00:00:00", "Simulated Controller", btn, act, combo, hold_s);
 }
 
 std::string ble_mgr_get_beacons_json(void) {

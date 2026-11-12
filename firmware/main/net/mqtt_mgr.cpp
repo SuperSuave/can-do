@@ -33,6 +33,7 @@ static std::atomic<bool> s_sync_task_running{false};
 static std::atomic<bool> s_need_clear_discovery{false};
 static std::atomic<bool> s_auto_reload_task_running{false};
 static std::atomic<bool> s_auto_reload_pending{false};
+static std::atomic<bool> s_auto_parse_tmp_pending{false};
 static std::unordered_set<std::string> s_exposed_auto_ids;
 static std::string s_lwt_topic;
 
@@ -268,14 +269,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     auto event = static_cast<esp_mqtt_event_handle_t>(event_data);
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED: {
-            s_mqtt_connected.store(true, std::memory_order_relaxed);
             ESP_LOGI(TAG, "MQTT connected to broker (%s)", s_mqtt_cfg.broker_url.c_str());
 
-            // 1. Publish LWT online status
-            std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/status";
-            mqtt_enqueue_nonblocking(status_topic.c_str(), "online", 6, 0, 1);
-
-            // 2. Pack all 14 control topics into a SINGLE MQTT SUBSCRIBE packet (QoS 0)
+            // 1. Pack all 14 control topics into a SINGLE MQTT SUBSCRIBE packet (QoS 0)
             // Avoids 14 separate WebSocket frames AND avoids # wildcard broker echo on /state/*
             std::string t_dev_tx       = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/tx";
             std::string t_base_tx      = MQTT_BASE_TOPIC + "/tx";
@@ -315,6 +311,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 sizeof(sub_list) / sizeof(sub_list[0])
             );
 
+            // 2. Mark connected after subscribe finishes and publish LWT online status
+            s_mqtt_connected.store(true, std::memory_order_relaxed);
+            std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/status";
+            mqtt_enqueue_nonblocking(status_topic.c_str(), "online", 6, 0, 1);
+
             // 3. Defer state dump & HA discovery to single background worker task (6144-byte stack)
             if (!s_sync_task_running.exchange(true)) {
                 if (xTaskCreate(mqtt_post_connect_sync_task, "mqtt_sync", 6144, nullptr, 2, nullptr) != pdPASS) {
@@ -332,7 +333,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         case MQTT_EVENT_DATA: {
             std::string config_set_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/set";
             std::string config_get_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/get";
-            std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/status";
 
             if (event->current_data_offset == 0 && event->topic_len == config_set_topic.length() && 
                 strncmp(event->topic, config_set_topic.c_str(), event->topic_len) == 0) {
@@ -357,21 +357,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     }
                     s_receiving_automations = false;
 
-                    bool valid = false;
-                    struct stat st;
-                    if (stat("/spiffs/automations.json.tmp", &st) == 0 && st.st_size > 0 && st.st_size <= 32768) {
-                        valid = load_automations_from_fs("/spiffs/automations.json.tmp");
-                    }
-
-                    if (valid) {
-                        unlink("/spiffs/automations.json");
-                        rename("/spiffs/automations.json.tmp", "/spiffs/automations.json");
-                        mqtt_enqueue_nonblocking(status_topic.c_str(), "{\"status\":\"ok\"}", 15, 0, 0);
-                        mqtt_mgr_on_automations_reloaded();
-                    } else {
-                        unlink("/spiffs/automations.json.tmp");
-                        mqtt_enqueue_nonblocking(status_topic.c_str(), "{\"status\":\"error\",\"message\":\"Invalid JSON syntax\"}", 50, 0, 0);
-                    }
+                    s_auto_parse_tmp_pending.store(true);
+                    mqtt_mgr_on_automations_reloaded();
                 }
                 return;
             }
@@ -693,10 +680,10 @@ void mqtt_mgr_start(void) {
     mqtt_cfg.session.last_will.qos = 0; // QoS 0 avoids broker session state buildup on network drops
     mqtt_cfg.session.last_will.retain = 1;
 
-    // Hardened timeouts & bounded outbox for ws:// & cellular roaming
+    // Hardened timeouts & bounded outbox for ws:// & cellular roaming (timeout < 3s TWDT)
     mqtt_cfg.session.keepalive = 30;
     mqtt_cfg.network.reconnect_timeout_ms = 5000;
-    mqtt_cfg.network.timeout_ms = 7500;
+    mqtt_cfg.network.timeout_ms = 2000;
     mqtt_cfg.buffer.size = 2048;
     mqtt_cfg.buffer.out_size = 2048;
     mqtt_cfg.outbox.limit = 4096;
@@ -831,6 +818,23 @@ static void refresh_automation_discovery_locked_check(void) {
 
 static void mqtt_auto_reload_task(void* arg) {
     while (s_auto_reload_pending.exchange(false)) {
+        if (s_auto_parse_tmp_pending.exchange(false)) {
+            std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/status";
+            bool valid = false;
+            struct stat st;
+            if (stat("/spiffs/automations.json.tmp", &st) == 0 && st.st_size > 0 && st.st_size <= 32768) {
+                valid = load_automations_from_fs("/spiffs/automations.json.tmp");
+            }
+            if (valid) {
+                unlink("/spiffs/automations.json");
+                rename("/spiffs/automations.json.tmp", "/spiffs/automations.json");
+                mqtt_enqueue_nonblocking(status_topic.c_str(), "{\"status\":\"ok\"}", 15, 0, 0);
+            } else {
+                unlink("/spiffs/automations.json.tmp");
+                mqtt_enqueue_nonblocking(status_topic.c_str(), "{\"status\":\"error\",\"message\":\"Invalid JSON syntax\"}", 50, 0, 0);
+                continue;
+            }
+        }
         if (!global_mqtt_client || !s_mqtt_connected.load()) break;
         publish_automations_json_state();
         refresh_automation_discovery_locked_check();
@@ -840,10 +844,11 @@ static void mqtt_auto_reload_task(void* arg) {
 }
 
 void mqtt_mgr_on_automations_reloaded(void) {
-    if (!global_mqtt_client || !s_mqtt_connected.load(std::memory_order_relaxed)) return;
+    if (!s_auto_parse_tmp_pending.load(std::memory_order_relaxed) &&
+        (!global_mqtt_client || !s_mqtt_connected.load(std::memory_order_relaxed))) return;
     s_auto_reload_pending.store(true);
     if (!s_auto_reload_task_running.exchange(true)) {
-        if (xTaskCreate(mqtt_auto_reload_task, "mqtt_auto", 4096, nullptr, 2, nullptr) != pdPASS) {
+        if (xTaskCreate(mqtt_auto_reload_task, "mqtt_auto", 6144, nullptr, 2, nullptr) != pdPASS) {
             s_auto_reload_task_running.store(false);
         }
     }
@@ -944,7 +949,7 @@ void mqtt_mgr_publish_bms(float kw, float soc, float v, float a, float delta_mv,
     mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/state/bms_cell_delta_mv").c_str(), val_str, len, 0, 1);
 }
 
-void mqtt_mgr_publish_ble_button(const std::string& address, const std::string& button, const std::string& action, const std::string& combo) {
+void mqtt_mgr_publish_ble_button(const std::string& address, const std::string& button, const std::string& action, const std::string& combo, uint32_t hold_seconds) {
     if (!global_mqtt_client || !s_mqtt_connected.load(std::memory_order_relaxed)) return;
 
     cJSON* root = cJSON_CreateObject();
@@ -956,6 +961,9 @@ void mqtt_mgr_publish_ble_button(const std::string& address, const std::string& 
     cJSON_AddStringToObject(root, "action", action.c_str());
     if (!combo.empty()) {
         cJSON_AddStringToObject(root, "combo", combo.c_str());
+    }
+    if (hold_seconds > 0) {
+        cJSON_AddNumberToObject(root, "hold_seconds", hold_seconds);
     }
 
     char* payload = cJSON_PrintUnformatted(root);

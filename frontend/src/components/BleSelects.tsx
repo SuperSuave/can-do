@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import { Bluetooth, Radio, Smartphone, ChevronDown, Check, Edit3 } from 'lucide-react';
 import { BleStatus, BleDeviceInfo, BeaconTarget, DiscoveredBeacon } from '../types/ble';
 import { resolveDeviceBaseUrl } from '../utils/hostUtils';
@@ -264,6 +264,80 @@ export const BleBeaconSelect: React.FC<BleBeaconSelectProps> = ({
           <option value="__custom__">Custom Beacon UUID / MAC...</option>
         </select>
       )}
+    </div>
+  );
+};
+
+interface BleActionSelectProps {
+  value: string;
+  onChange: (value: string) => void;
+  label?: string;
+}
+
+function parseHoldSeconds(action: string): number | null {
+  const m = /^hold_(\d+)s$/i.exec((action || '').trim());
+  if (!m) return null;
+  const sec = parseInt(m[1], 10);
+  return Number.isFinite(sec) && sec >= 1 ? sec : 1;
+}
+
+export const BleActionSelect: React.FC<BleActionSelectProps> = ({
+  value,
+  onChange,
+  label = 'Action Event'
+}) => {
+  const selectId = useId();
+  const secId = useId();
+  const holdSec = parseHoldSeconds(value);
+  const selectVal = holdSec !== null ? '__hold_n__' : (value || 'press');
+
+  return (
+    <div className="space-y-1 font-sans">
+      <label htmlFor={selectId} className="block text-[10px] font-sans text-muted">
+        {label}
+      </label>
+      <div className="flex items-center gap-1.5">
+        <select
+          id={selectId}
+          value={selectVal}
+          onChange={e => {
+            const next = e.target.value;
+            if (next === '__hold_n__') {
+              onChange(`hold_${holdSec ?? 2}s`);
+            } else {
+              onChange(next);
+            }
+          }}
+          className="w-full h-8 bg-surface-tertiary border border-border rounded px-2 text-xs text-foreground font-sans box-border focus:outline-none focus:border-focus"
+        >
+          <option value="press">Press (at 85ms / Chord)</option>
+          <option value="tap">Short Tap (&lt; 1s Release)</option>
+          <option value="release">Release (Any Duration)</option>
+          <option value="hold">Hold (Every 1s Tick)</option>
+          <option value="__hold_n__">Hold for N Seconds...</option>
+          <option value="any">Any Event</option>
+        </select>
+        {holdSec !== null && (
+          <div className="flex items-center gap-1 shrink-0">
+            <label htmlFor={secId} className="sr-only">Hold duration in whole seconds</label>
+            <input
+              id={secId}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={String(holdSec)}
+              onChange={e => {
+                const digits = e.target.value.replace(/\D+/g, '');
+                const parsed = digits ? Math.max(1, Math.min(60, parseInt(digits, 10))) : 1;
+                onChange(`hold_${parsed}s`);
+              }}
+              aria-label="Hold duration in whole seconds"
+              className="w-12 h-8 bg-surface-tertiary border border-border rounded px-1.5 text-xs text-accent font-mono text-center box-border focus:outline-none focus:border-focus"
+            />
+            <span className="text-[10px] text-muted font-mono">sec</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

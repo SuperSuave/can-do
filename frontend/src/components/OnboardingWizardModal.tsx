@@ -140,62 +140,62 @@ export function OnboardingWizardModal({
             </div>
 
             {/* Wizard Step Tabs Navigation */}
-            <div className="px-4 sm:px-6 pt-3 pb-1 border-b border-separator bg-surface">
+            <div className="px-4 sm:px-6 py-2.5 border-b border-separator bg-surface">
               <Tabs
                 selectedKey={String(step)}
                 onSelectionChange={key => setStep(Number(key))}
                 aria-label="Onboarding Wizard Steps"
               >
-                <Tabs.ListContainer className="p-1 rounded-2xl bg-surface-secondary border border-border overflow-x-auto no-scrollbar">
+                <Tabs.ListContainer className="p-1 rounded-2xl bg-default border border-border overflow-x-auto no-scrollbar">
                   <Tabs.List className="gap-1 flex-nowrap w-full">
                     <Tabs.Tab
                       id="1"
-                      className={`relative flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${step === 1 ? 'text-foreground' : 'text-muted hover:text-foreground'
+                      className={`relative flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${step === 1 ? 'text-segment-foreground' : 'text-muted hover:text-foreground'
                         }`}
                     >
                       <Car className={`w-3.5 h-3.5 shrink-0 ${step === 1 ? 'text-accent' : 'text-muted'}`} />
                       <span className="truncate">1. Vehicle</span>
-                      <Tabs.Indicator className="rounded-xl bg-surface-tertiary border border-border shadow-sm" />
+                      <Tabs.Indicator className="rounded-xl bg-segment border border-border shadow-sm" />
                     </Tabs.Tab>
 
                     <Tabs.Tab
                       id="2"
-                      className={`relative flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${step === 2 ? 'text-foreground' : 'text-muted hover:text-foreground'
+                      className={`relative flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${step === 2 ? 'text-segment-foreground' : 'text-muted hover:text-foreground'
                         }`}
                     >
                       <Wifi className={`w-3.5 h-3.5 shrink-0 ${step === 2 ? 'text-accent' : 'text-muted'}`} />
                       <span className="truncate">2. Wi-Fi</span>
-                      <Tabs.Indicator className="rounded-xl bg-surface-tertiary border border-border shadow-sm" />
+                      <Tabs.Indicator className="rounded-xl bg-segment border border-border shadow-sm" />
                     </Tabs.Tab>
 
                     <Tabs.Tab
                       id="3"
-                      className={`relative flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${step === 3 ? 'text-foreground' : 'text-muted hover:text-foreground'
+                      className={`relative flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${step === 3 ? 'text-segment-foreground' : 'text-muted hover:text-foreground'
                         }`}
                     >
                       <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${step === 3 ? 'text-accent' : 'text-muted'}`} />
                       <span className="truncate">3. Updates</span>
-                      <Tabs.Indicator className="rounded-xl bg-surface-tertiary border border-border shadow-sm" />
+                      <Tabs.Indicator className="rounded-xl bg-segment border border-border shadow-sm" />
                     </Tabs.Tab>
 
                     <Tabs.Tab
                       id="4"
-                      className={`relative flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${step === 4 ? 'text-foreground' : 'text-muted hover:text-foreground'
+                      className={`relative flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${step === 4 ? 'text-segment-foreground' : 'text-muted hover:text-foreground'
                         }`}
                     >
                       <Home className={`w-3.5 h-3.5 shrink-0 ${step === 4 ? 'text-accent' : 'text-muted'}`} />
                       <span className="truncate">4. HA Setup</span>
-                      <Tabs.Indicator className="rounded-xl bg-surface-tertiary border border-border shadow-sm" />
+                      <Tabs.Indicator className="rounded-xl bg-segment border border-border shadow-sm" />
                     </Tabs.Tab>
 
                     <Tabs.Tab
                       id="5"
-                      className={`relative flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${step === 5 ? 'text-foreground' : 'text-muted hover:text-foreground'
+                      className={`relative flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${step === 5 ? 'text-segment-foreground' : 'text-muted hover:text-foreground'
                         }`}
                     >
                       <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 ${step === 5 ? 'text-success' : 'text-muted'}`} />
                       <span className="truncate">5. Review</span>
-                      <Tabs.Indicator className="rounded-xl bg-surface-tertiary border border-border shadow-sm" />
+                      <Tabs.Indicator className="rounded-xl bg-segment border border-border shadow-sm" />
                     </Tabs.Tab>
                   </Tabs.List>
                 </Tabs.ListContainer>
@@ -269,7 +269,7 @@ export function OnboardingWizardModal({
                   )}
 
                   {/* Unit System Tabs */}
-                  <div className="space-y-2 pt-2 border-t border-separator">
+                  <div className="space-y-2 pt-6 border-t border-separator">
                     <label className="text-xs font-semibold text-foreground flex items-center gap-2">
                       <Gauge className="w-3.5 h-3.5 text-accent" />
                       Measurement System
@@ -280,7 +280,7 @@ export function OnboardingWizardModal({
                       aria-label="Measurement Units"
                       className="w-full"
                     >
-                      <Tabs.ListContainer className="p-1 rounded-2xl bg-surface-secondary border border-border w-full">
+                      <Tabs.ListContainer className="p-1 rounded-2xl bg-default border border-border w-full">
                         <Tabs.List className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
                           <Tabs.Tab
                             id="imperial"
@@ -345,7 +345,7 @@ export function OnboardingWizardModal({
                   </div>
 
                   {/* System Timezone */}
-                  <div className="space-y-2 pt-2 border-t border-separator">
+                  <div className="space-y-2 pt-6 border-t border-separator">
                     <label className="text-xs font-semibold text-foreground flex items-center gap-2">
                       <Clock className="w-3.5 h-3.5 text-accent" />
                       Local Timezone
@@ -685,19 +685,19 @@ export function OnboardingWizardModal({
 
                   {/* Summary Card */}
                   <div className="p-4 rounded-2xl bg-surface-secondary border border-border text-left max-w-md mx-auto space-y-2 text-xs">
-                    <div className="flex justify-between border-b border-separator pb-1.5">
+                    <div className="flex justify-between border-b border-separator pb-2">
                       <span className="text-muted">Vehicle:</span>
                       <span className="font-semibold text-foreground">{selectedVehicle?.make} {selectedVehicle?.model}</span>
                     </div>
-                    <div className="flex justify-between border-b border-separator pb-1.5">
+                    <div className="flex justify-between border-b border-separator pb-2">
                       <span className="text-muted">Units:</span>
                       <span className="font-semibold text-accent capitalize">{unitSystem}</span>
                     </div>
-                    <div className="flex justify-between border-b border-separator pb-1.5">
+                    <div className="flex justify-between border-b border-separator pb-2">
                       <span className="text-muted">Timezone:</span>
                       <span className="font-semibold text-foreground">{getTimezoneLabel(timezone)}</span>
                     </div>
-                    <div className="flex justify-between border-b border-separator pb-1.5">
+                    <div className="flex justify-between border-b border-separator pb-2">
                       <span className="text-muted">Update Policy:</span>
                       <span className="font-semibold text-foreground capitalize">
                         {updatePolicy === 'auto' ? 'Full Auto' : updatePolicy === 'prompt' ? 'Prompt on Available' : 'Manual'}

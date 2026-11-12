@@ -1451,7 +1451,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         </div>
 
         {/* Bottom Row: Integrated Vehicle Telemetry HUD Strip */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-separator text-xs text-muted">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-separator text-xs text-muted">
           {/* Left: Odometer, Ambient Temp, Speed */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 text-xs">
             <span className="font-mono text-foreground font-medium">
@@ -1543,7 +1543,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
             className="relative p-4 sm:p-6 rounded-2xl bg-surface border border-border shadow-surface space-y-5"
           >
             {/* Top Toolbar: Gear Selector, Lock/Unlock Security & Lighting Controls */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b border-separator">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-5 border-b border-separator">
               {/* Transmission Gear Selector */}
               <div className="flex items-center gap-2.5">
                 <div className="flex items-center gap-1 p-1 rounded-xl bg-surface-secondary border border-border">
@@ -1607,7 +1607,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   }}
                   aria-label="Headlight Mode"
                 >
-                  <Tabs.ListContainer className="p-0.5 rounded-xl bg-surface-secondary border border-border text-xs">
+                  <Tabs.ListContainer className="p-0.5 rounded-xl bg-default border border-border text-xs">
                     <Tabs.List className="gap-0.5">
                       {(['off', 'parking', 'low', 'high', 'auto'] as LightMode[]).map(mode => (
                         <Tabs.Tab
@@ -1620,7 +1620,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                             }`}
                         >
                           <span>{mode}</span>
-                          <Tabs.Indicator className="rounded-lg bg-surface-tertiary shadow-sm" />
+                          <Tabs.Indicator className="rounded-lg bg-accent-soft border border-accent/50 shadow-sm" />
                         </Tabs.Tab>
                       ))}
                     </Tabs.List>
@@ -1784,7 +1784,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
             </div>
 
             {/* Closures, Security & Latches Grid + Roof Controls */}
-            <div className="pt-4 border-t border-separator space-y-3">
+            <div className="pt-5 border-t border-separator space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-accent" />
@@ -1979,7 +1979,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
             </div>
 
             {/* Bottom Status Strip */}
-            <div className="w-full pt-3 border-t border-separator flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted">
+            <div className="w-full pt-5 border-t border-separator flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted">
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs text-foreground">
                   {EGMP_MODELS[selectedModel].brand} {EGMP_MODELS[selectedModel].name}
@@ -2144,21 +2144,17 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
               aria-label="Airflow Direction Modes"
               className="w-full pt-1"
             >
-              <Tabs.ListContainer className="p-1 rounded-xl bg-surface-secondary border border-border text-xs w-full">
+              <Tabs.ListContainer className="p-1 rounded-xl bg-default border border-border text-xs w-full">
                 <Tabs.List className="!grid grid-cols-5 gap-1 !w-full !min-w-0 !p-0">
                   {(['auto', 'face', 'face_feet', 'feet', 'defrost'] as AirflowMode[]).map(mode => {
                     const label = AIRFLOW_MODE_LABELS[mode];
                     const isSelected = (airflow || 'auto') === mode;
                     const activeColorClass = heatActive === true
                       ? 'text-warning'
-                      : acActive === true
-                        ? 'text-accent'
-                        : 'text-foreground';
-                    const indicatorBorderClass = heatActive === true
-                      ? 'border-warning/50'
-                      : acActive === true
-                        ? 'border-accent/50'
-                        : 'border-border';
+                      : 'text-accent';
+                    const indicatorClass = heatActive === true
+                      ? 'bg-warning-soft border-warning/50'
+                      : 'bg-accent-soft border-accent/50';
                     return (
                       <Tabs.Tab
                         key={mode}
@@ -2174,7 +2170,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                         <span title={label} className="relative z-10 w-full flex items-center justify-center">
                           <AirflowDirectionIcon mode={mode} className="w-[52px] max-w-full h-[42px]" />
                         </span>
-                        <Tabs.Indicator className={`rounded-lg bg-surface-tertiary border ${indicatorBorderClass} shadow-sm`} />
+                        <Tabs.Indicator className={`rounded-lg border ${indicatorClass} shadow-sm`} />
                       </Tabs.Tab>
                     );
                   })}
@@ -2230,7 +2226,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
             </div>
 
             {/* Quick Climate Toggles (Front Defrost, Rear Defrost, Heated Wheel) */}
-            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-separator text-xs">
+            <div className="grid grid-cols-3 gap-2 pt-4 border-t border-separator text-xs">
               <button
                 type="button"
                 id="front-defrost-btn"
@@ -2312,7 +2308,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
             </div>
 
             {/* Seat Comfort Controls */}
-            <div className="pt-2 border-t border-separator text-xs">
+            <div className="pt-4 border-t border-separator text-xs">
               <div className="grid grid-cols-2 gap-2">
                 {/* Driver Seat Controls */}
                 <div className="space-y-1.5">
@@ -2429,7 +2425,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
             </div>
 
             {/* Rear Heated Seats Steppers */}
-            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-separator text-xs">
+            <div className="grid grid-cols-2 gap-2 pt-4 border-t border-separator text-xs">
               <button
                 type="button"
                 id="rear-left-seat-comfort-btn"
