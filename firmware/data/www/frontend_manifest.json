@@ -49,12 +49,12 @@
     {
       "name": "index.html",
       "path": "/spiffs/www/index.html",
-      "size": 5298
+      "size": 5220
     },
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 2062
+      "size": 2053
     },
     {
       "name": "jCRKkeXm.js.gz",
@@ -64,7 +64,7 @@
     {
       "name": "logo.svg",
       "path": "/spiffs/www/logo.svg",
-      "size": 8221
+      "size": 8217
     }
   ]
 }
