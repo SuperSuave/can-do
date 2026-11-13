@@ -2,47 +2,39 @@
   "version": "2026.11.5-b003",
   "files": [
     {
+      "name": "7dZ3F5kt.js.gz",
+      "path": "/spiffs/www/7dZ3F5kt.js.gz",
+      "size": 23420
+    },
+    {
       "name": "BdMWSxNz.js.gz",
       "path": "/spiffs/www/BdMWSxNz.js.gz",
       "size": 70567
     },
     {
-      "name": "BI4to8cc.js.gz",
-      "path": "/spiffs/www/BI4to8cc.js.gz",
-      "size": 978
+      "name": "BJSobM_r.js.gz",
+      "path": "/spiffs/www/BJSobM_r.js.gz",
+      "size": 57235
     },
     {
-      "name": "CKQ7ELMA.js.gz",
-      "path": "/spiffs/www/CKQ7ELMA.js.gz",
-      "size": 34548
+      "name": "BqsaD-9g.js.gz",
+      "path": "/spiffs/www/BqsaD-9g.js.gz",
+      "size": 23474
     },
     {
-      "name": "CqnEkAjx.js.gz",
-      "path": "/spiffs/www/CqnEkAjx.js.gz",
-      "size": 23417
+      "name": "Cp7qQOaU.js.gz",
+      "path": "/spiffs/www/Cp7qQOaU.js.gz",
+      "size": 977
     },
     {
-      "name": "CQSNLtBR.js.gz",
-      "path": "/spiffs/www/CQSNLtBR.js.gz",
-      "size": 23471
+      "name": "CSbEEQJM.js.gz",
+      "path": "/spiffs/www/CSbEEQJM.js.gz",
+      "size": 34780
     },
     {
-<<<<<<< Updated upstream
-=======
-      "name": "D-7U-aI4.js.gz",
-      "path": "/spiffs/www/D-7U-aI4.js.gz",
-      "size": 57115
-    },
-    {
->>>>>>> Stashed changes
       "name": "DRUAzCcj.js.gz",
       "path": "/spiffs/www/DRUAzCcj.js.gz",
       "size": 8499
-    },
-    {
-      "name": "DRgzQjOE.js.gz",
-      "path": "/spiffs/www/DRgzQjOE.js.gz",
-      "size": 979
     },
     {
       "name": "DURp6PgD.js.gz",
@@ -50,44 +42,24 @@
       "size": 242230
     },
     {
-<<<<<<< Updated upstream
-      "name": "V4RRwyOO.js.gz",
-      "path": "/spiffs/www/V4RRwyOO.js.gz",
-      "size": 57117
+      "name": "index-Dm-RHb.js.gz",
+      "path": "/spiffs/www/index-Dm-RHb.js.gz",
+      "size": 74314
     },
     {
-      "name": "index-CIupVb.js.gz",
-      "path": "/spiffs/www/index-CIupVb.js.gz",
-      "size": 71458
-=======
-      "name": "index-CNAmsr.js.gz",
-      "path": "/spiffs/www/index-CNAmsr.js.gz",
-      "size": 73602
->>>>>>> Stashed changes
-    },
-    {
-      "name": "index-Df39fd.css.gz",
-      "path": "/spiffs/www/index-Df39fd.css.gz",
-      "size": 53061
+      "name": "index-QATHrO.css.gz",
+      "path": "/spiffs/www/index-QATHrO.css.gz",
+      "size": 53072
     },
     {
       "name": "index.html",
       "path": "/spiffs/www/index.html",
-      "size": 5220
+      "size": 5298
     },
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-<<<<<<< Updated upstream
-      "size": 2055
-    },
-    {
-      "name": "jfMqIZTA.js.gz",
-      "path": "/spiffs/www/jfMqIZTA.js.gz",
-      "size": 34548
-=======
-      "size": 2062
->>>>>>> Stashed changes
+      "size": 2064
     },
     {
       "name": "logo.svg",

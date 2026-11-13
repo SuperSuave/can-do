@@ -143,6 +143,40 @@ export function buildRangeActionPayload(hexVal: string, net?: CommandNetwork): B
 }
 
 /**
+ * Resolve a param_range command's template `steps` (e.g. command burst + latch frame) for a
+ * concrete raw byte. Any `{value}` placeholder (string payload token or ByteMap value) is
+ * replaced with the 2-digit hex byte. Returns undefined when the command has no steps.
+ */
+export function resolveRangeSteps(cmd: Command, hexVal: string): any[] | undefined {
+  if (!cmd.steps || cmd.steps.length === 0) return undefined;
+  const byteHex = String(hexVal).replace(/^0x/i, '').toUpperCase().padStart(2, '0');
+  const sub = (p: any): any => {
+    if (typeof p === 'string') return p.replace(/\{value\}/gi, byteHex);
+    if (p && typeof p === 'object') {
+      const out: Record<string, any> = {};
+      for (const [k, v] of Object.entries(p)) {
+        out[k] = typeof v === 'string' && v.trim().toLowerCase() === '{value}' ? `0x${byteHex}` : v;
+      }
+      return out;
+    }
+    return p;
+  };
+  const resolved = cmd.steps.map(s => (s.payload ? { ...s, payload: sub(s.payload) } : { ...s }));
+
+  // No {value} placeholder anywhere: treat `steps` as follow-up frames (e.g. latch/commit) and
+  // lead with the command frame built from network.base_payload + the range byte.
+  const hasPlaceholder = JSON.stringify(cmd.steps).toLowerCase().includes('{value}');
+  if (!hasPlaceholder) {
+    const net = cmd.network;
+    return [
+      { payload: buildRangeActionPayload(hexVal, net), repeat: cmd.repeat ?? 3, delay_ms: net?.delay_ms ?? 25 },
+      ...resolved
+    ];
+  }
+  return resolved;
+}
+
+/**
  * Friendly display name mappings for common platform family slugs.
  */
 const KNOWN_FAMILY_DISPLAY_NAMES: Record<string, string> = {
@@ -369,7 +403,9 @@ export function cleanToByteMap(input: string | ByteMap | undefined): ByteMap {
     }
     const cleanMap: ByteMap = {};
     for (const [k, v] of Object.entries(input)) {
-      if (v && typeof v === 'string' && !v.includes('*') && v !== '?') {
+      if (v && typeof v === 'string' && v.trim().toLowerCase() === '{value}') {
+        cleanMap[k] = '{value}';
+      } else if (v && typeof v === 'string' && !v.includes('*') && v !== '?') {
         const cleanHex = v.replace(/^0x/i, '').trim().toUpperCase();
         cleanMap[k] = cleanHex ? `0x${cleanHex}` : v;
       }
@@ -395,6 +431,10 @@ export function cleanToByteMap(input: string | ByteMap | undefined): ByteMap {
     if (idx >= 8) return;
     const dKey = `D${idx + 1}`;
     const clean = part.trim();
+    if (clean.toLowerCase() === '{value}') {
+      result[dKey] = '{value}';
+      return;
+    }
     if (!clean || clean === '*' || clean === '**' || clean === '??') return;
 
     const hexClean = clean.replace(/\*/g, '0');

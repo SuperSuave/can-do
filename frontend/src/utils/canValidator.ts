@@ -5,6 +5,8 @@ export function isValidPayloadToken(token: string): boolean {
   if (!token) return false;
   // full wildcard
   if (token === '*') return true;
+  // range-value template placeholder (param_range steps)
+  if (token.toLowerCase() === '{value}') return true;
   // nibble wildcard: *0, 0*, *A, F*
   if (/^(\*[0-9A-Fa-f]|[0-9A-Fa-f]\*)$/.test(token)) return true;
   // negated byte: !00, !12, !FF

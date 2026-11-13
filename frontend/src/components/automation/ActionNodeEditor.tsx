@@ -37,7 +37,7 @@ import {
   physicalToRawByte,
   getDefaultPhysicalValue,
   buildRangeActionPayload,
-  normalizeByteKey
+  resolveRangeSteps,  normalizeByteKey
 } from '../../utils/catalogUtils';
 import {
   groupOptionsIntoGridRows,
@@ -187,13 +187,25 @@ const NumericActionRangeControl: React.FC<NumericActionRangeControlProps> = ({
     const roundedDisplay = Math.round(clampedDisplay * 10) / 10;
     const labelStr = `${roundedDisplay}${displayUnit}`;
     const txCanId = net?.action_can_id || catalogCmd.action_can_id || effectiveCanId || '0x000';
+    const rangeSteps = resolveRangeSteps(catalogCmd, hexVal);
+    const txBus = net?.bus ?? effectiveBus ?? 0;
+    const cleanSteps = rangeSteps && rangeSteps.length > 1
+      ? rangeSteps.map((s, idx) => ({
+          can_id: s.can_id || txCanId,
+          bus: s.bus ?? txBus,
+          payload: compileToByteMap(s.payload),
+          repeat: s.repeat ?? 1,
+          delay_ms: s.delay_ms ?? (idx < rangeSteps.length - 1 ? (net?.delay_ms ?? 20) : 0)
+        }))
+      : undefined;
 
     onUpdate({
       ...act,
       type: 'can_tx',
       can_id: txCanId,
-      bus: net?.bus ?? effectiveBus ?? 0,
-      payload,
+      bus: txBus,
+      payload: cleanSteps ? cleanSteps[0].payload : payload,
+      ...(cleanSteps ? { steps: cleanSteps } : { steps: undefined }),
       command: labelStr,
       option_label: labelStr,
       entity_id: catalogCmd.id,

@@ -546,7 +546,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
       delete cleaned.match_payload;
       delete cleaned.match;
       delete cleaned.options;
-      delete cleaned.steps;
+      if (!cleaned.steps || cleaned.steps.length === 0) delete cleaned.steps;
     } else if (activePayloadMode === 'transition') {
       delete cleaned.match_payload;
       delete cleaned.options;
@@ -1518,6 +1518,60 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                                 onChange={e => setBasePayloadInput(e.target.value)}
                                 className="w-full px-3 py-1.5 rounded-[8px] bg-surface border border-border font-mono text-xs text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                               />
+                            </div>
+                          )}
+
+                          {/* Follow-up Latch / Multi-step Burst */}
+                          {(formData.roles?.includes('action') || formData.action_can_id) && (
+                            <div className="pt-2 border-t border-separator space-y-2">
+                              <div className="flex items-center justify-between">
+                                <label className="text-[11px] font-semibold text-muted">
+                                  Tx Burst Steps <span className="font-normal">(optional — steps without <code className="font-mono text-accent">{'{value}'}</code> are sent as follow-up latch frames after the base frame above; or put <code className="font-mono text-accent">{'{value}'}</code> in a step to define the command frame yourself)</span>
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const idx = (formData.steps?.length || 0);
+                                    const bytes = Array.from({ length: 8 }, (_, i) => `D${i + 1}` === actionByte ? '{value}' : '00').join(' ');
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      steps: [...(prev.steps || []), { payload: idx === 0 ? bytes : '00 00 00 00 00 00 00 00', repeat: 3, delay_ms: 25 }]
+                                    }));
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-accent hover:bg-accent-hover text-accent-foreground text-[11px] font-medium transition"
+                                >
+                                  <Plus className="w-3 h-3" /> {formData.steps && formData.steps.length > 0 ? 'Add Latch / Next Step' : 'Add Burst Step'}
+                                </button>
+                              </div>
+                              {formData.steps?.map((step, idx) => (
+                                <div key={idx} className="flex flex-wrap items-center gap-2 p-2 rounded-lg bg-surface border border-border">
+                                  <span className="w-5 h-5 rounded-full bg-surface-secondary border border-border flex items-center justify-center font-mono text-muted text-[10px]">{idx + 1}</span>
+                                  <input
+                                    type="text"
+                                    value={typeof step.payload === 'string' ? step.payload : ''}
+                                    placeholder="00 02 08 A0 {value} 00 00 00"
+                                    onChange={e => handleUpdateStep(idx, { payload: e.target.value })}
+                                    className="flex-1 min-w-[200px] px-2 py-1 rounded-[6px] bg-surface-tertiary border border-border font-mono text-xs text-foreground focus:outline-none focus:border-focus"
+                                  />
+                                  <span className="text-[10px] text-muted">x</span>
+                                  <input
+                                    type="number" min="1" max="50"
+                                    value={step.repeat || 1}
+                                    onChange={e => handleUpdateStep(idx, { repeat: parseInt(e.target.value) || 1 })}
+                                    className="w-14 px-2 py-1 rounded-[6px] bg-surface-tertiary border border-border font-mono text-xs text-center focus:outline-none focus:border-focus"
+                                  />
+                                  <span className="text-[10px] text-muted">delay ms</span>
+                                  <input
+                                    type="number" min="0" max="1000"
+                                    value={step.delay_ms ?? 25}
+                                    onChange={e => handleUpdateStep(idx, { delay_ms: parseInt(e.target.value) || 0 })}
+                                    className="w-16 px-2 py-1 rounded-[6px] bg-surface-tertiary border border-border font-mono text-xs text-center focus:outline-none focus:border-focus"
+                                  />
+                                  <button type="button" onClick={() => handleRemoveStep(idx)} className="p-1 text-muted hover:text-danger rounded transition">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))}
                             </div>
                           )}
 

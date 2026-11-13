@@ -10,6 +10,7 @@ import {
   rawByteToPhysical,
   physicalToRawByte,
   buildRangeActionPayload,
+  resolveRangeSteps,
 } from './catalogUtils.js';
 import type { Command, CommandOption, Vehicle } from '../types/catalog.js';
 
@@ -414,4 +415,21 @@ test('formatCommandForCatalog preserves param_range type and network range metad
   assert.strictEqual(formatted.network?.raw_min, '0x06');
   assert.strictEqual(formatted.network?.raw_max, '0x1A');
   assert.strictEqual(formatted.network?.unit, '°F');
+});
+
+test('resolveRangeSteps substitutes {value} in command burst and keeps latch step', () => {
+  const cmd: any = { id: 'amb', roles: ['action'], type: 'param_range', category: 'x', network: { action_can_id: '0x4AD' }, steps: [{ payload: '00 02 08 A0 {value} 00 00 00', repeat: 3 }, { payload: { D4: '0x20' }, repeat: 3 }] };
+  const steps = resolveRangeSteps(cmd, '0x0A');
+  assert.strictEqual(steps[0].payload, '00 02 08 A0 0A 00 00 00');
+  assert.deepStrictEqual(steps[1].payload, { D4: '0x20' });
+});
+
+test('resolveRangeSteps leads with base_payload command frame when steps are follow-up only', () => {
+  const cmd: any = { id: 'amb', roles: ['action'], type: 'param_range', category: 'x', network: { action_can_id: '0x4AD', action_byte: 'D5', state_byte: 'D5', base_payload: ['0x00','0x02','0x08','0xA0','0x00','0x00','0x00','0x00'] }, steps: [{ payload: { D1: '0x00', D2: '0x02', D3: '0x08', D4: '0x20' }, repeat: 3, delay_ms: 25 }] };
+  const steps = resolveRangeSteps(cmd, '0x05')!;
+  assert.strictEqual(steps.length, 2);
+  assert.strictEqual((steps[0].payload as any).D4, '0xA0');
+  assert.strictEqual((steps[0].payload as any).D5, '0x05');
+  assert.strictEqual(steps[0].repeat, 3);
+  assert.strictEqual((steps[1].payload as any).D4, '0x20');
 });

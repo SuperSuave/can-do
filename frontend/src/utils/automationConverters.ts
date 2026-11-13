@@ -18,7 +18,7 @@ import {
   physicalToRawByte,
   getDefaultPhysicalValue,
   buildRangeActionPayload,
-  normalizeByteKey
+  resolveRangeSteps,  normalizeByteKey
 } from './catalogUtils';
 
 /**
@@ -732,9 +732,19 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
 
       // Case C: Command defines root steps
       if (cmd.steps && cmd.steps.length > 0) {
-        const stepGroupId = cmd.steps.length > 1 ? (act.id || generateBlockId('grp')) : undefined;
+        let srcSteps: any[] = cmd.steps;
+        let stepsLabel = opt?.label || commandLabel;
+        if (isRangeCommand(cmd)) {
+          // param_range with template steps (command burst + latch): substitute {value}
+          const parsedPhys = commandLabel !== undefined ? parseFloat(String(commandLabel)) : NaN;
+          const phys = !isNaN(parsedPhys) ? parsedPhys : getDefaultPhysicalValue(cmd.network);
+          const hex = `0x${physicalToRawByte(phys, cmd.network).toString(16).toUpperCase().padStart(2, '0')}`;
+          srcSteps = resolveRangeSteps(cmd, hex) || cmd.steps;
+          if (!stepsLabel) stepsLabel = `${phys}${cmd.network?.unit || ''}`;
+        }
+        const stepGroupId = srcSteps.length > 1 ? (act.id || generateBlockId('grp')) : undefined;
         const inlinedSteps: any[] = [];
-        cmd.steps.forEach((step: any, idx: number) => {
+        srcSteps.forEach((step: any, idx: number) => {
           const stepPayload = compileToByteMap(step.payload);
           inlinedSteps.push({
             type: 'transmit',
@@ -746,14 +756,15 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
             ...(idx === 0 ? {
               source_command_id: entityId,
               source_command_name: cmd.ha_metadata?.name || cmd.name || cmd.id,
-              option_label: opt?.label || commandLabel,
+              option_label: stepsLabel,
               entity_id: entityId
             } : {})
           });
-          if (idx < cmd.steps.length - 1 && delayMs > 0) {
+          const stepDelay = step.delay_ms ?? delayMs;
+          if (idx < srcSteps.length - 1 && stepDelay > 0) {
             inlinedSteps.push({
               type: 'delay',
-              ms: delayMs,
+              ms: stepDelay,
               ...(stepGroupId ? { _step_group_id: stepGroupId } : {})
             });
           }
@@ -1965,13 +1976,24 @@ export function commandToAction(rawCmd: Command, opt?: CommandOption): Automatio
     const payload = buildRangeActionPayload(hexVal, net);
     const labelStr = `${defaultPhys}${net?.unit || ''}`;
     const delayMs = net?.delay_ms ?? cmd.delay_ms ?? 0;
+    const rangeSteps = resolveRangeSteps(cmd, hexVal);
+    const cleanRangeSteps: AutomationActionStep[] | undefined = rangeSteps && rangeSteps.length > 1
+      ? rangeSteps.map((s, idx) => ({
+          can_id: s.can_id || canId,
+          bus: s.bus ?? (net?.bus ?? cmd.action_bus ?? cmd.bus ?? 0),
+          payload: compileToByteMap(s.payload),
+          repeat: s.repeat ?? 1,
+          delay_ms: s.delay_ms ?? (idx < rangeSteps.length - 1 ? (delayMs || 20) : 0)
+        }))
+      : undefined;
 
     return {
       id: actId,
       type: 'can_tx',
       can_id: canId,
       bus: net?.bus ?? cmd.action_bus ?? cmd.bus ?? 0,
-      payload,
+      payload: cleanRangeSteps ? cleanRangeSteps[0].payload : payload,
+      ...(cleanRangeSteps ? { steps: cleanRangeSteps } : {}),
       repeat: cmd.repeat ?? 1,
       delay_ms: delayMs,
       entity_id: cmd.id,
