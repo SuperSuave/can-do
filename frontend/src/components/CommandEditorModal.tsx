@@ -11,10 +11,11 @@ import {
   ModalBody,
   ModalFooter
 } from '@heroui/react';
-import { Command, CommandRole, Catalog, CommandOption, CommandStep, ContributorInfo, getCommandContributors } from '../types/catalog';
+import { Command, CommandRole, CommandNetwork, Catalog, CommandOption, CommandStep, ContributorInfo, getCommandContributors } from '../types/catalog';
 import { validateCommand, getAllKnownFeatures } from '../utils/canValidator';
 import { parseCanCaptureNote } from '../utils/canCaptureParser';
 import { compileToByteMap } from '../utils/automationConverters';
+import { isRangeCommand, physicalToRawByte, rawByteToPhysical, getDefaultPhysicalValue } from '../utils/catalogUtils';
 import { PayloadByteVisualizer } from './PayloadByteVisualizer';
 import { PayloadByteEditor } from './PayloadByteEditor';
 import { StateDefinitionsEditor } from './StateDefinitionsEditor';
@@ -34,7 +35,8 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
-  Home
+  Home,
+  Sliders
 } from 'lucide-react';
 
 interface CommandEditorModalProps {
@@ -115,7 +117,9 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
   });
 
   const [tagsInput, setTagsInput] = useState('');
-  const [activePayloadMode, setActivePayloadMode] = useState<'transition' | 'match' | 'options' | 'steps'>('transition');
+  const [activePayloadMode, setActivePayloadMode] = useState<'transition' | 'match' | 'options' | 'steps' | 'range'>('transition');
+  const [rangeEncodingMode, setRangeEncodingMode] = useState<'raw_bounds' | 'factor_offset'>('raw_bounds');
+  const [basePayloadInput, setBasePayloadInput] = useState('');
   const [isIdManuallyEdited, setIsIdManuallyEdited] = useState(false);
   const [contributorsList, setContributorsList] = useState<ContributorInfo[]>([
     { name: '', github: '', notes: '', tested_vehicle: '', role: '' }
@@ -198,14 +202,28 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
     if (initialCommand) {
       const stateCan = initialCommand.state_can_id || initialCommand.network?.state_can_id || initialCommand.can_id || '';
       const actionCan = initialCommand.action_can_id || initialCommand.network?.action_can_id || '';
+      const resolvedIcon = initialCommand.icon || initialCommand.mdi || initialCommand.ha_metadata?.icon || 'mdi:steering';
       setFormData({
         ...initialCommand,
+        name: initialCommand.name || initialCommand.ha_metadata?.name || '',
+        ha_domain: initialCommand.ha_domain || initialCommand.ha_metadata?.domain || 'event',
+        icon: resolvedIcon,
+        mdi: initialCommand.mdi || resolvedIcon,
+        device_class: initialCommand.device_class || (initialCommand.ha_metadata as any)?.device_class || '',
         state_can_id: stateCan,
         action_can_id: actionCan,
         bus: initialCommand.bus ?? initialCommand.network?.bus ?? 0,
       });
       setIsIdManuallyEdited(true);
       setTagsInput(initialCommand.tags?.join(', ') || '');
+      const bp = initialCommand.network?.base_payload;
+      setBasePayloadInput(
+        Array.isArray(bp)
+          ? bp.map(v => typeof v === 'string' ? v.replace(/^0x/i, '').toUpperCase().padStart(2, '0') : Number(v).toString(16).toUpperCase().padStart(2, '0')).join(' ')
+          : ''
+      );
+      const usesFactorOffset = initialCommand.network?.raw_min === undefined && (initialCommand.network?.factor !== undefined || initialCommand.network?.offset !== undefined);
+      setRangeEncodingMode(usesFactorOffset ? 'factor_offset' : 'raw_bounds');
       const contribs = getCommandContributors(initialCommand);
       if (contribs.length > 0) {
         setContributorsList(
@@ -226,7 +244,9 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
           role: ''
         }]);
       }
-      if (initialCommand.options && initialCommand.options.length > 0) {
+      if (isRangeCommand(initialCommand)) {
+        setActivePayloadMode('range');
+      } else if (initialCommand.options && initialCommand.options.length > 0) {
         setActivePayloadMode('options');
       } else if (initialCommand.steps && initialCommand.steps.length > 0) {
         setActivePayloadMode('steps');
@@ -260,6 +280,8 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
       });
       setIsIdManuallyEdited(false);
       setTagsInput('');
+      setBasePayloadInput('');
+      setRangeEncodingMode('raw_bounds');
       setActivePayloadMode('transition');
 
       // Pre-fill author info from saved local storage if available
@@ -400,6 +422,47 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
     setFormData(prev => ({ ...prev, steps: updatedSteps }));
   };
 
+  const updateNetworkRange = (patch: Partial<CommandNetwork>) => {
+    setFormData(prev => ({
+      ...prev,
+      network: {
+        bus: prev.bus ?? 0,
+        ...(prev.network || {}),
+        ...patch
+      }
+    }));
+  };
+
+  const activateRangeMode = (extraUpdates: Partial<Command> = {}) => {
+    setActivePayloadMode('range');
+    setFormData(prev => {
+      const existingNet = prev.network || {};
+      const nextNet: CommandNetwork = {
+        bus: prev.bus ?? 0,
+        state_byte: 'D1',
+        mask: '0xFF',
+        min: 0,
+        max: 100,
+        step: 1,
+        ...existingNet,
+      };
+      if (nextNet.raw_min === undefined && nextNet.factor === undefined && nextNet.offset === undefined) {
+        nextNet.raw_min = '0x00';
+        nextNet.raw_max = '0x64';
+      }
+      const nextHaDomain = (!prev.ha_domain || prev.ha_domain === 'event' || prev.ha_domain === 'button')
+        ? (prev.roles?.includes('action') ? 'number' : 'sensor')
+        : prev.ha_domain;
+      return {
+        ...prev,
+        type: 'param_range',
+        ha_domain: nextHaDomain,
+        ...extraUpdates,
+        network: nextNet,
+      };
+    });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave) return;
@@ -441,16 +504,50 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
     }
     delete cleaned.can_id;
 
+    // Range helper: update network fields cleanly
+    const isRange = activePayloadMode === 'range' || cleaned.type === 'param_range';
+
     // Ensure network structure is preserved and synchronized
     cleaned.network = {
       ...(formData.network || {}),
       bus: cleaned.bus ?? 0,
-      type: cleaned.type || formData.network?.type || (cleaned.action_can_id ? 'can_rx_tx' : 'can_rx'),
+      type: isRange
+        ? (cleaned.action_can_id ? (cleaned.state_can_id ? 'can_rx_tx' : 'can_tx') : 'can_rx')
+        : (cleaned.type || formData.network?.type || (cleaned.action_can_id ? 'can_rx_tx' : 'can_rx')),
       ...(cleaned.state_can_id ? { state_can_id: cleaned.state_can_id } : {}),
       ...(cleaned.action_can_id ? { action_can_id: cleaned.action_can_id } : {}),
     };
 
-    if (activePayloadMode === 'transition') {
+    if (isRange) {
+      cleaned.type = 'param_range';
+      if (!cleaned.network.state_byte && !cleaned.network.byte) {
+        cleaned.network.state_byte = 'D1';
+      }
+      if (cleaned.network.delay_ms === undefined) {
+        cleaned.network.delay_ms = cleaned.delay_ms ?? 20;
+      }
+      const parsedBase = basePayloadInput
+        .trim()
+        .split(/[\s,]+/)
+        .filter(Boolean)
+        .slice(0, 8)
+        .map(tok => {
+          const cleanHex = tok.replace(/^0x/i, '').toUpperCase().padStart(2, '0');
+          return /^[0-9A-F]{2}$/.test(cleanHex) ? `0x${cleanHex}` : '0x00';
+        });
+      if (parsedBase.length > 0) {
+        while (parsedBase.length < 8) parsedBase.push('0x00');
+        cleaned.network.base_payload = parsedBase;
+      } else {
+        delete cleaned.network.base_payload;
+      }
+      delete cleaned.from_payload;
+      delete cleaned.to_payload;
+      delete cleaned.match_payload;
+      delete cleaned.match;
+      delete cleaned.options;
+      delete cleaned.steps;
+    } else if (activePayloadMode === 'transition') {
       delete cleaned.match_payload;
       delete cleaned.options;
       delete cleaned.steps;
@@ -854,6 +951,10 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                         value={formData.type || 'can_tx'}
                         onChange={e => {
                           const newType = e.target.value;
+                          if (newType === 'param_range') {
+                            activateRangeMode();
+                            return;
+                          }
                           const updates: Partial<typeof formData> = { type: newType };
                           if (newType === 'popup' && (!formData.ha_domain || formData.ha_domain === 'event' || formData.ha_domain === 'button')) {
                             updates.ha_domain = 'notify';
@@ -861,6 +962,9 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                               updates.icon = 'mdi:message-badge';
                               updates.mdi = 'mdi:message-badge';
                             }
+                          }
+                          if (activePayloadMode === 'range') {
+                            setActivePayloadMode('options');
                           }
                           setFormData({ ...formData, ...updates });
                         }}
@@ -938,11 +1042,11 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                       </label>
                     </div>
                     <div className="w-full p-1 rounded-xl bg-surface-secondary border border-border text-xs font-medium">
-                      <div className="w-full grid grid-cols-2 sm:grid-cols-4 gap-1">
+                      <div className="w-full grid grid-cols-2 sm:grid-cols-5 gap-1">
                         <button
                           type="button"
                           onClick={() => setActivePayloadMode('options')}
-                          className={`relative px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap ${activePayloadMode === 'options'
+                          className={`relative px-2.5 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap ${activePayloadMode === 'options'
                             ? 'bg-accent text-accent-foreground font-semibold shadow-sm'
                             : 'text-muted hover:text-foreground hover:bg-surface-tertiary'
                             }`}
@@ -961,8 +1065,20 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
 
                         <button
                           type="button"
+                          onClick={() => activateRangeMode()}
+                          className={`relative px-2.5 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap ${activePayloadMode === 'range'
+                            ? 'bg-accent text-accent-foreground font-semibold shadow-sm'
+                            : 'text-muted hover:text-foreground hover:bg-surface-tertiary'
+                            }`}
+                        >
+                          <Sliders className="w-3.5 h-3.5 shrink-0" />
+                          <span>Numeric Range</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => setActivePayloadMode('transition')}
-                          className={`relative px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center whitespace-nowrap ${activePayloadMode === 'transition'
+                          className={`relative px-2.5 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center whitespace-nowrap ${activePayloadMode === 'transition'
                             ? 'bg-accent text-accent-foreground font-semibold shadow-sm'
                             : 'text-muted hover:text-foreground hover:bg-surface-tertiary'
                             }`}
@@ -973,7 +1089,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setActivePayloadMode('match')}
-                          className={`relative px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center whitespace-nowrap ${activePayloadMode === 'match'
+                          className={`relative px-2.5 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center whitespace-nowrap ${activePayloadMode === 'match'
                             ? 'bg-accent text-accent-foreground font-semibold shadow-sm'
                             : 'text-muted hover:text-foreground hover:bg-surface-tertiary'
                             }`}
@@ -984,7 +1100,7 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setActivePayloadMode('steps')}
-                          className={`relative px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap ${activePayloadMode === 'steps'
+                          className={`relative px-2.5 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap ${activePayloadMode === 'steps'
                             ? 'bg-accent text-accent-foreground font-semibold shadow-sm'
                             : 'text-muted hover:text-foreground hover:bg-surface-tertiary'
                             }`}
@@ -1159,6 +1275,273 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                       </div>
                     </div>
                   )}
+
+                  {/* Mode 5: Numeric Range (param_range) */}
+                  {activePayloadMode === 'range' && (() => {
+                    const net = formData.network || {};
+                    const stateByte = net.state_byte || net.byte || 'D1';
+                    const actionByte = net.action_byte || stateByte;
+                    const minVal = net.min ?? 0;
+                    const maxVal = net.max ?? 100;
+                    const stepVal = net.step ?? 1;
+                    const midVal = getDefaultPhysicalValue(net);
+                    const minRaw = physicalToRawByte(minVal, net);
+                    const midRaw = physicalToRawByte(midVal, net);
+                    const maxRaw = physicalToRawByte(maxVal, net);
+                    const unitStr = net.unit || '';
+
+                    return (
+                      <div className="p-4 rounded-[12px] bg-surface-secondary border border-border space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-separator">
+                          <div>
+                            <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                              <Sliders className="w-3.5 h-3.5 text-accent" />
+                              Numeric Range Scaling (<span className="font-mono text-accent">param_range</span>)
+                            </span>
+                            <p className="text-[11px] text-muted mt-0.5">
+                              Maps a single byte (<code className="font-mono">D1</code>–<code className="font-mono">D8</code>) across a continuous numeric range instead of discrete options.
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Row A: Bytes & Mask */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-muted mb-1">
+                              State / Rx Byte
+                            </label>
+                            <select
+                              value={stateByte}
+                              onChange={e => updateNetworkRange({ state_byte: e.target.value })}
+                              className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-border font-mono text-xs text-foreground focus:outline-none focus:border-focus"
+                            >
+                              {['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'].map(b => (
+                                <option key={b} value={b}>{b}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-muted mb-1">
+                              Byte Mask (Hex)
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="0xFF"
+                              value={net.mask || '0xFF'}
+                              onChange={e => updateNetworkRange({ mask: e.target.value })}
+                              className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-border font-mono text-xs text-foreground focus:outline-none focus:border-focus"
+                            />
+                          </div>
+
+                          {(formData.roles?.includes('action') || formData.action_can_id) && (
+                            <div>
+                              <label className="block text-[11px] font-semibold text-success mb-1">
+                                Action / Tx Byte
+                              </label>
+                              <select
+                                value={actionByte}
+                                onChange={e => updateNetworkRange({ action_byte: e.target.value })}
+                                className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-success/40 font-mono text-xs text-success focus:outline-none focus:border-success"
+                              >
+                                {['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'].map(b => (
+                                  <option key={b} value={b}>{b}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Row B: Physical Range */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-muted mb-1">Min Value</label>
+                            <input
+                              type="number"
+                              step="any"
+                              value={minVal}
+                              onChange={e => updateNetworkRange({ min: parseFloat(e.target.value) || 0 })}
+                              className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-border font-mono text-xs text-foreground focus:outline-none focus:border-focus"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-muted mb-1">Max Value</label>
+                            <input
+                              type="number"
+                              step="any"
+                              value={maxVal}
+                              onChange={e => updateNetworkRange({ max: parseFloat(e.target.value) || 0 })}
+                              className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-border font-mono text-xs text-foreground focus:outline-none focus:border-focus"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-muted mb-1">Step</label>
+                            <input
+                              type="number"
+                              step="any"
+                              min="0.01"
+                              value={stepVal}
+                              onChange={e => updateNetworkRange({ step: parseFloat(e.target.value) || 1 })}
+                              className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-border font-mono text-xs text-foreground focus:outline-none focus:border-focus"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-muted mb-1">Unit</label>
+                            <input
+                              type="text"
+                              list="range-unit-suggestions"
+                              placeholder="°F, %, V..."
+                              value={unitStr}
+                              onChange={e => updateNetworkRange({ unit: e.target.value })}
+                              className="w-full px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-border font-mono text-xs text-foreground focus:outline-none focus:border-focus"
+                            />
+                            <datalist id="range-unit-suggestions">
+                              {['°F', '°C', '%', 'V', 'kW', 'km/h', 'mph', 'psi', 'dB'].map(u => (
+                                <option key={u} value={u} />
+                              ))}
+                            </datalist>
+                          </div>
+                        </div>
+
+                        {/* Row C: Raw Scaling Mode */}
+                        <div className="p-3 rounded-[10px] bg-surface-tertiary border border-border space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
+                              Raw CAN Byte Mapping
+                            </span>
+                            <div className="inline-flex rounded-lg bg-surface-secondary border border-border p-0.5 text-[11px]">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRangeEncodingMode('raw_bounds');
+                                  updateNetworkRange({
+                                    factor: undefined,
+                                    offset: undefined,
+                                    raw_min: net.raw_min ?? '0x00',
+                                    raw_max: net.raw_max ?? '0x64'
+                                  });
+                                }}
+                                className={`px-2.5 py-1 rounded-md font-medium transition ${rangeEncodingMode === 'raw_bounds'
+                                  ? 'bg-accent text-accent-foreground shadow-sm'
+                                  : 'text-muted hover:text-foreground'
+                                  }`}
+                              >
+                                Raw Hex Bounds (raw_min / raw_max)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRangeEncodingMode('factor_offset');
+                                  updateNetworkRange({
+                                    raw_min: undefined,
+                                    raw_max: undefined,
+                                    factor: net.factor ?? 1,
+                                    offset: net.offset ?? 0
+                                  });
+                                }}
+                                className={`px-2.5 py-1 rounded-md font-medium transition ${rangeEncodingMode === 'factor_offset'
+                                  ? 'bg-accent text-accent-foreground shadow-sm'
+                                  : 'text-muted hover:text-foreground'
+                                  }`}
+                              >
+                                Linear Formula (raw * factor + offset)
+                              </button>
+                            </div>
+                          </div>
+
+                          {rangeEncodingMode === 'raw_bounds' ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-[11px] font-semibold text-muted mb-1">
+                                  Raw Min (Hex, at Min Physical)
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="0x06"
+                                  value={net.raw_min !== undefined ? String(net.raw_min) : '0x00'}
+                                  onChange={e => updateNetworkRange({ raw_min: e.target.value })}
+                                  className="w-full px-3 py-1.5 rounded-[8px] bg-surface border border-border font-mono text-xs text-accent focus:outline-none focus:border-focus"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[11px] font-semibold text-muted mb-1">
+                                  Raw Max (Hex, at Max Physical)
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="0x1A"
+                                  value={net.raw_max !== undefined ? String(net.raw_max) : '0x64'}
+                                  onChange={e => updateNetworkRange({ raw_max: e.target.value })}
+                                  className="w-full px-3 py-1.5 rounded-[8px] bg-surface border border-border font-mono text-xs text-accent focus:outline-none focus:border-focus"
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-[11px] font-semibold text-muted mb-1">
+                                  Factor (Multiplier per raw count)
+                                </label>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={net.factor ?? 1}
+                                  onChange={e => updateNetworkRange({ factor: parseFloat(e.target.value) || 1 })}
+                                  className="w-full px-3 py-1.5 rounded-[8px] bg-surface border border-border font-mono text-xs text-accent focus:outline-none focus:border-focus"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[11px] font-semibold text-muted mb-1">
+                                  Offset (added after multiplying)
+                                </label>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={net.offset ?? 0}
+                                  onChange={e => updateNetworkRange({ offset: parseFloat(e.target.value) || 0 })}
+                                  className="w-full px-3 py-1.5 rounded-[8px] bg-surface border border-border font-mono text-xs text-accent focus:outline-none focus:border-focus"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Optional Base Tx Payload */}
+                          {(formData.roles?.includes('action') || formData.action_can_id) && (
+                            <div>
+                              <label className="block text-[11px] font-semibold text-muted mb-1">
+                                Base Tx Frame Bytes <span className="font-normal">(Optional 8 space-separated hex bytes; {actionByte} is replaced dynamically)</span>
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g. 00 00 00 00 00 00 00 00 (leave blank for single-byte payload)"
+                                value={basePayloadInput}
+                                onChange={e => setBasePayloadInput(e.target.value)}
+                                className="w-full px-3 py-1.5 rounded-[8px] bg-surface border border-border font-mono text-xs text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus"
+                              />
+                            </div>
+                          )}
+
+                          {/* Live Preview */}
+                          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-separator text-[11px]">
+                            <span className="text-muted font-medium">Preview:</span>
+                            {[
+                              { label: 'Min', phys: minVal, raw: minRaw },
+                              { label: 'Default', phys: midVal, raw: midRaw },
+                              { label: 'Max', phys: maxVal, raw: maxRaw }
+                            ].map(item => (
+                              <span
+                                key={item.label}
+                                className="px-2 py-0.5 rounded bg-surface border border-border font-mono text-foreground"
+                              >
+                                {item.label}: {rawByteToPhysical(item.raw, net).val}{unitStr} ↔{' '}
+                                <span className="text-accent">0x{item.raw.toString(16).toUpperCase().padStart(2, '0')}</span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Row 5: Required Feature, Tags, Delay */}
