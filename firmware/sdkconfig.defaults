@@ -60,5 +60,10 @@ CONFIG_WS_BUFFER_SIZE=2048
 # Drop MQTT publishes immediately when disconnected to preserve heap/outbox
 CONFIG_MQTT_SKIP_PUBLISH_IF_DISCONNECTED=y
 
+# Trigger panic & reboot on Task Watchdog timeouts so hung tasks recover automatically
+CONFIG_ESP_TASK_WDT_PANIC=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=5
+
+
 
 

@@ -50,6 +50,8 @@ void can_engine_set_ble_learn_mode(bool active, uint32_t duration_ms = 30000);
 void can_engine_on_ble_device_event(const std::string& address, const std::string& event, int8_t rssi, const std::string& name = "");
 void can_engine_on_ble_beacon_event(const std::string& uuid, const std::string& event, int8_t rssi, uint16_t major = 0, uint16_t minor = 0, const std::string& mac = "", const std::string& name = "");
 
+#define RTC_CRASH_MAGIC 0xDEADBEE2
+
 struct RtcCrashInfo {
     uint32_t magic;
     uint32_t can_id;
@@ -57,7 +59,20 @@ struct RtcCrashInfo {
     uint8_t  data[8];
     uint32_t step_marker;
     char     last_decoder[32];
+    uint32_t uptime_sec;
+    uint32_t free_heap;
+    uint32_t min_free_heap;
+    uint32_t internal_free_heap;
+    uint32_t can0_rx_overflow;
+    uint32_t can1_rx_overflow;
+    uint8_t  twdt_triggered;
+    uint8_t  last_abnormal_reset_reason;
+    char     cpu0_task[16];
+    char     cpu1_task[16];
+    char     last_event[32];
 };
 
 const RtcCrashInfo* get_rtc_crash_info(void);
 void rtc_crash_record(uint32_t can_id, uint8_t dlc, const uint8_t* data, uint32_t step, const char* decoder);
+void rtc_crash_record_event(const char* event_name);
+void init_crash_diagnostics(void);

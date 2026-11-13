@@ -28,7 +28,12 @@
 #include "vbat_sensor.h"
 #include "power_mgr.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
 #include "esp_task_wdt.h"
+#include "esp_system.h"
+#include "esp_heap_caps.h"
+#include "cJSON.h"
+#include <cstdio>
 
 static bool mac_matches(const std::string& a, const std::string& b) {
     std::string clean_a, clean_b;
@@ -181,7 +186,7 @@ static const char* TAG = "CAN_ENGINE";
 static RTC_NOINIT_ATTR RtcCrashInfo s_rtc_crash;
 
 const RtcCrashInfo* get_rtc_crash_info(void) {
-    if (s_rtc_crash.magic == 0xDEADBEEF) {
+    if (s_rtc_crash.magic == RTC_CRASH_MAGIC) {
         return &s_rtc_crash;
     }
     return nullptr;
@@ -197,8 +202,27 @@ static inline void copy_rtc_str(char* dst, const char* src, size_t max_len) {
     dst[i] = '\0';
 }
 
+static void rtc_crash_ensure_init(void) {
+    if (s_rtc_crash.magic != RTC_CRASH_MAGIC) {
+        memset((void*)&s_rtc_crash, 0, sizeof(s_rtc_crash));
+        s_rtc_crash.magic = RTC_CRASH_MAGIC;
+    }
+}
+
+static void rtc_crash_snapshot_stats(void) {
+    rtc_crash_ensure_init();
+    s_rtc_crash.uptime_sec = (uint32_t)(esp_timer_get_time() / 1000000ULL);
+    s_rtc_crash.free_heap = esp_get_free_heap_size();
+    s_rtc_crash.min_free_heap = esp_get_minimum_free_heap_size();
+    s_rtc_crash.internal_free_heap = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    mcp2518fd_t* dev0 = dual_can_get_device(CAN_BUS_0);
+    mcp2518fd_t* dev1 = dual_can_get_device(CAN_BUS_1);
+    s_rtc_crash.can0_rx_overflow = (dev0 && dev0->initialized) ? dev0->rx_overflow_count : 0;
+    s_rtc_crash.can1_rx_overflow = (dev1 && dev1->initialized) ? dev1->rx_overflow_count : 0;
+}
+
 void rtc_crash_record(uint32_t can_id, uint8_t dlc, const uint8_t* data, uint32_t step, const char* decoder) {
-    s_rtc_crash.magic = 0xDEADBEEF;
+    rtc_crash_ensure_init();
     s_rtc_crash.can_id = can_id;
     s_rtc_crash.dlc = dlc;
     if (data && dlc > 0) {
@@ -208,6 +232,7 @@ void rtc_crash_record(uint32_t can_id, uint8_t dlc, const uint8_t* data, uint32_
     if (decoder) {
         copy_rtc_str(s_rtc_crash.last_decoder, decoder, sizeof(s_rtc_crash.last_decoder));
     }
+    s_rtc_crash.uptime_sec = (uint32_t)(esp_timer_get_time() / 1000000ULL);
 }
 
 static inline void rtc_crash_step_label(uint32_t step, const char* decoder) {
@@ -215,6 +240,112 @@ static inline void rtc_crash_step_label(uint32_t step, const char* decoder) {
     if (decoder) {
         copy_rtc_str(s_rtc_crash.last_decoder, decoder, sizeof(s_rtc_crash.last_decoder));
     }
+}
+
+void rtc_crash_record_event(const char* event_name) {
+    rtc_crash_snapshot_stats();
+    if (event_name) {
+        copy_rtc_str(s_rtc_crash.last_event, event_name, sizeof(s_rtc_crash.last_event));
+    }
+}
+
+extern "C" void esp_task_wdt_isr_user_handler(void) {
+    s_rtc_crash.magic = RTC_CRASH_MAGIC;
+    s_rtc_crash.twdt_triggered = 1;
+    s_rtc_crash.uptime_sec = (uint32_t)(esp_timer_get_time() / 1000000ULL);
+    TaskHandle_t t0 = xTaskGetCurrentTaskHandleForCore(0);
+    if (t0) {
+        copy_rtc_str(s_rtc_crash.cpu0_task, pcTaskGetName(t0), sizeof(s_rtc_crash.cpu0_task));
+    }
+#if CONFIG_FREERTOS_NUMBER_OF_CORES > 1
+    TaskHandle_t t1 = xTaskGetCurrentTaskHandleForCore(1);
+    if (t1) {
+        copy_rtc_str(s_rtc_crash.cpu1_task, pcTaskGetName(t1), sizeof(s_rtc_crash.cpu1_task));
+    }
+#endif
+}
+
+static void crash_diag_shutdown_handler(void) {
+    rtc_crash_record_event("clean_shutdown");
+}
+
+static const char* diag_reset_reason_str(esp_reset_reason_t reason) {
+    switch (reason) {
+        case ESP_RST_POWERON: return "power_on";
+        case ESP_RST_EXT: return "external";
+        case ESP_RST_SW: return "software";
+        case ESP_RST_PANIC: return "panic";
+        case ESP_RST_INT_WDT: return "int_wdt";
+        case ESP_RST_TASK_WDT: return "task_wdt";
+        case ESP_RST_WDT: return "wdt";
+        case ESP_RST_DEEPSLEEP: return "deep_sleep";
+        case ESP_RST_BROWNOUT: return "brownout";
+        case ESP_RST_SDIO: return "sdio";
+        default: return "unknown";
+    }
+}
+
+void init_crash_diagnostics(void) {
+    esp_reset_reason_t reason = esp_reset_reason();
+    const bool abnormal_reason = (reason != ESP_RST_POWERON && reason != ESP_RST_SW && reason != ESP_RST_DEEPSLEEP);
+    const bool valid_rtc = (s_rtc_crash.magic == RTC_CRASH_MAGIC);
+
+    if (valid_rtc && (abnormal_reason || s_rtc_crash.twdt_triggered == 1)) {
+        s_rtc_crash.last_abnormal_reset_reason = (uint8_t)reason;
+        cJSON* root = cJSON_CreateObject();
+        if (root) {
+            cJSON_AddStringToObject(root, "reset_reason", diag_reset_reason_str(reason));
+            cJSON_AddNumberToObject(root, "reset_reason_code", (int)reason);
+            cJSON_AddBoolToObject(root, "twdt_triggered", s_rtc_crash.twdt_triggered != 0);
+            cJSON_AddNumberToObject(root, "uptime_sec", s_rtc_crash.uptime_sec);
+            cJSON_AddNumberToObject(root, "free_heap", s_rtc_crash.free_heap);
+            cJSON_AddNumberToObject(root, "min_free_heap", s_rtc_crash.min_free_heap);
+            cJSON_AddNumberToObject(root, "internal_free_heap", s_rtc_crash.internal_free_heap);
+            cJSON_AddNumberToObject(root, "can0_rx_overflow", s_rtc_crash.can0_rx_overflow);
+            cJSON_AddNumberToObject(root, "can1_rx_overflow", s_rtc_crash.can1_rx_overflow);
+            cJSON_AddStringToObject(root, "cpu0_task", s_rtc_crash.cpu0_task);
+            cJSON_AddStringToObject(root, "cpu1_task", s_rtc_crash.cpu1_task);
+            cJSON_AddStringToObject(root, "last_event", s_rtc_crash.last_event);
+            char id_str[16];
+            snprintf(id_str, sizeof(id_str), "0x%03lX", (unsigned long)s_rtc_crash.can_id);
+            cJSON_AddStringToObject(root, "can_id", id_str);
+            cJSON_AddNumberToObject(root, "dlc", s_rtc_crash.dlc);
+            char hex[17] = {0};
+            int dlc = s_rtc_crash.dlc > 8 ? 8 : s_rtc_crash.dlc;
+            for (int i = 0; i < dlc; i++) {
+                snprintf(&hex[i * 2], 3, "%02X", s_rtc_crash.data[i]);
+            }
+            cJSON_AddStringToObject(root, "data", hex);
+            cJSON_AddNumberToObject(root, "step_marker", s_rtc_crash.step_marker);
+            cJSON_AddStringToObject(root, "last_decoder", s_rtc_crash.last_decoder);
+
+            char* json_str = cJSON_PrintUnformatted(root);
+            if (json_str) {
+                FILE* f = fopen("/spiffs/crash_diag.json", "w");
+                if (f) {
+                    fwrite(json_str, 1, strlen(json_str), f);
+                    fclose(f);
+                    ESP_LOGW(TAG, "Persisted abnormal reset diagnostics (%s, uptime=%lus, event=%s, cpu0=%s, cpu1=%s)",
+                             diag_reset_reason_str(reason), (unsigned long)s_rtc_crash.uptime_sec,
+                             s_rtc_crash.last_event, s_rtc_crash.cpu0_task, s_rtc_crash.cpu1_task);
+                }
+                cJSON_free(json_str);
+            }
+            cJSON_Delete(root);
+        }
+        s_rtc_crash.twdt_triggered = 0;
+        rtc_crash_record_event("boot_diag_saved");
+    } else {
+        if (!valid_rtc || reason == ESP_RST_POWERON) {
+            memset((void*)&s_rtc_crash, 0, sizeof(s_rtc_crash));
+            s_rtc_crash.magic = RTC_CRASH_MAGIC;
+        } else {
+            s_rtc_crash.twdt_triggered = 0;
+        }
+        rtc_crash_record_event(reason == ESP_RST_SW ? "boot_sw" : "boot_poweron");
+    }
+
+    esp_register_shutdown_handler(crash_diag_shutdown_handler);
 }
 
 static std::string s_current_firing_trigger_id = "";
@@ -747,19 +878,26 @@ bool is_match(const uint8_t* incoming_data, const EntityOption& option) {
     return true;
 }
 
-static inline bool evaluate_masked_byte(uint8_t actual_value, uint8_t target_value, uint8_t mask) {
-    // If mask is 0xF0:
-    // actual: 0x13 (0001 0011) & mask: 0xF0 (1111 0000) = 0x10 (0001 0000)
-    // target: 0x10 (0001 0000) & mask: 0xF0 (1111 0000) = 0x10 (0001 0000)
-    // They match, ignoring the changing lower nibble!
-    return (actual_value & mask) == (target_value & mask);
+static inline bool evaluate_masked_byte(uint8_t actual_value, uint8_t target_value, uint8_t mask,
+                                        ConditionOperator op = ConditionOperator::EQUAL) {
+    uint8_t actual_masked = actual_value & mask;
+    uint8_t target_masked = target_value & mask;
+    switch (op) {
+        case ConditionOperator::NOT_EQUAL:             return actual_masked != target_masked;
+        case ConditionOperator::LESS_THAN:             return actual_masked < target_masked;
+        case ConditionOperator::LESS_THAN_OR_EQUAL:    return actual_masked <= target_masked;
+        case ConditionOperator::GREATER_THAN:          return actual_masked > target_masked;
+        case ConditionOperator::GREATER_THAN_OR_EQUAL: return actual_masked >= target_masked;
+        case ConditionOperator::EQUAL:
+        default:                                       return actual_masked == target_masked;
+    }
 }
 
 static bool is_can_target_match(const uint8_t* incoming_data, const AutomationTrigger& trig) {
     if (trig.type == "byte_transition" && trig.byte_index >= 0 && trig.byte_index < 8) {
-        bool is_to = evaluate_masked_byte(incoming_data[trig.byte_index], trig.to_value, trig.byte_mask);
+        bool is_to = evaluate_masked_byte(incoming_data[trig.byte_index], trig.to_value, trig.byte_mask, trig.op);
         // Menu Up fallback alias: CAN ID 0x448, byte index 6 (D7)
-        if (!is_to && trig.can_id == 0x448 && trig.byte_index == 6 && (trig.to_value == 0x40 || trig.to_value == 0x02)) {
+        if (!is_to && trig.op == ConditionOperator::EQUAL && trig.can_id == 0x448 && trig.byte_index == 6 && (trig.to_value == 0x40 || trig.to_value == 0x02)) {
             uint8_t actual_nibble = incoming_data[6] & 0x0F;
             if (actual_nibble == 0x02 || actual_nibble == 0x04 || (incoming_data[6] & 0xF0) == 0x40) {
                 is_to = true;
@@ -794,8 +932,8 @@ static bool is_trigger_match(const uint8_t* incoming_data, const uint8_t* previo
             bool was_from = evaluate_masked_byte(previous_data[trig.byte_index], trig.from_value, trig.byte_mask);
             return was_from && is_to && ((previous_data[trig.byte_index] & trig.byte_mask) != (incoming_data[trig.byte_index] & trig.byte_mask));
         } else {
-            bool was_to = evaluate_masked_byte(previous_data[trig.byte_index], trig.to_value, trig.byte_mask);
-            if (was_to && trig.can_id == 0x448 && trig.byte_index == 6 && (trig.to_value == 0x40 || trig.to_value == 0x02)) {
+            bool was_to = evaluate_masked_byte(previous_data[trig.byte_index], trig.to_value, trig.byte_mask, trig.op);
+            if (was_to && trig.op == ConditionOperator::EQUAL && trig.can_id == 0x448 && trig.byte_index == 6 && (trig.to_value == 0x40 || trig.to_value == 0x02)) {
                 uint8_t prev_nibble = previous_data[6] & 0x0F;
                 was_to = (prev_nibble == 0x02 || prev_nibble == 0x04 || (previous_data[6] & 0xF0) == 0x40);
             }
@@ -806,7 +944,22 @@ static bool is_trigger_match(const uint8_t* incoming_data, const uint8_t* previo
     return is_can_target_match(incoming_data, trig);
 }
 
-static bool try_fire_rule_trigger(AutomationRule& rule, const AutomationTrigger& trig, uint32_t now_ms, const char* source_label) {
+struct FiredRuleEvent {
+    std::string rule_id;
+    std::string rule_name;
+    std::string trig_id;
+    const char* source_label;
+};
+
+static void dispatch_fired_rule_events(const std::vector<FiredRuleEvent>& events) {
+    for (const auto& ev : events) {
+        ESP_LOGI(TAG, "%s fired rule: %s (trigger: %s)", ev.source_label, ev.rule_name.c_str(), ev.trig_id.c_str());
+        broadcast_ws_automation_event(ev.rule_id, ev.rule_name);
+    }
+}
+
+static bool try_fire_rule_trigger(AutomationRule& rule, const AutomationTrigger& trig, uint32_t now_ms,
+                                  const char* source_label, std::vector<FiredRuleEvent>* fired_out = nullptr) {
     if (rule.last_exec_time_ms != 0 && (now_ms - rule.last_exec_time_ms < rule.cooldown_ms)) {
         return false;
     }
@@ -822,10 +975,11 @@ static bool try_fire_rule_trigger(AutomationRule& rule, const AutomationTrigger&
 
     if (!passed) return false;
 
-    ESP_LOGI(TAG, "%s fired rule: %s (trigger: %s)", source_label, rule.name.c_str(), trig.id.c_str());
     rule.last_exec_time_ms = now_ms;
-    broadcast_ws_automation_event(rule.id, rule.name);
     queue_action_steps_ptr(0, 20, &rule.actions, trig.id, rule.is_running);
+    if (fired_out) {
+        fired_out->push_back({rule.id, rule.name, trig.id, source_label});
+    }
     return true;
 }
 
@@ -1707,9 +1861,9 @@ void can_rx_task(void* arg) {
     ESP_LOGI(TAG, "CAN RX task running");
 
     esp_task_wdt_config_t twdt_cfg = {
-        .timeout_ms = 3000,
+        .timeout_ms = 5000,
         .idle_core_mask = (1 << 0),
-        .trigger_panic = false
+        .trigger_panic = true
     };
     if (esp_task_wdt_reconfigure(&twdt_cfg) != ESP_OK) {
         esp_task_wdt_init(&twdt_cfg);
@@ -1724,6 +1878,7 @@ void can_rx_task(void* arg) {
     const bool use_dual_can = dual_can_is_available(CAN_BUS_0) || dual_can_is_available(CAN_BUS_1);
     bool prefer_bus1 = false;
     uint32_t last_dual_can_health_ms = 0;
+    uint32_t last_diag_snapshot_ms = 0;
     int64_t burst_start_us = esp_timer_get_time();
 
     // Index automation CAN IDs and rebuild cleanly whenever automations hot-reload
@@ -1754,6 +1909,10 @@ void can_rx_task(void* arg) {
             continue;
         }
         uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+        if ((now_ms - last_diag_snapshot_ms) >= 1000) {
+            last_diag_snapshot_ms = now_ms;
+            rtc_crash_snapshot_stats();
+        }
 
         if (use_dual_can) {
             if (g_twai_reconfig_pending.load()) {
@@ -1962,7 +2121,7 @@ void can_rx_task(void* arg) {
 
         if (has_frame) {
             consecutive_rx_frames++;
-            if (consecutive_rx_frames >= 24 || (esp_timer_get_time() - burst_start_us) >= 10000) {
+            if (consecutive_rx_frames >= 64 || (esp_timer_get_time() - burst_start_us) >= 20000) {
                 vTaskDelay(1);
                 consecutive_rx_frames = 0;
                 burst_start_us = esp_timer_get_time();
@@ -2064,35 +2223,46 @@ void can_rx_task(void* arg) {
                     refresh_watched_auto_ids();
                 }
                 if (watched_auto_ids.find(rx_msg.identifier) != watched_auto_ids.end()) {
-                    std::lock_guard<std::mutex> lock(g_automations_mutex);
-                    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-                    for (auto& rule : global_automations) {
-                        if (!rule.enabled) continue;
+                    std::vector<FiredRuleEvent> fired_events;
+                    {
+                        std::lock_guard<std::mutex> lock(g_automations_mutex);
+                        uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+                        for (auto& rule : global_automations) {
+                            if (!rule.enabled) continue;
 
-                        for (const auto& cond : rule.conditions) {
-                            tick_sustained_condition_tree(cond, rx_msg.identifier);
-                        }
-                        tick_sustained_conditions_in_steps(rule.actions, rx_msg.identifier);
+                            for (const auto& cond : rule.conditions) {
+                                tick_sustained_condition_tree(cond, rx_msg.identifier);
+                            }
+                            tick_sustained_conditions_in_steps(rule.actions, rx_msg.identifier);
 
-                        const bool rule_running = (rule.is_running && rule.is_running->load());
+                            const bool rule_running = (rule.is_running && rule.is_running->load());
 
-                        for (const auto& trig : rule.triggers) {
-                            if ((trig.type == "can_rx" || trig.type == "byte_transition") && trig.can_id == rx_msg.identifier) {
-                                if (trig.for_ms > 0) {
-                                    update_sustained_trigger_state(trig, is_can_target_match(rx_msg.data, trig), now_ms);
-                                    continue;
-                                }
-                                if (rule_running) continue;
-                                if (is_trigger_match(rx_msg.data, has_prev ? prev_data : nullptr, trig)) {
-                                    try_fire_rule_trigger(rule, trig, now_ms, "CAN automation");
+                            for (const auto& trig : rule.triggers) {
+                                if ((trig.type == "can_rx" || trig.type == "byte_transition") && trig.can_id == rx_msg.identifier) {
+                                    if (trig.for_ms > 0) {
+                                        update_sustained_trigger_state(trig, is_can_target_match(rx_msg.data, trig), now_ms);
+                                        continue;
+                                    }
+                                    if (rule_running) continue;
+                                    if (is_trigger_match(rx_msg.data, has_prev ? prev_data : nullptr, trig)) {
+                                        try_fire_rule_trigger(rule, trig, now_ms, "CAN automation", &fired_events);
+                                    }
                                 }
                             }
                         }
                     }
+                    dispatch_fired_rule_events(fired_events);
                 }
             }
 
             // 3. Match against catalog entities for state updates (O(1) indexed lookup)
+            // Never call MQTT enqueue or WebSocket broadcast while holding g_catalog_mutex (avoids AB-BA lock inversion).
+            struct PendingEntityUpdate {
+                std::string id;
+                std::string mqtt_payload;
+                std::string ws_label;
+            };
+            std::vector<PendingEntityUpdate> pending_updates;
             {
                 std::lock_guard<std::mutex> lock(g_catalog_mutex);
                 auto cat_it = catalog_by_can_id.find(rx_msg.identifier);
@@ -2105,9 +2275,6 @@ void can_rx_task(void* arg) {
                             if (is_match(rx_msg.data, opt)) {
                                 if (entity.current_state != opt.label) {
                                     entity.current_state = opt.label;
-                                    ESP_LOGD(TAG, "State change: %s -> %s", entity.id.c_str(), opt.label.c_str());
-
-                                    // MQTT Publish
                                     std::string payload = opt.label;
                                     if (entity.ha_domain == "switch") {
                                         std::string l_lower = opt.label;
@@ -2118,16 +2285,18 @@ void can_rx_task(void* arg) {
                                             payload = "ON";
                                         }
                                     }
-                                    mqtt_mgr_publish_entity_state(entity.id, payload);
-
-                                    // WebSocket Broadcast
-                                    broadcast_ws_state(entity.id, opt.label);
+                                    pending_updates.push_back({entity.id, std::move(payload), opt.label});
                                 }
                                 break;
                             }
                         }
                     }
                 }
+            }
+            for (const auto& u : pending_updates) {
+                ESP_LOGD(TAG, "State change: %s -> %s", u.id.c_str(), u.ws_label.c_str());
+                mqtt_mgr_publish_entity_state(u.id, u.mqtt_payload);
+                broadcast_ws_state(u.id, u.ws_label);
             }
 
             // 4. Real-time Live Cockpit Telemetry Decoders
@@ -2883,46 +3052,50 @@ void time_scheduler_task(void* arg) {
 
         // 1. Evaluate sustained-duration conditions and triggers (works 100% offline before NTP sync)
         if (g_automations_enabled.load()) {
-            std::lock_guard<std::mutex> lock(g_automations_mutex);
-            for (auto& rule : global_automations) {
-                if (!rule.enabled) continue;
+            std::vector<FiredRuleEvent> fired_events;
+            {
+                std::lock_guard<std::mutex> lock(g_automations_mutex);
+                for (auto& rule : global_automations) {
+                    if (!rule.enabled) continue;
 
-                for (const auto& cond : rule.conditions) {
-                    tick_sustained_condition_tree(cond);
-                }
-                tick_sustained_conditions_in_steps(rule.actions);
-
-                if (rule.is_running && rule.is_running->load()) continue;
-
-                for (const auto& trig : rule.triggers) {
-                    if (trig.for_ms == 0 || !trig.sustained) continue;
-                    if (trig.type == "ble_button" || trig.type == "time_schedule") continue;
-
-                    bool now_true = evaluate_trigger_state_now(trig, now_ms);
-                    bool ready = false;
-                    {
-                        std::lock_guard<std::mutex> lk(trig.sustained->mtx);
-                        if (!now_true) {
-                            trig.sustained->active = false;
-                            trig.sustained->since_ms = 0;
-                            trig.sustained->fired = false;
-                        } else {
-                            if (!trig.sustained->active) {
-                                trig.sustained->active = true;
-                                trig.sustained->since_ms = now_ms;
-                                trig.sustained->fired = false;
-                            }
-                            ready = (!trig.sustained->fired && (now_ms - trig.sustained->since_ms >= trig.for_ms));
-                        }
+                    for (const auto& cond : rule.conditions) {
+                        tick_sustained_condition_tree(cond);
                     }
-                    if (ready && try_fire_rule_trigger(rule, trig, now_ms, "Sustained trigger")) {
-                        std::lock_guard<std::mutex> lk(trig.sustained->mtx);
-                        if (trig.sustained->active) {
-                            trig.sustained->fired = true;
+                    tick_sustained_conditions_in_steps(rule.actions);
+
+                    if (rule.is_running && rule.is_running->load()) continue;
+
+                    for (const auto& trig : rule.triggers) {
+                        if (trig.for_ms == 0 || !trig.sustained) continue;
+                        if (trig.type == "ble_button" || trig.type == "time_schedule") continue;
+
+                        bool now_true = evaluate_trigger_state_now(trig, now_ms);
+                        bool ready = false;
+                        {
+                            std::lock_guard<std::mutex> lk(trig.sustained->mtx);
+                            if (!now_true) {
+                                trig.sustained->active = false;
+                                trig.sustained->since_ms = 0;
+                                trig.sustained->fired = false;
+                            } else {
+                                if (!trig.sustained->active) {
+                                    trig.sustained->active = true;
+                                    trig.sustained->since_ms = now_ms;
+                                    trig.sustained->fired = false;
+                                }
+                                ready = (!trig.sustained->fired && (now_ms - trig.sustained->since_ms >= trig.for_ms));
+                            }
+                        }
+                        if (ready && try_fire_rule_trigger(rule, trig, now_ms, "Sustained trigger", &fired_events)) {
+                            std::lock_guard<std::mutex> lk(trig.sustained->mtx);
+                            if (trig.sustained->active) {
+                                trig.sustained->fired = true;
+                            }
                         }
                     }
                 }
             }
+            dispatch_fired_rule_events(fired_events);
         }
 
         // 2. Time-of-day schedules (requires synchronized clock)
@@ -2947,19 +3120,23 @@ void time_scheduler_task(void* arg) {
             continue;
         }
 
-        std::lock_guard<std::mutex> lock(g_automations_mutex);
-        for (auto& rule : global_automations) {
-            if (!rule.enabled) continue;
-            if (rule.is_running && rule.is_running->load()) continue;
+        std::vector<FiredRuleEvent> sched_fired;
+        {
+            std::lock_guard<std::mutex> lock(g_automations_mutex);
+            for (auto& rule : global_automations) {
+                if (!rule.enabled) continue;
+                if (rule.is_running && rule.is_running->load()) continue;
 
-            for (const auto& trig : rule.triggers) {
-                if (trig.type == "time_schedule") {
-                    if (trig.schedule_time_min == cur_min && (trig.weekdays_mask & (1 << cur_wday))) {
-                        try_fire_rule_trigger(rule, trig, now_ms, "Time schedule");
+                for (const auto& trig : rule.triggers) {
+                    if (trig.type == "time_schedule") {
+                        if (trig.schedule_time_min == cur_min && (trig.weekdays_mask & (1 << cur_wday))) {
+                            try_fire_rule_trigger(rule, trig, now_ms, "Time schedule", &sched_fired);
+                        }
                     }
                 }
             }
         }
+        dispatch_fired_rule_events(sched_fired);
     }
 }
 
@@ -2967,51 +3144,55 @@ void can_engine_on_device_event(const std::string& event_type, const std::string
     if (!g_automations_enabled.load()) return;
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
 
-    std::lock_guard<std::mutex> lock(g_automations_mutex);
-    for (auto& rule : global_automations) {
-        if (!rule.enabled) continue;
-        if (rule.is_running && rule.is_running->load()) continue;
+    std::vector<FiredRuleEvent> fired_events;
+    {
+        std::lock_guard<std::mutex> lock(g_automations_mutex);
+        for (auto& rule : global_automations) {
+            if (!rule.enabled) continue;
+            if (rule.is_running && rule.is_running->load()) continue;
 
-        for (const auto& trig : rule.triggers) {
-            if (trig.type == "wifi" || trig.type == "wifi_event" || trig.type == "device_event") {
-                if (trig.for_ms > 0) continue; // Handled by sustained scheduler
+            for (const auto& trig : rule.triggers) {
+                if (trig.type == "wifi" || trig.type == "wifi_event" || trig.type == "device_event") {
+                    if (trig.for_ms > 0) continue; // Handled by sustained scheduler
 
-                bool event_match = false;
-                if (trig.wifi_event == event_type) {
-                    event_match = true;
-                } else if (event_type == "wifi_connected" && (trig.wifi_event == "connected" || trig.wifi_event == "sta_connected")) {
-                    event_match = true;
-                } else if (event_type == "wifi_disconnected" && (trig.wifi_event == "disconnected" || trig.wifi_event == "sta_disconnected")) {
-                    event_match = true;
-                }
-
-                if (!event_match) continue;
-
-                // Match SSID if specified
-                if (!trig.ssid.empty() && (event_type == "wifi_connected" || event_type == "wifi_disconnected")) {
-                    if (strcasecmp(trig.ssid.c_str(), detail_str.c_str()) != 0) {
-                        continue;
+                    bool event_match = false;
+                    if (trig.wifi_event == event_type) {
+                        event_match = true;
+                    } else if (event_type == "wifi_connected" && (trig.wifi_event == "connected" || trig.wifi_event == "sta_connected")) {
+                        event_match = true;
+                    } else if (event_type == "wifi_disconnected" && (trig.wifi_event == "disconnected" || trig.wifi_event == "sta_disconnected")) {
+                        event_match = true;
                     }
-                }
 
-                // Match client MAC if specified
-                if (!trig.client_mac.empty() && (event_type == "ap_client_connected" || event_type == "ap_client_disconnected")) {
-                    if (!mac_matches(trig.client_mac, detail_str)) {
-                        continue;
+                    if (!event_match) continue;
+
+                    // Match SSID if specified
+                    if (!trig.ssid.empty() && (event_type == "wifi_connected" || event_type == "wifi_disconnected")) {
+                        if (strcasecmp(trig.ssid.c_str(), detail_str.c_str()) != 0) {
+                            continue;
+                        }
                     }
-                }
 
-                // Match target RSSI if specified
-                if (trig.target_rssi != 0 && (event_type == "ap_client_connected" || event_type == "wifi_connected")) {
-                    if (rssi < trig.target_rssi) {
-                        continue;
+                    // Match client MAC if specified
+                    if (!trig.client_mac.empty() && (event_type == "ap_client_connected" || event_type == "ap_client_disconnected")) {
+                        if (!mac_matches(trig.client_mac, detail_str)) {
+                            continue;
+                        }
                     }
-                }
 
-                try_fire_rule_trigger(rule, trig, now_ms, "Device/Wi-Fi event");
+                    // Match target RSSI if specified
+                    if (trig.target_rssi != 0 && (event_type == "ap_client_connected" || event_type == "wifi_connected")) {
+                        if (rssi < trig.target_rssi) {
+                            continue;
+                        }
+                    }
+
+                    try_fire_rule_trigger(rule, trig, now_ms, "Device/Wi-Fi event", &fired_events);
+                }
             }
         }
     }
+    dispatch_fired_rule_events(fired_events);
 }
 
 void can_engine_set_ble_learn_mode(bool active, uint32_t duration_ms) {
@@ -3054,6 +3235,7 @@ void can_engine_on_ble_event(const std::string& address, const std::string& butt
 
     const bool is_hold_tick = (action == "hold" || action.rfind("hold_", 0) == 0);
     bool should_beep = false;
+    std::vector<FiredRuleEvent> fired_events;
 
     {
         std::lock_guard<std::mutex> lock(g_automations_mutex);
@@ -3092,33 +3274,13 @@ void can_engine_on_ble_event(const std::string& address, const std::string& butt
                         }
                     }
 
-                    // Check rule cooldown
-                    if (rule.last_exec_time_ms != 0 && (now_ms - rule.last_exec_time_ms < rule.cooldown_ms)) {
-                        continue;
-                    }
-
-                    // Evaluate conditions
-                    s_current_firing_trigger_id = trig.id;
-                    bool passed = true;
-                    for (const auto& cond : rule.conditions) {
-                        if (!evaluate_condition(cond)) {
-                            passed = false;
-                            break;
-                        }
-                    }
-
-                    if (passed) {
-                        ESP_LOGI(TAG, "BLE event triggered automation: %s (trigger: %s, button: %s, action: %s)",
-                                 rule.name.c_str(), trig.id.c_str(), button.c_str(), action.c_str());
-                        rule.last_exec_time_ms = now_ms;
-                        broadcast_ws_automation_event(rule.id, rule.name);
-                        queue_action_steps_ptr(0, 20, &rule.actions, trig.id, rule.is_running);
-                    }
+                    try_fire_rule_trigger(rule, trig, now_ms, "BLE button event", &fired_events);
                 }
             }
         }
     }
 
+    dispatch_fired_rule_events(fired_events);
     if (should_beep) {
         beep_play(1);
     }
@@ -3141,75 +3303,58 @@ void can_engine_on_ble_device_event(const std::string& address, const std::strin
 
     if (!g_automations_enabled.load()) return;
 
-    std::lock_guard<std::mutex> lock(g_automations_mutex);
-    for (auto& rule : global_automations) {
-        if (!rule.enabled) continue;
-        if (rule.is_running && rule.is_running->load()) continue;
+    std::vector<FiredRuleEvent> fired_events;
+    {
+        std::lock_guard<std::mutex> lock(g_automations_mutex);
+        for (auto& rule : global_automations) {
+            if (!rule.enabled) continue;
+            if (rule.is_running && rule.is_running->load()) continue;
 
-        for (const auto& trig : rule.triggers) {
-            if (trig.type == "ble_device_event" || trig.type == "ble_device" || trig.type == "ble_presence") {
-                if (trig.for_ms > 0) continue; // Handled by sustained scheduler
-                // Match event: "connected", "disconnected", "proximity", "present", "away", "any"
-                if (!trig.ble_event.empty() && trig.ble_event != "any") {
-                    bool event_matched = false;
-                    if (strcasecmp(trig.ble_event.c_str(), event.c_str()) == 0) {
-                        event_matched = true;
-                    } else if (strcasecmp(trig.ble_event.c_str(), "present") == 0) {
-                        if (event == "connected" || event == "proximity" || event == "present" || event == "enter") event_matched = true;
-                    } else if (strcasecmp(trig.ble_event.c_str(), "away") == 0) {
-                        if (event == "disconnected" || event == "away" || event == "exit") event_matched = true;
-                    } else if (strcasecmp(trig.ble_event.c_str(), "connected") == 0) {
-                        if (event == "present") event_matched = true;
-                    } else if (strcasecmp(trig.ble_event.c_str(), "disconnected") == 0) {
-                        if (event == "away") event_matched = true;
+            for (const auto& trig : rule.triggers) {
+                if (trig.type == "ble_device_event" || trig.type == "ble_device" || trig.type == "ble_presence") {
+                    if (trig.for_ms > 0) continue; // Handled by sustained scheduler
+                    // Match event: "connected", "disconnected", "proximity", "present", "away", "any"
+                    if (!trig.ble_event.empty() && trig.ble_event != "any") {
+                        bool event_matched = false;
+                        if (strcasecmp(trig.ble_event.c_str(), event.c_str()) == 0) {
+                            event_matched = true;
+                        } else if (strcasecmp(trig.ble_event.c_str(), "present") == 0) {
+                            if (event == "connected" || event == "proximity" || event == "present" || event == "enter") event_matched = true;
+                        } else if (strcasecmp(trig.ble_event.c_str(), "away") == 0) {
+                            if (event == "disconnected" || event == "away" || event == "exit") event_matched = true;
+                        } else if (strcasecmp(trig.ble_event.c_str(), "connected") == 0) {
+                            if (event == "present") event_matched = true;
+                        } else if (strcasecmp(trig.ble_event.c_str(), "disconnected") == 0) {
+                            if (event == "away") event_matched = true;
+                        }
+                        if (!event_matched) {
+                            continue;
+                        }
                     }
-                    if (!event_matched) {
-                        continue;
+
+                    // Match device MAC if specified
+                    if (!trig.ble_device.empty()) {
+                        if (!mac_matches(trig.ble_device, address) && strcasecmp(trig.ble_device.c_str(), name.c_str()) != 0) {
+                            continue;
+                        }
                     }
-                }
 
-                // Match device MAC if specified
-                if (!trig.ble_device.empty()) {
-                    if (!mac_matches(trig.ble_device, address) && strcasecmp(trig.ble_device.c_str(), name.c_str()) != 0) {
-                        continue;
+                    // Match target RSSI if specified (only for present/connected/proximity, NOT for away/disconnected)
+                    bool is_away = (event == "disconnected" || event == "away" ||
+                                   strcasecmp(trig.ble_event.c_str(), "disconnected") == 0 ||
+                                   strcasecmp(trig.ble_event.c_str(), "away") == 0);
+                    if (!is_away && trig.target_rssi != 0) {
+                        if (rssi < trig.target_rssi) {
+                            continue;
+                        }
                     }
-                }
 
-                // Match target RSSI if specified (only for present/connected/proximity, NOT for away/disconnected)
-                bool is_away = (event == "disconnected" || event == "away" || 
-                               strcasecmp(trig.ble_event.c_str(), "disconnected") == 0 || 
-                               strcasecmp(trig.ble_event.c_str(), "away") == 0);
-                if (!is_away && trig.target_rssi != 0) {
-                    if (rssi < trig.target_rssi) {
-                        continue;
-                    }
-                }
-
-                // Check rule cooldown
-                if (rule.last_exec_time_ms != 0 && (now_ms - rule.last_exec_time_ms < rule.cooldown_ms)) {
-                    continue;
-                }
-
-                // Evaluate conditions
-                s_current_firing_trigger_id = trig.id;
-                bool passed = true;
-                for (const auto& cond : rule.conditions) {
-                    if (!evaluate_condition(cond)) {
-                        passed = false;
-                        break;
-                    }
-                }
-
-                if (passed) {
-                    ESP_LOGI(TAG, "BLE device event triggered automation: %s (trigger: %s, event: %s, mac: %s)",
-                             rule.name.c_str(), trig.id.c_str(), event.c_str(), address.c_str());
-                    rule.last_exec_time_ms = now_ms;
-                    broadcast_ws_automation_event(rule.id, rule.name);
-                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id, rule.is_running);
+                    try_fire_rule_trigger(rule, trig, now_ms, "BLE device event", &fired_events);
                 }
             }
         }
     }
+    dispatch_fired_rule_events(fired_events);
 }
 
 void can_engine_on_ble_beacon_event(const std::string& uuid, const std::string& event, int8_t rssi, uint16_t major, uint16_t minor, const std::string& mac, const std::string& name) {
@@ -3240,78 +3385,61 @@ void can_engine_on_ble_beacon_event(const std::string& uuid, const std::string& 
 
     if (!g_automations_enabled.load()) return;
 
-    std::lock_guard<std::mutex> lock(g_automations_mutex);
-    for (auto& rule : global_automations) {
-        if (!rule.enabled) continue;
-        if (rule.is_running && rule.is_running->load()) continue;
+    std::vector<FiredRuleEvent> fired_events;
+    {
+        std::lock_guard<std::mutex> lock(g_automations_mutex);
+        for (auto& rule : global_automations) {
+            if (!rule.enabled) continue;
+            if (rule.is_running && rule.is_running->load()) continue;
 
-        for (const auto& trig : rule.triggers) {
-            if (trig.type == "ble_beacon" || trig.type == "beacon" || trig.type == "ble_presence") {
-                if (trig.for_ms > 0) continue; // Handled by sustained scheduler
-                // Match event: "enter", "exit", "proximity", "present", "away", "any"
-                if (!trig.ble_event.empty() && trig.ble_event != "any") {
-                    bool event_matched = false;
-                    if (strcasecmp(trig.ble_event.c_str(), event.c_str()) == 0) {
-                        event_matched = true;
-                    } else if (strcasecmp(trig.ble_event.c_str(), "present") == 0) {
-                        if (event == "enter" || event == "proximity" || event == "present") event_matched = true;
-                    } else if (strcasecmp(trig.ble_event.c_str(), "away") == 0) {
-                        if (event == "exit" || event == "away") event_matched = true;
-                    } else if (strcasecmp(trig.ble_event.c_str(), "enter") == 0) {
-                        if (event == "present") event_matched = true;
-                    } else if (strcasecmp(trig.ble_event.c_str(), "exit") == 0) {
-                        if (event == "away") event_matched = true;
+            for (const auto& trig : rule.triggers) {
+                if (trig.type == "ble_beacon" || trig.type == "beacon" || trig.type == "ble_presence") {
+                    if (trig.for_ms > 0) continue; // Handled by sustained scheduler
+                    // Match event: "enter", "exit", "proximity", "present", "away", "any"
+                    if (!trig.ble_event.empty() && trig.ble_event != "any") {
+                        bool event_matched = false;
+                        if (strcasecmp(trig.ble_event.c_str(), event.c_str()) == 0) {
+                            event_matched = true;
+                        } else if (strcasecmp(trig.ble_event.c_str(), "present") == 0) {
+                            if (event == "enter" || event == "proximity" || event == "present") event_matched = true;
+                        } else if (strcasecmp(trig.ble_event.c_str(), "away") == 0) {
+                            if (event == "exit" || event == "away") event_matched = true;
+                        } else if (strcasecmp(trig.ble_event.c_str(), "enter") == 0) {
+                            if (event == "present") event_matched = true;
+                        } else if (strcasecmp(trig.ble_event.c_str(), "exit") == 0) {
+                            if (event == "away") event_matched = true;
+                        }
+                        if (!event_matched) {
+                            continue;
+                        }
                     }
-                    if (!event_matched) {
-                        continue;
+
+                    // Match UUID / MAC / Name if specified
+                    const std::string& target_filter = !trig.beacon_uuid.empty() ? trig.beacon_uuid : (!trig.ble_device.empty() ? trig.ble_device : trig.client_mac);
+                    if (!target_filter.empty()) {
+                        bool match = false;
+                        if (!uuid.empty() && strcasestr(uuid.c_str(), target_filter.c_str()) != nullptr) match = true;
+                        if (!mac.empty() && mac_matches(target_filter, mac)) match = true;
+                        if (!name.empty() && strcasecmp(target_filter.c_str(), name.c_str()) == 0) match = true;
+                        if (!match) continue;
                     }
-                }
 
-                // Match UUID / MAC / Name if specified
-                const std::string& target_filter = !trig.beacon_uuid.empty() ? trig.beacon_uuid : (!trig.ble_device.empty() ? trig.ble_device : trig.client_mac);
-                if (!target_filter.empty()) {
-                    bool match = false;
-                    if (!uuid.empty() && strcasestr(uuid.c_str(), target_filter.c_str()) != nullptr) match = true;
-                    if (!mac.empty() && mac_matches(target_filter, mac)) match = true;
-                    if (!name.empty() && strcasecmp(target_filter.c_str(), name.c_str()) == 0) match = true;
-                    if (!match) continue;
-                }
-
-                // Match target RSSI if specified (only for enter/present/proximity, NOT for exit/away!)
-                bool is_away = (event == "exit" || event == "away" || 
-                               strcasecmp(trig.ble_event.c_str(), "exit") == 0 || 
-                               strcasecmp(trig.ble_event.c_str(), "away") == 0);
-                if (!is_away && trig.target_rssi != 0) {
-                    if (rssi < trig.target_rssi) {
-                        continue;
+                    // Match target RSSI if specified (only for enter/present/proximity, NOT for exit/away!)
+                    bool is_away = (event == "exit" || event == "away" ||
+                                   strcasecmp(trig.ble_event.c_str(), "exit") == 0 ||
+                                   strcasecmp(trig.ble_event.c_str(), "away") == 0);
+                    if (!is_away && trig.target_rssi != 0) {
+                        if (rssi < trig.target_rssi) {
+                            continue;
+                        }
                     }
-                }
 
-                // Check rule cooldown
-                if (rule.last_exec_time_ms != 0 && (now_ms - rule.last_exec_time_ms < rule.cooldown_ms)) {
-                    continue;
-                }
-
-                // Evaluate conditions
-                s_current_firing_trigger_id = trig.id;
-                bool passed = true;
-                for (const auto& cond : rule.conditions) {
-                    if (!evaluate_condition(cond)) {
-                        passed = false;
-                        break;
-                    }
-                }
-
-                if (passed) {
-                    ESP_LOGI(TAG, "BLE beacon event triggered automation: %s (trigger: %s, event: %s, uuid: %s, rssi: %d)",
-                             rule.name.c_str(), trig.id.c_str(), event.c_str(), uuid.c_str(), rssi);
-                    rule.last_exec_time_ms = now_ms;
-                    broadcast_ws_automation_event(rule.id, rule.name);
-                    queue_action_steps_ptr(0, 20, &rule.actions, trig.id, rule.is_running);
+                    try_fire_rule_trigger(rule, trig, now_ms, "BLE beacon event", &fired_events);
                 }
             }
         }
     }
+    dispatch_fired_rule_events(fired_events);
 }
 
 

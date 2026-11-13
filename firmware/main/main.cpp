@@ -4,7 +4,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "cJSON.h"
 #include "nvs_flash.h"
 #include "driver/twai.h"
 #include "esp_littlefs.h"
@@ -152,7 +154,20 @@ static void app_ip_event_handler(void* arg, esp_event_base_t event_base, int32_t
     }
 }
 
+#if CONFIG_SPIRAM
+static void* psram_cjson_malloc(size_t sz) {
+    return heap_caps_malloc_prefer(sz, 2, MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+}
+#endif
+
 extern "C" void app_main(void) {
+#if CONFIG_SPIRAM
+    cJSON_Hooks cjson_hooks = {
+        .malloc_fn = psram_cjson_malloc,
+        .free_fn = free
+    };
+    cJSON_InitHooks(&cjson_hooks);
+#endif
     // 0. Initialize WiCAN board hardware (CAN Transceiver STB pin and LEDs)
     board_hardware_init();
     vbat_sensor_init();
@@ -175,8 +190,9 @@ extern "C" void app_main(void) {
     }
     ESP_ERROR_CHECK(ret);
 
-    // 3. Mount LittleFS and initialize system timezone
+    // 3. Mount LittleFS, check/persist crash diagnostics, and initialize system timezone
     init_fs();
+    init_crash_diagnostics();
     timezone_mgr_init();
     mqtt_mgr_init();
 
@@ -204,9 +220,13 @@ extern "C" void app_main(void) {
 
     // 8. Init TWAI / Dual-CAN Hardware and launch RX/TX tasks immediately to prevent boot RX overflow
     ESP_ERROR_CHECK(init_twai());
-    xTaskCreate(can_rx_task, "CAN_RX", 8192, nullptr, 4, nullptr);
+    xTaskCreate(can_rx_task, "CAN_RX", 8192, nullptr, 5, nullptr);
     xTaskCreate(can_tx_task, "CAN_TX", 4096, nullptr, 4, nullptr);
     xTaskCreate(time_scheduler_task, "TIME_SCHED", 4096, nullptr, 3, nullptr);
+#if CONFIG_IDF_TARGET_ESP32S3
+    dual_can_clear_boot_overflows();
+#endif
+    rtc_crash_record_event("boot_complete");
 
     ESP_LOGI(TAG, "Hardware & Network Initialization complete. Free heap: %lu bytes",
              (unsigned long)esp_get_free_heap_size());

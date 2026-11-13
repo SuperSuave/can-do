@@ -224,6 +224,7 @@ typedef struct {
 typedef struct {
     track_popup_request_t request;
     uint8_t trigger_frames_remaining;
+    uint8_t trigger_media_type;
     bool strategy_selected;
     int64_t requested_at_us;
     int64_t trigger_forwarded_at_us;
@@ -392,24 +393,38 @@ static void trigger_enter(sm_t *sm) {
     }
 
     uint8_t mtype = service->media_type_owned ? TRACK_POPUP_FALLBACK_MEDIA_TYPE : s_last_media_type;
+    trigger_ctx.trigger_media_type = mtype;
 
-    // Actively transmit 0x4CE trigger frames to wake cluster track popup
+    // Actively transmit 1st 0x4CE trigger frame immediately; remaining frames send on subsequent ticks
     twai_message_t inj = {
         .identifier = TRACK_POPUP_MEDIA_FRAME_ID,
         .data_length_code = 8,
         .data = { mtype, 0x11U, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
     };
-    for (uint8_t i = 0; i < TRACK_POPUP_TRIGGER_FRAME_COUNT; i++) {
-        can_send(TRACK_POPUP_TARGET_BUS, &inj, pdMS_TO_TICKS(10));
-        vTaskDelay(pdMS_TO_TICKS(10));
+    can_send(TRACK_POPUP_TARGET_BUS, &inj, 1);
+    trigger_ctx.trigger_frames_remaining =
+        (TRACK_POPUP_TRIGGER_FRAME_COUNT > 0U) ? (TRACK_POPUP_TRIGGER_FRAME_COUNT - 1U) : 0U;
+    if (trigger_ctx.trigger_frames_remaining == 0U) {
+        trigger_ctx.trigger_forwarded_at_us = sm_now(sm);
     }
-    trigger_ctx.trigger_frames_remaining = 0U;
-    trigger_ctx.trigger_forwarded_at_us = sm_now(sm);
     ESP_LOGI(TAG, "Sent 0x4CE trigger injection (media=0x%02X)", mtype);
 }
 
 static void trigger_tick(sm_t *sm) {
     track_popup_t *service = owner(sm);
+    if (trigger_ctx.trigger_frames_remaining > 0U) {
+        twai_message_t inj = {
+            .identifier = TRACK_POPUP_MEDIA_FRAME_ID,
+            .data_length_code = 8,
+            .data = { trigger_ctx.trigger_media_type, 0x11U, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
+        };
+        can_send(TRACK_POPUP_TARGET_BUS, &inj, 1);
+        trigger_ctx.trigger_frames_remaining--;
+        if (trigger_ctx.trigger_frames_remaining == 0U) {
+            trigger_ctx.trigger_forwarded_at_us = sm_now(sm);
+        }
+        return;
+    }
     if (trigger_ctx.strategy_selected
             && trigger_ctx.trigger_frames_remaining == 0U
             && sm_now(sm) - trigger_ctx.trigger_forwarded_at_us

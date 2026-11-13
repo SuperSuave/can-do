@@ -19,6 +19,7 @@
 #include "esp_ota_ops.h"
 #include "esp_app_desc.h"
 #include "esp_system.h"
+#include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
@@ -883,6 +884,7 @@ static esp_err_t api_file_upload_handler(httpd_req_t *req) {
 
 static esp_err_t api_ota_handler(httpd_req_t *req) {
     set_cors_headers(req);
+    rtc_crash_record_event("ota_start");
     esp_ota_handle_t update_handle = 0;
     const esp_partition_t *update_partition = esp_ota_get_next_update_partition(nullptr);
     if (!update_partition) {
@@ -966,6 +968,7 @@ static void cloud_ota_task(void *pvParameter) {
     g_ota_state.bytes_read = 0;
     g_ota_state.success = false;
     g_ota_state.error_msg[0] = '\0';
+    rtc_crash_record_event("cloud_ota_start");
 
     ESP_LOGI(TAG, "Starting Direct Cloud OTA Pull from: %s", download_url.c_str());
     broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] Connecting to Cloud Release Asset...\"}");
@@ -1396,6 +1399,9 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
 
     // Free heap and uptime
     cJSON_AddNumberToObject(root, "free_heap", esp_get_free_heap_size());
+    cJSON_AddNumberToObject(root, "min_free_heap", esp_get_minimum_free_heap_size());
+    cJSON_AddNumberToObject(root, "internal_free_heap",
+                            (double)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     cJSON_AddNumberToObject(root, "uptime_sec", (uint32_t)(esp_timer_get_time() / 1000000ULL));
 
     // Device system time & NTP synchronization status
@@ -1491,7 +1497,7 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
     cJSON_AddStringToObject(root, "reset_reason", reason_str);
 
     const RtcCrashInfo* crash = get_rtc_crash_info();
-    if (crash && crash->magic == 0xDEADBEEF) {
+    if (crash && crash->magic == RTC_CRASH_MAGIC) {
         cJSON *cj_crash = cJSON_CreateObject();
         char id_str[16];
         snprintf(id_str, sizeof(id_str), "0x%03lX", (unsigned long)crash->can_id);
@@ -1505,7 +1511,31 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
         cJSON_AddStringToObject(cj_crash, "data", hex);
         cJSON_AddNumberToObject(cj_crash, "step_marker", crash->step_marker);
         cJSON_AddStringToObject(cj_crash, "last_decoder", crash->last_decoder);
+        cJSON_AddNumberToObject(cj_crash, "uptime_sec", crash->uptime_sec);
+        cJSON_AddNumberToObject(cj_crash, "free_heap", crash->free_heap);
+        cJSON_AddNumberToObject(cj_crash, "min_free_heap", crash->min_free_heap);
+        cJSON_AddNumberToObject(cj_crash, "internal_free_heap", crash->internal_free_heap);
+        cJSON_AddNumberToObject(cj_crash, "can0_rx_overflow", crash->can0_rx_overflow);
+        cJSON_AddNumberToObject(cj_crash, "can1_rx_overflow", crash->can1_rx_overflow);
+        cJSON_AddBoolToObject(cj_crash, "twdt_triggered", crash->twdt_triggered != 0);
+        cJSON_AddNumberToObject(cj_crash, "last_abnormal_reset_reason", crash->last_abnormal_reset_reason);
+        cJSON_AddStringToObject(cj_crash, "cpu0_task", crash->cpu0_task);
+        cJSON_AddStringToObject(cj_crash, "cpu1_task", crash->cpu1_task);
+        cJSON_AddStringToObject(cj_crash, "last_event", crash->last_event);
         cJSON_AddItemToObject(root, "last_crash", cj_crash);
+    }
+
+    FILE* diag_f = fopen("/spiffs/crash_diag.json", "r");
+    if (diag_f) {
+        char diag_buf[1024] = {0};
+        size_t n = fread(diag_buf, 1, sizeof(diag_buf) - 1, diag_f);
+        fclose(diag_f);
+        if (n > 0) {
+            cJSON* cj_persisted = cJSON_Parse(diag_buf);
+            if (cj_persisted) {
+                cJSON_AddItemToObject(root, "persisted_crash", cj_persisted);
+            }
+        }
     }
 
     char *json_str = cJSON_PrintUnformatted(root);

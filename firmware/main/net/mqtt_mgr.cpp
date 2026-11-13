@@ -14,6 +14,7 @@
 #include "esp_timer.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <freertos/queue.h>
 #include <sys/unistd.h>
 #include <sys/stat.h>
 
@@ -36,6 +37,23 @@ static std::atomic<bool> s_auto_reload_pending{false};
 static std::atomic<bool> s_auto_parse_tmp_pending{false};
 static std::unordered_set<std::string> s_exposed_auto_ids;
 static std::string s_lwt_topic;
+
+struct MqttSetCmd {
+    char entity_id[64];
+    char payload[384];
+};
+static QueueHandle_t s_mqtt_cmd_queue = nullptr;
+
+static void mqtt_cmd_worker_task(void* arg) {
+    (void)arg;
+    MqttSetCmd cmd;
+    while (true) {
+        if (xQueueReceive(s_mqtt_cmd_queue, &cmd, portMAX_DELAY) == pdTRUE) {
+            rtc_crash_record_event("mqtt_set_cmd");
+            queue_entity_command(cmd.entity_id, cmd.payload);
+        }
+    }
+}
 
 static FILE* s_automations_tmp_file = nullptr;
 static bool s_receiving_automations = false;
@@ -312,6 +330,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             );
 
             // 2. Mark connected after subscribe finishes and publish LWT online status
+            rtc_crash_record_event("mqtt_connected");
             s_mqtt_connected.store(true, std::memory_order_relaxed);
             std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/status";
             mqtt_enqueue_nonblocking(status_topic.c_str(), "online", 6, 0, 1);
@@ -368,7 +387,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             std::string payload(event->data, event->data_len);
 
             if (topic == config_get_topic || topic == (MQTT_BASE_TOPIC + "/config/automations/get")) {
-                publish_automations_json_state();
+                s_auto_reload_pending.store(true);
+                mqtt_mgr_on_automations_reloaded();
                 return;
             }
 
@@ -572,7 +592,16 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             } else if (is_set_cmd) {
                 size_t set_pos = topic.find("/set/");
                 std::string entity_id = topic.substr(set_pos + 5);
-                queue_entity_command(entity_id, payload);
+                if (s_mqtt_cmd_queue) {
+                    MqttSetCmd cmd = {};
+                    strncpy(cmd.entity_id, entity_id.c_str(), sizeof(cmd.entity_id) - 1);
+                    strncpy(cmd.payload, payload.c_str(), sizeof(cmd.payload) - 1);
+                    if (xQueueSend(s_mqtt_cmd_queue, &cmd, 0) != pdTRUE) {
+                        ESP_LOGW(TAG, "MQTT cmd queue full, dropping /set/%s", cmd.entity_id);
+                    }
+                } else {
+                    ESP_LOGW(TAG, "MQTT cmd queue not initialized");
+                }
             }
             break;
         }
@@ -649,6 +678,12 @@ static void load_settings_from_fs(void) {
 
 void mqtt_mgr_init(void) {
     load_settings_from_fs();
+    if (!s_mqtt_cmd_queue) {
+        s_mqtt_cmd_queue = xQueueCreate(16, sizeof(MqttSetCmd));
+        if (s_mqtt_cmd_queue) {
+            xTaskCreate(mqtt_cmd_worker_task, "mqtt_cmd", 4096, nullptr, 4, nullptr);
+        }
+    }
 }
 
 void mqtt_mgr_start(void) {
@@ -818,6 +853,7 @@ static void refresh_automation_discovery_locked_check(void) {
 
 static void mqtt_auto_reload_task(void* arg) {
     while (s_auto_reload_pending.exchange(false)) {
+        rtc_crash_record_event("auto_reload");
         if (s_auto_parse_tmp_pending.exchange(false)) {
             std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/status";
             bool valid = false;

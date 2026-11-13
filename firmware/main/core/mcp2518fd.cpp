@@ -64,6 +64,18 @@ static esp_err_t mcp2518fd_write_32(mcp2518fd_t *dev, uint16_t reg, uint32_t val
     return spi_device_polling_transmit(dev->spi, &t);
 }
 
+static esp_err_t mcp2518fd_write_byte(mcp2518fd_t *dev, uint16_t addr, uint8_t val) {
+    uint8_t tx[3] = {
+        (uint8_t)((MCP2518FD_CMD_WRITE << 4) | ((addr >> 8) & 0x0F)),
+        (uint8_t)(addr & 0xFF),
+        val
+    };
+    spi_transaction_t t = {};
+    t.length = 24;
+    t.tx_buffer = tx;
+    return spi_device_polling_transmit(dev->spi, &t);
+}
+
 static esp_err_t mcp2518fd_read_bytes(mcp2518fd_t *dev, uint16_t reg, uint8_t *data, size_t len) {
     if (len == 0 || !data) return ESP_ERR_INVALID_ARG;
     uint8_t tx[80] = {0};
@@ -151,6 +163,7 @@ esp_err_t mcp2518fd_init(mcp2518fd_t *dev, const mcp2518fd_config_t *config) {
     dev->config = *config;
     dev->spi = existing_spi;
     dev->mutex = existing_mutex ? existing_mutex : xSemaphoreCreateMutex();
+    dev->last_rx_empty = false;
 
     // Configure INT GPIO (Active LOW)
     if (config->int_pin >= 0) {
@@ -270,8 +283,8 @@ esp_err_t mcp2518fd_init(mcp2518fd_t *dev, const mcp2518fd_config_t *config) {
     uint32_t fifocon1 = (plsize << 29) | (tx_fsize << 24) | (1 << 21) | (1 << 7);
     mcp2518fd_write_32(dev, MCP2518FD_REG_CiFIFOCON(1), fifocon1);
 
-    // FIFO 2: RX FIFO, RX Not Empty IRQ enable (TFNRFNIE=1)
-    uint32_t fifocon2 = (plsize << 29) | (rx_fsize << 24) | (1 << 0);
+    // FIFO 2: RX FIFO, RX Overflow IRQ (RXOVIE=1) + RX Not Empty IRQ enable (TFNRFNIE=1)
+    uint32_t fifocon2 = (plsize << 29) | (rx_fsize << 24) | (1 << 3) | (1 << 0);
     mcp2518fd_write_32(dev, MCP2518FD_REG_CiFIFOCON(2), fifocon2);
     dev->rx_fifocon_cached = fifocon2;
 
@@ -282,9 +295,14 @@ esp_err_t mcp2518fd_init(mcp2518fd_t *dev, const mcp2518fd_config_t *config) {
     mcp2518fd_write_32(dev, MCP2518FD_REG_CiFLTOBJ(0), 0x00000000);
     mcp2518fd_write_32(dev, MCP2518FD_REG_CiMASK(0), 0x00000000); // 0 mask (MIDE=0) matches all std & ext
 
-    // 8. Enable RX FIFO Interrupt (RXIE = BIT(17) in CiINT) so hardware nINT pin asserts LOW on RX
-    // Leave IOCON at reset default (push-pull active-low nINT) to avoid multi-byte IOCON errata.
-    mcp2518fd_write_32(dev, MCP2518FD_REG_CiINT, (1 << 17));
+    // 8. Configure IOCON so nINT, INT0, INT1 operate as active-low push-pull interrupt outputs,
+    // then enable RX FIFO Interrupt (RXIE = BIT(17)) and Overflow Interrupt (RXOVIE = BIT(27)).
+    uint32_t iocon = 0;
+    if (mcp2518fd_read_32(dev, MCP2518FD_REG_IOCON, &iocon) == ESP_OK) {
+        iocon &= ~((1U << 24) | (1U << 25) | (1U << 30));
+        mcp2518fd_write_32(dev, MCP2518FD_REG_IOCON, iocon);
+    }
+    mcp2518fd_write_32(dev, MCP2518FD_REG_CiINT, (1U << 17) | (1U << 27));
 
     // 9. Transition to Operational Mode
     mcp2518fd_mode_t target_mode;
@@ -434,6 +452,10 @@ esp_err_t mcp2518fd_receive(mcp2518fd_t *dev, can_fd_frame_t *frame, TickType_t 
 
     uint32_t fifosta = (uint32_t)sta_ua[0] | ((uint32_t)sta_ua[1] << 8) | ((uint32_t)sta_ua[2] << 16) | ((uint32_t)sta_ua[3] << 24);
     if (!(fifosta & 0x01)) {
+        if (fifosta & (1 << 3)) {
+            mcp2518fd_write_byte(dev, MCP2518FD_REG_CiFIFOSTA(2), 0x00);
+        }
+        dev->last_rx_empty = true;
         xSemaphoreGive(dev->mutex);
         return ESP_ERR_NOT_FOUND;
     }
@@ -477,19 +499,15 @@ esp_err_t mcp2518fd_receive(mcp2518fd_t *dev, can_fd_frame_t *frame, TickType_t 
         }
     }
 
-    // 3. Increment RX FIFO Pointer (UINC=1) using cached CiFIFOCON(2) before clearing overflow
-    uint32_t fifocon2 = dev->rx_fifocon_cached;
-    if (fifocon2 == 0) {
-        mcp2518fd_read_32(dev, MCP2518FD_REG_CiFIFOCON(2), &fifocon2);
-        dev->rx_fifocon_cached = fifocon2;
-    }
-    mcp2518fd_write_32(dev, MCP2518FD_REG_CiFIFOCON(2), fifocon2 | (1 << 8));
+    // 3. Increment RX FIFO Pointer (UINC = BIT(0) of byte 1 in CiFIFOCON(2)) via single-byte SPI write
+    mcp2518fd_write_byte(dev, MCP2518FD_REG_CiFIFOCON(2) + 1, 0x01);
 
     // 4. Clear overflow flag (RXOVIF = BIT(3)) after UINC has freed a slot
     if (fifosta & (1 << 3)) {
         dev->rx_overflow_count++;
-        mcp2518fd_write_32(dev, MCP2518FD_REG_CiFIFOSTA(2), fifosta & ~(1 << 3));
+        mcp2518fd_write_byte(dev, MCP2518FD_REG_CiFIFOSTA(2), 0x00);
     }
+    dev->last_rx_empty = false;
 
     xSemaphoreGive(dev->mutex);
 
@@ -674,13 +692,29 @@ esp_err_t dual_can_poll_receive(can_bus_t bus, can_fd_frame_t *frame) {
     if (!dev->initialized) return ESP_ERR_INVALID_STATE;
 
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-    if (dev->config.int_pin >= 0) {
-        if (gpio_get_level(dev->config.int_pin) != 0 && (now_ms - dev->last_rx_poll_ms) < 20) {
+    if (dev->last_rx_empty && dev->config.int_pin >= 0) {
+        if (gpio_get_level(dev->config.int_pin) != 0 && (now_ms - dev->last_rx_poll_ms) < 2) {
             return ESP_ERR_NOT_FOUND;
         }
     }
-    dev->last_rx_poll_ms = now_ms;
-    return mcp2518fd_receive(dev, frame, pdMS_TO_TICKS(5));
+    esp_err_t ret = mcp2518fd_receive(dev, frame, pdMS_TO_TICKS(5));
+    if (ret == ESP_ERR_NOT_FOUND) {
+        dev->last_rx_poll_ms = now_ms;
+    }
+    return ret;
+}
+
+void dual_can_clear_boot_overflows(void) {
+    for (int i = 0; i < CAN_BUS_COUNT; i++) {
+        mcp2518fd_t *dev = &s_can_bus[i];
+        if (!dev->initialized) continue;
+        if (dev->mutex && xSemaphoreTake(dev->mutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+            mcp2518fd_write_byte(dev, MCP2518FD_REG_CiFIFOSTA(2), 0x00);
+            dev->rx_overflow_count = 0;
+            dev->last_rx_empty = false;
+            xSemaphoreGive(dev->mutex);
+        }
+    }
 }
 
 esp_err_t dual_can_set_listen_only(bool listen_only) {
