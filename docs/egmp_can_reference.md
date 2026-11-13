@@ -395,12 +395,16 @@ While the vehicle is awake or driving, touchscreen target temperature adjustment
 ---
 
 
-### 5.4 Driver-Only Zone & Defog Controls
+### 5.4 Driver-Only Zone, Heat, A/C, Smart Ventilation & Defog Controls
 
-* **Driver-Only Airflow**: **CAN ID `0x465` (`Climate_Button_Status`)**, Byte `D7`:
-  * **`0x04`** = Driver-Only Mode Active (Isolates airflow to driver side to conserve HV battery).
-  * **`0x0C`** = Driver-Only Mode Inactive (All cabin vents active).
-* **Rear Defogger & Heated Mirrors**: **CAN ID `0x4A2`**, Byte `D1`: `0x15`, with telemetry feedback on **`0x541` (`CGW1`)** Byte `D5` Bit 4 (`0x10` = Defogger active).
+* **Driver-Only Airflow & Cabin Heat (`0x41D`)**:
+  * **Driver-Only Toggle**: TX on **CAN ID `0x41D`** Byte `D5`: `0xFD` (On, 3x @ 25 ms) / `0xFC` (Off, 3x @ 25 ms) followed by `0xFF` release (3x @ 25 ms). Telemetry feedback on **CAN ID `0x465` (`Climate_Button_Status`)**, Byte `D7` (`0x04` = Driver-Only Active, `0x0C` = Inactive).
+  * **Heat Toggle**: TX on **CAN ID `0x41D`** Byte `D5`: `0xF7` (On, 3x @ 25 ms) / `0xF3` (Off, 3x @ 25 ms) followed by `0xFF` release (3x @ 25 ms).
+* **A/C, Smart Ventilation & Auto Defog (`0x49F`)**:
+  * **A/C Toggle**: TX on **CAN ID `0x49F`** Byte `D6`: `0x7F` (On, 3x @ 25 ms) / `0x3F` (Off, 3x @ 25 ms) followed by `0xFF` release (3x @ 25 ms).
+  * **Smart Ventilation**: TX on **CAN ID `0x49F`** Byte `D7`: `0xF7` (On, 3x @ 25 ms) / `0xF3` (Off, 3x @ 25 ms) followed by `0xFF` release (3x @ 25 ms).
+  * **Auto Defog**: TX on **CAN ID `0x49F`** Byte `D7`: `0xFD` (On, 3x @ 25 ms) / `0xFC` (Off, 3x @ 25 ms) followed by `0xFF` release (3x @ 25 ms).
+* **Rear Defogger & Heated Mirrors**: **CAN ID `0x4A2`**, Byte `D3`: `0xCF` (On) / `0x0F` (Off) followed by `0xFF` release, with telemetry feedback on **`0x541` (`CGW1`)** Byte `D5` Bit 4 (`0x10` = Defogger active).
 
 ---
 

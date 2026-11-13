@@ -6661,18 +6661,14 @@
       "subcategory": "HVAC Controls",
       "roles": [
         "trigger",
-        "condition"
+        "condition",
+        "action"
       ],
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x31B"
-      },
-      "notes": "Decoded from E-GMP CLIMATE_STATUS frame 795 (0x31B) Start Bit 28, Length 4 (bits 28-31 = high nibble of Byte D4, mask 0xF0). Values: 0: Auto, 1: Body, 2: Body&Legs, 3: Legs, 4: Legs&Defog.",
-      "contributor": {
-        "name": "Tichael",
-        "github": "tichael",
-        "notes": "HVAC vent airflow distribution state"
+        "state_can_id": "0x31B",
+        "action_can_id": "0x49F"
       },
       "options": [
         {
@@ -6680,6 +6676,22 @@
           "match": {
             "D4": "0x00"
           },
+          "steps": [
+            {
+              "payload": {
+                "D5": "0x7F"
+              },
+              "repeat": 3,
+              "can_id": "0x49F"
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3,
+              "can_id": "0x49F"
+            }
+          ],
           "mask": "0xF0",
           "default": true
         },
@@ -6688,6 +6700,22 @@
           "match": {
             "D4": "0x10"
           },
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x1F"
+              },
+              "repeat": 3,
+              "can_id": "0x49F"
+            },
+            {
+              "payload": {
+                "D4": "0xFF"
+              },
+              "repeat": 3,
+              "can_id": "0x49F"
+            }
+          ],
           "mask": "0xF0"
         },
         {
@@ -6695,6 +6723,20 @@
           "match": {
             "D4": "0x20"
           },
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x2F"
+              },
+              "repeat": 3
+            },
+            {
+              "payload": {
+                "D4": "0xFF"
+              },
+              "repeat": 3
+            }
+          ],
           "mask": "0xF0"
         },
         {
@@ -6702,6 +6744,22 @@
           "match": {
             "D4": "0x30"
           },
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x3F"
+              },
+              "repeat": 3,
+              "can_id": "0x49F"
+            },
+            {
+              "payload": {
+                "D4": "0xFF"
+              },
+              "repeat": 3,
+              "can_id": "0x49F"
+            }
+          ],
           "mask": "0xF0"
         },
         {
@@ -6709,10 +6767,30 @@
           "match": {
             "D4": "0x40"
           },
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x4F"
+              },
+              "repeat": 3,
+              "can_id": "0x49F"
+            },
+            {
+              "payload": {
+                "D4": "0xFF"
+              },
+              "repeat": 3,
+              "can_id": "0x49F"
+            }
+          ],
           "mask": "0xF0"
         }
       ],
-      "state_can_id": "0x31B"
+      "contributor": {
+        "name": "Tichael",
+        "github": "tichael",
+        "notes": "HVAC vent airflow distribution state"
+      }
     },
     {
       "id": "climate_fan_speed_level",
@@ -11142,28 +11220,28 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Driver Only HVAC toggle: commands via 0x41D Byte D5 (0x0D=On, 0x0C=Off, with 0x0F release). Status monitored from Climate_Button_Status frame 0x465 Byte D7 (0x04=On, 0x0C=Off)."
+        "notes": "Driver Only HVAC toggle: commands via 0x41D Byte D5 (0xFD=On, 0xFC=Off, followed by 0xFF release). Status monitored from Climate_Button_Status frame 0x465 Byte D7 (0x04=On, 0x0C=Off)."
       },
       "options": [
         {
-          "label": "Driver Only On",
+          "label": "Driver Only Off",
           "match": {
-            "D7": "0x04"
+            "D7": "0x0C"
           },
           "payload": {
-            "D5": "0x0D"
+            "D5": "0xFC"
           },
           "steps": [
             {
               "payload": {
-                "D5": "0x0D"
+                "D5": "0xFC"
               },
               "repeat": 3,
               "delay_ms": 25
             },
             {
               "payload": {
-                "D5": "0x0F"
+                "D5": "0xFF"
               },
               "repeat": 3,
               "delay_ms": 25
@@ -11172,24 +11250,24 @@
           "default": true
         },
         {
-          "label": "Driver Only Off",
+          "label": "Driver Only On",
           "match": {
-            "D7": "0x0C"
+            "D7": "0x04"
           },
           "payload": {
-            "D5": "0x0C"
+            "D5": "0xFD"
           },
           "steps": [
             {
               "payload": {
-                "D5": "0x0C"
+                "D5": "0xFD"
               },
               "repeat": 3,
               "delay_ms": 25
             },
             {
               "payload": {
-                "D5": "0x0F"
+                "D5": "0xFF"
               },
               "repeat": 3,
               "delay_ms": 25
@@ -11199,6 +11277,306 @@
       ],
       "action_can_id": "0x41D",
       "state_can_id": "0x465"
+    },
+    {
+      "id": "climate_heat_toggle",
+      "ha_metadata": {
+        "name": "Climate Heat Toggle",
+        "domain": "switch",
+        "icon": "mdi:fire"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "HVAC Controls",
+      "roles": [
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x41D",
+        "delay_ms": 25
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Cabin Heat toggle commanded via 0x41D Byte D5 (0xF7=On, 0xF3=Off, each repeated 3x followed by 0xFF x3 release)."
+      },
+      "options": [
+        {
+          "label": "Heat Off",
+          "payload": {
+            "D5": "0xF3"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D5": "0xF3"
+              },
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "Heat On",
+          "payload": {
+            "D5": "0xF7"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D5": "0xF7"
+              },
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": {
+                "D5": "0xFF"
+              },
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ]
+        }
+      ],
+      "action_can_id": "0x41D"
+    },
+    {
+      "id": "climate_ac_toggle",
+      "ha_metadata": {
+        "name": "Climate A/C Toggle",
+        "domain": "switch",
+        "icon": "mdi:snowflake"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "HVAC Controls",
+      "roles": [
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x49F",
+        "delay_ms": 25
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Cabin A/C compressor toggle commanded via 0x49F Byte D6 (0x7F=On, 0x3F=Off, each repeated 3x followed by 0xFF x3 release)."
+      },
+      "options": [
+        {
+          "label": "A/C Off",
+          "payload": {
+            "D6": "0x3F"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D6": "0x3F"
+              },
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": {
+                "D6": "0xFF"
+              },
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "A/C On",
+          "payload": {
+            "D6": "0x7F"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D6": "0x7F"
+              },
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": {
+                "D6": "0xFF"
+              },
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ]
+        }
+      ],
+      "action_can_id": "0x49F"
+    },
+    {
+      "id": "climate_smart_ventilation",
+      "ha_metadata": {
+        "name": "Smart Ventilation",
+        "domain": "switch",
+        "icon": "mdi:air-filter"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "HVAC Controls",
+      "roles": [
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x49F",
+        "delay_ms": 25
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Smart Ventilation toggle commanded via 0x49F Byte D7 (0xF7=On, 0xF3=Off, each repeated 3x followed by 0xFF x3 release)."
+      },
+      "options": [
+        {
+          "label": "Smart Ventilation Off",
+          "payload": {
+            "D7": "0xF3"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D7": "0xF3"
+              },
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": {
+                "D7": "0xFF"
+              },
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "Smart Ventilation On",
+          "payload": {
+            "D7": "0xF7"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D7": "0xF7"
+              },
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": {
+                "D7": "0xFF"
+              },
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ]
+        }
+      ],
+      "action_can_id": "0x49F"
+    },
+    {
+      "id": "climate_auto_defog",
+      "ha_metadata": {
+        "name": "Auto Defog",
+        "domain": "switch",
+        "icon": "mdi:car-defrost-front"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Climate & Comfort",
+      "subcategory": "Defrost & Defog",
+      "roles": [
+        "action"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_tx",
+        "action_can_id": "0x49F",
+        "delay_ms": 25
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Auto Defog toggle commanded via 0x49F Byte D7 (0xFD=On, 0xFC=Off, each repeated 3x followed by 0xFF x3 release)."
+      },
+      "options": [
+        {
+          "label": "Auto Defog Off",
+          "payload": {
+            "D7": "0xFC"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D7": "0xFC"
+              },
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": {
+                "D7": "0xFF"
+              },
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "default": true
+        },
+        {
+          "label": "Auto Defog On",
+          "payload": {
+            "D7": "0xFD"
+          },
+          "steps": [
+            {
+              "payload": {
+                "D7": "0xFD"
+              },
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": {
+                "D7": "0xFF"
+              },
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ]
+        }
+      ],
+      "action_can_id": "0x49F"
     },
     {
       "id": "climate_blower_speed_direct",
