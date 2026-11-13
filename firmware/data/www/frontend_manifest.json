@@ -1,25 +1,25 @@
 {
-  "version": "2026.11.5-b002",
+  "version": "2026.11.5-b003",
   "files": [
-    {
-      "name": "BB-iRqcG.js.gz",
-      "path": "/spiffs/www/BB-iRqcG.js.gz",
-      "size": 55047
-    },
     {
       "name": "BdMWSxNz.js.gz",
       "path": "/spiffs/www/BdMWSxNz.js.gz",
       "size": 70567
     },
     {
-      "name": "BsxZL4L_.js.gz",
-      "path": "/spiffs/www/BsxZL4L_.js.gz",
-      "size": 23476
+      "name": "C54CNQD-.js.gz",
+      "path": "/spiffs/www/C54CNQD-.js.gz",
+      "size": 23419
     },
     {
-      "name": "CNk55Fzw.js.gz",
-      "path": "/spiffs/www/CNk55Fzw.js.gz",
-      "size": 23418
+      "name": "CO4_twWH.js.gz",
+      "path": "/spiffs/www/CO4_twWH.js.gz",
+      "size": 23471
+    },
+    {
+      "name": "DRgzQjOE.js.gz",
+      "path": "/spiffs/www/DRgzQjOE.js.gz",
+      "size": 979
     },
     {
       "name": "DRUAzCcj.js.gz",
@@ -32,39 +32,39 @@
       "size": 242230
     },
     {
-      "name": "DZif6B95.js.gz",
-      "path": "/spiffs/www/DZif6B95.js.gz",
-      "size": 33568
+      "name": "index-CIupVb.js.gz",
+      "path": "/spiffs/www/index-CIupVb.js.gz",
+      "size": 71458
     },
     {
-      "name": "index-CWjHGe.js.gz",
-      "path": "/spiffs/www/index-CWjHGe.js.gz",
-      "size": 70358
-    },
-    {
-      "name": "index-ZJeLdw.css.gz",
-      "path": "/spiffs/www/index-ZJeLdw.css.gz",
-      "size": 53000
+      "name": "index-XpB6wV.css.gz",
+      "path": "/spiffs/www/index-XpB6wV.css.gz",
+      "size": 53055
     },
     {
       "name": "index.html",
       "path": "/spiffs/www/index.html",
-      "size": 5220
+      "size": 5298
     },
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 2053
+      "size": 2064
     },
     {
-      "name": "jCRKkeXm.js.gz",
-      "path": "/spiffs/www/jCRKkeXm.js.gz",
-      "size": 978
+      "name": "jfMqIZTA.js.gz",
+      "path": "/spiffs/www/jfMqIZTA.js.gz",
+      "size": 34548
     },
     {
       "name": "logo.svg",
       "path": "/spiffs/www/logo.svg",
       "size": 8217
+    },
+    {
+      "name": "V4RRwyOO.js.gz",
+      "path": "/spiffs/www/V4RRwyOO.js.gz",
+      "size": 57117
     }
   ]
 }
