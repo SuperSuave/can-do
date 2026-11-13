@@ -26,11 +26,21 @@ export interface AutomationTrigger {
   to?: string;
   from_value?: number;
   to_value?: number;
+  operator?: string;
+  value?: string;
+  evaluate?: {
+    byte: string;
+    byte_index?: number;
+    mask?: string | ByteMap;
+    operator: string;
+    value: string;
+  };
   from_payload?: string | ByteMap;
   to_payload?: string | ByteMap;
   match_payload?: string | ByteMap;
   match?: ByteMap;
   source_command_id?: string;
+  target_entity_id?: string;
   source_command_name?: string;
   option_label?: string;
   time?: string;

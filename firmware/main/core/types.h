@@ -191,6 +191,7 @@ struct AutomationTrigger {
     bool has_from_value = false;
     uint8_t from_value = 0;
     uint8_t to_value = 0;
+    ConditionOperator op = ConditionOperator::EQUAL;
     uint8_t match_payload[8] = {0};
     uint8_t match_mask = 0;
     uint8_t byte_masks[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };

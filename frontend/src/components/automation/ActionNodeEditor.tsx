@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useMemo } from 'react';
 import { Tabs, Switch, Slider } from '@heroui/react';
 import {
   Play,
@@ -16,10 +16,13 @@ import {
   Clock,
   Sliders,
   RotateCw,
-  Layers
+  Layers,
+  Thermometer,
+  Gauge,
+  Activity
 } from 'lucide-react';
 import { AutomationAction, AutomationCondition, AutomationTrigger, AutomationActionStep, ChoiceBranch } from '../../types/automation';
-import { Catalog, CommandOption, ByteMap } from '../../types/catalog';
+import { Catalog, Command, CommandOption, ByteMap } from '../../types/catalog';
 import {
   resolveCatalogCommandForAction,
   applyOptionToAction,
@@ -29,13 +32,316 @@ import {
   regenerateActionIds
 } from '../../utils/automationConverters';
 import {
+  isRangeCommand,
+  rawByteToPhysical,
+  physicalToRawByte,
+  getDefaultPhysicalValue,
+  buildRangeActionPayload,
+  normalizeByteKey
+} from '../../utils/catalogUtils';
+import {
   groupOptionsIntoGridRows,
   OptionGridGroup,
   LiveWifiStatus,
-  LiveBleItem
+  LiveBleItem,
+  parseHexPayload
 } from './liveEvaluator';
 import { ConditionListEditor } from './ConditionNodeEditor';
 import { AutomationClipboardContext } from './AutomationClipboardContext';
+
+interface NumericActionRangeControlProps {
+  act: AutomationAction;
+  catalogCmd: Command;
+  effectiveCanId: string;
+  effectiveBus: number;
+  effectivePayloadMap: ByteMap;
+  liveFrames?: Map<string, { data: string }>;
+  entityStates?: Map<string, string>;
+  onUpdate: (updated: AutomationAction) => void;
+}
+
+const NumericActionRangeControl: React.FC<NumericActionRangeControlProps> = ({
+  act,
+  catalogCmd,
+  effectiveCanId,
+  effectiveBus,
+  effectivePayloadMap,
+  liveFrames,
+  entityStates,
+  onUpdate
+}) => {
+  const net = catalogCmd.network;
+  const nativeUnit = net?.unit || '';
+  const isTemperature = nativeUnit === '°C' || nativeUnit === '°F' || (catalogCmd.id && catalogCmd.id.includes('temp'));
+
+  const [displayTempUnit, setDisplayTempUnit] = useState<'°F' | '°C'>(() => {
+    return nativeUnit === '°F' ? '°F' : '°C';
+  });
+
+  const actionByte = normalizeByteKey(net?.action_byte || net?.state_byte || net?.byte || 'D1');
+  const stateByte = normalizeByteKey(net?.state_byte || net?.action_byte || net?.byte || 'D1');
+  const stateCanId = net?.state_can_id || catalogCmd.state_can_id || effectiveCanId || '0x000';
+  const stateByteIdx = useMemo(() => {
+    const m = stateByte.match(/D(\d+)/i);
+    return m ? Math.max(0, Math.min(7, parseInt(m[1], 10) - 1)) : 0;
+  }, [stateByte]);
+
+  const rawVal = useMemo(() => {
+    const payloadHex = effectivePayloadMap[actionByte];
+    if (typeof payloadHex === 'string' && payloadHex.trim() !== '') {
+      const parsed = payloadHex.trim().startsWith('0x')
+        ? parseInt(payloadHex, 16)
+        : parseInt(payloadHex, 10);
+      if (!isNaN(parsed)) return parsed;
+    }
+    const labelStr = act.option_label || act.command;
+    if (labelStr) {
+      const num = parseFloat(labelStr);
+      if (!isNaN(num)) {
+        return physicalToRawByte(num, net);
+      }
+    }
+    return physicalToRawByte(getDefaultPhysicalValue(net), net);
+  }, [effectivePayloadMap, actionByte, act.option_label, act.command, net]);
+
+  const currentPhys = useMemo(() => {
+    const res = rawByteToPhysical(isNaN(rawVal) ? 0 : rawVal, net);
+    if (isTemperature) {
+      if (nativeUnit === '°C' && displayTempUnit === '°F') {
+        return Math.round((res.val * 1.8 + 32) * 10) / 10;
+      } else if (nativeUnit === '°F' && displayTempUnit === '°C') {
+        return Math.round(((res.val - 32) / 1.8) * 10) / 10;
+      }
+    }
+    return Math.round(res.val * 100) / 100;
+  }, [rawVal, net, isTemperature, nativeUnit, displayTempUnit]);
+
+  const liveInfo = useMemo(() => {
+    const cleanCanId = stateCanId.toLowerCase().replace(/^0x/, '');
+    if (liveFrames && cleanCanId) {
+      for (const [k, frame] of liveFrames.entries()) {
+        if (k.toLowerCase().replace(/^0x/, '') === cleanCanId) {
+          const bytes = parseHexPayload(frame.data);
+          if (bytes && bytes.length > stateByteIdx) {
+            const actByte = bytes[stateByteIdx];
+            const phys = rawByteToPhysical(actByte, net);
+            let displayVal = phys.val;
+            if (isTemperature) {
+              if (nativeUnit === '°C' && displayTempUnit === '°F') {
+                displayVal = Math.round((phys.val * 1.8 + 32) * 10) / 10;
+              } else if (nativeUnit === '°F' && displayTempUnit === '°C') {
+                displayVal = Math.round(((phys.val - 32) / 1.8) * 10) / 10;
+              }
+            }
+            return {
+              physValue: displayVal,
+              formatted: `${displayVal} ${isTemperature ? displayTempUnit : nativeUnit}`
+            };
+          }
+        }
+      }
+    }
+    if (catalogCmd.id && entityStates && entityStates.has(catalogCmd.id)) {
+      return {
+        formatted: entityStates.get(catalogCmd.id) || '',
+        physValue: undefined
+      };
+    }
+    return undefined;
+  }, [liveFrames, entityStates, stateCanId, stateByteIdx, net, isTemperature, nativeUnit, displayTempUnit, catalogCmd.id]);
+
+  const sliderMin = useMemo(() => {
+    if (net?.min === undefined) return undefined;
+    if (isTemperature && nativeUnit === '°C' && displayTempUnit === '°F') return Math.round((net.min * 1.8 + 32) * 10) / 10;
+    if (isTemperature && nativeUnit === '°F' && displayTempUnit === '°C') return Math.round(((net.min - 32) / 1.8) * 10) / 10;
+    return net.min;
+  }, [net?.min, isTemperature, nativeUnit, displayTempUnit]);
+
+  const sliderMax = useMemo(() => {
+    if (net?.max === undefined) return undefined;
+    if (isTemperature && nativeUnit === '°C' && displayTempUnit === '°F') return Math.round((net.max * 1.8 + 32) * 10) / 10;
+    if (isTemperature && nativeUnit === '°F' && displayTempUnit === '°C') return Math.round(((net.max - 32) / 1.8) * 10) / 10;
+    return net.max;
+  }, [net?.max, isTemperature, nativeUnit, displayTempUnit]);
+
+  const sliderStep = isTemperature && displayTempUnit === '°C' && nativeUnit === '°F' ? 0.5 : (net?.step || 1);
+
+  const updateActionSetpoint = (newDisplayVal: number) => {
+    let clampedDisplay = newDisplayVal;
+    if (sliderMin !== undefined) clampedDisplay = Math.max(sliderMin, clampedDisplay);
+    if (sliderMax !== undefined) clampedDisplay = Math.min(sliderMax, clampedDisplay);
+
+    let nativePhys = clampedDisplay;
+    if (isTemperature) {
+      if (nativeUnit === '°C' && displayTempUnit === '°F') {
+        nativePhys = (clampedDisplay - 32) / 1.8;
+      } else if (nativeUnit === '°F' && displayTempUnit === '°C') {
+        nativePhys = clampedDisplay * 1.8 + 32;
+      }
+    }
+
+    const calculatedRaw = physicalToRawByte(nativePhys, net);
+    const hexVal = `0x${calculatedRaw.toString(16).toUpperCase().padStart(2, '0')}`;
+    const payload = buildRangeActionPayload(hexVal, net);
+    const displayUnit = isTemperature ? displayTempUnit : nativeUnit;
+    const roundedDisplay = Math.round(clampedDisplay * 10) / 10;
+    const labelStr = `${roundedDisplay}${displayUnit}`;
+    const txCanId = net?.action_can_id || catalogCmd.action_can_id || effectiveCanId || '0x000';
+
+    onUpdate({
+      ...act,
+      type: 'can_tx',
+      can_id: txCanId,
+      bus: net?.bus ?? effectiveBus ?? 0,
+      payload,
+      command: labelStr,
+      option_label: labelStr,
+      entity_id: catalogCmd.id,
+      source_command_id: catalogCmd.id,
+      source_command_name: catalogCmd.ha_metadata?.name || catalogCmd.name || catalogCmd.id,
+      ...(net?.delay_ms !== undefined && act.delay_ms === undefined ? { delay_ms: net.delay_ms } : {})
+    });
+  };
+
+  const activeUnit = isTemperature ? displayTempUnit : nativeUnit;
+  const hexByte = `0x${rawVal.toString(16).toUpperCase().padStart(2, '0')}`;
+
+  return (
+    <div className="space-y-2.5 p-3 rounded-lg bg-surface-tertiary/50 border border-border">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex items-center gap-1.5 font-medium text-foreground/90">
+          {isTemperature ? (
+            <Thermometer className="w-4 h-4 text-danger" />
+          ) : (
+            <Gauge className="w-4 h-4 text-success" />
+          )}
+          <span>Target Setpoint</span>
+          {net?.min !== undefined && net?.max !== undefined && (
+            <span className="text-[10px] text-muted font-mono">
+              ({net.min} to {net.max} {nativeUnit})
+            </span>
+          )}
+        </div>
+
+        {isTemperature && (
+          <div className="flex items-center rounded-md bg-surface-tertiary border border-border p-0.5 text-[11px] font-bold">
+            <button
+              type="button"
+              onClick={() => setDisplayTempUnit('°F')}
+              className={`px-2 py-0.5 rounded transition ${
+                displayTempUnit === '°F'
+                  ? 'bg-success text-white shadow-sm'
+                  : 'text-muted hover:text-foreground'
+              }`}
+            >
+              °F
+            </button>
+            <button
+              type="button"
+              onClick={() => setDisplayTempUnit('°C')}
+              className={`px-2 py-0.5 rounded transition ${
+                displayTempUnit === '°C'
+                  ? 'bg-success text-white shadow-sm'
+                  : 'text-muted hover:text-foreground'
+              }`}
+            >
+              °C
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+        <button
+          type="button"
+          onClick={() => updateActionSetpoint(currentPhys - sliderStep)}
+          className="px-2.5 py-1.5 rounded bg-surface-tertiary hover:bg-default-hover border border-border text-foreground font-bold text-xs cursor-pointer"
+          title="Decrement step"
+        >
+          -
+        </button>
+
+        {sliderMin !== undefined && sliderMax !== undefined && (
+          <div className="flex-1 flex items-center gap-2 min-w-[140px]">
+            <span className="text-[10px] font-mono text-muted shrink-0">
+              {sliderMin}{activeUnit}
+            </span>
+            <input
+              type="range"
+              min={sliderMin}
+              max={sliderMax}
+              step={sliderStep}
+              value={Math.max(sliderMin, Math.min(sliderMax, isNaN(currentPhys) ? sliderMin : currentPhys))}
+              onChange={e => {
+                const val = parseFloat(e.target.value);
+                if (!isNaN(val)) updateActionSetpoint(val);
+              }}
+              aria-label="Action Target Setpoint Slider"
+              className="flex-1 accent-success cursor-pointer h-1.5 rounded-lg"
+            />
+            <span className="text-[10px] font-mono text-muted shrink-0">
+              {sliderMax}{activeUnit}
+            </span>
+          </div>
+        )}
+
+        <div className="flex items-center gap-1 w-24 shrink-0">
+          <input
+            type="number"
+            step={sliderStep}
+            value={isNaN(currentPhys) ? '' : currentPhys}
+            onChange={e => {
+              const val = parseFloat(e.target.value);
+              if (!isNaN(val)) updateActionSetpoint(val);
+            }}
+            className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-success font-mono font-bold text-sm text-center focus:outline-none focus:ring-1 focus:ring-success"
+          />
+          <span className="text-xs font-bold text-muted shrink-0 font-sans">
+            {activeUnit}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => updateActionSetpoint(currentPhys + sliderStep)}
+          className="px-2.5 py-1.5 rounded bg-surface-tertiary hover:bg-default-hover border border-border text-foreground font-bold text-xs cursor-pointer"
+          title="Increment step"
+        >
+          +
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-separator text-[11px]">
+        {liveInfo ? (
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-success animate-pulse shrink-0" />
+            <span className="text-muted">Live Car Reading:</span>
+            <span className="font-mono font-semibold text-foreground">{liveInfo.formatted}</span>
+            {liveInfo.physValue !== undefined && (
+              <button
+                type="button"
+                onClick={() => updateActionSetpoint(liveInfo.physValue!)}
+                className="ml-1 text-[10px] text-success hover:underline font-mono cursor-pointer"
+                title="Set action setpoint to current vehicle value"
+              >
+                Use Current
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="text-[10px] text-muted flex items-center gap-1">
+            <Activity className="w-3 h-3 text-muted" />
+            <span>TX CAN frame on trigger</span>
+          </div>
+        )}
+
+        <div className="text-[10px] font-mono text-muted/80 ml-auto">
+          TX Frame {effectiveCanId || net?.action_can_id || '0x000'} · {actionByte} = {hexByte} ({rawVal})
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export interface ActionNodeEditorProps {
   key?: React.Key;
@@ -130,6 +436,7 @@ export function ActionNodeEditor({
   // Action naming & catalog resolution (available to all action types and actionButtons)
   const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForAction(act, catalog) : { command: undefined, matchedOption: undefined };
   const hasOptions = !!(catalogCmd?.options && catalogCmd.options.length > 0);
+  const isRangeEntity = !hasOptions && isRangeCommand(catalogCmd);
   const actionName =
     catalogCmd?.ha_metadata?.name ||
     catalogCmd?.name ||
@@ -941,7 +1248,7 @@ export function ActionNodeEditor({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
-          {hasOptions && !collapsed && (
+          {(hasOptions || isRangeEntity) && !collapsed && (
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
@@ -1011,8 +1318,22 @@ export function ActionNodeEditor({
           })}
         </div>
       )}
+      {/* Numeric Range Setpoint Control for param_range actions */}
+      {isRangeEntity && catalogCmd && (
+        <NumericActionRangeControl
+          act={act}
+          catalogCmd={catalogCmd}
+          effectiveCanId={effectiveCanId}
+          effectiveBus={effectiveBus}
+          effectivePayloadMap={effectivePayloadMap}
+          liveFrames={liveFrames}
+          entityStates={entityStates}
+          onUpdate={onUpdate}
+        />
+      )}
+
       {/* Advanced Details View */}
-      {(!hasOptions || showAdvanced) && (() => {
+      {((!hasOptions && !isRangeEntity) || showAdvanced) && (() => {
         const isCanTx =
           act.type === 'can_tx' ||
           act.type === 'entity_command' ||
@@ -1021,7 +1342,7 @@ export function ActionNodeEditor({
         const hasMultipleSteps = isCanTx && !!(effectiveSteps && effectiveSteps.length > 1);
 
         return (
-        <div className={`space-y-3 ${hasOptions ? 'pt-2.5 border-t border-separator' : ''}`}>
+        <div className={`space-y-3 ${(hasOptions || isRangeEntity) ? 'pt-2.5 border-t border-separator' : ''}`}>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 font-mono text-[11px]">
             <div>
               <label className="block text-[10px] font-sans text-muted">Action Type</label>

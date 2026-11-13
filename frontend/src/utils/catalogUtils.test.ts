@@ -6,6 +6,10 @@ import {
   resolveVariant,
   resolveAllVariants,
   formatPlatformFamily,
+  formatCommandForCatalog,
+  rawByteToPhysical,
+  physicalToRawByte,
+  buildRangeActionPayload,
 } from './catalogUtils.js';
 import type { Command, CommandOption, Vehicle } from '../types/catalog.js';
 
@@ -324,4 +328,90 @@ test('formatPlatformFamily maps raw family slugs to friendly names', () => {
   // Fallback heuristic for unrecognized slugs
   assert.strictEqual(formatPlatformFamily('kia_ev9'), 'EV9');
   assert.strictEqual(formatPlatformFamily('custom_platform_slug'), 'Custom Platform Slug');
+});
+
+test('rawByteToPhysical, physicalToRawByte, and buildRangeActionPayload handle param_range schemas accurately', () => {
+  // 1. raw_min/raw_max climate_driver_temp schema (62..82 °F <-> 0x06..0x1A)
+  const driverNet = {
+    state_can_id: '0x380',
+    action_can_id: '0x4A0',
+    state_byte: 'D2',
+    action_byte: 'D2',
+    min: 62,
+    max: 82,
+    step: 1,
+    unit: '°F',
+    raw_min: '0x06',
+    raw_max: '0x1A',
+  };
+  assert.strictEqual(physicalToRawByte(70, driverNet), 0x0e);
+  assert.deepStrictEqual(rawByteToPhysical(0x0e, driverNet), { val: 70, unit: '°F' });
+  assert.deepStrictEqual(buildRangeActionPayload('0x0E', driverNet), { D2: '0x0E' });
+
+  // 2. Centered positive offset audio_amp_fader schema (-10..+10 dB <-> 0x00..0x14, center 0x0A)
+  const faderNet = {
+    action_can_id: '0x60C',
+    action_byte: 'D3',
+    min: -10,
+    max: 10,
+    step: 1,
+    offset: 10,
+    base_payload: ['0x19', '0x00', '0x0A', '0x00', '0x00', '0x00', '0x00', '0x00'],
+  };
+  assert.strictEqual(physicalToRawByte(0, faderNet), 0x0a);
+  assert.strictEqual(physicalToRawByte(-10, faderNet), 0x00);
+  assert.strictEqual(physicalToRawByte(10, faderNet), 0x14);
+  assert.strictEqual(rawByteToPhysical(0x0a, faderNet).val, 0);
+  assert.strictEqual(rawByteToPhysical(0x00, faderNet).val, -10);
+  assert.deepStrictEqual(buildRangeActionPayload('0x0C', faderNet), {
+    D1: '0x19',
+    D2: '0x00',
+    D3: '0x0C',
+    D4: '0x00',
+    D5: '0x00',
+    D6: '0x00',
+    D7: '0x00',
+    D8: '0x00',
+  });
+
+  // 3. Negative offset temperature schema (outdoor_temperature: -40..215 °C <-> 0x00..0xFF)
+  const outdoorNet = { min: -40, max: 215, factor: 1, offset: -40, unit: '°C' };
+  assert.strictEqual(physicalToRawByte(0, outdoorNet), 40);
+  assert.strictEqual(rawByteToPhysical(40, outdoorNet).val, 0);
+});
+
+test('formatCommandForCatalog preserves param_range type and network range metadata', () => {
+  const formatted = formatCommandForCatalog({
+    id: 'climate_driver_temp',
+    name: 'Driver Cabin Target Temperature',
+    ha_metadata: { name: 'Driver Cabin Target Temperature', domain: 'climate', icon: 'mdi:thermometer' },
+    type: 'param_range',
+    category: 'Climate & Comfort',
+    subcategory: 'HVAC Controls',
+    roles: ['trigger', 'condition', 'action'],
+    network: {
+      bus: 0,
+      type: 'can_rx_tx',
+      state_can_id: '0x380',
+      action_can_id: '0x4A0',
+      state_byte: 'D2',
+      action_byte: 'D2',
+      min: 62,
+      max: 82,
+      step: 1,
+      unit: '°F',
+      raw_min: '0x06',
+      raw_max: '0x1A',
+      delay_ms: 20,
+    },
+  });
+
+  assert.strictEqual(formatted.type, 'param_range');
+  assert.strictEqual(formatted.network?.state_byte, 'D2');
+  assert.strictEqual(formatted.network?.action_byte, 'D2');
+  assert.strictEqual(formatted.network?.min, 62);
+  assert.strictEqual(formatted.network?.max, 82);
+  assert.strictEqual(formatted.network?.raw_min, '0x06');
+  assert.strictEqual(formatted.network?.raw_max, '0x1A');
+  assert.strictEqual(formatted.network?.unit, '°F');
 });

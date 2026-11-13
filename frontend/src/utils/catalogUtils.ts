@@ -8,7 +8,139 @@
  *   // resolved.network and resolved.options now reflect the correct variant.
  */
 
-import { Command, CommandOption, Vehicle, ByteMap, Catalog } from '../types/catalog';
+import { Command, CommandNetwork, CommandOption, Vehicle, ByteMap, Catalog } from '../types/catalog';
+
+/**
+ * Normalize a byte identifier (e.g. 'D2', 'd2', '2', 2) to canonical 1-based 'D1'..'D8'.
+ */
+export function normalizeByteKey(byteKey?: string | number | null): string {
+  if (byteKey === undefined || byteKey === null) return 'D1';
+  const s = String(byteKey).trim();
+  const dMatch = s.match(/^D(\d+)$/i);
+  if (dMatch) {
+    const n = Math.max(1, Math.min(8, parseInt(dMatch[1], 10)));
+    return `D${n}`;
+  }
+  if (/^\d+$/.test(s)) {
+    const n = Math.max(1, Math.min(8, parseInt(s, 10)));
+    return `D${n}`;
+  }
+  return s || 'D1';
+}
+
+/**
+ * Determine whether a command represents a continuous/stepped numeric range without explicit discrete options.
+ */
+export function isRangeCommand(cmd?: Command | null): boolean {
+  if (!cmd) return false;
+  if (Array.isArray(cmd.options) && cmd.options.length > 0) return false;
+  return Boolean(
+    cmd.type === 'param_range' ||
+    cmd.type === 'linear_scale' ||
+    (cmd.network?.min !== undefined && cmd.network?.max !== undefined) ||
+    cmd.network?.factor !== undefined
+  );
+}
+
+function isPositiveCenteredOffset(net: CommandNetwork): boolean {
+  return (
+    net.min !== undefined &&
+    net.min < 0 &&
+    net.offset !== undefined &&
+    net.offset > 0 &&
+    net.min + net.offset >= 0
+  );
+}
+
+/**
+ * Convert raw byte integer to physical floating point representation based on catalog network schema.
+ */
+export function rawByteToPhysical(raw: number, net?: CommandNetwork): { val: number; unit: string } {
+  if (!net) return { val: raw, unit: '' };
+  const unit = net.unit || '';
+
+  if (net.raw_min !== undefined && net.min !== undefined) {
+    const rawMin = typeof net.raw_min === 'string' ? parseInt(net.raw_min, 16) || 0 : Number(net.raw_min);
+    const step = net.step ?? net.factor ?? 1;
+    const phys = net.min + (raw - rawMin) * step;
+    return { val: phys, unit };
+  }
+
+  const factor = net.factor !== undefined ? net.factor : 1;
+  if (isPositiveCenteredOffset(net)) {
+    const phys = raw * factor - (net.offset ?? 0);
+    return { val: phys, unit };
+  }
+
+  const offset = net.offset !== undefined ? net.offset : 0;
+  const phys = raw * factor + offset;
+  return { val: phys, unit };
+}
+
+/**
+ * Convert physical representation back to integer raw byte for ESP32 CAN comparison/transmission.
+ */
+export function physicalToRawByte(phys: number, net?: CommandNetwork): number {
+  if (!net) return Math.max(0, Math.min(255, Math.round(phys)));
+
+  if (net.raw_min !== undefined && net.min !== undefined) {
+    const rawMin = typeof net.raw_min === 'string' ? parseInt(net.raw_min, 16) || 0 : Number(net.raw_min);
+    const step = net.step ?? net.factor ?? 1;
+    const raw = Math.round(rawMin + (phys - net.min) / step);
+    return Math.max(0, Math.min(255, raw));
+  }
+
+  const factor = net.factor !== undefined && net.factor !== 0 ? net.factor : 1;
+  if (isPositiveCenteredOffset(net)) {
+    const raw = Math.round((phys + (net.offset ?? 0)) / factor);
+    return Math.max(0, Math.min(255, raw));
+  }
+
+  const offset = net.offset !== undefined ? net.offset : 0;
+  const raw = Math.round((phys - offset) / factor);
+  return Math.max(0, Math.min(255, raw));
+}
+
+/**
+ * Compute a sensible default physical setpoint/threshold for a range command.
+ */
+export function getDefaultPhysicalValue(net?: CommandNetwork): number {
+  if (!net) return 0;
+  const min = net.min ?? 0;
+  const max = net.max ?? 100;
+  const step = net.step ?? 1;
+  const unit = net.unit || '';
+
+  if (unit === '°F' && min <= 70 && max >= 70) return 70;
+  if (unit === '°C' && min <= 20 && max >= 20) return 20;
+  if (min < 0 && max > 0) return 0;
+
+  const rawMid = (min + max) / 2;
+  const snapped = Math.round((rawMid - min) / step) * step + min;
+  return Math.max(min, Math.min(max, Number(snapped.toFixed(4))));
+}
+
+/**
+ * Build a 1-based ByteMap payload for a range TX action, merging network.base_payload when provided.
+ */
+export function buildRangeActionPayload(hexVal: string, net?: CommandNetwork): ByteMap {
+  const actionByte = normalizeByteKey(net?.action_byte || net?.state_byte || net?.byte || 'D1');
+  const normHex = `0x${parseInt(String(hexVal).replace(/^0x/i, ''), 16).toString(16).toUpperCase().padStart(2, '0')}`;
+  const payloadObj: ByteMap = {};
+
+  if (Array.isArray(net?.base_payload)) {
+    net.base_payload.forEach((b, idx) => {
+      if (idx < 8) {
+        const parsed = typeof b === 'string' ? parseInt(b.replace(/^0x/i, ''), 16) : Number(b);
+        const byteHex = isNaN(parsed) ? '0x00' : `0x${parsed.toString(16).toUpperCase().padStart(2, '0')}`;
+        payloadObj[`D${idx + 1}`] = byteHex;
+      }
+    });
+  }
+
+  payloadObj[actionByte] = isNaN(parseInt(normHex, 16)) ? hexVal : normHex;
+  return payloadObj;
+}
 
 /**
  * Friendly display name mappings for common platform family slugs.
@@ -133,42 +265,57 @@ export function resolveAllVariants(commands: Command[], vehicle: Vehicle | null 
  * Options with `evaluate` (range comparisons) are appended at the end so they
  * remain available as condition chips in the automation builder.
  *
- * If the command is not `type: "linear_scale"` or lacks range metadata, the
- * original `cmd.options` are returned unchanged.
+ * If the command lacks range metadata, the original `cmd.options` are returned unchanged.
  */
 export function expandLinearScaleOptions(cmd: Command): CommandOption[] {
   const net = cmd.network;
-  if (cmd.type !== 'linear_scale' || !net) {
+  if ((cmd.type !== 'linear_scale' && cmd.type !== 'param_range') || !net) {
     return cmd.options ?? [];
   }
 
-  const rawMinStr = (net as any).raw_min as string | undefined;
-  const rawMaxStr = (net as any).raw_max as string | undefined;
+  const rawMinStr = net.raw_min !== undefined ? String(net.raw_min) : undefined;
+  const rawMaxStr = net.raw_max !== undefined ? String(net.raw_max) : undefined;
+  const hasRawBounds = Boolean(rawMinStr && rawMaxStr);
+  const hasPhysBounds = net.min !== undefined && net.max !== undefined;
 
-  // Need at least raw_min and raw_max to generate the sequence
-  if (!rawMinStr || !rawMaxStr) {
+  if (!hasRawBounds && !hasPhysBounds) {
     return cmd.options ?? [];
   }
 
-  const rawMin = parseInt(rawMinStr.replace('0x', ''), 16);
-  const rawMax = parseInt(rawMaxStr.replace('0x', ''), 16);
-  const displayMin: number = (net as any).min ?? rawMin;
-  const displayStep: number = (net as any).step ?? 1;
-  const unit: string = (net as any).unit ?? '';
-  const stateByte: string = (net as any).state_byte ?? (net as any).byte ?? 'D1';
-  const actionByte: string = (net as any).action_byte ?? stateByte;
-
-  // Generate one option per raw step value
+  const unit: string = net.unit ?? '';
+  const stateByte: string = normalizeByteKey(net.state_byte ?? net.byte ?? 'D1');
+  const displayStep: number = net.step ?? 1;
   const generated: CommandOption[] = [];
-  for (let raw = rawMin; raw <= rawMax; raw++) {
-    const display = displayMin + (raw - rawMin) * displayStep;
-    const hexVal = `0x${raw.toString(16).toUpperCase().padStart(2, '0')}`;
-    generated.push({
-      label: `${display}${unit}`,
-      match: { [stateByte]: hexVal },
-      payload: { [actionByte]: hexVal },
-      mask: '0xFF',
-    });
+
+  if (hasRawBounds) {
+    const rawMin = parseInt(rawMinStr!.replace(/^0x/i, ''), 16);
+    const rawMax = parseInt(rawMaxStr!.replace(/^0x/i, ''), 16);
+    const displayMin: number = net.min ?? rawMin;
+
+    for (let raw = rawMin; raw <= rawMax; raw++) {
+      const display = displayMin + (raw - rawMin) * displayStep;
+      const hexVal = `0x${raw.toString(16).toUpperCase().padStart(2, '0')}`;
+      generated.push({
+        label: `${display}${unit}`,
+        match: { [stateByte]: hexVal },
+        payload: buildRangeActionPayload(hexVal, net),
+        mask: net.state_mask || net.mask || '0xFF',
+      });
+    }
+  } else {
+    const min = net.min!;
+    const max = net.max!;
+    for (let val = min; val <= max + 1e-9; val += displayStep) {
+      const display = Number(val.toFixed(4));
+      const raw = physicalToRawByte(display, net);
+      const hexVal = `0x${raw.toString(16).toUpperCase().padStart(2, '0')}`;
+      generated.push({
+        label: `${display}${unit}`,
+        match: { [stateByte]: hexVal },
+        payload: buildRangeActionPayload(hexVal, net),
+        mask: net.state_mask || net.mask || '0xFF',
+      });
+    }
   }
 
   // Collect evaluate-type named options to append at the end
@@ -201,12 +348,12 @@ export function expandLinearScaleOptions(cmd: Command): CommandOption[] {
 }
 
 /**
- * Get the effective options for a command, expanding linear_scale ranges
+ * Get the effective options for a command, expanding linear_scale / param_range ranges
  * if applicable. This is the single entry point consumers should use
  * instead of reading `cmd.options` directly.
  */
 export function getEffectiveOptions(cmd: Command): CommandOption[] {
-  return cmd.type === 'linear_scale'
+  return (cmd.type === 'linear_scale' || cmd.type === 'param_range')
     ? expandLinearScaleOptions(cmd)
     : (cmd.options ?? []);
 }
@@ -295,6 +442,21 @@ export function formatCommandForCatalog(cmd: Command): Command {
     type: netType,
     ...(stateCanId ? { state_can_id: stateCanId } : {}),
     ...(actionCanId ? { action_can_id: actionCanId } : {}),
+    ...(cmd.network?.byte ? { byte: cmd.network.byte } : {}),
+    ...(cmd.network?.state_byte ? { state_byte: cmd.network.state_byte } : {}),
+    ...(cmd.network?.action_byte ? { action_byte: cmd.network.action_byte } : {}),
+    ...(cmd.network?.mask ? { mask: cmd.network.mask } : {}),
+    ...(cmd.network?.state_mask ? { state_mask: cmd.network.state_mask } : {}),
+    ...(cmd.network?.action_mask ? { action_mask: cmd.network.action_mask } : {}),
+    ...(cmd.network?.min !== undefined ? { min: cmd.network.min } : {}),
+    ...(cmd.network?.max !== undefined ? { max: cmd.network.max } : {}),
+    ...(cmd.network?.step !== undefined ? { step: cmd.network.step } : {}),
+    ...(cmd.network?.factor !== undefined ? { factor: cmd.network.factor } : {}),
+    ...(cmd.network?.offset !== undefined ? { offset: cmd.network.offset } : {}),
+    ...(cmd.network?.unit !== undefined ? { unit: cmd.network.unit } : {}),
+    ...(cmd.network?.raw_min !== undefined ? { raw_min: cmd.network.raw_min } : {}),
+    ...(cmd.network?.raw_max !== undefined ? { raw_max: cmd.network.raw_max } : {}),
+    ...(Array.isArray(cmd.network?.base_payload) ? { base_payload: cmd.network.base_payload } : {}),
     ...(delayMs !== undefined ? { delay_ms: delayMs } : {})
   };
 
@@ -457,6 +619,7 @@ export function formatCommandForCatalog(cmd: Command): Command {
   const result: any = {
     id: cmd.id,
     ha_metadata,
+    ...(cmd.type ? { type: cmd.type } : {}),
     tags: cmd.tags && cmd.tags.length > 0 ? cmd.tags : ['all_egmp'],
     category: cmd.category,
     ...(cmd.subcategory ? { subcategory: cmd.subcategory } : {}),

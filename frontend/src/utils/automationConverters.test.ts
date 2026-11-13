@@ -20,6 +20,8 @@ import {
   decompileCondition,
   decompileActionList,
   decompileAutomationRule,
+  commandToTrigger,
+  commandToCondition,
   commandToAction,
   applyOptionsToCondition,
 } from './automationConverters.js';
@@ -1349,6 +1351,167 @@ test('compileAutomationRule and decompileAutomationRule preserve sustained for_s
   assert.strictEqual(condFromTrig.for_sec, 300);
   const trigFromCond = convertConditionToTrigger(condFromTrig);
   assert.strictEqual(trigFromCond.for_sec, 300);
+});
+
+test('param_range commands convert cleanly to trigger, condition, and action and disambiguate shared CAN IDs', () => {
+  const driverTemp: Command = {
+    id: 'climate_driver_temp',
+    name: 'Driver Cabin Target Temperature',
+    ha_metadata: { name: 'Driver Cabin Target Temperature', domain: 'climate', icon: 'mdi:thermometer' },
+    type: 'param_range',
+    category: 'Climate & Comfort',
+    roles: ['trigger', 'condition', 'action'],
+    network: {
+      bus: 0,
+      type: 'can_rx_tx',
+      state_can_id: '0x380',
+      action_can_id: '0x4A0',
+      state_byte: 'D2',
+      action_byte: 'D2',
+      min: 62,
+      max: 82,
+      step: 1,
+      unit: '°F',
+      raw_min: '0x06',
+      raw_max: '0x1A',
+      delay_ms: 20,
+    },
+  };
+
+  const passengerTemp: Command = {
+    id: 'climate_passenger_temp',
+    name: 'Passenger Cabin Target Temperature',
+    ha_metadata: { name: 'Passenger Cabin Target Temperature', domain: 'climate', icon: 'mdi:thermometer' },
+    type: 'param_range',
+    category: 'Climate & Comfort',
+    roles: ['trigger', 'condition', 'action'],
+    network: {
+      bus: 0,
+      type: 'can_rx_tx',
+      state_can_id: '0x380',
+      action_can_id: '0x4A0',
+      state_byte: 'D3',
+      action_byte: 'D8',
+      min: 62,
+      max: 82,
+      step: 1,
+      unit: '°F',
+      raw_min: '0x06',
+      raw_max: '0x1A',
+      delay_ms: 20,
+    },
+  };
+
+  const catalog: Catalog = {
+    can_do_version: '1.0.0',
+    vehicles: [],
+    commands: [driverTemp, passengerTemp],
+  };
+
+  // Defaults to 70°F (0x0E) on the correct state_byte / action_byte
+  const trigDriver = commandToTrigger(driverTemp);
+  assert.strictEqual(trigDriver.can_id, '0x380');
+  assert.strictEqual(trigDriver.byte, 'D2');
+  assert.strictEqual(trigDriver.to, '0x0E');
+  assert.strictEqual(trigDriver.mask, '0xFF');
+  assert.strictEqual(trigDriver.option_label, '70°F');
+
+  const condPassenger = commandToCondition(passengerTemp);
+  assert.strictEqual(condPassenger.can_id, '0x380');
+  assert.strictEqual(condPassenger.byte, 'D3');
+  assert.strictEqual(condPassenger.value, '0x0E');
+  assert.strictEqual(condPassenger.mask, '0xFF');
+  assert.strictEqual(condPassenger.option_label, '70°F');
+
+  const actDriver = commandToAction(driverTemp);
+  assert.strictEqual(actDriver.can_id, '0x4A0');
+  assert.deepStrictEqual(actDriver.payload, { D2: '0x0E' });
+  assert.strictEqual(actDriver.option_label, '70°F');
+
+  const actPassenger = commandToAction(passengerTemp);
+  assert.strictEqual(actPassenger.can_id, '0x4A0');
+  assert.deepStrictEqual(actPassenger.payload, { D8: '0x0E' });
+
+  // Disambiguation without source_command_id (using shared CAN ID + byte position)
+  const resolvedTrigPass = resolveCatalogCommandForTrigger(
+    { id: 't_pass', source: 'can', type: 'byte_transition', can_id: '0x380', byte: 'D3', to: '0x10' },
+    catalog
+  );
+  assert.strictEqual(resolvedTrigPass.command?.id, 'climate_passenger_temp');
+
+  const resolvedCondDriver = resolveCatalogCommandForCondition(
+    { id: 'c_drv', type: 'can_state', can_id: '0x380', byte: 'D2', operator: 'greater_than', value: '0x10' },
+    catalog
+  );
+  assert.strictEqual(resolvedCondDriver.command?.id, 'climate_driver_temp');
+
+  const resolvedActPass = resolveCatalogCommandForAction(
+    { id: 'a_pass', type: 'can_tx', can_id: '0x4A0', payload: { D8: '0x10' } },
+    catalog
+  );
+  assert.strictEqual(resolvedActPass.command?.id, 'climate_passenger_temp');
+
+  // Compile rule preserves trigger relational operator and param_range condition fields
+  const compiled = compileAutomationRule(
+    {
+      id: 'rule_range',
+      name: 'Temp Rule',
+      enabled: true,
+      ha_expose: false,
+      ha_icon: 'mdi:thermometer',
+      exec_mode: 'one_shot',
+      trigger_mode: 'any',
+      cooldown_ms: 500,
+      triggers: [
+        {
+          ...trigDriver,
+          operator: 'greater_than',
+          value: '0x12',
+          to: '0x12',
+        },
+      ],
+      conditions: [
+        {
+          ...condPassenger,
+          type: 'param_range',
+          operator: 'less_than_or_equal',
+          value: '0x14',
+        },
+      ],
+      actions: [actPassenger],
+    },
+    catalog
+  );
+
+  assert.strictEqual(compiled.triggers[0].type, 'byte_transition');
+  assert.strictEqual(compiled.triggers[0].byte, 'D2');
+  assert.strictEqual(compiled.triggers[0].mask, '0xFF');
+  assert.strictEqual(compiled.triggers[0].to, '0x12');
+  assert.strictEqual(compiled.triggers[0].operator, 'greater_than');
+
+  assert.strictEqual(compiled.conditions[0].can_id, '0x380');
+  assert.strictEqual(compiled.conditions[0].byte, 'D3');
+  assert.strictEqual(compiled.conditions[0].mask, '0xFF');
+  assert.strictEqual(compiled.conditions[0].operator, 'less_than_or_equal');
+  assert.strictEqual(compiled.conditions[0].value, '0x14');
+
+  assert.strictEqual(compiled.actions[0].type, 'transmit');
+  assert.strictEqual(compiled.actions[0].can_id, '0x4A0');
+  assert.deepStrictEqual(compiled.actions[0].payload, { D8: '0x0E' });
+
+  // entity_command action on param_range without explicit options compiles from physical label
+  const compiledEntityCmd = compileAction(
+    {
+      id: 'a_ent',
+      type: 'entity_command',
+      entity_id: 'climate_driver_temp',
+      command: '75°F',
+    },
+    catalog
+  );
+  assert.strictEqual(compiledEntityCmd.type, 'transmit');
+  assert.strictEqual(compiledEntityCmd.can_id, '0x4A0');
+  assert.deepStrictEqual(compiledEntityCmd.payload, { D2: '0x13' }); // 0x06 + (75 - 62) = 19 = 0x13
 });
 
 

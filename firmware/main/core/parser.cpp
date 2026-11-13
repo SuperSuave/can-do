@@ -1132,14 +1132,24 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
                             tr.byte_mask = 0xFF;
                         }
 
+                        cJSON* op_item = cJSON_GetObjectItem(t_item, "operator");
+                        if (cJSON_IsString(op_item)) {
+                            tr.op = parse_operator(op_item->valuestring);
+                        }
+
                         cJSON* from_item = cJSON_GetObjectItem(t_item, "from");
                         cJSON* to_item = cJSON_GetObjectItem(t_item, "to");
+                        if (!to_item) to_item = cJSON_GetObjectItem(t_item, "value");
                         if (cJSON_IsString(from_item)) {
                             tr.from_value = parse_hex_string(from_item->valuestring);
                             tr.has_from_value = true;
                         }
                         if (cJSON_IsString(to_item)) {
                             tr.to_value = parse_hex_string(to_item->valuestring);
+                            tr.match_payload[b_idx] = tr.to_value;
+                            tr.match_mask |= (1 << b_idx);
+                        } else if (cJSON_IsNumber(to_item)) {
+                            tr.to_value = static_cast<uint8_t>(to_item->valueint);
                             tr.match_payload[b_idx] = tr.to_value;
                             tr.match_mask |= (1 << b_idx);
                         }

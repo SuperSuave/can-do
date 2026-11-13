@@ -10,7 +10,16 @@ import {
 } from '../types/automation';
 import { Command, CommandOption, Catalog, ByteMap, Vehicle } from '../types/catalog';
 import { DEFAULT_CATALOG } from '../data/defaultCatalog';
-import { resolveVariant, getEffectiveOptions } from './catalogUtils';
+import {
+  resolveVariant,
+  getEffectiveOptions,
+  isRangeCommand,
+  rawByteToPhysical,
+  physicalToRawByte,
+  getDefaultPhysicalValue,
+  buildRangeActionPayload,
+  normalizeByteKey
+} from './catalogUtils';
 
 /**
  * Converts any numeric integer or hex/decimal string into canonical 2-digit uppercase hex (e.g. "0xFF", "0x00", "0x3F").
@@ -261,16 +270,6 @@ export function compileCondition(cond: AutomationCondition, catalog: Catalog = D
       type: 'voltage',
       operator: cond.operator || (cond.voltage_dir === 'below' ? 'less' : 'greater'),
       value: numVal,
-      ...sustained
-    };
-  }
-
-  if (cond.type === 'param_range') {
-    return {
-      type: 'param_range',
-      can_id: cond.can_id || '0x100',
-      operator: cond.operator || (cond.voltage_dir === 'above' ? 'greater' : 'less'),
-      value: cond.value || cond.voltage_val || '50',
       ...sustained
     };
   }
@@ -775,6 +774,35 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
           source_command_id: entityId,
           source_command_name: cmd.ha_metadata?.name || cmd.name || cmd.id,
           option_label: opt?.label || commandLabel,
+          entity_id: entityId
+        };
+      }
+
+      // Case E: param_range / numeric range command without discrete options
+      if (isRangeCommand(cmd)) {
+        const existingPayload = compileToByteMap(act.payload || act.to_payload);
+        let rangePayload = existingPayload;
+        let labelOut = commandLabel;
+        if (Object.keys(rangePayload).length === 0) {
+          const parsedPhys = commandLabel !== undefined ? parseFloat(String(commandLabel)) : NaN;
+          const targetPhys = !isNaN(parsedPhys) ? parsedPhys : getDefaultPhysicalValue(cmd.network);
+          const rawByte = physicalToRawByte(targetPhys, cmd.network);
+          const hexVal = `0x${rawByte.toString(16).toUpperCase().padStart(2, '0')}`;
+          rangePayload = buildRangeActionPayload(hexVal, cmd.network);
+          if (!labelOut) {
+            labelOut = `${targetPhys}${cmd.network?.unit || ''}`;
+          }
+        }
+        return {
+          ...(act.id ? { id: act.id } : {}),
+          type: 'transmit',
+          can_id: canId,
+          bus: bus,
+          payload: rangePayload,
+          repeat: act.repeat || cmd.repeat || 1,
+          source_command_id: entityId,
+          source_command_name: cmd.ha_metadata?.name || cmd.name || cmd.id,
+          ...(labelOut ? { option_label: labelOut } : {}),
           entity_id: entityId
         };
       }
@@ -1629,10 +1657,11 @@ export function compileAutomationRule(
         };
       }
 
-      const targetByte = trig.byte || (trig.match ? Object.keys(trig.match)[0] : undefined) || (trig.byte_index !== undefined ? `D${trig.byte_index + 1}` : 'D7');
+      const targetByte = trig.byte || trig.evaluate?.byte || (trig.match ? Object.keys(trig.match)[0] : undefined) || (trig.byte_index !== undefined ? `D${trig.byte_index + 1}` : 'D7');
       const fromHex = trig.from || (trig.from_value !== undefined ? `0x${trig.from_value.toString(16).padStart(2, '0').toUpperCase()}` : '0x00');
-      const toHex = trig.to || (trig.match && trig.match[targetByte]) || (trig.to_value !== undefined ? `0x${trig.to_value.toString(16).padStart(2, '0').toUpperCase()}` : '0x10');
-      const maskHex = trig.mask || '0xF0';
+      const toHex = trig.to || trig.value || trig.evaluate?.value || (trig.match && trig.match[targetByte]) || (trig.to_value !== undefined ? `0x${trig.to_value.toString(16).padStart(2, '0').toUpperCase()}` : '0x10');
+      const trigOp = trig.operator || trig.evaluate?.operator;
+      const maskHex = trig.mask || (typeof trig.evaluate?.mask === 'string' ? trig.evaluate.mask : undefined) || (trigOp || trig.value !== undefined ? '0xFF' : '0xF0');
 
       return {
         ...baseTrigger,
@@ -1642,7 +1671,8 @@ export function compileAutomationRule(
         byte: targetByte || '',
         mask: maskHex || '',
         from: fromHex || '',
-        to: toHex || ''
+        to: toHex || '',
+        ...(trigOp && trigOp !== 'equal' ? { operator: trigOp } : {})
       };
     }),
     conditions: (rule.conditions || []).map(c => compileCondition(c, catalog)),
@@ -1717,6 +1747,48 @@ export function commandToTrigger(rawCmd: Command, opt?: CommandOption): Automati
   const trigId = `trig_${cmd.id}_${Date.now().toString(36).slice(-4)}`;
   const canId = cmd.network?.state_can_id || cmd.state_can_id || cmd.network?.action_can_id || cmd.action_can_id || '0x448';
   const chosenOpt = opt || (cmd.options && cmd.options.length > 0 ? (cmd.options.find(o => o.default) || cmd.options[0]) : undefined);
+
+  if (!chosenOpt && isRangeCommand(cmd)) {
+    const net = cmd.network;
+    const targetByte = normalizeByteKey(net?.state_byte || net?.byte || 'D1');
+    const targetMask = net?.state_mask || net?.mask || (typeof cmd.mask === 'string' ? cmd.mask : undefined) || '0xFF';
+    const defaultPhys = getDefaultPhysicalValue(net);
+    const rawByte = physicalToRawByte(defaultPhys, net);
+    const hexVal = `0x${rawByte.toString(16).toUpperCase().padStart(2, '0')}`;
+    const labelStr = `${defaultPhys}${net?.unit || ''}`;
+    const byteIdx = parseInt(targetByte.replace(/\D/g, ''), 10) - 1;
+
+    return {
+      id: trigId,
+      type: 'byte_transition',
+      source: 'can',
+      can_id: canId,
+      bus: net?.bus ?? cmd.bus ?? 0,
+      byte: targetByte,
+      mask: targetMask,
+      operator: 'equal',
+      value: hexVal,
+      from: '0x00',
+      to: hexVal,
+      to_value: rawByte,
+      match: { [targetByte]: hexVal },
+      evaluate: {
+        byte: targetByte,
+        byte_index: isNaN(byteIdx) ? 0 : byteIdx,
+        mask: targetMask,
+        operator: 'equal',
+        value: hexVal
+      },
+      click_count: 1,
+      for_sec: 0,
+      for_ms: 0,
+      source_command_id: cmd.id,
+      target_entity_id: cmd.id,
+      source_command_name: cmd.ha_metadata?.name || cmd.name || cmd.id,
+      option_label: labelStr
+    };
+  }
+
   const match = compileToByteMap(chosenOpt?.match || cmd.match || chosenOpt?.payload || cmd.payload);
   const targetByte = Object.keys(match)[0] || 'D7';
   const targetTo = match[targetByte] || '0x10';
@@ -1756,6 +1828,40 @@ export function commandToCondition(rawCmd: Command, opt?: CommandOption): Automa
   const chosenOpt = opt || (cmd.options && cmd.options.length > 0 ? (cmd.options.find(o => o.default) || cmd.options[0]) : undefined);
   const condId = `cond_${cmd.id}_${Date.now().toString(36).slice(-4)}`;
   const canId = cmd.network?.state_can_id || cmd.state_can_id || cmd.network?.action_can_id || cmd.action_can_id || '0x000';
+
+  if (!chosenOpt && isRangeCommand(cmd)) {
+    const net = cmd.network;
+    const dKey = normalizeByteKey(net?.state_byte || net?.byte || 'D1');
+    const targetMask = net?.state_mask || net?.mask || (typeof cmd.mask === 'string' ? cmd.mask : undefined) || '0xFF';
+    const defaultPhys = getDefaultPhysicalValue(net);
+    const rawByte = physicalToRawByte(defaultPhys, net);
+    const hexVal = `0x${rawByte.toString(16).toUpperCase().padStart(2, '0')}`;
+    const labelStr = `${defaultPhys}${net?.unit || ''}`;
+    const byteIdx = parseInt(dKey.replace(/\D/g, ''), 10) - 1;
+
+    return {
+      id: condId,
+      type: 'can_state',
+      can_id: canId,
+      bus: net?.bus ?? cmd.bus ?? 0,
+      match: { [dKey]: hexVal },
+      byte: dKey,
+      mask: targetMask,
+      operator: 'equal',
+      value: hexVal,
+      evaluate: {
+        byte: dKey,
+        byte_index: isNaN(byteIdx) ? 0 : byteIdx,
+        operator: 'equal',
+        value: hexVal,
+        mask: targetMask
+      },
+      invert: false,
+      source_command_id: cmd.id,
+      source_command_name: cmd.ha_metadata?.name || cmd.name || cmd.id,
+      option_label: labelStr
+    };
+  }
   
   const optEval = typeof chosenOpt?.evaluate === 'object' ? chosenOpt.evaluate : (typeof cmd.evaluate === 'object' ? cmd.evaluate : undefined);
   const match = compileToByteMap(chosenOpt?.match || cmd.match || chosenOpt?.payload || cmd.payload);
@@ -1848,6 +1954,32 @@ export function commandToAction(rawCmd: Command, opt?: CommandOption): Automatio
       source_command_id: cmd.id,
       source_command_name: cmdDisplayName,
       option_label: chosenOpt?.label
+    };
+  }
+
+  if (!chosenOpt && isRangeCommand(cmd)) {
+    const net = cmd.network;
+    const defaultPhys = getDefaultPhysicalValue(net);
+    const rawByte = physicalToRawByte(defaultPhys, net);
+    const hexVal = `0x${rawByte.toString(16).toUpperCase().padStart(2, '0')}`;
+    const payload = buildRangeActionPayload(hexVal, net);
+    const labelStr = `${defaultPhys}${net?.unit || ''}`;
+    const delayMs = net?.delay_ms ?? cmd.delay_ms ?? 0;
+
+    return {
+      id: actId,
+      type: 'can_tx',
+      can_id: canId,
+      bus: net?.bus ?? cmd.action_bus ?? cmd.bus ?? 0,
+      payload,
+      repeat: cmd.repeat ?? 1,
+      delay_ms: delayMs,
+      entity_id: cmd.id,
+      command: labelStr,
+      option_label: labelStr,
+      source_command_id: cmd.id,
+      source_command_name: cmdDisplayName,
+      popup_message: `${cmdDisplayName} - ${labelStr}`
     };
   }
 
@@ -1998,8 +2130,9 @@ export function resolveCatalogCommandForTrigger(
   const index = getCatalogCommandIndex(catalog.commands);
 
   // 1. Direct ID match
-  if (trig.source_command_id) {
-    const rawCmd = index.byId.get(trig.source_command_id);
+  const directTrigId = trig.source_command_id || trig.target_entity_id;
+  if (directTrigId) {
+    const rawCmd = index.byId.get(directTrigId);
     if (rawCmd) {
       const cmd = resolveVariant(rawCmd, null);
       const opt = findMatchingOptionForTrigger(cmd, trig);
@@ -2024,8 +2157,11 @@ export function resolveCatalogCommandForTrigger(
   if (trig.can_id) {
     const normCanId = normalizeCanId(trig.can_id);
     const rawCands = index.byCanId.get(normCanId) ?? [];
-    const stateMatching = rawCands.filter(c => normalizeCanId(c.network?.state_can_id || c.state_can_id) === normCanId);
-    const candidateCmds = stateMatching.length > 0 ? stateMatching : rawCands;
+    let candidateCmds = rawCands;
+    if (rawCands.length > 1) {
+      const stateMatching = rawCands.filter(c => normalizeCanId(c.network?.state_can_id || c.state_can_id) === normCanId);
+      if (stateMatching.length > 0) candidateCmds = stateMatching;
+    }
 
     if (candidateCmds.length === 1) {
       const cmd = resolveVariant(candidateCmds[0], null);
@@ -2047,6 +2183,21 @@ export function resolveCatalogCommandForTrigger(
         const cmd = resolveVariant(raw, null);
         if (cmd.match && trig.byte && cmd.match[trig.byte]) {
           return { command: cmd, matchedOption: cmd.options?.[0] };
+        }
+      }
+      // Disambiguate shared CAN ID range commands by state_byte / byte (e.g. 0x380 D2 driver vs D3 passenger)
+      const trigByteKeyRaw = trig.byte || trig.evaluate?.byte || (trig.match ? Object.keys(trig.match)[0] : undefined);
+      if (trigByteKeyRaw) {
+        const normTrigByte = normalizeByteKey(trigByteKeyRaw);
+        const rangeMatches = candidateCmds
+          .map(raw => resolveVariant(raw, null))
+          .filter(cmd => {
+            if (!isRangeCommand(cmd)) return false;
+            const cmdByte = cmd.network?.state_byte || cmd.network?.byte;
+            return cmdByte ? normalizeByteKey(cmdByte) === normTrigByte : false;
+          });
+        if (rangeMatches.length === 1) {
+          return { command: rangeMatches[0], matchedOption: undefined };
         }
       }
       return {};
@@ -2290,7 +2441,7 @@ export function resolveCatalogCommandForAction(
   const index = getCatalogCommandIndex(catalog.commands);
 
   // 1. Direct ID or Alias match
-  const rawTargetId = act.source_command_id || act.entity_id;
+  const rawTargetId = act.source_command_id || act.entity_id || act.target_command_id || (act as any).target_entity_id;
   if (rawTargetId) {
     const normTarget = rawTargetId.toLowerCase().trim();
     const resolvedId = index.byId.has(rawTargetId)
@@ -2311,7 +2462,7 @@ export function resolveCatalogCommandForAction(
 
   // 2. Command Name / ID hint match (e.g. act.id contains 'drivers_seat_comfort', or source_command_name has 'Driver Seat')
   const nameHint = `${act.source_command_name || ''} ${act.id || ''}`.toLowerCase();
-  if (nameHint.trim()) {
+  if (nameHint.trim().length >= 5) {
     for (const [alias, canonicalId] of Object.entries(ENTITY_ALIASES)) {
       if (nameHint.includes(alias.replace(/_/g, ' ')) || nameHint.includes(alias)) {
         const rawCmd = index.byId.get(canonicalId);
@@ -2328,8 +2479,11 @@ export function resolveCatalogCommandForAction(
   if (act.can_id) {
     const normCanId = normalizeCanId(act.can_id);
     const rawCands = index.byCanId.get(normCanId) ?? [];
-    const actionMatching = rawCands.filter(c => normalizeCanId(c.network?.action_can_id || c.action_can_id) === normCanId);
-    const candidateCmds = actionMatching.length > 0 ? actionMatching : rawCands;
+    let candidateCmds = rawCands;
+    if (rawCands.length > 1) {
+      const actionMatching = rawCands.filter(c => normalizeCanId(c.network?.action_can_id || c.action_can_id) === normCanId);
+      if (actionMatching.length > 0) candidateCmds = actionMatching;
+    }
 
     if (candidateCmds.length === 1) {
       const cmd = resolveVariant(candidateCmds[0], null);
@@ -2362,6 +2516,50 @@ export function resolveCatalogCommandForAction(
             const opt = findMatchingOptionForAction(cmd, act, false) || cmd.options?.[0];
             return { command: cmd, matchedOption: opt };
           }
+        }
+      }
+
+      // Disambiguate shared CAN ID range commands by action_byte / base_payload (e.g. 0x4A0 D2 driver vs D8 passenger)
+      if (actPayload && Object.keys(actPayload).length > 0) {
+        let bestRange: { cmd: Command; score: number } | null = null;
+        let tie = false;
+        for (const raw of candidateCmds) {
+          const cmd = resolveVariant(raw, null);
+          if (!isRangeCommand(cmd)) continue;
+          const actionByte = normalizeByteKey(cmd.network?.action_byte || cmd.network?.state_byte || cmd.network?.byte || 'D1');
+          const actHex = toHexByte(actPayload[actionByte]);
+          if (!actHex) continue;
+
+          let score = 0;
+          if (Array.isArray(cmd.network?.base_payload)) {
+            const baseArr = cmd.network.base_payload;
+            const actionIdx = parseInt(actionByte.slice(1), 10) - 1;
+            const baseActionHex = toHexByte(baseArr[actionIdx]);
+            let headerMatch = 0;
+            for (let b = 0; b < Math.min(baseArr.length, 8); b++) {
+              if (b === actionIdx) continue;
+              const expected = toHexByte(baseArr[b]);
+              const actual = toHexByte(actPayload[`D${b + 1}`]);
+              if (expected && actual && expected === actual) headerMatch++;
+            }
+            if (headerMatch > 0) {
+              score = actHex !== baseActionHex ? 100 + headerMatch : 20 + headerMatch;
+            }
+          } else {
+            score = Object.keys(actPayload).length === 1 ? 100 : 50;
+          }
+
+          if (score > 0) {
+            if (!bestRange || score > bestRange.score) {
+              bestRange = { cmd, score };
+              tie = false;
+            } else if (score === bestRange.score) {
+              tie = true;
+            }
+          }
+        }
+        if (bestRange && !tie) {
+          return { command: bestRange.cmd, matchedOption: undefined };
         }
       }
 
@@ -2398,7 +2596,7 @@ export function resolveCatalogCommandForCondition(
   }
 
   // 2. ID name hint match (e.g. cond_gear_drive -> gear_selector)
-  if (cond.id) {
+  if (cond.id && cond.id.length >= 5) {
     const lowerId = cond.id.toLowerCase();
     for (const c of catalog.commands) {
       if (lowerId.includes(c.id.toLowerCase())) {
@@ -2413,8 +2611,11 @@ export function resolveCatalogCommandForCondition(
   if (cond.can_id) {
     const normCanId = normalizeCanId(cond.can_id);
     const rawCands = index.byCanId.get(normCanId) ?? [];
-    const stateMatching = rawCands.filter(c => normalizeCanId(c.network?.state_can_id || c.state_can_id) === normCanId);
-    const candidateCmds = stateMatching.length > 0 ? stateMatching : rawCands;
+    let candidateCmds = rawCands;
+    if (rawCands.length > 1) {
+      const stateMatching = rawCands.filter(c => normalizeCanId(c.network?.state_can_id || c.state_can_id) === normCanId);
+      if (stateMatching.length > 0) candidateCmds = stateMatching;
+    }
 
     if (candidateCmds.length === 1) {
       const cmd = resolveVariant(candidateCmds[0], null);
@@ -2427,6 +2628,21 @@ export function resolveCatalogCommandForCondition(
         const cmd = resolveVariant(raw, null);
         const opt = findMatchingOptionForCondition(cmd, cond, false);
         if (opt) return { command: cmd, matchedOption: opt };
+      }
+      // Disambiguate shared CAN ID range commands by state_byte / byte (e.g. 0x380 D2 driver vs D3 passenger)
+      const condByteRaw = cond.byte || cond.evaluate?.byte || (cond.match ? Object.keys(cond.match)[0] : undefined);
+      if (condByteRaw) {
+        const normCondByte = normalizeByteKey(condByteRaw);
+        const rangeMatches = candidateCmds
+          .map(raw => resolveVariant(raw, null))
+          .filter(cmd => {
+            if (!isRangeCommand(cmd)) return false;
+            const cmdByte = cmd.network?.state_byte || cmd.network?.byte;
+            return cmdByte ? normalizeByteKey(cmdByte) === normCondByte : false;
+          });
+        if (rangeMatches.length === 1) {
+          return { command: rangeMatches[0], matchedOption: undefined };
+        }
       }
       return {};
     }

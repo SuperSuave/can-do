@@ -1,8 +1,22 @@
 import React, { useState, useMemo } from 'react';
-import { Thermometer, Gauge, Activity, ArrowRight, CornerDownRight } from 'lucide-react';
+import { Thermometer, Gauge, Activity } from 'lucide-react';
 import { AutomationCondition, AutomationTrigger } from '../../types/automation';
-import { Command, CommandNetwork } from '../../types/catalog';
+import { Command } from '../../types/catalog';
+import {
+  rawByteToPhysical,
+  physicalToRawByte,
+  getDefaultPhysicalValue,
+  buildRangeActionPayload,
+  normalizeByteKey
+} from '../../utils/catalogUtils';
 import { parseHexPayload } from './liveEvaluator';
+
+export {
+  rawByteToPhysical,
+  physicalToRawByte,
+  getDefaultPhysicalValue,
+  buildRangeActionPayload
+};
 
 export interface NumericRangeNodeEditorProps {
   item: AutomationCondition | AutomationTrigger;
@@ -10,45 +24,6 @@ export interface NumericRangeNodeEditorProps {
   liveFrames?: Map<string, { data: string }>;
   entityStates?: Map<string, string>;
   onUpdate: (updated: any) => void;
-}
-
-/**
- * Convert raw byte integer to physical floating point representation based on catalog network schema.
- */
-export function rawByteToPhysical(raw: number, net?: CommandNetwork): { val: number; unit: string } {
-  if (!net) return { val: raw, unit: '' };
-  const unit = net.unit || '';
-
-  if (net.raw_min !== undefined && net.min !== undefined) {
-    const rawMin = typeof net.raw_min === 'string' ? parseInt(net.raw_min, 16) || 0 : Number(net.raw_min);
-    const step = net.step || 1;
-    const phys = net.min + (raw - rawMin) * step;
-    return { val: phys, unit };
-  }
-
-  const factor = net.factor !== undefined ? net.factor : 1;
-  const offset = net.offset !== undefined ? net.offset : 0;
-  const phys = raw * factor + offset;
-  return { val: phys, unit };
-}
-
-/**
- * Convert physical representation back to integer raw byte for ESP32 CAN comparison.
- */
-export function physicalToRawByte(phys: number, net?: CommandNetwork): number {
-  if (!net) return Math.max(0, Math.min(255, Math.round(phys)));
-
-  if (net.raw_min !== undefined && net.min !== undefined) {
-    const rawMin = typeof net.raw_min === 'string' ? parseInt(net.raw_min, 16) || 0 : Number(net.raw_min);
-    const step = net.step || 1;
-    const raw = Math.round(rawMin + (phys - net.min) / step);
-    return Math.max(0, Math.min(255, raw));
-  }
-
-  const factor = net.factor !== undefined && net.factor !== 0 ? net.factor : 1;
-  const offset = net.offset !== undefined ? net.offset : 0;
-  const raw = Math.round((phys - offset) / factor);
-  return Math.max(0, Math.min(255, raw));
 }
 
 export const NumericRangeNodeEditor: React.FC<NumericRangeNodeEditorProps> = ({
@@ -61,28 +36,40 @@ export const NumericRangeNodeEditor: React.FC<NumericRangeNodeEditorProps> = ({
   const net = catalogCmd?.network;
   const nativeUnit = net?.unit || '';
   const isTemperature = nativeUnit === '°C' || nativeUnit === '°F' || (catalogCmd?.id && catalogCmd.id.includes('temp'));
+  const isTriggerItem = 'source' in item;
 
   // Local temperature unit preference for viewing/editing (°F vs °C)
   const [displayTempUnit, setDisplayTempUnit] = useState<'°F' | '°C'>(() => {
     return nativeUnit === '°F' ? '°F' : '°C';
   });
 
-  const stateByte = net?.state_byte || item.byte || 'D1';
-  const stateCanId = net?.state_can_id || item.can_id || '0x000';
-  const stateMask = net?.state_mask || net?.mask || item.mask || '0xFF';
+  const stateByte = normalizeByteKey(net?.state_byte || net?.byte || item.byte || 'D1');
+  const stateCanId = net?.state_can_id || catalogCmd?.state_can_id || item.can_id || '0x000';
+  const stateMask = net?.state_mask || net?.mask || (typeof item.mask === 'string' ? item.mask : undefined) || '0xFF';
   const byteIdx = useMemo(() => {
     const m = stateByte.match(/D(\d+)/i);
     return m ? Math.max(0, Math.min(7, parseInt(m[1], 10) - 1)) : 0;
   }, [stateByte]);
 
-  // Decode raw value currently in condition / trigger
+  // Decode raw value currently in condition / trigger, defaulting to mid/nominal setpoint if absent
   const rawVal = useMemo(() => {
-    const v = (item as any).value ?? (item as any).evaluate?.value;
-    if (typeof v === 'string') {
-      return v.startsWith('0x') ? parseInt(v, 16) : parseInt(v, 10);
+    const rawCandidate =
+      (item as any).value ??
+      (item as any).evaluate?.value ??
+      (item as any).to ??
+      (item as any).to_value ??
+      (item as any).match?.[stateByte];
+    if (typeof rawCandidate === 'string' && rawCandidate.trim() !== '') {
+      const parsed = rawCandidate.trim().startsWith('0x')
+        ? parseInt(rawCandidate, 16)
+        : parseInt(rawCandidate, 10);
+      if (!isNaN(parsed)) return parsed;
     }
-    return typeof v === 'number' ? v : 0;
-  }, [(item as any).value, (item as any).evaluate?.value]);
+    if (typeof rawCandidate === 'number' && !isNaN(rawCandidate)) {
+      return rawCandidate;
+    }
+    return physicalToRawByte(getDefaultPhysicalValue(net), net);
+  }, [(item as any).value, (item as any).evaluate?.value, (item as any).to, (item as any).to_value, (item as any).match, stateByte, net]);
 
   const currentPhys = useMemo(() => {
     const res = rawByteToPhysical(isNaN(rawVal) ? 0 : rawVal, net);
@@ -135,7 +122,7 @@ export const NumericRangeNodeEditor: React.FC<NumericRangeNodeEditorProps> = ({
   }, [liveFrames, entityStates, stateCanId, byteIdx, net, isTemperature, nativeUnit, displayTempUnit, catalogCmd?.id]);
 
   const updateNumericThreshold = (newPhysValue: number, newOp?: string) => {
-    const op = newOp || (item as any).operator || 'equal';
+    const op = newOp || (item as any).operator || (item as any).evaluate?.operator || 'equal';
     let nativePhys = newPhysValue;
     if (isTemperature) {
       if (nativeUnit === '°C' && displayTempUnit === '°F') {
@@ -147,14 +134,24 @@ export const NumericRangeNodeEditor: React.FC<NumericRangeNodeEditorProps> = ({
 
     const calculatedRaw = physicalToRawByte(nativePhys, net);
     const hexVal = `0x${calculatedRaw.toString(16).toUpperCase().padStart(2, '0')}`;
+    const displayUnit = isTemperature ? displayTempUnit : nativeUnit;
+    const roundedDisplay = Math.round(newPhysValue * 10) / 10;
+    const labelStr = `${roundedDisplay}${displayUnit}`;
 
     onUpdate({
       ...item,
+      type: isTriggerItem ? 'byte_transition' : 'can_state',
       can_id: stateCanId,
+      bus: net?.bus ?? (item as any).bus ?? 0,
       byte: stateByte,
       mask: stateMask,
       operator: op,
       value: hexVal,
+      to: hexVal,
+      to_value: calculatedRaw,
+      match: { [stateByte]: hexVal },
+      option_label: labelStr,
+      ...(catalogCmd?.id ? { source_command_id: catalogCmd.id, target_entity_id: catalogCmd.id } : {}),
       evaluate: {
         byte: stateByte,
         byte_index: byteIdx,
@@ -166,6 +163,19 @@ export const NumericRangeNodeEditor: React.FC<NumericRangeNodeEditorProps> = ({
   };
 
   const currentOp = (item as any).operator || (item as any).evaluate?.operator || 'equal';
+  const sliderMin = useMemo(() => {
+    if (net?.min === undefined) return undefined;
+    if (isTemperature && nativeUnit === '°C' && displayTempUnit === '°F') return Math.round((net.min * 1.8 + 32) * 10) / 10;
+    if (isTemperature && nativeUnit === '°F' && displayTempUnit === '°C') return Math.round(((net.min - 32) / 1.8) * 10) / 10;
+    return net.min;
+  }, [net?.min, isTemperature, nativeUnit, displayTempUnit]);
+  const sliderMax = useMemo(() => {
+    if (net?.max === undefined) return undefined;
+    if (isTemperature && nativeUnit === '°C' && displayTempUnit === '°F') return Math.round((net.max * 1.8 + 32) * 10) / 10;
+    if (isTemperature && nativeUnit === '°F' && displayTempUnit === '°C') return Math.round(((net.max - 32) / 1.8) * 10) / 10;
+    return net.max;
+  }, [net?.max, isTemperature, nativeUnit, displayTempUnit]);
+  const sliderStep = isTemperature && displayTempUnit === '°C' && nativeUnit === '°F' ? 0.5 : (net?.step || 1);
 
   return (
     <div className="space-y-2.5 p-3 rounded-lg bg-surface-secondary/70 border border-border">
@@ -238,7 +248,7 @@ export const NumericRangeNodeEditor: React.FC<NumericRangeNodeEditorProps> = ({
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => updateNumericThreshold(currentPhys - (net?.step || 1), currentOp)}
+              onClick={() => updateNumericThreshold(currentPhys - sliderStep, currentOp)}
               className="px-2.5 py-1.5 rounded bg-surface-tertiary hover:bg-default-hover border border-border text-foreground font-bold text-xs"
               title="Decrement step"
             >
@@ -247,7 +257,7 @@ export const NumericRangeNodeEditor: React.FC<NumericRangeNodeEditorProps> = ({
 
             <input
               type="number"
-              step={isTemperature && displayTempUnit === '°C' ? 0.5 : (net?.step || 1)}
+              step={sliderStep}
               value={isNaN(currentPhys) ? '' : currentPhys}
               onChange={e => {
                 const val = parseFloat(e.target.value);
@@ -260,7 +270,7 @@ export const NumericRangeNodeEditor: React.FC<NumericRangeNodeEditorProps> = ({
 
             <button
               type="button"
-              onClick={() => updateNumericThreshold(currentPhys + (net?.step || 1), currentOp)}
+              onClick={() => updateNumericThreshold(currentPhys + sliderStep, currentOp)}
               className="px-2.5 py-1.5 rounded bg-surface-tertiary hover:bg-default-hover border border-border text-foreground font-bold text-xs"
               title="Increment step"
             >
@@ -273,6 +283,33 @@ export const NumericRangeNodeEditor: React.FC<NumericRangeNodeEditorProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Interactive Range Slider when catalog bounds are defined */}
+      {sliderMin !== undefined && sliderMax !== undefined && (
+        <div className="flex items-center gap-2 pt-0.5">
+          <span className="text-[10px] font-mono text-muted shrink-0">
+            {sliderMin}{isTemperature ? displayTempUnit : nativeUnit}
+          </span>
+          <input
+            type="range"
+            min={sliderMin}
+            max={sliderMax}
+            step={sliderStep}
+            value={Math.max(sliderMin, Math.min(sliderMax, isNaN(currentPhys) ? sliderMin : currentPhys))}
+            onChange={e => {
+              const val = parseFloat(e.target.value);
+              if (!isNaN(val)) {
+                updateNumericThreshold(val, currentOp);
+              }
+            }}
+            aria-label="Numeric Range Threshold Slider"
+            className="flex-1 accent-accent cursor-pointer h-1.5 rounded-lg"
+          />
+          <span className="text-[10px] font-mono text-muted shrink-0">
+            {sliderMax}{isTemperature ? displayTempUnit : nativeUnit}
+          </span>
+        </div>
+      )}
 
       {/* Live Telemetry Pill & Edge Evaluation Insight */}
       <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-separator text-[11px]">
