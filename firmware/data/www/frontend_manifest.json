@@ -17,14 +17,14 @@
       "size": 57514
     },
     {
-      "name": "Cp7qQOaU.js.gz",
-      "path": "/spiffs/www/Cp7qQOaU.js.gz",
-      "size": 977
-    },
-    {
       "name": "CSbEEQJM.js.gz",
       "path": "/spiffs/www/CSbEEQJM.js.gz",
       "size": 34780
+    },
+    {
+      "name": "Cp7qQOaU.js.gz",
+      "path": "/spiffs/www/Cp7qQOaU.js.gz",
+      "size": 977
     },
     {
       "name": "DNJg_jrl.js.gz",
@@ -54,12 +54,12 @@
     {
       "name": "index.html",
       "path": "/spiffs/www/index.html",
-      "size": 5298
+      "size": 5220
     },
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 2065
+      "size": 2056
     },
     {
       "name": "logo.svg",
