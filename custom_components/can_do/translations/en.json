@@ -28,8 +28,11 @@
     "step": {
       "init": {
         "title": "CAN Do Options",
+        "description": "Configure vehicle model/trim, active CAN ID filtering, and enabled subsystem categories.",
         "data": {
-          "vehicle_id": "Vehicle Model",
+          "vehicle_id": "Vehicle Model / Trim",
+          "filter_active_ids": "Only include entities actively detected on CAN bus",
+          "enabled_categories": "Enabled Subsystem Categories",
           "base_topic": "MQTT Base Topic"
         }
       }

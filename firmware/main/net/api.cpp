@@ -1572,6 +1572,7 @@ static esp_err_t api_system_set_time_handler(httpd_req_t *req) {
             tv.tv_sec = epoch_sec;
             tv.tv_usec = 0;
             settimeofday(&tv, nullptr);
+            rtc_clock_anchor_update((uint64_t)epoch_sec);
             char strftime_buf[64];
             timezone_mgr_format_local(epoch_sec, strftime_buf, sizeof(strftime_buf));
             ESP_LOGI(TAG, "Device clock synchronized via HTTP: %s (%s)", strftime_buf, timezone_mgr_get_id());
@@ -2054,6 +2055,101 @@ static esp_err_t api_mqtt_post_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static esp_err_t api_can_monitored_ids_get_handler(httpd_req_t *req) {
+    std::vector<uint32_t> ids = mqtt_mgr_get_monitored_ids();
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddNumberToObject(root, "count", (double)ids.size());
+    cJSON_AddBoolToObject(root, "customized", mqtt_mgr_is_monitored_ids_customized());
+    cJSON *arr = cJSON_CreateArray();
+    for (uint32_t id : ids) {
+        char hex[16];
+        snprintf(hex, sizeof(hex), "0x%03lX", (unsigned long)id);
+        cJSON_AddItemToArray(arr, cJSON_CreateString(hex));
+    }
+    cJSON_AddItemToObject(root, "monitored_ids", arr);
+    char *rendered = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, rendered);
+    free(rendered);
+    return ESP_OK;
+}
+
+static esp_err_t api_can_monitored_ids_post_handler(httpd_req_t *req) {
+    char buf[2048];
+    int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
+    if (ret <= 0) return ESP_FAIL;
+    buf[ret] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    cJSON *arr = cJSON_IsArray(root) ? root : cJSON_GetObjectItem(root, "monitored_ids");
+    if (!arr || !cJSON_IsArray(arr)) {
+        arr = cJSON_GetObjectItem(root, "ids");
+    }
+
+    if (!arr || !cJSON_IsArray(arr)) {
+        cJSON_Delete(root);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Expected JSON array of CAN IDs");
+        return ESP_FAIL;
+    }
+
+    std::vector<uint32_t> ids;
+    int count = cJSON_GetArraySize(arr);
+    for (int i = 0; i < count; i++) {
+        cJSON *itm = cJSON_GetArrayItem(arr, i);
+        if (itm && cJSON_IsString(itm)) {
+            ids.push_back(strtoul(itm->valuestring, nullptr, 0));
+        } else if (itm && cJSON_IsNumber(itm)) {
+            ids.push_back((uint32_t)itm->valueint);
+        }
+    }
+    cJSON_Delete(root);
+
+    mqtt_mgr_set_monitored_ids(ids, true);
+
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "status", "ok");
+    cJSON_AddNumberToObject(resp, "count", (double)ids.size());
+    char *rendered = cJSON_PrintUnformatted(resp);
+    cJSON_Delete(resp);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, rendered);
+    free(rendered);
+    return ESP_OK;
+}
+
+static esp_err_t api_can_monitored_ids_reset_handler(httpd_req_t *req) {
+    (void)req;
+    mqtt_mgr_reset_monitored_ids();
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"status\":\"ok\",\"message\":\"Restored default monitored CAN IDs\"}");
+    return ESP_OK;
+}
+
+static esp_err_t api_can_active_ids_get_handler(httpd_req_t *req) {
+    std::vector<uint32_t> active = can_engine_get_active_ids();
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddNumberToObject(root, "count", (double)active.size());
+    cJSON *arr = cJSON_CreateArray();
+    for (uint32_t id : active) {
+        char hex[16];
+        snprintf(hex, sizeof(hex), "0x%03lX", (unsigned long)id);
+        cJSON_AddItemToArray(arr, cJSON_CreateString(hex));
+    }
+    cJSON_AddItemToObject(root, "active_ids", arr);
+    char *rendered = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, rendered);
+    free(rendered);
+    return ESP_OK;
+}
+
 static esp_err_t api_notify_handler(httpd_req_t *req) {
     char buf[256];
     int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
@@ -2508,6 +2604,10 @@ httpd_handle_t start_webserver(void) {
         reg_uri("/api/ble/beacons", HTTP_DELETE, api_ble_beacons_delete_handler);
         reg_uri("/api/mqtt", HTTP_GET, api_mqtt_get_handler);
         reg_uri("/api/mqtt", HTTP_POST, api_mqtt_post_handler);
+        reg_uri("/api/can/monitored_ids", HTTP_GET, api_can_monitored_ids_get_handler);
+        reg_uri("/api/can/monitored_ids", HTTP_POST, api_can_monitored_ids_post_handler);
+        reg_uri("/api/can/monitored_ids/reset", HTTP_POST, api_can_monitored_ids_reset_handler);
+        reg_uri("/api/can/active_ids", HTTP_GET, api_can_active_ids_get_handler);
         reg_uri("/api/upload", HTTP_POST, api_file_upload_handler);
         reg_uri("/api/ota", HTTP_POST, api_ota_handler);
         reg_uri("/api/ota/cloud_pull", HTTP_POST, api_ota_cloud_pull_handler);

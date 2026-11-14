@@ -272,6 +272,13 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
   const [mqttPasswordInput, setMqttPasswordInput] = useState<string>('');
   const [mqttSaveStatus, setMqttSaveStatus] = useState<string>('');
 
+  // Monitored CAN IDs state
+  const [monitoredIds, setMonitoredIds] = useState<string[]>([]);
+  const [activeBusIds, setActiveBusIds] = useState<string[]>([]);
+  const [isCustomizedMonitored, setIsCustomizedMonitored] = useState<boolean>(false);
+  const [monitoredLoading, setMonitoredLoading] = useState<boolean>(false);
+  const [newCanIdInput, setNewCanIdInput] = useState<string>('');
+
   // Wi-Fi manager state
   const [networks, setNetworks] = useState<KnownNetwork[]>([]);
   const [scanResults, setScanResults] = useState<WifiScanResult[]>([]);
@@ -584,6 +591,60 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     }
   };
 
+  // REST: Fetch Monitored & Active CAN IDs
+  const fetchMonitoredIds = async () => {
+    setMonitoredLoading(true);
+    try {
+      const [monRes, actRes] = await Promise.all([
+        fetch(getApiUrl('/api/can/monitored_ids')),
+        fetch(getApiUrl('/api/can/active_ids'))
+      ]);
+      if (monRes.ok) {
+        const monData = await monRes.json();
+        setMonitoredIds(monData.monitored_ids || []);
+        setIsCustomizedMonitored(!!monData.customized);
+      }
+      if (actRes.ok) {
+        const actData = await actRes.json();
+        setActiveBusIds(actData.active_ids || []);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setMonitoredLoading(false);
+    }
+  };
+
+  const handleSaveMonitoredIds = async (idsToSave: string[]) => {
+    try {
+      const res = await fetch(getApiUrl('/api/can/monitored_ids'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monitored_ids: idsToSave })
+      });
+      if (res.ok) {
+        showNotice(`Persisted ${idsToSave.length} monitored CAN IDs`);
+        fetchMonitoredIds();
+      } else {
+        showNotice('Failed to persist monitored CAN IDs', 'error');
+      }
+    } catch (e: any) {
+      showNotice(`Error: ${e.message}`, 'error');
+    }
+  };
+
+  const handleResetMonitoredIds = async () => {
+    try {
+      const res = await fetch(getApiUrl('/api/can/monitored_ids/reset'), { method: 'POST' });
+      if (res.ok) {
+        showNotice('Reset monitored CAN IDs to catalog defaults');
+        fetchMonitoredIds();
+      }
+    } catch (e: any) {
+      showNotice(`Error: ${e.message}`, 'error');
+    }
+  };
+
   useEffect(() => {
     fetchStatus();
     fetchWifi();
@@ -624,7 +685,10 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
   useEffect(() => {
     if (activeTab === 'automations') fetchAutomationsDiag();
-    if (activeTab === 'mqtt') fetchMqtt();
+    if (activeTab === 'mqtt') {
+      fetchMqtt();
+      fetchMonitoredIds();
+    }
     if (activeTab === 'wifi') {
       fetchWifi();
       fetchNetworks();
@@ -1697,6 +1761,123 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               </Button>
             </div>
           </form>
+
+          {/* Monitored CAN IDs Card */}
+          <div className="pt-5 border-t border-border space-y-4 max-w-2xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-foreground block">
+                  Monitored CAN IDs ({monitoredIds.length})
+                </span>
+                <span className="text-[11px] text-muted">
+                  CAN IDs the ESP32 filters and streams over MQTT. Persists in flash storage across reboots.
+                  {isCustomizedMonitored && <span className="ml-1.5 text-accent font-semibold">(Customized)</span>}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onPress={fetchMonitoredIds}
+                  isDisabled={monitoredLoading}
+                  className="p-1.5 text-xs rounded-lg border border-border"
+                  aria-label="Refresh Monitored IDs"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${monitoredLoading ? 'animate-spin text-accent' : ''}`} />
+                </Button>
+                {isCustomizedMonitored && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onPress={handleResetMonitoredIds}
+                    className="px-2.5 py-1 text-[11px] text-muted hover:text-danger rounded-lg border border-border font-semibold transition"
+                  >
+                    Reset Defaults
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Actively detected IDs hint */}
+            {activeBusIds.length > 0 && (
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-surface-secondary border border-border text-[11px]">
+                <span className="text-muted">
+                  <span className="font-semibold text-success">{activeBusIds.length} IDs</span> actively detected on the physical bus.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleSaveMonitoredIds(activeBusIds)}
+                  className="text-accent hover:underline font-bold transition"
+                >
+                  Sync to Detected
+                </button>
+              </div>
+            )}
+
+            {/* Add custom CAN ID input */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newCanIdInput}
+                onChange={(e) => setNewCanIdInput(e.target.value)}
+                placeholder="e.g. 0x4CE or 4CE"
+                className="px-3 py-1.5 text-xs rounded-xl bg-surface-secondary border border-border text-foreground font-mono flex-1 focus:outline-none focus:border-focus"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    let val = newCanIdInput.trim().toUpperCase();
+                    if (!val) return;
+                    if (!val.startsWith('0X')) val = '0X' + val;
+                    if (!monitoredIds.map(x => x.toUpperCase()).includes(val)) {
+                      const updated = [...monitoredIds, val].sort();
+                      handleSaveMonitoredIds(updated);
+                    }
+                    setNewCanIdInput('');
+                  }
+                }}
+              />
+              <Button
+                size="sm"
+                variant="secondary"
+                onPress={() => {
+                  let val = newCanIdInput.trim().toUpperCase();
+                  if (!val) return;
+                  if (!val.startsWith('0X')) val = '0X' + val;
+                  if (!monitoredIds.map(x => x.toUpperCase()).includes(val)) {
+                    const updated = [...monitoredIds, val].sort();
+                    handleSaveMonitoredIds(updated);
+                  }
+                  setNewCanIdInput('');
+                }}
+                className="px-3 py-1.5 text-xs rounded-xl bg-surface-secondary border border-border font-bold text-foreground"
+              >
+                + Add ID
+              </Button>
+            </div>
+
+            {/* ID Chips Container */}
+            <div className="max-h-48 overflow-y-auto p-2.5 rounded-xl bg-surface-secondary border border-border flex flex-wrap gap-1.5">
+              {monitoredIds.map((cid) => (
+                <span
+                  key={cid}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface text-[11px] font-mono border border-border text-foreground"
+                >
+                  {cid}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = monitoredIds.filter((id) => id.toUpperCase() !== cid.toUpperCase());
+                      handleSaveMonitoredIds(updated);
+                    }}
+                    className="text-muted hover:text-danger ml-0.5 text-xs leading-none font-bold"
+                    title={`Remove ${cid}`}
+                  >
+                    &times;
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 

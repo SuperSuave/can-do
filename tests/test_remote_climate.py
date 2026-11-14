@@ -190,6 +190,44 @@ class TestRemoteClimate(unittest.TestCase):
                     self.assertEqual(steps[1].get("payload"), "0002082000000000")
         self.assertTrue(found, "ambient_mood_lighting not found in catalog")
 
+    def test_ambient_lighting_ha_unified_entity(self) -> None:
+        """Verify ambient mood lighting is unified under light domain without duplicate number entity."""
+        cat_path = Path(__file__).resolve().parent.parent / "catalog" / "can_do_catalog.json"
+        with open(cat_path, "r", encoding="utf-8") as f:
+            cat = json.load(f)
+
+        cmds = {c["id"]: c for c in cat.get("commands", [])}
+
+        # 1. ambient_mood_lighting must have ha_metadata domain 'light'
+        self.assertIn("ambient_mood_lighting", cmds)
+        ha_meta = cmds["ambient_mood_lighting"].get("ha_metadata", {})
+        self.assertEqual(ha_meta.get("domain"), "light")
+        self.assertEqual(ha_meta.get("name"), "Ambient Mood Lighting")
+
+        # 2. ambient_mood_light_brightness must NOT have ha_metadata (avoid duplicate number entity in HA)
+        self.assertIn("ambient_mood_light_brightness", cmds)
+        self.assertNotIn("ha_metadata", cmds["ambient_mood_light_brightness"])
+
+        # 3. Verify all 10 brightness level steps match the formula
+        brightness_cmd = cmds["ambient_mood_light_brightness"]
+        opts = {opt["label"]: opt for opt in brightness_cmd.get("options", [])}
+
+        self.assertIn("Off", opts)
+        self.assertEqual(opts["Off"]["steps"][0]["payload"], "000208A000000000")
+        self.assertEqual(opts["Off"]["steps"][1]["payload"], "0002082000000000")
+        self.assertEqual(opts["Off"]["match"]["D1"], "0x41")
+
+        for lvl in range(1, 11):
+            lbl = f"Brightness Level {lvl}" if lvl < 10 else "Brightness Level 10 (Max)"
+            self.assertIn(lbl, opts)
+            d4 = 0x20 if (lvl % 2 != 0) else 0xA0
+            d5 = (lvl + 1) // 2
+            expected_step0 = f"000208{d4:02X}{d5:02X}000000"
+            self.assertEqual(opts[lbl]["steps"][0]["payload"], expected_step0)
+            self.assertEqual(opts[lbl]["steps"][1]["payload"], "0002082000000000")
+            expected_match_d1 = f"0x{0x41 + lvl:02X}"
+            self.assertEqual(opts[lbl]["match"]["D1"], expected_match_d1)
+
     def test_user_settings_0x542_decoding(self) -> None:
         """Verify 0x542 HU_USM_E_02 convenience settings payload matching."""
         # Standard factory preset: Speed lock (D1=0x02), Park unlock (D2=0x01), 5 Flashes (D3=0x05)

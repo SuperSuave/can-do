@@ -105,6 +105,7 @@ static esp_err_t init_twai(void) {
 static bool s_sntp_initialized = false;
 static void time_sync_notification_cb(struct timeval *tv) {
     time_t now = tv->tv_sec;
+    rtc_clock_anchor_update((uint64_t)now);
     char strftime_buf[64];
     timezone_mgr_format_local(now, strftime_buf, sizeof(strftime_buf));
     ESP_LOGI(TAG, "Time synchronized via NTP: %s (%s)", strftime_buf, timezone_mgr_get_id());
@@ -214,6 +215,7 @@ extern "C" void app_main(void) {
 
     init_can_engine();
     load_automations_from_fs("/spiffs/automations.json");
+    rtc_can_state_restore();
     uds_engine_init();
     power_mgr_init();
     usb_can_init();

@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.11.5-b005",
+  "can_do_version": "2026.11.6-b001",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -13773,11 +13773,6 @@
     },
     {
       "id": "ambient_mood_light_brightness",
-      "ha_metadata": {
-        "name": "Ambient Mood Lamp Brightness Level",
-        "domain": "number",
-        "icon": "mdi:brightness-6"
-      },
       "tags": [
         "all_egmp"
       ],

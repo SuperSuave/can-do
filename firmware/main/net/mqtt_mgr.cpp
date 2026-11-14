@@ -131,7 +131,7 @@ static inline void mqtt_enqueue_nonblocking(const char* topic, const char* data,
 }
 
 // Default monitored CAN IDs (Gen5W / E-GMP vehicle telemetry)
-static std::unordered_set<uint32_t> s_monitored_ids = {
+static const std::unordered_set<uint32_t> s_default_monitored_ids = {
     0x038, 0x045, 0x070, 0x0A2, 0x130, 0x151, 0x152, 0x1AC, 0x1CF, 0x1F1, 0x1F9,
     0x200, 0x226, 0x227, 0x25C, 0x29C, 0x2AD, 0x2AF, 0x2C0, 0x2FC,
     0x30B, 0x30E, 0x31B, 0x324, 0x326, 0x327, 0x328, 0x380, 0x384, 0x3A1, 0x3A2, 0x3AA, 0x3C1, 0x410, 0x411, 0x412, 0x414,
@@ -140,7 +140,78 @@ static std::unordered_set<uint32_t> s_monitored_ids = {
     0x540, 0x541, 0x559, 0x578, 0x584, 0x593, 0x594, 0x595, 0x597, 0x5CC,
     0x5D0, 0x5F5, 0x5F7, 0x60C, 0x60E, 0x651, 0x652, 0x7EC
 };
+static std::unordered_set<uint32_t> s_monitored_ids = s_default_monitored_ids;
 static std::mutex s_monitored_mutex;
+static const char* MONITORED_IDS_FILE = "/spiffs/monitored_ids.json";
+
+static void load_monitored_ids_from_fs(void) {
+    FILE* f = fopen(MONITORED_IDS_FILE, "r");
+    if (!f) return;
+
+    fseek(f, 0, SEEK_END);
+    long len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (len <= 0) {
+        fclose(f);
+        return;
+    }
+
+    std::string buf(len, '\0');
+    fread(&buf[0], 1, len, f);
+    fclose(f);
+
+    cJSON* root = cJSON_Parse(buf.c_str());
+    if (!root || !cJSON_IsArray(root)) {
+        if (root) cJSON_Delete(root);
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(s_monitored_mutex);
+    s_monitored_ids.clear();
+    int count = cJSON_GetArraySize(root);
+    for (int i = 0; i < count; i++) {
+        cJSON* itm = cJSON_GetArrayItem(root, i);
+        if (itm && cJSON_IsString(itm)) {
+            s_monitored_ids.insert(strtoul(itm->valuestring, nullptr, 0));
+        } else if (itm && cJSON_IsNumber(itm)) {
+            s_monitored_ids.insert((uint32_t)itm->valueint);
+        }
+    }
+    cJSON_Delete(root);
+    ESP_LOGI(TAG, "Loaded %d monitored CAN IDs from %s", (int)s_monitored_ids.size(), MONITORED_IDS_FILE);
+}
+
+static bool save_monitored_ids_to_fs(void) {
+    cJSON* root = cJSON_CreateArray();
+    {
+        std::lock_guard<std::mutex> lock(s_monitored_mutex);
+        std::vector<uint32_t> sorted(s_monitored_ids.begin(), s_monitored_ids.end());
+        std::sort(sorted.begin(), sorted.end());
+        for (uint32_t id : sorted) {
+            char hex_buf[16];
+            snprintf(hex_buf, sizeof(hex_buf), "0x%03lX", (unsigned long)id);
+            cJSON_AddItemToArray(root, cJSON_CreateString(hex_buf));
+        }
+    }
+
+    char* rendered = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!rendered) return false;
+
+    FILE* f = fopen("/spiffs/monitored_ids.json.tmp", "w");
+    if (!f) {
+        free(rendered);
+        return false;
+    }
+    fputs(rendered, f);
+    fclose(f);
+    free(rendered);
+
+    unlink(MONITORED_IDS_FILE);
+    rename("/spiffs/monitored_ids.json.tmp", MONITORED_IDS_FILE);
+    ESP_LOGI(TAG, "Persisted %s", MONITORED_IDS_FILE);
+    return true;
+}
 
 void mqtt_mgr_publish_can_state(uint32_t can_id, const uint8_t* data, size_t len) {
     if (!global_mqtt_client || !s_mqtt_connected.load(std::memory_order_relaxed)) return;
@@ -160,12 +231,68 @@ void mqtt_mgr_publish_entity_state(const std::string& entity_id, const std::stri
     mqtt_enqueue_nonblocking(topic.c_str(), state.c_str(), (int)state.length(), 0, 1);
 }
 
-void mqtt_mgr_set_monitored_ids(const std::vector<uint32_t>& ids) {
-    std::lock_guard<std::mutex> lock(s_monitored_mutex);
-    s_monitored_ids.clear();
-    for (uint32_t id : ids) {
-        s_monitored_ids.insert(id);
+void mqtt_mgr_publish_active_ids(bool force) {
+    if (!global_mqtt_client || !s_mqtt_connected.load(std::memory_order_relaxed)) return;
+    static uint32_t s_last_active_pub_ms = 0;
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    if (!force && (now_ms - s_last_active_pub_ms < 10000)) {
+        return; // Throttle to at most once per 10s
     }
+
+    std::vector<uint32_t> active = can_engine_get_active_ids();
+    if (active.empty() && !force) return;
+
+    cJSON* root = cJSON_CreateArray();
+    for (uint32_t id : active) {
+        char hex_buf[16];
+        snprintf(hex_buf, sizeof(hex_buf), "0x%03lX", (unsigned long)id);
+        cJSON_AddItemToArray(root, cJSON_CreateString(hex_buf));
+    }
+    char* rendered = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!rendered) return;
+
+    char topic[64];
+    snprintf(topic, sizeof(topic), "%s/%s/active_ids", MQTT_BASE_TOPIC.c_str(), DEVICE_ID.c_str());
+    mqtt_enqueue_nonblocking(topic, rendered, (int)strlen(rendered), 0, 1);
+    free(rendered);
+
+    s_last_active_pub_ms = now_ms;
+    can_engine_clear_active_ids_changed();
+}
+
+void mqtt_mgr_set_monitored_ids(const std::vector<uint32_t>& ids, bool persist) {
+    {
+        std::lock_guard<std::mutex> lock(s_monitored_mutex);
+        s_monitored_ids.clear();
+        for (uint32_t id : ids) {
+            s_monitored_ids.insert(id);
+        }
+    }
+    if (persist) {
+        save_monitored_ids_to_fs();
+    }
+}
+
+std::vector<uint32_t> mqtt_mgr_get_monitored_ids(void) {
+    std::lock_guard<std::mutex> lock(s_monitored_mutex);
+    std::vector<uint32_t> ids(s_monitored_ids.begin(), s_monitored_ids.end());
+    std::sort(ids.begin(), ids.end());
+    return ids;
+}
+
+void mqtt_mgr_reset_monitored_ids(void) {
+    {
+        std::lock_guard<std::mutex> lock(s_monitored_mutex);
+        s_monitored_ids = s_default_monitored_ids;
+    }
+    unlink(MONITORED_IDS_FILE);
+    ESP_LOGI(TAG, "Reset monitored CAN IDs to default");
+}
+
+bool mqtt_mgr_is_monitored_ids_customized(void) {
+    struct stat st;
+    return stat(MONITORED_IDS_FILE, &st) == 0;
 }
 
 bool mqtt_mgr_is_monitored_id(uint32_t can_id) {
@@ -323,6 +450,11 @@ static void mqtt_post_connect_sync_task(void* arg) {
         }
     }
 
+    // 1b. Publish active bus manifest (detected CAN IDs)
+    if (s_mqtt_connected.load()) {
+        mqtt_mgr_publish_active_ids(true);
+    }
+
     // 2. Publish automations state
     if (s_mqtt_connected.load()) {
         publish_automations_json_state();
@@ -342,6 +474,14 @@ static void mqtt_post_connect_sync_task(void* arg) {
         } else if (s_need_clear_discovery.exchange(false)) {
             mqtt_mgr_clear_discovery();
         }
+    }
+
+    // 4. If we subscribed to retained states during cold boot, unsubscribe after hydration window
+    if (!g_state_restored_from_rtc.load()) {
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        std::string state_sub = MQTT_BASE_TOPIC + "/state/+";
+        esp_mqtt_client_unsubscribe(global_mqtt_client, state_sub.c_str());
+        ESP_LOGI(TAG, "Completed cold-boot state hydration from MQTT; unsubscribed from %s", state_sub.c_str());
     }
 
     s_sync_task_running.store(false);
@@ -393,6 +533,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 sub_list,
                 sizeof(sub_list) / sizeof(sub_list[0])
             );
+
+            // Cold-boot fallback: If RTC state cache was empty, subscribe to retained entity states
+            static std::atomic<bool> s_hydrated_from_mqtt{false};
+            if (!g_state_restored_from_rtc.load() && !s_hydrated_from_mqtt.load()) {
+                std::string state_sub = MQTT_BASE_TOPIC + "/state/+";
+                esp_mqtt_client_subscribe(global_mqtt_client, state_sub.c_str(), 0);
+                ESP_LOGI(TAG, "Cold boot detected without RTC cache: Subscribed to retained states (%s)", state_sub.c_str());
+            }
 
             // 2. Mark connected after subscribe finishes and publish LWT online status
             rtc_crash_record_event("mqtt_connected");
@@ -454,6 +602,13 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             if (topic == config_get_topic || topic == (MQTT_BASE_TOPIC + "/config/automations/get")) {
                 s_auto_reload_pending.store(true);
                 mqtt_mgr_on_automations_reloaded();
+                return;
+            }
+
+            std::string state_prefix = MQTT_BASE_TOPIC + "/state/";
+            if (topic.rfind(state_prefix, 0) == 0 && topic.length() > state_prefix.length()) {
+                std::string entity_id = topic.substr(state_prefix.length());
+                can_engine_hydrate_from_mqtt(entity_id, payload);
                 return;
             }
 
@@ -650,7 +805,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                             ids.push_back((uint32_t)itm->valueint);
                         }
                     }
-                    mqtt_mgr_set_monitored_ids(ids);
+                    mqtt_mgr_set_monitored_ids(ids, true);
                     ESP_LOGI(TAG, "Updated monitored CAN IDs (%d IDs)", (int)ids.size());
                 }
                 if (root) cJSON_Delete(root);
@@ -743,6 +898,7 @@ static void load_settings_from_fs(void) {
 
 void mqtt_mgr_init(void) {
     load_settings_from_fs();
+    load_monitored_ids_from_fs();
     if (!s_mqtt_pub_queue) {
         s_mqtt_pub_queue_storage = (uint8_t*)alloc_mqtt_pub_buf(MQTT_PUB_QUEUE_LEN * sizeof(MqttPubItem));
         if (s_mqtt_pub_queue_storage) {
@@ -853,6 +1009,8 @@ void mqtt_mgr_on_wifi_connect(void) {
 void mqtt_mgr_watchdog(void) {
     if (!global_mqtt_client) {
         mqtt_mgr_start();
+    } else {
+        mqtt_mgr_publish_active_ids(false);
     }
 }
 

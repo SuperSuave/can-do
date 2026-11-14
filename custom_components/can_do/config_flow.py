@@ -7,16 +7,21 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.service_info.mqtt import MqttServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .catalog_loader import async_get_vehicles
 from .const import (
+    ALL_CATEGORIES,
     CONF_BASE_TOPIC,
     CONF_DEVICE_ID,
+    CONF_ENABLED_CATEGORIES,
+    CONF_FILTER_ACTIVE_IDS,
     CONF_VEHICLE_ID,
     DEFAULT_BASE_TOPIC,
     DEFAULT_DEVICE_ID,
+    DEFAULT_FILTER_ACTIVE_IDS,
     DEFAULT_VEHICLE_ID,
     DOMAIN,
 )
@@ -168,12 +173,30 @@ class CanDoOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        current_vehicle = self.config_entry.data.get(CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID)
-        current_base = self.config_entry.data.get(CONF_BASE_TOPIC, DEFAULT_BASE_TOPIC)
+        current_vehicle = self.config_entry.options.get(
+            CONF_VEHICLE_ID,
+            self.config_entry.data.get(CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID),
+        )
+        current_base = self.config_entry.options.get(
+            CONF_BASE_TOPIC,
+            self.config_entry.data.get(CONF_BASE_TOPIC, DEFAULT_BASE_TOPIC),
+        )
+        current_filter_active = self.config_entry.options.get(
+            CONF_FILTER_ACTIVE_IDS,
+            self.config_entry.data.get(CONF_FILTER_ACTIVE_IDS, DEFAULT_FILTER_ACTIVE_IDS),
+        )
+        current_categories = self.config_entry.options.get(
+            CONF_ENABLED_CATEGORIES,
+            ALL_CATEGORIES,
+        )
+
+        cat_options = {cat: cat for cat in ALL_CATEGORIES}
 
         schema = vol.Schema(
             {
                 vol.Required(CONF_VEHICLE_ID, default=current_vehicle): vol.In(vehicle_map),
+                vol.Required(CONF_FILTER_ACTIVE_IDS, default=current_filter_active): bool,
+                vol.Optional(CONF_ENABLED_CATEGORIES, default=current_categories): cv.multi_select(cat_options),
                 vol.Optional(CONF_BASE_TOPIC, default=current_base): str,
             }
         )

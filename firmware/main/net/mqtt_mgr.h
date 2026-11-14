@@ -33,7 +33,11 @@ void mqtt_mgr_on_automations_reloaded(void);
 
 void mqtt_mgr_publish_can_state(uint32_t can_id, const uint8_t* data, size_t len);
 void mqtt_mgr_publish_entity_state(const std::string& entity_id, const std::string& state);
-void mqtt_mgr_set_monitored_ids(const std::vector<uint32_t>& ids);
+void mqtt_mgr_publish_active_ids(bool force = false);
+void mqtt_mgr_set_monitored_ids(const std::vector<uint32_t>& ids, bool persist = true);
+std::vector<uint32_t> mqtt_mgr_get_monitored_ids(void);
+void mqtt_mgr_reset_monitored_ids(void);
+bool mqtt_mgr_is_monitored_ids_customized(void);
 bool mqtt_mgr_is_monitored_id(uint32_t can_id);
 
 struct BleButtonEvent;

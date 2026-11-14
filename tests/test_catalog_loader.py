@@ -142,5 +142,40 @@ class TestParseHexVal(unittest.TestCase):
         self.assertEqual(parse_hex_val("!xyz"), (0, True))
 
 
+class TestVehicleCommandFiltering(unittest.TestCase):
+    """Test suite for vehicle command category and active CAN ID filtering."""
+
+    def test_category_filtering(self) -> None:
+        """Filtering by category should return only commands matching the allowed categories."""
+        from custom_components.can_do.catalog_loader import get_vehicle_commands
+        all_cmds = get_vehicle_commands("ev6_gtline")
+        doors_cmds = get_vehicle_commands("ev6_gtline", enabled_categories=["Doors, Access & Security"])
+        self.assertGreater(len(all_cmds), len(doors_cmds))
+        self.assertTrue(all(c.get("category") == "Doors, Access & Security" for c in doors_cmds))
+
+    def test_active_can_id_filtering(self) -> None:
+        """Filtering by active CAN IDs should exclude state telemetry commands whose ID is not seen."""
+        from custom_components.can_do.catalog_loader import get_vehicle_commands
+        all_cmds = get_vehicle_commands("ev6_gtline")
+        # Give only 0x4CE and 0x0A2
+        active_ids = {"0x4ce", "0x0a2"}
+        filtered = get_vehicle_commands("ev6_gtline", active_can_ids=active_ids)
+        self.assertGreater(len(all_cmds), len(filtered))
+        for c in filtered:
+            scid = c.get("network", {}).get("state_can_id") or c.get("state_can_id")
+            acid = c.get("network", {}).get("action_can_id") or c.get("action_can_id")
+            if scid and not acid:
+                norm = f"0x{int(scid, 16):03x}"
+                self.assertIn(norm, active_ids)
+
+    def test_monitored_can_ids_filtered(self) -> None:
+        """get_monitored_can_ids should respect enabled categories."""
+        from custom_components.can_do.catalog_loader import get_monitored_can_ids
+        all_ids = get_monitored_can_ids("ev6_gtline")
+        doors_ids = get_monitored_can_ids("ev6_gtline", enabled_categories=["Doors, Access & Security"])
+        self.assertGreater(len(all_ids), len(doors_ids))
+        self.assertTrue(set(doors_ids).issubset(set(all_ids)))
+
+
 if __name__ == "__main__":
     unittest.main()

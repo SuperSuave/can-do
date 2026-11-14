@@ -12,8 +12,11 @@ from .catalog_loader import get_monitored_can_ids, get_vehicle_commands
 from .const import (
     CONF_BASE_TOPIC,
     CONF_DEVICE_ID,
+    CONF_ENABLED_CATEGORIES,
+    CONF_FILTER_ACTIVE_IDS,
     CONF_VEHICLE_ID,
     DEFAULT_BASE_TOPIC,
+    DEFAULT_FILTER_ACTIVE_IDS,
     DEFAULT_VEHICLE_ID,
 )
 
@@ -75,8 +78,12 @@ class CanDoDataCoordinator:
         self._ble_beacon_listeners: list[Callable[[], None]] = []
         self._ble_device_listeners: list[Callable[[], None]] = []
 
-        self.commands = get_vehicle_commands(self.vehicle_id)
-        self.monitored_can_ids = get_monitored_can_ids(self.vehicle_id)
+        self.enabled_categories: list[str] | None = entry_data.get(CONF_ENABLED_CATEGORIES)
+        self.filter_active_ids: bool = entry_data.get(CONF_FILTER_ACTIVE_IDS, DEFAULT_FILTER_ACTIVE_IDS)
+        self.active_can_ids: set[str] = set()
+
+        self.commands = get_vehicle_commands(self.vehicle_id, enabled_categories=self.enabled_categories)
+        self.monitored_can_ids = get_monitored_can_ids(self.vehicle_id, enabled_categories=self.enabled_categories)
 
     @property
     def effective_device_id(self) -> str:
@@ -127,6 +134,11 @@ class CanDoDataCoordinator:
     def sub_ids_topic(self) -> str:
         """Return MQTT dynamic monitored CAN IDs topic."""
         return f"{self.base_topic}/{self.effective_device_id}/subscribe_ids"
+
+    @property
+    def active_ids_topic(self) -> str:
+        """Return MQTT active CAN IDs topic wildcard."""
+        return f"{self.base_topic}/+/active_ids"
 
     @property
     def climate_topic(self) -> str:
@@ -185,6 +197,16 @@ class CanDoDataCoordinator:
         )
         self._unsub_list.append(unsub_dev_dir)
 
+        # 3b. Subscribe to active CAN IDs manifest from ESP32 edge device
+        unsub_act = await mqtt.async_subscribe(
+            self.hass, self.active_ids_topic, self._handle_active_ids_message, qos=1
+        )
+        self._unsub_list.append(unsub_act)
+        unsub_act_dir = await mqtt.async_subscribe(
+            self.hass, f"{self.base_topic}/active_ids", self._handle_active_ids_message, qos=1
+        )
+        self._unsub_list.append(unsub_act_dir)
+
         # 4. Inform ESP32 edge device of the state CAN IDs we want it to publish
         if self.monitored_can_ids:
             await self.async_publish_monitored_ids()
@@ -233,6 +255,34 @@ class CanDoDataCoordinator:
 
         if new_avail and self.monitored_can_ids:
             self.hass.async_create_task(self.async_publish_monitored_ids())
+
+    @callback
+    def _handle_active_ids_message(self, msg: mqtt.ReceiveMessage) -> None:
+        """Handle incoming active bus manifest from ESP32."""
+        payload = msg.payload.strip()
+        if not payload:
+            return
+        try:
+            raw_ids = json.loads(payload)
+            if isinstance(raw_ids, list):
+                new_active = {normalize_can_id(cid) for cid in raw_ids if cid}
+                if new_active != self.active_can_ids:
+                    self.active_can_ids = new_active
+                    _LOGGER.info(
+                        "Updated active CAN IDs from %s: %d IDs detected",
+                        msg.topic,
+                        len(self.active_can_ids),
+                    )
+                    self._notify_all_listeners()
+        except Exception as ex:
+            _LOGGER.debug("Failed parsing active_ids payload from %s: %s", msg.topic, ex)
+
+    def is_can_id_active(self, can_id: str | None) -> bool:
+        """Return True if CAN ID has been actively observed on the vehicle bus."""
+        if not self.filter_active_ids or not can_id:
+            return True
+        norm = normalize_can_id(can_id)
+        return norm in self.active_can_ids
 
     @callback
     def _handle_can_state_message(self, msg: mqtt.ReceiveMessage) -> None:

@@ -210,14 +210,14 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
 
     @property
     def brightness(self) -> int | None:
-        """Return the brightness of this light."""
+        """Return the brightness of this light (0-255)."""
         # Check live infotainment status frame 0x455 (Byte D1 low nibble: 1=off, 2-11=levels 1-10)
         raw_455 = self.coordinator.get_can_payload("0x455")
         if raw_455 and len(raw_455) >= 1:
             lvl = (raw_455[0] & 0x0F) - 1
             if lvl <= 0:
                 return 0
-            return int((lvl / 10.0) * 255)
+            return int(round((lvl / 10.0) * 255))
 
         return self._brightness
 
@@ -241,13 +241,14 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
         return None
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn the ambient lighting on."""
+        """Turn the ambient lighting on, set color, effect, or brightness."""
         net = self.command.get("network", {})
         action_can_id = net.get("action_can_id", "0x4AD")
         delay_ms = net.get("delay_ms", 25)
 
         target_opt = None
         r, g, b = self._rgb_color
+        color_changed = False
 
         if ATTR_RGB_COLOR in kwargs:
             r, g, b = kwargs[ATTR_RGB_COLOR]
@@ -260,6 +261,7 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
             rgb_payload = json.dumps({"r": r, "g": g, "b": b, "mode": 1})
             _LOGGER.info("Sending Ambient Light RGB (%d, %d, %d) to coordinator", r, g, b)
             await self.coordinator.async_send_entity_command("ambient_mood_lamp_color", rgb_payload)
+            color_changed = True
 
         elif ATTR_EFFECT in kwargs:
             effect_name = kwargs[ATTR_EFFECT]
@@ -270,8 +272,9 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
 
             _LOGGER.info("Selecting Ambient Light effect preset '%s'", effect_name)
             await self.coordinator.async_send_entity_command("ambient_mood_lamp_color", effect_name)
+            color_changed = True
 
-        else:
+        elif ATTR_BRIGHTNESS not in kwargs:
             # Simple turn on: use current effect / RGB preset
             if self._effect and self._effect in self._options_by_label:
                 target_opt = self._options_by_label[self._effect]
@@ -282,20 +285,47 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
             cmd_name = self._effect or "Color 8: Pure Cyan / Aqua Wave"
             _LOGGER.info("Turning on Ambient Light with default preset '%s'", cmd_name)
             await self.coordinator.async_send_entity_command("ambient_mood_lamp_color", cmd_name)
+            color_changed = True
 
-        if ATTR_BRIGHTNESS in kwargs:
-            self._brightness = kwargs[ATTR_BRIGHTNESS]
-
-        # 2. Transmit 2-stage CAN burst for target option to Dash (0x4AD) and Doors (0x48F)
-        if target_opt:
+        # 2. Transmit 2-stage CAN burst for color option to Dash (0x4AD)
+        if color_changed and target_opt:
             steps = build_action_steps(self.command, target_opt)
             if steps:
                 for s in steps:
                     if s.get("repeat", 1) < 3:
                         s["repeat"] = 3
                     s["delay_ms"] = delay_ms
-                _LOGGER.info("Sending 0x4AD 2-stage burst (%d steps) for ambient light", len(steps))
+                _LOGGER.info("Sending 0x4AD 2-stage burst (%d steps) for ambient light color", len(steps))
                 await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
+
+        # 3. Transmit 2-stage CAN burst for brightness adjustment
+        if ATTR_BRIGHTNESS in kwargs:
+            brightness = kwargs[ATTR_BRIGHTNESS]
+            self._brightness = brightness
+            if brightness <= 0:
+                await self.async_turn_off()
+                return
+
+            level = max(1, min(10, round((brightness / 255.0) * 10)))
+            d4_byte = 0x20 if (level % 2 != 0) else 0xA0
+            d5_byte = (level + 1) // 2
+            brightness_steps = [
+                {"payload": f"000208{d4_byte:02X}{d5_byte:02X}000000", "repeat": 3, "delay_ms": delay_ms},
+                {"payload": "0002082000000000", "repeat": 3, "delay_ms": delay_ms},
+            ]
+            _LOGGER.info("Setting ambient light brightness to level %d (HA %d)", level, brightness)
+            await self.coordinator.async_send_action(action_can_id, delay_ms, brightness_steps)
+        elif not self.is_on:
+            # If turning on from OFF without explicit brightness, restore last known brightness level (default 10)
+            level = max(1, min(10, round((self._brightness / 255.0) * 10))) if self._brightness > 0 else 10
+            d4_byte = 0x20 if (level % 2 != 0) else 0xA0
+            d5_byte = (level + 1) // 2
+            brightness_steps = [
+                {"payload": f"000208{d4_byte:02X}{d5_byte:02X}000000", "repeat": 3, "delay_ms": delay_ms},
+                {"payload": "0002082000000000", "repeat": 3, "delay_ms": delay_ms},
+            ]
+            _LOGGER.info("Activating ambient light at brightness level %d", level)
+            await self.coordinator.async_send_action(action_can_id, delay_ms, brightness_steps)
 
         self._is_on = True
         self.async_write_ha_state()

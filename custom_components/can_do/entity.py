@@ -32,6 +32,19 @@ class CanDoEntity(Entity):
         self._unsub_listeners: list[Callable[[], None]] = []
         self._last_state_snapshot: Any = object()
 
+        # Adhere to Home Assistant standard: enable core entities by default, leave debug/auxiliary disabled
+        if "enabled_default" in meta:
+            self._attr_entity_registry_enabled_default = bool(meta["enabled_default"])
+        else:
+            self._attr_entity_registry_enabled_default = self._infer_default_enabled()
+
+    def _infer_default_enabled(self) -> bool:
+        """Infer default enabled state based on entity category and role."""
+        eid = self.entity_id_str.lower()
+        if any(k in eid for k in ("hud_nav", "audio_dsp", "wheel_speed", "cell_delta", "raw_", "diag_")):
+            return False
+        return True
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return base diagnostic attributes including state and action CAN IDs."""
@@ -47,7 +60,11 @@ class CanDoEntity(Entity):
 
     @property
     def available(self) -> bool:
-        """Return True so entities stay active in Home Assistant and report unknown instead of unavailable."""
+        """Return True if coordinator is available and CAN ID is active (if active filtering is enabled)."""
+        if not self.coordinator.available:
+            return False
+        if self.state_can_id and not self.coordinator.is_can_id_active(self.state_can_id):
+            return False
         return True
 
     @property

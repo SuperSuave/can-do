@@ -176,23 +176,65 @@ def resolve_variant(command: dict[str, Any], vehicle_id: str) -> dict[str, Any]:
     return resolved
 
 
-def get_vehicle_commands(vehicle_id: str) -> list[dict[str, Any]]:
-    """Filter commands applicable to the selected vehicle, resolving variants."""
+def get_vehicle_commands(
+    vehicle_id: str,
+    enabled_categories: list[str] | set[str] | None = None,
+    active_can_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Filter commands applicable to the selected vehicle, resolving variants and optional filters."""
     catalog = load_catalog()
     vehicle = get_vehicle_definition(vehicle_id)
     family = vehicle.get("family", "") if vehicle else ""
+
+    cat_set = set(enabled_categories) if enabled_categories is not None else None
+    act_set = None
+    if active_can_ids is not None:
+        act_set = set()
+        for cid in active_can_ids:
+            s = str(cid).strip().lower()
+            if s.startswith("0x"):
+                try:
+                    s = f"0x{int(s, 16):03x}"
+                except ValueError:
+                    pass
+            act_set.add(s)
 
     matched = []
     for c in catalog.get("commands", []):
         tags = c.get("tags", [])
         if "all_egmp" in tags or vehicle_id in tags or (family and family in tags):
-            matched.append(resolve_variant(c, vehicle_id))
+            if cat_set is not None:
+                cat = c.get("category", "")
+                if cat and cat not in cat_set:
+                    continue
+
+            resolved = resolve_variant(c, vehicle_id)
+
+            if act_set is not None:
+                net = resolved.get("network", {})
+                scid = net.get("state_can_id") or resolved.get("state_can_id")
+                acid = net.get("action_can_id") or resolved.get("action_can_id")
+                # If command has a state telemetry CAN ID and no action trigger, verify it is active
+                if scid:
+                    s = str(scid).strip().lower()
+                    if s.startswith("0x"):
+                        try:
+                            s = f"0x{int(s, 16):03x}"
+                        except ValueError:
+                            pass
+                    if s not in act_set and not acid:
+                        continue
+
+            matched.append(resolved)
     return matched
 
 
-def get_monitored_can_ids(vehicle_id: str) -> list[str]:
+def get_monitored_can_ids(
+    vehicle_id: str,
+    enabled_categories: list[str] | set[str] | None = None,
+) -> list[str]:
     """Get unique state CAN IDs (e.g. '0x448') used by the selected vehicle's commands."""
-    commands = get_vehicle_commands(vehicle_id)
+    commands = get_vehicle_commands(vehicle_id, enabled_categories=enabled_categories)
     ids: set[str] = set()
     for c in commands:
         net = c.get("network", {})

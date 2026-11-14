@@ -51,6 +51,39 @@ void can_engine_on_ble_device_event(const std::string& address, const std::strin
 void can_engine_on_ble_beacon_event(const std::string& uuid, const std::string& event, int8_t rssi, uint16_t major = 0, uint16_t minor = 0, const std::string& mac = "", const std::string& name = "");
 
 #define RTC_CRASH_MAGIC 0xDEADBEE2
+#define RTC_CAN_STATE_MAGIC 0xCA11D002
+#define RTC_MAX_SAVED_FRAMES 128
+
+struct RtcCanFrameEntry {
+    uint32_t can_id;
+    uint8_t  dlc;
+    uint8_t  data[8];
+};
+
+struct RtcCanStateCache {
+    uint32_t magic;
+    uint32_t crc32;
+    uint32_t count;
+    uint32_t timestamp_sec;
+    int64_t  esp_timer_us_at_sync;
+    uint64_t wall_time_epoch_at_sync;
+    uint8_t  time_valid;
+    RtcCanFrameEntry frames[RTC_MAX_SAVED_FRAMES];
+};
+
+extern std::atomic<bool> g_state_restored_from_rtc;
+
+void rtc_can_state_save(void);
+bool rtc_can_state_restore(void);
+void rtc_clock_anchor_update(uint64_t epoch_sec);
+void can_engine_hydrate_from_mqtt(const std::string& entity_id, const std::string& state);
+void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t data_length_code);
+
+// Active CAN ID discovery tracking
+void can_engine_record_active_id(uint32_t can_id);
+std::vector<uint32_t> can_engine_get_active_ids(void);
+bool can_engine_has_active_ids_changed(void);
+void can_engine_clear_active_ids_changed(void);
 
 struct RtcCrashInfo {
     uint32_t magic;
