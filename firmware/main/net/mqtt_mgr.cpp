@@ -12,9 +12,11 @@
 #include <unordered_set>
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
+#include <freertos/idf_additions.h>
 #include <sys/unistd.h>
 #include <sys/stat.h>
 
@@ -58,11 +60,74 @@ static void mqtt_cmd_worker_task(void* arg) {
 static FILE* s_automations_tmp_file = nullptr;
 static bool s_receiving_automations = false;
 
-// Non-blocking MQTT enqueue helper: never blocks can_rx_task or UART worker on TCP socket stalls
+struct MqttPubItem {
+    char topic[96];
+    char inline_data[144];
+    char* heap_data;
+    int len;
+    uint8_t qos;
+    uint8_t retain;
+};
+#if CONFIG_SPIRAM
+static constexpr UBaseType_t MQTT_PUB_QUEUE_LEN = 64;
+#else
+static constexpr UBaseType_t MQTT_PUB_QUEUE_LEN = 16;
+#endif
+static StaticQueue_t s_mqtt_pub_queue_struct;
+static uint8_t* s_mqtt_pub_queue_storage = nullptr;
+static QueueHandle_t s_mqtt_pub_queue = nullptr;
+static std::mutex s_mqtt_pub_mutex;
+
+static inline char* alloc_mqtt_pub_buf(size_t sz) {
+#if CONFIG_SPIRAM
+    return (char*)heap_caps_malloc_prefer(sz, 2, MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+#else
+    return (char*)malloc(sz);
+#endif
+}
+
+static void mqtt_pub_worker_task(void* arg) {
+    (void)arg;
+    MqttPubItem item;
+    while (true) {
+        if (xQueueReceive(s_mqtt_pub_queue, &item, portMAX_DELAY) == pdTRUE) {
+            if (s_mqtt_connected.load(std::memory_order_relaxed)) {
+                std::lock_guard<std::mutex> pub_lock(s_mqtt_pub_mutex);
+                if (global_mqtt_client && s_mqtt_connected.load(std::memory_order_relaxed)) {
+                    const char* payload_ptr = item.heap_data ? item.heap_data : item.inline_data;
+                    esp_mqtt_client_enqueue(global_mqtt_client, item.topic, payload_ptr, item.len, item.qos, item.retain, true);
+                }
+            }
+            if (item.heap_data) {
+                free(item.heap_data);
+            }
+        }
+    }
+}
+
+// Non-blocking MQTT enqueue helper: queues to s_mqtt_pub_queue with 0-tick wait so can_rx_task never touches MQTT_API_LOCK
 static inline void mqtt_enqueue_nonblocking(const char* topic, const char* data, int len, int qos, int retain) {
-    if (!global_mqtt_client || !s_mqtt_connected.load(std::memory_order_relaxed)) return;
-    int actual_len = (len > 0) ? len : (int)strlen(data);
-    esp_mqtt_client_enqueue(global_mqtt_client, topic, data, actual_len, qos, retain, true);
+    if (!s_mqtt_pub_queue || !global_mqtt_client || !s_mqtt_connected.load(std::memory_order_relaxed) || !topic) return;
+    int actual_len = (len > 0) ? len : (data ? (int)strlen(data) : 0);
+    MqttPubItem item = {};
+    strncpy(item.topic, topic, sizeof(item.topic) - 1);
+    item.len = actual_len;
+    item.qos = (uint8_t)qos;
+    item.retain = (uint8_t)retain;
+    if (actual_len > 0 && data) {
+        if (actual_len <= (int)sizeof(item.inline_data)) {
+            memcpy(item.inline_data, data, actual_len);
+        } else {
+            item.heap_data = alloc_mqtt_pub_buf((size_t)actual_len);
+            if (!item.heap_data) return;
+            memcpy(item.heap_data, data, actual_len);
+        }
+    }
+    if (xQueueSend(s_mqtt_pub_queue, &item, 0) != pdTRUE) {
+        if (item.heap_data) {
+            free(item.heap_data);
+        }
+    }
 }
 
 // Default monitored CAN IDs (Gen5W / E-GMP vehicle telemetry)
@@ -678,6 +743,23 @@ static void load_settings_from_fs(void) {
 
 void mqtt_mgr_init(void) {
     load_settings_from_fs();
+    if (!s_mqtt_pub_queue) {
+        s_mqtt_pub_queue_storage = (uint8_t*)alloc_mqtt_pub_buf(MQTT_PUB_QUEUE_LEN * sizeof(MqttPubItem));
+        if (s_mqtt_pub_queue_storage) {
+            s_mqtt_pub_queue = xQueueCreateStatic(MQTT_PUB_QUEUE_LEN, sizeof(MqttPubItem), s_mqtt_pub_queue_storage, &s_mqtt_pub_queue_struct);
+        } else {
+            s_mqtt_pub_queue = xQueueCreate(16, sizeof(MqttPubItem));
+        }
+        if (s_mqtt_pub_queue) {
+#if CONFIG_SPIRAM
+            if (xTaskCreateWithCaps(mqtt_pub_worker_task, "mqtt_pub", 4096, nullptr, 3, nullptr, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
+                xTaskCreate(mqtt_pub_worker_task, "mqtt_pub", 3072, nullptr, 3, nullptr);
+            }
+#else
+            xTaskCreate(mqtt_pub_worker_task, "mqtt_pub", 3072, nullptr, 3, nullptr);
+#endif
+        }
+    }
     if (!s_mqtt_cmd_queue) {
         s_mqtt_cmd_queue = xQueueCreate(16, sizeof(MqttSetCmd));
         if (s_mqtt_cmd_queue) {
@@ -737,10 +819,22 @@ void mqtt_mgr_start(void) {
 void mqtt_mgr_stop(void) {
     std::lock_guard<std::mutex> lock(s_mqtt_mutex);
     if (global_mqtt_client) {
-        s_mqtt_connected = false;
-        esp_mqtt_client_stop(global_mqtt_client);
-        esp_mqtt_client_destroy(global_mqtt_client);
-        global_mqtt_client = nullptr;
+        s_mqtt_connected.store(false, std::memory_order_relaxed);
+        esp_mqtt_client_handle_t client = global_mqtt_client;
+        esp_mqtt_client_stop(client);
+        {
+            std::lock_guard<std::mutex> pub_lock(s_mqtt_pub_mutex);
+            global_mqtt_client = nullptr;
+            if (s_mqtt_pub_queue) {
+                MqttPubItem item;
+                while (xQueueReceive(s_mqtt_pub_queue, &item, 0) == pdTRUE) {
+                    if (item.heap_data) {
+                        free(item.heap_data);
+                    }
+                }
+            }
+        }
+        esp_mqtt_client_destroy(client);
     }
 }
 
