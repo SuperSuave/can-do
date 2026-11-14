@@ -4,8 +4,11 @@ import { Catalog, Command, Vehicle } from '../types/catalog';
 import { isRunningOnDevice, resolveDeviceBaseUrl } from '../utils/hostUtils';
 import { resolveVariant } from '../utils/catalogUtils';
 import {
+  decodeAirflowCanByte,
+  decodeAirflowEntityState,
   decodeChargePortCanFrame,
   decodeChargingCanFrame,
+  decodeDriverOnlyCanFrame,
   decodeRearSeatEntityUpdate,
   decodeSeatComfortByte,
   decodeSeatLevel,
@@ -18,6 +21,7 @@ import {
   parseDualCabinTempToF,
   parseOdometerStateToKm,
   parseSingleCabinTempToF,
+  AIRFLOW_MODE_COMMAND_LABELS,
 } from '../utils/cockpitDecoders';
 import { deviceWs } from '../services/deviceWs';
 import {
@@ -49,7 +53,8 @@ import {
   Info,
   Maximize2,
   Activity,
-  Link2
+  Link2,
+  User,
 } from 'lucide-react';
 import {
   EgmpModel,
@@ -241,6 +246,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   const [passengerTemp, setPassengerTemp] = useState<number | null>(null);
   const [fanSpeed, setFanSpeed] = useState<number | null>(null); // 1-8
   const [airflow, setAirflow] = useState<AirflowMode | null>(null);
+  const [driverOnly, setDriverOnly] = useState<boolean | null>(null);
   const [recirc, setRecirc] = useState<boolean | null>(null);
   const [rearDefrost, setRearDefrost] = useState<boolean | null>(null);
   const [frontDefrost, setFrontDefrost] = useState<boolean | null>(null);
@@ -412,6 +418,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       tpmsName: findCmd('tpms_warning_lamp')?.ha_metadata?.name || findCmd('wheel_speeds')?.ha_metadata?.name || 'TPMS Tire Pressures',
       sunroof: getCanId('sunroof_extended', '442'),
       sunroofName: findCmd('sunroof_extended')?.ha_metadata?.name || 'Sunroof Glass & Cover',
+      driverOnly: getCanId('climate_driver_only_toggle', '465'),
+      driverOnlyName: findCmd('climate_driver_only_toggle')?.ha_metadata?.name || 'Driver Only Climate Zone',
+      heatToggle: getCanId('climate_heat_toggle', '41d'),
+      heatToggleName: findCmd('climate_heat_toggle')?.ha_metadata?.name || 'Climate Heat Toggle',
+      acToggle: getCanId('climate_ac_toggle', '49f'),
+      acToggleName: findCmd('climate_ac_toggle')?.ha_metadata?.name || 'Climate A/C Toggle',
+      airflow: getCanId('climate_airflow_direction', '31b'),
+      airflowName: findCmd('climate_airflow_direction')?.ha_metadata?.name || 'Climate Airflow Direction',
     };
   }, [catalog, activeVehicle]);
 
@@ -430,6 +444,21 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       return;
     }
     previewFn();
+  };
+
+  // Bench preview cycler for outdoor ambient temperature
+  const cycleAmbientTempPreview = () => {
+    runPreviewOrReadOnly('Outdoor Temperature', () => {
+      const presets = [-5, 10, 21.5, 32];
+      setAmbientTempC(prev => {
+        if (prev === null) return presets[0];
+        const nextIdx = (presets.findIndex(p => Math.round(p) === Math.round(prev)) + 1) % presets.length;
+        const nextC = presets[nextIdx];
+        const f = Math.round(nextC * 1.8 + 32);
+        triggerNotice(`Outdoor Temp Preview: ${tempUnit === 'F' ? `${f}°F` : `${nextC}°C`}`);
+        return nextC;
+      });
+    });
   };
 
   // Sunroof toggles
@@ -649,11 +678,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       const match = stateStr.match(/(\d+)/);
       if (match) setFanSpeed(parseInt(match[1], 10));
     } else if (entity === 'climate_airflow_direction' || entity === 'airflow_direction') {
-      if (normState.includes('face_feet') || normState.includes('face / feet') || normState.includes('body & legs')) setAirflow('face_feet');
-      else if (normState.includes('defrost') || normState.includes('defog')) setAirflow('defrost');
-      else if (normState.includes('face') || normState.includes('body')) setAirflow('face');
-      else if (normState.includes('feet') || normState.includes('legs')) setAirflow('feet');
-      else if (normState.includes('auto')) setAirflow('auto');
+      const decodedAf = decodeAirflowEntityState(stateStr);
+      if (decodedAf) setAirflow(decodedAf);
+    } else if (entity === 'climate_driver_only_toggle' || entity === 'driver_only') {
+      setDriverOnly(parseBooleanEntityState(stateStr) || normState.includes('on') || normState.includes('driver only on'));
+    } else if (entity === 'climate_heat_toggle' || entity === 'heat_toggle' || entity === 'cabin_heat') {
+      setHeatActive(parseBooleanEntityState(stateStr) || normState.includes('on') || normState.includes('heat on'));
+    } else if (entity === 'climate_ac_toggle' || entity === 'ac_toggle' || entity === 'cabin_ac') {
+      setAcActive(parseBooleanEntityState(stateStr) || normState.includes('on') || normState.includes('a/c on'));
     } else if (entity === 'climate_recirc_on') {
       setRecirc(parseBooleanEntityState(stateStr));
     } else if (entity === 'climate_sync_toggle') {
@@ -846,7 +878,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     // Ambient Outdoor Temperature (Dynamically mapped from catalog, e.g. 0x226)
     else if ((normId === canMappings.ambientTemp || normId === '226') && bytes.length >= 4) {
       const raw = bytes[3];
-      if (raw > 0 && raw < 255) {
+      if (raw >= 0 && raw < 255) {
         const c = raw - 40;
         setAmbientTempC(prev => (prev === c ? prev : c));
         recordLog(idFormatted, canMappings.ambientTempName, `${c}°C (${Math.round(c * 1.8 + 32)}°F)`, hexPayload, now);
@@ -1182,19 +1214,21 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       const fanRaw = bytes[3] & 0x0F;
       const speed = fanRaw >= 2 && fanRaw <= 9 ? fanRaw - 1 : 0;
       setFanSpeed(speed);
-      const afRaw = bytes[3] & 0xF0;
-      const afMap: Record<number, AirflowMode> = {
-        0x00: 'auto',
-        0x10: 'face',
-        0x20: 'face_feet',
-        0x30: 'feet',
-        0x40: 'defrost',
-      };
-      if (afRaw in afMap) setAirflow(afMap[afRaw]);
+      const decodedAf = decodeAirflowCanByte(bytes[3]);
+      if (decodedAf) setAirflow(decodedAf);
       if (bytes.length >= 5) {
         setRecirc(Boolean(bytes[4] & 0x40));
       }
       recordLog(idFormatted, canMappings.fanBlowerName, `Fan ${speed}`, hexPayload, now);
+    }
+
+    // Driver-Only Climate Zone (0x465 Byte D7: 0x04=On, 0x0C=Off)
+    else if ((normId === canMappings.driverOnly || normId === '465') && bytes.length >= 7) {
+      const isDo = decodeDriverOnlyCanFrame(bytes);
+      if (isDo !== null) {
+        setDriverOnly(isDo);
+        recordLog(idFormatted, canMappings.driverOnlyName, isDo ? 'Driver Only On' : 'Driver Only Off', hexPayload, now);
+      }
     }
 
     // Remote Climate Execution State (DATC_07 0x384 D4 == 0x0A)
@@ -1472,7 +1506,13 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
               {odometer !== null ? `${odometer.toLocaleString()} ${unitSystem === 'metric' ? 'km' : 'mi'}` : `-- ${unitSystem === 'metric' ? 'km' : 'mi'}`}
             </span>
             <span className="text-muted/60">•</span>
-            <span className="inline-flex items-center gap-1">
+            <button
+              type="button"
+              id="hud-outdoor-temp-btn"
+              onClick={cycleAmbientTempPreview}
+              title="Outdoor Ambient Temperature (Click in bench mode to preview)"
+              className="inline-flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
+            >
               <Thermometer className="w-3.5 h-3.5 text-muted" />
               <span>{displayAmbient}</span>
               {ambientThreshold && (
@@ -1485,7 +1525,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   {ambientThreshold.label}
                 </Chip>
               )}
-            </span>
+            </button>
             <span className="text-muted/60">•</span>
             <span className="font-mono text-foreground font-medium">
               {unitSystem === 'metric' ? `${speedKph} km/h` : `${speedMph} MPH`}
@@ -1995,12 +2035,53 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
           {/* Dual-Zone Climate Control Suite */}
           <Card className="p-4 sm:p-5 rounded-2xl bg-surface border border-border shadow-surface space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Wind className="w-4 h-4 text-accent" />
                 <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Cabin Climate</h3>
+                <button
+                  type="button"
+                  id="cabin-outdoor-temp-btn"
+                  onClick={cycleAmbientTempPreview}
+                  title="Outdoor Ambient Temperature (Click in bench mode to preview)"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-secondary border border-border text-[11px] font-mono text-muted hover:text-foreground transition-colors cursor-pointer"
+                >
+                  <Thermometer className="w-3 h-3 text-muted" />
+                  <span>Outside {displayAmbient}</span>
+                  {ambientThreshold && (
+                    <Chip
+                      size="sm"
+                      color={ambientThreshold.color}
+                      variant="soft"
+                      className="text-[9px] px-1 py-0 rounded font-medium leading-tight"
+                    >
+                      {ambientThreshold.label}
+                    </Chip>
+                  )}
+                </button>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  id="driver-only-toggle-btn"
+                  onClick={() => {
+                    const next = !(driverOnly === true);
+                    setDriverOnly(next);
+                    dispatchCommand(
+                      'climate_driver_only_toggle',
+                      next ? 'Driver Only On' : 'Driver Only Off',
+                      next ? 'Driver-Only Climate Activated' : 'Driver-Only Climate Inactive'
+                    );
+                  }}
+                  title="Click to toggle Driver-Only Climate Zone"
+                  className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${driverOnly === true
+                    ? 'bg-accent-soft text-accent-soft-foreground border-accent/50 shadow-sm'
+                    : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                    }`}
+                >
+                  <User className={`w-3.5 h-3.5 ${driverOnly === true ? 'text-accent' : 'text-muted'}`} />
+                  <span>DRIVER ONLY</span>
+                </button>
                 <button
                   type="button"
                   id="climate-sync-toggle-btn"
@@ -2137,10 +2218,13 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
               selectedKey={airflow || 'auto'}
               onSelectionChange={key => {
                 const mode = key as AirflowMode;
-                runPreviewOrReadOnly('Airflow Direction', () => {
-                  setAirflow(mode);
-                  triggerNotice(`Airflow Preview: ${AIRFLOW_MODE_LABELS[mode]}`);
-                });
+                setAirflow(mode);
+                const cmdLabel = AIRFLOW_MODE_COMMAND_LABELS[mode] || 'Auto';
+                dispatchCommand(
+                  'climate_airflow_direction',
+                  cmdLabel,
+                  `Airflow: ${AIRFLOW_MODE_LABELS[mode]}`
+                );
               }}
               aria-label="Airflow Direction Modes"
               className="w-full pt-1"
@@ -2186,11 +2270,13 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 id="hvac-heat-toggle"
                 onClick={() => {
                   const next = !(heatActive === true);
-                  runPreviewOrReadOnly('Cabin Heat Mode', () => {
-                    setHeatActive(next);
-                    if (next) setHvacPower(true);
-                    triggerNotice(next ? 'Cabin Heat Active (Preview)' : 'Cabin Heat Off (Preview)');
-                  });
+                  setHeatActive(next);
+                  if (next) setHvacPower(true);
+                  dispatchCommand(
+                    'climate_heat_toggle',
+                    next ? 'Heat On' : 'Heat Off',
+                    next ? 'Cabin Heat Activated' : 'Cabin Heat Turned Off'
+                  );
                 }}
                 aria-pressed={heatActive === true}
                 className={`h-[52px] px-3 rounded-xl border font-bold tracking-wide transition-colors cursor-pointer flex items-center justify-center gap-2 ${
@@ -2208,11 +2294,13 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 id="hvac-ac-toggle"
                 onClick={() => {
                   const next = !(acActive === true);
-                  runPreviewOrReadOnly('Cabin A/C Mode', () => {
-                    setAcActive(next);
-                    if (next) setHvacPower(true);
-                    triggerNotice(next ? 'Cabin A/C Active (Preview)' : 'Cabin A/C Off (Preview)');
-                  });
+                  setAcActive(next);
+                  if (next) setHvacPower(true);
+                  dispatchCommand(
+                    'climate_ac_toggle',
+                    next ? 'A/C On' : 'A/C Off',
+                    next ? 'Cabin A/C Activated' : 'Cabin A/C Turned Off'
+                  );
                 }}
                 aria-pressed={acActive === true}
                 className={`h-[52px] px-3 rounded-xl border font-bold tracking-wide transition-colors cursor-pointer flex items-center justify-center gap-2 ${

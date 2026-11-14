@@ -10,6 +10,10 @@ import {
   decodeSeatComfortByte,
   decodeSeatLevel,
   decodeSunroofEntityState,
+  decodeAirflowCanByte,
+  decodeAirflowEntityState,
+  decodeDriverOnlyCanFrame,
+  AIRFLOW_MODE_COMMAND_LABELS,
   displayTempToFahrenheit,
   fahrenheitToDisplayTemp,
   formatOdometerFromKm,
@@ -201,3 +205,51 @@ test('decodeSunroofEntityState separates cover shade from glass position', () =>
   assert.deepStrictEqual(decodeSunroofEntityState('Glass Tilted / Windbreak'), { glassState: 'vent' });
   assert.deepStrictEqual(decodeSunroofEntityState('closed'), { glassState: 'closed' });
 });
+
+test('decodeAirflowCanByte decodes 0x31B Byte D4 nibble distribution', () => {
+  assert.strictEqual(decodeAirflowCanByte(0x00), 'auto');
+  assert.strictEqual(decodeAirflowCanByte(0x15), 'face');
+  assert.strictEqual(decodeAirflowCanByte(0x27), 'face_feet');
+  assert.strictEqual(decodeAirflowCanByte(0x32), 'feet');
+  assert.strictEqual(decodeAirflowCanByte(0x40), 'defrost');
+  assert.strictEqual(decodeAirflowCanByte(0x50), null);
+});
+
+test('decodeAirflowEntityState decodes textual status descriptions', () => {
+  assert.strictEqual(decodeAirflowEntityState('Auto'), 'auto');
+  assert.strictEqual(decodeAirflowEntityState('Body / Face Vents'), 'face');
+  assert.strictEqual(decodeAirflowEntityState('Body & Legs'), 'face_feet');
+  assert.strictEqual(decodeAirflowEntityState('Legs / Floor Vents'), 'feet');
+  assert.strictEqual(decodeAirflowEntityState('Legs & Windshield Defog'), 'defrost');
+  assert.strictEqual(decodeAirflowEntityState('Random String'), null);
+});
+
+test('AIRFLOW_MODE_COMMAND_LABELS maps modes directly to catalog options', () => {
+  const airflowCmd = catalog.commands.find(c => c.id === 'climate_airflow_direction');
+  assert.ok(airflowCmd, 'climate_airflow_direction must exist in catalog');
+  const catalogLabels = airflowCmd.options?.map(o => o.label) || [];
+  for (const [, label] of Object.entries(AIRFLOW_MODE_COMMAND_LABELS)) {
+    assert.ok(
+      catalogLabels.includes(label),
+      `Catalog climate_airflow_direction must include label "${label}"`
+    );
+  }
+});
+
+test('decodeDriverOnlyCanFrame decodes 0x465 Byte D7', () => {
+  // Too short
+  assert.strictEqual(decodeDriverOnlyCanFrame([0, 0, 0, 0, 0, 0]), null);
+
+  // D7 = 0x04 (Driver Only On)
+  const onPayload = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00];
+  assert.strictEqual(decodeDriverOnlyCanFrame(onPayload), true);
+
+  // D7 = 0x0C (Driver Only Off)
+  const offPayload = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x00];
+  assert.strictEqual(decodeDriverOnlyCanFrame(offPayload), false);
+
+  // Other bits in high nibble preserved (e.g. 0x34 -> 0x04)
+  assert.strictEqual(decodeDriverOnlyCanFrame([0, 0, 0, 0, 0, 0, 0x34]), true);
+  assert.strictEqual(decodeDriverOnlyCanFrame([0, 0, 0, 0, 0, 0, 0x3C]), false);
+});
+

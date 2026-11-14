@@ -9,6 +9,16 @@ export type CockpitSeatLevel =
   | 'cool_med'
   | 'cool_high';
 
+export type CockpitAirflowMode = 'auto' | 'face' | 'face_feet' | 'feet' | 'defrost';
+
+export const AIRFLOW_MODE_COMMAND_LABELS: Record<CockpitAirflowMode, string> = {
+  auto: 'Auto',
+  face: 'Body / Face Vents',
+  face_feet: 'Body & Legs',
+  feet: 'Legs / Floor Vents',
+  defrost: 'Legs & Windshield Defog',
+};
+
 const KM_TO_MI = 0.621371192;
 
 const NEGATIVE_STATE_RE =
@@ -305,4 +315,45 @@ export function decodeSunroofEntityState(stateStr: string): {
   if (norm.includes('closed') || norm.includes('close')) return { glassState: 'closed' };
   return {};
 }
+
+/**
+ * Decodes HVAC vent airflow mode from 0x31B Byte D4 (high nibble).
+ */
+export function decodeAirflowCanByte(d4Byte: number): CockpitAirflowMode | null {
+  const afRaw = d4Byte & 0xF0;
+  switch (afRaw) {
+    case 0x00: return 'auto';
+    case 0x10: return 'face';
+    case 0x20: return 'face_feet';
+    case 0x30: return 'feet';
+    case 0x40: return 'defrost';
+    default: return null;
+  }
+}
+
+/**
+ * Decodes airflow mode from entity state text (e.g. "Body / Face Vents", "Body & Legs", "Defrost").
+ */
+export function decodeAirflowEntityState(stateStr: string): CockpitAirflowMode | null {
+  const norm = stateStr.trim().toLowerCase();
+  if (norm.includes('face_feet') || norm.includes('face / feet') || norm.includes('body & legs') || norm.includes('body / legs') || norm.includes('body&legs')) return 'face_feet';
+  if (norm.includes('defrost') || norm.includes('defog')) return 'defrost';
+  if (norm.includes('face') || norm.includes('body')) return 'face';
+  if (norm.includes('feet') || norm.includes('legs')) return 'feet';
+  if (norm.includes('auto')) return 'auto';
+  return null;
+}
+
+/**
+ * Decodes Driver-Only Climate Zone from 0x465 Byte D7.
+ * 0x04 = Active / On, 0x0C = Inactive / Off.
+ */
+export function decodeDriverOnlyCanFrame(bytes: number[]): boolean | null {
+  if (bytes.length < 7) return null;
+  const val = bytes[6] & 0x0F;
+  if (val === 0x04) return true;
+  if (val === 0x0C) return false;
+  return null;
+}
+
 
