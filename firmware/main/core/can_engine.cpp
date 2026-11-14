@@ -334,6 +334,8 @@ void init_crash_diagnostics(void) {
             cJSON_Delete(root);
         }
         s_rtc_crash.twdt_triggered = 0;
+        s_rtc_crash.cpu0_task[0] = '\0';
+        s_rtc_crash.cpu1_task[0] = '\0';
         rtc_crash_record_event("boot_diag_saved");
     } else {
         if (!valid_rtc || reason == ESP_RST_POWERON) {
@@ -341,6 +343,8 @@ void init_crash_diagnostics(void) {
             s_rtc_crash.magic = RTC_CRASH_MAGIC;
         } else {
             s_rtc_crash.twdt_triggered = 0;
+            s_rtc_crash.cpu0_task[0] = '\0';
+            s_rtc_crash.cpu1_task[0] = '\0';
         }
         rtc_crash_record_event(reason == ESP_RST_SW ? "boot_sw" : "boot_poweron");
     }
@@ -1438,9 +1442,7 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
         bool ok = false;
         std::string new_state = command_label;
         uint8_t payload_4ad[4] = {0};
-        uint8_t payload_48f[4] = {0};
         bool has_4ad = false;
-        bool has_48f = false;
 
         // 1. Check if an animated effect is requested
         if (ambient_anim_start_by_name(cmd_lower)) {
@@ -1462,34 +1464,8 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
             return true;
         }
 
-        // 3. Holiday 2-Tone Static Presets (Dash 0x4AD vs Doors 0x48F)
-        if (cmd_lower.find("christmas") != std::string::npos || cmd_lower.find("xmas") != std::string::npos) {
-            ambient_anim_get_palette_color(46, payload_4ad); // Red
-            ambient_anim_get_palette_color(1, payload_48f);  // Lime Green
-            new_state = "Christmas Dual-Tone (Red Dash / Green Doors)";
-            has_4ad = true;
-            has_48f = true;
-        } else if (cmd_lower.find("halloween") != std::string::npos) {
-            ambient_anim_get_palette_color(57, payload_4ad); // Amber / Orange
-            ambient_anim_get_palette_color(24, payload_48f); // Deep Purple
-            new_state = "Halloween Dual-Tone (Orange Dash / Purple Doors)";
-            has_4ad = true;
-            has_48f = true;
-        } else if (cmd_lower.find("valentine") != std::string::npos) {
-            ambient_anim_get_palette_color(33, payload_4ad); // Magenta / Pink
-            ambient_anim_get_palette_color(46, payload_48f); // Red
-            new_state = "Valentine's Dual-Tone (Pink Dash / Red Doors)";
-            has_4ad = true;
-            has_48f = true;
-        } else if (cmd_lower.find("4th") != std::string::npos || cmd_lower.find("fourth") != std::string::npos || cmd_lower.find("july") != std::string::npos || cmd_lower.find("patriotic") != std::string::npos) {
-            ambient_anim_get_palette_color(46, payload_4ad); // Red
-            ambient_anim_get_palette_color(15, payload_48f); // Electric Blue
-            new_state = "4th of July Dual-Tone (Red Dash / Blue Doors)";
-            has_4ad = true;
-            has_48f = true;
-        }
-        // 4. Factory Dual-Color Themes (EV6 GT-Line)
-        else if (cmd_lower.find("golden") != std::string::npos || cmd_lower.find("orange delight") != std::string::npos) {
+        // 3. Factory Themes (EV6 GT-Line)
+        if (cmd_lower.find("golden") != std::string::npos || cmd_lower.find("orange delight") != std::string::npos) {
             payload_4ad[0] = 0xD0; payload_4ad[1] = 0xC1; payload_4ad[2] = 0x75; payload_4ad[3] = 0x15;
             new_state = "Golden Insight / Orange Delight";
             has_4ad = true;
@@ -1599,11 +1575,6 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
 
         if (has_4ad) {
             ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, payload_4ad);
-            if (has_48f) {
-                ambient_anim_send_burst(AMBIENT_CAN_ID_DOORS, payload_48f);
-            } else {
-                ambient_anim_send_burst(AMBIENT_CAN_ID_DOORS, payload_4ad);
-            }
             ok = true;
         }
 

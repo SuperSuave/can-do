@@ -9,8 +9,7 @@
 extern "C" {
 #endif
 
-#define AMBIENT_CAN_ID_DASH  0x4ADU // Front Crash Pad / Center Console (MLU_01)
-#define AMBIENT_CAN_ID_DOORS 0x48FU // Door Panels / Rear Zone (MLU_02)
+#define AMBIENT_CAN_ID_DASH  0x4ADU // Ambient Mood Lamp Controller (0x4AD)
 
 enum class AmbientEffect {
     NONE = 0,

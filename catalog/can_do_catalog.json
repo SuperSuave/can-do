@@ -4775,9 +4775,10 @@
       ],
       "network": {
         "bus": 0,
-        "type": "can_tx",
+        "type": "can_rx_tx",
         "action_can_id": "0x4AD",
-        "delay_ms": 25
+        "delay_ms": 25,
+        "state_can_id": "0x455"
       },
       "popup_message": "Ambient Light: {option}",
       "options": [
@@ -4881,74 +4882,6 @@
             }
           ],
           "popup": "Ambient: Refreshing Sea",
-          "default": false
-        },
-        {
-          "label": "Christmas Dual-Tone (Red Dash / Green Doors)",
-          "steps": [
-            {
-              "payload": "FE88000000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Christmas Dual-Tone",
-          "default": false
-        },
-        {
-          "label": "Halloween Dual-Tone (Orange Dash / Purple Doors)",
-          "steps": [
-            {
-              "payload": "FF50720700000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Halloween Dual-Tone",
-          "default": false
-        },
-        {
-          "label": "Valentine's Dual-Tone (Pink Dash / Red Doors)",
-          "steps": [
-            {
-              "payload": "FF00100F00000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Valentine's Dual-Tone",
-          "default": false
-        },
-        {
-          "label": "4th of July Dual-Tone (Red Dash / Blue Doors)",
-          "steps": [
-            {
-              "payload": "FE88000000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: 4th of July Dual-Tone",
           "default": false
         },
         {
@@ -6061,13 +5994,15 @@
       "subcategory": "Lighting",
       "roles": [
         "action",
-        "trigger"
+        "trigger",
+        "state"
       ],
       "contributor": {
         "name": "Liz",
         "github": "L1Z3"
       },
-      "action_can_id": "0x4AD"
+      "action_can_id": "0x4AD",
+      "state_can_id": "0x455"
     },
     {
       "id": "vehicle_gear_state",
@@ -13790,6 +13725,315 @@
         "notes": "EV_CP5 (0x578) Byte 2 (D3 bits 1:0) setting maximum continuous current draw during Level 2 AC charging."
       },
       "state_can_id": "0x578"
+    },
+    {
+      "id": "mlu_ambient_light_status",
+      "ha_metadata": {
+        "name": "Ambient Mood Lamp Illumination Status",
+        "domain": "binary_sensor",
+        "icon": "mdi:car-light-dimmed"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Cockpit & Controls",
+      "subcategory": "Lighting",
+      "roles": [
+        "sensor",
+        "state"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x2DB"
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Decoded from Mood Lamp Unit (MLU) emitted light and PWM frame 0x2DB on M-CAN. Byte D4 is 0xFA (250) when illuminated and 0x00 when powered off."
+      },
+      "options": [
+        {
+          "label": "Illuminated",
+          "match": {
+            "D4": "0xFA"
+          },
+          "mask": "0xFF",
+          "default": true
+        },
+        {
+          "label": "Off",
+          "match": {
+            "D4": "0x00"
+          },
+          "mask": "0xFF"
+        }
+      ],
+      "state_can_id": "0x2DB"
+    },
+    {
+      "id": "ambient_mood_light_brightness",
+      "ha_metadata": {
+        "name": "Ambient Mood Lamp Brightness Level",
+        "domain": "number",
+        "icon": "mdi:brightness-6"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Cockpit & Controls",
+      "subcategory": "Lighting",
+      "roles": [
+        "action",
+        "sensor",
+        "state",
+        "trigger",
+        "condition"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx_tx",
+        "action_can_id": "0x4AD",
+        "state_can_id": "0x455",
+        "state_byte": "D1",
+        "action_byte": "D5",
+        "min": 0,
+        "max": 10,
+        "step": 1,
+        "raw_min": "0x41",
+        "raw_max": "0x4B",
+        "delay_ms": 25
+      },
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Decoded from native M-CAN 0x4AD commands and 0x455 state telemetry. Display level 1-10 is derived as (D5*2) - (1 if D4==0x20 else 0), reflected on 0x455 Byte D1 as (Display Level + 1)."
+      },
+      "options": [
+        {
+          "label": "Off",
+          "steps": [
+            {
+              "payload": "000208A000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "match": {
+            "D1": "0x41"
+          },
+          "mask": "0xFF",
+          "default": false
+        },
+        {
+          "label": "Brightness Level 1",
+          "steps": [
+            {
+              "payload": "0002082001000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "match": {
+            "D1": "0x42"
+          },
+          "mask": "0xFF",
+          "default": false
+        },
+        {
+          "label": "Brightness Level 2",
+          "steps": [
+            {
+              "payload": "000208A001000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "match": {
+            "D1": "0x43"
+          },
+          "mask": "0xFF",
+          "default": false
+        },
+        {
+          "label": "Brightness Level 3",
+          "steps": [
+            {
+              "payload": "0002082002000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "match": {
+            "D1": "0x44"
+          },
+          "mask": "0xFF",
+          "default": false
+        },
+        {
+          "label": "Brightness Level 4",
+          "steps": [
+            {
+              "payload": "000208A002000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "match": {
+            "D1": "0x45"
+          },
+          "mask": "0xFF",
+          "default": false
+        },
+        {
+          "label": "Brightness Level 5",
+          "steps": [
+            {
+              "payload": "0002082003000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "match": {
+            "D1": "0x46"
+          },
+          "mask": "0xFF",
+          "default": false
+        },
+        {
+          "label": "Brightness Level 6",
+          "steps": [
+            {
+              "payload": "000208A003000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "match": {
+            "D1": "0x47"
+          },
+          "mask": "0xFF",
+          "default": false
+        },
+        {
+          "label": "Brightness Level 7",
+          "steps": [
+            {
+              "payload": "0002082004000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "match": {
+            "D1": "0x48"
+          },
+          "mask": "0xFF",
+          "default": false
+        },
+        {
+          "label": "Brightness Level 8",
+          "steps": [
+            {
+              "payload": "000208A004000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "match": {
+            "D1": "0x49"
+          },
+          "mask": "0xFF",
+          "default": false
+        },
+        {
+          "label": "Brightness Level 9",
+          "steps": [
+            {
+              "payload": "0002082005000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "match": {
+            "D1": "0x4A"
+          },
+          "mask": "0xFF",
+          "default": false
+        },
+        {
+          "label": "Brightness Level 10 (Max)",
+          "steps": [
+            {
+              "payload": "000208A005000000",
+              "repeat": 3,
+              "delay_ms": 25
+            },
+            {
+              "payload": "0002082000000000",
+              "repeat": 3,
+              "delay_ms": 25
+            }
+          ],
+          "match": {
+            "D1": "0x4B"
+          },
+          "mask": "0xFF",
+          "default": true
+        }
+      ],
+      "action_can_id": "0x4AD",
+      "state_can_id": "0x455",
+      "type": "param_range"
     }
   ],
   "automations": [

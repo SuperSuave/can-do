@@ -144,12 +144,7 @@ void ambient_anim_send_burst(uint32_t can_id, const uint8_t* payload_4bytes) {
 
 void ambient_anim_send_off(uint32_t can_id) {
     const uint8_t off_color[4] = { 0x00, 0x00, 0x00, 0x00 };
-    if (can_id == 0 || can_id == AMBIENT_CAN_ID_DASH) {
-        ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, off_color);
-    }
-    if (can_id == 0 || can_id == AMBIENT_CAN_ID_DOORS) {
-        ambient_anim_send_burst(AMBIENT_CAN_ID_DOORS, off_color);
-    }
+    ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, off_color);
 }
 
 bool ambient_anim_get_palette_color(uint8_t index, uint8_t* out_payload) {
@@ -206,7 +201,6 @@ static void ambient_anim_task(void* pvParameters) {
                 uint8_t idx_doors = ((step_count + 8) % 64); // 8 steps (~45 deg) offset for 2-tone wave
 
                 ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, PALETTE_64[idx_dash]);
-                ambient_anim_send_burst(AMBIENT_CAN_ID_DOORS, PALETTE_64[idx_doors]);
 
                 uint32_t delay_ms = interval > 0 ? interval : 600;
                 vTaskDelay(pdMS_TO_TICKS(delay_ms));
@@ -214,13 +208,11 @@ static void ambient_anim_task(void* pvParameters) {
             }
 
             case AmbientEffect::CHRISTMAS_WAVE: {
-                // 🎄 Alternate Crimson Red and Lime Green between Dash and Door panels
+                // 🎄 Alternate Crimson Red and Lime Green
                 bool swap = (step_count % 2 == 1);
                 const uint8_t* dash_col = swap ? c_lime : c_red;
-                const uint8_t* door_col = swap ? c_red : c_lime;
 
                 ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, dash_col);
-                ambient_anim_send_burst(AMBIENT_CAN_ID_DOORS, door_col);
 
                 uint32_t delay_ms = interval > 0 ? interval : 1500;
                 vTaskDelay(pdMS_TO_TICKS(delay_ms));
@@ -228,13 +220,11 @@ static void ambient_anim_task(void* pvParameters) {
             }
 
             case AmbientEffect::HALLOWEEN_WAVE: {
-                // 🎃 Alternate Pumpkin Amber and Witch Violet between Dash and Door panels
+                // 🎃 Alternate Pumpkin Amber and Witch Violet
                 bool swap = (step_count % 2 == 1);
                 const uint8_t* dash_col = swap ? c_purple : c_amber;
-                const uint8_t* door_col = swap ? c_amber : c_purple;
 
                 ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, dash_col);
-                ambient_anim_send_burst(AMBIENT_CAN_ID_DOORS, door_col);
 
                 uint32_t delay_ms = interval > 0 ? interval : 1500;
                 vTaskDelay(pdMS_TO_TICKS(delay_ms));
@@ -242,13 +232,11 @@ static void ambient_anim_task(void* pvParameters) {
             }
 
             case AmbientEffect::VALENTINE_WAVE: {
-                // 💖 Alternate Neon Pink and Crimson Red between Dash and Door panels
+                // 💖 Alternate Neon Pink and Crimson Red
                 bool swap = (step_count % 2 == 1);
                 const uint8_t* dash_col = swap ? c_red : c_magenta;
-                const uint8_t* door_col = swap ? c_magenta : c_red;
 
                 ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, dash_col);
-                ambient_anim_send_burst(AMBIENT_CAN_ID_DOORS, door_col);
 
                 uint32_t delay_ms = interval > 0 ? interval : 1500;
                 vTaskDelay(pdMS_TO_TICKS(delay_ms));
@@ -259,10 +247,8 @@ static void ambient_anim_task(void* pvParameters) {
                 // 🎆 3-stage patriotic rotation: Red, White, and Blue
                 uint32_t phase = step_count % 3;
                 const uint8_t* p_dash = (phase == 0) ? c_red : ((phase == 1) ? c_white : c_blue);
-                const uint8_t* p_door = (phase == 0) ? c_blue : ((phase == 1) ? c_red : c_white);
 
                 ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, p_dash);
-                ambient_anim_send_burst(AMBIENT_CAN_ID_DOORS, p_door);
 
                 uint32_t delay_ms = interval > 0 ? interval : 1200;
                 vTaskDelay(pdMS_TO_TICKS(delay_ms));
@@ -273,10 +259,8 @@ static void ambient_anim_task(void* pvParameters) {
                 // 🚨 Fast alternating strobe between Red and Blue
                 bool swap = (step_count % 2 == 1);
                 const uint8_t* p_dash = swap ? c_blue : c_red;
-                const uint8_t* p_door = swap ? c_red : c_blue;
 
                 ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, p_dash);
-                ambient_anim_send_burst(AMBIENT_CAN_ID_DOORS, p_door);
 
                 uint32_t delay_ms = interval > 0 ? interval : 350;
                 vTaskDelay(pdMS_TO_TICKS(delay_ms));
@@ -287,10 +271,8 @@ static void ambient_anim_task(void* pvParameters) {
                 // 🌊 Swells through Cyan, Sky Blue, and Electric Blue
                 uint8_t ocean_indices[4] = { 7, 9, 14, 11 };
                 uint8_t cur = ocean_indices[step_count % 4];
-                uint8_t nxt = ocean_indices[(step_count + 1) % 4];
 
                 ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, PALETTE_64[cur]);
-                ambient_anim_send_burst(AMBIENT_CAN_ID_DOORS, PALETTE_64[nxt]);
 
                 uint32_t delay_ms = interval > 0 ? interval : 1800;
                 vTaskDelay(pdMS_TO_TICKS(delay_ms));
@@ -301,10 +283,8 @@ static void ambient_anim_task(void* pvParameters) {
                 // 🌅 Warm embers flowing from Crimson Red to Warm Amber to Champagne Gold
                 uint8_t sunset_indices[4] = { 45, 52, 56, 63 };
                 uint8_t cur = sunset_indices[step_count % 4];
-                uint8_t nxt = sunset_indices[(step_count + 1) % 4];
 
                 ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, PALETTE_64[cur]);
-                ambient_anim_send_burst(AMBIENT_CAN_ID_DOORS, PALETTE_64[nxt]);
 
                 uint32_t delay_ms = interval > 0 ? interval : 2000;
                 vTaskDelay(pdMS_TO_TICKS(delay_ms));
@@ -315,10 +295,8 @@ static void ambient_anim_task(void* pvParameters) {
                 // 🌲 Shifting hues between Emerald Lime and Pure Cyan
                 uint8_t aurora_indices[4] = { 0, 3, 5, 7 };
                 uint8_t cur = aurora_indices[step_count % 4];
-                uint8_t nxt = aurora_indices[(step_count + 2) % 4];
 
                 ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, PALETTE_64[cur]);
-                ambient_anim_send_burst(AMBIENT_CAN_ID_DOORS, PALETTE_64[nxt]);
 
                 uint32_t delay_ms = interval > 0 ? interval : 1800;
                 vTaskDelay(pdMS_TO_TICKS(delay_ms));
@@ -335,7 +313,6 @@ static void ambient_anim_task(void* pvParameters) {
                 p_mod[3] = d4_val;
 
                 ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, p_mod);
-                ambient_anim_send_burst(AMBIENT_CAN_ID_DOORS, p_mod);
 
                 uint32_t delay_ms = interval > 0 ? interval : 1000;
                 vTaskDelay(pdMS_TO_TICKS(delay_ms));

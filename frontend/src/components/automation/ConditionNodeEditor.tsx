@@ -1022,12 +1022,14 @@ export function ConditionNodeEditor({
     '';
   const effectiveCondBus = cond.bus ?? catalogCmd?.network?.bus ?? catalogCmd?.bus ?? 0;
   const activeCondOptionLabel = (cond.option_label || matchedOption?.label || '').toLowerCase().trim();
-  const isRangeEntity = !hasOptions && Boolean(
+  const isRangeEntity = Boolean(
     catalogCmd?.type === 'param_range' ||
     catalogCmd?.type === 'linear_scale' ||
-    (catalogCmd?.network?.min !== undefined && catalogCmd?.network?.max !== undefined) ||
-    catalogCmd?.network?.factor !== undefined ||
-    cond.type === 'param_range'
+    cond.type === 'param_range' ||
+    (!hasOptions && (
+      (catalogCmd?.network?.min !== undefined && catalogCmd?.network?.max !== undefined) ||
+      catalogCmd?.network?.factor !== undefined
+    ))
   );
 
   return (

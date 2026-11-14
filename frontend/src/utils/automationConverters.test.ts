@@ -942,44 +942,25 @@ test('resolveCatalogCommandForAction and applyOptionToAction properly handle amb
 
 
 
-  // 2. Compiling Christmas Dual-Tone appends 0x48F door zone burst with Lime Green (7AC20815)
-
-  const xmasAct: AutomationAction = {
-
-    id: 'act_xmas',
-
+  // 2. Compiling 2-stage ambient mood lighting on 0x4AD
+  const ambientAct: AutomationAction = {
+    id: 'act_ambient',
     type: 'can_tx',
-
     can_id: '0x4AD',
-
     entity_id: 'ambient_mood_lighting',
-
-    option_label: 'Christmas Dual-Tone (Red Dash / Green Doors)',
-
-    command: 'Christmas Dual-Tone (Red Dash / Green Doors)',
-
+    option_label: 'Golden Insight / Orange Delight',
+    command: 'Golden Insight / Orange Delight',
     steps: [
-
-      { can_id: '0x4AD', bus: 0, payload: compileToByteMap('EB02371700000000'), repeat: 2, delay_ms: 25 },
-
+      { can_id: '0x4AD', bus: 0, payload: compileToByteMap('D0C1751500000000'), repeat: 2, delay_ms: 25 },
       { can_id: '0x4AD', bus: 0, payload: compileToByteMap('0002082000000000'), repeat: 2, delay_ms: 0 }
-
     ]
-
   };
-
-  const compiledXmas = compileAction(xmasAct, catalog);
-
-  assert.ok(Array.isArray(compiledXmas));
-
-  const doorFrames = compiledXmas.filter((s: any) => s.type === 'transmit' && s.can_id === '0x48F');
-
-  assert.strictEqual(doorFrames.length, 2);
-
-  assert.strictEqual(doorFrames[0].payload.D1, '0x7A');
-
-  assert.strictEqual(doorFrames[0].payload.D2, '0xC2');
-
+  const compiledAmbient = compileAction(ambientAct, catalog);
+  assert.ok(Array.isArray(compiledAmbient));
+  const frames4ad = compiledAmbient.filter((s: any) => s.type === 'transmit' && s.can_id === '0x4AD');
+  assert.strictEqual(frames4ad.length, 2);
+  assert.strictEqual(frames4ad[0].payload.D1, '0xD0');
+  assert.strictEqual(frames4ad[0].payload.D2, '0xC1');
 });
 
 
@@ -1070,9 +1051,9 @@ test('compileAutomationRule and decompileAutomationRule preserve multi-step cata
         network: { action_can_id: '0x4AD', state_can_id: '0x3C6', delay_ms: 25 },
         options: [
           {
-            label: 'Christmas Dual-Tone (Red Dash / Green Doors)',
+            label: 'Golden Insight / Orange Delight',
             steps: [
-              { payload: 'EB02371700000000', repeat: 2, delay_ms: 25 },
+              { payload: 'D0C1751500000000', repeat: 2, delay_ms: 25 },
               { payload: '0002082000000000', repeat: 2, delay_ms: 0 }
             ]
           }
@@ -1099,8 +1080,8 @@ test('compileAutomationRule and decompileAutomationRule preserve multi-step cata
 
   // 1. Compile for ESP32 automations.json: steps are flattened for C++ firmware execution
   const compiled = compileAutomationRule(rule, catalog);
-  // seatAction (2 transmits + 1 delay = 3) + ambientAction (2 0x4AD transmits + 1 delay + 2 0x48F transmits + 2 delays = 7) = 10 flat items
-  assert.strictEqual(compiled.actions.length, 10);
+  // seatAction (2 transmits + 1 delay = 3) + ambientAction (2 0x4AD transmits + 1 delay = 3) = 6 flat items
+  assert.strictEqual(compiled.actions.length, 6);
 
   // 2. Decompile when pulled back from ESP32 or imported: must coalesce back into 2 unified actions!
   const decompiled = decompileAutomationRule(compiled, catalog);
@@ -1113,9 +1094,9 @@ test('compileAutomationRule and decompileAutomationRule preserve multi-step cata
   assert.deepStrictEqual(decompiled.actions[0].steps?.[1].payload, { D5: '0xFF' });
 
   assert.strictEqual(decompiled.actions[1].source_command_id, 'ambient_mood_lighting');
-  assert.strictEqual(decompiled.actions[1].option_label, 'Christmas Dual-Tone (Red Dash / Green Doors)');
+  assert.strictEqual(decompiled.actions[1].option_label, 'Golden Insight / Orange Delight');
   assert.strictEqual(decompiled.actions[1].steps?.length, 2);
-  assert.strictEqual((decompiled.actions[1].steps?.[0].payload as any).D1, '0xEB');
+  assert.strictEqual((decompiled.actions[1].steps?.[0].payload as any).D1, '0xD0');
   assert.strictEqual((decompiled.actions[1].steps?.[1].payload as any).D4, '0x20');
 });
 

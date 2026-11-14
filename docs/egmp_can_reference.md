@@ -563,12 +563,11 @@ Vehicle user settings for welcome accessories and hands-free automatic trunk ope
 
 ---
 
-## 8. Ambient Mood Lighting (Native M-CAN 2-Stage Sequence on `0x4AD` / `0x48F`)
+## 8. Ambient Mood Lighting (Native M-CAN 2-Stage Sequence on `0x4AD`)
 
 Ambient lighting in E-GMP vehicles (Kia EV6, Hyundai Ioniq 5/6, Genesis GV60) is commanded directly from the Head Unit MICOM over M-CAN via a verified **2-Stage State Machine**. The Mood Lamp Units require a latch/commit frame following the active color burst to commit the PWM color register into EEPROM/RAM.
 
-* **Front / Center Console Zone**: **CAN ID `0x4AD` (`MLU_01`)**
-* **Rear / Door Panel Zone**: **CAN ID `0x48F` (`MLU_02`)** (Synchronized or independent 2-tone split with `0x4AD`)
+* **Target CAN ID**: **`0x4AD` (`MLU_01`)**
 * **Timing**: Spacing of 20–25 ms between consecutive frames
 
 ### 8.1 Two-Stage Transmission Protocol:
@@ -584,23 +583,15 @@ Ambient lighting in E-GMP vehicles (Kia EV6, Hyundai Ioniq 5/6, Genesis GV60) is
 
 ### 8.2 Valid Message Payloads:
 
-#### Factory Dual-Color Theme Presets:
-| Theme Name | Stage 1 Payload (`0x4AD` / `0x48F`) | Stage 2 Latch Payload | Description |
+#### Factory Theme Presets:
+| Theme Name | Stage 1 Payload (`0x4AD`) | Stage 2 Latch Payload | Description |
 | :--- | :--- | :--- | :--- |
-| **Golden Insight / Orange Delight** | `D0 C1 75 15 00 00 00 00` | `00 02 08 20 00 00 00 00` | Warm Gold upper + Deep Amber lower |
-| **Blue Flight** | `4F 29 36 1C 00 00 00 00` | `00 02 08 20 00 00 00 00` | Sky Blue upper + Royal Blue lower |
-| **Peaceful Forest** | `7F 69 A6 17 00 00 00 00` | `00 02 08 20 00 00 00 00` | Emerald Green upper + Mint lower |
-| **Dreamy Purple** | `6B 69 55 19 00 00 00 00` | `00 02 08 20 00 00 00 00` | Magenta upper + Indigo lower |
-| **Violet Cloud** | `A7 89 F5 17 00 00 00 00` | `00 02 08 20 00 00 00 00` | Soft Lavender upper + Violet lower |
-| **Refreshing Sea** | `32 69 E6 19 00 00 00 00` | `00 02 08 20 00 00 00 00` | Turquoise upper + Cyan lower |
-
-#### Holiday Dual-Tone Presets:
-| Holiday Preset | Dash Zone (`0x4AD`) | Door Zone (`0x48F`) | Description |
-| :--- | :--- | :--- | :--- |
-| 🎄 **Christmas Dual-Tone** | `FE 88 00 00 00 00 00 00` (Red) | `F7 FC 63 0B 00 00 00 00` (Lime Green) | Festive Crimson Red dash + Lime/Mint doors |
-| 🎃 **Halloween Dual-Tone** | `FF 50 72 07 00 00 00 00` (Amber) | `80 00 F0 0F 00 00 00 00` (Purple) | Pumpkin Amber dash + Deep Witch Purple doors |
-| 💖 **Valentine's Dual-Tone** | `FF 00 10 0F 00 00 00 00` (Neon Pink) | `FE 88 00 00 00 00 00 00` (Crimson Red) | Neon Pink dash + Crimson Red doors |
-| 🎆 **4th of July Dual-Tone** | `FE 88 00 00 00 00 00 00` (Red) | `00 54 F1 0F 00 00 00 00` (Electric Blue) | Patriotic Red dash + EV Electric Blue doors |
+| **Golden Insight / Orange Delight** | `D0 C1 75 15 00 00 00 00` | `00 02 08 20 00 00 00 00` | Warm Gold / Amber tone |
+| **Blue Flight** | `4F 29 36 1C 00 00 00 00` | `00 02 08 20 00 00 00 00` | Sky Blue tone |
+| **Peaceful Forest** | `7F 69 A6 17 00 00 00 00` | `00 02 08 20 00 00 00 00` | Emerald Green tone |
+| **Dreamy Purple** | `6B 69 55 19 00 00 00 00` | `00 02 08 20 00 00 00 00` | Rich Magenta / Violet tone |
+| **Violet Cloud** | `A7 89 F5 17 00 00 00 00` | `00 02 08 20 00 00 00 00` | Soft Lavender tone |
+| **Refreshing Sea** | `32 69 E6 19 00 00 00 00` | `00 02 08 20 00 00 00 00` | Turquoise / Cyan tone |
 
 #### Dynamic Edge Animation Modes (`firmware/main/subsystems/ambient_anim.cpp`):
 The ESP32 firmware features an edge-first FreeRTOS background task (`ambient_anim_task`) that executes dynamic animations locally without requiring continuous Home Assistant, Wi-Fi, or MQTT connectivity:
@@ -618,7 +609,7 @@ The ESP32 firmware features an edge-first FreeRTOS background task (`ambient_ani
 #### Verified 64-Color Factory Palette Reference:
 Captured empirically from real E-GMP vehicle CAN bus logs while cycling through the complete 64-color infotainment wheel:
 
-| Index | Color Name | Stage 1 Payload (`0x4AD` / `0x48F`) | RGB Equivalent | Tone Description |
+| Index | Color Name | Stage 1 Payload (`0x4AD`) | RGB Equivalent | Tone Description |
 | :---: | :--- | :--- | :---: | :--- |
 | **1** | **Lime / Mint Glow** | `F7 FC 63 0B 00 00 00 00` | `(70, 255, 70)` | Vibrant Lime Green anchor |
 | **2** | Spring Lime | `E6 F8 A3 0B 00 00 00 00` | `(85, 255, 95)` | Soft Spring Green |
@@ -685,6 +676,82 @@ Captured empirically from real E-GMP vehicle CAN bus logs while cycling through 
 | **63** | Warm Ivory | `FF 60 33 09 00 00 00 00` | `(255, 235, 180)` | Warm Ivory |
 | **64** | **Champagne White** | `FE B4 53 0A 00 00 00 00` | `(255, 240, 220)` | Neutral Warm White anchor |
 | **—** | **Mood Light Off** | `00 00 00 00 00 00 00 00` | `(0, 0, 0)` | Complete Illumination Cutoff |
+
+---
+
+### 8.3 Ambient Mood Lighting Status & Feedback Frame (`0x455` / M-CAN)
+
+Broadcast periodically (~600 ms) and immediately updated (15–35 ms) by the infotainment system whenever ambient mood lighting attributes are adjusted:
+
+```text
+0x455 Payload: [ D1 ] [ D2 ] [ D3   D4   D5   D6 ] [ D7 ] [ D8 ]
+```
+
+| Byte Index | 1-Based | Mask | Signal / Field Name | Description & Decoding Formula |
+| :---: | :---: | :---: | :--- | :--- |
+| `0` | `D1` | `0xF0` | `State_Flag` | Feature Active Flag: Always `0x4_` when operational. |
+| `0` | `D1` | `0x0F` | `Brightness_Level` | **Display UI Brightness Level**: `(D1 & 0x0F) - 1`<br>`0x1` (`0x41`): **Off / 0**<br>`0x2` (`0x42`): **Level 1** (10%)<br>`0x3` (`0x43`): **Level 2** (20%)<br>`...`<br>`0xB` (`0x4B`): **Level 10 / Max** (100%) |
+| `1` | `D2` | `0xFF` | `Reserved_0` | Always `0x00` |
+| `2` | `D3` | `0xFF` | `Color_Byte_1` | Exact byte-for-byte match of `0x4AD` Command Byte `D1` |
+| `3` | `D4` | `0xFF` | `Color_Byte_2` | Exact byte-for-byte match of `0x4AD` Command Byte `D2` |
+| `4` | `D5` | `0xFF` | `Color_Byte_3` | Exact byte-for-byte match of `0x4AD` Command Byte `D3` |
+| `5` | `D6` | `0xFF` | `Color_Byte_4_Latched` | Matches `(0x4AD Byte D4) | 0x40` (the `0x40` bit indicates active/latched status) |
+| `6` | `D7` | `0xFF` | `Reserved_1` | Always `0x00` |
+| `7` | `D8` | `0xFF` | `Reserved_2` | Always `0x00` |
+
+---
+
+### 8.4 Mood Lamp Unit (MLU) Hardware Emitted Output State (`0x2DB` / M-CAN)
+
+Broadcast by the lighting controller / MLU hardware reflecting real-time physical illumination and emitted chromaticity coordinates:
+
+```text
+0x2DB Payload: [ D1   D2 ] [ D3 ] [ D4 ] [ D5   D6 ] [ D7 ] [ D8 ]
+```
+
+| Byte Index | 1-Based | Field Name | Description & Values |
+| :---: | :---: | :--- | :--- |
+| `0–1` | `D1–D2` | `CIE_Chromaticity` | **CIE 1931 xy Chromaticity Coordinates** of emitted light:<br>• `30 1A`: Dreamy Purple / Indigo<br>• `88 67`: Golden Insight / Amber Gold ($x \approx 0.53$)<br>• `52 6F` / `52 65`: Peaceful Forest / Fresh Grass ($x \approx 0.32$)<br>• `27 12`: Deep Blue ($x \approx 0.15, y \approx 0.07$) |
+| `2` | `D3` | `Reserved_0` | Constant `0x00` |
+| `3` | `D4` | `PWM_Output_Duty` | **Physical Illumination State**:<br>`0x00`: **Off** (0 PWM output duty cycle)<br>`0xFA` (250): **Active / Illuminated** (~98% full PWM duty) |
+| `4–5` | `D5–D6` | `Target_Scale` | Constant `0x0A 0x0A` (Scale factor 10, 10) |
+| `6` | `D7` | `Mode` | Constant `0x02` (Normal operational state) |
+| `7` | `D8` | `Reserved_1` | Constant `0x00` |
+
+---
+
+### 8.5 10-Step Brightness Matrix on `0x4AD`
+
+Brightness adjustment on `0x4AD` uses a 2-byte command structure: Byte `D5` provides the coarse step (`0x00` to `0x05`), while bit 7 of Byte `D4` (`0x20` vs `0xA0`) toggles the +1 sub-step:
+
+$$\text{Display Level} = (\text{D5} \times 2) - [1 \text{ if } \text{D4} == 0x20 \text{ else } 0]$$
+
+| UI Display Level | 0x4AD Command Payload | 0x455 Status Byte `D1` | 0x2DB PWM Byte `D4` | Physical State |
+| :---: | :---: | :---: | :---: | :--- |
+| **OFF (0)** | `00 02 08 A0 00 00 00 00` | **`0x41`** | **`0x00`** | **Lamp Off** (0 PWM) |
+| **Level 1** | `00 02 08 20 01 00 00 00` | **`0x42`** | **`0xFA`** | Active (10%) |
+| **Level 2** | `00 02 08 A0 01 00 00 00` | **`0x43`** | **`0xFA`** | Active (20%) |
+| **Level 3** | `00 02 08 20 02 00 00 00` | **`0x44`** | **`0xFA`** | Active (30%) |
+| **Level 4** | `00 02 08 A0 02 00 00 00` | **`0x45`** | **`0xFA`** | Active (40%) |
+| **Level 5** | `00 02 08 20 03 00 00 00` | **`0x46`** | **`0xFA`** | Active (50%) |
+| **Level 6** | `00 02 08 A0 03 00 00 00` | **`0x47`** | **`0xFA`** | Active (60%) |
+| **Level 7** | `00 02 08 20 04 00 00 00` | **`0x48`** | **`0xFA`** | Active (70%) |
+| **Level 8** | `00 02 08 A0 04 00 00 00` | **`0x49`** | **`0xFA`** | Active (80%) |
+| **Level 9** | `00 02 08 20 05 00 00 00` | **`0x4A`** | **`0xFA`** | Active (90%) |
+| **Level 10 (Max)** | `00 02 08 A0 05 00 00 00` | **`0x4B`** | **`0xFA`** | Active (100% Max) |
+
+*Note: Like color changes, brightness commands require the standard Stage 2 latch burst (`00 02 08 20 00 00 00 00`) to commit the value into the MLU register.*
+
+---
+
+### 8.6 OEM Custom Color Wheel Protocol & Gating
+
+Empirically verified directly on vehicle head unit interactions:
+1. **Interactive Preview Gating**: Stepping clockwise or counter-clockwise through the circular color wheel only updates the local cursor on the LCD screen; **zero CAN frames are transmitted** during navigation.
+2. **Commit on "OK"**: Pressing the "OK" button initiates the hardware commit sequence:
+   * **Stage 1 (Burst)**: `[D1, D2, D3, D4, 0x00, 0x00, 0x00, 0x00]` on `0x4AD` transmitting the 64-palette color bytes.
+   * **Stage 2 (Latch)**: 2–3 frames of `00 02 08 20 00 00 00 00` on `0x4AD` committing the RGB registers.
+3. **Telemetric Acknowledgement**: Within 15–35 ms, `0x455` updates with `[D3..D6]` matching the color and `0x2DB` reports the corresponding CIE 1931 xy coordinates.
 
 ---
 

@@ -108,11 +108,6 @@ PALETTE_64_RGB_MAP: dict[str, tuple[int, int, int]] = {
     "Dreamy Purple": (107, 105, 85),
     "Violet Cloud": (167, 137, 245),
     "Refreshing Sea": (50, 105, 230),
-    # Holiday 2-Tone Presets
-    "Christmas Dual-Tone (Red Dash / Green Doors)": (255, 0, 0),
-    "Halloween Dual-Tone (Orange Dash / Purple Doors)": (255, 140, 0),
-    "Valentine's Dual-Tone (Pink Dash / Red Doors)": (255, 20, 147),
-    "4th of July Dual-Tone (Red Dash / Blue Doors)": (0, 120, 255),
 }
 
 DYNAMIC_ANIMATIONS: list[str] = [
@@ -181,7 +176,17 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
     @property
     def is_on(self) -> bool:
         """Return True if light is on."""
-        # 1. Check live CAN frame 0x410 status if available (Byte D4 bits 6-7)
+        # 1. Check live MLU hardware power frame 0x2DB (Byte D4: 0xFA = active, 0x00 = off)
+        raw_2db = self.coordinator.get_can_payload("0x2DB")
+        if raw_2db and len(raw_2db) >= 4:
+            return raw_2db[3] > 0
+
+        # 2. Check live infotainment status frame 0x455 (Byte D1: 0x41 = off, 0x42-0x4B = on)
+        raw_455 = self.coordinator.get_can_payload("0x455")
+        if raw_455 and len(raw_455) >= 1:
+            return (raw_455[0] & 0x0F) > 1
+
+        # 3. Check live CAN frame 0x410 status if available (Byte D4 bits 6-7)
         raw_410 = self.coordinator.get_can_payload("0x410")
         if raw_410 and len(raw_410) >= 4:
             mood_bits = raw_410[3] & 0xC0
@@ -190,7 +195,7 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
             elif mood_bits == 0x00:
                 return False
 
-        # 2. Fall back to optimistic state
+        # 4. Fall back to optimistic state
         return self._is_on
 
     @property
@@ -206,6 +211,14 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
     @property
     def brightness(self) -> int | None:
         """Return the brightness of this light."""
+        # Check live infotainment status frame 0x455 (Byte D1 low nibble: 1=off, 2-11=levels 1-10)
+        raw_455 = self.coordinator.get_can_payload("0x455")
+        if raw_455 and len(raw_455) >= 1:
+            lvl = (raw_455[0] & 0x0F) - 1
+            if lvl <= 0:
+                return 0
+            return int((lvl / 10.0) * 255)
+
         return self._brightness
 
     def _find_closest_preset(self, r: int, g: int, b: int) -> dict[str, Any] | None:
@@ -281,10 +294,8 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
                     if s.get("repeat", 1) < 3:
                         s["repeat"] = 3
                     s["delay_ms"] = delay_ms
-                _LOGGER.info("Sending 0x4AD and 0x48F 2-stage bursts (%d steps) for ambient light", len(steps))
+                _LOGGER.info("Sending 0x4AD 2-stage burst (%d steps) for ambient light", len(steps))
                 await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
-                # Also synchronize doors (0x48F)
-                await self.coordinator.async_send_action("0x48F", delay_ms, steps)
 
         self._is_on = True
         self.async_write_ha_state()
@@ -299,13 +310,12 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
         # 1. Send ambient light off command to edge engine
         await self.coordinator.async_send_entity_command("ambient_mood_lamp_color", "off")
 
-        # 2. Transmit 2-stage CAN burst to power off both Dash (0x4AD) and Doors (0x48F)
+        # 2. Transmit 2-stage CAN burst to power off ambient lighting on 0x4AD
         off_steps = [
-            {"payload": "0000000000000000", "repeat": 3, "delay_ms": delay_ms},
+            {"payload": "000208A000000000", "repeat": 3, "delay_ms": delay_ms},
             {"payload": "0002082000000000", "repeat": 3, "delay_ms": delay_ms},
         ]
         await self.coordinator.async_send_action(action_can_id, delay_ms, off_steps)
-        await self.coordinator.async_send_action("0x48F", delay_ms, off_steps)
 
         self._is_on = False
         self.async_write_ha_state()

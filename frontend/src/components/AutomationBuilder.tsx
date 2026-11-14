@@ -672,7 +672,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         return;
       }
 
-      // Special Flow 9.5: Ambient Mood Lighting (executes hardware-timed 2-stage burst on both 0x4AD Dash + 0x48F Doors)
+      // Special Flow 9.5: Ambient Mood Lighting (executes hardware-timed 2-stage burst on 0x4AD)
       if (targetEntityId === 'ambient_mood_lighting' || (targetCanId && targetCanId.toUpperCase() === '0X4AD')) {
         let dispatchedViaEntity = false;
         if (targetCommand) {
@@ -693,7 +693,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
         if (dispatchedViaEntity) {
           setActionTestToast({
-            message: `Action tested: Ambient Mood Lighting ➔ ${targetCommand} (0x4AD Dash + 0x48F Doors)`,
+            message: `Action tested: Ambient Mood Lighting ➔ ${targetCommand} (0x4AD)`,
             type: 'success'
           });
           setTimeout(() => setActionTestToast(null), 4000);

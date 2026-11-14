@@ -100,9 +100,27 @@ const NumericActionRangeControl: React.FC<NumericActionRangeControlProps> = ({
       if (!isNaN(num)) {
         return physicalToRawByte(num, net);
       }
+      if (catalogCmd.options) {
+        const found = catalogCmd.options.find(o => o.label?.toLowerCase() === labelStr.toLowerCase());
+        if (found && found.match) {
+          const mVal = Object.values(found.match)[0];
+          if (mVal) {
+            const parsed = parseInt(String(mVal).replace(/^0x/i, ''), 16);
+            if (!isNaN(parsed)) return parsed;
+          }
+        }
+      }
+      const matchNum = labelStr.match(/(\d+(\.\d+)?)/);
+      if (matchNum) {
+        const parsed = parseFloat(matchNum[1]);
+        if (!isNaN(parsed)) return physicalToRawByte(parsed, net);
+      }
+      if (labelStr.toLowerCase().includes('off')) {
+        return physicalToRawByte(net?.min ?? 0, net);
+      }
     }
     return physicalToRawByte(getDefaultPhysicalValue(net), net);
-  }, [effectivePayloadMap, actionByte, act.option_label, act.command, net]);
+  }, [effectivePayloadMap, actionByte, act.option_label, act.command, net, catalogCmd.options]);
 
   const currentPhys = useMemo(() => {
     const res = rawByteToPhysical(isNaN(rawVal) ? 0 : rawVal, net);
@@ -182,14 +200,14 @@ const NumericActionRangeControl: React.FC<NumericActionRangeControlProps> = ({
 
     const calculatedRaw = physicalToRawByte(nativePhys, net);
     const hexVal = `0x${calculatedRaw.toString(16).toUpperCase().padStart(2, '0')}`;
-    const payload = buildRangeActionPayload(hexVal, net);
+    let payload = buildRangeActionPayload(hexVal, net);
     const displayUnit = isTemperature ? displayTempUnit : nativeUnit;
     const roundedDisplay = Math.round(clampedDisplay * 10) / 10;
-    const labelStr = `${roundedDisplay}${displayUnit}`;
+    let labelStr = `${roundedDisplay}${displayUnit}`;
     const txCanId = net?.action_can_id || catalogCmd.action_can_id || effectiveCanId || '0x000';
     const rangeSteps = resolveRangeSteps(catalogCmd, hexVal);
     const txBus = net?.bus ?? effectiveBus ?? 0;
-    const cleanSteps = rangeSteps && rangeSteps.length > 1
+    let cleanSteps = rangeSteps && rangeSteps.length > 1
       ? rangeSteps.map((s, idx) => ({
           can_id: s.can_id || txCanId,
           bus: s.bus ?? txBus,
@@ -198,6 +216,32 @@ const NumericActionRangeControl: React.FC<NumericActionRangeControlProps> = ({
           delay_ms: s.delay_ms ?? (idx < rangeSteps.length - 1 ? (net?.delay_ms ?? 20) : 0)
         }))
       : undefined;
+
+    // Check if catalogCmd has discrete options matching this slider setpoint (e.g. ambient_mood_light_brightness)
+    if (catalogCmd.options && catalogCmd.options.length > 0) {
+      const matchedOpt = catalogCmd.options.find(o => {
+        if (o.match) {
+          const mVal = Object.values(o.match)[0];
+          if (mVal && String(mVal).toLowerCase() === hexVal.toLowerCase()) return true;
+        }
+        return false;
+      }) || catalogCmd.options[Math.round(clampedDisplay)];
+
+      if (matchedOpt) {
+        if (matchedOpt.steps && matchedOpt.steps.length > 1) {
+          cleanSteps = matchedOpt.steps.map((s: any, idx: number) => ({
+            can_id: s.can_id || txCanId,
+            bus: s.bus ?? txBus,
+            payload: compileToByteMap(s.payload),
+            repeat: s.repeat ?? 1,
+            delay_ms: s.delay_ms ?? (idx < matchedOpt.steps!.length - 1 ? (net?.delay_ms ?? 20) : 0)
+          }));
+        } else if (matchedOpt.payload) {
+          payload = compileToByteMap(matchedOpt.payload);
+        }
+        labelStr = matchedOpt.label;
+      }
+    }
 
     onUpdate({
       ...act,
@@ -448,7 +492,8 @@ export function ActionNodeEditor({
   // Action naming & catalog resolution (available to all action types and actionButtons)
   const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForAction(act, catalog) : { command: undefined, matchedOption: undefined };
   const hasOptions = !!(catalogCmd?.options && catalogCmd.options.length > 0);
-  const isRangeEntity = !hasOptions && isRangeCommand(catalogCmd);
+  const isRangeEntity = isRangeCommand(catalogCmd);
+  const hasPills = hasOptions && !isRangeEntity;
   const actionName =
     catalogCmd?.ha_metadata?.name ||
     catalogCmd?.name ||
@@ -1283,7 +1328,7 @@ export function ActionNodeEditor({
         <>
 
       {/* Option Selector Big Pills in Smart Grid Rows */}
-      {hasOptions && (
+      {hasPills && (
         <div className="space-y-1.5 pt-0.5">
           {groupOptionsIntoGridRows(catalogCmd.options).map((group, gIdx) => {
             const itemCount = group.items.length;
@@ -1345,7 +1390,7 @@ export function ActionNodeEditor({
       )}
 
       {/* Advanced Details View */}
-      {((!hasOptions && !isRangeEntity) || showAdvanced) && (() => {
+      {((!hasPills && !isRangeEntity) || showAdvanced) && (() => {
         const isCanTx =
           act.type === 'can_tx' ||
           act.type === 'entity_command' ||

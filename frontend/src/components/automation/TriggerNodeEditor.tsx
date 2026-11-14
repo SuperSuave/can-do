@@ -701,13 +701,16 @@ export function TriggerNodeEditor({
   // CAN Trigger: Dual-View with Catalog recognition
   const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForTrigger(trig, catalog) : {};
   const hasOptions = !!(catalogCmd?.options && catalogCmd.options.length > 0);
-  const isRangeEntity = !hasOptions && Boolean(
+  const isRangeEntity = Boolean(
     catalogCmd?.type === 'param_range' ||
     catalogCmd?.type === 'linear_scale' ||
-    (catalogCmd?.network?.min !== undefined && catalogCmd?.network?.max !== undefined) ||
-    catalogCmd?.network?.factor !== undefined ||
-    trig.type === 'param_range'
+    trig.type === 'param_range' ||
+    (!hasOptions && (
+      (catalogCmd?.network?.min !== undefined && catalogCmd?.network?.max !== undefined) ||
+      catalogCmd?.network?.factor !== undefined
+    ))
   );
+  const hasPills = hasOptions && !isRangeEntity;
   const isCustomCan = !catalogCmd;
   const defaultCanName = isCustomCan
     ? (trig.can_id ? `Custom CAN (${trig.can_id})` : 'Custom CAN Trigger')
@@ -783,7 +786,7 @@ export function TriggerNodeEditor({
         <>
 
       {/* Option Selector Big Pills in Smart Grid Rows */}
-      {hasOptions && (
+      {hasPills && (
         <div className="space-y-1.5 pt-0.5">
           {groupOptionsIntoGridRows(catalogCmd.options).map((group, gIdx) => {
             const itemCount = group.items.length;

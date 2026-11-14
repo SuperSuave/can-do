@@ -480,24 +480,6 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
     };
   }
 
-  // Helper to resolve dual-tone door payload (0x48F) for ambient_mood_lighting presets
-  const getAmbientDoorPayload = (label: string | undefined, dashPayload: ByteMap): ByteMap => {
-    const l = (label || '').toLowerCase();
-    if (l.includes('christmas') || l.includes('xmas')) {
-      return compileToByteMap('7AC2081500000000'); // Lime Green Doors
-    }
-    if (l.includes('halloween')) {
-      return compileToByteMap('6703D51300000000'); // Deep Purple Doors
-    }
-    if (l.includes('valentine')) {
-      return compileToByteMap('EB02371700000000'); // Crimson Red Doors
-    }
-    if (l.includes('4th') || l.includes('fourth') || l.includes('july') || l.includes('patriotic')) {
-      return compileToByteMap('1E02861700000000'); // Electric Blue Doors
-    }
-    return dashPayload;
-  };
-
   // Handle explicit transmit or raw can_tx: inline multiple steps if defined, or return single transmit frame
   if (act.type === 'transmit' || act.type === 'can_tx') {
     const isAmbient = (act.entity_id || act.source_command_id) === 'ambient_mood_lighting' || formatCanId(act.can_id) === '0x4AD';
@@ -569,21 +551,6 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
           });
         }
       });
-
-      // If this is a 2-step 0x4AD ambient mood lighting sequence without 0x48F, also append the 0x48F door zone burst
-      const has48F = inlinedSteps.some(s => s.type === 'transmit' && formatCanId(s.can_id) === '0x48F');
-      if (isAmbient && !has48F && inlinedSteps.length >= 2 && inlinedSteps[0]?.type === 'transmit') {
-        const dashStage1 = inlinedSteps[0].payload;
-        const doorStage1 = getAmbientDoorPayload(act.option_label || act.command || resolvedForFallback.matchedOption?.label, dashStage1);
-        const latchCommit = compileToByteMap('0002082000000000');
-        const busVal = act.bus ?? 0;
-        inlinedSteps.push(
-          { type: 'delay', ms: 25, _step_group_id: stepGroupId, _auto_ambient_48f: true },
-          { type: 'transmit', can_id: '0x48F', bus: busVal, payload: doorStage1, repeat: 2, _step_group_id: stepGroupId, _auto_ambient_48f: true },
-          { type: 'delay', ms: 25, _step_group_id: stepGroupId, _auto_ambient_48f: true },
-          { type: 'transmit', can_id: '0x48F', bus: busVal, payload: latchCommit, repeat: 2, _step_group_id: stepGroupId, _auto_ambient_48f: true }
-        );
-      }
 
       return inlinedSteps;
     }
@@ -696,19 +663,6 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
             });
           }
         });
-
-        const has48F = inlinedSteps.some(s => s.type === 'transmit' && formatCanId(s.can_id) === '0x48F');
-        if (entityId === 'ambient_mood_lighting' && !has48F && inlinedSteps.length >= 2 && inlinedSteps[0]?.type === 'transmit') {
-          const dashStage1 = inlinedSteps[0].payload;
-          const doorStage1 = getAmbientDoorPayload(opt?.label || commandLabel, dashStage1);
-          const latchCommit = compileToByteMap('0002082000000000');
-          inlinedSteps.push(
-            { type: 'delay', ms: 25, ...(stepGroupId ? { _step_group_id: stepGroupId } : {}), _auto_ambient_48f: true },
-            { type: 'transmit', can_id: '0x48F', bus: bus, payload: doorStage1, repeat: 2, ...(stepGroupId ? { _step_group_id: stepGroupId } : {}), _auto_ambient_48f: true },
-            { type: 'delay', ms: 25, ...(stepGroupId ? { _step_group_id: stepGroupId } : {}), _auto_ambient_48f: true },
-            { type: 'transmit', can_id: '0x48F', bus: bus, payload: latchCommit, repeat: 2, ...(stepGroupId ? { _step_group_id: stepGroupId } : {}), _auto_ambient_48f: true }
-          );
-        }
 
         return inlinedSteps;
       }
@@ -1026,7 +980,7 @@ export function decompileCondition(rawCond: any, catalog: Catalog = DEFAULT_CATA
 
 /**
  * Helper to check and consume trailing flattened steps in rawActions starting at `startIndex`
- * that match `expectedSteps.slice(1)` (plus any auto-appended 0x48F ambient mood lighting frames).
+ * that match `expectedSteps.slice(1)`.
  */
 function matchAndConsumeRemainingCatalogSteps(
   rawActions: any[],
@@ -1114,27 +1068,6 @@ function matchAndConsumeRemainingCatalogSteps(
     cursor++;
   }
 
-  // If this is ambient_mood_lighting, also consume trailing auto-synthesized 0x48F door zone frames if present
-  if (catalogCmd.id === 'ambient_mood_lighting' || formatCanId(defaultCanId) === '0x4AD') {
-    while (cursor < rawActions.length) {
-      let probe = cursor;
-      if (rawActions[probe]?.type === 'delay' && !rawActions[probe]?.source_command_id) {
-        probe++;
-      }
-      const frame1 = rawActions[probe];
-      if (
-        frame1 &&
-        (frame1.type === 'transmit' || frame1.type === 'can_tx') &&
-        !frame1.source_command_id &&
-        formatCanId(frame1.can_id) === '0x48F'
-      ) {
-        cursor = probe + 1;
-        continue;
-      }
-      break;
-    }
-  }
-
   return { matched: true, nextIndex: cursor, extractedSteps };
 }
 
@@ -1155,12 +1088,6 @@ export function decompileActionList(
   while (i < rawActions.length) {
     const raw = rawActions[i];
     if (!raw || typeof raw !== 'object') {
-      i++;
-      continue;
-    }
-
-    // Skip standalone auto-generated 0x48F ambient frames if encountered directly
-    if (raw._auto_ambient_48f) {
       i++;
       continue;
     }
