@@ -1740,6 +1740,8 @@ static esp_err_t api_system_control_handler(httpd_req_t *req) {
             cJSON *en = cJSON_GetObjectItem(root, "enabled");
             bool val = cJSON_IsBool(en) ? cJSON_IsTrue(en) : !g_hardware_listen_only.load();
             set_sniffer_mode(g_sniffer_mode.load(), val);
+        } else if (strcmp(act, "disconnect_gvret") == 0 || strcmp(act, "reset_gvret") == 0) {
+            gvret_disconnect_client();
         }
     }
 

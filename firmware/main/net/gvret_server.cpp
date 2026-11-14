@@ -8,6 +8,7 @@
 #include "freertos/queue.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <cstring>
@@ -23,9 +24,18 @@ static const char* TAG = "GVRET";
 static QueueHandle_t s_gvret_queue = nullptr;
 static std::atomic<int> s_client_count{0};
 static int s_active_client_fd = -1;
+static std::atomic<bool> s_disconnect_requested{false};
 
 int gvret_get_client_count(void) {
     return s_client_count.load();
+}
+
+void gvret_disconnect_client(void) {
+    s_disconnect_requested.store(true);
+    int fd = s_active_client_fd;
+    if (fd >= 0) {
+        shutdown(fd, SHUT_RDWR);
+    }
 }
 
 void gvret_enqueue_frame(const twai_message_t* msg, uint8_t bus) {
@@ -43,17 +53,30 @@ void gvret_enqueue_fd_frame(const can_fd_frame_t* msg) {
 static bool send_flush_buffer(int sock, uint8_t* buf, size_t& len) {
     if (len == 0) return true;
     size_t sent = 0;
+    int retries = 0;
+    const int max_retries = 25; // 25 * 2ms = 50ms max buffer drain wait
     while (sent < len) {
+        if (s_disconnect_requested.load()) {
+            len = 0;
+            return false;
+        }
         int r = send(sock, buf + sent, len - sent, MSG_DONTWAIT);
         if (r > 0) {
             sent += r;
+            retries = 0;
             continue;
         }
         if (r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            if (++retries > max_retries) {
+                ESP_LOGW(TAG, "GVRET socket TX buffer stalled (>50ms), dropping dead/unresponsive peer");
+                len = 0;
+                return false;
+            }
             vTaskDelay(pdMS_TO_TICKS(2));
             continue;
         }
         ESP_LOGW(TAG, "GVRET socket send error (%d), peer disconnected", errno);
+        len = 0;
         return false;
     }
     len = 0;
@@ -357,18 +380,66 @@ static void gvret_server_task(void* pvParameters) {
 
         if (client_sock < 0) continue;
 
+        // Configure TCP Keepalive to quickly detect dead/unplugged clients
+        int keepalive = 1;
+        setsockopt(client_sock, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive));
+        int keepidle = 5;      // Probes start after 5 seconds of idle
+        setsockopt(client_sock, IPPROTO_TCP, TCP_KEEPIDLE, &keepidle, sizeof(keepidle));
+        int keepintvl = 2;     // Probes sent every 2 seconds
+        setsockopt(client_sock, IPPROTO_TCP, TCP_KEEPINTVL, &keepintvl, sizeof(keepintvl));
+        int keepcnt = 3;       // 3 unacknowledged probes = drop connection (~11s total)
+        setsockopt(client_sock, IPPROTO_TCP, TCP_KEEPCNT, &keepcnt, sizeof(keepcnt));
+
+        // Configure socket send & receive timeouts (2 seconds)
+        struct timeval tv_timeout = { .tv_sec = 2, .tv_usec = 0 };
+        setsockopt(client_sock, SOL_SOCKET, SO_SNDTIMEO, &tv_timeout, sizeof(tv_timeout));
+        setsockopt(client_sock, SOL_SOCKET, SO_RCVTIMEO, &tv_timeout, sizeof(tv_timeout));
+
+        // Disable Nagle's algorithm for immediate dispatch of CAN packets
+        int nodelay = 1;
+        setsockopt(client_sock, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
+
         ESP_LOGI(TAG, "GVRET client connected! Suspending automated burst commands for clean bus sniffing...");
         s_active_client_fd = client_sock;
         s_client_count.store(1);
         s_accum_len = 0;
+        s_disconnect_requested.store(false);
 
         bool prev_automations_state = g_automations_enabled.load();
         set_automations_enabled(false);
 
         size_t batch_len = 0;
         int64_t last_flush_us = esp_timer_get_time();
+        int loop_counter = 0;
 
         while (true) {
+            if (s_disconnect_requested.load()) {
+                ESP_LOGI(TAG, "GVRET disconnect requested via API");
+                break;
+            }
+
+            // Check every ~10 iterations (~20ms) if a new client is attempting to connect.
+            // If so, preempt and close the existing client to immediately service the reconnecting client.
+            if (++loop_counter >= 10) {
+                loop_counter = 0;
+                fd_set check_fds;
+                FD_ZERO(&check_fds);
+                int check_max = -1;
+                if (listen_sock_primary >= 0) {
+                    FD_SET(listen_sock_primary, &check_fds);
+                    if (listen_sock_primary > check_max) check_max = listen_sock_primary;
+                }
+                if (listen_sock_secondary >= 0) {
+                    FD_SET(listen_sock_secondary, &check_fds);
+                    if (listen_sock_secondary > check_max) check_max = listen_sock_secondary;
+                }
+                struct timeval tv_zero = { .tv_sec = 0, .tv_usec = 0 };
+                if (check_max >= 0 && select(check_max + 1, &check_fds, nullptr, nullptr, &tv_zero) > 0) {
+                    ESP_LOGI(TAG, "New GVRET client connect detected on listening port; preempting fd %d", client_sock);
+                    break;
+                }
+            }
+
             // 1. Process client incoming commands/frames
             if (!handle_client_rx(client_sock)) {
                 ESP_LOGI(TAG, "GVRET client disconnected (rx error/close)");
@@ -399,6 +470,7 @@ static void gvret_server_task(void* pvParameters) {
         s_active_client_fd = -1;
         s_client_count.store(0);
         s_accum_len = 0;
+        s_disconnect_requested.store(false);
         xQueueReset(s_gvret_queue);
 
         if (prev_automations_state) {
@@ -419,6 +491,6 @@ esp_err_t gvret_server_init(uint16_t port) {
         if (!s_gvret_queue) return ESP_ERR_NO_MEM;
     }
 
-    BaseType_t res = xTaskCreate(gvret_server_task, "gvret_srv", 3072, (void*)(uintptr_t)port, 4, nullptr);
+    BaseType_t res = xTaskCreate(gvret_server_task, "gvret_srv", 4096, (void*)(uintptr_t)port, 4, nullptr);
     return res == pdPASS ? ESP_OK : ESP_FAIL;
 }

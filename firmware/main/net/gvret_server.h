@@ -14,3 +14,6 @@ void gvret_enqueue_fd_frame(const can_fd_frame_t* msg);
 
 // Returns active GVRET client count
 int gvret_get_client_count(void);
+
+// Force disconnects any active GVRET client and resumes automations
+void gvret_disconnect_client(void);
