@@ -15,7 +15,7 @@ import { VehiclesTab } from './components/VehiclesTab';
 import { GroupedCommandView } from './components/GroupedCommandView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { CanDoLogo } from './components/CanDoLogo';
-import { Tabs, Button, Chip, Badge } from '@heroui/react';
+import { Tabs, Button, CloseButton, Chip, Badge } from '@heroui/react';
 import type { ExportFormat } from './components/ExportModal';
 
 // Code-split dynamic imports for heavy tabs and secondary modals
@@ -1149,6 +1149,18 @@ export default function App() {
     pendingAddedVehicles.length +
     pendingModifiedVehicles.length;
 
+  const [isContributeDismissed, setIsContributeDismissed] = useState(false);
+  const prevPendingCountRef = useRef(totalPendingCount);
+
+  useEffect(() => {
+    if (totalPendingCount === 0) {
+      setIsContributeDismissed(false);
+    } else if (totalPendingCount > prevPendingCountRef.current) {
+      setIsContributeDismissed(false);
+    }
+    prevPendingCountRef.current = totalPendingCount;
+  }, [totalPendingCount]);
+
   const handleQuickDownload = () => {
     const dataStr =
       'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(catalog, null, 2));
@@ -1636,19 +1648,26 @@ export default function App() {
       </footer>
 
       {/* Floating Action Buttons (FAB Stack) */}
-      <div className="ha-fab-stack">
-        {/* Contribute to GitHub FAB: only visible if edits exist */}
-        {totalPendingCount > 0 && (
-          <Button
-            variant="primary"
-            size="sm"
-            onPress={() => setIsContributeOpen(true)}
-            className="ha-save-fab dirty"
-            aria-label="Review & Contribute Changes to GitHub"
-          >
-            <Github className="w-4 h-4" />
-            <span>Contribute ({totalPendingCount} Staged)</span>
-          </Button>
+      <div id="ha-fab-stack" className="ha-fab-stack">
+        {/* Contribute to GitHub FAB: only visible if edits exist and not dismissed */}
+        {totalPendingCount > 0 && !isContributeDismissed && (
+          <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+            <Button
+              variant="primary"
+              size="sm"
+              onPress={() => setIsContributeOpen(true)}
+              className="ha-save-fab dirty"
+              aria-label="Review & Contribute Changes to GitHub"
+            >
+              <Github className="w-4 h-4" />
+              <span>Contribute ({totalPendingCount} Staged)</span>
+            </Button>
+            <CloseButton
+              aria-label="Dismiss staged contributions FAB"
+              onPress={() => setIsContributeDismissed(true)}
+              className="size-8 rounded-full bg-surface-secondary/90 hover:bg-surface-tertiary border border-border text-muted hover:text-foreground shadow-overlay backdrop-blur transition flex items-center justify-center shrink-0 cursor-pointer pointer-events-auto"
+            />
+          </div>
         )}
 
         {/* Automate FAB */}

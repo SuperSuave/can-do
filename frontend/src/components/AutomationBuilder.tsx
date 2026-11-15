@@ -1,6 +1,7 @@
-import React, { useState, useRef, useCallback, useContext, createContext } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useContext, createContext } from 'react';
+import { createPortal } from 'react-dom';
 import mqtt from 'mqtt';
-import { Switch, Button, ButtonGroup, Slider } from '@heroui/react';
+import { Switch, Button, CloseButton, ButtonGroup, Slider } from '@heroui/react';
 import {
   AutomationRule,
   AutomationSettings,
@@ -171,6 +172,27 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [editingSettingsRule, setEditingSettingsRule] = useState<AutomationRule | null>(null);
   const lastPushedJsonRef = useRef<string>(JSON.stringify(rules));
   const hasUnpushedChanges = lastPushedJsonRef.current !== JSON.stringify(rules);
+
+  const [mounted, setMounted] = useState(false);
+  const [isPushFabDismissed, setIsPushFabDismissed] = useState(false);
+  const prevRulesJsonRef = useRef(JSON.stringify(rules));
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const currentJson = JSON.stringify(rules);
+    if (lastPushedJsonRef.current === currentJson) {
+      setIsPushFabDismissed(false);
+    } else if (currentJson !== prevRulesJsonRef.current) {
+      // Re-surface FAB on new edits
+      setIsPushFabDismissed(false);
+    }
+    prevRulesJsonRef.current = currentJson;
+  }, [rules]);
+
+  const portalTarget = mounted && typeof document !== 'undefined' ? document.getElementById('ha-fab-stack') : null;
 
 
   // Global Automation Clipboard state
@@ -2164,6 +2186,72 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
+      )}
+
+      {/* Floating Action Button (FAB) for Unpushed Automation Edits */}
+      {hasUnpushedChanges && !isPushFabDismissed && (
+        portalTarget ? (
+          createPortal(
+            <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <Button
+                variant="primary"
+                size="sm"
+                isDisabled={syncing}
+                onPress={handlePushToEsp}
+                className="ha-save-fab dirty !bg-warning !text-warning-foreground shadow-lg shadow-warning/25"
+                aria-label="Push unsaved automation changes to device"
+              >
+                {syncing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Pushing Changes...</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowUp className="w-4 h-4" />
+                    <span>Push Changes ({rules.length} Rule{rules.length !== 1 ? 's' : ''})</span>
+                  </>
+                )}
+              </Button>
+              <CloseButton
+                aria-label="Dismiss push changes FAB"
+                onPress={() => setIsPushFabDismissed(true)}
+                className="size-8 rounded-full bg-surface-secondary/90 hover:bg-surface-tertiary border border-border text-muted hover:text-foreground shadow-overlay backdrop-blur transition flex items-center justify-center shrink-0 cursor-pointer pointer-events-auto"
+              />
+            </div>,
+            portalTarget
+          )
+        ) : (
+          <div className="ha-fab-stack">
+            <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <Button
+                variant="primary"
+                size="sm"
+                isDisabled={syncing}
+                onPress={handlePushToEsp}
+                className="ha-save-fab dirty !bg-warning !text-warning-foreground shadow-lg shadow-warning/25"
+                aria-label="Push unsaved automation changes to device"
+              >
+                {syncing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Pushing Changes...</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowUp className="w-4 h-4" />
+                    <span>Push Changes ({rules.length} Rule{rules.length !== 1 ? 's' : ''})</span>
+                  </>
+                )}
+              </Button>
+              <CloseButton
+                aria-label="Dismiss push changes FAB"
+                onPress={() => setIsPushFabDismissed(true)}
+                className="size-8 rounded-full bg-surface-secondary/90 hover:bg-surface-tertiary border border-border text-muted hover:text-foreground shadow-overlay backdrop-blur transition flex items-center justify-center shrink-0 cursor-pointer pointer-events-auto"
+              />
+            </div>
+          </div>
+        )
       )}
     </div>
     </AutomationClipboardContext.Provider>
