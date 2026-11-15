@@ -482,7 +482,7 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
 
   // Handle explicit transmit or raw can_tx: inline multiple steps if defined, or return single transmit frame
   if (act.type === 'transmit' || act.type === 'can_tx') {
-    const isAmbient = (act.entity_id || act.source_command_id) === 'ambient_mood_lighting' || formatCanId(act.can_id) === '0x4AD';
+    const isAmbient = (act.entity_id || act.source_command_id) === 'ambient_light_colors' || (act.entity_id || act.source_command_id) === 'ambient_mood_lighting' || formatCanId(act.can_id) === '0x4AD';
     const resolvedForFallback = catalog ? resolveCatalogCommandForAction(act, catalog) : {};
     const fallbackOptSteps = resolvedForFallback.matchedOption?.steps;
     const fallbackCmd = resolvedForFallback.command;
@@ -2208,9 +2208,12 @@ const ENTITY_ALIASES: Record<string, string> = {
   steering_wheel_heat: 'heated_steering_wheel_toggle',
   heated_wheel: 'heated_steering_wheel_toggle',
   heated_steering_wheel: 'heated_steering_wheel_toggle',
-  rear_defog: 'climate_rear_defog',
-  rear_defogger: 'climate_rear_defog',
-  defogger: 'climate_rear_defog',
+  rear_defog: 'climate_rear_defrost',
+  rear_defogger: 'climate_rear_defrost',
+  defogger: 'climate_rear_defrost',
+  rear_defrost: 'climate_rear_defrost',
+  rear_defroster: 'climate_rear_defrost',
+  defroster: 'climate_rear_defrost',
 };
 
 function extractActionPayload(act: AutomationAction): ByteMap | undefined {

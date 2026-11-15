@@ -695,7 +695,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
       }
 
       // Special Flow 9.5: Ambient Mood Lighting (executes hardware-timed 2-stage burst on 0x4AD)
-      if (targetEntityId === 'ambient_mood_lighting' || (targetCanId && targetCanId.toUpperCase() === '0X4AD')) {
+      if (targetEntityId === 'ambient_light_colors' || targetEntityId === 'ambient_mood_lighting' || (targetCanId && targetCanId.toUpperCase() === '0X4AD')) {
         let dispatchedViaEntity = false;
         if (targetCommand) {
           try {
@@ -703,7 +703,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                entity: 'ambient_mood_lighting',
+                entity: targetEntityId || 'ambient_light_colors',
                 command: targetCommand
               })
             });

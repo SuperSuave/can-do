@@ -16,7 +16,7 @@ export const AIRFLOW_MODE_COMMAND_LABELS: Record<CockpitAirflowMode, string> = {
   face: 'Body / Face Vents',
   face_feet: 'Body & Legs',
   feet: 'Legs / Floor Vents',
-  defrost: 'Legs & Windshield Defog',
+  defrost: 'Legs & Windshield Defrost',
 };
 
 const KM_TO_MI = 0.621371192;

@@ -217,7 +217,7 @@ const NumericActionRangeControl: React.FC<NumericActionRangeControlProps> = ({
         }))
       : undefined;
 
-    // Check if catalogCmd has discrete options matching this slider setpoint (e.g. ambient_mood_light_brightness)
+    // Check if catalogCmd has discrete options matching this slider setpoint (e.g. ambient_light_brightness)
     if (catalogCmd.options && catalogCmd.options.length > 0) {
       const matchedOpt = catalogCmd.options.find(o => {
         if (o.match) {

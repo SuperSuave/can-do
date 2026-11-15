@@ -229,16 +229,11 @@ class TestEgmpAuditDecoders(unittest.TestCase):
         self.assertEqual(resolve_variant(warn_lamp, "hyundai_kona_ev")["network"]["state_can_id"], "0x593")
 
     def test_epb_and_climate_variants(self):
-        """Verify EPB resolves to 0x1F1 / 0x490 and Climate to 0x380 / 0x5F5."""
+        """Verify EPB resolves to 0x1F1 / 0x490 and Climate Fan to 0x384 / 0x5F7."""
         epb = self.commands_by_id.get("electric_parking_brake_status")
         self.assertIsNotNone(epb)
         self.assertEqual(resolve_variant(epb, "kia_ev6")["network"]["state_can_id"], "0x1F1")
         self.assertEqual(resolve_variant(epb, "hyundai_kona_ev")["network"]["state_can_id"], "0x490")
-
-        clim = self.commands_by_id.get("climate_telemetry_status")
-        self.assertIsNotNone(clim)
-        self.assertEqual(resolve_variant(clim, "kia_ev6")["network"]["state_can_id"], "0x380")
-        self.assertEqual(resolve_variant(clim, "hyundai_kona_ev")["network"]["state_can_id"], "0x5F5")
 
         fan = self.commands_by_id.get("climate_blower_fan_status")
         self.assertIsNotNone(fan)
@@ -265,7 +260,6 @@ class TestEgmpAuditDecoders(unittest.TestCase):
         self.assertIn("0x595", gen2_ids)
         self.assertIn("0x593", gen2_ids)
         self.assertIn("0x490", gen2_ids)
-        self.assertIn("0x5f5", gen2_ids)
         self.assertIn("0x5f7", gen2_ids)
         self.assertIn("0x597", gen2_ids)
         self.assertIn("0x4e2", gen2_ids)

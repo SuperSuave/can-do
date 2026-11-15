@@ -400,8 +400,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       odometerName: findCmd('vehicle_odometer')?.ha_metadata?.name || 'Odometer',
       climateTarget: getCanId('climate_driver_temp', getCanId('climate_dual_cabin_temp', '380')),
       climateTargetName: findCmd('climate_driver_temp')?.ha_metadata?.name || 'Cabin Target Temp',
-      defrost: getCanId('climate_rear_defog', '541'),
-      defrostName: findCmd('climate_rear_defog')?.ha_metadata?.name || 'Rear Defroster',
+      defrost: getCanId('climate_rear_defrost', getCanId('climate_rear_defog', '541')),
+      defrostName: findCmd('climate_rear_defrost')?.ha_metadata?.name || findCmd('climate_rear_defog')?.ha_metadata?.name || 'Rear Defroster',
       hazards: getCanId('hazard_lights', '413'),
       hazardsName: findCmd('hazard_lights')?.ha_metadata?.name || 'Hazard Flashers',
       welcomeMirrors: getCanId('cgw_welcome_mirror_light', '410'),
@@ -670,7 +670,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       if (normState.includes('left')) setTurnSignal('left');
       else if (normState.includes('right')) setTurnSignal('right');
       else setTurnSignal('off');
-    } else if (entity === 'climate_rear_defog') {
+    } else if (entity === 'climate_rear_defrost' || entity === 'climate_rear_defog') {
       setRearDefrost(parseBooleanEntityState(stateStr));
     } else if (entity === 'front_defrost') {
       setFrontDefrost(parseBooleanEntityState(stateStr));
@@ -2353,8 +2353,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   const next = rearDefrost === true ? false : true;
                   setRearDefrost(next);
                   dispatchCommand(
-                    'climate_rear_defog',
-                    next ? 'Defogger & Mirrors On' : 'Defogger & Mirrors Off',
+                    'climate_rear_defrost',
+                    next ? 'Defroster & Mirrors On' : 'Defroster & Mirrors Off',
                     next ? 'Rear Defrost Activated' : 'Rear Defrost Deactivated'
                   );
                 }}

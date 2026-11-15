@@ -1613,7 +1613,7 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
         return true;
     }
 
-    if (entity_id == "ambient_mood_lamp_color" || entity_id == "ambient_mood_lighting" || entity_id == "mood_lighting" || entity_id == "ambient_light") {
+    if (entity_id == "ambient_mood_lamp_color" || entity_id == "ambient_mood_lighting" || entity_id == "ambient_light_colors" || entity_id == "mood_lighting" || entity_id == "ambient_light") {
         std::string cmd_lower = command_label;
         std::transform(cmd_lower.begin(), cmd_lower.end(), cmd_lower.begin(), ::tolower);
         bool ok = false;
@@ -2517,7 +2517,7 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
         else if (af_raw == 0x10) af_str = "Body / Face Vents";
         else if (af_raw == 0x20) af_str = "Body & Legs";
         else if (af_raw == 0x30) af_str = "Legs / Floor Vents";
-        else if (af_raw == 0x40) af_str = "Legs & Windshield Defog";
+        else if (af_raw == 0x40) af_str = "Legs & Windshield Defrost";
         if (af_str) {
             static const char* s_last_af = nullptr;
             if (af_str != s_last_af) {
@@ -2563,6 +2563,7 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
         int def_int = def ? 1 : 0;
         if (def_int != s_last_def) {
             s_last_def = def_int;
+            emit_live_entity_state("climate_rear_defrost", def ? "ON" : "OFF");
             emit_live_entity_state("climate_rear_defog", def ? "ON" : "OFF");
         }
     }

@@ -179,7 +179,7 @@ class TestRemoteClimate(unittest.TestCase):
 
         found = False
         for cmd in cat.get("commands", []):
-            if cmd.get("id") == "ambient_mood_lighting":
+            if cmd.get("id") == "ambient_light_colors":
                 found = True
                 self.assertEqual(cmd.get("network", {}).get("action_can_id"), "0x4AD")
                 for opt in cmd.get("options", []):
@@ -188,28 +188,30 @@ class TestRemoteClimate(unittest.TestCase):
                     self.assertEqual(len(steps), 2)
                     # Stage 2 must be the commit frame: 0002082000000000
                     self.assertEqual(steps[1].get("payload"), "0002082000000000")
-        self.assertTrue(found, "ambient_mood_lighting not found in catalog")
+        self.assertTrue(found, "ambient_light_colors not found in catalog")
 
     def test_ambient_lighting_ha_unified_entity(self) -> None:
-        """Verify ambient mood lighting is unified under light domain without duplicate number entity."""
+        """Verify ambient mood lighting is unified under light domain."""
         cat_path = Path(__file__).resolve().parent.parent / "catalog" / "can_do_catalog.json"
         with open(cat_path, "r", encoding="utf-8") as f:
             cat = json.load(f)
 
         cmds = {c["id"]: c for c in cat.get("commands", [])}
 
-        # 1. ambient_mood_lighting must have ha_metadata domain 'light'
-        self.assertIn("ambient_mood_lighting", cmds)
-        ha_meta = cmds["ambient_mood_lighting"].get("ha_metadata", {})
+        # 1. ambient_light_colors must have ha_metadata domain 'light'
+        self.assertIn("ambient_light_colors", cmds)
+        ha_meta = cmds["ambient_light_colors"].get("ha_metadata", {})
         self.assertEqual(ha_meta.get("domain"), "light")
-        self.assertEqual(ha_meta.get("name"), "Ambient Mood Lighting")
+        self.assertEqual(ha_meta.get("name"), "Ambient Light Colors")
 
-        # 2. ambient_mood_light_brightness must NOT have ha_metadata (avoid duplicate number entity in HA)
-        self.assertIn("ambient_mood_light_brightness", cmds)
-        self.assertNotIn("ha_metadata", cmds["ambient_mood_light_brightness"])
+        # 2. ambient_light_brightness must have ha_metadata domain 'light'
+        self.assertIn("ambient_light_brightness", cmds)
+        bright_meta = cmds["ambient_light_brightness"].get("ha_metadata", {})
+        self.assertEqual(bright_meta.get("domain"), "light")
+        self.assertEqual(bright_meta.get("name"), "Ambient Light Brightness")
 
         # 3. Verify all 10 brightness level steps match the formula
-        brightness_cmd = cmds["ambient_mood_light_brightness"]
+        brightness_cmd = cmds["ambient_light_brightness"]
         opts = {opt["label"]: opt for opt in brightness_cmd.get("options", [])}
 
         self.assertIn("Off", opts)
@@ -443,17 +445,17 @@ class TestRemoteClimate(unittest.TestCase):
             {"D1": "0x00", "D2": "0x00", "D3": "0x0F", "D4": "0x03", "D5": "0xFF", "D6": "0xFF", "D7": "0x00", "D8": "0x00"}
         )
 
-        # 2. Rear Defogger & Heated Mirrors on/off payloads
-        self.assertIn("climate_rear_defog", cmds)
-        defog = cmds["climate_rear_defog"]
-        self.assertEqual(defog.get("action_can_id"), "0x4A2")
-        dopts = {o["label"]: o for o in defog.get("options", [])}
+        # 2. Rear Defroster & Heated Mirrors on/off payloads
+        self.assertIn("climate_rear_defrost", cmds)
+        defrost = cmds["climate_rear_defrost"]
+        self.assertEqual(defrost.get("action_can_id"), "0x4A2")
+        dopts = {o["label"]: o for o in defrost.get("options", [])}
         self.assertEqual(
-            dopts["Defogger & Mirrors On"]["payload"],
+            dopts["Defroster & Mirrors On"]["payload"],
             {"D1": "0x00", "D2": "0x00", "D3": "0xCF", "D4": "0x03", "D5": "0xFF", "D6": "0xFF", "D7": "0x00", "D8": "0x00"}
         )
         self.assertEqual(
-            dopts["Defogger & Mirrors Off"]["payload"],
+            dopts["Defroster & Mirrors Off"]["payload"],
             {"D1": "0x00", "D2": "0x00", "D3": "0x0F", "D4": "0x03", "D5": "0xFF", "D6": "0xFF", "D7": "0x00", "D8": "0x00"}
         )
 
