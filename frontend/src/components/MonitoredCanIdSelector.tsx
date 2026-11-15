@@ -487,7 +487,7 @@ export const MonitoredCanIdSelector: React.FC<MonitoredCanIdSelectorProps> = ({
   };
 
   return (
-    <div className="space-y-4 max-w-3xl pb-24">
+    <div className="space-y-4 w-full pb-24">
       {/* Top Header Card */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
         <div>

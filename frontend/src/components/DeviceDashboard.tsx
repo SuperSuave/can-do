@@ -1624,157 +1624,175 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             </div>
           </div>
 
-          {/* Configuration Form */}
-          <form onSubmit={handleSaveMqtt} className="space-y-5 max-w-2xl">
-            {/* Toggle Enable */}
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-secondary border border-border">
-              <div>
-                <span className="text-xs font-bold text-foreground block">
-                  Enable MQTT Client
-                </span>
-                <span className="text-[11px] text-muted">
-                  Connect to MQTT broker and stream real-time vehicle telemetry states
-                </span>
-              </div>
-              <Switch
-                id="chk-mqtt-en"
-                isSelected={mqttConfig.enabled}
-                onChange={(isSelected) => setMqttConfig((prev) => ({ ...prev, enabled: isSelected }))}
-                size="sm"
-                aria-label="Enable MQTT Client"
-              >
-                <Switch.Content>
-                  <Switch.Control>
-                    <Switch.Thumb />
-                  </Switch.Control>
-                </Switch.Content>
-              </Switch>
+          {/* Two-Column Responsive Layout: CAN Selector (Left) & MQTT Broker Settings (Right) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left Column: Monitored CAN IDs & Signals Tree */}
+            <div className="lg:col-span-7 xl:col-span-7 space-y-4">
+              <MonitoredCanIdSelector
+                catalog={catalog}
+                monitoredIds={monitoredIds}
+                activeBusIds={activeBusIds}
+                isCustomized={isCustomizedMonitored}
+                onSaveMonitoredIds={handleSaveMonitoredIds}
+                onResetDefaults={handleResetMonitoredIds}
+                onRefresh={fetchMonitoredIds}
+                loading={monitoredLoading}
+              />
             </div>
 
-            {/* Toggle HA Generic Discovery */}
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-secondary border border-border">
-              <div>
-                <span className="text-xs font-bold text-foreground block">
-                  Broadcast Generic MQTT Auto-Discovery
-                </span>
-                <span className="text-[11px] text-muted">
-                  Publish legacy <code className="text-accent font-mono">homeassistant/.../config</code> topics. <strong className="text-warning font-semibold">Leave disabled (recommended)</strong> when using the native CAN Do Home Assistant integration to avoid duplicate entities.
-                </span>
-              </div>
-              <Switch
-                id="chk-mqtt-disco"
-                isSelected={!!mqttConfig.ha_discovery}
-                onChange={(isSelected) => setMqttConfig((prev) => ({ ...prev, ha_discovery: isSelected }))}
-                size="sm"
-                aria-label="Broadcast Generic MQTT Auto-Discovery"
-              >
-                <Switch.Content>
-                  <Switch.Control>
-                    <Switch.Thumb />
-                  </Switch.Control>
-                </Switch.Content>
-              </Switch>
-            </div>
-
-            {/* Broker Fields */}
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-foreground mb-1">
-                  Broker URL (URI)
-                </label>
-                <input
-                  type="text"
-                  value={mqttConfig.broker_url}
-                  onChange={(e) => setMqttConfig((prev) => ({ ...prev, broker_url: e.target.value }))}
-                  placeholder="mqtt://homeassistant.local:1883 or mqtt://192.168.1.100:1883"
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-focus font-mono"
-                  required
-                />
-                <span className="text-[10px] text-muted mt-1 block">
-                  Supported formats: <code className="text-accent">mqtt://host:1883</code> or <code className="text-accent">mqtts://host:8883</code>
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-foreground mb-1">
-                    Username <span className="text-[10px] font-normal text-muted">(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={mqttConfig.username}
-                    onChange={(e) => setMqttConfig((prev) => ({ ...prev, username: e.target.value }))}
-                    placeholder="homeassistant"
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-focus font-mono"
-                  />
+            {/* Right Column: MQTT Broker Connection Settings Form */}
+            <div className="lg:col-span-5 xl:col-span-5 lg:sticky lg:top-4">
+              <div className="p-4 sm:p-5 rounded-2xl bg-surface-secondary/40 border border-border space-y-5 shadow-sm">
+                <div className="flex items-center justify-between pb-3 border-b border-border">
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground">
+                      MQTT Broker Settings
+                    </h4>
+                    <p className="text-[11px] text-muted">
+                      Connection parameters for Home Assistant & telemetry
+                    </p>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-foreground mb-1">
-                    Password {mqttConfig.has_password && <span className="text-success text-[10px] font-normal">(Password set)</span>}
-                  </label>
-                  <input
-                    type="password"
-                    value={mqttPasswordInput}
-                    onChange={(e) => setMqttPasswordInput(e.target.value)}
-                    placeholder={mqttConfig.has_password ? '•••••••• (leave blank to keep)' : 'Enter broker password'}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-focus font-mono"
-                  />
-                </div>
+                <form onSubmit={handleSaveMqtt} className="space-y-4">
+                  {/* Toggle Enable */}
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-surface-secondary border border-border">
+                    <div className="pr-2">
+                      <span className="text-xs font-bold text-foreground block">
+                        Enable MQTT Client
+                      </span>
+                      <span className="text-[11px] text-muted">
+                        Connect to broker and stream real-time vehicle telemetry states
+                      </span>
+                    </div>
+                    <Switch
+                      id="chk-mqtt-en"
+                      isSelected={mqttConfig.enabled}
+                      onChange={(isSelected) => setMqttConfig((prev) => ({ ...prev, enabled: isSelected }))}
+                      size="sm"
+                      aria-label="Enable MQTT Client"
+                    >
+                      <Switch.Content>
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
+                      </Switch.Content>
+                    </Switch>
+                  </div>
+
+                  {/* Toggle HA Generic Discovery */}
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-surface-secondary border border-border">
+                    <div className="pr-2">
+                      <span className="text-xs font-bold text-foreground block">
+                        Broadcast Generic Discovery
+                      </span>
+                      <span className="text-[11px] text-muted">
+                        Legacy <code className="text-accent font-mono">homeassistant/.../config</code> topics. <strong className="text-warning font-semibold">Leave disabled (recommended)</strong> when using the native CAN Do Home Assistant integration.
+                      </span>
+                    </div>
+                    <Switch
+                      id="chk-mqtt-disco"
+                      isSelected={!!mqttConfig.ha_discovery}
+                      onChange={(isSelected) => setMqttConfig((prev) => ({ ...prev, ha_discovery: isSelected }))}
+                      size="sm"
+                      aria-label="Broadcast Generic MQTT Auto-Discovery"
+                    >
+                      <Switch.Content>
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
+                      </Switch.Content>
+                    </Switch>
+                  </div>
+
+                  {/* Broker Fields */}
+                  <div className="space-y-3.5">
+                    <div>
+                      <label className="block text-xs font-bold text-foreground mb-1">
+                        Broker URL (URI)
+                      </label>
+                      <input
+                        type="text"
+                        value={mqttConfig.broker_url}
+                        onChange={(e) => setMqttConfig((prev) => ({ ...prev, broker_url: e.target.value }))}
+                        placeholder="mqtt://homeassistant.local:1883 or mqtt://192.168.1.100:1883"
+                        className="w-full px-3 py-2 text-xs rounded-xl bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-focus font-mono"
+                        required
+                      />
+                      <span className="text-[10px] text-muted mt-1 block">
+                        Supported: <code className="text-accent">mqtt://host:1883</code> or <code className="text-accent">mqtts://host:8883</code>
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="block text-xs font-bold text-foreground mb-1">
+                          Username <span className="text-[10px] font-normal text-muted">(optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={mqttConfig.username}
+                          onChange={(e) => setMqttConfig((prev) => ({ ...prev, username: e.target.value }))}
+                          placeholder="homeassistant"
+                          className="w-full px-3 py-2 text-xs rounded-xl bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-focus font-mono"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-foreground mb-1">
+                          Password {mqttConfig.has_password && <span className="text-success text-[10px] font-normal">(Password set)</span>}
+                        </label>
+                        <input
+                          type="password"
+                          value={mqttPasswordInput}
+                          onChange={(e) => setMqttPasswordInput(e.target.value)}
+                          placeholder={mqttConfig.has_password ? '•••••••• (leave blank to keep)' : 'Enter broker password'}
+                          className="w-full px-3 py-2 text-xs rounded-xl bg-surface-secondary border border-border text-foreground focus:outline-none focus:border-focus font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Info Callout */}
+                  <div className="p-3 rounded-xl bg-surface-secondary border border-border text-[11px] text-muted space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-bold text-foreground">
+                      <Info className="w-3.5 h-3.5 text-accent" />
+                      <span>Home Assistant Auto-Discovery</span>
+                    </div>
+                    <p>
+                      When connected, CAN Do streams selected signals under <code className="text-accent font-mono">homeassistant/sensor/cando/...</code> and commands to <code className="text-accent font-mono">cando/set/...</code>.
+                    </p>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-between pt-2">
+                    <span className={`text-xs font-medium ${mqttSaveStatus.includes('Error') || mqttSaveStatus.includes('Failed') ? 'text-danger' : 'text-success'}`}>
+                      {mqttSaveStatus}
+                    </span>
+
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      size="sm"
+                      isDisabled={mqttSaving}
+                      className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-foreground font-bold text-xs transition shadow-sm inline-flex items-center gap-2"
+                    >
+                      {mqttSaving ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Save & Connect</span>
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
               </div>
             </div>
-
-            {/* Info Callout */}
-            <div className="p-3.5 rounded-xl bg-surface-secondary border border-border text-[11px] text-muted space-y-1.5">
-              <div className="flex items-center gap-1.5 font-bold text-foreground">
-                <Info className="w-3.5 h-3.5 text-accent" />
-                <span>Home Assistant MQTT Auto-Discovery</span>
-              </div>
-              <p>
-                When enabled and connected, CAN Do publishes telemetry and discovery topics under <code className="text-accent font-mono">homeassistant/sensor/cando/...</code> and commands to <code className="text-accent font-mono">cando/set/...</code>.
-              </p>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-between pt-2">
-              <span className={`text-xs font-medium ${mqttSaveStatus.includes('Error') || mqttSaveStatus.includes('Failed') ? 'text-danger' : 'text-success'}`}>
-                {mqttSaveStatus}
-              </span>
-
-              <Button
-                type="submit"
-                variant="primary"
-                size="sm"
-                isDisabled={mqttSaving}
-                className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-foreground font-bold text-xs transition shadow-sm inline-flex items-center gap-2"
-              >
-                {mqttSaving ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Save & Connect</span>
-                  </>
-                )}
-              </Button>
-            </div>
-          </form>
-
-          {/* Monitored CAN IDs & Catalog Subscriptions */}
-          <div className="pt-5 border-t border-border">
-            <MonitoredCanIdSelector
-              catalog={catalog}
-              monitoredIds={monitoredIds}
-              activeBusIds={activeBusIds}
-              isCustomized={isCustomizedMonitored}
-              onSaveMonitoredIds={handleSaveMonitoredIds}
-              onResetDefaults={handleResetMonitoredIds}
-              onRefresh={fetchMonitoredIds}
-              loading={monitoredLoading}
-            />
           </div>
         </div>
       )}
