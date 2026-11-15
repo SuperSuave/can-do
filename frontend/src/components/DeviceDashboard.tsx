@@ -58,6 +58,7 @@ import { checkForUpdates, executeUpdateSequence, UpdateCheckResult, UpdateStage 
 import { MdiIcon } from './MdiIcon';
 import { BluetoothManager } from './BluetoothManager';
 import { DeviceRebootModal } from './DeviceRebootModal';
+import { MonitoredCanIdSelector } from './MonitoredCanIdSelector';
 import { STANDARD_TIMEZONES, detectBrowserTimezone, getTimezoneLabel } from '../utils/timezone';
 
 export interface CanBusStatus {
@@ -1762,121 +1763,18 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             </div>
           </form>
 
-          {/* Monitored CAN IDs Card */}
-          <div className="pt-5 border-t border-border space-y-4 max-w-2xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-foreground block">
-                  Monitored CAN IDs ({monitoredIds.length})
-                </span>
-                <span className="text-[11px] text-muted">
-                  CAN IDs the ESP32 filters and streams over MQTT. Persists in flash storage across reboots.
-                  {isCustomizedMonitored && <span className="ml-1.5 text-accent font-semibold">(Customized)</span>}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onPress={fetchMonitoredIds}
-                  isDisabled={monitoredLoading}
-                  className="p-1.5 text-xs rounded-lg border border-border"
-                  aria-label="Refresh Monitored IDs"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${monitoredLoading ? 'animate-spin text-accent' : ''}`} />
-                </Button>
-                {isCustomizedMonitored && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onPress={handleResetMonitoredIds}
-                    className="px-2.5 py-1 text-[11px] text-muted hover:text-danger rounded-lg border border-border font-semibold transition"
-                  >
-                    Reset Defaults
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {/* Actively detected IDs hint */}
-            {activeBusIds.length > 0 && (
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-surface-secondary border border-border text-[11px]">
-                <span className="text-muted">
-                  <span className="font-semibold text-success">{activeBusIds.length} IDs</span> actively detected on the physical bus.
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleSaveMonitoredIds(activeBusIds)}
-                  className="text-accent hover:underline font-bold transition"
-                >
-                  Sync to Detected
-                </button>
-              </div>
-            )}
-
-            {/* Add custom CAN ID input */}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newCanIdInput}
-                onChange={(e) => setNewCanIdInput(e.target.value)}
-                placeholder="e.g. 0x4CE or 4CE"
-                className="px-3 py-1.5 text-xs rounded-xl bg-surface-secondary border border-border text-foreground font-mono flex-1 focus:outline-none focus:border-focus"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    let val = newCanIdInput.trim().toUpperCase();
-                    if (!val) return;
-                    if (!val.startsWith('0X')) val = '0X' + val;
-                    if (!monitoredIds.map(x => x.toUpperCase()).includes(val)) {
-                      const updated = [...monitoredIds, val].sort();
-                      handleSaveMonitoredIds(updated);
-                    }
-                    setNewCanIdInput('');
-                  }
-                }}
-              />
-              <Button
-                size="sm"
-                variant="secondary"
-                onPress={() => {
-                  let val = newCanIdInput.trim().toUpperCase();
-                  if (!val) return;
-                  if (!val.startsWith('0X')) val = '0X' + val;
-                  if (!monitoredIds.map(x => x.toUpperCase()).includes(val)) {
-                    const updated = [...monitoredIds, val].sort();
-                    handleSaveMonitoredIds(updated);
-                  }
-                  setNewCanIdInput('');
-                }}
-                className="px-3 py-1.5 text-xs rounded-xl bg-surface-secondary border border-border font-bold text-foreground"
-              >
-                + Add ID
-              </Button>
-            </div>
-
-            {/* ID Chips Container */}
-            <div className="max-h-48 overflow-y-auto p-2.5 rounded-xl bg-surface-secondary border border-border flex flex-wrap gap-1.5">
-              {monitoredIds.map((cid) => (
-                <span
-                  key={cid}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface text-[11px] font-mono border border-border text-foreground"
-                >
-                  {cid}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const updated = monitoredIds.filter((id) => id.toUpperCase() !== cid.toUpperCase());
-                      handleSaveMonitoredIds(updated);
-                    }}
-                    className="text-muted hover:text-danger ml-0.5 text-xs leading-none font-bold"
-                    title={`Remove ${cid}`}
-                  >
-                    &times;
-                  </button>
-                </span>
-              ))}
-            </div>
+          {/* Monitored CAN IDs & Catalog Subscriptions */}
+          <div className="pt-5 border-t border-border">
+            <MonitoredCanIdSelector
+              catalog={catalog}
+              monitoredIds={monitoredIds}
+              activeBusIds={activeBusIds}
+              isCustomized={isCustomizedMonitored}
+              onSaveMonitoredIds={handleSaveMonitoredIds}
+              onResetDefaults={handleResetMonitoredIds}
+              onRefresh={fetchMonitoredIds}
+              loading={monitoredLoading}
+            />
           </div>
         </div>
       )}

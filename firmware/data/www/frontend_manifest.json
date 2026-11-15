@@ -7,34 +7,24 @@
       "size": 70567
     },
     {
-      "name": "CSbEEQJM.js.gz",
-      "path": "/spiffs/www/CSbEEQJM.js.gz",
-      "size": 34780
+      "name": "CmZxVl1b.js.gz",
+      "path": "/spiffs/www/CmZxVl1b.js.gz",
+      "size": 976
     },
     {
-      "name": "Cp7qQOaU.js.gz",
-      "path": "/spiffs/www/Cp7qQOaU.js.gz",
-      "size": 977
+      "name": "DFgME9Ru.js.gz",
+      "path": "/spiffs/www/DFgME9Ru.js.gz",
+      "size": 27835
     },
     {
-      "name": "DC_hdWYG.js.gz",
-      "path": "/spiffs/www/DC_hdWYG.js.gz",
-      "size": 57514
+      "name": "DMPOl11m.js.gz",
+      "path": "/spiffs/www/DMPOl11m.js.gz",
+      "size": 8638
     },
     {
-      "name": "DNJg_jrl.js.gz",
-      "path": "/spiffs/www/DNJg_jrl.js.gz",
-      "size": 24207
-    },
-    {
-      "name": "DPVwSmck.js.gz",
-      "path": "/spiffs/www/DPVwSmck.js.gz",
-      "size": 24309
-    },
-    {
-      "name": "DRUAzCcj.js.gz",
-      "path": "/spiffs/www/DRUAzCcj.js.gz",
-      "size": 8499
+      "name": "Dphy6uX7.js.gz",
+      "path": "/spiffs/www/Dphy6uX7.js.gz",
+      "size": 24201
     },
     {
       "name": "DURp6PgD.js.gz",
@@ -42,29 +32,39 @@
       "size": 242230
     },
     {
-      "name": "index-DIQlvk.css.gz",
-      "path": "/spiffs/www/index-DIQlvk.css.gz",
-      "size": 53076
+      "name": "index-BMJ1Sx.js.gz",
+      "path": "/spiffs/www/index-BMJ1Sx.js.gz",
+      "size": 73918
     },
     {
-      "name": "index-DJXhDB.js.gz",
-      "path": "/spiffs/www/index-DJXhDB.js.gz",
-      "size": 73919
+      "name": "index-CUIwxE.css.gz",
+      "path": "/spiffs/www/index-CUIwxE.css.gz",
+      "size": 53452
     },
     {
       "name": "index.html",
       "path": "/spiffs/www/index.html",
-      "size": 5220
+      "size": 5298
     },
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 2054
+      "size": 2062
     },
     {
       "name": "logo.svg",
       "path": "/spiffs/www/logo.svg",
       "size": 8217
+    },
+    {
+      "name": "UhKext0x.js.gz",
+      "path": "/spiffs/www/UhKext0x.js.gz",
+      "size": 57512
+    },
+    {
+      "name": "_nbR17Tr.js.gz",
+      "path": "/spiffs/www/_nbR17Tr.js.gz",
+      "size": 34779
     }
   ]
 }
