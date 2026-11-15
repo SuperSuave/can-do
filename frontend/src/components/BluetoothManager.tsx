@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Spinner } from '@heroui/react';
 import {
   Bluetooth,
@@ -47,6 +47,9 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
   const [activePressedButton, setActivePressedButton] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
+  const maxClearedTimestampRef = useRef<number>(0);
+  const isClearedRef = useRef<boolean>(false);
+
   // Beacon & Phone Proximity state
   const [beaconName, setBeaconName] = useState('My Phone');
   const [beaconUuid, setBeaconUuid] = useState('');
@@ -77,14 +80,33 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
           setScanning(true);
         }
         if (data.recent_events && data.recent_events.length > 0) {
-          setRecentEvents(data.recent_events);
-        } else if (data.last_event) {
-          setRecentEvents(prev => {
-            if (prev.length === 0 || prev[0].timestamp_ms !== data.last_event?.timestamp_ms) {
-              return [data.last_event!, ...prev.slice(0, 49)];
+          let events = data.recent_events;
+          if (isClearedRef.current) {
+            events = events.filter(ev => (ev.timestamp_ms || 0) > maxClearedTimestampRef.current);
+            if (events.length > 0) {
+              // Fresh events arrived since clear was pressed
+              isClearedRef.current = false;
+              maxClearedTimestampRef.current = 0;
             }
-            return prev;
-          });
+          }
+          // Sort descending: most recent event at index 0 (top of the stream)
+          const sorted = [...events].sort((a, b) => (b.timestamp_ms || 0) - (a.timestamp_ms || 0));
+          setRecentEvents(sorted);
+        } else if (data.recent_events && data.recent_events.length === 0) {
+          isClearedRef.current = false;
+          maxClearedTimestampRef.current = 0;
+          setRecentEvents([]);
+        } else if (data.last_event) {
+          if (!isClearedRef.current || (data.last_event.timestamp_ms || 0) > maxClearedTimestampRef.current) {
+            isClearedRef.current = false;
+            maxClearedTimestampRef.current = 0;
+            setRecentEvents(prev => {
+              if (prev.length === 0 || prev[0].timestamp_ms !== data.last_event?.timestamp_ms) {
+                return [data.last_event!, ...prev.slice(0, 49)];
+              }
+              return prev;
+            });
+          }
         }
       }
     } catch {
@@ -109,8 +131,10 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
           hold_seconds: msg.hold_seconds,
           device_name: msg.device_name || msg.name || status?.connected_device?.name || 'BLE Device',
           device_address: msg.address || status?.connected_device?.address || '',
-          timestamp_ms: Date.now()
+          timestamp_ms: typeof msg.timestamp_ms === 'number' ? msg.timestamp_ms : Date.now()
         };
+        isClearedRef.current = false;
+        maxClearedTimestampRef.current = 0;
         setRecentEvents(prev => [eventItem, ...prev.slice(0, 49)]);
       } else if (msg && msg.type === 'ble_beacon') {
         setStatus(prev => {
@@ -230,6 +254,8 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
       device_address: status?.connected_device?.address || '00:00:00:00:00:00',
       timestamp_ms: Date.now()
     };
+    isClearedRef.current = false;
+    maxClearedTimestampRef.current = 0;
     setRecentEvents(prev => [eventItem, ...prev.slice(0, 49)]);
 
     try {
@@ -240,6 +266,24 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
       });
     } catch {
       // Ignored for simulation
+    }
+  };
+
+  const handleClearLog = async () => {
+    let maxTs = 0;
+    for (const ev of recentEvents) {
+      if (ev.timestamp_ms && ev.timestamp_ms > maxTs) {
+        maxTs = ev.timestamp_ms;
+      }
+    }
+    maxClearedTimestampRef.current = maxTs;
+    isClearedRef.current = true;
+    setRecentEvents([]);
+
+    try {
+      await fetch(resolveUrl('/api/ble/clear_events'), { method: 'POST' });
+    } catch {
+      // Ignored for simulation / offline
     }
   };
 
@@ -938,10 +982,12 @@ export const BluetoothManager: React.FC<BluetoothManagerProps> = ({
             </span>
             <button
               type="button"
-              onClick={() => setRecentEvents([])}
-              className="text-[10px] text-muted hover:text-danger transition"
+              onClick={handleClearLog}
+              className="text-[10px] text-muted hover:text-danger transition inline-flex items-center gap-1 font-medium"
+              aria-label="Clear Event Log"
             >
-              Clear Log
+              <Trash2 className="w-3 h-3" />
+              <span>Clear Log</span>
             </button>
           </div>
 

@@ -1720,7 +1720,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                         required
                       />
                       <span className="text-[10px] text-muted mt-1 block">
-                        Supported: <code className="text-accent">mqtt://host:1883</code> or <code className="text-accent">mqtts://host:8883</code>
+                        Supported: <code className="text-accent">mqtt(s)://host:1883</code> or <code className="text-accent">ws(s)://host/mqtt</code>
                       </span>
                     </div>
 

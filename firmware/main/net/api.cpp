@@ -2475,6 +2475,14 @@ static esp_err_t api_ble_test_event_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static esp_err_t api_ble_clear_events_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    ble_mgr_clear_events();
+    httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
+    return ESP_OK;
+}
+
 static esp_err_t api_ble_beacons_get_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
@@ -2599,6 +2607,7 @@ httpd_handle_t start_webserver(void) {
         reg_uri("/api/ble/pair", HTTP_POST, api_ble_pair_handler);
         reg_uri("/api/ble/unpair", HTTP_POST, api_ble_unpair_handler);
         reg_uri("/api/ble/test_event", HTTP_POST, api_ble_test_event_handler);
+        reg_uri("/api/ble/clear_events", HTTP_POST, api_ble_clear_events_handler);
         reg_uri("/api/ble/beacons", HTTP_GET, api_ble_beacons_get_handler);
         reg_uri("/api/ble/beacons", HTTP_POST, api_ble_beacons_post_handler);
         reg_uri("/api/ble/beacons", HTTP_DELETE, api_ble_beacons_delete_handler);

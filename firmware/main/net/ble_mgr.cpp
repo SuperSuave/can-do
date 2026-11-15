@@ -1227,11 +1227,11 @@ std::string ble_mgr_get_status_json(void) {
         cJSON_AddNullToObject(root, "last_event");
     }
 
-    // Recent events
+    // Recent events (newest first)
     cJSON* recent = cJSON_CreateArray();
-    for (const auto& ev : s_recent_ble_events) {
+    for (auto it = s_recent_ble_events.rbegin(); it != s_recent_ble_events.rend(); ++it) {
         cJSON* itm = cJSON_CreateObject();
-        append_ble_event_json(itm, ev);
+        append_ble_event_json(itm, *it);
         cJSON_AddItemToArray(recent, itm);
     }
     cJSON_AddItemToObject(root, "recent_events", recent);
@@ -1495,6 +1495,13 @@ bool ble_mgr_is_scanning(void) {
     return s_ble_scanning;
 }
 
+void ble_mgr_clear_events(void) {
+    std::lock_guard<std::mutex> lock(s_ble_mutex);
+    s_recent_ble_events.clear();
+    s_has_last_event = false;
+    s_last_ble_event = {};
+}
+
 #else // !CONFIG_BT_ENABLED
 
 void ble_mgr_init(void) {
@@ -1511,6 +1518,7 @@ void ble_mgr_start_scan(uint32_t duration_sec) { (void)duration_sec; }
 bool ble_mgr_pair_device(const std::string& address, const std::string& name) { (void)address; (void)name; return false; }
 void ble_mgr_unpair_device(const std::string& address) { (void)address; }
 void ble_mgr_inject_test_event(const std::string& button, const std::string& action) { (void)button; (void)action; }
+void ble_mgr_clear_events(void) {}
 std::string ble_mgr_get_beacons_json(void) { return "{\"targets\":[],\"discovered\":[]}"; }
 bool ble_mgr_set_beacon(const std::string& uuid, const std::string& mac, const std::string& name, int enter_rssi, int exit_timeout_s) {
     (void)uuid; (void)mac; (void)name; (void)enter_rssi; (void)exit_timeout_s; return false;
