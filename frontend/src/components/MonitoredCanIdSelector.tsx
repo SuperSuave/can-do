@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Button } from '@heroui/react';
+import { createPortal } from 'react-dom';
+import { Button, CloseButton } from '@heroui/react';
 import {
   ChevronRight,
   ChevronDown,
@@ -218,6 +219,12 @@ export const MonitoredCanIdSelector: React.FC<MonitoredCanIdSelectorProps> = ({
 
   // Save operation state
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [mounted, setMounted] = useState<boolean>(false);
+  const [isSaveFabDismissed, setIsSaveFabDismissed] = useState<boolean>(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Initialize selection when monitoredIds changes or loads
   useEffect(() => {
@@ -290,6 +297,14 @@ export const MonitoredCanIdSelector: React.FC<MonitoredCanIdSelectorProps> = ({
     }
     return false;
   }, [selectedCommandIds, savedSelectedCommandIds, customCanIds, savedCustomCanIds]);
+
+  useEffect(() => {
+    if (hasChanges) {
+      setIsSaveFabDismissed(false);
+    }
+  }, [hasChanges]);
+
+  const portalTarget = mounted && typeof document !== 'undefined' ? document.getElementById('ha-fab-stack') : null;
 
   // Filter commands by search query
   const queryLower = searchQuery.trim().toLowerCase();
@@ -558,8 +573,24 @@ export const MonitoredCanIdSelector: React.FC<MonitoredCanIdSelectorProps> = ({
           )}
         </div>
 
-        {/* Expand / Collapse Controls */}
+        {/* Bulk Selection & Expand / Collapse Controls */}
         <div className="flex items-center gap-1 shrink-0 self-end sm:self-auto">
+          <button
+            type="button"
+            onClick={handleSelectAll}
+            className="px-2 py-1 text-[11px] font-medium text-accent hover:underline transition rounded"
+          >
+            Select All
+          </button>
+          <span className="text-border">|</span>
+          <button
+            type="button"
+            onClick={handleClearAll}
+            className="px-2 py-1 text-[11px] font-medium text-muted hover:text-danger transition rounded"
+          >
+            Clear All
+          </button>
+          <span className="text-border">|</span>
           <button
             type="button"
             onClick={handleExpandAll}
@@ -844,82 +875,99 @@ export const MonitoredCanIdSelector: React.FC<MonitoredCanIdSelectorProps> = ({
       </div>
 
       {/* =========================================================================
-          FLOATING ACTION BAR (FAB)
-          - Quick Bulk Select / Clear
-          - Live Entity & CAN ID Counters
-          - Save Choices Button with Dirty State Glow
-          - Revert Button
+          FLOATING ACTION BUTTON (FAB)
+          - Rendered only when hasChanges && !isSaveFabDismissed
+          - Portaled into the unified #ha-fab-stack so it never collides
+          - HeroUI Button and CloseButton specs
       ========================================================================= */}
-      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 p-2 rounded-2xl bg-surface/95 backdrop-blur-md border border-border shadow-2xl transition-all duration-300 max-w-[calc(100vw-2rem)] flex-wrap">
-        {/* Bulk Select / Clear Actions */}
-        <div className="flex items-center gap-1 pr-2 border-r border-border">
-          <Button
-            size="sm"
-            variant="secondary"
-            onPress={handleSelectAll}
-            className="px-2.5 py-1 text-xs rounded-xl bg-surface-secondary hover:bg-surface-tertiary border border-border font-semibold text-foreground flex items-center gap-1.5"
-            aria-label="Select all catalog signals"
-          >
-            <CheckSquare className="w-3.5 h-3.5 text-accent" />
-            <span className="hidden sm:inline">Select All</span>
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onPress={handleClearAll}
-            className="px-2.5 py-1 text-xs rounded-xl bg-surface-secondary hover:bg-surface-tertiary border border-border font-semibold text-muted hover:text-danger flex items-center gap-1.5"
-            aria-label="Deselect all signals"
-          >
-            <Square className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Clear All</span>
-          </Button>
-        </div>
+      {hasChanges && !isSaveFabDismissed && (
+        portalTarget ? (
+          createPortal(
+            <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <Button
+                size="sm"
+                variant="secondary"
+                onPress={handleRevert}
+                className="ha-save-fab !bg-surface-secondary !text-muted hover:!text-foreground !border !border-border text-xs font-semibold"
+                aria-label="Discard changes and revert"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Revert</span>
+              </Button>
 
-        {/* Live Counters */}
-        <div className="px-2 text-xs text-foreground flex items-center gap-1.5">
-          <span className="font-bold text-accent">{selectedCommandIds.size}</span>
-          <span className="text-muted">signals</span>
-          <span className="text-border">•</span>
-          <span className="font-mono font-bold text-foreground">{computedCanIds.length}</span>
-          <span className="text-muted">CAN IDs</span>
-        </div>
+              <Button
+                size="sm"
+                variant="primary"
+                onPress={handleSave}
+                isDisabled={isSaving}
+                className="ha-save-fab dirty"
+                aria-label="Save choices to ESP32 flash"
+              >
+                {isSaving ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>Save Choices ({computedCanIds.length} IDs)</span>
+                  </>
+                )}
+              </Button>
 
-        {/* Save / Revert Controls */}
-        {hasChanges && (
-          <div className="flex items-center gap-1.5 pl-2 border-l border-border">
-            <Button
-              size="sm"
-              variant="secondary"
-              onPress={handleRevert}
-              className="px-2.5 py-1 text-xs rounded-xl bg-surface-secondary hover:bg-surface-tertiary border border-border font-semibold text-muted hover:text-foreground flex items-center gap-1"
-              aria-label="Discard changes and revert"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Revert</span>
-            </Button>
-            <Button
-              size="sm"
-              variant="primary"
-              onPress={handleSave}
-              isDisabled={isSaving}
-              className="px-3.5 py-1 text-xs rounded-xl bg-accent text-accent-foreground font-bold shadow-lg shadow-accent/25 hover:shadow-accent/40 animate-pulse hover:animate-none flex items-center gap-1.5 transition"
-              aria-label="Save choices to ESP32 flash"
-            >
-              {isSaving ? (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <>
-                  <Save className="w-3.5 h-3.5" />
-                  <span>Save Choices ({computedCanIds.length} IDs)</span>
-                </>
-              )}
-            </Button>
+              <CloseButton
+                aria-label="Dismiss save choices FAB"
+                onPress={() => setIsSaveFabDismissed(true)}
+                className="size-8 rounded-full bg-surface-secondary/90 hover:bg-surface-tertiary border border-border text-muted hover:text-foreground shadow-overlay backdrop-blur transition flex items-center justify-center shrink-0 cursor-pointer pointer-events-auto"
+              />
+            </div>,
+            portalTarget
+          )
+        ) : (
+          <div className="ha-fab-stack">
+            <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <Button
+                size="sm"
+                variant="secondary"
+                onPress={handleRevert}
+                className="ha-save-fab !bg-surface-secondary !text-muted hover:!text-foreground !border !border-border text-xs font-semibold"
+                aria-label="Discard changes and revert"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Revert</span>
+              </Button>
+
+              <Button
+                size="sm"
+                variant="primary"
+                onPress={handleSave}
+                isDisabled={isSaving}
+                className="ha-save-fab dirty"
+                aria-label="Save choices to ESP32 flash"
+              >
+                {isSaving ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>Save Choices ({computedCanIds.length} IDs)</span>
+                  </>
+                )}
+              </Button>
+
+              <CloseButton
+                aria-label="Dismiss save choices FAB"
+                onPress={() => setIsSaveFabDismissed(true)}
+                className="size-8 rounded-full bg-surface-secondary/90 hover:bg-surface-tertiary border border-border text-muted hover:text-foreground shadow-overlay backdrop-blur transition flex items-center justify-center shrink-0 cursor-pointer pointer-events-auto"
+              />
+            </div>
           </div>
-        )}
-      </div>
+        )
+      )}
     </div>
   );
 };
