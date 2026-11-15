@@ -1635,9 +1635,9 @@
       "state_can_id": "0x60E"
     },
     {
-      "id": "climate_rear_defog",
+      "id": "climate_rear_defrost",
       "ha_metadata": {
-        "name": "Rear Defogger & Heated Mirrors",
+        "name": "Rear Defroster & Heated Mirrors",
         "domain": "switch",
         "icon": "mdi:car-defrost-rear"
       },
@@ -1660,14 +1660,14 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Rear window defogger grid and heated exterior side mirrors commanded via 0x4A2 (Byte D3: 0xCF=On, 0x0F=Off, followed by 0xFF idle reset). Comfort bytes D5 and D6 are padded with 0xFF to prevent seat heating collisions. Live status read from DATC frame 0x541 Byte D5 (0x10=Active, 0x00=Inactive)."
+        "notes": "Rear window defroster grid and heated exterior side mirrors commanded via 0x4A2 (Byte D3: 0xCF=On, 0x0F=Off, followed by 0xFF idle reset). Comfort bytes D5 and D6 are padded with 0xFF to prevent seat heating collisions. Live status read from DATC frame 0x541 Byte D5 (0x10=Active, 0x00=Inactive)."
       },
-      "subcategory": "Defrost & Defog",
+      "subcategory": "Defrost",
       "state_can_id": "0x541",
       "action_can_id": "0x4A2",
       "options": [
         {
-          "label": "Defogger & Mirrors On",
+          "label": "Defroster & Mirrors On",
           "payload": {
             "D1": "0x00",
             "D2": "0x00",
@@ -1713,7 +1713,7 @@
           "default": true
         },
         {
-          "label": "Defogger & Mirrors Off",
+          "label": "Defroster & Mirrors Off",
           "payload": {
             "D1": "0x00",
             "D2": "0x00",
@@ -4545,65 +4545,6 @@
       "state_can_id": "0x1F9"
     },
     {
-      "id": "deep_sleep_network_wake_pulse",
-      "ha_metadata": {
-        "name": "Deep Sleep Network Wake Pulse",
-        "domain": "button",
-        "icon": "mdi:thermostat"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_tx",
-        "action_can_id": "0x604",
-        "delay_ms": 40
-      },
-      "popup_message": "Vehicle Network Woken",
-      "options": [
-        {
-          "label": "Wake Pulse",
-          "payload": {
-            "D1": "0x4B",
-            "D2": "0x14",
-            "D3": "0x14",
-            "D4": "0x14",
-            "D5": "0x14",
-            "D6": "0x14",
-            "D7": "0xFF",
-            "D8": "0xFF"
-          },
-          "default": true
-        }
-      ],
-      "steps": [
-        {
-          "payload": {
-            "D1": "0x4B",
-            "D2": "0x14",
-            "D3": "0x14",
-            "D4": "0x14",
-            "D5": "0x14",
-            "D6": "0x14",
-            "D7": "0xFF",
-            "D8": "0xFF"
-          },
-          "repeat": 30
-        }
-      ],
-      "category": "Doors, Access & Security",
-      "roles": [
-        "action"
-      ],
-      "contributor": {
-        "name": "Unknown",
-        "github": ""
-      },
-      "subcategory": "Access & Wakeup",
-      "action_can_id": "0x604"
-    },
-    {
       "id": "active_sound_design_asd_profile",
       "ha_metadata": {
         "name": "Active Sound Design (ASD) Profile",
@@ -4727,46 +4668,9 @@
       "action_can_id": "0x476"
     },
     {
-      "id": "keepalive_wakeup_ping",
+      "id": "ambient_light_colors",
       "ha_metadata": {
-        "name": "Keepalive / Wakeup Ping",
-        "domain": "button",
-        "icon": "mdi:car-info"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_tx",
-        "action_can_id": "0x7DF",
-        "delay_ms": 10
-      },
-      "popup_message": "Keepalive Ping",
-      "steps": [
-        {
-          "payload": {
-            "D1": "0x02",
-            "D2": "0x01"
-          },
-          "repeat": 3
-        }
-      ],
-      "category": "Doors, Access & Security",
-      "roles": [
-        "action"
-      ],
-      "contributor": {
-        "name": "Unknown",
-        "github": ""
-      },
-      "subcategory": "Access & Wakeup",
-      "action_can_id": "0x7DF"
-    },
-    {
-      "id": "ambient_mood_lighting",
-      "ha_metadata": {
-        "name": "Ambient Mood Lighting",
+        "name": "Ambient Light Colors",
         "domain": "light",
         "icon": "mdi:car-light-dimmed"
       },
@@ -5971,27 +5875,10 @@
           ],
           "popup": "Ambient: Champagne",
           "default": false
-        },
-        {
-          "label": "Mood Light Off",
-          "steps": [
-            {
-              "payload": "0000000000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            },
-            {
-              "payload": "0002082000000000",
-              "repeat": 3,
-              "delay_ms": 25
-            }
-          ],
-          "popup": "Ambient: Off",
-          "default": false
         }
       ],
       "category": "Cockpit & Controls",
-      "subcategory": "Lighting",
+      "subcategory": "Ambient Lighting",
       "roles": [
         "action",
         "trigger",
@@ -6002,7 +5889,8 @@
         "github": "L1Z3"
       },
       "action_can_id": "0x4AD",
-      "state_can_id": "0x455"
+      "state_can_id": "0x455",
+      "name": "Ambient Light Colors"
     },
     {
       "id": "vehicle_gear_state",
@@ -6698,7 +6586,7 @@
           "mask": "0xF0"
         },
         {
-          "label": "Legs & Windshield Defog",
+          "label": "Legs & Windshield Defrost",
           "match": {
             "D4": "0x40"
           },
@@ -8726,206 +8614,6 @@
       "state_can_id": "0x584"
     },
     {
-      "id": "climate_telemetry_status",
-      "ha_metadata": {
-        "name": "Cabin Displayed Target Temperature",
-        "domain": "sensor",
-        "icon": "mdi:thermometer-lines",
-        "unit_of_measurement": "°F"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Climate & Comfort",
-      "subcategory": "Zone Settings",
-      "roles": [
-        "sensor",
-        "condition"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Actual climate control computer displayed temperature from Gen 3 DATC_03 frame 0x380 (Byte D4 = Driver Temp in deg C x 0.5 + 14.0, Byte D5 = Driver Temp in deg F integer + 56). Legacy Gen 2 uses DATC1 frame 0x5F5."
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x380",
-        "unit": "°F"
-      },
-      "options": [
-        {
-          "label": "68°F (20.0°C)",
-          "match": {
-            "D5": "0x0C"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "70°F (21.0°C)",
-          "match": {
-            "D5": "0x0E"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "72°F (22.0°C)",
-          "match": {
-            "D5": "0x10"
-          },
-          "mask": "0xFF",
-          "default": true
-        },
-        {
-          "label": "74°F (23.5°C)",
-          "match": {
-            "D5": "0x12"
-          },
-          "mask": "0xFF"
-        },
-        {
-          "label": "76°F (24.5°C)",
-          "match": {
-            "D5": "0x14"
-          },
-          "mask": "0xFF"
-        }
-      ],
-      "state_can_id": "0x380",
-      "variants": [
-        {
-          "targets": [
-            "all_egmp",
-            "hi5_limited",
-            "hi5_sel",
-            "hi5_se",
-            "hi5_n",
-            "hi5_ultimate",
-            "hi5_premium",
-            "hi5_advance",
-            "ev6_gtline",
-            "ev6_wind",
-            "ev6_gt",
-            "ev6_light",
-            "ev6_gtline_s",
-            "ev6_air",
-            "hi6_limited",
-            "hi6_sel",
-            "hi6_se",
-            "hi6_ultimate",
-            "hi6_premium",
-            "gv60_performance",
-            "gv60_advanced",
-            "gv60_standard",
-            "gv60_premium",
-            "gv60_sport",
-            "hyundai_ioniq5",
-            "hyundai_ioniq6",
-            "kia_ev6",
-            "genesis_gv60"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x380",
-            "unit": "°F"
-          },
-          "options": [
-            {
-              "label": "68°F (20.0°C)",
-              "match": {
-                "D5": "0x0C"
-              },
-              "mask": "0xFF"
-            },
-            {
-              "label": "70°F (21.0°C)",
-              "match": {
-                "D5": "0x0E"
-              },
-              "mask": "0xFF"
-            },
-            {
-              "label": "72°F (22.0°C)",
-              "match": {
-                "D5": "0x10"
-              },
-              "mask": "0xFF",
-              "default": true
-            },
-            {
-              "label": "74°F (23.5°C)",
-              "match": {
-                "D5": "0x12"
-              },
-              "mask": "0xFF"
-            },
-            {
-              "label": "76°F (24.5°C)",
-              "match": {
-                "D5": "0x14"
-              },
-              "mask": "0xFF"
-            }
-          ]
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen2a",
-            "hyundai_kona_ev",
-            "kia_niro_ev",
-            "kia_soul_ev",
-            "hyundai_ioniq_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x5F5",
-            "unit": "°F"
-          },
-          "options": [
-            {
-              "label": "68°F (20.0°C)",
-              "match": {
-                "D3": "0x44"
-              },
-              "mask": "0xFF"
-            },
-            {
-              "label": "70°F (21.0°C)",
-              "match": {
-                "D3": "0x46"
-              },
-              "mask": "0xFF"
-            },
-            {
-              "label": "72°F (22.0°C)",
-              "match": {
-                "D3": "0x48"
-              },
-              "mask": "0xFF",
-              "default": true
-            },
-            {
-              "label": "74°F (23.5°C)",
-              "match": {
-                "D3": "0x4A"
-              },
-              "mask": "0xFF"
-            },
-            {
-              "label": "76°F (24.5°C)",
-              "match": {
-                "D3": "0x4C"
-              },
-              "mask": "0xFF"
-            }
-          ]
-        }
-      ]
-    },
-    {
       "id": "climate_blower_fan_status",
       "ha_metadata": {
         "name": "Climate Blower Fan Level & Defrost Status",
@@ -10444,66 +10132,6 @@
       "state_can_id": "0x60C"
     },
     {
-      "id": "can_network_wake_keepalive",
-      "ha_metadata": {
-        "name": "Cluster Network Wake & Keep-Alive (CLU11)",
-        "domain": "button",
-        "icon": "mdi:network"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Doors, Access & Security",
-      "roles": [
-        "action"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "CLU11 (0x4F1) Instrument Cluster alive heartbeat frame [00 D0 00 00 00 00 00 00]. Wakes physical CAN transceivers from low-power standby and prevents the Central Gateway (CGW) from entering bus-sleep during remote commands or diagnostic operations."
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_tx",
-        "action_can_id": "0x4F1",
-        "delay_ms": 100
-      },
-      "popup_message": "Network Keep-Alive Sent",
-      "options": [
-        {
-          "label": "Wake & Keep-Alive Pulse",
-          "payload": {
-            "D1": "0x00",
-            "D2": "0xD0",
-            "D3": "0x00",
-            "D4": "0x00",
-            "D5": "0x00",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "default": true
-        }
-      ],
-      "steps": [
-        {
-          "payload": {
-            "D1": "0x00",
-            "D2": "0xD0",
-            "D3": "0x00",
-            "D4": "0x00",
-            "D5": "0x00",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "repeat": 10
-        }
-      ],
-      "subcategory": "Access & Wakeup",
-      "action_can_id": "0x4F1"
-    },
-    {
       "id": "tpms_front_tires",
       "ha_metadata": {
         "name": "Front Tire Pressure & Temperature (TPMS)",
@@ -10705,73 +10333,6 @@
       ],
       "action_can_id": "0x321",
       "state_can_id": "0x321"
-    },
-    {
-      "id": "telematics_remote_security",
-      "ha_metadata": {
-        "name": "Telematics Remote Ignition & Security Immobilizer",
-        "domain": "switch",
-        "icon": "mdi:car-key"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Doors, Access & Security",
-      "subcategory": "Access & Wakeup",
-      "roles": [
-        "action",
-        "sensor"
-      ],
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Telematics Modem Unit remote vehicle ignition start/stop, stolen vehicle slowdown (SVSD), and immobilizer alarm trigger on CAN 0x502 (TMU11)."
-      },
-      "network": {
-        "bus": 0,
-        "type": "can_rx_tx",
-        "state_can_id": "0x502",
-        "action_can_id": "0x502"
-      },
-      "options": [
-        {
-          "label": "Remote Ignition Start",
-          "match": {
-            "D1": "0x01"
-          },
-          "mask": "0x0F",
-          "payload": {
-            "D1": "0x01",
-            "D2": "0x00",
-            "D3": "0x00",
-            "D4": "0x00",
-            "D5": "0x00",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          }
-        },
-        {
-          "label": "Remote Ignition Stop / Normal",
-          "match": {
-            "D1": "0x00"
-          },
-          "mask": "0x0F",
-          "payload": {
-            "D1": "0x00",
-            "D2": "0x00",
-            "D3": "0x00",
-            "D4": "0x00",
-            "D5": "0x00",
-            "D6": "0x00",
-            "D7": "0x00",
-            "D8": "0x00"
-          },
-          "default": true
-        }
-      ],
-      "action_can_id": "0x502",
-      "state_can_id": "0x502"
     },
     {
       "id": "audio_chime_nav_mix",
@@ -11439,9 +11000,9 @@
       "action_can_id": "0x49F"
     },
     {
-      "id": "climate_auto_defog",
+      "id": "climate_auto_defrost",
       "ha_metadata": {
-        "name": "Auto Defog",
+        "name": "Auto Defrost",
         "domain": "switch",
         "icon": "mdi:car-defrost-front"
       },
@@ -11449,7 +11010,7 @@
         "all_egmp"
       ],
       "category": "Climate & Comfort",
-      "subcategory": "Defrost & Defog",
+      "subcategory": "Defrost",
       "roles": [
         "action"
       ],
@@ -11462,11 +11023,11 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Auto Defog toggle commanded via 0x49F Byte D7 (0xFD=On, 0xFC=Off, each repeated 3x followed by 0xFF x3 release)."
+        "notes": "Auto Defrost toggle commanded via 0x49F Byte D7 (0xFD=On, 0xFC=Off, each repeated 3x followed by 0xFF x3 release)."
       },
       "options": [
         {
-          "label": "Auto Defog Off",
+          "label": "Auto Defrost Off",
           "payload": {
             "D7": "0xFC"
           },
@@ -11489,7 +11050,7 @@
           "default": true
         },
         {
-          "label": "Auto Defog On",
+          "label": "Auto Defrost On",
           "payload": {
             "D7": "0xFD"
           },
@@ -11747,51 +11308,6 @@
             "D5": "0x00"
           },
           "mask": "0x07"
-        }
-      ],
-      "state_can_id": "0x410"
-    },
-    {
-      "id": "cgw_ambient_mood_light_status",
-      "ha_metadata": {
-        "name": "Ambient Mood Lamp Active Status",
-        "domain": "binary_sensor",
-        "icon": "mdi:car-light-dimmed"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Cockpit & Controls",
-      "subcategory": "Ambient Lighting",
-      "roles": [
-        "sensor",
-        "state"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x410"
-      },
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "CF_Gway_MoodLpRValue in CGW_USM1 (0x410) bits 30-31 (Byte D4 bits 6-7, mask 0xC0)."
-      },
-      "options": [
-        {
-          "label": "Mood Light Active",
-          "match": {
-            "D4": "0x40"
-          },
-          "mask": "0xC0",
-          "default": true
-        },
-        {
-          "label": "Mood Light Off",
-          "match": {
-            "D4": "0x00"
-          },
-          "mask": "0xC0"
         }
       ],
       "state_can_id": "0x410"
@@ -13131,35 +12647,6 @@
       ]
     },
     {
-      "id": "esc_wheel_speed_fl",
-      "ha_metadata": {
-        "name": "Wheel Speed (Front Left)",
-        "domain": "sensor",
-        "icon": "mdi:speedometer"
-      },
-      "tags": [
-        "all_egmp"
-      ],
-      "category": "Vehicle State & Telematics",
-      "subcategory": "Driving Dynamics",
-      "roles": [
-        "sensor",
-        "state"
-      ],
-      "network": {
-        "bus": 0,
-        "type": "can_rx",
-        "state_can_id": "0x4B0",
-        "unit": "km/h"
-      },
-      "contributor": {
-        "name": "SuaveEV",
-        "github": "supersuave",
-        "notes": "Electronic Stability Control (ESC) / ABS module high-rate wheel speed telemetry broadcast on CAN ID 0x4B0 Bytes 0-1 (D1-D2) as 16-bit big-endian unsigned integer (scaling 0.03125 km/h per count)."
-      },
-      "state_can_id": "0x4B0"
-    },
-    {
       "id": "ptgm_tailgate_status",
       "ha_metadata": {
         "name": "Power Tailgate Position & Motion",
@@ -13729,7 +13216,7 @@
     {
       "id": "mlu_ambient_light_status",
       "ha_metadata": {
-        "name": "Ambient Mood Lamp Illumination Status",
+        "name": "Ambient Light Illumination Status",
         "domain": "binary_sensor",
         "icon": "mdi:car-light-dimmed"
       },
@@ -13737,7 +13224,7 @@
         "all_egmp"
       ],
       "category": "Cockpit & Controls",
-      "subcategory": "Lighting",
+      "subcategory": "Ambient Lighting",
       "roles": [
         "sensor",
         "state"
@@ -13772,12 +13259,17 @@
       "state_can_id": "0x2DB"
     },
     {
-      "id": "ambient_mood_light_brightness",
+      "id": "ambient_light_brightness",
+      "ha_metadata": {
+        "name": "Ambient Light Brightness",
+        "domain": "light",
+        "icon": "mdi:car-light-dimmed"
+      },
       "tags": [
         "all_egmp"
       ],
       "category": "Cockpit & Controls",
-      "subcategory": "Lighting",
+      "subcategory": "Ambient Lighting",
       "roles": [
         "action",
         "sensor",
@@ -14028,6 +13520,7 @@
       ],
       "action_can_id": "0x4AD",
       "state_can_id": "0x455",
+      "name": "Ambient Light Brightness",
       "type": "param_range"
     }
   ],
