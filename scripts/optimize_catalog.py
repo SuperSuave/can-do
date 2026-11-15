@@ -450,9 +450,11 @@ def validate_catalog(catalog: Dict[str, Any]) -> Tuple[List[str], List[str]]:
             errors.append(f"commands[{cid}]: duplicate command id")
         cmd_map[cid] = cmd
 
-        ha = cmd.get("ha_metadata", {})
-        if not ha.get("name") or ha.get("domain") not in ALLOWED_DOMAINS:
-            errors.append(f"commands[{cid}].ha_metadata: invalid name or domain '{ha.get('domain')}'")
+        if "ha_metadata" in cmd:
+            ha = cmd.get("ha_metadata")
+            if not isinstance(ha, dict) or not ha.get("name") or ha.get("domain") not in ALLOWED_DOMAINS:
+                domain_val = ha.get("domain") if isinstance(ha, dict) else None
+                errors.append(f"commands[{cid}].ha_metadata: invalid name or domain '{domain_val}'")
 
         if cmd.get("category") not in ALLOWED_CATEGORIES:
             errors.append(f"commands[{cid}]: invalid category '{cmd.get('category')}'")
