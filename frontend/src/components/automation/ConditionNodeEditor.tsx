@@ -41,7 +41,7 @@ import {
 import { DayOfWeekPicker } from './DayOfWeekPicker';
 import { BleButtonComboPicker } from '../BleButtonComboPicker';
 import { BleDeviceSelect, BleBeaconSelect, BleActionSelect } from '../BleSelects';
-import { SustainedDurationInput, formatSustainedBadge } from './SustainedDurationInput';
+import { SustainedDurationInput } from './SustainedDurationInput';
 import { AutomationClipboardContext } from './AutomationClipboardContext';
 import { NumericRangeNodeEditor } from './NumericRangeNodeEditor';
 
@@ -226,19 +226,6 @@ export function ConditionNodeEditor({
             <span className={`px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] border ${tagCls} shrink-0`}>
               {groupLogic} Group {depth > 0 && `(L${depth + 1})`}
             </span>
-            <span className="text-muted text-[11px] hidden sm:inline">
-              {groupLogic === 'and' && '(ALL nested must match)'}
-              {groupLogic === 'or' && '(ANY nested must match)'}
-              {groupLogic === 'not' && '(Children must NOT match)'}
-            </span>
-            <span className="text-muted font-mono text-[10px] shrink-0">
-              [{(cond.conditions || []).length} items]
-            </span>
-            {formatSustainedBadge(cond.for_sec, cond.for_ms) && (
-              <span className="px-1.5 py-0.2 rounded bg-accent-soft text-accent-soft-foreground text-[10px] border border-accent/30 font-mono shrink-0">
-                for {formatSustainedBadge(cond.for_sec, cond.for_ms)}
-              </span>
-            )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
             <select
@@ -323,12 +310,14 @@ export function ConditionNodeEditor({
                   <option value="">-- Choose Rule Trigger --</option>
                   {(availableTriggers || []).map((t, tIdx) => {
                     const { command: tCmd, matchedOption: tOpt } = catalog ? resolveCatalogCommandForTrigger(t, catalog) : {};
-                    let tName = tCmd?.ha_metadata?.name || tCmd?.name || t.source_command_name || t.can_id || `Trigger ${tIdx + 1}`;
-                    if (tOpt) tName += ` (${tOpt.label})`;
-                    if (t.id) tName = `[${t.id}] ${tName}`;
+                    let fallbackName = tCmd?.ha_metadata?.name || tCmd?.name || t.source_command_name || t.can_id || `Trigger ${tIdx + 1}`;
+                    if (tOpt && !fallbackName.toLowerCase().includes(tOpt.label.toLowerCase())) {
+                      fallbackName += ` - ${tOpt.label}`;
+                    }
+                    const displayLabel = `Trigger ${tIdx + 1}: ${t.name?.trim() || fallbackName}`;
                     return (
                       <option key={t.id || tIdx} value={t.id}>
-                        {tName}
+                        {displayLabel}
                       </option>
                     );
                   })}
@@ -338,8 +327,10 @@ export function ConditionNodeEditor({
             {matchedTrig && (
               <div className="text-[11px] text-muted font-sans flex items-center gap-1.5 pt-0.5 min-w-0 flex-wrap">
                 <span className="text-muted">Source:</span>
-                <span className="text-foreground font-semibold">{matchedTrig.source_command_name || matchedTrig.can_id}</span>
-                {matchedTrig.option_label && (
+                <span className="text-foreground font-semibold">
+                  {matchedTrig.name?.trim() || matchedTrig.source_command_name || matchedTrig.can_id}
+                </span>
+                {matchedTrig.option_label && !(matchedTrig.name || '').toLowerCase().includes(matchedTrig.option_label.toLowerCase()) && (
                   <span className="px-1.5 py-0.2 rounded bg-surface-tertiary text-foreground border border-border text-[10px]">
                     {matchedTrig.option_label}
                   </span>
@@ -371,11 +362,6 @@ export function ConditionNodeEditor({
             <div className="flex items-center gap-1.5 min-w-0">
               <Clock className="w-3.5 h-3.5 text-accent shrink-0" />
               <span className="font-semibold text-foreground truncate">Time Window</span>
-              {(cond.start_time || cond.end_time) && (
-                <span className="px-1.5 py-0.2 rounded bg-accent-soft text-accent-soft-foreground text-[10px] border border-accent/30 font-mono shrink-0">
-                  {cond.start_time || '--:--'} - {cond.end_time || '--:--'}
-                </span>
-              )}
             </div>
           </div>
           <div className="shrink-0 ml-auto sm:ml-0">
@@ -436,14 +422,6 @@ export function ConditionNodeEditor({
             <div className="flex items-center gap-1.5 min-w-0">
               <Wifi className="w-3.5 h-3.5 text-accent shrink-0" />
               <span className="font-semibold text-foreground truncate">ESP32 Wi-Fi / AP Mode</span>
-              <span className="px-1.5 py-0.2 rounded bg-accent-soft text-accent-soft-foreground text-[10px] border border-accent/30 font-mono shrink-0">
-                {prop}
-              </span>
-              {formatSustainedBadge(cond.for_sec, cond.for_ms) && (
-                <span className="px-1.5 py-0.2 rounded bg-accent-soft text-accent-soft-foreground text-[10px] border border-accent/30 font-mono shrink-0">
-                  for {formatSustainedBadge(cond.for_sec, cond.for_ms)}
-                </span>
-              )}
             </div>
           </div>
           <div className="shrink-0 ml-auto sm:ml-0">
@@ -716,16 +694,6 @@ export function ConditionNodeEditor({
             <div className="flex items-center gap-1.5 min-w-0">
               <Bluetooth className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
               <span className="font-semibold text-foreground truncate">Bluetooth Presence</span>
-              <span className="px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-600 dark:text-purple-400 text-[10px] border border-purple-500/30 font-mono shrink-0">
-                {currentMode === 'phone_beacon'
-                  ? (cond.target_bool !== false && cond.device_property !== 'away' ? 'Beacon Present' : 'Beacon Absent (Away)')
-                  : (cond.target_bool !== false && cond.device_property !== 'away' && cond.device_property !== 'disconnected' ? 'Device Connected (Present)' : 'Device Disconnected (Away)')}
-              </span>
-              {formatSustainedBadge(cond.for_sec, cond.for_ms) && (
-                <span className="px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-600 dark:text-purple-400 text-[10px] border border-purple-500/30 font-mono shrink-0">
-                  for {formatSustainedBadge(cond.for_sec, cond.for_ms)}
-                </span>
-              )}
             </div>
           </div>
           <div className="shrink-0 ml-auto sm:ml-0">
@@ -919,9 +887,6 @@ export function ConditionNodeEditor({
             <div className="flex items-center gap-1.5 min-w-0">
               <Bluetooth className="w-3.5 h-3.5 text-accent shrink-0" />
               <span className="font-semibold text-foreground truncate">Bluetooth Button / Combo</span>
-              <span className="px-1.5 py-0.2 rounded bg-accent-soft text-accent-soft-foreground text-[10px] border border-accent/30 font-mono shrink-0">
-                {btn || 'any'} • {act}
-              </span>
             </div>
           </div>
           <div className="shrink-0 ml-auto sm:ml-0">
@@ -1048,11 +1013,6 @@ export function ConditionNodeEditor({
             C{index + 1}
           </span>
           <span className="font-semibold text-foreground text-xs sm:text-sm tracking-tight truncate">{conditionName}</span>
-          {formatSustainedBadge(cond.for_sec, cond.for_ms) && (
-            <span className="px-1.5 py-0.2 rounded bg-accent-soft text-accent-soft-foreground text-[10px] border border-accent/30 font-mono shrink-0">
-              for {formatSustainedBadge(cond.for_sec, cond.for_ms)}
-            </span>
-          )}
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">

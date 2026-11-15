@@ -1009,7 +1009,12 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
         cJSON* t_item = nullptr;
         cJSON_ArrayForEach(t_item, trigs) {
             AutomationTrigger tr;
-            tr.for_ms = parse_sustained_for_ms(t_item);
+            cJSON* cc_item = cJSON_GetObjectItem(t_item, "click_count");
+            if (cJSON_IsNumber(cc_item) && cc_item->valueint >= 1 && cc_item->valueint <= 5) {
+                tr.click_count = static_cast<uint8_t>(cc_item->valueint);
+            }
+            tr.multi_click = std::make_shared<MultiClickState>();
+            tr.for_ms = (tr.click_count > 1) ? 0 : parse_sustained_for_ms(t_item);
             if (tr.for_ms > 0) {
                 tr.sustained = std::make_shared<SustainedState>();
             }
@@ -1052,6 +1057,14 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
                 if (!act) act = cJSON_GetObjectItem(t_item, "action");
                 if (cJSON_IsString(act)) tr.ble_action = act->valuestring;
                 else tr.ble_action = "press";
+
+                if (strcasecmp(tr.ble_action.c_str(), "double_press") == 0) {
+                    tr.ble_action = "press";
+                    if (tr.click_count <= 1) tr.click_count = 2;
+                } else if (strcasecmp(tr.ble_action.c_str(), "triple_press") == 0) {
+                    tr.ble_action = "press";
+                    if (tr.click_count <= 1) tr.click_count = 3;
+                }
 
                 cJSON* dev = cJSON_GetObjectItem(t_item, "ble_device");
                 if (!dev) dev = cJSON_GetObjectItem(t_item, "device");

@@ -489,36 +489,57 @@ export function ActionNodeEditor({
     }
   };
 
+  const isBuiltinNonCanTx = [
+    'precondition',
+    'climate_target',
+    'remote_climate',
+    'track_popup',
+    'popup',
+    'delay',
+    'if_then',
+    'choose',
+    'webhook',
+    'cycle_entity',
+    'wait_for',
+    'repeat_until'
+  ].includes(act.type);
+  const isCanTxAction =
+    act.type === 'can_tx' ||
+    act.type === 'entity_command' ||
+    act.type === 'transmit' ||
+    !isBuiltinNonCanTx;
+
   // Action naming & catalog resolution (available to all action types and actionButtons)
   const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForAction(act, catalog) : { command: undefined, matchedOption: undefined };
-  const hasOptions = !!(catalogCmd?.options && catalogCmd.options.length > 0);
-  const isRangeEntity = isRangeCommand(catalogCmd);
+  const hasOptions = isCanTxAction && !!(catalogCmd?.options && catalogCmd.options.length > 0);
+  const isRangeEntity = isCanTxAction && isRangeCommand(catalogCmd);
   const hasPills = hasOptions && !isRangeEntity;
+  const hasCompactCatalogView = hasPills || isRangeEntity || (isCanTxAction && Boolean(catalogCmd));
   const actionName =
-    catalogCmd?.ha_metadata?.name ||
-    catalogCmd?.name ||
-    act.source_command_name ||
-    (act.can_id
-      ? `CAN Transmit ${formatCanId(act.can_id)}`
-      : act.type === 'if_then'
-      ? 'IF-THEN-ELSE'
-      : act.type === 'choose'
-      ? 'CHOOSE'
-      : act.type === 'wait_for'
-      ? 'Wait For'
-      : act.type === 'repeat_until'
-      ? 'Repeat Until'
-      : act.type === 'cycle_entity'
-      ? `Cycle ${act.entity_id || 'Entity'}`
-      : act.type === 'climate_target'
-      ? 'Climate Target'
-      : act.type === 'precondition'
-      ? 'Battery Preconditioning'
-      : act.type === 'track_popup' || act.type === 'popup'
-      ? 'Cluster Popup'
-      : act.type === 'delay'
-      ? `Delay ${act.delay_ms || act.ms || 0}ms`
-      : `Action ${index + 1}`);
+    act.type === 'cycle_entity'
+      ? `Cycle ${catalogCmd?.ha_metadata?.name || catalogCmd?.name || act.entity_id || 'Entity'}`
+      : catalogCmd?.ha_metadata?.name ||
+        catalogCmd?.name ||
+        act.source_command_name ||
+        (act.can_id
+          ? `CAN Transmit ${formatCanId(act.can_id)}`
+          : act.type === 'if_then'
+          ? 'IF-THEN-ELSE'
+          : act.type === 'choose'
+          ? 'CHOOSE'
+          : act.type === 'wait_for'
+          ? 'Wait For'
+          : act.type === 'repeat_until'
+          ? 'Repeat Until'
+          : act.type === 'climate_target' || act.type === 'remote_climate'
+          ? 'Climate Target'
+          : act.type === 'precondition'
+          ? 'Battery Preconditioning'
+          : act.type === 'track_popup' || act.type === 'popup'
+          ? 'Cluster Popup'
+          : act.type === 'delay'
+          ? `Delay ${act.delay_ms || act.ms || 0}ms`
+          : `Action ${index + 1}`);
 
   const actionButtons = (
     <div className="flex items-center gap-1 shrink-0 flex-wrap">
@@ -980,11 +1001,6 @@ export function ActionNodeEditor({
               <Clock className="w-3 h-3 shrink-0" />
               <span className="truncate">WAIT (Condition or Delay)</span>
             </span>
-            <span className="px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-600 dark:text-purple-400 text-[10px] font-mono border border-purple-500/30 truncate">
-              {isDelayMode 
-                ? `Delay: ${displayVal} ${defaultUnit}` 
-                : `Wait For Condition (timeout: ${act.timeout_ms || 10000}ms)`}
-            </span>
           </div>
           <div className="shrink-0 ml-auto sm:ml-0">
             {actionButtons}
@@ -1297,15 +1313,10 @@ export function ActionNodeEditor({
             A{index + 1}
           </span>
           <span className="font-semibold text-foreground text-xs sm:text-sm tracking-tight truncate">{actionName}</span>
-          {effectiveSteps && effectiveSteps.length > 1 && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-success-soft text-success-soft-foreground border border-success/40 shrink-0">
-              {effectiveSteps.length} Steps
-            </span>
-          )}
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
-          {(hasOptions || isRangeEntity) && !collapsed && (
+          {hasCompactCatalogView && !collapsed && (
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
@@ -1389,17 +1400,33 @@ export function ActionNodeEditor({
         />
       )}
 
+      {/* Compact Catalog Action Card for 0-option catalog commands (e.g. surround_view_camera) */}
+      {isCanTxAction && catalogCmd && !hasPills && !isRangeEntity && !showAdvanced && (
+        <div className="p-2.5 rounded-lg bg-surface-tertiary/60 border border-border flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="px-2 py-0.5 rounded bg-success-soft text-success-soft-foreground border border-success/40 font-semibold text-[10px] uppercase tracking-wider shrink-0">
+              {catalogCmd.ha_metadata?.domain || 'Command'}
+            </span>
+            <span className="text-foreground/90 font-medium truncate">
+              {act.popup_message || catalogCmd.popup_message || catalogCmd.ha_metadata?.name || catalogCmd.name}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] text-muted font-mono shrink-0">
+            {effectiveCanId && <span>TX {formatCanId(effectiveCanId)}</span>}
+            {effectiveSteps && effectiveSteps.length > 1 && (
+              <span>· {effectiveSteps.length} steps</span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Advanced Details View */}
-      {((!hasPills && !isRangeEntity) || showAdvanced) && (() => {
-        const isCanTx =
-          act.type === 'can_tx' ||
-          act.type === 'entity_command' ||
-          act.type === 'transmit' ||
-          !['precondition', 'climate_target', 'track_popup', 'popup', 'delay', 'if_then', 'choose', 'webhook'].includes(act.type);
+      {(!hasCompactCatalogView || showAdvanced) && (() => {
+        const isCanTx = isCanTxAction;
         const hasMultipleSteps = isCanTx && !!(effectiveSteps && effectiveSteps.length > 1);
 
         return (
-        <div className={`space-y-3 ${(hasOptions || isRangeEntity) ? 'pt-2.5 border-t border-separator' : ''}`}>
+        <div className={`space-y-3 ${hasCompactCatalogView ? 'pt-2.5 border-t border-separator' : ''}`}>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 font-mono text-[11px]">
             <div>
               <label className="block text-[10px] font-sans text-muted">Action Type</label>
@@ -1409,12 +1436,14 @@ export function ActionNodeEditor({
                 className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground font-sans"
               >
                 <option value="can_tx">can_tx (CAN Transmit)</option>
+                <option value="cycle_entity">cycle_entity (Cyclic Stepper)</option>
                 <option value="precondition">precondition (E-GMP)</option>
                 <option value="climate_target">climate_target (HVAC Temp Target)</option>
                 <option value="track_popup">track_popup (Cluster Popup)</option>
                 <option value="delay">delay</option>
                 <option value="if_then">if_then (Conditional Branch)</option>
                 <option value="choose">choose (Multiple Choices)</option>
+                <option value="repeat_until">repeat_until (Loop)</option>
                 <option value="webhook">webhook (HTTP)</option>
               </select>
             </div>

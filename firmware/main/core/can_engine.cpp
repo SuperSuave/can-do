@@ -1122,6 +1122,10 @@ static bool is_trigger_match(const uint8_t* incoming_data, const uint8_t* previo
         }
     }
 
+    if (trig.click_count > 1 && previous_data && is_can_target_match(previous_data, trig)) {
+        return false; // Require rising edge for multi-click counting on can_rx triggers
+    }
+
     return is_can_target_match(incoming_data, trig);
 }
 
@@ -1162,6 +1166,98 @@ static bool try_fire_rule_trigger(AutomationRule& rule, const AutomationTrigger&
         fired_out->push_back({rule.id, rule.name, trig.id, source_label});
     }
     return true;
+}
+
+static constexpr uint32_t MULTI_CLICK_WINDOW_MS = 450;
+static constexpr uint32_t MULTI_CLICK_DEBOUNCE_MS = 45;
+
+static bool triggers_share_button_target(const AutomationTrigger& a, const AutomationTrigger& b) {
+    const bool a_is_can = (a.type == "can_rx" || a.type == "byte_transition");
+    const bool b_is_can = (b.type == "can_rx" || b.type == "byte_transition");
+    if (a_is_can && b_is_can) {
+        if (a.can_id != b.can_id || a.bus != b.bus) return false;
+        if (a.byte_index >= 0 && b.byte_index >= 0) {
+            return a.byte_index == b.byte_index &&
+                   a.byte_mask == b.byte_mask &&
+                   (a.to_value & a.byte_mask) == (b.to_value & b.byte_mask);
+        }
+        return a.match_mask == b.match_mask &&
+               memcmp(a.match_payload, b.match_payload, 8) == 0;
+    }
+
+    const bool a_is_ble = (a.type == "ble_button" || a.type == "ble_key" || a.type == "ble");
+    const bool b_is_ble = (b.type == "ble_button" || b.type == "ble_key" || b.type == "ble");
+    if (a_is_ble && b_is_ble) {
+        if (strcasecmp(a.ble_button.c_str(), b.ble_button.c_str()) != 0 &&
+            a.ble_button != "any" && b.ble_button != "any") {
+            return false;
+        }
+        if (!a.ble_device.empty() && !b.ble_device.empty() &&
+            strcasecmp(a.ble_device.c_str(), b.ble_device.c_str()) != 0) {
+            return false;
+        }
+        return true;
+    }
+
+    return false;
+}
+
+// Caller must hold g_automations_mutex
+static bool has_higher_click_count_sibling(const AutomationTrigger& trig) {
+    const uint8_t my_clicks = trig.click_count >= 1 ? trig.click_count : 1;
+    for (const auto& rule : global_automations) {
+        if (!rule.enabled) continue;
+        for (const auto& other : rule.triggers) {
+            const uint8_t other_clicks = other.click_count >= 1 ? other.click_count : 1;
+            if (other_clicks > my_clicks && triggers_share_button_target(trig, other)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Caller must hold g_automations_mutex
+static bool handle_trigger_press_edge(AutomationRule& rule, const AutomationTrigger& trig, uint32_t now_ms,
+                                      const char* source_label, std::vector<FiredRuleEvent>* fired_out) {
+    const uint8_t target_clicks = trig.click_count >= 1 ? trig.click_count : 1;
+    const bool has_higher = has_higher_click_count_sibling(trig);
+
+    if (target_clicks == 1 && !has_higher) {
+        return try_fire_rule_trigger(rule, trig, now_ms, source_label, fired_out);
+    }
+
+    if (!trig.multi_click) {
+        return (target_clicks == 1) ? try_fire_rule_trigger(rule, trig, now_ms, source_label, fired_out) : false;
+    }
+
+    bool fire_immediately = false;
+    {
+        std::lock_guard<std::mutex> lk(trig.multi_click->mtx);
+        if (trig.multi_click->last_press_ms != 0 &&
+            (now_ms - trig.multi_click->last_press_ms < MULTI_CLICK_DEBOUNCE_MS)) {
+            return false;
+        }
+        if (trig.multi_click->pending &&
+            (now_ms - trig.multi_click->last_press_ms <= MULTI_CLICK_WINDOW_MS)) {
+            trig.multi_click->count++;
+        } else {
+            trig.multi_click->count = 1;
+        }
+        trig.multi_click->last_press_ms = now_ms;
+        trig.multi_click->pending = true;
+
+        if (!has_higher && trig.multi_click->count == target_clicks) {
+            trig.multi_click->pending = false;
+            trig.multi_click->count = 0;
+            fire_immediately = true;
+        }
+    }
+
+    if (fire_immediately) {
+        return try_fire_rule_trigger(rule, trig, now_ms, source_label, fired_out);
+    }
+    return false;
 }
 
 static bool evaluate_trigger_state_now(const AutomationTrigger& trig, uint32_t now_ms) {
@@ -3109,13 +3205,13 @@ void can_rx_task(void* arg) {
 
                             for (const auto& trig : rule.triggers) {
                                 if ((trig.type == "can_rx" || trig.type == "byte_transition") && trig.can_id == rx_msg.identifier) {
-                                    if (trig.for_ms > 0) {
+                                    if (trig.for_ms > 0 && trig.click_count <= 1) {
                                         update_sustained_trigger_state(trig, is_can_target_match(rx_msg.data, trig), now_ms);
                                         continue;
                                     }
                                     if (rule_running) continue;
                                     if (is_trigger_match(rx_msg.data, has_prev ? prev_data : nullptr, trig)) {
-                                        try_fire_rule_trigger(rule, trig, now_ms, "CAN automation", &fired_events);
+                                        handle_trigger_press_edge(rule, trig, now_ms, "CAN automation", &fired_events);
                                     }
                                 }
                             }
@@ -3207,11 +3303,11 @@ void time_scheduler_task(void* arg) {
     int last_checked_min = -1;
 
     while (true) {
-        vTaskDelay(pdMS_TO_TICKS(250));
+        vTaskDelay(pdMS_TO_TICKS(50));
 
         uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
 
-        // 1. Evaluate sustained-duration conditions and triggers (works 100% offline before NTP sync)
+        // 1. Evaluate multi-press click windows and sustained-duration conditions/triggers (works 100% offline before NTP sync)
         if (g_automations_enabled.load()) {
             std::vector<FiredRuleEvent> fired_events;
             {
@@ -3227,7 +3323,24 @@ void time_scheduler_task(void* arg) {
                     if (rule.is_running && rule.is_running->load()) continue;
 
                     for (const auto& trig : rule.triggers) {
-                        if (trig.for_ms == 0 || !trig.sustained) continue;
+                        if (trig.multi_click) {
+                            bool ready_multi = false;
+                            {
+                                std::lock_guard<std::mutex> lk(trig.multi_click->mtx);
+                                if (trig.multi_click->pending &&
+                                    (now_ms - trig.multi_click->last_press_ms >= MULTI_CLICK_WINDOW_MS)) {
+                                    const uint8_t target_clicks = trig.click_count >= 1 ? trig.click_count : 1;
+                                    ready_multi = (trig.multi_click->count == target_clicks);
+                                    trig.multi_click->pending = false;
+                                    trig.multi_click->count = 0;
+                                }
+                            }
+                            if (ready_multi) {
+                                try_fire_rule_trigger(rule, trig, now_ms, "Multi-press trigger", &fired_events);
+                            }
+                        }
+
+                        if (trig.for_ms == 0 || !trig.sustained || trig.click_count > 1) continue;
                         if (trig.type == "ble_button" || trig.type == "time_schedule") continue;
 
                         bool now_true = evaluate_trigger_state_now(trig, now_ms);
@@ -3424,7 +3537,12 @@ void can_engine_on_ble_event(const std::string& address, const std::string& butt
                         continue;
                     }
 
-                    if (!ble_action_matches(trig.ble_action, action, hold_seconds)) {
+                    const std::string& effective_ble_action =
+                        (trig.click_count > 1 && (trig.ble_action.empty() || trig.ble_action == "any"))
+                            ? std::string("press")
+                            : trig.ble_action;
+
+                    if (!ble_action_matches(effective_ble_action, action, hold_seconds)) {
                         continue;
                     }
 
@@ -3435,7 +3553,7 @@ void can_engine_on_ble_event(const std::string& address, const std::string& butt
                         }
                     }
 
-                    try_fire_rule_trigger(rule, trig, now_ms, "BLE button event", &fired_events);
+                    handle_trigger_press_edge(rule, trig, now_ms, "BLE button event", &fired_events);
                 }
             }
         }

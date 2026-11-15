@@ -23,7 +23,9 @@ import {
   commandToTrigger,
   commandToCondition,
   commandToAction,
+  applyOptionToTrigger,
   applyOptionsToCondition,
+  formatDefaultTriggerName,
 } from './automationConverters.js';
 import type { Catalog, Command } from '../types/catalog.js';
 import type {
@@ -1495,5 +1497,208 @@ test('param_range commands convert cleanly to trigger, condition, and action and
   assert.deepStrictEqual(compiledEntityCmd.payload, { D2: '0x13' }); // 0x06 + (75 - 62) = 19 = 0x13
 });
 
+test('Button triggers support single, double, and triple press (click_count: 1, 2, 3) across CAN and BLE', () => {
+  const catalog = createMockCatalog(10);
+  const starCmd = {
+    id: 'sw_star',
+    name: 'Steering Wheel Star Button',
+    category: 'Steering Wheel & Controls',
+    subcategory: 'steering_wheel_buttons',
+    roles: ['trigger'] as ('trigger' | 'condition' | 'action')[],
+    ha_metadata: { name: 'Star Button', domain: 'event' },
+    network: { state_can_id: '0x448', bus: 0 },
+    options: [
+      { label: 'Pressed', match: { D8: '0x02' }, mask: '0x02', default: true },
+      { label: 'Released', match: { D8: '0x00' }, mask: '0x02' },
+    ],
+  };
+  catalog.commands.push(starCmd);
 
+  const singleTrig = commandToTrigger(starCmd, starCmd.options[0]);
+  assert.strictEqual(singleTrig.click_count, 1);
 
+  const doubleTrig: AutomationTrigger = {
+    ...singleTrig,
+    id: 'trig_star_2x',
+    click_count: 2,
+    for_sec: 2,
+    for_ms: 500,
+  };
+
+  const tripleBleTrig: AutomationTrigger = {
+    id: 'trig_ble_3x',
+    type: 'ble_button',
+    source: 'ble',
+    ble_button: 'volume_up',
+    ble_action: 'press',
+    click_count: 3,
+  };
+
+  const compiled = compileAutomationRule(
+    {
+      id: 'rule_multipress',
+      name: 'Multi-Press Test',
+      enabled: true,
+      ha_expose: true,
+      ha_icon: 'mdi:gesture-double-tap',
+      exec_mode: 'one_shot',
+      trigger_mode: 'any',
+      cooldown_ms: 500,
+      triggers: [singleTrig, doubleTrig, tripleBleTrig],
+      conditions: [],
+      actions: [],
+    },
+    catalog
+  );
+
+  // Single press omits click_count in compiled output for compact JSON
+  assert.strictEqual(compiled.triggers[0].click_count, undefined);
+  // Double press preserves click_count=2 and strips sustained hold fields
+  assert.strictEqual(compiled.triggers[1].click_count, 2);
+  assert.strictEqual(compiled.triggers[1].for_sec, undefined);
+  assert.strictEqual(compiled.triggers[1].for_ms, undefined);
+  // Triple BLE press preserves click_count=3
+  assert.strictEqual(compiled.triggers[2].click_count, 3);
+  assert.strictEqual(compiled.triggers[2].ble_button, 'volume_up');
+
+  // Decompile restores click_count and normalizes legacy ble_action='double_press'
+  const decompiled = decompileAutomationRule(
+    {
+      ...compiled,
+      triggers: [
+        ...compiled.triggers,
+        { id: 'trig_ble_legacy', type: 'ble_button', ble_button: 'play', ble_action: 'double_press' },
+      ],
+    },
+    catalog
+  );
+
+  assert.strictEqual(decompiled.triggers[0].click_count, undefined);
+  assert.strictEqual(decompiled.triggers[1].click_count, 2);
+  assert.strictEqual(decompiled.triggers[1].for_sec, 0);
+  assert.strictEqual(decompiled.triggers[2].click_count, 3);
+  assert.strictEqual(decompiled.triggers[3].click_count, 2);
+  assert.strictEqual(decompiled.triggers[3].ble_action, 'press');
+});
+
+test('Trigger name defaults to chosen option and preserves custom names across option changes', () => {
+  const starCmd: Command = {
+    id: 'sw_star',
+    name: 'Steering Wheel Star Button',
+    category: 'Steering Wheel & Controls',
+    roles: ['trigger'],
+    ha_metadata: { name: 'Star Button', domain: 'event' },
+    network: { state_can_id: '0x448', bus: 0 },
+    options: [
+      { label: 'Pressed', match: { D8: '0x02' }, mask: '0x02', default: true },
+      { label: 'Released', match: { D8: '0x00' }, mask: '0x02' },
+    ],
+  };
+
+  const trig = commandToTrigger(starCmd, starCmd.options![0]);
+  assert.strictEqual(trig.name, 'Star Button - Pressed');
+
+  const updatedDefault = applyOptionToTrigger(trig, starCmd, starCmd.options![1]);
+  assert.strictEqual(updatedDefault.name, 'Star Button - Released');
+
+  const customized = { ...updatedDefault, name: 'My Garage Door Opener' };
+  const updatedCustom = applyOptionToTrigger(customized, starCmd, starCmd.options![0]);
+  assert.strictEqual(updatedCustom.name, 'My Garage Door Opener');
+
+  assert.strictEqual(formatDefaultTriggerName('Star Button', 'Pressed', 2), 'Star Button - Pressed (2x Press)');
+});
+
+test('resolveCatalogCommandForAction resolves ambient_mood_lighting alias, exact 0x00 Off options, and preserves single-step metadata', () => {
+  const catalog: Catalog = {
+    can_do_version: '1.0.0',
+    vehicles: [],
+    commands: [
+      {
+        id: 'ambient_light_colors',
+        name: 'Ambient Light Colors',
+        category: 'Cockpit & Controls',
+        roles: ['action'],
+        network: { action_can_id: '0x4AD', bus: 0, delay_ms: 25 },
+        options: [
+          {
+            label: 'Blue Flight',
+            steps: [
+              { payload: '4F29361C00000000', repeat: 3, delay_ms: 25 },
+              { payload: '0002082000000000', repeat: 3, delay_ms: 25 },
+            ],
+          },
+          {
+            label: 'Off',
+            steps: [
+              { payload: '000208A000000000', repeat: 3, delay_ms: 25 },
+              { payload: '0002082000000000', repeat: 3, delay_ms: 25 },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'ambient_light_brightness',
+        name: 'Ambient Light Brightness',
+        category: 'Cockpit & Controls',
+        roles: ['action'],
+        network: { action_can_id: '0x4AD', bus: 0, delay_ms: 25 },
+        options: [{ label: 'Level 5', payload: '0002085000000000' }],
+      },
+      {
+        id: 'hazard_lights',
+        name: 'Hazard Lights',
+        category: 'Lighting',
+        roles: ['action'],
+        network: { action_can_id: '0x587', bus: 0 },
+        options: [
+          { label: 'Turned ON / Active', payload: { D1: '0x01' } },
+          {
+            label: 'Turned OFF / Inactive',
+            payload: { D1: '0x00', D2: '0x00', D3: '0x00', D4: '0x00', D5: '0x00', D6: '0x00', D7: '0x00', D8: '0x00' },
+          },
+        ],
+      },
+      {
+        id: 'telematics_remote_door_locks',
+        name: 'Remote Door Locks',
+        category: 'Closures',
+        roles: ['action'],
+        network: { action_can_id: '0x587', bus: 0 },
+        options: [{ label: 'Lock', payload: { D2: '0x02' } }],
+      },
+    ],
+  };
+
+  // Legacy ambient_mood_lighting alias resolves to ambient_light_colors instead of failing on ambiguous 0x4AD
+  const aliasResolved = resolveCatalogCommandForAction(
+    { id: 'act_alias', type: 'can_tx', entity_id: 'ambient_mood_lighting' },
+    catalog
+  );
+  assert.strictEqual(aliasResolved.command?.id, 'ambient_light_colors');
+
+  // Exact all-0x00 payload matches Turned OFF / Inactive without metadata
+  const zeroOffResolved = resolveCatalogCommandForAction(
+    {
+      id: 'act_hazard_off',
+      type: 'can_tx',
+      can_id: '0x587',
+      payload: { D1: '0x00', D2: '0x00', D3: '0x00', D4: '0x00', D5: '0x00', D6: '0x00', D7: '0x00', D8: '0x00' },
+    },
+    catalog
+  );
+  assert.strictEqual(zeroOffResolved.command?.id, 'hazard_lights');
+  assert.strictEqual(zeroOffResolved.matchedOption?.label, 'Turned OFF / Inactive');
+
+  // Single-step compileAction preserves resolved catalog metadata
+  const compiledSingle = compileAction(
+    {
+      id: 'act_hazard_on',
+      type: 'can_tx',
+      can_id: '0x587',
+      payload: { D1: '0x01' },
+    },
+    catalog
+  );
+  assert.strictEqual(compiledSingle.source_command_id, 'hazard_lights');
+  assert.strictEqual(compiledSingle.option_label, 'Turned ON / Active');
+});

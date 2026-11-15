@@ -111,7 +111,6 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           color: 'text-warning bg-warning-soft border-warning/30',
           create: (): AutomationTrigger => ({
             id: `trig_${Date.now().toString(36)}`,
-            name: 'Custom CAN Trigger',
             source: 'can',
             can_id: '',
             bus: 0,
@@ -191,7 +190,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         {
           id: 'triggered_by',
           title: 'Triggered By (CHOOSE Branching)',
-          desc: 'Evaluate which trigger ID initiated this automation execution',
+          desc: 'Evaluate which trigger initiated this automation execution',
           icon: Radio,
           color: 'text-warning bg-warning-soft border-warning/30',
           create: (): AutomationCondition => ({

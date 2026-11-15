@@ -555,6 +555,9 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
       return inlinedSteps;
     }
 
+    const resolvedSourceId = act.source_command_id || act.entity_id || fallbackCmd?.id;
+    const resolvedSourceName = act.source_command_name || fallbackCmd?.ha_metadata?.name || fallbackCmd?.name;
+    const resolvedOptLabel = act.option_label || act.command || fallbackOpt?.label;
     const payload = compileToByteMap(act.payload || act.to_payload);
     return {
       ...(act.id ? { id: act.id } : {}),
@@ -563,10 +566,10 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
       bus: act.bus ?? 0,
       payload: Object.keys(payload).length > 0 ? payload : { D1: '0x01' },
       repeat: act.repeat || 1,
-      ...(act.source_command_id ? { source_command_id: act.source_command_id } : {}),
-      ...(act.source_command_name ? { source_command_name: act.source_command_name } : {}),
-      ...(act.option_label ? { option_label: act.option_label } : {}),
-      ...(act.entity_id ? { entity_id: act.entity_id } : {})
+      ...(resolvedSourceId ? { source_command_id: resolvedSourceId } : {}),
+      ...(resolvedSourceName ? { source_command_name: resolvedSourceName } : {}),
+      ...(resolvedOptLabel ? { option_label: resolvedOptLabel } : {}),
+      ...(resolvedSourceId ? { entity_id: resolvedSourceId } : {})
     };
   }
 
@@ -1418,6 +1421,20 @@ export function decompileAutomationRule(
           ...trig,
           id: trig.id || generateBlockId('trig')
         };
+        if (clone.click_count !== undefined && clone.click_count !== null) {
+          const parsedCount = Number(clone.click_count);
+          clone.click_count = !isNaN(parsedCount) && parsedCount >= 1 ? parsedCount : 1;
+        } else if (clone.ble_action === 'double_press') {
+          clone.click_count = 2;
+          clone.ble_action = 'press';
+        } else if (clone.ble_action === 'triple_press') {
+          clone.click_count = 3;
+          clone.ble_action = 'press';
+        }
+        if ((clone.click_count ?? 1) > 1) {
+          clone.for_sec = 0;
+          clone.for_ms = 0;
+        }
         if (clone.can_id !== undefined && clone.can_id !== null) {
           clone.can_id = formatCanId(clone.can_id);
         }
@@ -1499,15 +1516,16 @@ export function compileAutomationRule(
     ...(rule.category ? { category: rule.category } : {}),
     ...(rule.description ? { description: rule.description } : {}),
     triggers: (rule.triggers || []).map(trig => {
+      const isMultiClick = Boolean(trig.click_count && trig.click_count > 1);
       const baseTrigger = {
         id: trig.id,
         ...(trig.name ? { name: trig.name } : {}),
         ...(trig.source_command_id ? { source_command_id: trig.source_command_id } : {}),
         ...(trig.source_command_name ? { source_command_name: trig.source_command_name } : {}),
         ...(trig.option_label ? { option_label: trig.option_label } : {}),
-        ...(trig.click_count && trig.click_count > 1 ? { click_count: trig.click_count } : {}),
-        ...(trig.for_ms ? { for_ms: trig.for_ms } : {}),
-        ...(trig.for_sec ? { for_sec: trig.for_sec } : {})
+        ...(isMultiClick ? { click_count: trig.click_count } : {}),
+        ...(!isMultiClick && trig.for_ms ? { for_ms: trig.for_ms } : {}),
+        ...(!isMultiClick && trig.for_sec ? { for_sec: trig.for_sec } : {})
       };
 
       if (trig.type === 'time_schedule' || trig.source === 'time' || trig.time) {
@@ -1677,6 +1695,25 @@ export function exportToFullCatalogJson(
   }, null, 2);
 }
 
+export function formatDefaultTriggerName(
+  baseName?: string,
+  optionLabel?: string,
+  clickCount?: number
+): string {
+  const cleanBase = (baseName || '').trim();
+  const cleanOpt = (optionLabel || '').trim();
+  let result = cleanBase;
+  if (cleanOpt && !cleanBase.toLowerCase().includes(cleanOpt.toLowerCase())) {
+    result = cleanBase ? `${cleanBase} - ${cleanOpt}` : cleanOpt;
+  } else if (!result) {
+    result = cleanOpt || 'CAN Trigger';
+  }
+  if (clickCount && clickCount > 1) {
+    result = `${result} (${clickCount}x Press)`;
+  }
+  return result;
+}
+
 /**
  * Convert a Catalog Command into an Automation Trigger
  */
@@ -1685,6 +1722,7 @@ export function commandToTrigger(rawCmd: Command, opt?: CommandOption): Automati
   const trigId = `trig_${cmd.id}_${Date.now().toString(36).slice(-4)}`;
   const canId = cmd.network?.state_can_id || cmd.state_can_id || cmd.network?.action_can_id || cmd.action_can_id || '0x448';
   const chosenOpt = opt || (cmd.options && cmd.options.length > 0 ? (cmd.options.find(o => o.default) || cmd.options[0]) : undefined);
+  const cmdDisplayName = cmd.ha_metadata?.name || cmd.name || cmd.id;
 
   if (!chosenOpt && isRangeCommand(cmd)) {
     const net = cmd.network;
@@ -1698,6 +1736,7 @@ export function commandToTrigger(rawCmd: Command, opt?: CommandOption): Automati
 
     return {
       id: trigId,
+      name: formatDefaultTriggerName(cmdDisplayName, labelStr, 1),
       type: 'byte_transition',
       source: 'can',
       can_id: canId,
@@ -1722,7 +1761,7 @@ export function commandToTrigger(rawCmd: Command, opt?: CommandOption): Automati
       for_ms: 0,
       source_command_id: cmd.id,
       target_entity_id: cmd.id,
-      source_command_name: cmd.ha_metadata?.name || cmd.name || cmd.id,
+      source_command_name: cmdDisplayName,
       option_label: labelStr
     };
   }
@@ -1741,6 +1780,7 @@ export function commandToTrigger(rawCmd: Command, opt?: CommandOption): Automati
 
   return {
     id: trigId,
+    name: formatDefaultTriggerName(cmdDisplayName, chosenOpt?.label, 1),
     type: 'byte_transition',
     source: 'can',
     can_id: canId,
@@ -1753,7 +1793,7 @@ export function commandToTrigger(rawCmd: Command, opt?: CommandOption): Automati
     for_sec: 0,
     for_ms: 0,
     source_command_id: cmd.id,
-    source_command_name: cmd.name || cmd.ha_metadata?.name || cmd.id,
+    source_command_name: cmdDisplayName,
     option_label: chosenOpt?.label
   };
 }
@@ -2214,6 +2254,10 @@ const ENTITY_ALIASES: Record<string, string> = {
   rear_defrost: 'climate_rear_defrost',
   rear_defroster: 'climate_rear_defrost',
   defroster: 'climate_rear_defrost',
+  ambient_mood_lighting: 'ambient_light_colors',
+  ambient_mood_lamp_color: 'ambient_light_colors',
+  mood_lighting: 'ambient_light_colors',
+  ambient_light: 'ambient_light_colors',
 };
 
 function extractActionPayload(act: AutomationAction): ByteMap | undefined {
@@ -2353,6 +2397,15 @@ function findBestScoredOptionForAction(
           score += matchCount * 25 + significantMatchCount * 50;
         } else if (matchCount > 0 && labelToMatch) {
           score += matchCount * 10;
+        } else if (
+          matchCount > 0 &&
+          matchCount === optKeys.length &&
+          matchCount === actKeys.length &&
+          optKeys.every(k => String(optMap[k]).toLowerCase() === '0x00')
+        ) {
+          // Exact all-0x00 command payload (e.g. Hazard Lights Off / Mute Off / e-ASD Off),
+          // while still rejecting partial 0xFF release/reset frames like { D5: '0xFF' }.
+          score += matchCount * 15;
         }
       }
     }
@@ -2658,8 +2711,32 @@ export function applyOptionToTrigger(trig: AutomationTrigger, rawCmd: Command, o
     : (targetTo === '0x00' ? targetMask : '0x00');
   const fromVal = parseInt(targetFrom.replace('0x', ''), 16);
 
+  const prevCandidates = new Set<string>(
+    [
+      friendlyName,
+      trig.source_command_name,
+      cmd.name,
+      cmd.ha_metadata?.name,
+      trig.option_label,
+      formatDefaultTriggerName(friendlyName, trig.option_label, trig.click_count),
+      formatDefaultTriggerName(trig.source_command_name, trig.option_label, trig.click_count),
+      formatDefaultTriggerName(cmd.name, trig.option_label, trig.click_count),
+      formatDefaultTriggerName(friendlyName, trig.option_label, 1),
+      formatDefaultTriggerName(cmd.name, trig.option_label, 1),
+    ]
+      .filter((s): s is string => Boolean(s))
+      .map(s => s.trim().toLowerCase())
+  );
+
+  const currentTrimmedName = (trig.name || '').trim();
+  const shouldAutoUpdateName = !currentTrimmedName || prevCandidates.has(currentTrimmedName.toLowerCase());
+  const nextName = shouldAutoUpdateName
+    ? formatDefaultTriggerName(friendlyName, opt.label, trig.click_count)
+    : trig.name;
+
   return {
     ...trig,
+    name: nextName,
     source_command_id: cmd.id,
     source_command_name: friendlyName,
     option_label: opt.label,

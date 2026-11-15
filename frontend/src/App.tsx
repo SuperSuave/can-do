@@ -233,6 +233,9 @@ export default function App() {
     }
     return DEFAULT_CATALOG;
   });
+  const catalogRef = useRef<Catalog>(catalog);
+  catalogRef.current = catalog;
+  const needsCatalogDecompileRef = useRef<boolean>(catalog.commands.length === 0);
 
   // 2. Draft contribution tracking (Commands)
   const [draftAddedIds, setDraftAddedIds] = useState<string[]>(() => {
@@ -393,7 +396,12 @@ export default function App() {
             actions: (rule.actions || []).map(act => {
               const srcId = act.source_command_id || act.entity_id;
               const chosenCommand = act.command || act.option_label;
-              if (act.id === 'act_cool_driver_seat' || act.entity_id === 'drivers_seat_comfort' || (srcId === 'drivers_seat_comfort')) {
+              if (
+                act.type !== 'cycle_entity' &&
+                (act.id === 'act_cool_driver_seat' ||
+                  ((act.entity_id === 'drivers_seat_comfort' || srcId === 'drivers_seat_comfort') &&
+                    (!act.type || act.type === 'entity_command' || !act.can_id)))
+              ) {
                 return {
                   ...act,
                   type: 'can_tx',
@@ -419,16 +427,16 @@ export default function App() {
               return act;
             })
           }));
-          return decompileAutomationRules(migrated, DEFAULT_CATALOG);
+          return decompileAutomationRules(migrated, catalog);
         }
       }
     } catch (e) {
       console.error('Failed to load automation rules from storage', e);
     }
     if ((DEFAULT_CATALOG as any).automations && Array.isArray((DEFAULT_CATALOG as any).automations) && (DEFAULT_CATALOG as any).automations.length > 0) {
-      return decompileAutomationRules((DEFAULT_CATALOG as any).automations, DEFAULT_CATALOG);
+      return decompileAutomationRules((DEFAULT_CATALOG as any).automations, catalog);
     }
-    return decompileAutomationRules(DEFAULT_AUTOMATION_RULES, DEFAULT_CATALOG);
+    return decompileAutomationRules(DEFAULT_AUTOMATION_RULES, catalog);
   });
 
   const [automationSettings, setAutomationSettings] = useState<AutomationSettings>(() => {
@@ -513,7 +521,12 @@ export default function App() {
             if (data && Array.isArray(data.commands) && Array.isArray(data.vehicles)) {
               if (!cancelled) {
                 const normalized = normalizeCatalog(data);
+                catalogRef.current = normalized;
                 setCatalog(normalized);
+                if (needsCatalogDecompileRef.current && normalized.commands.length > 0) {
+                  needsCatalogDecompileRef.current = false;
+                  setAutomationRules(prev => decompileAutomationRules(prev, normalized));
+                }
                 try {
                   localStorage.setItem(STORAGE_KEY_CATALOG, JSON.stringify(normalized));
                 } catch {}
@@ -994,10 +1007,14 @@ export default function App() {
       const res = await fetch(`${base}/api/automations`);
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       const data = await res.json();
+      const activeCatalog = catalogRef.current;
+      if (activeCatalog.commands.length === 0) {
+        needsCatalogDecompileRef.current = true;
+      }
       if (data && Array.isArray(data.rules)) {
-        setAutomationRules(decompileAutomationRules(data.rules, catalog));
+        setAutomationRules(decompileAutomationRules(data.rules, activeCatalog));
       } else if (Array.isArray(data)) {
-        setAutomationRules(decompileAutomationRules(data, catalog));
+        setAutomationRules(decompileAutomationRules(data, activeCatalog));
       }
       if (data && data.settings) {
         setAutomationSettings(data.settings);
@@ -1178,7 +1195,7 @@ export default function App() {
         {/* Left Flank: Compact Logo + Wordmark flush with content */}
         <div className="flex items-center gap-2.5 md:flex-1 min-w-0">
           <CanDoLogo className="h-7 sm:h-8 w-auto shrink-0" />
-          <h1 className="text-base sm:text-lg font-bold text-foreground tracking-wide whitespace-nowrap">
+          <h1 className="md:hidden lg:block text-base sm:text-lg font-bold text-foreground tracking-wide whitespace-nowrap">
             CAN Do
           </h1>
         </div>

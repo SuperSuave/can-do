@@ -16,12 +16,12 @@ import {
 } from 'lucide-react';
 import { AutomationTrigger, AutomationAction, AutomationCondition } from '../../types/automation';
 import { Catalog, CommandOption } from '../../types/catalog';
-import { compileToByteMap, resolveCatalogCommandForTrigger, applyOptionToTrigger } from '../../utils/automationConverters';
+import { compileToByteMap, resolveCatalogCommandForTrigger, applyOptionToTrigger, formatDefaultTriggerName } from '../../utils/automationConverters';
 import { groupOptionsIntoGridRows, OptionGridGroup, LiveWifiStatus, LiveBleItem } from './liveEvaluator';
 import { DayOfWeekPicker } from './DayOfWeekPicker';
 import { BleButtonComboPicker } from '../BleButtonComboPicker';
 import { BleDeviceSelect, BleBeaconSelect, BleActionSelect } from '../BleSelects';
-import { SustainedDurationInput, formatSustainedBadge } from './SustainedDurationInput';
+import { SustainedDurationInput } from './SustainedDurationInput';
 import { AutomationClipboardContext } from './AutomationClipboardContext';
 import { NumericRangeNodeEditor } from './NumericRangeNodeEditor';
 
@@ -43,7 +43,7 @@ export interface TriggerNodeEditorProps {
 
 export function TriggerNodeEditor({
   trig,
-  tIdx,
+  tIdx: _tIdx,
   catalog,
   liveWifiStatus,
   liveBleMap,
@@ -59,23 +59,88 @@ export function TriggerNodeEditor({
   const [collapsed, setCollapsed] = useState(false);
   const { copyToClipboard } = useContext(AutomationClipboardContext);
 
+  const activeClickCount = trig.click_count && trig.click_count >= 1 ? trig.click_count : 1;
+
+  const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForTrigger(trig, catalog) : {};
+  const isCustomCan = !catalogCmd;
+  const chosenOptionLabel = trig.option_label || matchedOption?.label;
+  const baseCanName = isCustomCan
+    ? (trig.can_id ? `Custom CAN (${trig.can_id})` : 'Custom CAN Trigger')
+    : (catalogCmd?.ha_metadata?.name || catalogCmd?.name || trig.source_command_name || 'CAN Trigger');
+  const defaultCanName = formatDefaultTriggerName(baseCanName, chosenOptionLabel, activeClickCount);
+
   const getTriggerLabel = (): string => {
+    if (trig.name?.trim()) {
+      return trig.name.trim();
+    }
+    const clickSuffix = activeClickCount > 1 ? ` (${activeClickCount}x Press)` : '';
     if (trig.type === 'time_schedule' || trig.source === 'time') {
-      return `Time: ${trig.time || '--:--'}`;
+      return 'Time Schedule';
     }
     if (trig.type === 'ble_button' || trig.type === 'ble_key' || (!trig.type && trig.source === 'ble' && trig.ble_button)) {
-      return `BLE: ${trig.ble_button || 'button'} (${trig.ble_action || 'press'})`;
+      return `Bluetooth Remote Button${clickSuffix}`;
     }
     if (trig.type === 'ble_presence' || trig.type === 'ble_beacon' || trig.type === 'beacon') {
-      return `BLE Presence: ${trig.ble_event || 'enter'}`;
+      return 'Presence / Proximity';
     }
-    if (trig.type === 'wifi' || trig.type === 'wifi_status') {
-      return `Wi-Fi: ${trig.device_property || 'status'}`;
+    if (trig.type === 'wifi' || trig.type === 'wifi_event' || trig.source === 'wifi') {
+      return 'Wi-Fi / AP Connection Event';
     }
-    if (trig.name || trig.command_name) {
-      return trig.name || trig.command_name || 'Custom CAN Trigger';
+    if (trig.command_name) {
+      return `${trig.command_name}${clickSuffix}`;
     }
-    return trig.can_id ? `CAN ${trig.can_id}` : 'Custom CAN Trigger';
+    return defaultCanName;
+  };
+
+  const renderPressCountSelector = (accentColor: 'warning' | 'accent' = 'warning') => {
+    const options = [
+      { count: 1, label: 'Single Press (1x)', shortLabel: 'Single (1x)' },
+      { count: 2, label: 'Double Press (2x)', shortLabel: 'Double (2x)' },
+      { count: 3, label: 'Triple Press (3x)', shortLabel: 'Triple (3x)' },
+    ];
+    const activeClasses =
+      accentColor === 'accent'
+        ? 'bg-accent-soft text-accent-soft-foreground border-accent/60 font-semibold shadow-sm ring-1 ring-accent/30'
+        : 'bg-warning-soft text-warning-soft-foreground border-warning/60 font-semibold shadow-sm ring-1 ring-warning/30';
+
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+        <span className="text-[10px] font-sans font-medium text-muted uppercase tracking-wider">
+          Press Count
+        </span>
+        <div className="grid grid-cols-3 gap-1.5 flex-1 sm:flex-initial sm:min-w-[300px]">
+          {options.map(item => {
+            const isSelected = activeClickCount === item.count;
+            return (
+              <button
+                key={item.count}
+                type="button"
+                onClick={() => {
+                  const prevAuto = formatDefaultTriggerName(baseCanName, chosenOptionLabel, activeClickCount).toLowerCase();
+                  const prevBase = baseCanName.trim().toLowerCase();
+                  const curName = (trig.name || '').trim().toLowerCase();
+                  const isAutoName = curName !== '' && (curName === prevAuto || curName === prevBase);
+                  onUpdate({
+                    ...trig,
+                    click_count: item.count,
+                    ...(isAutoName ? { name: formatDefaultTriggerName(baseCanName, chosenOptionLabel, item.count) } : {}),
+                    ...(item.count > 1 ? { for_sec: 0, for_ms: 0 } : {})
+                  });
+                }}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition flex items-center justify-center gap-1 border cursor-pointer text-center ${
+                  isSelected
+                    ? activeClasses
+                    : 'bg-surface-tertiary text-foreground/85 hover:text-foreground hover:bg-default-hover border-border'
+                }`}
+              >
+                <span className="hidden sm:inline truncate">{item.label}</span>
+                <span className="sm:hidden truncate">{item.shortLabel}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   const toggleAdvanced = () => {
@@ -144,32 +209,17 @@ export function TriggerNodeEditor({
         className="p-3.5 rounded-xl bg-surface-secondary border border-border space-y-2.5 text-xs"
       >
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-muted hover:text-foreground transition p-0.5"
+              className="text-muted hover:text-foreground transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
-            <div className="flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-accent" />
-              <span className="font-semibold text-foreground">Time Schedule</span>
-              {trig.time && (
-                <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent-soft-foreground text-[10px] border border-accent/30 font-mono">
-                  {trig.time}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 font-mono text-[11px]">
-              <span className="text-[10px] text-muted font-sans">ID:</span>
-              <input
-                type="text"
-                value={trig.id || ''}
-                onChange={e => onUpdate({ ...trig, id: e.target.value })}
-                placeholder={`trig_${tIdx + 1}`}
-                className="bg-surface-tertiary border border-border rounded px-1.5 py-0.5 text-accent text-[11px] font-mono focus:outline-none focus:border-accent w-24"
-              />
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Clock className="w-3.5 h-3.5 text-accent shrink-0" />
+              <span className="font-semibold text-foreground truncate">{trig.name || 'Time Schedule'}</span>
             </div>
           </div>
           {actionButtons}
@@ -179,13 +229,13 @@ export function TriggerNodeEditor({
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
-                <label className="block text-[10px] font-sans text-muted mb-1">Trigger ID</label>
+                <label className="block text-[10px] font-sans text-muted mb-1">Trigger Name</label>
                 <input
                   type="text"
-                  value={trig.id || ''}
-                  onChange={e => onUpdate({ ...trig, id: e.target.value })}
-                  placeholder={`trig_${tIdx + 1}`}
-                  className="w-full bg-surface-tertiary border border-border rounded px-2.5 py-1 text-accent font-mono text-xs focus:outline-none focus:border-accent"
+                  value={trig.name || ''}
+                  onChange={e => onUpdate({ ...trig, name: e.target.value })}
+                  placeholder="Time Schedule"
+                  className="w-full bg-surface-tertiary border border-border rounded px-2.5 py-1 text-foreground font-sans text-xs focus:outline-none focus:border-accent"
                 />
               </div>
 
@@ -212,77 +262,76 @@ export function TriggerNodeEditor({
 
   // Bluetooth Remote / Button Trigger
   if (trig.type === 'ble_button' || trig.type === 'ble_key' || (!trig.type && trig.source === 'ble' && trig.ble_button)) {
+    const bleAction = trig.ble_action || 'press';
+    const supportsMultiClick = bleAction === 'press' || bleAction === 'tap' || bleAction === 'any';
+
     return (
       <div
         className="p-3.5 rounded-xl bg-surface-secondary border border-accent/40 space-y-2.5 text-xs shadow-sm"
       >
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-muted hover:text-foreground transition p-0.5"
+              className="text-muted hover:text-foreground transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5 text-accent font-semibold">
-                <Bluetooth className="w-3.5 h-3.5" />
-                <span>Bluetooth Remote Button</span>
-              </div>
-              <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent-soft-foreground text-[10px] font-mono border border-accent/30">
-                {trig.ble_button || 'any'} • {trig.ble_action || 'press'}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 font-mono text-[11px]">
-              <span className="text-[10px] text-muted font-sans">ID:</span>
-              <input
-                type="text"
-                value={trig.id || ''}
-                onChange={e => onUpdate({ ...trig, id: e.target.value })}
-                placeholder={`trig_${tIdx + 1}`}
-                className="bg-surface-tertiary border border-border rounded px-1.5 py-0.5 text-accent text-[11px] font-mono focus:outline-none focus:border-accent w-24"
-              />
+            <div className="flex items-center gap-1.5 text-accent font-semibold min-w-0">
+              <Bluetooth className="w-3.5 h-3.5 shrink-0" />
+              <span className="text-foreground truncate">{trig.name || 'Bluetooth Remote Button'}</span>
             </div>
           </div>
           {actionButtons}
         </div>
 
         {!collapsed && (
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 font-mono text-[11px] items-end">
-            <div className="flex flex-col justify-end">
-              <label className="block text-[10px] font-sans text-muted mb-1">Trigger ID</label>
-              <input
-                type="text"
-                value={trig.id || ''}
-                onChange={e => onUpdate({ ...trig, id: e.target.value })}
-                placeholder={`trig_${tIdx + 1}`}
-                className="w-full h-8 bg-surface-tertiary border border-border rounded px-2 text-accent font-mono text-[11px] box-border focus:outline-none focus:border-accent"
-              />
+          <div className="space-y-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 font-mono text-[11px] items-end">
+              <div className="flex flex-col justify-end">
+                <label className="block text-[10px] font-sans text-muted mb-1">Trigger Name</label>
+                <input
+                  type="text"
+                  value={trig.name || ''}
+                  onChange={e => onUpdate({ ...trig, name: e.target.value })}
+                  placeholder="Bluetooth Remote Button"
+                  className="w-full h-8 bg-surface-tertiary border border-border rounded px-2 text-foreground font-sans text-[11px] box-border focus:outline-none focus:border-accent"
+                />
+              </div>
+
+              <div className="flex flex-col justify-end">
+                <BleButtonComboPicker
+                  value={trig.ble_button ?? 'any'}
+                  onChange={val => onUpdate({ ...trig, ble_button: val })}
+                  label="Button or Multi-Button Combo Chord"
+                />
+              </div>
+
+              <div className="flex flex-col justify-end">
+                <BleActionSelect
+                  value={bleAction}
+                  onChange={val => {
+                    const isMultiAllowed = val === 'press' || val === 'tap' || val === 'any';
+                    onUpdate({
+                      ...trig,
+                      ble_action: val,
+                      ...(isMultiAllowed ? {} : { click_count: 1 })
+                    });
+                  }}
+                />
+              </div>
+
+              <div className="flex flex-col justify-end">
+                <BleDeviceSelect
+                  value={trig.ble_device || ''}
+                  onChange={val => onUpdate({ ...trig, ble_device: val })}
+                  label="Device Filter (Optional)"
+                />
+              </div>
             </div>
 
-            <div className="flex flex-col justify-end">
-              <BleButtonComboPicker
-                value={trig.ble_button ?? 'any'}
-                onChange={val => onUpdate({ ...trig, ble_button: val })}
-                label="Button or Multi-Button Combo Chord"
-              />
-            </div>
-
-            <div className="flex flex-col justify-end">
-              <BleActionSelect
-                value={trig.ble_action || 'press'}
-                onChange={val => onUpdate({ ...trig, ble_action: val })}
-              />
-            </div>
-
-            <div className="flex flex-col justify-end">
-              <BleDeviceSelect
-                value={trig.ble_device || ''}
-                onChange={val => onUpdate({ ...trig, ble_device: val })}
-                label="Device Filter (Optional)"
-              />
-            </div>
+            {supportsMultiClick && renderPressCountSelector('accent')}
           </div>
         )}
       </div>
@@ -304,34 +353,17 @@ export function TriggerNodeEditor({
     return (
       <div className="p-3.5 rounded-xl bg-surface-secondary border border-purple-500/40 space-y-2.5 text-xs shadow-sm">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-muted hover:text-foreground transition p-0.5"
+              className="text-muted hover:text-foreground transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400 font-semibold">
-                <Bluetooth className="w-3.5 h-3.5" />
-                <span>Presence / Proximity</span>
-              </div>
-              {formatSustainedBadge(trig.for_sec, trig.for_ms) && (
-                <span className="px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-600 dark:text-purple-400 text-[10px] font-mono border border-purple-500/30">
-                  for {formatSustainedBadge(trig.for_sec, trig.for_ms)}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 font-mono text-[11px]">
-              <span className="text-[10px] text-muted font-sans">ID:</span>
-              <input
-                type="text"
-                value={trig.id || ''}
-                onChange={e => onUpdate({ ...trig, id: e.target.value })}
-                placeholder={`trig_${tIdx + 1}`}
-                className="bg-surface-tertiary border border-border rounded px-1.5 py-0.5 text-purple-600 dark:text-purple-400 text-[11px] font-mono focus:outline-none focus:border-purple-500 w-24"
-              />
+            <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400 font-semibold min-w-0">
+              <Bluetooth className="w-3.5 h-3.5 shrink-0" />
+              <span className="text-foreground truncate">{trig.name || 'Presence / Proximity'}</span>
             </div>
           </div>
           {actionButtons}
@@ -341,13 +373,13 @@ export function TriggerNodeEditor({
           <div className="space-y-2.5">
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 font-mono text-[11px] items-end">
               <div className="flex flex-col justify-end">
-                <label className="block text-[10px] font-sans text-muted mb-1">Trigger ID</label>
+                <label className="block text-[10px] font-sans text-muted mb-1">Trigger Name</label>
                 <input
                   type="text"
-                  value={trig.id || ''}
-                  onChange={e => onUpdate({ ...trig, id: e.target.value })}
-                  placeholder={`trig_${tIdx + 1}`}
-                  className="w-full h-8 bg-surface-tertiary border border-border rounded px-2 text-purple-600 dark:text-purple-400 font-mono text-[11px] box-border focus:outline-none focus:border-purple-500"
+                  value={trig.name || ''}
+                  onChange={e => onUpdate({ ...trig, name: e.target.value })}
+                  placeholder="Presence / Proximity"
+                  className="w-full h-8 bg-surface-tertiary border border-border rounded px-2 text-foreground font-sans text-[11px] box-border focus:outline-none focus:border-purple-500"
                 />
               </div>
 
@@ -538,36 +570,17 @@ export function TriggerNodeEditor({
     return (
       <div className="p-3.5 rounded-xl bg-surface-secondary border border-accent/40 space-y-2.5 text-xs shadow-sm">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className="text-muted hover:text-foreground transition p-0.5"
+              className="text-muted hover:text-foreground transition p-0.5 shrink-0"
             >
               {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </button>
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5 text-accent font-semibold">
-                <Wifi className="w-3.5 h-3.5" />
-                <span>Wi-Fi / AP Connection Event</span>
-              </div>
-              <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent-soft-foreground text-[10px] font-mono border border-accent/30">
-                {trig.wifi_event || 'ap_client_connected'}
-                {trig.ssid ? ` • SSID: ${trig.ssid}` : ''}
-                {trig.client_mac ? ` • MAC: ${trig.client_mac}` : ''}
-                {trig.target_rssi ? ` • RSSI: ≥${trig.target_rssi} dBm` : ''}
-                {formatSustainedBadge(trig.for_sec, trig.for_ms) ? ` • for ${formatSustainedBadge(trig.for_sec, trig.for_ms)}` : ''}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 font-mono text-[11px]">
-              <span className="text-[10px] text-muted font-sans">ID:</span>
-              <input
-                type="text"
-                value={trig.id || ''}
-                onChange={e => onUpdate({ ...trig, id: e.target.value })}
-                placeholder={`trig_${tIdx + 1}`}
-                className="bg-surface-tertiary border border-border rounded px-1.5 py-0.5 text-accent text-[11px] font-mono focus:outline-none focus:border-accent w-24"
-              />
+            <div className="flex items-center gap-1.5 text-accent font-semibold min-w-0">
+              <Wifi className="w-3.5 h-3.5 shrink-0" />
+              <span className="text-foreground truncate">{trig.name || 'Wi-Fi / AP Connection Event'}</span>
             </div>
           </div>
           {actionButtons}
@@ -577,13 +590,13 @@ export function TriggerNodeEditor({
           <>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 font-mono text-[11px]">
             <div>
-              <label className="block text-[10px] font-sans text-muted mb-1">Trigger ID</label>
+              <label className="block text-[10px] font-sans text-muted mb-1">Trigger Name</label>
               <input
                 type="text"
-                value={trig.id || ''}
-                onChange={e => onUpdate({ ...trig, id: e.target.value })}
-                placeholder={`trig_${tIdx + 1}`}
-                className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-accent font-mono text-[11px] focus:outline-none focus:border-accent"
+                value={trig.name || ''}
+                onChange={e => onUpdate({ ...trig, name: e.target.value })}
+                placeholder="Wi-Fi / AP Connection Event"
+                className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground font-sans text-[11px] focus:outline-none focus:border-accent"
               />
             </div>
 
@@ -699,7 +712,6 @@ export function TriggerNodeEditor({
   }
 
   // CAN Trigger: Dual-View with Catalog recognition
-  const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForTrigger(trig, catalog) : {};
   const hasOptions = !!(catalogCmd?.options && catalogCmd.options.length > 0);
   const isRangeEntity = Boolean(
     catalogCmd?.type === 'param_range' ||
@@ -711,22 +723,32 @@ export function TriggerNodeEditor({
     ))
   );
   const hasPills = hasOptions && !isRangeEntity;
-  const isCustomCan = !catalogCmd;
-  const defaultCanName = isCustomCan
-    ? (trig.can_id ? `Custom CAN (${trig.can_id})` : 'Custom CAN Trigger')
-    : (catalogCmd?.ha_metadata?.name || catalogCmd?.name || 'CAN Trigger');
+  const isButtonEntity = Boolean(
+    activeClickCount > 1 ||
+    catalogCmd?.ha_metadata?.domain === 'event' ||
+    catalogCmd?.ha_metadata?.domain === 'button' ||
+    (catalogCmd?.subcategory || '').toLowerCase().includes('button') ||
+    (catalogCmd?.subcategory || '').toLowerCase().includes('steering') ||
+    (catalogCmd?.subcategory || '').toLowerCase().includes('stalk') ||
+    (catalogCmd?.subcategory || '').toLowerCase().includes('paddle') ||
+    (catalogCmd?.id || '').toLowerCase().startsWith('sw_') ||
+    (catalogCmd?.id || '').toLowerCase().includes('btn') ||
+    (catalogCmd?.id || '').toLowerCase().includes('button') ||
+    (catalogCmd?.id || '').toLowerCase().includes('paddle') ||
+    (catalogCmd?.id || '').toLowerCase().includes('stalk') ||
+    (catalogCmd?.id || '').toLowerCase().includes('star')
+  );
 
   const triggerName =
-    trig.name ||
+    (trig.name && trig.name.trim()) ||
     trig.command_name ||
-    trig.source_command_name ||
     defaultCanName;
 
   return (
     <div className="p-2.5 sm:p-3.5 rounded-xl bg-surface-secondary border border-border hover:border-border-secondary space-y-2.5 text-xs transition-all shadow-sm min-w-0 overflow-hidden">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 flex-wrap">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}
@@ -739,26 +761,6 @@ export function TriggerNodeEditor({
             <span className="font-semibold text-foreground text-xs sm:text-sm tracking-tight truncate">
               {triggerName}
             </span>
-          </div>
-          {trig.can_id && (
-            <span className="px-1.5 py-0.5 rounded bg-warning-soft text-warning-soft-foreground text-[10px] border border-warning/30 font-mono">
-              {trig.can_id}
-            </span>
-          )}
-          {formatSustainedBadge(trig.for_sec, trig.for_ms) && (
-            <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent-soft-foreground text-[10px] border border-accent/30 font-mono">
-              for {formatSustainedBadge(trig.for_sec, trig.for_ms)}
-            </span>
-          )}
-          <div className="flex items-center gap-1.5 font-mono text-[11px] shrink-0">
-            <span className="text-[10px] text-muted font-sans">ID:</span>
-            <input
-              type="text"
-              value={trig.id || ''}
-              onChange={e => onUpdate({ ...trig, id: e.target.value })}
-              placeholder={`trig_${tIdx + 1}`}
-              className="bg-surface-tertiary border border-border rounded px-1.5 py-0.5 text-warning text-[11px] font-mono focus:outline-none focus:border-warning w-24"
-            />
           </div>
         </div>
 
@@ -844,6 +846,10 @@ export function TriggerNodeEditor({
         />
       )}
 
+      {/* Single / Double / Triple Press Count Selector for Button Triggers or Custom/Advanced CAN Triggers */}
+      {(isButtonEntity || (!hasOptions && !isRangeEntity) || showAdvanced) &&
+        renderPressCountSelector('warning')}
+
       {/* Advanced Details View */}
       {((!hasOptions && !isRangeEntity) || showAdvanced) && (() => {
         const effectiveTrigCanId =
@@ -888,7 +894,7 @@ export function TriggerNodeEditor({
         return (
         <div className={`space-y-3 ${hasOptions ? 'pt-2.5 border-t border-separator' : ''}`}>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px]">
-            <div>
+            <div className="col-span-2">
               <label className="block text-[10px] font-sans text-muted">Trigger Name</label>
               <input
                 type="text"
@@ -896,16 +902,6 @@ export function TriggerNodeEditor({
                 onChange={e => onUpdate({ ...trig, name: e.target.value })}
                 placeholder={defaultCanName}
                 className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground text-[11px] font-sans focus:outline-none focus:border-warning"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-sans text-muted">Trigger ID</label>
-              <input
-                type="text"
-                value={trig.id || ''}
-                onChange={e => onUpdate({ ...trig, id: e.target.value })}
-                placeholder={`trig_${tIdx + 1}`}
-                className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-warning text-[11px] font-mono"
               />
             </div>
             <div>
@@ -1009,11 +1005,13 @@ export function TriggerNodeEditor({
         </div>
         );
       })()}
-      <SustainedDurationInput
-        forSec={trig.for_sec}
-        forMs={trig.for_ms}
-        onChange={next => onUpdate({ ...trig, ...next })}
-      />
+      {activeClickCount === 1 && (
+        <SustainedDurationInput
+          forSec={trig.for_sec}
+          forMs={trig.for_ms}
+          onChange={next => onUpdate({ ...trig, ...next })}
+        />
+      )}
         </>
       )}
     </div>

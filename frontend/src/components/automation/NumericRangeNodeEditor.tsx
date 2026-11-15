@@ -10,6 +10,7 @@ import {
   normalizeByteKey
 } from '../../utils/catalogUtils';
 import { parseHexPayload } from './liveEvaluator';
+import { formatDefaultTriggerName } from '../../utils/automationConverters';
 
 export {
   rawByteToPhysical,
@@ -138,8 +139,19 @@ export const NumericRangeNodeEditor: React.FC<NumericRangeNodeEditorProps> = ({
     const roundedDisplay = Math.round(newPhysValue * 10) / 10;
     const labelStr = `${roundedDisplay}${displayUnit}`;
 
+    const cmdDisplayName = catalogCmd?.ha_metadata?.name || catalogCmd?.name || (item as any).source_command_name;
+    let nextNamePatch: Record<string, any> = {};
+    if (isTriggerItem && cmdDisplayName) {
+      const curName = ((item as any).name || '').trim().toLowerCase();
+      const prevAuto = formatDefaultTriggerName(cmdDisplayName, (item as any).option_label, (item as any).click_count).toLowerCase();
+      if (curName !== '' && (curName === prevAuto || curName === cmdDisplayName.trim().toLowerCase())) {
+        nextNamePatch = { name: formatDefaultTriggerName(cmdDisplayName, labelStr, (item as any).click_count) };
+      }
+    }
+
     onUpdate({
       ...item,
+      ...nextNamePatch,
       type: isTriggerItem ? 'byte_transition' : 'can_state',
       can_id: stateCanId,
       bus: net?.bus ?? (item as any).bus ?? 0,

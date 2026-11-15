@@ -218,6 +218,17 @@ struct AutomationTrigger {
     // Sustained state duration requirement (0 = immediate/edge)
     uint32_t for_ms = 0;
     std::shared_ptr<SustainedState> sustained;
+
+    // Multi-press click count requirement (1 = single, 2 = double, 3 = triple)
+    uint8_t click_count = 1;
+    std::shared_ptr<struct MultiClickState> multi_click;
+};
+
+struct MultiClickState {
+    std::mutex mtx;
+    uint8_t count = 0;
+    uint32_t last_press_ms = 0;
+    bool pending = false;
 };
 
 struct AutomationRule {
