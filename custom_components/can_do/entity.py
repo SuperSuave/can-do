@@ -2,7 +2,8 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-from homeassistant.helpers.entity import DeviceInfo, Entity
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import Entity
 
 from .catalog_loader import get_vehicle_definition
 from .const import DOMAIN, VERSION

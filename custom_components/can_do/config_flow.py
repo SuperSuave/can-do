@@ -6,10 +6,14 @@ from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, selector
 from homeassistant.helpers.service_info.mqtt import MqttServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
+
+try:
+    from homeassistant.config_entries import ConfigFlowResult
+except ImportError:
+    from homeassistant.data_entry_flow import FlowResult as ConfigFlowResult  # type: ignore[no-redef]
 
 from .catalog_loader import async_get_vehicles
 from .const import (
@@ -40,7 +44,7 @@ class CanDoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle the initial setup step."""
         errors: dict[str, str] = {}
 
@@ -71,7 +75,7 @@ class CanDoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_mqtt(
         self, discovery_info: MqttServiceInfo
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle MQTT discovery (e.g. cando/+/status)."""
         # Expected topic format: <base_topic>/<device_id>/status
         topic_parts = discovery_info.topic.strip("/").split("/")
@@ -93,7 +97,7 @@ class CanDoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_zeroconf(
         self, discovery_info: ZeroconfServiceInfo
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle Zeroconf / mDNS discovery."""
         hostname = getattr(discovery_info, "hostname", "") or ""
         device_id = hostname.rstrip(".").removesuffix(".local")
@@ -113,7 +117,7 @@ class CanDoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_discovery_confirm(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Confirm discovery and select vehicle profile."""
         errors: dict[str, str] = {}
         device_id = self._discovered_device.get(CONF_DEVICE_ID, DEFAULT_DEVICE_ID)
@@ -153,19 +157,15 @@ class CanDoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> config_entries.OptionsFlow:
         """Get the options flow for this handler."""
-        return CanDoOptionsFlow(config_entry)
+        return CanDoOptionsFlow()
 
 
 class CanDoOptionsFlow(config_entries.OptionsFlow):
     """Handle CAN Do options."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
-
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Manage the options."""
         vehicles = await async_get_vehicles(self.hass)
         vehicle_map = {vid: label for vid, label in vehicles}
@@ -190,14 +190,32 @@ class CanDoOptionsFlow(config_entries.OptionsFlow):
             ALL_CATEGORIES,
         )
 
-        cat_options = {cat: cat for cat in ALL_CATEGORIES}
+        vehicle_options = [
+            {"value": vid, "label": label}
+            for vid, label in vehicle_map.items()
+        ]
+        category_options = [
+            {"value": cat, "label": cat}
+            for cat in ALL_CATEGORIES
+        ]
 
         schema = vol.Schema(
             {
-                vol.Required(CONF_VEHICLE_ID, default=current_vehicle): vol.In(vehicle_map),
-                vol.Required(CONF_FILTER_ACTIVE_IDS, default=current_filter_active): bool,
-                vol.Optional(CONF_ENABLED_CATEGORIES, default=current_categories): cv.multi_select(cat_options),
-                vol.Optional(CONF_BASE_TOPIC, default=current_base): str,
+                vol.Required(CONF_VEHICLE_ID, default=current_vehicle): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=vehicle_options,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Required(CONF_FILTER_ACTIVE_IDS, default=current_filter_active): selector.BooleanSelector(),
+                vol.Optional(CONF_ENABLED_CATEGORIES, default=current_categories): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=category_options,
+                        multiple=True,
+                        mode=selector.SelectSelectorMode.LIST,
+                    )
+                ),
+                vol.Optional(CONF_BASE_TOPIC, default=current_base): selector.TextSelector(),
             }
         )
 

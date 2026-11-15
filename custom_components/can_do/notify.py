@@ -91,7 +91,7 @@ class CanDoClusterMasterNotifyEntity(NotifyEntity):
     @property
     def device_info(self) -> Any:
         """Return device information."""
-        from homeassistant.helpers.entity import DeviceInfo
+        from homeassistant.helpers.device_registry import DeviceInfo
 
         from .catalog_loader import get_vehicle_definition
 

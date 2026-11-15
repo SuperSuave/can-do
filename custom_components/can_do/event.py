@@ -56,7 +56,7 @@ class CanDoBleButtonEventEntity(EventEntity):
     @property
     def device_info(self):
         """Link to parent CAN Do Bridge device."""
-        from homeassistant.helpers.entity import DeviceInfo
+        from homeassistant.helpers.device_registry import DeviceInfo
         from .const import VERSION
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.effective_device_id)},
