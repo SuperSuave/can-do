@@ -13,6 +13,10 @@ import {
   decodeAirflowCanByte,
   decodeAirflowEntityState,
   decodeDriverOnlyCanFrame,
+  decodeAmbientCanFrame,
+  getAmbientColorHex,
+  AMBIENT_LIGHT_THEMES,
+  AMBIENT_PALETTE_64,
   AIRFLOW_MODE_COMMAND_LABELS,
   displayTempToFahrenheit,
   fahrenheitToDisplayTemp,
@@ -252,4 +256,60 @@ test('decodeDriverOnlyCanFrame decodes 0x465 Byte D7', () => {
   assert.strictEqual(decodeDriverOnlyCanFrame([0, 0, 0, 0, 0, 0, 0x34]), true);
   assert.strictEqual(decodeDriverOnlyCanFrame([0, 0, 0, 0, 0, 0, 0x3C]), false);
 });
+
+test('decodeAmbientCanFrame decodes 0x455 brightness level and active color option', () => {
+  const ambientCmd = catalog.commands.find(c => c.id === 'ambient_light_colors') as Command;
+  assert.ok(ambientCmd, 'ambient_light_colors must exist in catalog');
+
+  // Payload 1: Dreamy Purple at Level 10 (from real vehicle capture)
+  // 4B 00 6B 69 55 59 00 00
+  const dreamyPurplePayload = [0x4b, 0x00, 0x6b, 0x69, 0x55, 0x59, 0x00, 0x00];
+  const res1 = decodeAmbientCanFrame(dreamyPurplePayload, ambientCmd.options);
+  assert.ok(res1);
+  assert.strictEqual(res1.brightness, 10);
+  assert.strictEqual(res1.activeOptionLabel, 'Dreamy Purple');
+  assert.strictEqual(res1.hexColor, '#6b6955');
+
+  // Payload 2: Dreamy Purple at Level 0 / Off
+  // 41 00 6B 69 55 59 00 00
+  const dreamyPurpleOff = [0x41, 0x00, 0x6b, 0x69, 0x55, 0x59, 0x00, 0x00];
+  const res2 = decodeAmbientCanFrame(dreamyPurpleOff, ambientCmd.options);
+  assert.ok(res2);
+  assert.strictEqual(res2.brightness, 0);
+  assert.strictEqual(res2.activeOptionLabel, 'Dreamy Purple');
+
+  // Payload 3: Golden Insight at Level 10
+  // 4B 00 D0 C1 75 55 00 00
+  const goldenInsight = [0x4b, 0x00, 0xd0, 0xc1, 0x75, 0x55, 0x00, 0x00];
+  const res3 = decodeAmbientCanFrame(goldenInsight, ambientCmd.options);
+  assert.ok(res3);
+  assert.strictEqual(res3.brightness, 10);
+  assert.strictEqual(res3.activeOptionLabel, 'Golden Insight / Orange Delight');
+  assert.strictEqual(res3.hexColor, '#ff8c00');
+});
+
+test('AMBIENT_LIGHT_THEMES and AMBIENT_PALETTE_64 cover all catalog options', () => {
+  const ambientCmd = catalog.commands.find(c => c.id === 'ambient_light_colors') as Command;
+  assert.ok(ambientCmd, 'ambient_light_colors must exist in catalog');
+  assert.strictEqual(ambientCmd.options.length, 70);
+  assert.strictEqual(AMBIENT_LIGHT_THEMES.length, 6);
+  assert.strictEqual(AMBIENT_PALETTE_64.length, 64);
+
+  // Every theme in AMBIENT_LIGHT_THEMES exists in catalog options
+  for (const t of AMBIENT_LIGHT_THEMES) {
+    assert.ok(
+      ambientCmd.options.some(o => o.label === t.label),
+      `Theme "${t.label}" must exist in catalog options`
+    );
+  }
+
+  // Every palette color in AMBIENT_PALETTE_64 exists in catalog options
+  for (const p of AMBIENT_PALETTE_64) {
+    assert.ok(
+      ambientCmd.options.some(o => o.label === p.label),
+      `Palette color "${p.label}" must exist in catalog options`
+    );
+  }
+});
+
 

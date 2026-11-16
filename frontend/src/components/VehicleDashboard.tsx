@@ -13,6 +13,11 @@ import {
   decodeSeatComfortByte,
   decodeSeatLevel,
   decodeSunroofEntityState,
+  decodeAmbientCanFrame,
+  getAmbientColorHex,
+  AMBIENT_LIGHT_THEMES,
+  AMBIENT_PALETTE_64,
+  AMBIENT_QUICK_COLORS,
   displayTempToFahrenheit,
   fahrenheitToDisplayTemp,
   formatOdometerFromKm,
@@ -55,6 +60,10 @@ import {
   Activity,
   Link2,
   User,
+  Sparkles,
+  Palette,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import {
   EgmpModel,
@@ -258,6 +267,11 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   const [climateSync, setClimateSync] = useState<boolean | null>(null);
   const turnSignalTimeoutRef = useRef<any>(null);
 
+  // Ambient Mood Lighting
+  const [ambientBrightness, setAmbientBrightness] = useState<number | null>(7);
+  const [ambientColor, setAmbientColor] = useState<string | null>('Dreamy Purple');
+  const [ambientPaletteExpanded, setAmbientPaletteExpanded] = useState<boolean>(false);
+
   // TPMS (PSI)
   const [tpms, setTpms] = useState<{
     fl: number | null;
@@ -286,6 +300,11 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     }
     return `${ambientTempC.toFixed(1)}°C`;
   }, [ambientTempC, tempUnit]);
+
+  // Active ambient mood lighting color hex resolution
+  const activeColorHex = useMemo(() => {
+    return getAmbientColorHex(ambientColor);
+  }, [ambientColor]);
 
   // Ambient threshold assessment
   const ambientThreshold = useMemo(() => {
@@ -426,6 +445,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       acToggleName: findCmd('climate_ac_toggle')?.ha_metadata?.name || 'Climate A/C Toggle',
       airflow: getCanId('climate_airflow_direction', '31b'),
       airflowName: findCmd('climate_airflow_direction')?.ha_metadata?.name || 'Climate Airflow Direction',
+      ambientLight: getCanId('ambient_light_colors', '455'),
+      ambientLightName: findCmd('ambient_light_colors')?.ha_metadata?.name || 'Ambient Mood Lighting',
+      ambientLightOptions: findCmd('ambient_light_colors')?.options || [],
+      ambientBrightness: getCanId('ambient_light_brightness', '455'),
     };
   }, [catalog, activeVehicle]);
 
@@ -769,6 +792,15 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
           ...(roof.glassState !== undefined ? { state: roof.glassState } : {}),
           ...(roof.sunshade !== undefined ? { sunshade: roof.sunshade } : {}),
         }));
+      }
+    } else if (entity === 'ambient_light_colors' || entity === 'ambient_mood_lighting') {
+      setAmbientColor(stateStr);
+    } else if (entity === 'ambient_light_brightness') {
+      const match = stateStr.match(/(\d+)/);
+      if (match) {
+        setAmbientBrightness(parseInt(match[1], 10));
+      } else if (stateStr.toLowerCase().includes('off')) {
+        setAmbientBrightness(0);
       }
     }
   };
@@ -1281,6 +1313,24 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       if (fl > 20 && fl < 55) {
         setTpms({ fl, fr, rl, rr });
         recordLog(idFormatted, canMappings.tpmsName, `FL:${fl} FR:${fr} RL:${rl} RR:${rr} PSI`, hexPayload, now);
+      }
+    }
+
+    // Ambient Mood Lighting (0x455 / M-CAN: D1=Brightness, D3..D6=Color signature)
+    else if ((normId === canMappings.ambientLight || normId === '455') && bytes.length >= 6) {
+      const decoded = decodeAmbientCanFrame(bytes, canMappings.ambientLightOptions);
+      if (decoded) {
+        setAmbientBrightness(decoded.brightness);
+        if (decoded.activeOptionLabel) {
+          setAmbientColor(decoded.activeOptionLabel);
+        }
+        recordLog(
+          idFormatted,
+          canMappings.ambientLightName,
+          `Level ${decoded.brightness} (${decoded.activeOptionLabel || 'Custom'})`,
+          hexPayload,
+          now
+        );
       }
     }
 
@@ -2544,6 +2594,227 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   {rearRightSeat === null ? '--' : rearRightSeat.replace('_', ' ').toUpperCase()}
                 </span>
               </button>
+            </div>
+          </Card>
+
+          {/* Ambient Mood Lighting Card */}
+          <Card id="ambient-lighting-card" className="p-4 sm:p-5 rounded-2xl bg-surface border border-border shadow-surface space-y-4">
+            {/* Header: Title, Active Color Pill, Power Toggle */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-accent" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Ambient Mood Lighting</h3>
+                {ambientColor && (
+                  <div
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-border bg-surface-secondary text-[11px] font-medium"
+                    title={`Active Mood Lighting: ${ambientColor} (${ambientBrightness === 0 ? 'Off' : `Level ${ambientBrightness ?? '--'}`})`}
+                  >
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shadow-sm ring-1 ring-border"
+                      style={{
+                        backgroundColor: activeColorHex,
+                        boxShadow: ambientBrightness && ambientBrightness > 0 ? `0 0 8px ${activeColorHex}` : 'none'
+                      }}
+                    />
+                    <span className="truncate max-w-[130px] font-mono text-[10px] text-foreground">
+                      {ambientColor.replace(/^Color \d+:\s*/i, '')}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Power Toggle Button */}
+              <button
+                type="button"
+                id="ambient-light-power-toggle"
+                onClick={() => {
+                  const isCurrentlyOff = ambientBrightness === 0;
+                  const nextLvl = isCurrentlyOff ? 7 : 0;
+                  setAmbientBrightness(nextLvl);
+                  const cmdLabel = nextLvl === 0 ? 'Off' : `Brightness Level ${nextLvl}`;
+                  dispatchCommand('ambient_light_brightness', cmdLabel, nextLvl === 0 ? 'Ambient Light Turned OFF' : `Ambient Light: Level ${nextLvl}`);
+                }}
+                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-colors cursor-pointer border ${ambientBrightness !== null && ambientBrightness > 0
+                  ? 'bg-accent text-accent-foreground border-accent shadow-sm'
+                  : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                }`}
+              >
+                {ambientBrightness !== null && ambientBrightness > 0 ? 'ON' : 'OFF'}
+              </button>
+            </div>
+
+            {/* Brightness Stepper Bar (Off to Level 10) */}
+            <div className="space-y-1.5 pt-1">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-muted flex items-center gap-1.5">
+                  <Sun className="w-3.5 h-3.5 text-muted" />
+                  <span>Brightness Level</span>
+                </span>
+                <span className="font-mono font-bold text-foreground">
+                  {ambientBrightness === null ? '--' : ambientBrightness === 0 ? 'Off' : `Level ${ambientBrightness}`}
+                </span>
+              </div>
+              <div className="grid grid-cols-11 gap-1">
+                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(step => {
+                  const isActive = ambientBrightness === step;
+                  return (
+                    <button
+                      key={step}
+                      type="button"
+                      id={`ambient-brightness-step-${step}`}
+                      onClick={() => {
+                        setAmbientBrightness(step);
+                        const cmdLabel = step === 0 ? 'Off' : step === 10 ? 'Brightness Level 10 (Max)' : `Brightness Level ${step}`;
+                        dispatchCommand('ambient_light_brightness', cmdLabel, step === 0 ? 'Ambient Light Turned OFF' : `Ambient Light: Level ${step}`);
+                      }}
+                      title={step === 0 ? 'Off (0%)' : `Level ${step} (${step * 10}%)`}
+                      className={`h-7 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${isActive
+                        ? 'bg-accent text-accent-foreground shadow-sm ring-1 ring-accent scale-[1.03]'
+                        : ambientBrightness !== null && ambientBrightness >= step && step > 0
+                          ? 'bg-accent-soft text-accent border border-accent/30 hover:bg-accent-soft/80'
+                          : 'bg-surface-secondary text-muted border border-border hover:bg-surface-tertiary hover:text-foreground'
+                      }`}
+                    >
+                      {step === 0 ? '0' : step}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Factory OEM Dual-Color Themes (6 Themes) */}
+            <div className="space-y-1.5 pt-2 border-t border-separator">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-muted block">Factory Dual-Tone Themes</span>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-xs">
+                {AMBIENT_LIGHT_THEMES.map(t => {
+                  const isSelected = ambientColor === t.label;
+                  return (
+                    <button
+                      key={t.label}
+                      type="button"
+                      id={`ambient-theme-${t.name.toLowerCase().replace(/\s+/g, '-')}`}
+                      onClick={() => {
+                        setAmbientColor(t.label);
+                        if (ambientBrightness === 0) setAmbientBrightness(7);
+                        dispatchCommand('ambient_light_colors', t.label, `Theme Selected: ${t.name}`);
+                      }}
+                      className={`p-2 rounded-xl border flex items-center gap-2 transition-all cursor-pointer text-left ${isSelected
+                        ? 'bg-accent-soft text-accent-soft-foreground border-accent/60 shadow-sm ring-1 ring-accent/40 font-bold'
+                        : 'bg-surface-secondary text-foreground/80 border-border hover:bg-surface-tertiary hover:text-foreground'
+                      }`}
+                    >
+                      <span
+                        className="w-4 h-4 rounded-full flex-shrink-0 shadow-sm border border-border"
+                        style={{
+                          background: `linear-gradient(135deg, ${t.primaryHex} 50%, ${t.secondaryHex} 50%)`,
+                          boxShadow: isSelected ? `0 0 8px ${t.primaryHex}` : 'none'
+                        }}
+                      />
+                      <span className="text-[11px] font-medium leading-tight truncate">{t.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Quick Popular Single Hues */}
+            <div className="space-y-1.5 pt-2 border-t border-separator">
+              <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-wider text-muted">
+                <span>Popular Colors</span>
+                <span className="font-mono text-[9px] lowercase font-normal opacity-70">single hue presets</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {AMBIENT_QUICK_COLORS.map(c => {
+                  const isSelected = ambientColor === c.label;
+                  return (
+                    <button
+                      key={c.label}
+                      type="button"
+                      id={`ambient-quick-${c.name.toLowerCase().replace(/\s+/g, '-')}`}
+                      onClick={() => {
+                        setAmbientColor(c.label);
+                        if (ambientBrightness === 0) setAmbientBrightness(7);
+                        dispatchCommand('ambient_light_colors', c.label, `Color: ${c.name}`);
+                      }}
+                      title={`${c.name} (${c.label})`}
+                      className={`group relative flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-all cursor-pointer ${isSelected
+                        ? 'bg-accent-soft text-accent border-accent/60 shadow-sm ring-1 ring-accent/40 font-bold scale-105'
+                        : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                      }`}
+                    >
+                      <span
+                        className="w-3.5 h-3.5 rounded-full shadow-sm ring-1 ring-black/20"
+                        style={{
+                          backgroundColor: c.hex,
+                          boxShadow: isSelected ? `0 0 8px ${c.hex}` : 'none'
+                        }}
+                      />
+                      <span className="text-[11px]">{c.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Full 64-Color Palette Collapsible Drawer */}
+            <div className="pt-2 border-t border-separator">
+              <button
+                type="button"
+                id="ambient-palette-toggle-btn"
+                onClick={() => setAmbientPaletteExpanded(prev => !prev)}
+                className="w-full flex items-center justify-between py-1.5 text-xs text-muted hover:text-foreground transition-colors cursor-pointer"
+              >
+                <span className="font-semibold text-[11px] flex items-center gap-1.5">
+                  <Palette className="w-3.5 h-3.5 text-accent" />
+                  <span>Full OEM Palette (64 Colors)</span>
+                </span>
+                <span className="flex items-center gap-1 text-[10px] text-muted font-mono">
+                  <span>{ambientPaletteExpanded ? 'Collapse' : 'Expand'}</span>
+                  {ambientPaletteExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </span>
+              </button>
+
+              {ambientPaletteExpanded && (
+                <div className="mt-2.5 p-2 rounded-xl bg-surface-secondary border border-border space-y-2">
+                  <div className="grid grid-cols-8 sm:grid-cols-8 gap-1.5 max-h-[190px] overflow-y-auto p-1 scrollbar-thin">
+                    {AMBIENT_PALETTE_64.map(p => {
+                      const isSelected = ambientColor === p.label;
+                      return (
+                        <Tooltip key={p.step}>
+                          <Tooltip.Trigger>
+                            <button
+                              type="button"
+                              id={`ambient-palette-step-${p.step}`}
+                              onClick={() => {
+                                setAmbientColor(p.label);
+                                if (ambientBrightness === 0) setAmbientBrightness(7);
+                                dispatchCommand('ambient_light_colors', p.label, `Color: ${p.name}`);
+                              }}
+                              className={`w-full aspect-square rounded-md transition-all cursor-pointer relative flex items-center justify-center border ${isSelected
+                                ? 'ring-2 ring-accent scale-110 border-white z-10'
+                                : 'border-border/60 hover:scale-105 hover:border-foreground/40'
+                              }`}
+                              style={{
+                                backgroundColor: p.hex,
+                                boxShadow: isSelected ? `0 0 8px ${p.hex}` : 'none'
+                              }}
+                              aria-label={p.label}
+                            />
+                          </Tooltip.Trigger>
+                          <Tooltip.Content className="px-2 py-1 text-[11px] rounded bg-overlay border border-border text-overlay-foreground shadow-overlay z-50">
+                            {p.label}
+                          </Tooltip.Content>
+                        </Tooltip>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] text-muted px-1 font-mono">
+                    <span>1: Lime Mint</span>
+                    <span>32: Pink</span>
+                    <span>64: Warm White</span>
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
 

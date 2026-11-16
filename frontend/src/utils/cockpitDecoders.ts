@@ -356,4 +356,158 @@ export function decodeDriverOnlyCanFrame(bytes: number[]): boolean | null {
   return null;
 }
 
+export interface AmbientThemeOption {
+  label: string;
+  name: string;
+  primaryHex: string;
+  secondaryHex: string;
+}
+
+export interface AmbientPaletteOption {
+  step: number;
+  label: string;
+  name: string;
+  hex: string;
+}
+
+export const AMBIENT_LIGHT_THEMES: AmbientThemeOption[] = [
+  { label: 'Golden Insight / Orange Delight', name: 'Golden Insight', primaryHex: '#ff8c00', secondaryHex: '#ffa500' },
+  { label: 'Blue Flight', name: 'Blue Flight', primaryHex: '#4f2936', secondaryHex: '#0078d4' },
+  { label: 'Peaceful Forest', name: 'Peaceful Forest', primaryHex: '#7f69a6', secondaryHex: '#107c41' },
+  { label: 'Dreamy Purple', name: 'Dreamy Purple', primaryHex: '#6b6955', secondaryHex: '#800080' },
+  { label: 'Violet Cloud', name: 'Violet Cloud', primaryHex: '#a789f5', secondaryHex: '#9370db' },
+  { label: 'Refreshing Sea', name: 'Refreshing Sea', primaryHex: '#3269e6', secondaryHex: '#00bfff' },
+];
+
+export const AMBIENT_PALETTE_64: AmbientPaletteOption[] = [
+  { step: 1, label: 'Color 1: Lime / Mint Glow', name: 'Lime / Mint Glow', hex: '#46ff46' },
+  { step: 2, label: 'Color 2: Spring Lime', name: 'Spring Lime', hex: '#55ff5f' },
+  { step: 3, label: 'Color 3: Fresh Grass', name: 'Fresh Grass', hex: '#64ff78' },
+  { step: 4, label: 'Color 4: Pastel Mint', name: 'Pastel Mint', hex: '#73ff96' },
+  { step: 5, label: 'Color 5: Light Aqua', name: 'Light Aqua', hex: '#50ffb4' },
+  { step: 6, label: 'Color 6: Bright Turquoise', name: 'Bright Turquoise', hex: '#28ffd2' },
+  { step: 7, label: 'Color 7: Deep Turquoise', name: 'Deep Turquoise', hex: '#0affeb' },
+  { step: 8, label: 'Color 8: Pure Cyan / Aqua Wave', name: 'Pure Cyan', hex: '#00ffff' },
+  { step: 9, label: 'Color 9: Sky Blue Light', name: 'Sky Blue Light', hex: '#00ebff' },
+  { step: 10, label: 'Color 10: Sky Blue', name: 'Sky Blue', hex: '#00d7ff' },
+  { step: 11, label: 'Color 11: Glacier Blue', name: 'Glacier Blue', hex: '#00c3ff' },
+  { step: 12, label: 'Color 12: Cerulean', name: 'Cerulean', hex: '#00afff' },
+  { step: 13, label: 'Color 13: Cobalt Light', name: 'Cobalt Light', hex: '#009bff' },
+  { step: 14, label: 'Color 14: Pacific Blue', name: 'Pacific Blue', hex: '#0087ff' },
+  { step: 15, label: 'Color 15: Electric Blue', name: 'Electric Blue', hex: '#0078ff' },
+  { step: 16, label: 'Color 16: Royal Blue', name: 'Royal Blue', hex: '#145aff' },
+  { step: 17, label: 'Color 17: Deep Blue', name: 'Deep Blue', hex: '#323cff' },
+  { step: 18, label: 'Color 18: Indigo Blue', name: 'Indigo Blue', hex: '#5028ff' },
+  { step: 19, label: 'Color 19: Blue Violet', name: 'Blue Violet', hex: '#691eff' },
+  { step: 20, label: 'Color 20: Lavender Violet', name: 'Lavender Violet', hex: '#8214ff' },
+  { step: 21, label: 'Color 21: Grape Purple', name: 'Grape Purple', hex: '#960fff' },
+  { step: 22, label: 'Color 22: Electric Purple', name: 'Electric Purple', hex: '#a50aff' },
+  { step: 23, label: 'Color 23: Bright Violet', name: 'Bright Violet', hex: '#af05ff' },
+  { step: 24, label: 'Color 24: Deep Purple / Violet', name: 'Deep Purple', hex: '#b400ff' },
+  { step: 25, label: 'Color 25: Amethyst', name: 'Amethyst', hex: '#be00fa' },
+  { step: 26, label: 'Color 26: Royal Purple', name: 'Royal Purple', hex: '#cd00f0' },
+  { step: 27, label: 'Color 27: Purple Orchid', name: 'Purple Orchid', hex: '#dc00e6' },
+  { step: 28, label: 'Color 28: Purple Magenta', name: 'Purple Magenta', hex: '#e600d7' },
+  { step: 29, label: 'Color 29: Bright Magenta', name: 'Bright Magenta', hex: '#f000c8' },
+  { step: 30, label: 'Color 30: Deep Fuchsia', name: 'Deep Fuchsia', hex: '#f505b4' },
+  { step: 31, label: 'Color 31: Hot Fuchsia', name: 'Hot Fuchsia', hex: '#fa0aa0' },
+  { step: 32, label: 'Color 32: Neon Pink', name: 'Neon Pink', hex: '#ff0f8c' },
+  { step: 33, label: 'Color 33: Magenta / Neon Pink', name: 'Magenta Pink', hex: '#ff1493' },
+  { step: 34, label: 'Color 34: Deep Rose Pink', name: 'Deep Rose Pink', hex: '#ff0f78' },
+  { step: 35, label: 'Color 35: Crimson Pink', name: 'Crimson Pink', hex: '#ff0a64' },
+  { step: 36, label: 'Color 36: Bright Rose Red', name: 'Bright Rose Red', hex: '#ff0a50' },
+  { step: 37, label: 'Color 37: Ruby Red', name: 'Ruby Red', hex: '#ff0a3c' },
+  { step: 38, label: 'Color 38: Cherry Red', name: 'Cherry Red', hex: '#ff0a2d' },
+  { step: 39, label: 'Color 39: Scarlet', name: 'Scarlet', hex: '#ff0a23' },
+  { step: 40, label: 'Color 40: Carmine Red', name: 'Carmine Red', hex: '#ff0a19' },
+  { step: 41, label: 'Color 41: Pure Red Bright', name: 'Pure Red Bright', hex: '#ff050f' },
+  { step: 42, label: 'Color 42: Pure Red Strong', name: 'Pure Red Strong', hex: '#ff000a' },
+  { step: 43, label: 'Color 43: Deep Crimson', name: 'Deep Crimson', hex: '#ff0005' },
+  { step: 44, label: 'Color 44: Blood Red', name: 'Blood Red', hex: '#ff0000' },
+  { step: 45, label: 'Color 45: Burnt Red', name: 'Burnt Red', hex: '#ff1400' },
+  { step: 46, label: 'Color 46: Crimson Red', name: 'Crimson Red', hex: '#ff0000' },
+  { step: 47, label: 'Color 47: Vermilion Red-Orange', name: 'Vermilion', hex: '#ff2d00' },
+  { step: 48, label: 'Color 48: Deep Orange', name: 'Deep Orange', hex: '#ff4100' },
+  { step: 49, label: 'Color 49: Bright Orange', name: 'Bright Orange', hex: '#ff5000' },
+  { step: 50, label: 'Color 50: Tangerine', name: 'Tangerine', hex: '#ff5f00' },
+  { step: 51, label: 'Color 51: Sunrise Orange', name: 'Sunrise Orange', hex: '#ff6e00' },
+  { step: 52, label: 'Color 52: Golden Orange', name: 'Golden Orange', hex: '#ff7d00' },
+  { step: 53, label: 'Color 53: Amber Gold', name: 'Amber Gold', hex: '#ff8700' },
+  { step: 54, label: 'Color 54: Warm Amber', name: 'Warm Amber', hex: '#ff8c00' },
+  { step: 55, label: 'Color 55: Deep Marigold', name: 'Deep Marigold', hex: '#ff9100' },
+  { step: 56, label: 'Color 56: Marigold Orange', name: 'Marigold Orange', hex: '#ff9600' },
+  { step: 57, label: 'Color 57: Warm Sunset / Amber', name: 'Warm Sunset', hex: '#ff8c00' },
+  { step: 58, label: 'Color 58: Peach Amber', name: 'Peach Amber', hex: '#ffa50a' },
+  { step: 59, label: 'Color 59: Golden Peach', name: 'Golden Peach', hex: '#ffb41e' },
+  { step: 60, label: 'Color 60: Champagne Gold', name: 'Champagne Gold', hex: '#ffc33c' },
+  { step: 61, label: 'Color 61: Soft Gold', name: 'Soft Gold', hex: '#ffd264' },
+  { step: 62, label: 'Color 62: Vanilla Gold', name: 'Vanilla Gold', hex: '#ffe18c' },
+  { step: 63, label: 'Color 63: Warm Ivory', name: 'Warm Ivory', hex: '#ffebb4' },
+  { step: 64, label: 'Color 64: Warm White / Champagne', name: 'Warm White', hex: '#fff0dc' },
+];
+
+export const AMBIENT_QUICK_COLORS = [
+  { label: 'Color 64: Warm White / Champagne', name: 'White', hex: '#fff0dc' },
+  { label: 'Color 8: Pure Cyan / Aqua Wave', name: 'Cyan', hex: '#00ffff' },
+  { label: 'Color 15: Electric Blue', name: 'Electric Blue', hex: '#0078ff' },
+  { label: 'Color 24: Deep Purple / Violet', name: 'Deep Purple', hex: '#b400ff' },
+  { label: 'Color 46: Crimson Red', name: 'Crimson Red', hex: '#ff0000' },
+  { label: 'Color 54: Warm Amber', name: 'Amber', hex: '#ff8c00' },
+  { label: 'Color 1: Lime / Mint Glow', name: 'Lime Mint', hex: '#46ff46' },
+];
+
+/**
+ * Resolves a hex color code from an ambient light option label or partial name.
+ */
+export function getAmbientColorHex(label?: string | null): string {
+  if (!label) return '#00ffff';
+  const norm = label.trim().toLowerCase();
+  for (const t of AMBIENT_LIGHT_THEMES) {
+    if (t.label.toLowerCase() === norm || norm.includes(t.name.toLowerCase())) {
+      return t.primaryHex;
+    }
+  }
+  for (const p of AMBIENT_PALETTE_64) {
+    if (p.label.toLowerCase() === norm || norm === `color ${p.step}` || norm.startsWith(`color ${p.step}:`)) {
+      return p.hex;
+    }
+  }
+  if (norm.includes('white') || norm.includes('champagne')) return '#fff0dc';
+  if (norm.includes('cyan') || norm.includes('aqua')) return '#00ffff';
+  if (norm.includes('blue')) return '#0078ff';
+  if (norm.includes('purple') || norm.includes('violet')) return '#b400ff';
+  if (norm.includes('red') || norm.includes('rose') || norm.includes('ruby')) return '#ff0000';
+  if (norm.includes('amber') || norm.includes('orange') || norm.includes('gold')) return '#ff8c00';
+  if (norm.includes('green') || norm.includes('lime') || norm.includes('mint')) return '#46ff46';
+  return '#00ffff';
+}
+
+/**
+ * Decodes ambient mood lamp status from 0x455 CAN frame.
+ * - Byte D1 (index 0): 0x41 = 0 (Off), 0x42..0x4B = 1..10
+ * - Bytes D3..D6 (indices 2..5): 4-byte color matching signature
+ */
+export function decodeAmbientCanFrame(
+  bytes: number[],
+  catalogOptions?: CommandOption[]
+): { brightness: number; activeOptionLabel?: string; hexColor?: string } | null {
+  if (bytes.length < 6) return null;
+  const rawLvl = (bytes[0] & 0x0F) - 1;
+  const brightness = Math.max(0, Math.min(10, rawLvl));
+
+  let activeOptionLabel: string | undefined;
+  if (catalogOptions && catalogOptions.length > 0) {
+    for (const opt of catalogOptions) {
+      if (matchesCatalogByteSpec(bytes, opt)) {
+        activeOptionLabel = opt.label;
+        break;
+      }
+    }
+  }
+
+  const hexColor = activeOptionLabel ? getAmbientColorHex(activeOptionLabel) : undefined;
+  return { brightness, activeOptionLabel, hexColor };
+}
+
+
 
