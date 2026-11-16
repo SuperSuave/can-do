@@ -198,19 +198,32 @@ class TestRemoteClimate(unittest.TestCase):
 
         cmds = {c["id"]: c for c in cat.get("commands", [])}
 
-        # 1. ambient_light_colors must have ha_metadata domain 'light'
+        # 1. ambient_light_colors must have ha_metadata domain 'light' with friendly name
         self.assertIn("ambient_light_colors", cmds)
         ha_meta = cmds["ambient_light_colors"].get("ha_metadata", {})
         self.assertEqual(ha_meta.get("domain"), "light")
-        self.assertEqual(ha_meta.get("name"), "Ambient Light Colors")
+        self.assertEqual(ha_meta.get("name"), "Ambient Mood Lighting")
 
-        # 2. ambient_light_brightness must have ha_metadata domain 'light'
+        # 2. ambient_light_brightness must NOT have ha_metadata (single unified light entity in HA)
         self.assertIn("ambient_light_brightness", cmds)
-        bright_meta = cmds["ambient_light_brightness"].get("ha_metadata", {})
-        self.assertEqual(bright_meta.get("domain"), "light")
-        self.assertEqual(bright_meta.get("name"), "Ambient Light Brightness")
+        self.assertNotIn("ha_metadata", cmds["ambient_light_brightness"])
 
-        # 3. Verify all 10 brightness level steps match the formula
+        # 3. Verify all 70 color options in ambient_light_colors have unique 4-byte match blocks
+        color_cmd = cmds["ambient_light_colors"]
+        seen_matches = set()
+        for opt in color_cmd.get("options", []):
+            match = opt.get("match")
+            self.assertIsNotNone(match, f"Option {opt.get('label')} missing match block")
+            self.assertIn("D3", match)
+            self.assertIn("D4", match)
+            self.assertIn("D5", match)
+            self.assertIn("D6", match)
+            match_key = (match["D3"], match["D4"], match["D5"], match["D6"])
+            self.assertNotIn(match_key, seen_matches, f"Duplicate match key for {opt.get('label')}")
+            seen_matches.add(match_key)
+        self.assertEqual(len(seen_matches), 70)
+
+        # 4. Verify all 10 brightness level steps match the formula
         brightness_cmd = cmds["ambient_light_brightness"]
         opts = {opt["label"]: opt for opt in brightness_cmd.get("options", [])}
 

@@ -4670,7 +4670,7 @@
     {
       "id": "ambient_light_colors",
       "ha_metadata": {
-        "name": "Ambient Light Colors",
+        "name": "Ambient Mood Lighting",
         "domain": "light",
         "icon": "mdi:car-light-dimmed"
       },
@@ -4701,7 +4701,13 @@
             }
           ],
           "popup": "Ambient: Golden Insight",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xD0",
+            "D4": "0xC1",
+            "D5": "0x75",
+            "D6": "0x55"
+          }
         },
         {
           "label": "Blue Flight",
@@ -4718,7 +4724,13 @@
             }
           ],
           "popup": "Ambient: Blue Flight",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x4F",
+            "D4": "0x29",
+            "D5": "0x36",
+            "D6": "0x5C"
+          }
         },
         {
           "label": "Peaceful Forest",
@@ -4735,7 +4747,13 @@
             }
           ],
           "popup": "Ambient: Peaceful Forest",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x7F",
+            "D4": "0x69",
+            "D5": "0xA6",
+            "D6": "0x57"
+          }
         },
         {
           "label": "Dreamy Purple",
@@ -4752,7 +4770,13 @@
             }
           ],
           "popup": "Ambient: Dreamy Purple",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x6B",
+            "D4": "0x69",
+            "D5": "0x55",
+            "D6": "0x59"
+          }
         },
         {
           "label": "Violet Cloud",
@@ -4769,7 +4793,13 @@
             }
           ],
           "popup": "Ambient: Violet Cloud",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xA7",
+            "D4": "0x89",
+            "D5": "0xF5",
+            "D6": "0x57"
+          }
         },
         {
           "label": "Refreshing Sea",
@@ -4786,7 +4816,13 @@
             }
           ],
           "popup": "Ambient: Refreshing Sea",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x32",
+            "D4": "0x69",
+            "D5": "0xE6",
+            "D6": "0x59"
+          }
         },
         {
           "label": "Color 1: Lime / Mint Glow",
@@ -4803,7 +4839,13 @@
             }
           ],
           "popup": "Ambient: Lime Glow",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xF7",
+            "D4": "0xFC",
+            "D5": "0x63",
+            "D6": "0x4B"
+          }
         },
         {
           "label": "Color 2: Spring Lime",
@@ -4820,7 +4862,13 @@
             }
           ],
           "popup": "Ambient: Spring Lime",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xE6",
+            "D4": "0xF8",
+            "D5": "0xA3",
+            "D6": "0x4B"
+          }
         },
         {
           "label": "Color 3: Fresh Grass",
@@ -4837,7 +4885,13 @@
             }
           ],
           "popup": "Ambient: Fresh Grass",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xD2",
+            "D4": "0xFC",
+            "D5": "0xC3",
+            "D6": "0x4B"
+          }
         },
         {
           "label": "Color 4: Pastel Mint",
@@ -4854,7 +4908,13 @@
             }
           ],
           "popup": "Ambient: Pastel Mint",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xAF",
+            "D4": "0xF8",
+            "D5": "0xF3",
+            "D6": "0x4B"
+          }
         },
         {
           "label": "Color 5: Light Aqua",
@@ -4871,7 +4931,13 @@
             }
           ],
           "popup": "Ambient: Light Aqua",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x77",
+            "D4": "0xF8",
+            "D5": "0x43",
+            "D6": "0x4C"
+          }
         },
         {
           "label": "Color 6: Bright Turquoise",
@@ -4888,7 +4954,13 @@
             }
           ],
           "popup": "Ambient: Bright Turquoise",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x3A",
+            "D4": "0xFC",
+            "D5": "0x63",
+            "D6": "0x4C"
+          }
         },
         {
           "label": "Color 7: Deep Turquoise",
@@ -4905,7 +4977,13 @@
             }
           ],
           "popup": "Ambient: Deep Turquoise",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x0A",
+            "D4": "0xFC",
+            "D5": "0xB3",
+            "D6": "0x4E"
+          }
         },
         {
           "label": "Color 8: Pure Cyan / Aqua Wave",
@@ -4922,7 +5000,13 @@
             }
           ],
           "popup": "Ambient: Pure Cyan",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x00",
+            "D4": "0x64",
+            "D5": "0x53",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 9: Sky Blue Light",
@@ -4939,7 +5023,13 @@
             }
           ],
           "popup": "Ambient: Sky Blue Light",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x00",
+            "D4": "0xD0",
+            "D5": "0xF2",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 10: Sky Blue",
@@ -4956,7 +5046,13 @@
             }
           ],
           "popup": "Ambient: Sky Blue",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x00",
+            "D4": "0x84",
+            "D5": "0xF2",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 11: Glacier Blue",
@@ -4973,7 +5069,13 @@
             }
           ],
           "popup": "Ambient: Glacier Blue",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x00",
+            "D4": "0x30",
+            "D5": "0xF2",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 12: Cerulean",
@@ -4990,7 +5092,13 @@
             }
           ],
           "popup": "Ambient: Cerulean",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x00",
+            "D4": "0xF4",
+            "D5": "0xF1",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 13: Cobalt Light",
@@ -5007,7 +5115,13 @@
             }
           ],
           "popup": "Ambient: Cobalt Light",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x00",
+            "D4": "0xCC",
+            "D5": "0xE1",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 14: Pacific Blue",
@@ -5024,7 +5138,13 @@
             }
           ],
           "popup": "Ambient: Pacific Blue",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x00",
+            "D4": "0x8C",
+            "D5": "0xF1",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 15: Electric Blue",
@@ -5041,7 +5161,13 @@
             }
           ],
           "popup": "Ambient: Electric Blue",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x00",
+            "D4": "0x54",
+            "D5": "0xF1",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 16: Royal Blue",
@@ -5058,7 +5184,13 @@
             }
           ],
           "popup": "Ambient: Royal Blue",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x00",
+            "D4": "0xF8",
+            "D5": "0xF0",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 17: Deep Blue",
@@ -5075,7 +5207,13 @@
             }
           ],
           "popup": "Ambient: Deep Blue",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x19",
+            "D4": "0x00",
+            "D5": "0xF0",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 18: Indigo Blue",
@@ -5092,7 +5230,13 @@
             }
           ],
           "popup": "Ambient: Indigo Blue",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x37",
+            "D4": "0x00",
+            "D5": "0xF0",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 19: Blue Violet",
@@ -5109,7 +5253,13 @@
             }
           ],
           "popup": "Ambient: Blue Violet",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x51",
+            "D4": "0x00",
+            "D5": "0xF0",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 20: Lavender Violet",
@@ -5126,7 +5276,13 @@
             }
           ],
           "popup": "Ambient: Lavender Violet",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x64",
+            "D4": "0x00",
+            "D5": "0xF0",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 21: Grape Purple",
@@ -5143,7 +5299,13 @@
             }
           ],
           "popup": "Ambient: Grape Purple",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x6D",
+            "D4": "0xA8",
+            "D5": "0xF0",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 22: Electric Purple",
@@ -5160,7 +5322,13 @@
             }
           ],
           "popup": "Ambient: Electric Purple",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x7A",
+            "D4": "0xD0",
+            "D5": "0xF0",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 23: Bright Violet",
@@ -5177,7 +5345,13 @@
             }
           ],
           "popup": "Ambient: Bright Violet",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x7D",
+            "D4": "0x64",
+            "D5": "0xF0",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 24: Deep Purple / Violet",
@@ -5194,7 +5368,13 @@
             }
           ],
           "popup": "Ambient: Deep Purple",
-          "default": true
+          "default": true,
+          "match": {
+            "D3": "0x80",
+            "D4": "0x00",
+            "D5": "0xF0",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 25: Amethyst",
@@ -5211,7 +5391,13 @@
             }
           ],
           "popup": "Ambient: Amethyst",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x82",
+            "D4": "0x00",
+            "D5": "0xF0",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 26: Royal Purple",
@@ -5228,7 +5414,13 @@
             }
           ],
           "popup": "Ambient: Royal Purple",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x8F",
+            "D4": "0x00",
+            "D5": "0xF0",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 27: Purple Orchid",
@@ -5245,7 +5437,13 @@
             }
           ],
           "popup": "Ambient: Purple Orchid",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0x9C",
+            "D4": "0x00",
+            "D5": "0xF0",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 28: Purple Magenta",
@@ -5262,7 +5460,13 @@
             }
           ],
           "popup": "Ambient: Purple Magenta",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xA7",
+            "D4": "0x00",
+            "D5": "0xF0",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 29: Bright Magenta",
@@ -5279,7 +5483,13 @@
             }
           ],
           "popup": "Ambient: Bright Magenta",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xB0",
+            "D4": "0x00",
+            "D5": "0xF0",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 30: Deep Fuchsia",
@@ -5296,7 +5506,13 @@
             }
           ],
           "popup": "Ambient: Deep Fuchsia",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xC3",
+            "D4": "0x00",
+            "D5": "0xE0",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 31: Hot Fuchsia",
@@ -5313,7 +5529,13 @@
             }
           ],
           "popup": "Ambient: Hot Fuchsia",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xCD",
+            "D4": "0x00",
+            "D5": "0xE0",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 32: Neon Pink",
@@ -5330,7 +5552,13 @@
             }
           ],
           "popup": "Ambient: Neon Pink",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xE8",
+            "D4": "0x00",
+            "D5": "0xE0",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 33: Magenta / Neon Pink",
@@ -5347,7 +5575,13 @@
             }
           ],
           "popup": "Ambient: Magenta",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x00",
+            "D5": "0x10",
+            "D6": "0x4F"
+          }
         },
         {
           "label": "Color 34: Deep Rose Pink",
@@ -5364,7 +5598,13 @@
             }
           ],
           "popup": "Ambient: Deep Rose Pink",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x00",
+            "D5": "0x30",
+            "D6": "0x4C"
+          }
         },
         {
           "label": "Color 35: Crimson Pink",
@@ -5381,7 +5621,13 @@
             }
           ],
           "popup": "Ambient: Crimson Pink",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x00",
+            "D5": "0xE0",
+            "D6": "0x49"
+          }
         },
         {
           "label": "Color 36: Bright Rose Red",
@@ -5398,7 +5644,13 @@
             }
           ],
           "popup": "Ambient: Bright Rose Red",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x00",
+            "D5": "0x90",
+            "D6": "0x48"
+          }
         },
         {
           "label": "Color 37: Ruby Red",
@@ -5415,7 +5667,13 @@
             }
           ],
           "popup": "Ambient: Ruby Red",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x00",
+            "D5": "0x50",
+            "D6": "0x47"
+          }
         },
         {
           "label": "Color 38: Cherry Red",
@@ -5432,7 +5690,13 @@
             }
           ],
           "popup": "Ambient: Cherry Red",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x00",
+            "D5": "0xF0",
+            "D6": "0x46"
+          }
         },
         {
           "label": "Color 39: Scarlet",
@@ -5449,7 +5713,13 @@
             }
           ],
           "popup": "Ambient: Scarlet",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x00",
+            "D5": "0xA0",
+            "D6": "0x46"
+          }
         },
         {
           "label": "Color 40: Carmine Red",
@@ -5466,7 +5736,13 @@
             }
           ],
           "popup": "Ambient: Carmine Red",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x00",
+            "D5": "0x50",
+            "D6": "0x46"
+          }
         },
         {
           "label": "Color 41: Pure Red Bright",
@@ -5483,7 +5759,13 @@
             }
           ],
           "popup": "Ambient: Pure Red Bright",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFE",
+            "D4": "0x00",
+            "D5": "0xF0",
+            "D6": "0x45"
+          }
         },
         {
           "label": "Color 42: Pure Red Strong",
@@ -5500,7 +5782,13 @@
             }
           ],
           "popup": "Ambient: Pure Red Strong",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x00",
+            "D5": "0x80",
+            "D6": "0x44"
+          }
         },
         {
           "label": "Color 43: Deep Crimson",
@@ -5517,7 +5805,13 @@
             }
           ],
           "popup": "Ambient: Deep Crimson",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFE",
+            "D4": "0x00",
+            "D5": "0xA0",
+            "D6": "0x43"
+          }
         },
         {
           "label": "Color 44: Blood Red",
@@ -5534,7 +5828,13 @@
             }
           ],
           "popup": "Ambient: Blood Red",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFE",
+            "D4": "0x00",
+            "D5": "0xE0",
+            "D6": "0x41"
+          }
         },
         {
           "label": "Color 45: Burnt Red",
@@ -5551,7 +5851,13 @@
             }
           ],
           "popup": "Ambient: Burnt Red",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x0C",
+            "D5": "0xA0",
+            "D6": "0x40"
+          }
         },
         {
           "label": "Color 46: Crimson Red",
@@ -5568,7 +5874,13 @@
             }
           ],
           "popup": "Ambient: Crimson Red",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFE",
+            "D4": "0x88",
+            "D5": "0x00",
+            "D6": "0x40"
+          }
         },
         {
           "label": "Color 47: Vermilion Red-Orange",
@@ -5585,7 +5897,13 @@
             }
           ],
           "popup": "Ambient: Vermilion",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0xC0",
+            "D5": "0x70",
+            "D6": "0x41"
+          }
         },
         {
           "label": "Color 48: Deep Orange",
@@ -5602,7 +5920,13 @@
             }
           ],
           "popup": "Ambient: Deep Orange",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0xF0",
+            "D5": "0xA0",
+            "D6": "0x42"
+          }
         },
         {
           "label": "Color 49: Bright Orange",
@@ -5619,7 +5943,13 @@
             }
           ],
           "popup": "Ambient: Bright Orange",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x04",
+            "D5": "0x11",
+            "D6": "0x43"
+          }
         },
         {
           "label": "Color 50: Tangerine",
@@ -5636,7 +5966,13 @@
             }
           ],
           "popup": "Ambient: Tangerine",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x24",
+            "D5": "0x91",
+            "D6": "0x44"
+          }
         },
         {
           "label": "Color 51: Sunrise Orange",
@@ -5653,7 +5989,13 @@
             }
           ],
           "popup": "Ambient: Sunrise Orange",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x60",
+            "D5": "0x81",
+            "D6": "0x45"
+          }
         },
         {
           "label": "Color 52: Golden Orange",
@@ -5670,7 +6012,13 @@
             }
           ],
           "popup": "Ambient: Golden Orange",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x80",
+            "D5": "0xA1",
+            "D6": "0x46"
+          }
         },
         {
           "label": "Color 53: Amber Gold",
@@ -5687,7 +6035,13 @@
             }
           ],
           "popup": "Ambient: Amber Gold",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0xAC",
+            "D5": "0x41",
+            "D6": "0x47"
+          }
         },
         {
           "label": "Color 54: Warm Amber",
@@ -5704,7 +6058,13 @@
             }
           ],
           "popup": "Ambient: Warm Amber",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0xC4",
+            "D5": "0x11",
+            "D6": "0x47"
+          }
         },
         {
           "label": "Color 55: Deep Marigold",
@@ -5721,7 +6081,13 @@
             }
           ],
           "popup": "Ambient: Deep Marigold",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0xF4",
+            "D5": "0x31",
+            "D6": "0x47"
+          }
         },
         {
           "label": "Color 56: Marigold Orange",
@@ -5738,7 +6104,13 @@
             }
           ],
           "popup": "Ambient: Marigold Orange",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x24",
+            "D5": "0xB2",
+            "D6": "0x46"
+          }
         },
         {
           "label": "Color 57: Warm Sunset / Amber",
@@ -5755,7 +6127,13 @@
             }
           ],
           "popup": "Ambient: Sunset Orange",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x50",
+            "D5": "0x72",
+            "D6": "0x47"
+          }
         },
         {
           "label": "Color 58: Peach Amber",
@@ -5772,7 +6150,13 @@
             }
           ],
           "popup": "Ambient: Peach Amber",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x80",
+            "D5": "0xF2",
+            "D6": "0x46"
+          }
         },
         {
           "label": "Color 59: Golden Peach",
@@ -5789,7 +6173,13 @@
             }
           ],
           "popup": "Ambient: Golden Peach",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0xB0",
+            "D5": "0x12",
+            "D6": "0x47"
+          }
         },
         {
           "label": "Color 60: Champagne Gold",
@@ -5806,7 +6196,13 @@
             }
           ],
           "popup": "Ambient: Champagne Gold",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0xC4",
+            "D5": "0xC2",
+            "D6": "0x46"
+          }
         },
         {
           "label": "Color 61: Soft Gold",
@@ -5823,7 +6219,13 @@
             }
           ],
           "popup": "Ambient: Soft Gold",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0xFC",
+            "D5": "0xB2",
+            "D6": "0x47"
+          }
         },
         {
           "label": "Color 62: Vanilla Gold",
@@ -5840,7 +6242,13 @@
             }
           ],
           "popup": "Ambient: Vanilla Gold",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFE",
+            "D4": "0x3C",
+            "D5": "0xA3",
+            "D6": "0x48"
+          }
         },
         {
           "label": "Color 63: Warm Ivory",
@@ -5857,7 +6265,13 @@
             }
           ],
           "popup": "Ambient: Warm Ivory",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFF",
+            "D4": "0x60",
+            "D5": "0x33",
+            "D6": "0x49"
+          }
         },
         {
           "label": "Color 64: Warm White / Champagne",
@@ -5874,7 +6288,13 @@
             }
           ],
           "popup": "Ambient: Champagne",
-          "default": false
+          "default": false,
+          "match": {
+            "D3": "0xFE",
+            "D4": "0xB4",
+            "D5": "0x53",
+            "D6": "0x4A"
+          }
         }
       ],
       "category": "Cockpit & Controls",
@@ -13260,11 +13680,6 @@
     },
     {
       "id": "ambient_light_brightness",
-      "ha_metadata": {
-        "name": "Ambient Light Brightness",
-        "domain": "light",
-        "icon": "mdi:car-light-dimmed"
-      },
       "tags": [
         "all_egmp"
       ],
