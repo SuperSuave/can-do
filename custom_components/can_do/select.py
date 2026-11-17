@@ -119,13 +119,6 @@ class CanDoSelectEntity(CanDoEntity, SelectEntity):
 
             # Map ambient mood lamp presets to corresponding 0x4AD 2-stage frame bursts
             hex_map: dict[str, str] = {
-                "golden": "D0C1751500000000",
-                "orange delight": "D0C1751500000000",
-                "blue flight": "4F29361C00000000",
-                "peaceful forest": "7F69A61700000000",
-                "dreamy purple": "6B69551900000000",
-                "violet cloud": "A789F51700000000",
-                "refreshing sea": "3269E61900000000",
                 "cyan": "0064530F00000000",
                 "aqua": "0064530F00000000",
                 "amber": "FF50720700000000",

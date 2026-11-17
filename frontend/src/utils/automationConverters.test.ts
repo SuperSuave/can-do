@@ -888,7 +888,7 @@ test('resolveCatalogCommandForAction and applyOptionToAction properly handle amb
 
           {
 
-            label: 'Christmas Dual-Tone (Red Dash / Green Doors)',
+            label: 'Color 8: Pure Cyan / Aqua Wave',
 
             steps: [
 
@@ -950,10 +950,10 @@ test('resolveCatalogCommandForAction and applyOptionToAction properly handle amb
     type: 'can_tx',
     can_id: '0x4AD',
     entity_id: 'ambient_mood_lighting',
-    option_label: 'Golden Insight / Orange Delight',
-    command: 'Golden Insight / Orange Delight',
+    option_label: 'Color 8: Pure Cyan / Aqua Wave',
+    command: 'Color 8: Pure Cyan / Aqua Wave',
     steps: [
-      { can_id: '0x4AD', bus: 0, payload: compileToByteMap('D0C1751500000000'), repeat: 2, delay_ms: 25 },
+      { can_id: '0x4AD', bus: 0, payload: compileToByteMap('00FFFF0400000000'), repeat: 2, delay_ms: 25 },
       { can_id: '0x4AD', bus: 0, payload: compileToByteMap('0002082000000000'), repeat: 2, delay_ms: 0 }
     ]
   };
@@ -961,8 +961,8 @@ test('resolveCatalogCommandForAction and applyOptionToAction properly handle amb
   assert.ok(Array.isArray(compiledAmbient));
   const frames4ad = compiledAmbient.filter((s: any) => s.type === 'transmit' && s.can_id === '0x4AD');
   assert.strictEqual(frames4ad.length, 2);
-  assert.strictEqual(frames4ad[0].payload.D1, '0xD0');
-  assert.strictEqual(frames4ad[0].payload.D2, '0xC1');
+  assert.strictEqual(frames4ad[0].payload.D1, '0x00');
+  assert.strictEqual(frames4ad[0].payload.D2, '0xFF');
 });
 
 
@@ -1053,9 +1053,9 @@ test('compileAutomationRule and decompileAutomationRule preserve multi-step cata
         network: { action_can_id: '0x4AD', state_can_id: '0x3C6', delay_ms: 25 },
         options: [
           {
-            label: 'Golden Insight / Orange Delight',
+            label: 'Color 8: Pure Cyan / Aqua Wave',
             steps: [
-              { payload: 'D0C1751500000000', repeat: 2, delay_ms: 25 },
+              { payload: '00FFFF0400000000', repeat: 2, delay_ms: 25 },
               { payload: '0002082000000000', repeat: 2, delay_ms: 0 }
             ]
           }
@@ -1096,9 +1096,9 @@ test('compileAutomationRule and decompileAutomationRule preserve multi-step cata
   assert.deepStrictEqual(decompiled.actions[0].steps?.[1].payload, { D5: '0xFF' });
 
   assert.strictEqual(decompiled.actions[1].source_command_id, 'ambient_mood_lighting');
-  assert.strictEqual(decompiled.actions[1].option_label, 'Golden Insight / Orange Delight');
+  assert.strictEqual(decompiled.actions[1].option_label, 'Color 8: Pure Cyan / Aqua Wave');
   assert.strictEqual(decompiled.actions[1].steps?.length, 2);
-  assert.strictEqual((decompiled.actions[1].steps?.[0].payload as any).D1, '0xD0');
+  assert.strictEqual((decompiled.actions[1].steps?.[0].payload as any).D1, '0x00');
   assert.strictEqual((decompiled.actions[1].steps?.[1].payload as any).D4, '0x20');
 });
 
@@ -1621,9 +1621,9 @@ test('resolveCatalogCommandForAction resolves ambient_mood_lighting alias, exact
         network: { action_can_id: '0x4AD', bus: 0, delay_ms: 25 },
         options: [
           {
-            label: 'Blue Flight',
+            label: 'Color 8: Pure Cyan / Aqua Wave',
             steps: [
-              { payload: '4F29361C00000000', repeat: 3, delay_ms: 25 },
+              { payload: '0064530F00000000', repeat: 3, delay_ms: 25 },
               { payload: '0002082000000000', repeat: 3, delay_ms: 25 },
             ],
           },

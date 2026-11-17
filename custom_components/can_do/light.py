@@ -101,13 +101,6 @@ PALETTE_64_RGB_MAP: dict[str, tuple[int, int, int]] = {
     "Crimson Red": (255, 0, 0),
     "Warm Sunset / Amber": (255, 140, 0),
     "Warm White / Champagne": (255, 240, 220),
-    # Factory Dual-Color Themes
-    "Golden Insight / Orange Delight": (255, 140, 0),
-    "Blue Flight": (79, 41, 54),
-    "Peaceful Forest": (127, 105, 166),
-    "Dreamy Purple": (107, 105, 85),
-    "Violet Cloud": (167, 137, 245),
-    "Refreshing Sea": (50, 105, 230),
 }
 
 DYNAMIC_ANIMATIONS: list[str] = [

@@ -28,7 +28,6 @@ import {
   decodeSunroofEntityState,
   decodeAmbientCanFrame,
   getAmbientColorHex,
-  AMBIENT_LIGHT_THEMES,
   AMBIENT_PALETTE_64,
   AMBIENT_QUICK_COLORS,
   displayTempToFahrenheit,
@@ -377,7 +376,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       const saved = localStorage.getItem('cando_ambient_color');
       if (saved) return saved;
     } catch {}
-    return 'Dreamy Purple';
+    return 'Color 24: Deep Purple / Violet';
   });
   const [ambientPaletteExpanded, setAmbientPaletteExpanded] = useState<boolean>(false);
 
@@ -3502,42 +3501,6 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
-              </div>
-            </div>
-
-            {/* Dual-Tone Themes */}
-            <div className="space-y-1.5 pt-2 border-t border-separator">
-              <span className="text-xs font-semibold text-muted block">Dual-Tone Themes</span>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-xs">
-                {AMBIENT_LIGHT_THEMES.map(t => {
-                  const isSelected = ambientColor === t.label;
-                  return (
-                    <button
-                      key={t.label}
-                      type="button"
-                      id={`ambient-theme-${t.name.toLowerCase().replace(/\s+/g, '-')}`}
-                      onClick={() => {
-                        setAmbientColor(t.label);
-                        if (ambientBrightness === 0) setAmbientBrightness(7);
-                        dispatchCommand('ambient_light_colors', t.label, `Theme Selected: ${t.name}`);
-                      }}
-                      className={`p-2 rounded-xl border flex items-center gap-2 transition-all cursor-pointer text-left ${
-                        isSelected
-                          ? 'bg-accent-soft text-accent-soft-foreground border-accent/60 shadow-sm font-bold'
-                          : 'bg-surface-secondary text-foreground/80 border-border hover:bg-surface-tertiary hover:text-foreground'
-                      }`}
-                    >
-                      <span
-                        className="w-4 h-4 rounded-full flex-shrink-0 shadow-sm border border-border"
-                        style={{
-                          background: `linear-gradient(135deg, ${t.primaryHex} 50%, ${t.secondaryHex} 50%)`,
-                          boxShadow: isSelected ? `0 0 8px ${t.primaryHex}` : 'none'
-                        }}
-                      />
-                      <span className="text-[11px] font-medium leading-tight truncate">{t.name}</span>
-                    </button>
-                  );
-                })}
               </div>
             </div>
 

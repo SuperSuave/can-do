@@ -356,28 +356,12 @@ export function decodeDriverOnlyCanFrame(bytes: number[]): boolean | null {
   return null;
 }
 
-export interface AmbientThemeOption {
-  label: string;
-  name: string;
-  primaryHex: string;
-  secondaryHex: string;
-}
-
 export interface AmbientPaletteOption {
   step: number;
   label: string;
   name: string;
   hex: string;
 }
-
-export const AMBIENT_LIGHT_THEMES: AmbientThemeOption[] = [
-  { label: 'Golden Insight / Orange Delight', name: 'Golden Insight', primaryHex: '#ff8c00', secondaryHex: '#ffa500' },
-  { label: 'Blue Flight', name: 'Blue Flight', primaryHex: '#4f2936', secondaryHex: '#0078d4' },
-  { label: 'Peaceful Forest', name: 'Peaceful Forest', primaryHex: '#7f69a6', secondaryHex: '#107c41' },
-  { label: 'Dreamy Purple', name: 'Dreamy Purple', primaryHex: '#6b6955', secondaryHex: '#800080' },
-  { label: 'Violet Cloud', name: 'Violet Cloud', primaryHex: '#a789f5', secondaryHex: '#9370db' },
-  { label: 'Refreshing Sea', name: 'Refreshing Sea', primaryHex: '#3269e6', secondaryHex: '#00bfff' },
-];
 
 export const AMBIENT_PALETTE_64: AmbientPaletteOption[] = [
   { step: 1, label: 'Color 1: Lime / Mint Glow', name: 'Lime / Mint Glow', hex: '#46ff46' },
@@ -462,11 +446,6 @@ export const AMBIENT_QUICK_COLORS = [
 export function getAmbientColorHex(label?: string | null): string {
   if (!label) return '#00ffff';
   const norm = label.trim().toLowerCase();
-  for (const t of AMBIENT_LIGHT_THEMES) {
-    if (t.label.toLowerCase() === norm || norm.includes(t.name.toLowerCase())) {
-      return t.primaryHex;
-    }
-  }
   for (const p of AMBIENT_PALETTE_64) {
     if (p.label.toLowerCase() === norm || norm === `color ${p.step}` || norm.startsWith(`color ${p.step}:`)) {
       return p.hex;

@@ -1737,34 +1737,8 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
             return true;
         }
 
-        // 3. Factory Themes (EV6 GT-Line)
-        if (cmd_lower.find("golden") != std::string::npos || cmd_lower.find("orange delight") != std::string::npos) {
-            payload_4ad[0] = 0xD0; payload_4ad[1] = 0xC1; payload_4ad[2] = 0x75; payload_4ad[3] = 0x15;
-            new_state = "Golden Insight / Orange Delight";
-            has_4ad = true;
-        } else if (cmd_lower.find("blue flight") != std::string::npos) {
-            payload_4ad[0] = 0x4F; payload_4ad[1] = 0x29; payload_4ad[2] = 0x36; payload_4ad[3] = 0x1C;
-            new_state = "Blue Flight";
-            has_4ad = true;
-        } else if (cmd_lower.find("peaceful forest") != std::string::npos) {
-            payload_4ad[0] = 0x7F; payload_4ad[1] = 0x69; payload_4ad[2] = 0xA6; payload_4ad[3] = 0x17;
-            new_state = "Peaceful Forest";
-            has_4ad = true;
-        } else if (cmd_lower.find("dreamy purple") != std::string::npos) {
-            payload_4ad[0] = 0x6B; payload_4ad[1] = 0x69; payload_4ad[2] = 0x55; payload_4ad[3] = 0x19;
-            new_state = "Dreamy Purple";
-            has_4ad = true;
-        } else if (cmd_lower.find("violet cloud") != std::string::npos) {
-            payload_4ad[0] = 0xA7; payload_4ad[1] = 0x89; payload_4ad[2] = 0xF5; payload_4ad[3] = 0x17;
-            new_state = "Violet Cloud";
-            has_4ad = true;
-        } else if (cmd_lower.find("refreshing sea") != std::string::npos) {
-            payload_4ad[0] = 0x32; payload_4ad[1] = 0x69; payload_4ad[2] = 0xE6; payload_4ad[3] = 0x19;
-            new_state = "Refreshing Sea";
-            has_4ad = true;
-        }
-        // 5. JSON commands (RGB or palette color index)
-        else if (!command_label.empty() && command_label[0] == '{') {
+        // 3. JSON commands (RGB or palette color index)
+        if (!command_label.empty() && command_label[0] == '{') {
             cJSON* root = cJSON_Parse(command_label.c_str());
             if (root) {
                 cJSON* idx_it = cJSON_GetObjectItem(root, "color_index");

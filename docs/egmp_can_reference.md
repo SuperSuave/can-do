@@ -583,15 +583,9 @@ Ambient lighting in E-GMP vehicles (Kia EV6, Hyundai Ioniq 5/6, Genesis GV60) is
 
 ### 8.2 Valid Message Payloads:
 
-#### Factory Theme Presets:
-| Theme Name | Stage 1 Payload (`0x4AD`) | Stage 2 Latch Payload | Description |
-| :--- | :--- | :--- | :--- |
-| **Golden Insight / Orange Delight** | `D0 C1 75 15 00 00 00 00` | `00 02 08 20 00 00 00 00` | Warm Gold / Amber tone |
-| **Blue Flight** | `4F 29 36 1C 00 00 00 00` | `00 02 08 20 00 00 00 00` | Sky Blue tone |
-| **Peaceful Forest** | `7F 69 A6 17 00 00 00 00` | `00 02 08 20 00 00 00 00` | Emerald Green tone |
-| **Dreamy Purple** | `6B 69 55 19 00 00 00 00` | `00 02 08 20 00 00 00 00` | Rich Magenta / Violet tone |
-| **Violet Cloud** | `A7 89 F5 17 00 00 00 00` | `00 02 08 20 00 00 00 00` | Soft Lavender tone |
-| **Refreshing Sea** | `32 69 E6 19 00 00 00 00` | `00 02 08 20 00 00 00 00` | Turquoise / Cyan tone |
+#### Single-Zone E-GMP Architecture Note:
+> [!NOTE]
+> Dual-tone ambient lighting (separate upper/lower door trim colors, e.g. Ioniq 6 / GV60 dual-color themes) is **not supported** on single-zone E-GMP hardware (e.g. Kia EV6, which features a single continuous dash and console ambient LED channel). All ambient commands and telemetry in CAN Do operate strictly across the 64 verified empirical palette colors and dynamic edge animations.
 
 #### Dynamic Edge Animation Modes (`firmware/main/subsystems/ambient_anim.cpp`):
 The ESP32 firmware features an edge-first FreeRTOS background task (`ambient_anim_task`) that executes dynamic animations locally without requiring continuous Home Assistant, Wi-Fi, or MQTT connectivity:
@@ -711,7 +705,7 @@ Broadcast by the lighting controller / MLU hardware reflecting real-time physica
 
 | Byte Index | 1-Based | Field Name | Description & Values |
 | :---: | :---: | :--- | :--- |
-| `0–1` | `D1–D2` | `CIE_Chromaticity` | **CIE 1931 xy Chromaticity Coordinates** of emitted light:<br>• `30 1A`: Dreamy Purple / Indigo<br>• `88 67`: Golden Insight / Amber Gold ($x \approx 0.53$)<br>• `52 6F` / `52 65`: Peaceful Forest / Fresh Grass ($x \approx 0.32$)<br>• `27 12`: Deep Blue ($x \approx 0.15, y \approx 0.07$) |
+| `0–1` | `D1–D2` | `CIE_Chromaticity` | **CIE 1931 xy Chromaticity Coordinates** of emitted light:<br>• `30 1A`: Indigo / Purple<br>• `88 67`: Amber Gold ($x \approx 0.53$)<br>• `52 6F` / `52 65`: Fresh Grass ($x \approx 0.32$)<br>• `27 12`: Deep Blue ($x \approx 0.15, y \approx 0.07$) |
 | `2` | `D3` | `Reserved_0` | Constant `0x00` |
 | `3` | `D4` | `PWM_Output_Duty` | **Physical Illumination State**:<br>`0x00`: **Off** (0 PWM output duty cycle)<br>`0xFA` (250): **Active / Illuminated** (~98% full PWM duty) |
 | `4–5` | `D5–D6` | `Target_Scale` | Constant `0x0A 0x0A` (Scale factor 10, 10) |

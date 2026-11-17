@@ -122,7 +122,7 @@ export default function App() {
       const saved = localStorage.getItem('cando_ambient_color');
       if (saved) return saved;
     } catch {}
-    return 'Dreamy Purple';
+    return 'Color 24: Deep Purple / Violet';
   });
   const [ambientBrightness, setAmbientBrightness] = useState<number>(() => {
     try {
