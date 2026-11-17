@@ -592,11 +592,12 @@
     color-mix(in oklab, var(--surface-secondary) 80%, var(--foreground) 4%) 0%,
     var(--surface) 100%
   );
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--ambient-nav-border, var(--border));
   border-top: none;
-  box-shadow: var(--surface-shadow);
+  box-shadow: var(--ambient-nav-glow, var(--surface-shadow));
   transform-origin: top center;
   transform: perspective(200px) rotateX(-13deg);
+  transition: border-color 0.35s ease, box-shadow 0.35s ease;
   pointer-events: none;
 }
 
@@ -607,10 +608,100 @@
 
   .ev6-climate-bar::before {
     border-radius: 7px 7px 16px 16px;
-    border-top: 1px solid var(--border);
+    border-top: 1.5px solid var(--ambient-nav-border, var(--border));
     box-shadow:
       inset 0 1px 0 color-mix(in oklab, var(--foreground) 8%, transparent),
-      var(--surface-shadow);
+      var(--ambient-nav-glow, var(--surface-shadow));
     transform: perspective(200px) rotateX(-11deg);
   }
 }
+
+/* ==========================================================================
+   Kia "Opposites United" Start Animation (Remote Climate Ignition Burst)
+   ========================================================================== */
+@keyframes kia-streak-sweep {
+  0% {
+    stroke-dashoffset: 240;
+    opacity: 0.25;
+  }
+  45% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  80% {
+    stroke-dashoffset: -120;
+    opacity: 0.85;
+  }
+  100% {
+    stroke-dashoffset: -240;
+    opacity: 0;
+  }
+}
+
+@keyframes kia-crosshair-bloom {
+  0% {
+    opacity: 0;
+    transform: scale(0.45);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  70% {
+    opacity: 0.8;
+    transform: scale(1.35);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+@keyframes kia-cap-flare {
+  0% {
+    opacity: 0;
+    transform: translate(-120%, 120%) rotate(-45deg);
+  }
+  40% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(120%, -120%) rotate(-45deg);
+  }
+}
+
+@keyframes kia-ring-ignite {
+  0% {
+    transform: scale(1);
+    opacity: 0.95;
+  }
+  50% {
+    transform: scale(1.28);
+    opacity: 0.65;
+  }
+  100% {
+    transform: scale(1.52);
+    opacity: 0;
+  }
+}
+
+.kia-streak-active {
+  stroke-dasharray: 95 160;
+  animation: kia-streak-sweep 1.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.kia-crosshair-active {
+  transform-origin: center;
+  animation: kia-crosshair-bloom 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.kia-cap-flare-active {
+  animation: kia-cap-flare 1.1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.kia-ring-ignite-active {
+  animation: kia-ring-ignite 1.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+

@@ -252,7 +252,7 @@ export const BleButtonComboPicker: React.FC<BleButtonComboPickerProps> = ({
         <Modal isOpen={showPicker} onOpenChange={(open) => !open && handleClose()}>
           <ModalBackdrop className="bg-backdrop backdrop-blur-sm fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
             <ModalContainer className="w-full max-w-xl">
-              <ModalDialog className="relative bg-overlay border border-border rounded-2xl shadow-overlay overflow-hidden flex flex-col">
+              <ModalDialog className="relative bg-overlay border border-border rounded-2xl shadow-overlay overflow-hidden p-0 flex flex-col">
                 <ModalHeader className="px-5 py-4 border-b border-separator bg-surface">
                   <div className="flex items-center gap-2.5 pr-10">
                     <Keyboard className="w-4 h-4 text-accent shrink-0" />

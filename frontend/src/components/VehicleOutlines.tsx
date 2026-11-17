@@ -1,4 +1,11 @@
 import React from 'react';
+import {
+  EV6_FASCIA,
+  GV60_FASCIA,
+  IONIQ5_FASCIA,
+  IONIQ6_FASCIA,
+  type BeamRectSpec,
+} from './frontFasciaPaths';
 
 export type EgmpModel = 'ioniq5' | 'ev6' | 'ioniq6' | 'gv60';
 
@@ -1118,5 +1125,699 @@ export const VehicleSilhouette: React.FC<VehicleOutlineProps> = ({
         </g>
       )}
     </svg>
+  );
+};
+
+export interface SideChargingProfileProps {
+  model: EgmpModel;
+  soc: number | null;
+  chargeRateKw: number;
+  lights: 'off' | 'parking' | 'low' | 'high' | 'auto';
+  gear?: 'P' | 'R' | 'N' | 'D' | null;
+  trunkOpen?: boolean;
+  hoodOpen?: boolean;
+  onClick?: () => void;
+}
+
+export const VehicleSideChargingProfile: React.FC<SideChargingProfileProps> = ({
+  model,
+  soc,
+  chargeRateKw,
+  lights,
+  gear = 'P',
+  trunkOpen = false,
+  hoodOpen = false,
+  onClick
+}) => {
+  const isLightsOn = lights !== 'off' && (lights !== 'auto' || gear !== 'P');
+
+  // Model-specific sleek side silhouettes (facing left, rear charge port on right)
+  const bodyPaths: Record<EgmpModel, { shell: string; window: string; wheelFrontX: number; wheelRearX: number; portX: number; portY: number }> = {
+    ev6: {
+      shell:
+        'M 42 104 C 38 92, 46 80, 68 74 L 128 64 C 166 42, 224 38, 288 42 C 336 45, 376 62, 404 72 C 414 78, 418 92, 412 106 L 392 108 C 390 88, 366 84, 356 84 C 344 84, 326 88, 324 108 L 142 108 C 140 88, 118 84, 108 84 C 96 84, 78 88, 76 108 Z',
+      window:
+        'M 146 64 C 176 47, 226 44, 282 47 C 318 49, 348 59, 370 69 L 150 69 Z',
+      wheelFrontX: 109,
+      wheelRearX: 358,
+      portX: 392,
+      portY: 79
+    },
+    ioniq5: {
+      shell:
+        'M 44 104 C 42 90, 50 76, 68 70 L 124 63 L 166 39 L 334 39 C 362 42, 386 60, 402 74 L 408 106 L 392 108 C 390 87, 366 83, 356 83 C 344 83, 326 87, 324 108 L 140 108 C 138 87, 116 83, 106 83 C 94 83, 76 87, 74 108 Z',
+      window:
+        'M 142 63 L 174 45 L 324 45 C 344 47, 362 56, 376 67 L 144 67 Z',
+      wheelFrontX: 107,
+      wheelRearX: 358,
+      portX: 388,
+      portY: 78
+    },
+    ioniq6: {
+      shell:
+        'M 36 104 C 36 90, 50 76, 78 70 L 134 62 C 174 39, 238 35, 298 41 C 344 46, 382 64, 412 78 C 418 84, 418 96, 412 106 L 394 108 C 392 88, 368 84, 358 84 C 346 84, 328 88, 326 108 L 142 108 C 140 88, 118 84, 108 84 C 96 84, 78 88, 76 108 Z',
+      window:
+        'M 150 62 C 182 44, 238 41, 292 46 C 324 49, 352 60, 372 68 L 152 68 Z',
+      wheelFrontX: 109,
+      wheelRearX: 360,
+      portX: 392,
+      portY: 80
+    },
+    gv60: {
+      shell:
+        'M 44 104 C 40 90, 50 76, 72 71 L 128 63 C 168 41, 226 37, 286 41 C 334 44, 374 58, 398 74 C 406 80, 410 93, 406 106 L 390 108 C 388 88, 364 84, 354 84 C 342 84, 324 88, 322 108 L 142 108 C 140 88, 118 84, 108 84 C 96 84, 78 88, 76 108 Z',
+      window:
+        'M 148 63 C 178 46, 226 43, 280 46 C 314 48, 344 58, 364 68 L 150 68 Z',
+      wheelFrontX: 109,
+      wheelRearX: 356,
+      portX: 386,
+      portY: 79
+    }
+  };
+
+  const geo = bodyPaths[model];
+
+  return (
+    <button
+      id="hero-side-charging-silhouette"
+      type="button"
+      onClick={onClick}
+      aria-label={`${EGMP_MODELS[model].brand} ${EGMP_MODELS[model].name} charging side view${soc !== null ? `, ${soc}% battery` : ''}${chargeRateKw > 0 ? `, ${chargeRateKw} kilowatts` : ''}`}
+      className="group relative w-full flex items-center justify-center bg-transparent border-0 p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl cursor-pointer select-none"
+    >
+      <svg
+        viewBox="0 0 460 148"
+        className="w-full h-auto max-h-[126px] block overflow-visible"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <defs>
+          <linearGradient id="sideBodyFill" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="currentColor" stopOpacity="0.14" />
+            <stop offset="100%" stopColor="currentColor" stopOpacity="0.06" />
+          </linearGradient>
+          <linearGradient id="sidePackGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#10b981" stopOpacity="0.15" />
+            <stop offset="50%" stopColor="#34d399" stopOpacity="0.85" />
+            <stop offset="100%" stopColor="#10b981" stopOpacity="0.45" />
+          </linearGradient>
+          <filter id="sideEmeraldGlow" x="-25%" y="-25%" width="150%" height="150%">
+            <feGaussianBlur stdDeviation="2.5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <style>
+            {`
+              @keyframes side-charge-flow {
+                0% { stroke-dashoffset: 48; }
+                100% { stroke-dashoffset: 0; }
+              }
+              .side-charge-stream {
+                stroke-dasharray: 5 11;
+                animation: side-charge-flow 1.6s linear infinite;
+              }
+              @media (prefers-reduced-motion: reduce) {
+                .side-charge-stream {
+                  animation: none;
+                }
+              }
+            `}
+          </style>
+        </defs>
+
+        {/* Ground Shadow Line */}
+        <ellipse cx="226" cy="126" rx="188" ry="6" fill="currentColor" className="text-foreground/10" />
+
+        {/* Subtle EVSE Charging Cable Entering Rear Quarter Port */}
+        <path
+          d={`M 448 124 C 446 92, 434 80, ${geo.portX + 6} ${geo.portY}`}
+          stroke="#10b981"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          opacity="0.85"
+        />
+        <path
+          d={`M 448 124 C 446 92, 434 80, ${geo.portX + 6} ${geo.portY}`}
+          stroke="#6ee7b7"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          className="side-charge-stream"
+        />
+        {/* Charger Plug Handle */}
+        <rect
+          x={geo.portX - 2}
+          y={geo.portY - 4}
+          width="11"
+          height="8"
+          rx="2.5"
+          fill="#10b981"
+          stroke="#a7f3d0"
+          strokeWidth="1"
+          filter="url(#sideEmeraldGlow)"
+        />
+
+        {/* Vehicle Side Body Shell */}
+        <path
+          d={geo.shell}
+          fill="url(#sideBodyFill)"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinejoin="round"
+          className="text-foreground/60"
+        />
+
+        {/* Side Greenhouse Glass */}
+        <path
+          d={geo.window}
+          fill="currentColor"
+          fillOpacity="0.16"
+          stroke="currentColor"
+          strokeOpacity="0.35"
+          strokeWidth="1.1"
+          className="text-foreground"
+        />
+        {/* B-Pillar Divider */}
+        <line x1="234" y1="45" x2="230" y2="68" stroke="currentColor" strokeOpacity="0.35" strokeWidth="1.4" className="text-foreground" />
+
+        {/* 800V Skateboard Battery Pack Flow Along Underbody */}
+        <rect
+          x="148"
+          y="99"
+          width="168"
+          height="6"
+          rx="3"
+          fill="#064e3b"
+          fillOpacity="0.45"
+          stroke="#10b981"
+          strokeOpacity="0.55"
+          strokeWidth="0.9"
+        />
+        <rect
+          x="150"
+          y="100.5"
+          width={Math.max(12, Math.round((164 * (soc ?? 50)) / 100))}
+          height="3"
+          rx="1.5"
+          fill="url(#sidePackGlow)"
+          filter="url(#sideEmeraldGlow)"
+        />
+        <line
+          x1={geo.portX - 4}
+          y1={geo.portY + 2}
+          x2="318"
+          y2="102"
+          stroke="#34d399"
+          strokeWidth="2"
+          strokeLinecap="round"
+          className="side-charge-stream"
+        />
+
+        {/* Front & Rear Wheels */}
+        {[geo.wheelFrontX, geo.wheelRearX].map((cx, idx) => (
+          <g key={`side-wheel-${idx}`}>
+            <circle cx={cx} cy="108" r="19" fill="#0f172a" stroke="currentColor" strokeWidth="1.6" className="text-foreground/55" />
+            <circle cx={cx} cy="108" r="11.5" fill="none" stroke="currentColor" strokeWidth="1.2" className="text-foreground/35" />
+            <circle cx={cx} cy="108" r="3.5" fill="currentColor" className="text-foreground/55" />
+          </g>
+        ))}
+
+        {/* Headlight & Taillight Indicators */}
+        <path
+          d="M 48 80 L 65 76"
+          stroke={isLightsOn ? '#7dd3fc' : 'currentColor'}
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          className={isLightsOn ? '' : 'text-foreground/25'}
+          filter={isLightsOn ? 'url(#sideEmeraldGlow)' : undefined}
+        />
+        <path
+          d="M 396 71 L 408 75"
+          stroke="#ef4444"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          opacity={0.85}
+        />
+
+        {/* Subtle Ajar Highlights if Hood / Trunk Opened While Plugged In */}
+        {hoodOpen && (
+          <path d="M 54 72 L 122 62" stroke="#f59e0b" strokeWidth="2.2" strokeLinecap="round" />
+        )}
+        {trunkOpen && (
+          <path d="M 380 56 L 410 74" stroke="#f59e0b" strokeWidth="2.2" strokeLinecap="round" />
+        )}
+      </svg>
+    </button>
+  );
+};
+
+export interface FrontFasciaHeadlightProps {
+  model: EgmpModel;
+  lights: 'off' | 'parking' | 'low' | 'high' | 'auto';
+  gear?: 'P' | 'R' | 'N' | 'D' | null;
+  hazards: boolean;
+  turnSignal: 'off' | 'left' | 'right';
+  blinkState: boolean;
+  hoodOpen?: boolean;
+  onClick?: () => void;
+}
+
+export const FrontFasciaHeadlightSignature: React.FC<FrontFasciaHeadlightProps> = ({
+  model,
+  lights,
+  gear = 'P',
+  hazards,
+  turnSignal,
+  blinkState,
+  hoodOpen = false,
+  onClick
+}) => {
+  const isDrlOn = lights !== 'off';
+  const isMainBeamOn =
+    lights === 'low' ||
+    lights === 'high' ||
+    (lights === 'auto' && gear !== 'P');
+  const isHighBeam = lights === 'high';
+
+  const leftBlink = (hazards || turnSignal === 'left') && blinkState;
+  const rightBlink = (hazards || turnSignal === 'right') && blinkState;
+
+  const signatureTitle =
+    model === 'ev6'
+      ? 'Digital Tiger Face'
+      : model === 'gv60'
+        ? 'Two-Line Quad Lamps'
+        : model === 'ioniq5'
+          ? 'Parametric Pixel DRL'
+          : 'Pixel Matrix Headlamps';
+
+  const beamLabel =
+    lights === 'off'
+      ? 'Lights Off'
+      : lights === 'parking'
+        ? 'DRL / Parking'
+        : lights === 'low'
+          ? 'Low Beam'
+          : lights === 'high'
+            ? 'High Beam'
+            : gear !== 'P'
+              ? 'Auto · Active'
+              : 'Auto · Standby';
+
+  const leftDrlClass = leftBlink
+    ? 'text-amber-500 dark:text-amber-400'
+    : isDrlOn
+      ? 'text-sky-500 dark:text-sky-100'
+      : 'text-foreground/30';
+
+  const rightDrlClass = rightBlink
+    ? 'text-amber-500 dark:text-amber-400'
+    : isDrlOn
+      ? 'text-sky-500 dark:text-sky-100'
+      : 'text-foreground/30';
+
+  const lowBeamClass = isHighBeam
+    ? 'text-sky-600 dark:text-white'
+    : isMainBeamOn
+      ? 'text-sky-500 dark:text-sky-200'
+      : 'text-foreground/20';
+
+  const highBeamClass = isHighBeam
+    ? 'text-sky-600 dark:text-white'
+    : isMainBeamOn
+      ? 'text-sky-500/60 dark:text-sky-200/55'
+      : 'text-foreground/20';
+
+  const housingClass = hoodOpen
+    ? 'text-amber-500/80 dark:text-amber-400/80'
+    : 'text-foreground/25';
+
+  const emblemClass = hoodOpen
+    ? 'text-amber-500/75 dark:text-amber-400/75'
+    : 'text-foreground/45';
+
+  const viewBox =
+    model === 'gv60'
+      ? GV60_FASCIA.viewBox
+      : model === 'ioniq6'
+        ? IONIQ6_FASCIA.viewBox
+        : model === 'ioniq5'
+          ? IONIQ5_FASCIA.viewBox
+          : EV6_FASCIA.viewBox;
+
+  const renderBeamRect = (
+    spec: BeamRectSpec,
+    id: string,
+    isActive: boolean,
+    fillOpacity: number,
+    strokeWidth: number,
+    withGlow: boolean
+  ) => (
+    <rect
+      id={id}
+      x={spec.x}
+      y={spec.y}
+      width={spec.width}
+      height={spec.height}
+      rx={spec.rx}
+      ry={spec.rx}
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      fill={isActive ? 'currentColor' : 'none'}
+      fillOpacity={isActive ? fillOpacity : 0}
+      filter={withGlow ? 'url(#fasciaLedGlow)' : undefined}
+    />
+  );
+
+  return (
+    <button
+      id="hero-headlight-silhouette"
+      type="button"
+      onClick={onClick}
+      aria-label={`${EGMP_MODELS[model].brand} ${EGMP_MODELS[model].name} ${signatureTitle}: ${beamLabel}. Click to cycle lights preview.`}
+      title={`${EGMP_MODELS[model].brand} ${EGMP_MODELS[model].name} · ${signatureTitle} (${beamLabel}) — Click to cycle`}
+      className="group relative w-full flex items-center justify-center bg-transparent border-0 p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl cursor-pointer select-none"
+    >
+      <svg
+        viewBox={viewBox}
+        className="w-full h-auto max-h-[108px] block overflow-visible transition-opacity duration-200 opacity-95 group-hover:opacity-100"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <defs>
+          <filter id="fasciaLedGlow" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="20" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
+        {/* GENESIS GV60 — Two-Line MLA Quad Lamps */}
+        {model === 'gv60' && (
+          <g id="fascia-gv60">
+            <path
+              id="gv60-emblem"
+              d={GV60_FASCIA.emblemPath}
+              fill="currentColor"
+              className={emblemClass}
+            />
+            {[
+              { side: 'left', blink: leftBlink, drlClass: leftDrlClass, transform: undefined },
+              { side: 'right', blink: rightBlink, drlClass: rightDrlClass, transform: GV60_FASCIA.rightMirrorTransform }
+            ].map(({ side, blink, drlClass, transform }) => (
+              <g key={`gv60-lamp-${side}`} id={`gv60-headlight-${side}`} transform={transform}>
+                <g
+                  id={`gv60-drl-${side}`}
+                  className={drlClass}
+                  filter={isDrlOn || blink ? 'url(#fasciaLedGlow)' : undefined}
+                >
+                  {GV60_FASCIA.drlPaths.map((d, idx) => (
+                    <path
+                      key={`gv60-drl-${side}-${idx}`}
+                      d={d}
+                      stroke="currentColor"
+                      strokeWidth={10}
+                      strokeLinejoin="round"
+                      fill={isDrlOn || blink ? 'currentColor' : 'none'}
+                      fillOpacity={isDrlOn || blink ? 0.88 : 0}
+                    />
+                  ))}
+                </g>
+                <g id={`gv60-housings-${side}`} className={housingClass}>
+                  {GV60_FASCIA.housingPaths.map((d, idx) => (
+                    <path
+                      key={`gv60-housing-${side}-${idx}`}
+                      d={d}
+                      stroke="currentColor"
+                      strokeWidth={10}
+                      strokeLinejoin="round"
+                      fill="none"
+                    />
+                  ))}
+                </g>
+                <g id={`gv60-beams-${side}`}>
+                  <g
+                    id={side === 'left' ? 'gv60-low-beam-left' : 'gv60-low-beams-right'}
+                    className={lowBeamClass}
+                    filter={isMainBeamOn ? 'url(#fasciaLedGlow)' : undefined}
+                  >
+                    {GV60_FASCIA.lowBeamPaths.map((d, idx) => (
+                      <path
+                        key={`gv60-low-${side}-${idx}`}
+                        d={d}
+                        stroke="currentColor"
+                        strokeWidth={10}
+                        strokeLinejoin="round"
+                        fill={isMainBeamOn ? 'currentColor' : 'none'}
+                        fillOpacity={isHighBeam ? 0.92 : isMainBeamOn ? 0.82 : 0}
+                      />
+                    ))}
+                  </g>
+                  <g
+                    id={side === 'left' ? 'gv60-high-beam-left' : 'gv60-high-beams-right'}
+                    className={highBeamClass}
+                    filter={isHighBeam ? 'url(#fasciaLedGlow)' : undefined}
+                  >
+                    {GV60_FASCIA.highBeamPaths.map((d, idx) => (
+                      <path
+                        key={`gv60-high-${side}-${idx}`}
+                        d={d}
+                        stroke="currentColor"
+                        strokeWidth={10}
+                        strokeLinejoin="round"
+                        fill={isMainBeamOn ? 'currentColor' : 'none'}
+                        fillOpacity={isHighBeam ? 0.96 : isMainBeamOn ? 0.14 : 0}
+                      />
+                    ))}
+                  </g>
+                </g>
+              </g>
+            ))}
+          </g>
+        )}
+
+        {/* HYUNDAI IONIQ 6 — Pixel Matrix Headlamps */}
+        {model === 'ioniq6' && (
+          <g id="fascia-ioniq6">
+            <g id="ioniq6-emblem" transform={IONIQ6_FASCIA.emblemTransform} className={emblemClass}>
+              {IONIQ6_FASCIA.emblemPaths.map((d, idx) => (
+                <path key={`i6-emblem-${idx}`} d={d} fill="currentColor" />
+              ))}
+            </g>
+            {[
+              { side: 'left', blink: leftBlink, drlClass: leftDrlClass, transform: IONIQ6_FASCIA.leftTransform },
+              { side: 'right', blink: rightBlink, drlClass: rightDrlClass, transform: IONIQ6_FASCIA.rightTransform }
+            ].map(({ side, blink, drlClass, transform }) => (
+              <g key={`i6-lamp-${side}`} id={`ioniq6-headlight-${side}`} transform={transform}>
+                <g id={`ioniq6-housing-${side}`} className={housingClass}>
+                  {IONIQ6_FASCIA.housingPaths.map((d, idx) => (
+                    <path
+                      key={`i6-housing-${side}-${idx}`}
+                      d={d}
+                      fill="none"
+                      fillRule="evenodd"
+                      stroke="currentColor"
+                      strokeLinejoin="round"
+                      strokeWidth={10}
+                    />
+                  ))}
+                </g>
+                <g
+                  id={`ioniq6-drl-${side}`}
+                  transform={IONIQ6_FASCIA.drlGroupTransform}
+                  className={drlClass}
+                  filter={isDrlOn || blink ? 'url(#fasciaLedGlow)' : undefined}
+                >
+                  {IONIQ6_FASCIA.drlRectPositions.map(([x, y], idx) => (
+                    <rect
+                      key={`i6-drl-${side}-${idx}`}
+                      x={x}
+                      y={y}
+                      width={50}
+                      height={50}
+                      rx={5}
+                      ry={5}
+                      stroke="currentColor"
+                      strokeWidth={6}
+                      fill={isDrlOn || blink ? 'currentColor' : 'none'}
+                      fillOpacity={isDrlOn || blink ? 0.9 : 0}
+                    />
+                  ))}
+                </g>
+                <g id={`ioniq6-beams-${side}`}>
+                  <g className={lowBeamClass}>
+                    {renderBeamRect(
+                      IONIQ6_FASCIA.lowBeam,
+                      `ioniq6-low-beam-${side}`,
+                      isMainBeamOn,
+                      isHighBeam ? 0.92 : 0.82,
+                      8,
+                      isMainBeamOn
+                    )}
+                  </g>
+                  <g className={highBeamClass}>
+                    {renderBeamRect(
+                      IONIQ6_FASCIA.highBeam,
+                      `ioniq6-high-beam-${side}`,
+                      isMainBeamOn,
+                      isHighBeam ? 0.96 : 0.14,
+                      8,
+                      isHighBeam
+                    )}
+                  </g>
+                </g>
+                <g
+                  id={`ioniq6-pixels-upper-${side}`}
+                  transform={IONIQ6_FASCIA.upperPixelsTransform}
+                  className={drlClass}
+                  opacity={isDrlOn || blink ? 0.88 : 0.28}
+                  filter={isDrlOn || blink ? 'url(#fasciaLedGlow)' : undefined}
+                >
+                  {IONIQ6_FASCIA.upperPixelRects.map(([x, y, width, height], idx) => (
+                    <rect
+                      key={`i6-px-${side}-${idx}`}
+                      x={x}
+                      y={y}
+                      width={width}
+                      height={height}
+                      fill="currentColor"
+                    />
+                  ))}
+                </g>
+              </g>
+            ))}
+          </g>
+        )}
+
+        {/* HYUNDAI IONIQ 5 — Parametric Pixel DRL & Dual Projectors */}
+        {model === 'ioniq5' && (
+          <g id="fascia-ioniq5">
+            <g id="ioniq5-emblem" className={emblemClass}>
+              {IONIQ5_FASCIA.emblemPaths.map((d, idx) => (
+                <path key={`i5-emblem-${idx}`} d={d} fill="currentColor" />
+              ))}
+            </g>
+            <g id="ioniq5-headlight-left" transform={IONIQ5_FASCIA.leftTransform}>
+              <g id="ioniq5-beams-left">
+                <g className={lowBeamClass}>
+                  {renderBeamRect(
+                    IONIQ5_FASCIA.leftLowBeam,
+                    'ioniq5-low-beam-left',
+                    isMainBeamOn,
+                    isHighBeam ? 0.92 : 0.82,
+                    10,
+                    isMainBeamOn
+                  )}
+                </g>
+                <g className={highBeamClass}>
+                  {renderBeamRect(
+                    IONIQ5_FASCIA.leftHighBeam,
+                    'ioniq5-high-beam-left',
+                    isMainBeamOn,
+                    isHighBeam ? 0.96 : 0.14,
+                    10,
+                    isHighBeam
+                  )}
+                </g>
+              </g>
+              <g
+                id="ioniq5-drl-left"
+                className={leftDrlClass}
+                filter={isDrlOn || leftBlink ? 'url(#fasciaLedGlow)' : undefined}
+              >
+                {IONIQ5_FASCIA.leftDrlPaths.map((d, idx) => (
+                  <path key={`i5-drl-l-${idx}`} d={d} fill="currentColor" fillRule="evenodd" />
+                ))}
+              </g>
+            </g>
+            <g id="ioniq5-headlight-right" transform={IONIQ5_FASCIA.rightTransform}>
+              <g id="ioniq5-beams-right">
+                <g className={lowBeamClass}>
+                  {renderBeamRect(
+                    IONIQ5_FASCIA.rightLowBeam,
+                    'ioniq5-low-beam-right',
+                    isMainBeamOn,
+                    isHighBeam ? 0.92 : 0.82,
+                    10,
+                    isMainBeamOn
+                  )}
+                </g>
+                <g className={highBeamClass}>
+                  {renderBeamRect(
+                    IONIQ5_FASCIA.rightHighBeam,
+                    'ioniq5-high-beam-right',
+                    isMainBeamOn,
+                    isHighBeam ? 0.96 : 0.14,
+                    10,
+                    isHighBeam
+                  )}
+                </g>
+              </g>
+              <g
+                id="ioniq5-drl-right"
+                className={rightDrlClass}
+                filter={isDrlOn || rightBlink ? 'url(#fasciaLedGlow)' : undefined}
+              >
+                {IONIQ5_FASCIA.rightDrlPaths.map((d, idx) => (
+                  <path key={`i5-drl-r-${idx}`} d={d} fill="currentColor" fillRule="evenodd" />
+                ))}
+              </g>
+            </g>
+          </g>
+        )}
+
+        {/* KIA EV6 — Digital Tiger Face Sequential DRLs */}
+        {model === 'ev6' && (
+          <g id="fascia-ev6">
+            <g id="ev6-emblem" transform="translate(-3.5, 0)" className={emblemClass}>
+              {EV6_FASCIA.emblemPaths.map((d, idx) => (
+                <path key={`ev6-emblem-${idx}`} d={d} fill="currentColor" />
+              ))}
+            </g>
+            {[
+              { side: 'left', blink: leftBlink, drlClass: leftDrlClass, transform: EV6_FASCIA.leftTransform },
+              { side: 'right', blink: rightBlink, drlClass: rightDrlClass, transform: EV6_FASCIA.rightTransform }
+            ].map(({ side, blink, drlClass, transform }) => (
+              <g key={`ev6-lamp-${side}`} id={`ev6-headlight-${side}`} transform={transform}>
+                <g id={`ev6-beams-${side}`}>
+                  <g className={highBeamClass}>
+                    {renderBeamRect(
+                      EV6_FASCIA.highBeam,
+                      `ev6-high-beam-${side}`,
+                      isMainBeamOn,
+                      isHighBeam ? 0.96 : 0.14,
+                      10,
+                      isHighBeam
+                    )}
+                  </g>
+                  <g className={lowBeamClass}>
+                    {renderBeamRect(
+                      EV6_FASCIA.lowBeam,
+                      `ev6-low-beam-${side}`,
+                      isMainBeamOn,
+                      isHighBeam ? 0.92 : 0.82,
+                      10,
+                      isMainBeamOn
+                    )}
+                  </g>
+                </g>
+                <g
+                  id={`ev6-drl-${side}`}
+                  className={drlClass}
+                  filter={isDrlOn || blink ? 'url(#fasciaLedGlow)' : undefined}
+                >
+                  {EV6_FASCIA.drlPaths.map((d, idx) => (
+                    <path key={`ev6-drl-${side}-${idx}`} d={d} fill="currentColor" />
+                  ))}
+                </g>
+              </g>
+            ))}
+          </g>
+        )}
+      </svg>
+    </button>
   );
 };

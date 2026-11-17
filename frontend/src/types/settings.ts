@@ -35,6 +35,7 @@ export interface UserPreferences {
   quiet_hours_end?: string;
   uds_sleep_delay_sec?: number;
   uds_awake_interval_sec?: number;
+  demo_telemetry_enabled?: boolean;
 }
 
 export const STORAGE_KEY_USER_PREFERENCES = 'can_do_user_preferences';
@@ -61,6 +62,7 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   quiet_hours_end: '07:00',
   uds_sleep_delay_sec: 10,
   uds_awake_interval_sec: 15,
+  demo_telemetry_enabled: false,
 };
 
 export function getUserPreferences(): UserPreferences {

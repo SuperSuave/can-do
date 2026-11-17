@@ -1,5 +1,18 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Tabs, Chip, Card, Tooltip, ProgressBar } from '@heroui/react';
+import {
+  Tabs,
+  Card,
+  Tooltip,
+  ProgressBar,
+  Modal,
+  ModalBackdrop,
+  ModalContainer,
+  ModalDialog,
+  ModalHeader,
+  ModalHeading,
+  ModalBody,
+  ModalFooter
+} from '@heroui/react';
 import { Catalog, Command, Vehicle } from '../types/catalog';
 import { isRunningOnDevice, resolveDeviceBaseUrl } from '../utils/hostUtils';
 import { resolveVariant } from '../utils/catalogUtils';
@@ -30,46 +43,36 @@ import {
 } from '../utils/cockpitDecoders';
 import { deviceWs } from '../services/deviceWs';
 import {
-  Car,
   BatteryCharging,
-  Battery,
-  Thermometer,
   Fan,
   Wind,
   Flame,
   Snowflake,
   Lock,
   Unlock,
-  Gauge,
-  Zap,
-  Shield,
-  ShieldCheck,
   AlertTriangle,
-  RotateCw,
-  Eye,
-  Sliders,
-  Play,
-  Pause,
   Sun,
-  Moon,
-  Compass,
-  ArrowUpRight,
   CheckCircle2,
-  Info,
-  Maximize2,
-  Activity,
   Link2,
   User,
   Sparkles,
   Palette,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
+  PlugZap,
+  Minus,
+  Plus,
+  SlidersHorizontal,
+  X,
 } from 'lucide-react';
 import {
   EgmpModel,
   SunroofConfig,
   EGMP_MODELS,
-  VehicleSilhouette
+  VehicleSilhouette,
+  FrontFasciaHeadlightSignature,
+  VehicleSideChargingProfile
 } from './VehicleOutlines';
 import {
   AirflowDirectionIcon,
@@ -83,6 +86,11 @@ export interface VehicleDashboardProps {
   catalog: Catalog;
   activeVehicle?: Vehicle;
   unitSystem?: 'imperial' | 'metric';
+  demoTelemetryEnabled?: boolean;
+  ambientColor?: string | null;
+  ambientBrightness?: number | null;
+  onAmbientColorChange?: (colorLabel: string) => void;
+  onAmbientBrightnessChange?: (brightness: number) => void;
   onSelectVehicle?: (vehicleId: string) => void;
   onNavigateToCatalog?: (searchQuery?: string) => void;
   onNavigateToAutomations?: () => void;
@@ -133,11 +141,15 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   catalog,
   activeVehicle,
   unitSystem = 'imperial',
-  onSelectVehicle,
+  demoTelemetryEnabled = false,
+  ambientColor: externalAmbientColor,
+  ambientBrightness: externalAmbientBrightness,
+  onAmbientColorChange,
+  onAmbientBrightnessChange,
   onNavigateToCatalog,
   onNavigateToAutomations
 }) => {
-  // 0. Model Architecture and Sunroof State
+  // 0. Model Architecture & Sunroof State
   const [selectedModel, setSelectedModel] = useState<EgmpModel>(() => detectEgmpModel(activeVehicle));
   const [sunroof, setSunroof] = useState<SunroofConfig>(() => ({
     equipped: detectHasSunroof(activeVehicle),
@@ -267,10 +279,135 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   const [climateSync, setClimateSync] = useState<boolean | null>(null);
   const turnSignalTimeoutRef = useRef<any>(null);
 
+  // Remote Climate Hold-to-Toggle + Kia Startup Animation (prevents accidental activation)
+  const REMOTE_CLIMATE_HOLD_MS = 1400;
+  const [climateStartAnim, setClimateStartAnim] = useState<'idle' | 'starting' | 'stopping'>('idle');
+  const [climateAnimKey, setClimateAnimKey] = useState<number>(0);
+  const [climateHoldProgress, setClimateHoldProgress] = useState<number>(0);
+  const [climateTab, setClimateTab] = useState<'comfort' | 'vents'>('comfort');
+  const startAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdStartRef = useRef<number | null>(null);
+  const holdRafRef = useRef<number | null>(null);
+  const holdTriggeredRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    return () => {
+      if (startAnimTimerRef.current) clearTimeout(startAnimTimerRef.current);
+      if (holdRafRef.current !== null) cancelAnimationFrame(holdRafRef.current);
+    };
+  }, []);
+
+  const executeRemoteClimateToggle = () => {
+    const next = hvacPower === true ? false : true;
+    setHvacPower(next);
+    if (next && driverTemp === null) {
+      const def = tempUnit === 'C' ? 22 : 72;
+      setDriverTemp(def);
+      setPassengerTemp(def);
+      driverTempFRef.current = 72;
+      passengerTempFRef.current = 72;
+    }
+    if (next && fanSpeed === null) {
+      setFanSpeed(3);
+    }
+    if (startAnimTimerRef.current) clearTimeout(startAnimTimerRef.current);
+    setClimateAnimKey(k => k + 1);
+    setClimateStartAnim(next ? 'starting' : 'stopping');
+    startAnimTimerRef.current = setTimeout(() => {
+      setClimateStartAnim('idle');
+    }, next ? 1650 : 800);
+    dispatchCommand(
+      'remote_climate_tmu',
+      next ? 'Remote Climate On' : 'Remote Climate Off',
+      next ? 'Cabin Climate Activated' : 'Cabin Climate Turned OFF',
+      0
+    );
+  };
+
+  const cancelClimateHold = (showHint = false) => {
+    if (holdRafRef.current !== null) {
+      cancelAnimationFrame(holdRafRef.current);
+      holdRafRef.current = null;
+    }
+    const startedAt = holdStartRef.current;
+    const wasTriggered = holdTriggeredRef.current;
+    holdStartRef.current = null;
+    holdTriggeredRef.current = false;
+    setClimateHoldProgress(0);
+    if (showHint && startedAt !== null && !wasTriggered && performance.now() - startedAt >= 40) {
+      triggerNotice('Hold EV button to start or stop climate');
+    }
+  };
+
+  const startClimateHold = () => {
+    if (holdStartRef.current !== null) return;
+    holdTriggeredRef.current = false;
+    const startTs = performance.now();
+    holdStartRef.current = startTs;
+
+    const step = (now: number) => {
+      if (holdStartRef.current === null) return;
+      const pct = Math.min(100, ((now - startTs) / REMOTE_CLIMATE_HOLD_MS) * 100);
+      setClimateHoldProgress(pct);
+      if (pct >= 100) {
+        holdTriggeredRef.current = true;
+        holdStartRef.current = null;
+        holdRafRef.current = null;
+        setClimateHoldProgress(0);
+        executeRemoteClimateToggle();
+        return;
+      }
+      holdRafRef.current = requestAnimationFrame(step);
+    };
+    holdRafRef.current = requestAnimationFrame(step);
+  };
+
   // Ambient Mood Lighting
-  const [ambientBrightness, setAmbientBrightness] = useState<number | null>(7);
-  const [ambientColor, setAmbientColor] = useState<string | null>('Dreamy Purple');
+  const [ambientBrightness, setAmbientBrightnessState] = useState<number | null>(() => {
+    if (externalAmbientBrightness !== undefined) return externalAmbientBrightness;
+    try {
+      const saved = localStorage.getItem('cando_ambient_brightness');
+      if (saved !== null) return parseInt(saved, 10);
+    } catch {}
+    return 7;
+  });
+  const [ambientColor, setAmbientColorState] = useState<string | null>(() => {
+    if (externalAmbientColor !== undefined && externalAmbientColor !== null) return externalAmbientColor;
+    try {
+      const saved = localStorage.getItem('cando_ambient_color');
+      if (saved) return saved;
+    } catch {}
+    return 'Dreamy Purple';
+  });
   const [ambientPaletteExpanded, setAmbientPaletteExpanded] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (externalAmbientColor !== undefined && externalAmbientColor !== null && externalAmbientColor !== ambientColor) {
+      setAmbientColorState(externalAmbientColor);
+    }
+  }, [externalAmbientColor]);
+
+  useEffect(() => {
+    if (externalAmbientBrightness !== undefined && externalAmbientBrightness !== null && externalAmbientBrightness !== ambientBrightness) {
+      setAmbientBrightnessState(externalAmbientBrightness);
+    }
+  }, [externalAmbientBrightness]);
+
+  const setAmbientColor = (nextColor: string | null) => {
+    setAmbientColorState(nextColor);
+    if (nextColor) {
+      try { localStorage.setItem('cando_ambient_color', nextColor); } catch {}
+      onAmbientColorChange?.(nextColor);
+    }
+  };
+
+  const setAmbientBrightness = (nextBrightness: number | null) => {
+    setAmbientBrightnessState(nextBrightness);
+    if (nextBrightness !== null) {
+      try { localStorage.setItem('cando_ambient_brightness', String(nextBrightness)); } catch {}
+      onAmbientBrightnessChange?.(nextBrightness);
+    }
+  };
 
   // TPMS (PSI)
   const [tpms, setTpms] = useState<{
@@ -285,12 +422,97 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     rr: null
   });
 
-  // UI / Perspective State
+  // UI / Perspective & Rivian-Style State-Driven Vehicle Stage + Overlay Sheets
+  type HeroViewMode = 'auto' | 'nose' | 'side' | 'topdown';
+  type CockpitOverlay = 'climate' | 'charging' | 'ambient' | null;
+
   const [perspective, setPerspective] = useState<ViewPerspective>('exterior');
+  const [heroViewMode, setHeroViewMode] = useState<HeroViewMode>('auto');
+  const [activeOverlay, setActiveOverlay] = useState<CockpitOverlay>(null);
   const [hasReceivedFrames, setHasReceivedFrames] = useState<boolean>(false);
   const [speedKph, setSpeedKph] = useState<number>(0);
   const [connectedDevice, setConnectedDevice] = useState<boolean>(false);
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
+  const appliedDemoRef = useRef<boolean>(false);
+
+  const openClosureLabels = [
+    doors.frontLeft ? 'Driver Door' : null,
+    doors.frontRight ? 'Pass. Door' : null,
+    doors.rearLeft ? 'Rear Left Door' : null,
+    doors.rearRight ? 'Rear Right Door' : null,
+    hoodOpen ? 'Frunk' : null,
+    trunkOpen ? 'Liftgate' : null,
+  ].filter(Boolean) as string[];
+
+  const openClosureCount = openClosureLabels.length;
+  const hasClosureAlert = openClosureCount > 0 || chargePortOpen || isCharging;
+  const effectiveHeroView: 'nose' | 'side' | 'topdown' =
+    heroViewMode === 'auto' ? (isCharging ? 'side' : 'nose') : heroViewMode;
+
+  const toggleTopDownView = () => {
+    setHeroViewMode(prev => (prev === 'topdown' ? 'auto' : 'topdown'));
+  };
+
+  const cycleLightsPreview = () => {
+    runPreviewOrReadOnly('Headlight Signature', () => {
+      const order: LightMode[] = ['auto', 'parking', 'low', 'high', 'off'];
+      setLights(prev => {
+        const next = order[(order.indexOf(prev) + 1) % order.length];
+        const label =
+          next === 'auto'
+            ? 'Auto'
+            : next === 'parking'
+              ? 'DRL / Parking'
+              : next === 'low'
+                ? 'Low Beam'
+                : next === 'high'
+                  ? 'High Beam'
+                  : 'Off';
+        triggerNotice(`Lights Preview: ${label}`);
+        return next;
+      });
+    });
+  };
+
+  // Sync optional Settings > Demo Telemetry preference cleanly without a dashboard button
+  useEffect(() => {
+    if (connectedDevice && hasReceivedFrames) return;
+    if (demoTelemetryEnabled && !appliedDemoRef.current) {
+      appliedDemoRef.current = true;
+      setSoc(78);
+      setAmbientTempC(20);
+      driverTempFRef.current = 72;
+      passengerTempFRef.current = 72;
+      setDriverTemp(fahrenheitToDisplayTemp(72, tempUnit));
+      setPassengerTemp(fahrenheitToDisplayTemp(72, tempUnit));
+      setClimateSync(true);
+      setFanSpeed(3);
+      setAirflow('auto');
+      setBatteryMinTempC(21);
+      setBatteryMaxTempC(24);
+      setAux12V(12.9);
+      setHvVoltage(742);
+      setTpms({ fl: 38, fr: 38, rl: 38, rr: 38 });
+      setAcChargeLimit(80);
+      setDcChargeLimit(80);
+    } else if (!demoTelemetryEnabled && appliedDemoRef.current) {
+      appliedDemoRef.current = false;
+      setSoc(null);
+      setAmbientTempC(null);
+      setDriverTemp(null);
+      setPassengerTemp(null);
+      setFanSpeed(null);
+      setBatteryMinTempC(null);
+      setBatteryMaxTempC(null);
+      setAux12V(null);
+      setHvVoltage(null);
+      setTpms({ fl: null, fr: null, rl: null, rr: null });
+      setAcChargeLimit(null);
+      setDcChargeLimit(null);
+      setIsCharging(false);
+      setChargeRateKw(0);
+    }
+  }, [demoTelemetryEnabled, connectedDevice, hasReceivedFrames, tempUnit]);
 
   // Calculated ambient temp display
   const displayAmbient = useMemo(() => {
@@ -301,19 +523,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     return `${ambientTempC.toFixed(1)}°C`;
   }, [ambientTempC, tempUnit]);
 
-  // Active ambient mood lighting color hex resolution
   const activeColorHex = useMemo(() => {
     return getAmbientColorHex(ambientColor);
   }, [ambientColor]);
-
-  // Ambient threshold assessment
-  const ambientThreshold = useMemo(() => {
-    if (ambientTempC === null) return null;
-    if (ambientTempC <= 0) return { label: 'Freezing', color: 'accent' as const };
-    if (ambientTempC < 15) return { label: 'Cold', color: 'accent' as const };
-    if (ambientTempC > 26) return { label: 'Warm', color: 'warning' as const };
-    return { label: 'Comfortable', color: 'success' as const };
-  }, [ambientTempC]);
 
   // Estimated driving range dynamically calculated based on active vehicle's battery pack & SOC
   const estimatedRangeMiles = useMemo(() => {
@@ -485,18 +697,6 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   };
 
   // Sunroof toggles
-  const toggleSunroofEquipped = () => {
-    setSunroof(prev => {
-      const nextEquipped = !prev.equipped;
-      const roofName = EGMP_MODELS[selectedModel].roofType;
-      triggerNotice(nextEquipped ? `${roofName}: Glass Roof Equipped` : 'Roof: Solid Steel Stamping');
-      return {
-        ...prev,
-        equipped: nextEquipped
-      };
-    });
-  };
-
   const cycleSunroofState = () => {
     runPreviewOrReadOnly('Sunroof Position', () => {
       setSunroof(prev => {
@@ -518,28 +718,12 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     });
   };
 
-  const toggleSunshade = () => {
-    runPreviewOrReadOnly('Power Sunshade', () => {
-      setSunroof(prev => {
-        const nextShade = prev.sunshade === 'open' ? 'closed' : 'open';
-        triggerNotice(`Power Sunshade: ${nextShade === 'open' ? 'Retracted' : 'Closed'} (Preview)`);
-        return { ...prev, sunshade: nextShade };
-      });
-    });
-  };
-
-  const cycleAcLimit = () => {
-    const limits = [50, 60, 70, 80, 90, 100];
-    const curr = acChargeLimit || 80;
-    const next = limits[(limits.indexOf(curr) + 1) % limits.length];
+  const setDirectAcLimit = (next: number) => {
     setAcChargeLimit(next);
-    dispatchCommand('ac_charging_limit', `${next}%`, `AC Limit: ${next}%`);
+    dispatchCommand('ac_charging_limit', `${next}%`, `AC Charge Limit: ${next}%`);
   };
 
-  const cycleDcLimit = () => {
-    const limits = [50, 60, 70, 80, 90, 100];
-    const curr = dcChargeLimit || 80;
-    const next = limits[(limits.indexOf(curr) + 1) % limits.length];
+  const setDirectDcLimit = (next: number) => {
     setDcChargeLimit(next);
     dispatchCommand('dc_charging_limit', `${next}%`, `DC Fast Charge Limit: ${next}%`);
   };
@@ -1515,119 +1699,47 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     );
   };
 
+  const setPresetTemp = (displayVal: number) => {
+    const targetF = Math.max(62, Math.min(82, displayTempToFahrenheit(displayVal, tempUnit)));
+    setDriverTemp(displayVal);
+    driverTempFRef.current = targetF;
+    if (climateSync !== false) {
+      setClimateSync(true);
+      setPassengerTemp(displayVal);
+      passengerTempFRef.current = targetF;
+    }
+    dispatchCommand('climate_driver_temp', `${targetF}°F`, `Cabin Target Temp: ${displayVal}°${tempUnit}`);
+  };
+
+  const isThermalBannerActive = hvacPower === true || climateStartAnim === 'starting';
+  const isCoolingBanner = acActive === true && heatActive !== true;
+  const isSyncedMode = climateSync !== false;
+  const displayTargetTemp =
+    driverTemp !== null
+      ? `${driverTemp}°${tempUnit}`
+      : tempUnit === 'C'
+        ? '22°C'
+        : '72°F';
+
+  const seatLevelLabel = (lvl: SeatLevel | null) => {
+    if (!lvl || lvl === 'off') return 'Off';
+    return lvl.replace('_', ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+  };
+
+  const formatChargeSummary = () => {
+    if (isCharging) return `Charging${chargeRateKw > 0 ? ` +${chargeRateKw} kW` : ''}`;
+    if (gear === 'P') return 'Parked';
+    if (gear === 'R') return 'Reverse';
+    if (gear === 'N') return 'Neutral';
+    if (gear === 'D') return 'Drive';
+    return `Gear ${gear}`;
+  };
+
+  const chargeLimitPresets = [60, 70, 80, 90, 100];
+  const tempPresets = tempUnit === 'C' ? [19, 21, 22, 24] : [68, 70, 72, 74];
+
   return (
     <div id="vehicle-live-dashboard" className="space-y-5 select-none animate-fadeIn">
-      {/* 1. Header Toolbar: Vehicle ID & Telemetry Status Bar (Option 3: Unified Automotive Status Bar) */}
-      <header className="p-4 sm:p-5 rounded-2xl bg-surface border border-border shadow-surface space-y-3">
-        {/* Top Row: Vehicle Title & Identity (Left) vs CAN Status Badge (Right) */}
-        <div className="flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-surface-secondary border border-border flex items-center justify-center text-accent shrink-0">
-              <Car className="w-6 h-6" />
-            </div>
-            <div className="flex items-center gap-2 min-w-0 flex-wrap">
-              <h1 className="text-base sm:text-lg font-bold text-foreground tracking-tight truncate">
-                {activeVehicle ? `${activeVehicle.make} ${activeVehicle.model} ${activeVehicle.trim || ''}`.trim() : `${EGMP_MODELS[selectedModel].brand} ${EGMP_MODELS[selectedModel].name}`}
-              </h1>
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full font-mono text-[10px] font-medium tracking-wide text-accent-soft-foreground bg-accent-soft border border-accent/30 shrink-0">
-                {activeVehicle?.region ? activeVehicle.region.toUpperCase() : EGMP_MODELS[selectedModel].badge}
-              </span>
-            </div>
-          </div>
-
-          {/* Live CAN Telemetry Connection Badge */}
-          <span
-            id="live-can-status-badge"
-            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all shrink-0 ml-auto ${connectedDevice
-              ? 'bg-success-soft text-success-soft-foreground border-success/30 shadow-sm'
-              : 'bg-surface-secondary text-foreground border-border shadow-sm'
-              }`}
-          >
-            <span className={`w-2 h-2 rounded-full shrink-0 ${connectedDevice ? 'bg-success animate-pulse' : 'bg-warning'}`} />
-            <span>{connectedDevice ? 'Vehicle CAN Online' : 'Awaiting CAN Traffic'}</span>
-          </span>
-        </div>
-
-        {/* Bottom Row: Integrated Vehicle Telemetry HUD Strip */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-separator text-xs text-muted">
-          {/* Left: Odometer, Ambient Temp, Speed */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 text-xs">
-            <span className="font-mono text-foreground font-medium">
-              {odometer !== null ? `${odometer.toLocaleString()} ${unitSystem === 'metric' ? 'km' : 'mi'}` : `-- ${unitSystem === 'metric' ? 'km' : 'mi'}`}
-            </span>
-            <span className="text-muted/60">•</span>
-            <button
-              type="button"
-              id="hud-outdoor-temp-btn"
-              onClick={cycleAmbientTempPreview}
-              title="Outdoor Ambient Temperature (Click in bench mode to preview)"
-              className="inline-flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
-            >
-              <Thermometer className="w-3.5 h-3.5 text-muted" />
-              <span>{displayAmbient}</span>
-              {ambientThreshold && (
-                <Chip
-                  size="sm"
-                  color={ambientThreshold.color}
-                  variant="soft"
-                  className="text-[10px] px-1.5 py-0.2 rounded font-medium"
-                >
-                  {ambientThreshold.label}
-                </Chip>
-              )}
-            </button>
-            <span className="text-muted/60">•</span>
-            <span className="font-mono text-foreground font-medium">
-              {unitSystem === 'metric' ? `${speedKph} km/h` : `${speedMph} MPH`}
-            </span>
-          </div>
-
-          {/* Right: Battery State of Charge (SoC) & Charging Status */}
-          <div className="flex items-center gap-2 shrink-0 ml-auto">
-            <Tooltip>
-              <Tooltip.Trigger>
-                <div className="flex items-center gap-2">
-                  <Chip
-                    size="sm"
-                    color={soc !== null && soc <= 20 ? 'danger' : isCharging ? 'success' : 'accent'}
-                    variant="soft"
-                    className="px-2.5 py-1 text-xs font-mono font-semibold inline-flex items-center gap-1.5 border border-current/20 shadow-sm cursor-help"
-                  >
-                    {isCharging ? (
-                      <BatteryCharging className="w-3.5 h-3.5 text-success animate-pulse mr-1" />
-                    ) : (
-                      <Battery className="w-3.5 h-3.5 text-accent mr-1" />
-                    )}
-                    <span>{soc !== null ? `${soc}%` : '--%'}</span>
-                    {estimatedRangeMiles !== null && (
-                      <span className="text-[10px] opacity-75 ml-1">• {estimatedRangeMiles} {unitSystem === 'metric' ? 'km' : 'mi'}</span>
-                    )}
-                    {isCharging && (
-                      <span className="text-[9px] uppercase tracking-wider font-bold bg-success/20 px-1 rounded text-success-soft-foreground ml-1">
-                        Charging
-                      </span>
-                    )}
-                  </Chip>
-                  <div className="w-16 hidden sm:block">
-                    <ProgressBar
-                      value={soc ?? 0}
-                      aria-label="HV Traction Battery State of Charge"
-                      className="w-full flex flex-col gap-0.5"
-                    >
-                      <ProgressBar.Track className="w-full bg-surface-tertiary rounded-full h-1.5 overflow-hidden">
-                        <ProgressBar.Fill className={`${soc !== null && soc <= 20 ? 'bg-danger' : isCharging ? 'bg-success' : 'bg-accent'} h-1.5 rounded-full transition-all duration-300`} />
-                      </ProgressBar.Track>
-                    </ProgressBar>
-                  </div>
-                </div>
-              </Tooltip.Trigger>
-              <Tooltip.Content className="px-2.5 py-1 text-xs rounded-md bg-overlay border border-border text-overlay-foreground shadow-overlay z-50">
-                {isCharging ? `EV Traction Battery Charging: ${soc !== null ? `${soc}%` : '--%'}` : `HV Battery State of Charge: ${soc !== null ? `${soc}%` : '--%'}`}
-              </Tooltip.Content>
-            </Tooltip>
-          </div>
-        </div>
-      </header>
 
       {/* Toast Notice */}
       {feedbackNotice && (
@@ -1637,480 +1749,1237 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         </div>
       )}
 
-      {/* 2. Main Cockpit Grid: Unified Vehicle Overview & Outlines */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-
-        {/* Main Vehicle Column: Unified Vehicle Outline Card */}
-        <div className="lg:col-span-7 xl:col-span-8 space-y-4">
+      {/* Rivian-Style Main Cockpit Canvas */}
+      <div className="max-w-3xl mx-auto space-y-4">
+        <div className="space-y-4">
+          {/* HERO VEHICLE STAGE & QUICK ACTIONS CARD */}
           <Card
             id="unified-vehicle-cockpit-card"
-            className="relative p-4 sm:p-6 rounded-2xl bg-surface border border-border shadow-surface space-y-5"
+            className="overflow-hidden rounded-3xl bg-surface border border-border shadow-surface"
           >
-            {/* Top Toolbar: Gear Selector, Lock/Unlock Security & Lighting Controls */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-5 border-b border-separator">
-              {/* Transmission Gear Selector */}
-              <div className="flex items-center gap-2.5">
-                <div className="flex items-center gap-1 p-1 rounded-xl bg-surface-secondary border border-border">
-                  {(['P', 'R', 'N', 'D'] as GearMode[]).map((g) => {
-                    const active = gear === g;
-                    return (
-                      <Tooltip key={g}>
-                        <Tooltip.Trigger>
-                          <button
-                            id={`gear-selector-${g}`}
-                            type="button"
-                            onClick={() => {
-                              runPreviewOrReadOnly('Transmission Gear', () => {
-                                setGear(g);
-                                if (g === 'D') {
-                                  setSpeedMph(prev => (prev === 0 ? 35 : prev));
-                                  setSpeedKph(prev => (prev === 0 ? 56 : prev));
-                                }
-                                if (g === 'P') {
-                                  setSpeedMph(0);
-                                  setSpeedKph(0);
-                                }
-                                triggerNotice(`Transmission Preview: ${g}`);
-                              });
-                            }}
-                            className="focus:outline-none"
-                          >
-                            <Chip
-                              size="sm"
-                              color={active ? 'accent' : 'default'}
-                              variant={active ? 'primary' : 'secondary'}
-                              className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all cursor-pointer ${active
-                                ? 'bg-accent text-accent-foreground shadow-sm ring-1 ring-accent/40 font-extrabold scale-105'
-                                : 'bg-surface-tertiary text-muted hover:text-foreground hover:bg-default-hover'
-                                }`}
-                            >
-                              {g}
-                            </Chip>
-                          </button>
-                        </Tooltip.Trigger>
-                        <Tooltip.Content className="px-2.5 py-1 text-xs rounded-md bg-overlay border border-border text-overlay-foreground shadow-overlay z-50">
-                          {`Transmission Gear: ${g === 'P' ? 'Park' : g === 'R' ? 'Reverse' : g === 'N' ? 'Neutral' : 'Drive'} (CAN 0x${canMappings.gear.toUpperCase()})`}
-                        </Tooltip.Content>
-                      </Tooltip>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Security Lock Toggle & Exterior Lighting Controls */}
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Headlights Mode Selector */}
-                <Tabs
-                  selectedKey={lights || 'off'}
-                  onSelectionChange={key => {
-                    const mode = key as LightMode;
-                    runPreviewOrReadOnly('Headlights Mode', () => {
-                      setLights(mode);
-                      triggerNotice(`Headlights Preview: ${mode.toUpperCase()}`);
-                    });
-                  }}
-                  aria-label="Headlight Mode"
-                >
-                  <Tabs.ListContainer className="p-0.5 rounded-xl bg-default border border-border text-xs">
-                    <Tabs.List className="gap-0.5">
-                      {(['off', 'parking', 'low', 'high', 'auto'] as LightMode[]).map(mode => (
-                        <Tabs.Tab
-                          key={mode}
-                          id={mode}
-                          data-testid={`light-btn-${mode}`}
-                          className={`relative px-2 py-1 rounded-lg text-[11px] font-medium uppercase transition-colors cursor-pointer flex items-center ${lights === mode
-                            ? 'text-accent font-bold'
-                            : 'text-muted hover:text-foreground'
-                            }`}
-                        >
-                          <span>{mode}</span>
-                          <Tabs.Indicator className="rounded-lg bg-accent-soft border border-accent/50 shadow-sm" />
-                        </Tabs.Tab>
-                      ))}
-                    </Tabs.List>
-                  </Tabs.ListContainer>
-                </Tabs>
-
-                {/* Hazards & Mirrors */}
-                <button
-                  type="button"
-                  id="hazard-btn"
-                  onClick={() => {
-                    const nextHaz = !hazards;
-                    setHazards(nextHaz);
-                    dispatchCommand('hazard_lights', nextHaz ? 'Turned ON / Active' : 'Turned OFF / Inactive', nextHaz ? 'Hazard Flashers Active' : 'Hazard Flashers Deactivated');
-                  }}
-                  className={`p-2 rounded-xl border transition-colors ${hazards
-                    ? 'bg-warning-soft text-warning-soft-foreground border-warning/50 animate-pulse'
-                    : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                    }`}
-                  title="Hazard Flashers (CAN 0x413 / 0x587)"
-                >
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                </button>
-
-                {/* Turn Signals Controls */}
-                <div className="flex items-center gap-0.5 p-0.5 rounded-xl bg-surface-secondary border border-border">
-                  <button
-                    type="button"
-                    id="turn-left-btn"
-                    onClick={() => {
-                      const next = turnSignal === 'left' ? 'off' : 'left';
-                      runPreviewOrReadOnly('Turn Signal', () => {
-                        setTurnSignal(next);
-                        triggerNotice(`Turn Signal Preview: ${next.toUpperCase()}`);
-                      });
-                    }}
-                    title="Left Turn Signal Indicator (CAN 0x3C1 / 0x413)"
-                    className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${(turnSignal === 'left' || hazards) && blinkState
-                      ? 'bg-success text-success-foreground font-black shadow-sm scale-105'
-                      : turnSignal === 'left'
-                        ? 'bg-success-soft text-success-soft-foreground border border-success/40'
-                        : 'text-muted hover:text-foreground'
-                      }`}
-                  >
-                    ◀
-                  </button>
-                  <button
-                    type="button"
-                    id="turn-right-btn"
-                    onClick={() => {
-                      const next = turnSignal === 'right' ? 'off' : 'right';
-                      runPreviewOrReadOnly('Turn Signal', () => {
-                        setTurnSignal(next);
-                        triggerNotice(`Turn Signal Preview: ${next.toUpperCase()}`);
-                      });
-                    }}
-                    title="Right Turn Signal Indicator (CAN 0x3C1 / 0x413)"
-                    className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${(turnSignal === 'right' || hazards) && blinkState
-                      ? 'bg-success text-success-foreground font-black shadow-sm scale-105'
-                      : turnSignal === 'right'
-                        ? 'bg-success-soft text-success-soft-foreground border border-success/40'
-                        : 'text-muted hover:text-foreground'
-                      }`}
-                  >
-                    ▶
-                  </button>
-                </div>
-
-                {/* Vehicle Lock/Unlock Master Action */}
-                <button
-                  type="button"
-                  id="lock-all-btn"
-                  onClick={() => {
-                    const next = !locked;
-                    setLocked(next);
-                    if (next) {
-                      setDoors({ frontLeft: false, frontRight: false, rearLeft: false, rearRight: false });
-                      setHoodOpen(false);
-                      setTrunkOpen(false);
-                    }
-                    if (autoFoldEnabledRef.current) {
-                      setMirrorsFolded(next);
-                    }
-                    dispatchCommand('door_locks', next ? 'lock' : 'unlock', next ? 'All Doors Locked & Secured' : 'Vehicle Unlocked');
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 border transition-colors ${locked
-                    ? 'bg-surface-secondary text-success border-border hover:bg-surface-tertiary'
-                    : 'bg-warning-soft text-warning-soft-foreground border-warning/40 shadow-sm'
-                    }`}
-                >
-                  {locked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-                  <span>{locked ? 'Locked' : 'Unlocked'}</span>
-                </button>
-              </div>
-            </div>
-
-
-
-            {/* Central Vehicle Silhouette Visual Stage with Projections & TPMS */}
-            <div className="relative py-2 overflow-hidden flex flex-col items-center justify-center min-h-[500px]">
-              {/* Headlight beam projections (visible when low or high or auto in Drive) */}
-              {(lights === 'low' || lights === 'high' || (lights === 'auto' && gear === 'D')) && (
-                <div
-                  className={`absolute -top-12 w-64 h-36 bg-gradient-to-t from-accent/20 via-accent/5 to-transparent pointer-events-none blur-xl transition-opacity duration-500 ${lights === 'high' ? 'opacity-80 scale-125' : 'opacity-40'
-                    }`}
-                  style={{ clipPath: 'polygon(20% 100%, 80% 100%, 100% 0%, 0% 0%)' }}
-                />
-              )}
-
-              {/* Onboarding-Selected Vehicle Vector Silhouette */}
-              <VehicleSilhouette
-                model={selectedModel}
-                perspective={perspective}
-                sunroof={sunroof}
-                doors={doors}
-                hoodOpen={hoodOpen}
-                trunkOpen={trunkOpen}
-                chargePortOpen={chargePortOpen}
-                isCharging={isCharging}
-                mirrorsFolded={mirrorsFolded}
-                lights={lights}
-                rearDefrost={rearDefrost}
-                hazards={hazards}
-                turnSignal={turnSignal}
-                blinkState={blinkState}
-                gear={gear}
-                speedMph={speedMph}
-                driverSeat={driverSeat}
-                passengerSeat={passengerSeat}
-                steeringWheelHeat={steeringWheelHeat}
-                onToggleDoor={toggleDoor}
-                onToggleHood={handleToggleHood}
-                onToggleTrunk={handleToggleTrunk}
-                onToggleChargePort={() => {
-                  const next = !chargePortOpen;
-                  setChargePortOpen(next);
-                  dispatchCommand(
-                    'charge_port',
-                    next ? 'Opened / Open' : 'Closed / Shut',
-                    next ? 'Charge Port Opened' : 'Charge Port Closed'
-                  );
+            {/* Dynamic Thermal Banner (Slides open when Remote Climate / HVAC is running, Rivian 3.0 style) */}
+            {isThermalBannerActive && (
+              <div
+                id="climate-running-banner"
+                className="px-5 py-5 text-white transition-all duration-300"
+                style={{
+                  background: isCoolingBanner
+                    ? 'linear-gradient(135deg, #135582 0%, #1d70a6 100%)'
+                    : 'linear-gradient(135deg, #c84b28 0%, #e0633c 100%)'
                 }}
-                onToggleSunroof={cycleSunroofState}
-                onCycleDriverSeat={() => cycleSeat(driverSeat, true)}
-                onCyclePassengerSeat={() => cycleSeat(passengerSeat, false)}
-                onCycleSteeringHeat={cycleSteeringHeat}
-              />
-            </div>
+              >
+                <div className="flex flex-col items-center text-center gap-1.5">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white/90">
+                    <Fan className="w-4 h-4 animate-spin" style={{ animationDuration: '1.8s' }} />
+                    <span>{isCoolingBanner ? 'Cooling Cabin' : 'Conditioning Cabin'}</span>
+                  </div>
 
-            {/* Closures, Security & Latches Grid + Roof Controls */}
-            <div className="pt-5 border-t border-separator space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-accent" />
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Closures & Security</h3>
+                  {/* Direct In-Banner Temp Stepper */}
+                  <div className="flex items-center justify-center gap-4 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => adjustTemp(true, -1)}
+                      aria-label="Decrease target cabin temperature"
+                      className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <div className="text-4xl sm:text-5xl font-bold font-mono tabular-nums tracking-tight leading-none min-w-[110px]">
+                      {displayTargetTemp}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => adjustTemp(true, 1)}
+                      aria-label="Increase target cabin temperature"
+                      className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <p className="text-sm font-semibold mt-0.5">Climate is running</p>
+                  <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-white/85">
+                    <span>
+                      Target {displayTargetTemp}
+                      {ambientTempC !== null ? ` · Outside ${displayAmbient}` : ''}
+                      {driverOnly === true ? ' · Driver Only' : ''}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <button
+                      type="button"
+                      onClick={executeRemoteClimateToggle}
+                      className="underline font-semibold hover:text-white cursor-pointer"
+                    >
+                      Turn Off
+                    </button>
+                  </div>
                 </div>
               </div>
+            )}
 
-              {/* Doors & Latches Matrix */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
-                <button
-                  type="button"
-                  id="toggle-fl-door"
-                  onClick={() => toggleDoor('frontLeft')}
-                  className={`p-2 rounded-xl text-left border transition-all ${doors.frontLeft
-                    ? 'bg-warning-soft text-warning-soft-foreground border-warning/40 shadow-sm'
-                    : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                    }`}
-                >
-                  <span className="text-[10px] block opacity-75">Driver Door</span>
-                  <Chip
-                    size="sm"
-                    color={doors.frontLeft ? 'warning' : 'default'}
-                    variant="soft"
-                    className="mt-1 font-semibold text-[10px]"
-                  >
-                    {doors.frontLeft ? 'Opened' : 'Closed'}
-                  </Chip>
-                </button>
-
-                <button
-                  type="button"
-                  id="toggle-fr-door"
-                  onClick={() => toggleDoor('frontRight')}
-                  className={`p-2 rounded-xl text-left border transition-all ${doors.frontRight
-                    ? 'bg-warning-soft text-warning-soft-foreground border-warning/40 shadow-sm'
-                    : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                    }`}
-                >
-                  <span className="text-[10px] block opacity-75">Pass. Door</span>
-                  <Chip
-                    size="sm"
-                    color={doors.frontRight ? 'warning' : 'default'}
-                    variant="soft"
-                    className="mt-1 font-semibold text-[10px]"
-                  >
-                    {doors.frontRight ? 'Opened' : 'Closed'}
-                  </Chip>
-                </button>
-
-                <button
-                  type="button"
-                  id="toggle-rl-door"
-                  onClick={() => toggleDoor('rearLeft')}
-                  className={`p-2 rounded-xl text-left border transition-all ${doors.rearLeft
-                    ? 'bg-warning-soft text-warning-soft-foreground border-warning/40 shadow-sm'
-                    : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                    }`}
-                >
-                  <span className="text-[10px] block opacity-75">Rear Left</span>
-                  <Chip
-                    size="sm"
-                    color={doors.rearLeft ? 'warning' : 'default'}
-                    variant="soft"
-                    className="mt-1 font-semibold text-[10px]"
-                  >
-                    {doors.rearLeft ? 'Opened' : 'Closed'}
-                  </Chip>
-                </button>
-
-                <button
-                  type="button"
-                  id="toggle-rr-door"
-                  onClick={() => toggleDoor('rearRight')}
-                  className={`p-2 rounded-xl text-left border transition-all ${doors.rearRight
-                    ? 'bg-warning-soft text-warning-soft-foreground border-warning/40 shadow-sm'
-                    : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                    }`}
-                >
-                  <span className="text-[10px] block opacity-75">Rear Right</span>
-                  <Chip
-                    size="sm"
-                    color={doors.rearRight ? 'warning' : 'default'}
-                    variant="soft"
-                    className="mt-1 font-semibold text-[10px]"
-                  >
-                    {doors.rearRight ? 'Opened' : 'Closed'}
-                  </Chip>
-                </button>
-
-                <button
-                  type="button"
-                  id="toggle-hood"
-                  onClick={handleToggleHood}
-                  className={`p-2 rounded-xl text-left border transition-all ${hoodOpen
-                    ? 'bg-warning-soft text-warning-soft-foreground border-warning/40 shadow-sm'
-                    : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                    }`}
-                >
-                  <span className="text-[10px] block opacity-75">Frunk / Hood</span>
-                  <Chip
-                    size="sm"
-                    color={hoodOpen ? 'warning' : 'default'}
-                    variant="soft"
-                    className="mt-1 font-semibold text-[10px]"
-                  >
-                    {hoodOpen ? 'OPEN' : 'Closed'}
-                  </Chip>
-                </button>
-
-                <button
-                  type="button"
-                  id="toggle-trunk"
-                  onClick={handleToggleTrunk}
-                  className={`p-2 rounded-xl text-left border transition-all ${trunkOpen
-                    ? 'bg-warning-soft text-warning-soft-foreground border-warning/40 shadow-sm'
-                    : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                    }`}
-                >
-                  <span className="text-[10px] block opacity-75">Liftgate / Trunk</span>
-                  <Chip
-                    size="sm"
-                    color={trunkOpen ? 'warning' : 'default'}
-                    variant="soft"
-                    className="mt-1 font-semibold text-[10px]"
-                  >
-                    {trunkOpen ? 'OPEN' : 'Closed'}
-                  </Chip>
-                </button>
-              </div>
-
-              {/* Roof Configuration Row */}
-              <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="text-muted">Roof Configuration:</span>
-                  <span className="font-medium text-foreground">
-                    {sunroof.equipped ? EGMP_MODELS[selectedModel].roofType : 'Solid Steel Stamping'}
+            <div className="p-5 sm:p-6 space-y-5">
+              {/* Centered Rivian 3.0 Range Hero Anchor */}
+              <div className="flex flex-col items-center text-center space-y-1.5 pt-1">
+                <div className="flex items-baseline justify-center gap-2">
+                  <span className="text-5xl sm:text-6xl font-bold tracking-tight text-foreground font-mono tabular-nums leading-none">
+                    {estimatedRangeMiles !== null ? estimatedRangeMiles : '--'}
+                  </span>
+                  <span className="text-xl sm:text-2xl font-semibold text-muted">
+                    {unitSystem === 'metric' ? 'km' : 'mi'}
                   </span>
                 </div>
+                <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-muted">
+                  <span className="font-mono tabular-nums font-semibold text-foreground">
+                    {soc !== null ? `${soc}%` : '--%'}
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span className={isCharging ? 'text-success font-semibold' : ''}>
+                    {formatChargeSummary()}
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span className="font-mono tabular-nums text-foreground">
+                    {unitSystem === 'metric' ? `${speedKph} km/h` : `${speedMph} MPH`}
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span className={locked ? 'text-foreground' : 'text-warning font-semibold'}>
+                    {locked ? 'Secured' : 'Unlocked'}
+                  </span>
+                  {odometer !== null && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span className="font-mono tabular-nums">
+                        {odometer.toLocaleString()} {unitSystem === 'metric' ? 'km' : 'mi'}
+                      </span>
+                    </>
+                  )}
+                </div>
 
-                <div className="flex items-center gap-2">
+                {/* Compact Centered SoC Progress Bar */}
+                <div className="w-full max-w-sm pt-1.5">
+                  <ProgressBar
+                    value={soc ?? 0}
+                    aria-label="HV Traction Battery State of Charge"
+                    className="w-full"
+                  >
+                    <ProgressBar.Track className="w-full bg-surface-secondary rounded-full h-1.5 overflow-hidden border border-border/50">
+                      <ProgressBar.Fill
+                        className={`${
+                          soc !== null && soc <= 20
+                            ? 'bg-danger'
+                            : isCharging
+                              ? 'bg-success'
+                              : 'bg-accent'
+                        } h-1.5 rounded-full transition-all duration-300`}
+                      />
+                    </ProgressBar.Track>
+                  </ProgressBar>
+                </div>
+              </div>
+
+              {/* Contextual Closure / Charging Alert Strip */}
+              {hasClosureAlert && (
+                <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl bg-surface-secondary border border-border text-xs">
+                  <div className="flex items-center gap-2 text-foreground min-w-0">
+                    <AlertTriangle className={`w-4 h-4 shrink-0 ${isCharging && openClosureCount === 0 ? 'text-success' : 'text-warning'}`} />
+                    <span className="font-medium truncate">
+                      {openClosureCount > 0
+                        ? `${openClosureLabels.join(' · ')} open`
+                        : isCharging
+                          ? `Charging active${chargeRateKw > 0 ? ` · +${chargeRateKw} kW` : ''}`
+                          : 'Charge port door open'}
+                    </span>
+                  </div>
                   <button
                     type="button"
-                    id="toggle-sunroof-equipped-btn"
-                    onClick={toggleSunroofEquipped}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${sunroof.equipped
-                      ? 'bg-accent-soft text-accent-soft-foreground border-accent/40 shadow-sm'
-                      : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                      }`}
+                    onClick={toggleTopDownView}
+                    className="text-accent font-semibold hover:underline cursor-pointer whitespace-nowrap shrink-0"
                   >
-                    {sunroof.equipped ? 'Glass Equipped' : 'Solid Roof'}
+                    {effectiveHeroView === 'topdown' ? 'Compact View' : 'Top-Down View'}
                   </button>
+                </div>
+              )}
 
-                  {sunroof.equipped && (
-                    selectedModel === 'ev6' || selectedModel === 'ioniq6' ? (
-                      <div className="flex items-center gap-1 p-0.5 rounded-lg bg-surface-secondary border border-border">
-                        {(['closed', 'vent', 'open'] as const).map(pos => (
+              {/* State-Driven Rivian Hero Stage: Front Nose (Idle), Side View (Charging / Toggle), or Top-Down */}
+              <div className="space-y-3">
+                {effectiveHeroView === 'side' && (
+                  <div className="py-1 flex flex-col items-center justify-center px-2">
+                    <div className="w-full max-w-[400px] space-y-1.5">
+                      <VehicleSideChargingProfile
+                        model={selectedModel}
+                        soc={soc}
+                        chargeRateKw={chargeRateKw}
+                        lights={lights}
+                        gear={gear}
+                        trunkOpen={trunkOpen}
+                        hoodOpen={hoodOpen}
+                        onClick={() => setActiveOverlay('charging')}
+                      />
+                      <div className="flex items-center justify-center gap-2 text-[11px] text-muted font-mono tabular-nums">
+                        <span className={isCharging ? 'text-success font-semibold' : 'text-foreground/80 font-medium'}>
+                          {isCharging
+                            ? chargeRateKw > 0
+                              ? `+${chargeRateKw} kW Charging`
+                              : 'Charging Active'
+                            : 'Side Charging Preview'}
+                        </span>
+                        <span aria-hidden="true">·</span>
+                        <span>
+                          {soc !== null ? `${soc}%` : '--%'} → {acChargeLimit ?? 80}% limit
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {effectiveHeroView === 'nose' && (
+                  <div className="py-2 flex flex-col items-center justify-center px-2">
+                    <div className="w-full max-w-[360px] space-y-1.5">
+                      <FrontFasciaHeadlightSignature
+                        model={selectedModel}
+                        lights={lights}
+                        gear={gear}
+                        hazards={hazards}
+                        turnSignal={turnSignal}
+                        blinkState={blinkState}
+                        hoodOpen={hoodOpen}
+                        onClick={cycleLightsPreview}
+                      />
+                      <div className="flex items-center justify-center gap-2 text-[11px] text-muted">
+                        <span>
+                          {EGMP_MODELS[selectedModel].brand} {EGMP_MODELS[selectedModel].name}
+                        </span>
+                        <span aria-hidden="true">·</span>
+                        <span>
+                          Lights {lights === 'auto' ? (gear !== 'P' ? 'Active' : 'Auto') : lights.toUpperCase()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {effectiveHeroView === 'topdown' && (
+                  <div className="space-y-3 pt-1">
+                    <div className="relative py-1 overflow-hidden flex flex-col items-center justify-center">
+                      {(lights === 'low' || lights === 'high' || (lights === 'auto' && gear === 'D')) && (
+                        <div
+                          className={`absolute -top-6 w-56 h-24 bg-gradient-to-t from-accent/20 via-accent/5 to-transparent pointer-events-none blur-xl transition-opacity duration-500 ${
+                            lights === 'high' ? 'opacity-80 scale-125' : 'opacity-40'
+                          }`}
+                          style={{ clipPath: 'polygon(20% 100%, 80% 100%, 100% 0%, 0% 0%)' }}
+                        />
+                      )}
+                      <div className="w-full max-w-[205px] sm:max-w-[225px]">
+                        <VehicleSilhouette
+                          model={selectedModel}
+                          perspective={perspective}
+                          sunroof={sunroof}
+                          doors={doors}
+                          hoodOpen={hoodOpen}
+                          trunkOpen={trunkOpen}
+                          chargePortOpen={chargePortOpen}
+                          isCharging={isCharging}
+                          mirrorsFolded={mirrorsFolded}
+                          lights={lights}
+                          rearDefrost={rearDefrost}
+                          hazards={hazards}
+                          turnSignal={turnSignal}
+                          blinkState={blinkState}
+                          gear={gear}
+                          speedMph={speedMph}
+                          driverSeat={driverSeat}
+                          passengerSeat={passengerSeat}
+                          steeringWheelHeat={steeringWheelHeat}
+                          onToggleDoor={toggleDoor}
+                          onToggleHood={handleToggleHood}
+                          onToggleTrunk={handleToggleTrunk}
+                          onToggleChargePort={() => {
+                            const next = !chargePortOpen;
+                            setChargePortOpen(next);
+                            dispatchCommand(
+                              'charge_port',
+                              next ? 'Opened / Open' : 'Closed / Shut',
+                              next ? 'Charge Port Opened' : 'Charge Port Closed'
+                            );
+                          }}
+                          onToggleSunroof={cycleSunroofState}
+                          onCycleDriverSeat={() => cycleSeat(driverSeat, true)}
+                          onCyclePassengerSeat={() => cycleSeat(passengerSeat, false)}
+                          onCycleSteeringHeat={cycleSteeringHeat}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-center">
+                      <div className="flex items-center gap-1 p-1 rounded-xl bg-surface-secondary border border-border">
+                        {(['exterior', 'interior', 'powertrain'] as ViewPerspective[]).map(p => (
                           <button
-                            key={pos}
+                            key={p}
                             type="button"
-                            id={`sunroof-pos-${pos}`}
-                            onClick={() => {
-                              runPreviewOrReadOnly('Sunroof Position', () => {
-                                setSunroof(prev => ({ ...prev, state: pos }));
-                                triggerNotice(`Sunroof Preview: ${pos === 'vent' ? 'Tilt Vent' : pos === 'open' ? 'Fully Open' : 'Closed'}`);
-                              });
-                            }}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-colors ${sunroof.state === pos
-                              ? 'bg-accent text-accent-foreground shadow-sm'
-                              : 'text-muted hover:text-foreground'
-                              }`}
+                            id={`perspective-tab-${p}`}
+                            onClick={() => setPerspective(p)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                              perspective === p
+                                ? 'bg-surface text-foreground shadow-sm border border-border/60'
+                                : 'text-muted hover:text-foreground'
+                            }`}
                           >
-                            {pos}
+                            {p === 'powertrain' ? '800V Powertrain' : p}
                           </button>
                         ))}
                       </div>
-                    ) : (
-                      <button
-                        type="button"
-                        id="toggle-vision-shade-btn"
-                        onClick={toggleSunshade}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${sunroof.sunshade === 'open'
-                          ? 'bg-accent-soft text-accent-soft-foreground border-accent/40'
-                          : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                    </div>
+                  </div>
+                )}
+
+                {/* Compact View Switcher: Auto / Front Nose / Side View / Top-Down */}
+                <div className="flex justify-center">
+                  <div
+                    role="group"
+                    aria-label="Vehicle stage view mode"
+                    className="inline-flex items-center gap-1 p-1 rounded-xl bg-surface-secondary border border-border text-xs"
+                  >
+                    {([
+                      { id: 'auto', label: 'Auto' },
+                      { id: 'nose', label: 'Front Nose' },
+                      { id: 'side', label: 'Side View' },
+                      { id: 'topdown', label: 'Top-Down' },
+                    ] as const).map(opt => {
+                      const active = heroViewMode === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          id={opt.id === 'side' ? 'hero-view-side-btn' : `hero-view-${opt.id}-btn`}
+                          onClick={() => setHeroViewMode(opt.id)}
+                          className={`px-2.5 sm:px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                            active
+                              ? 'bg-surface text-foreground shadow-sm border border-border/60'
+                              : 'text-muted hover:text-foreground'
                           }`}
-                      >
-                        {sunroof.sunshade === 'open' ? 'Vision Shade: Retracted' : 'Vision Shade: Closed'}
-                      </button>
-                    )
-                  )}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Rivian-Style Quick Actions Dock + Zero-Friction Single-Tap EV Start Button */}
+              <div
+                className={`relative py-3.5 px-3 rounded-2xl border overflow-hidden transition-colors duration-300 ${
+                  climateStartAnim === 'starting'
+                    ? 'bg-zinc-950/95 border-border shadow-inner'
+                    : 'bg-surface-secondary/50 border-border'
+                }`}
+              >
+                {/* Kia "Opposites United" Geometric Lattice + Neon Light-Streak Stage */}
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 overflow-hidden transition-opacity duration-300"
+                  style={{
+                    opacity:
+                      climateStartAnim === 'starting'
+                        ? 1
+                        : hvacPower === true
+                          ? 0.2
+                          : 0
+                  }}
+                >
+                  <div
+                    className="absolute inset-0 opacity-25"
+                    style={{
+                      backgroundImage:
+                        'linear-gradient(to right, rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.06) 1px, transparent 1px)',
+                      backgroundSize: '22px 22px'
+                    }}
+                  />
+
+                  <svg
+                    key={`kia-stage-${climateAnimKey}`}
+                    viewBox="0 0 400 100"
+                    preserveAspectRatio="none"
+                    className="absolute inset-0 w-full h-full"
+                  >
+                    <defs>
+                      <filter id="kiaLaserGlow" x="-30%" y="-30%" width="160%" height="160%">
+                        <feGaussianBlur stdDeviation="2.2" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
+                    </defs>
+
+                    <path
+                      d="M 0 50 L 90 50 L 122 26 L 200 50"
+                      fill="none"
+                      stroke="#38bdf8"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      filter="url(#kiaLaserGlow)"
+                      className={climateStartAnim === 'starting' ? 'kia-streak-active' : ''}
+                    />
+
+                    <path
+                      d="M 400 50 L 310 50 L 278 74 L 200 50"
+                      fill="none"
+                      stroke={activeColorHex}
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      filter="url(#kiaLaserGlow)"
+                      className={climateStartAnim === 'starting' ? 'kia-streak-active' : ''}
+                    />
+
+                    <line
+                      x1="128"
+                      y1="96"
+                      x2="272"
+                      y2="4"
+                      stroke="#7dd3fc"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      filter="url(#kiaLaserGlow)"
+                      className={climateStartAnim === 'starting' ? 'kia-streak-active' : ''}
+                    />
+                    <line
+                      x1="272"
+                      y1="96"
+                      x2="128"
+                      y2="4"
+                      stroke="#fb7185"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      filter="url(#kiaLaserGlow)"
+                      className={climateStartAnim === 'starting' ? 'kia-streak-active' : ''}
+                    />
+
+                    {climateStartAnim === 'starting' && (
+                      <g className="kia-crosshair-active">
+                        <line x1="150" y1="50" x2="250" y2="50" stroke="#e0f2fe" strokeWidth="1.4" filter="url(#kiaLaserGlow)" />
+                        <line x1="200" y1="10" x2="200" y2="90" stroke={activeColorHex} strokeWidth="1.4" filter="url(#kiaLaserGlow)" />
+                        <circle cx="200" cy="50" r="14" fill={activeColorHex} opacity="0.35" filter="url(#kiaLaserGlow)" />
+                      </g>
+                    )}
+                  </svg>
+                </div>
+
+                {/* Subtle horizontal EV6 dashboard trim line behind quick actions */}
+                <div
+                  className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 h-[2px] opacity-30 transition-colors duration-300"
+                  style={{
+                    background: `linear-gradient(90deg, transparent 0%, ${activeColorHex} 22%, ${activeColorHex} 78%, transparent 100%)`
+                  }}
+                />
+
+                <div className="relative z-10 grid grid-cols-4 items-start justify-items-center gap-2">
+                  {/* 1. Lock / Unlock */}
+                  <div className="flex flex-col items-center gap-1.5">
+                    <button
+                      type="button"
+                      id="lock-all-btn"
+                      onClick={() => {
+                        const next = !locked;
+                        setLocked(next);
+                        if (next) {
+                          setDoors({ frontLeft: false, frontRight: false, rearLeft: false, rearRight: false });
+                          setHoodOpen(false);
+                          setTrunkOpen(false);
+                        }
+                        if (autoFoldEnabledRef.current) {
+                          setMirrorsFolded(next);
+                        }
+                        dispatchCommand('door_locks', next ? 'lock' : 'unlock', next ? 'All Doors Locked & Secured' : 'Vehicle Unlocked');
+                      }}
+                      className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center transition-all cursor-pointer border active:scale-95 ${
+                        locked
+                          ? 'bg-foreground text-background border-foreground shadow-sm hover:opacity-90'
+                          : 'bg-warning-soft text-warning-soft-foreground border-warning/50 hover:bg-warning/20'
+                      }`}
+                      title={locked ? 'Tap to Unlock Vehicle' : 'Tap to Lock Vehicle'}
+                    >
+                      {locked ? <Lock className="w-5 h-5" /> : <Unlock className="w-5 h-5" />}
+                    </button>
+                    <span className="text-[11px] font-medium text-foreground whitespace-nowrap">
+                      {locked ? 'Locked' : 'Unlocked'}
+                    </span>
+                  </div>
+
+                  {/* 2. Centerpiece: Hold-to-Toggle Kia EV6 Power Button (Sole Climate Start Control) */}
+                  <div className="flex flex-col items-center gap-1.5">
+                    <Tooltip>
+                      <Tooltip.Trigger>
+                        <div className="relative flex items-center justify-center">
+                          {/* Press-and-Hold Radial Progress Ring */}
+                          {climateHoldProgress > 0 && (
+                            <svg
+                              viewBox="0 0 76 76"
+                              aria-hidden="true"
+                              className="pointer-events-none absolute -inset-1.5 w-[calc(100%+12px)] h-[calc(100%+12px)] -rotate-90"
+                            >
+                              <circle
+                                cx="38"
+                                cy="38"
+                                r="34"
+                                fill="none"
+                                stroke="rgba(255,255,255,0.18)"
+                                strokeWidth="3.5"
+                              />
+                              <circle
+                                cx="38"
+                                cy="38"
+                                r="34"
+                                fill="none"
+                                stroke={activeColorHex}
+                                strokeWidth="3.5"
+                                strokeLinecap="round"
+                                strokeDasharray={2 * Math.PI * 34}
+                                strokeDashoffset={2 * Math.PI * 34 * (1 - climateHoldProgress / 100)}
+                                style={{ filter: `drop-shadow(0 0 6px ${activeColorHex})` }}
+                              />
+                            </svg>
+                          )}
+
+                          {climateStartAnim === 'starting' && (
+                            <span
+                              key={`ignite-ring-${climateAnimKey}`}
+                              aria-hidden="true"
+                              className="kia-ring-ignite-active pointer-events-none absolute inset-0 rounded-full border-2"
+                              style={{
+                                borderColor: activeColorHex,
+                                boxShadow: `0 0 18px ${activeColorHex}, 0 0 8px #7dd3fc`
+                              }}
+                            />
+                          )}
+
+                          <button
+                            type="button"
+                            id="hvac-power-toggle"
+                            aria-label={
+                              hvacPower === true
+                                ? 'Remote Climate Active — Press and hold to stop'
+                                : 'Press and hold to start Remote Climate'
+                            }
+                            aria-pressed={hvacPower === true}
+                            onPointerDown={startClimateHold}
+                            onPointerUp={() => cancelClimateHold(true)}
+                            onPointerLeave={() => cancelClimateHold(false)}
+                            onPointerCancel={() => cancelClimateHold(false)}
+                            onKeyDown={(e) => {
+                              if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) {
+                                e.preventDefault();
+                                startClimateHold();
+                              }
+                            }}
+                            onKeyUp={(e) => {
+                              if (e.key === ' ' || e.key === 'Enter') {
+                                e.preventDefault();
+                                cancelClimateHold(true);
+                              }
+                            }}
+                            onContextMenu={(e) => e.preventDefault()}
+                            style={{
+                              borderColor: activeColorHex,
+                              boxShadow:
+                                climateStartAnim === 'starting' || climateHoldProgress > 0
+                                  ? `0 0 26px ${activeColorHex}, 0 0 14px #38bdf8, inset 0 0 10px rgba(0,0,0,0.9)`
+                                  : hvacPower === true
+                                    ? `0 0 18px ${activeColorHex}, 0 0 6px ${activeColorHex}, inset 0 0 8px rgba(0,0,0,0.85)`
+                                    : ambientBrightness === null || ambientBrightness > 0
+                                      ? `0 0 10px color-mix(in oklab, ${activeColorHex} 45%, transparent), inset 0 1px 2px rgba(255,255,255,0.2)`
+                                      : 'inset 0 1px 2px rgba(255,255,255,0.15)'
+                            }}
+                            className="group relative w-14 h-14 sm:w-16 sm:h-16 rounded-full border-2 p-1 cursor-pointer select-none touch-none transition-all duration-200 focus:outline-none bg-gradient-to-b from-zinc-800 via-zinc-950 to-black flex items-center justify-center active:scale-95"
+                          >
+                            <span
+                              className="w-full h-full rounded-full p-[3px] flex items-center justify-center transition-transform duration-200 group-hover:scale-[1.02]"
+                              style={{
+                                background:
+                                  'linear-gradient(135deg, #f4f4f6 0%, #a1a1aa 28%, #52525b 55%, #d4d4d8 82%, #71717a 100%)',
+                                boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.65), 0 2px 5px rgba(0,0,0,0.8)'
+                              }}
+                            >
+                              <span
+                                className="relative w-full h-full rounded-full flex items-center justify-center overflow-hidden"
+                                style={{
+                                  background:
+                                    'radial-gradient(circle at 35% 28%, #3f3f46 0%, #18181b 48%, #09090b 85%, #000000 100%)',
+                                  boxShadow:
+                                    'inset 0 3px 6px rgba(0,0,0,0.85), inset 0 -1px 3px rgba(255,255,255,0.12)'
+                                }}
+                              >
+                                <span
+                                  className="pointer-events-none absolute -top-1 -left-1 w-8 h-5 rounded-full opacity-25 blur-[1px] -rotate-12"
+                                  style={{
+                                    background: 'linear-gradient(180deg, rgba(255,255,255,0.75) 0%, transparent 100%)'
+                                  }}
+                                />
+
+                                {climateStartAnim === 'starting' && (
+                                  <span
+                                    key={`cap-flare-${climateAnimKey}`}
+                                    aria-hidden="true"
+                                    className="kia-cap-flare-active pointer-events-none absolute inset-0 w-16 h-2.5 my-auto"
+                                    style={{
+                                      background:
+                                        'linear-gradient(90deg, transparent 0%, rgba(125,211,252,0.85) 45%, rgba(255,255,255,0.98) 50%, rgba(251,113,133,0.85) 55%, transparent 100%)',
+                                      filter: 'blur(1px)'
+                                    }}
+                                  />
+                                )}
+
+                                <svg
+                                  viewBox="0 0 64 64"
+                                  className={`w-8 h-8 sm:w-9 sm:h-9 transition-all duration-300 ${
+                                    climateStartAnim === 'starting' || climateHoldProgress > 0 ? 'scale-105' : ''
+                                  }`}
+                                  style={{
+                                    filter:
+                                      climateStartAnim === 'starting' || hvacPower === true || climateHoldProgress > 0
+                                        ? `drop-shadow(0 0 7px ${activeColorHex}) drop-shadow(0 0 3px #ffffff)`
+                                        : 'drop-shadow(0 0 2px rgba(255,255,255,0.35))'
+                                  }}
+                                  aria-hidden="true"
+                                >
+                                  <line
+                                    x1="32"
+                                    y1="10"
+                                    x2="32"
+                                    y2="23"
+                                    stroke={hvacPower === true || climateHoldProgress > 0 ? '#ffffff' : '#e4e4e7'}
+                                    strokeWidth="4.2"
+                                    strokeLinecap="round"
+                                  />
+                                  <path
+                                    d="M 22.5 15.2 A 19 19 0 1 0 41.5 15.2"
+                                    fill="none"
+                                    stroke={hvacPower === true || climateHoldProgress > 0 ? '#ffffff' : '#e4e4e7'}
+                                    strokeWidth="4.2"
+                                    strokeLinecap="round"
+                                  />
+                                  <text
+                                    x="32"
+                                    y="37.5"
+                                    textAnchor="middle"
+                                    fill={hvacPower === true || climateHoldProgress > 0 ? '#ffffff' : '#e4e4e7'}
+                                    fontSize="13.5"
+                                    fontWeight="800"
+                                    letterSpacing="0.8"
+                                    fontFamily="system-ui, -apple-system, sans-serif"
+                                  >
+                                    EV
+                                  </text>
+                                </svg>
+                              </span>
+                            </span>
+                          </button>
+                        </div>
+                      </Tooltip.Trigger>
+                      <Tooltip.Content className="px-2.5 py-1 text-xs rounded-md bg-overlay border border-border text-overlay-foreground shadow-overlay z-50">
+                        {`Remote Climate (${hvacPower === true ? 'Active — Hold to Stop' : 'Hold to Start'})`}
+                      </Tooltip.Content>
+                    </Tooltip>
+
+                    <span className="text-[11px] font-semibold text-foreground whitespace-nowrap">
+                      {climateHoldProgress > 0
+                        ? hvacPower === true
+                          ? 'Stopping...'
+                          : 'Holding...'
+                        : climateStartAnim === 'starting'
+                          ? 'Starting...'
+                          : hvacPower === true
+                            ? 'Climate ON'
+                            : 'Hold Climate'}
+                    </span>
+                  </div>
+
+                  {/* 3. Liftgate / Trunk */}
+                  <div className="flex flex-col items-center gap-1.5">
+                    <button
+                      type="button"
+                      id="quick-trunk-btn"
+                      onClick={handleToggleTrunk}
+                      className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center transition-all cursor-pointer border active:scale-95 ${
+                        trunkOpen
+                          ? 'bg-warning-soft text-warning-soft-foreground border-warning/60 shadow-sm'
+                          : 'bg-surface text-foreground border-border hover:bg-surface-tertiary'
+                      }`}
+                      title="Toggle Power Liftgate / Trunk"
+                    >
+                      <ChevronUp className={`w-5 h-5 transition-transform ${trunkOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    <span className="text-[11px] font-medium text-muted whitespace-nowrap">
+                      {trunkOpen ? 'Trunk Open' : 'Liftgate'}
+                    </span>
+                  </div>
+
+                  {/* 4. Charge Port */}
+                  <div className="flex flex-col items-center gap-1.5">
+                    <button
+                      type="button"
+                      id="quick-charge-port-btn"
+                      onClick={() => {
+                        const next = !chargePortOpen;
+                        setChargePortOpen(next);
+                        dispatchCommand(
+                          'charge_port',
+                          next ? 'Opened / Open' : 'Closed / Shut',
+                          next ? 'Charge Port Opened' : 'Charge Port Closed'
+                        );
+                      }}
+                      className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center transition-all cursor-pointer border active:scale-95 ${
+                        isCharging
+                          ? 'bg-success-soft text-success-soft-foreground border-success/60 shadow-sm'
+                          : chargePortOpen
+                            ? 'bg-warning-soft text-warning-soft-foreground border-warning/60 shadow-sm'
+                            : 'bg-surface text-foreground border-border hover:bg-surface-tertiary'
+                      }`}
+                      title="Toggle Charge Port Door"
+                    >
+                      <PlugZap className="w-5 h-5" />
+                    </button>
+                    <span className="text-[11px] font-medium text-muted whitespace-nowrap">
+                      {isCharging ? 'Charging' : chargePortOpen ? 'Port Open' : 'Port'}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
-
-            {/* Bottom Status Strip */}
-            <div className="w-full pt-5 border-t border-separator flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-xs text-foreground">
-                  {EGMP_MODELS[selectedModel].brand} {EGMP_MODELS[selectedModel].name}
-                </span>
-              </div>
-            </div>
           </Card>
-        </div>
 
-        {/* Right Column (Cabin Climate & Comfort Suite) */}
-        <div className="lg:col-span-5 xl:col-span-4 space-y-4">
+          {/* RIVIAN-STYLE 2-UP SQUARES: CLIMATE (LEFT) & CHARGING (RIGHT) */}
+          <div className="grid grid-cols-2 gap-3.5 sm:gap-4">
+            {/* LEFT SQUARE: CLIMATE (Tap opens full Climate overlay) */}
+            <div
+              id="climate-summary-square"
+              className="rounded-3xl bg-surface border border-border hover:border-accent/50 transition-all duration-200 shadow-surface flex flex-col justify-between p-4 sm:p-5 min-h-[176px]"
+            >
+              <button
+                type="button"
+                onClick={() => setActiveOverlay('climate')}
+                className="w-full text-left space-y-2.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
+                        hvacPower === true
+                          ? isCoolingBanner
+                            ? 'bg-accent text-accent-foreground border-accent'
+                            : 'bg-warning text-warning-foreground border-warning'
+                          : 'bg-surface-secondary text-muted border-border'
+                      }`}
+                    >
+                      <Wind className="w-4 h-4" />
+                    </span>
+                    <span className="text-sm font-bold text-foreground truncate">Climate</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted shrink-0" />
+                </div>
 
-          {/* Dual-Zone Climate Control Suite */}
-          <Card className="p-4 sm:p-5 rounded-2xl bg-surface border border-border shadow-surface space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Wind className="w-4 h-4 text-accent" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Cabin Climate</h3>
+                <div>
+                  <div className="text-2xl sm:text-3xl font-bold font-mono tabular-nums tracking-tight text-foreground leading-none">
+                    {driverTemp !== null
+                      ? isSyncedMode || passengerTemp === null || passengerTemp === driverTemp
+                        ? `${driverTemp}°${tempUnit}`
+                        : `${driverTemp}° / ${passengerTemp}°`
+                      : '--'}
+                  </div>
+                  <p className="text-xs text-muted mt-1.5 truncate">
+                    {[
+                      hvacPower === true ? 'Running' : 'Standby',
+                      ambientTempC !== null ? `Outside ${displayAmbient}` : null,
+                      heatActive === true ? 'Heat' : acActive === true ? 'A/C' : null,
+                      driverSeat && driverSeat !== 'off' ? 'Seat' : null,
+                      steeringWheelHeat && steeringWheelHeat !== 'off' ? 'Wheel' : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                </div>
+              </button>
+
+              <div className="pt-3 mt-2 border-t border-separator flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => adjustTemp(true, -1)}
+                    aria-label="Decrease target temperature"
+                    className="w-10 h-10 rounded-full bg-surface-secondary hover:bg-surface-tertiary border border-border flex items-center justify-center text-foreground transition-colors cursor-pointer"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => adjustTemp(true, 1)}
+                    aria-label="Increase target temperature"
+                    className="w-10 h-10 rounded-full bg-surface-secondary hover:bg-surface-tertiary border border-border flex items-center justify-center text-foreground transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
                 <button
                   type="button"
-                  id="cabin-outdoor-temp-btn"
-                  onClick={cycleAmbientTempPreview}
-                  title="Outdoor Ambient Temperature (Click in bench mode to preview)"
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-secondary border border-border text-[11px] font-mono text-muted hover:text-foreground transition-colors cursor-pointer"
+                  onClick={() => setActiveOverlay('climate')}
+                  className="text-xs font-semibold text-accent hover:underline cursor-pointer whitespace-nowrap px-1 py-2"
                 >
-                  <Thermometer className="w-3 h-3 text-muted" />
-                  <span>Outside {displayAmbient}</span>
-                  {ambientThreshold && (
-                    <Chip
-                      size="sm"
-                      color={ambientThreshold.color}
-                      variant="soft"
-                      className="text-[9px] px-1 py-0 rounded font-medium leading-tight"
-                    >
-                      {ambientThreshold.label}
-                    </Chip>
-                  )}
+                  Open
                 </button>
               </div>
-              <div className="flex items-center gap-1.5">
+            </div>
+
+            {/* RIGHT SQUARE: CHARGING & ENERGY (Tap opens full Charging overlay) */}
+            <div
+              id="energy-summary-square"
+              className="rounded-3xl bg-surface border border-border hover:border-success/50 transition-all duration-200 shadow-surface flex flex-col justify-between p-4 sm:p-5 min-h-[176px]"
+            >
+              <button
+                type="button"
+                onClick={() => setActiveOverlay('charging')}
+                className="w-full text-left space-y-2.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
+                        isCharging
+                          ? 'bg-success text-success-foreground border-success'
+                          : 'bg-success-soft text-success border-success/30'
+                      }`}
+                    >
+                      <BatteryCharging className="w-4 h-4" />
+                    </span>
+                    <span className="text-sm font-bold text-foreground truncate">Charging</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted shrink-0" />
+                </div>
+
+                <div>
+                  <div className="text-2xl sm:text-3xl font-bold font-mono tabular-nums tracking-tight text-foreground leading-none">
+                    {soc !== null ? `${soc}%` : '--%'}
+                  </div>
+                  <p className="text-xs text-muted mt-1.5 font-mono tabular-nums truncate">
+                    {[
+                      isCharging ? (chargeRateKw > 0 ? `+${chargeRateKw} kW` : 'Active') : `AC ${acChargeLimit ?? 80}%`,
+                      `DC ${dcChargeLimit ?? 80}%`,
+                      aux12V !== null ? `12V ${aux12V.toFixed(1)}V` : null
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                </div>
+              </button>
+
+              <div className="pt-3 mt-2 border-t border-separator space-y-2">
+                <div className="relative w-full h-1.5 rounded-full bg-surface-secondary overflow-hidden border border-border/50">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${isCharging ? 'bg-success' : 'bg-accent'}`}
+                    style={{ width: `${Math.min(100, Math.max(0, soc ?? 0))}%` }}
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="absolute top-0 bottom-0 w-0.5 bg-foreground/60"
+                    style={{ left: `${Math.min(99, acChargeLimit ?? 80)}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted font-mono tabular-nums truncate">
+                    {batteryMinTempC !== null && batteryMaxTempC !== null
+                      ? `${batteryMinTempC}–${batteryMaxTempC}°C`
+                      : '800V Pack'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveOverlay('charging')}
+                    className="text-xs font-semibold text-accent hover:underline cursor-pointer whitespace-nowrap"
+                  >
+                    Open
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* RIVIAN-STYLE SECONDARY ROWS BELOW THE 2 SQUARES */}
+          <div className="rounded-3xl bg-surface border border-border shadow-surface divide-y divide-separator overflow-hidden">
+            {/* Ambient Mood Lighting Row (Opens Overlay) */}
+            <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5">
+              <button
+                type="button"
+                id="ambient-lighting-row-btn"
+                onClick={() => setActiveOverlay('ambient')}
+                className="flex items-center gap-3 min-w-0 flex-1 text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl py-0.5"
+              >
+                <span
+                  className="w-9 h-9 rounded-full border border-border flex items-center justify-center shrink-0 bg-surface-secondary"
+                  style={{
+                    boxShadow: ambientBrightness && ambientBrightness > 0 ? `0 0 10px ${activeColorHex}` : 'none'
+                  }}
+                >
+                  <span
+                    className="w-4 h-4 rounded-full"
+                    style={{ backgroundColor: activeColorHex }}
+                  />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-bold text-foreground">Ambient Lighting</div>
+                  <div className="text-xs text-muted truncate">
+                    {ambientColor ? ambientColor.replace(/^Color \d+:\s*/i, '') : 'Default'} ·{' '}
+                    {ambientBrightness === null ? '--' : ambientBrightness === 0 ? 'Off' : `${ambientBrightness * 10}%`}
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted shrink-0" />
+              </button>
+
+              <button
+                type="button"
+                id="ambient-light-power-toggle"
+                onClick={() => {
+                  const isCurrentlyOff = ambientBrightness === 0;
+                  const nextLvl = isCurrentlyOff ? 7 : 0;
+                  setAmbientBrightness(nextLvl);
+                  const cmdLabel = nextLvl === 0 ? 'Off' : `Brightness Level ${nextLvl}`;
+                  dispatchCommand('ambient_light_brightness', cmdLabel, nextLvl === 0 ? 'Ambient Light Turned OFF' : `Ambient Light: Level ${nextLvl}`);
+                }}
+                className={`px-3.5 min-h-[38px] rounded-xl text-xs font-bold transition-colors cursor-pointer border shrink-0 ${
+                  ambientBrightness !== null && ambientBrightness > 0
+                    ? 'bg-accent text-accent-foreground border-accent shadow-sm'
+                    : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                }`}
+              >
+                {ambientBrightness !== null && ambientBrightness > 0 ? 'On' : 'Off'}
+              </button>
+            </div>
+
+            {/* Closures & Tire Pressure Summary Row */}
+            <button
+              type="button"
+              onClick={() => setHeroViewMode(prev => (prev === 'topdown' ? 'auto' : 'topdown'))}
+              className="w-full flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 text-left hover:bg-surface-secondary/50 transition-colors cursor-pointer"
+            >
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-foreground">Closures & Chassis</div>
+                <div className="text-xs text-muted truncate font-mono tabular-nums">
+                  {openClosureCount > 0 ? `${openClosureLabels.join(' · ')} open` : 'All doors & latches closed'}
+                  {tpms.fl !== null ? ` · TPMS ${tpms.fl}/${tpms.fr}/${tpms.rl}/${tpms.rr} PSI` : ''}
+                </div>
+              </div>
+              <span className="text-xs font-semibold text-accent whitespace-nowrap shrink-0">
+                {effectiveHeroView === 'topdown' ? 'Hide Top-Down' : 'Top-Down View'}
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* RIVIAN-STYLE FULL OVERLAY MODAL FOR CLIMATE / CHARGING / AMBIENT */}
+      <Modal
+        isOpen={activeOverlay !== null}
+        onOpenChange={open => {
+          if (!open) setActiveOverlay(null);
+        }}
+      >
+        <ModalBackdrop variant="blur" className="bg-backdrop backdrop-blur-sm">
+          <ModalContainer placement="center" scroll="inside" className="p-2 sm:p-6 justify-end sm:justify-center items-center">
+            <ModalDialog className="relative w-full max-w-xl rounded-t-3xl sm:rounded-3xl border border-border bg-surface text-foreground shadow-overlay overflow-hidden my-0 sm:my-auto p-0 flex flex-col max-h-[88vh]">
+              <ModalHeader className="px-5 py-4 pr-16 border-b border-separator bg-surface-secondary/60 flex flex-row items-center gap-3 shrink-0">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <span
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
+                      activeOverlay === 'charging'
+                        ? isCharging
+                          ? 'bg-success text-success-foreground border-success'
+                          : 'bg-success-soft text-success border-success/30'
+                        : activeOverlay === 'climate'
+                          ? hvacPower === true
+                            ? isCoolingBanner
+                              ? 'bg-accent text-accent-foreground border-accent'
+                              : 'bg-warning text-warning-foreground border-warning'
+                            : 'bg-accent-soft text-accent border-accent/30'
+                          : 'bg-accent-soft text-accent border-accent/30'
+                    }`}
+                  >
+                    {activeOverlay === 'charging' ? (
+                      <BatteryCharging className="w-5 h-5" />
+                    ) : activeOverlay === 'climate' ? (
+                      <Wind className="w-5 h-5" />
+                    ) : (
+                      <Sparkles className="w-5 h-5" />
+                    )}
+                  </span>
+                  <div className="min-w-0">
+                    <ModalHeading className="text-base font-bold text-foreground truncate">
+                      {activeOverlay === 'charging'
+                        ? 'Energy & Charging'
+                        : activeOverlay === 'climate'
+                          ? 'Cabin Climate & Comfort'
+                          : 'Ambient Mood Lighting'}
+                    </ModalHeading>
+                    <p className="text-xs text-muted truncate">
+                      {activeOverlay === 'charging'
+                        ? isCharging
+                          ? `Active HV Grid Charge${chargeRateKw > 0 ? ` · +${chargeRateKw} kW` : ''}`
+                          : '800V E-GMP Pack & 12V Aux'
+                        : activeOverlay === 'climate'
+                          ? `Outside ${displayAmbient} · ${hvacPower === true ? 'Climate Running' : 'Standby'}`
+                          : ambientColor
+                            ? ambientColor.replace(/^Color \d+:\s*/i, '')
+                            : 'OEM Cabin Illumination'}
+                    </p>
+                  </div>
+                </div>
+              </ModalHeader>
+
+              <button
+                type="button"
+                onClick={() => setActiveOverlay(null)}
+                aria-label="Close overlay"
+                className="absolute top-4 right-4 z-20 w-10 h-10 rounded-full bg-surface hover:bg-surface-tertiary border border-border flex items-center justify-center text-muted hover:text-foreground transition-colors cursor-pointer shrink-0 shadow-sm"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <ModalBody className="m-0 p-0 overflow-y-auto">
+                {activeOverlay === 'charging' && (
+                  <div id="energy-charging-card">
+                    <div className="p-5 space-y-4">
+              {/* Clean Hairline Telemetry Row */}
+              <div className="grid grid-cols-4 gap-3 pb-3.5 border-b border-separator text-xs">
+                <div>
+                  <span className="text-muted block">HV State</span>
+                  <span className="text-base font-bold font-mono tabular-nums text-foreground mt-0.5 block">
+                    {soc !== null ? `${soc}%` : '--%'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted block">12V Aux</span>
+                  <span className="text-base font-bold font-mono tabular-nums text-foreground mt-0.5 block">
+                    {aux12V !== null ? `${aux12V.toFixed(1)}V` : '--V'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted block">Pack Temp</span>
+                  <span className="text-base font-bold font-mono tabular-nums text-foreground mt-0.5 block">
+                    {batteryMinTempC !== null && batteryMaxTempC !== null
+                      ? `${batteryMinTempC}–${batteryMaxTempC}°C`
+                      : '--°C'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted block">HV Bus</span>
+                  <span className="text-base font-bold font-mono tabular-nums text-foreground mt-0.5 block">
+                    {hvVoltage !== null
+                      ? `${Math.round(hvVoltage)}V`
+                      : cellDeltaMv !== null
+                        ? `Δ${cellDeltaMv}mV`
+                        : '--'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Direct 1-Tap AC & DC Charge Limit Selectors (Replaces 5-click cycling) */}
+              <div className="space-y-3 text-xs">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-muted">AC Charge Limit</span>
+                    <span className="font-mono tabular-nums font-bold text-foreground">
+                      {acChargeLimit !== null ? `${acChargeLimit}%` : '80%'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1 p-1 rounded-xl bg-surface-secondary border border-border">
+                    {chargeLimitPresets.map(pct => {
+                      const active = (acChargeLimit ?? 80) === pct;
+                      return (
+                        <button
+                          key={`ac-${pct}`}
+                          type="button"
+                          id={pct === 80 ? 'cycle-ac-limit-btn' : `ac-limit-${pct}`}
+                          onClick={() => setDirectAcLimit(pct)}
+                          className={`py-2 rounded-lg font-mono tabular-nums font-semibold transition-colors cursor-pointer ${
+                            active
+                              ? 'bg-success text-success-foreground shadow-sm'
+                              : 'text-muted hover:text-foreground hover:bg-surface-tertiary'
+                          }`}
+                        >
+                          {pct}%
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-muted">DC Fast Charge Limit</span>
+                    <span className="font-mono tabular-nums font-bold text-foreground">
+                      {dcChargeLimit !== null ? `${dcChargeLimit}%` : '80%'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1 p-1 rounded-xl bg-surface-secondary border border-border">
+                    {chargeLimitPresets.map(pct => {
+                      const active = (dcChargeLimit ?? 80) === pct;
+                      return (
+                        <button
+                          key={`dc-${pct}`}
+                          type="button"
+                          id={pct === 80 ? 'cycle-dc-limit-btn' : `dc-limit-${pct}`}
+                          onClick={() => setDirectDcLimit(pct)}
+                          className={`py-2 rounded-lg font-mono tabular-nums font-semibold transition-colors cursor-pointer ${
+                            active
+                              ? 'bg-accent text-accent-foreground shadow-sm'
+                              : 'text-muted hover:text-foreground hover:bg-surface-tertiary'
+                          }`}
+                        >
+                          {pct}%
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+                  </div>
+                )}
+
+                {activeOverlay === 'climate' && (
+                  <div id="cabin-climate-card">
+                    <div className="px-5 pt-4 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        id="cabin-outdoor-temp-btn"
+                        onClick={cycleAmbientTempPreview}
+                        title="Outdoor Ambient Temperature (Click in bench mode to preview)"
+                        className="text-xs font-mono tabular-nums text-muted hover:text-foreground transition-colors cursor-pointer text-left"
+                      >
+                        Outside {displayAmbient}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={executeRemoteClimateToggle}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                          hvacPower === true
+                            ? 'bg-warning-soft text-warning border-warning/50'
+                            : 'bg-surface-secondary text-foreground border-border hover:bg-surface-tertiary'
+                        }`}
+                      >
+                        {hvacPower === true ? 'Turn Climate Off' : 'Start Remote Climate'}
+                      </button>
+                    </div>
+
+                    <div className="p-5 space-y-4">
+              {/* Unified or Split Temperature Dial + Quick Presets */}
+              {isSyncedMode ? (
+                <div className="p-3.5 rounded-2xl bg-surface-secondary border border-border space-y-3">
+                  <div className="flex items-center justify-center gap-4">
+                    <button
+                      type="button"
+                      id="driver-temp-down"
+                      onClick={() => adjustTemp(true, -1)}
+                      aria-label="Decrease cabin temperature"
+                      className="w-10 h-10 rounded-full bg-surface hover:bg-surface-tertiary text-foreground border border-border flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+
+                    <div className="text-center min-w-[116px]">
+                      <span className="text-[11px] font-medium text-muted block">Cabin Target (Synced)</span>
+                      <span className="text-3xl font-bold font-mono tabular-nums text-foreground tracking-tight leading-tight">
+                        {driverTemp !== null ? `${driverTemp}°${tempUnit}` : '--'}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      id="driver-temp-up"
+                      onClick={() => adjustTemp(true, 1)}
+                      aria-label="Increase cabin temperature"
+                      className="w-10 h-10 rounded-full bg-surface hover:bg-surface-tertiary text-foreground border border-border flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* 1-Tap Temperature Quick Presets */}
+                  <div className="grid grid-cols-4 gap-1.5 text-xs">
+                    {tempPresets.map(tVal => {
+                      const active = driverTemp === tVal;
+                      return (
+                        <button
+                          key={tVal}
+                          type="button"
+                          onClick={() => setPresetTemp(tVal)}
+                          className={`py-1.5 rounded-lg font-mono tabular-nums font-semibold border transition-colors cursor-pointer ${
+                            active
+                              ? 'bg-accent text-accent-foreground border-accent shadow-sm'
+                              : 'bg-surface text-muted border-border hover:text-foreground'
+                          }`}
+                        >
+                          {tVal}°{tempUnit}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-2xl bg-surface-secondary border border-border flex flex-col items-center">
+                    <span className="text-[11px] text-muted font-semibold mb-1.5">Driver</span>
+                    <div className="flex items-center justify-center gap-2.5">
+                      <button
+                        type="button"
+                        id="driver-temp-down"
+                        aria-label="Decrease driver temperature"
+                        onClick={() => adjustTemp(true, -1)}
+                        className="w-9 h-9 rounded-full bg-surface hover:bg-surface-tertiary text-foreground border border-border flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-2xl font-bold font-mono tabular-nums text-foreground tracking-tight min-w-[68px] text-center">
+                        {driverTemp !== null ? `${driverTemp}°${tempUnit}` : '--'}
+                      </span>
+                      <button
+                        type="button"
+                        id="driver-temp-up"
+                        aria-label="Increase driver temperature"
+                        onClick={() => adjustTemp(true, 1)}
+                        className="w-9 h-9 rounded-full bg-surface hover:bg-surface-tertiary text-foreground border border-border flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-surface-secondary border border-border flex flex-col items-center">
+                    <span className="text-[11px] text-muted font-semibold mb-1.5">Passenger</span>
+                    <div className="flex items-center justify-center gap-2.5">
+                      <button
+                        type="button"
+                        id="pass-temp-down"
+                        aria-label="Decrease passenger temperature"
+                        onClick={() => adjustTemp(false, -1)}
+                        className="w-9 h-9 rounded-full bg-surface hover:bg-surface-tertiary text-foreground border border-border flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-2xl font-bold font-mono tabular-nums text-foreground tracking-tight min-w-[68px] text-center">
+                        {passengerTemp !== null ? `${passengerTemp}°${tempUnit}` : '--'}
+                      </span>
+                      <button
+                        type="button"
+                        id="pass-temp-up"
+                        aria-label="Increase passenger temperature"
+                        onClick={() => adjustTemp(false, 1)}
+                        className="w-9 h-9 rounded-full bg-surface hover:bg-surface-tertiary text-foreground border border-border flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Zone & Sub-Tab Controls */}
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   id="driver-only-toggle-btn"
@@ -2123,20 +2992,21 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                       next ? 'Driver-Only Climate Activated' : 'Driver-Only Climate Inactive'
                     );
                   }}
-                  title="Click to toggle Driver-Only Climate Zone"
-                  className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${driverOnly === true
-                    ? 'bg-accent-soft text-accent-soft-foreground border-accent/50 shadow-sm'
-                    : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                    }`}
+                  className={`px-3 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                    driverOnly === true
+                      ? 'bg-accent-soft text-accent-soft-foreground border-accent/50 shadow-sm'
+                      : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                  }`}
                 >
-                  <User className={`w-3.5 h-3.5 ${driverOnly === true ? 'text-accent' : 'text-muted'}`} />
-                  <span>DRIVER ONLY</span>
+                  <User className={`w-3.5 h-3.5 shrink-0 ${driverOnly === true ? 'text-accent' : 'text-muted'}`} />
+                  <span>Driver Only</span>
                 </button>
+
                 <button
                   type="button"
                   id="climate-sync-toggle-btn"
                   onClick={() => {
-                    const next = !climateSync;
+                    const next = !isSyncedMode;
                     setClimateSync(next);
                     if (next && driverTemp !== null) {
                       setPassengerTemp(driverTemp);
@@ -2145,546 +3015,499 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                     dispatchCommand(
                       'climate_sync_toggle',
                       next ? 'Sync Passenger to Driver' : 'Dual Split / Sync Off',
-                      next ? 'Dual Climate Synced' : 'Dual Climate Independent'
+                      next ? 'Dual Climate Synced' : 'Dual Climate Split'
                     );
                   }}
-                  title="Click to toggle Dual Climate Sync"
-                  className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${climateSync
-                    ? 'bg-accent-soft text-accent-soft-foreground border-accent/50 shadow-sm'
-                    : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                    }`}
+                  className={`px-3 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                    isSyncedMode
+                      ? 'bg-accent-soft text-accent-soft-foreground border-accent/50 shadow-sm'
+                      : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                  }`}
                 >
-                  <Link2 className={`w-3.5 h-3.5 ${climateSync ? 'text-accent' : 'text-muted'}`} />
-                  <span>SYNC</span>
+                  <Link2 className={`w-3.5 h-3.5 shrink-0 ${isSyncedMode ? 'text-accent' : 'text-muted'}`} />
+                  <span>{isSyncedMode ? 'Zones Synced' : 'Split Zones'}</span>
+                </button>
+              </div>
+
+              {/* Clean Segmented Switch: Comfort vs Fan & Vents (Reduces visual overload) */}
+              <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-surface-secondary border border-border text-xs">
+                <button
+                  type="button"
+                  onClick={() => setClimateTab('comfort')}
+                  className={`py-2 px-3 rounded-lg font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                    climateTab === 'comfort'
+                      ? 'bg-surface text-foreground shadow-sm border border-border/60'
+                      : 'text-muted hover:text-foreground'
+                  }`}
+                >
+                  Comfort & Seats
                 </button>
                 <button
                   type="button"
-                  id="hvac-power-toggle"
-                  onClick={() => {
-                    const next = hvacPower === true ? false : true;
-                    setHvacPower(next);
-                    dispatchCommand('remote_climate_tmu', next ? 'Remote Climate On' : 'Remote Climate Off', next ? 'Cabin Climate Activated' : 'Cabin Climate Turned OFF');
-                  }}
-                  className={`px-2.5 py-1 rounded-md text-xs font-bold transition-colors cursor-pointer border ${hvacPower === true
-                    ? 'bg-accent text-accent-foreground border-accent shadow-sm'
-                    : hvacPower === false
-                      ? 'bg-surface-tertiary text-muted border-border hover:text-foreground'
-                      : 'bg-surface-secondary text-muted border-border hover:text-foreground'
-                    }`}
+                  onClick={() => setClimateTab('vents')}
+                  className={`py-2 px-3 rounded-lg font-semibold transition-colors cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5 ${
+                    climateTab === 'vents'
+                      ? 'bg-surface text-foreground shadow-sm border border-border/60'
+                      : 'text-muted hover:text-foreground'
+                  }`}
                 >
-                  {hvacPower === true ? 'ON' : hvacPower === false ? 'OFF' : '--'}
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span>Fan & Vents</span>
+                </button>
+              </div>
+
+              {climateTab === 'comfort' ? (
+                <div className="space-y-4">
+                  {/* Heat / A/C Toggles */}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <button
+                      type="button"
+                      id="hvac-heat-toggle"
+                      onClick={() => {
+                        const next = !(heatActive === true);
+                        setHeatActive(next);
+                        dispatchCommand(
+                          'climate_heat_toggle',
+                          next ? 'Heat On' : 'Heat Off',
+                          next ? 'Cabin Heat Activated' : 'Cabin Heat Turned Off'
+                        );
+                      }}
+                      aria-pressed={heatActive === true}
+                      className={`h-12 px-3 rounded-xl border font-bold tracking-wide transition-colors cursor-pointer flex items-center justify-center gap-2 ${
+                        heatActive === true
+                          ? 'bg-warning-soft text-warning border-warning/50 shadow-sm'
+                          : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                      }`}
+                    >
+                      <Flame className={`w-4 h-4 ${heatActive === true ? 'text-warning' : 'text-muted'}`} />
+                      <span>Heat</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      id="hvac-ac-toggle"
+                      onClick={() => {
+                        const next = !(acActive === true);
+                        setAcActive(next);
+                        dispatchCommand(
+                          'climate_ac_toggle',
+                          next ? 'A/C On' : 'A/C Off',
+                          next ? 'Cabin A/C Activated' : 'Cabin A/C Turned Off'
+                        );
+                      }}
+                      aria-pressed={acActive === true}
+                      className={`h-12 px-3 rounded-xl border font-bold tracking-wide transition-colors cursor-pointer flex items-center justify-center gap-2 ${
+                        acActive === true
+                          ? 'bg-accent-soft text-accent border-accent/50 shadow-sm'
+                          : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                      }`}
+                    >
+                      <Snowflake className={`w-4 h-4 ${acActive === true ? 'text-accent' : 'text-muted'}`} />
+                      <span>A/C</span>
+                    </button>
+                  </div>
+
+                  {/* Driver & Passenger Seat Comfort with Explicit Labels */}
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between px-0.5">
+                        <span className="font-semibold text-foreground">Driver Seat</span>
+                        <span className="text-[11px] text-muted">{seatLevelLabel(driverSeat)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          id="driver-seat-heat-btn"
+                          onClick={() => cycleSeatHeat(driverSeat, true)}
+                          title="Driver Seat Heating (Off/Low/Med/High)"
+                          className={`flex-1 h-12 rounded-xl border flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
+                            getSeatHeatLevel(driverSeat) > 0
+                              ? 'bg-warning-soft text-warning border-warning/50 shadow-sm'
+                              : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                          }`}
+                        >
+                          <Flame className={`w-4 h-4 ${getSeatHeatLevel(driverSeat) > 0 ? 'text-warning' : 'text-muted'}`} />
+                          <div className="flex gap-1">
+                            {[1, 2, 3].map(i => (
+                              <span
+                                key={i}
+                                className={`w-2 h-1 rounded-full ${
+                                  i <= getSeatHeatLevel(driverSeat) ? 'bg-warning' : 'bg-surface-tertiary border border-border'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          id="driver-seat-cool-btn"
+                          onClick={() => cycleSeatCool(driverSeat, true)}
+                          title="Driver Seat Ventilation (Off/Low/Med/High)"
+                          className={`flex-1 h-12 rounded-xl border flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
+                            getSeatCoolLevel(driverSeat) > 0
+                              ? 'bg-accent-soft text-accent border-accent/50 shadow-sm'
+                              : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                          }`}
+                        >
+                          <Snowflake className={`w-4 h-4 ${getSeatCoolLevel(driverSeat) > 0 ? 'text-accent' : 'text-muted'}`} />
+                          <div className="flex gap-1">
+                            {[1, 2, 3].map(i => (
+                              <span
+                                key={i}
+                                className={`w-2 h-1 rounded-full ${
+                                  i <= getSeatCoolLevel(driverSeat) ? 'bg-accent' : 'bg-surface-tertiary border border-border'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between px-0.5">
+                        <span className="font-semibold text-foreground">Pass. Seat</span>
+                        <span className="text-[11px] text-muted">{seatLevelLabel(passengerSeat)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          id="pass-seat-heat-btn"
+                          onClick={() => cycleSeatHeat(passengerSeat, false)}
+                          title="Passenger Seat Heating (Off/Low/Med/High)"
+                          className={`flex-1 h-12 rounded-xl border flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
+                            getSeatHeatLevel(passengerSeat) > 0
+                              ? 'bg-warning-soft text-warning border-warning/50 shadow-sm'
+                              : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                          }`}
+                        >
+                          <Flame className={`w-4 h-4 ${getSeatHeatLevel(passengerSeat) > 0 ? 'text-warning' : 'text-muted'}`} />
+                          <div className="flex gap-1">
+                            {[1, 2, 3].map(i => (
+                              <span
+                                key={i}
+                                className={`w-2 h-1 rounded-full ${
+                                  i <= getSeatHeatLevel(passengerSeat) ? 'bg-warning' : 'bg-surface-tertiary border border-border'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          id="pass-seat-cool-btn"
+                          onClick={() => cycleSeatCool(passengerSeat, false)}
+                          title="Passenger Seat Ventilation (Off/Low/Med/High)"
+                          className={`flex-1 h-12 rounded-xl border flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
+                            getSeatCoolLevel(passengerSeat) > 0
+                              ? 'bg-accent-soft text-accent border-accent/50 shadow-sm'
+                              : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                          }`}
+                        >
+                          <Snowflake className={`w-4 h-4 ${getSeatCoolLevel(passengerSeat) > 0 ? 'text-accent' : 'text-muted'}`} />
+                          <div className="flex gap-1">
+                            {[1, 2, 3].map(i => (
+                              <span
+                                key={i}
+                                className={`w-2 h-1 rounded-full ${
+                                  i <= getSeatCoolLevel(passengerSeat) ? 'bg-accent' : 'bg-surface-tertiary border border-border'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quick Comfort Toggles: Heated Wheel, Rear Defrost, Front Defrost */}
+                  <div className="grid grid-cols-3 gap-2 pt-3 border-t border-separator text-xs">
+                    <button
+                      type="button"
+                      id="steering-wheel-heat-btn"
+                      aria-pressed={Boolean(steeringWheelHeat && steeringWheelHeat !== 'off')}
+                      onClick={cycleSteeringHeat}
+                      className={`min-h-[62px] py-2 px-1 rounded-xl border flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
+                        steeringWheelHeat && steeringWheelHeat !== 'off'
+                          ? 'bg-warning-soft text-warning border-warning/50 shadow-sm'
+                          : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                      }`}
+                    >
+                      <HeatedWheelIcon className="w-auto max-w-full h-[30px]" />
+                      <span className="text-[11px] font-medium whitespace-nowrap">Wheel</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      id="rear-defrost-btn"
+                      aria-pressed={rearDefrost === true}
+                      onClick={() => {
+                        const next = rearDefrost === true ? false : true;
+                        setRearDefrost(next);
+                        dispatchCommand(
+                          'climate_rear_defrost',
+                          next ? 'Defroster & Mirrors On' : 'Defroster & Mirrors Off',
+                          next ? 'Rear Defrost Activated' : 'Rear Defrost Deactivated'
+                        );
+                      }}
+                      className={`min-h-[62px] py-2 px-1 rounded-xl border flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
+                        rearDefrost === true
+                          ? 'bg-warning-soft text-warning border-warning/50 shadow-sm'
+                          : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                      }`}
+                    >
+                      <RearDefrostIcon className="w-auto max-w-full h-[30px]" />
+                      <span className="text-[11px] font-medium whitespace-nowrap">Rear Defrost</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      id="front-defrost-btn"
+                      aria-pressed={frontDefrost === true}
+                      onClick={() => {
+                        const nextF = frontDefrost === true ? false : true;
+                        runPreviewOrReadOnly('Front Defrost', () => {
+                          setFrontDefrost(nextF);
+                          triggerNotice(nextF ? 'Front Defrost MAX Preview' : 'Front Defrost Off (Preview)');
+                        });
+                      }}
+                      className={`min-h-[62px] py-2 px-1 rounded-xl border flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
+                        frontDefrost === true
+                          ? 'bg-warning-soft text-warning border-warning/50 shadow-sm'
+                          : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                      }`}
+                    >
+                      <FrontDefrostIcon className="w-auto max-w-full h-[30px]" />
+                      <span className="text-[11px] font-medium whitespace-nowrap">Front Defrost</span>
+                    </button>
+                  </div>
+
+                  {/* Rear Heated Seats Comfort */}
+                  <div className="grid grid-cols-2 gap-2 pt-3 border-t border-separator text-xs">
+                    <button
+                      type="button"
+                      id="rear-left-seat-comfort-btn"
+                      onClick={() => cycleRearSeat(true)}
+                      className={`p-3 rounded-xl border text-left transition-colors cursor-pointer ${
+                        rearLeftSeat?.startsWith('heat')
+                          ? 'bg-warning-soft text-warning-soft-foreground border-warning/50 shadow-sm'
+                          : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                      }`}
+                    >
+                      <span className="text-[11px] block font-medium">Rear Left Seat</span>
+                      <span className="font-bold font-mono text-foreground mt-0.5 block">
+                        {rearLeftSeat === null ? 'Off' : seatLevelLabel(rearLeftSeat)}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      id="rear-right-seat-comfort-btn"
+                      onClick={() => cycleRearSeat(false)}
+                      className={`p-3 rounded-xl border text-left transition-colors cursor-pointer ${
+                        rearRightSeat?.startsWith('heat')
+                          ? 'bg-warning-soft text-warning-soft-foreground border-warning/50 shadow-sm'
+                          : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                      }`}
+                    >
+                      <span className="text-[11px] block font-medium">Rear Right Seat</span>
+                      <span className="font-bold font-mono text-foreground mt-0.5 block">
+                        {rearRightSeat === null ? 'Off' : seatLevelLabel(rearRightSeat)}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Blower Fan Speed Stepper */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-muted flex items-center gap-1.5">
+                        <Fan
+                          className={`w-3.5 h-3.5 ${fanSpeed !== null && fanSpeed > 0 && hvacPower ? 'text-accent animate-spin' : 'text-muted'}`}
+                          style={{ animationDuration: `${Math.max(0.4, 2.5 - (fanSpeed || 0) * 0.25)}s` }}
+                        />
+                        <span>Fan Speed</span>
+                      </span>
+                      <span className="font-mono tabular-nums font-bold text-foreground">
+                        {fanSpeed === null ? '--' : fanSpeed === 0 ? 'Off' : `Level ${fanSpeed}`}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-8 gap-1">
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map(step => (
+                        <button
+                          key={step}
+                          type="button"
+                          onClick={() => {
+                            runPreviewOrReadOnly('Blower Fan Speed', () => {
+                              setFanSpeed(step);
+                              triggerNotice(`Fan Speed Preview: Level ${step}`);
+                            });
+                          }}
+                          className={`h-9 rounded-lg text-xs font-mono tabular-nums font-bold transition-colors cursor-pointer ${
+                            fanSpeed !== null && fanSpeed >= step
+                              ? 'bg-accent text-accent-foreground'
+                              : 'bg-surface-secondary text-muted border border-border hover:bg-surface-tertiary hover:text-foreground'
+                          }`}
+                        >
+                          {step}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Airflow Direction Modes */}
+                  <Tabs
+                    selectedKey={airflow || 'auto'}
+                    onSelectionChange={key => {
+                      const mode = key as AirflowMode;
+                      setAirflow(mode);
+                      const cmdLabel = AIRFLOW_MODE_COMMAND_LABELS[mode] || 'Auto';
+                      dispatchCommand(
+                        'climate_airflow_direction',
+                        cmdLabel,
+                        `Airflow: ${AIRFLOW_MODE_LABELS[mode]}`
+                      );
+                    }}
+                    aria-label="Airflow Direction Modes"
+                    className="w-full"
+                  >
+                    <Tabs.ListContainer className="p-1 rounded-xl bg-default border border-border text-xs w-full">
+                      <Tabs.List className="!grid grid-cols-5 gap-1 !w-full !min-w-0 !p-0">
+                        {(['auto', 'face', 'face_feet', 'feet', 'defrost'] as AirflowMode[]).map(mode => {
+                          const label = AIRFLOW_MODE_LABELS[mode];
+                          const shortLabel = mode === 'face_feet' ? 'Mix' : mode === 'feet' ? 'Floor' : mode.charAt(0).toUpperCase() + mode.slice(1);
+                          const isSelected = (airflow || 'auto') === mode;
+                          const activeColorClass = heatActive === true ? 'text-warning' : 'text-accent';
+                          const indicatorClass = heatActive === true ? 'bg-warning-soft border-warning/50' : 'bg-accent-soft border-accent/50';
+                          return (
+                            <Tabs.Tab
+                              key={mode}
+                              id={mode}
+                              data-testid={`airflow-btn-${mode}`}
+                              aria-label={`Airflow: ${label}`}
+                              className={`relative !min-w-0 w-full px-0.5 py-1.5 min-h-[58px] rounded-lg transition-colors cursor-pointer text-center flex flex-col items-center justify-center gap-0.5 ${
+                                isSelected ? activeColorClass : 'text-muted hover:text-foreground'
+                              }`}
+                            >
+                              <span title={label} className="relative z-10 w-full flex items-center justify-center">
+                                <AirflowDirectionIcon mode={mode} className="w-[44px] max-w-full h-[32px]" />
+                              </span>
+                              <span className="relative z-10 text-[10px] font-semibold leading-none">{shortLabel}</span>
+                              <Tabs.Indicator className={`rounded-lg border ${indicatorClass} shadow-sm`} />
+                            </Tabs.Tab>
+                          );
+                        })}
+                      </Tabs.List>
+                    </Tabs.ListContainer>
+                  </Tabs>
+                </div>
+              )}
+                    </div>
+                  </div>
+                )}
+
+                {activeOverlay === 'ambient' && (
+                  <div id="ambient-lighting-card" className="p-5 space-y-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {ambientColor && (
+                          <span className="inline-flex items-center gap-2 text-xs text-muted">
+                            <span
+                              className="w-3 h-3 rounded-full ring-1 ring-border shrink-0"
+                              style={{
+                                backgroundColor: activeColorHex,
+                                boxShadow: ambientBrightness && ambientBrightness > 0 ? `0 0 8px ${activeColorHex}` : 'none'
+                              }}
+                            />
+                            <span className="font-semibold text-foreground">
+                              {ambientColor.replace(/^Color \d+:\s*/i, '')}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const isCurrentlyOff = ambientBrightness === 0;
+                          const nextLvl = isCurrentlyOff ? 7 : 0;
+                          setAmbientBrightness(nextLvl);
+                          const cmdLabel = nextLvl === 0 ? 'Off' : `Brightness Level ${nextLvl}`;
+                          dispatchCommand('ambient_light_brightness', cmdLabel, nextLvl === 0 ? 'Ambient Light Turned OFF' : `Ambient Light: Level ${nextLvl}`);
+                        }}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer border ${
+                          ambientBrightness !== null && ambientBrightness > 0
+                            ? 'bg-accent text-accent-foreground border-accent shadow-sm'
+                            : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                        }`}
+                      >
+                        {ambientBrightness !== null && ambientBrightness > 0 ? 'Turn Off' : 'Turn On'}
+                      </button>
+                    </div>
+
+            {/* Smooth Brightness Slider + Steppers (Replaces 11 cramped boxes) */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-muted flex items-center gap-1.5">
+                  <Sun className="w-3.5 h-3.5 text-muted" />
+                  <span>Brightness</span>
+                </span>
+                <span className="font-mono tabular-nums font-bold text-foreground">
+                  {ambientBrightness === null ? '--' : ambientBrightness === 0 ? 'Off' : `${ambientBrightness * 10}%`}
+                </span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  aria-label="Decrease ambient brightness"
+                  onClick={() => {
+                    const next = Math.max(0, (ambientBrightness ?? 7) - 1);
+                    setAmbientBrightness(next);
+                    const cmdLabel = next === 0 ? 'Off' : `Brightness Level ${next}`;
+                    dispatchCommand('ambient_light_brightness', cmdLabel, next === 0 ? 'Ambient Light Turned OFF' : `Ambient Light: Level ${next}`);
+                  }}
+                  className="w-9 h-9 rounded-xl bg-surface-secondary hover:bg-surface-tertiary border border-border flex items-center justify-center text-foreground cursor-pointer shrink-0"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={1}
+                  aria-label="Ambient lighting brightness level"
+                  value={ambientBrightness ?? 7}
+                  onChange={e => {
+                    const step = parseInt(e.target.value, 10);
+                    setAmbientBrightness(step);
+                    const cmdLabel = step === 0 ? 'Off' : step === 10 ? 'Brightness Level 10 (Max)' : `Brightness Level ${step}`;
+                    dispatchCommand('ambient_light_brightness', cmdLabel, step === 0 ? 'Ambient Light Turned OFF' : `Ambient Light: Level ${step}`);
+                  }}
+                  className="w-full h-2 accent-current cursor-pointer"
+                  style={{ accentColor: activeColorHex }}
+                />
+                <button
+                  type="button"
+                  aria-label="Increase ambient brightness"
+                  onClick={() => {
+                    const next = Math.min(10, (ambientBrightness ?? 7) + 1);
+                    setAmbientBrightness(next);
+                    const cmdLabel = next === 10 ? 'Brightness Level 10 (Max)' : `Brightness Level ${next}`;
+                    dispatchCommand('ambient_light_brightness', cmdLabel, `Ambient Light: Level ${next}`);
+                  }}
+                  className="w-9 h-9 rounded-xl bg-surface-secondary hover:bg-surface-tertiary border border-border flex items-center justify-center text-foreground cursor-pointer shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
 
-            {/* Dual Temperature Setpoint Dials */}
-            <div className="grid grid-cols-2 gap-3">
-              {/* Driver Temp */}
-              <div className="p-3 rounded-xl bg-surface-secondary border border-border flex flex-col items-center">
-                <span className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-1">Driver</span>
-                <span className="text-2xl font-bold font-mono text-foreground tracking-tight">
-                  {driverTemp !== null ? `${driverTemp}°${tempUnit}` : '--'}
-                </span>
-                <div className="flex items-center gap-2 mt-2">
-                  <button
-                    type="button"
-                    id="driver-temp-down"
-                    onClick={() => adjustTemp(true, -1)}
-                    className="w-7 h-7 rounded-lg bg-surface-tertiary hover:bg-default-hover text-foreground border border-border flex items-center justify-center font-bold text-sm transition-colors"
-                  >
-                    -
-                  </button>
-                  <button
-                    type="button"
-                    id="driver-temp-up"
-                    onClick={() => adjustTemp(true, 1)}
-                    className="w-7 h-7 rounded-lg bg-surface-tertiary hover:bg-default-hover text-foreground border border-border flex items-center justify-center font-bold text-sm transition-colors"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-
-              {/* Passenger Temp */}
-              <div className="p-3 rounded-xl bg-surface-secondary border border-border flex flex-col items-center">
-                <span className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-1">Passenger</span>
-                <span className="text-2xl font-bold font-mono text-foreground tracking-tight">
-                  {passengerTemp !== null ? `${passengerTemp}°${tempUnit}` : '--'}
-                </span>
-                <div className="flex items-center gap-2 mt-2">
-                  <button
-                    type="button"
-                    id="pass-temp-down"
-                    onClick={() => adjustTemp(false, -1)}
-                    className="w-7 h-7 rounded-lg bg-surface-tertiary hover:bg-default-hover text-foreground border border-border flex items-center justify-center font-bold text-sm transition-colors"
-                  >
-                    -
-                  </button>
-                  <button
-                    type="button"
-                    id="pass-temp-up"
-                    onClick={() => adjustTemp(false, 1)}
-                    className="w-7 h-7 rounded-lg bg-surface-tertiary hover:bg-default-hover text-foreground border border-border flex items-center justify-center font-bold text-sm transition-colors"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Blower Fan Speed Stepper */}
-            <div className="space-y-1.5 pt-1">
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-muted flex items-center gap-1">
-                  <Fan className={`w-3.5 h-3.5 ${fanSpeed !== null && fanSpeed > 0 && hvacPower ? 'text-accent animate-spin' : 'text-muted'}`} style={{ animationDuration: `${Math.max(0.4, 2.5 - (fanSpeed || 0) * 0.25)}s` }} />
-                  <span>Fan Speed</span>
-                </span>
-                <span className="font-mono font-bold text-foreground">{fanSpeed === null ? '--' : fanSpeed === 0 ? 'Off' : `Level ${fanSpeed}`}</span>
-              </div>
-              <div className="grid grid-cols-8 gap-1">
-                {[1, 2, 3, 4, 5, 6, 7, 8].map(step => (
-                  <button
-                    key={step}
-                    type="button"
-                    onClick={() => {
-                      runPreviewOrReadOnly('Blower Fan Speed', () => {
-                        setFanSpeed(step);
-                        triggerNotice(`Fan Speed Preview: Level ${step}`);
-                      });
-                    }}
-                    className={`h-6 rounded text-[10px] font-mono font-bold transition-colors ${fanSpeed !== null && fanSpeed >= step && hvacPower
-                      ? 'bg-accent text-accent-foreground'
-                      : 'bg-surface-secondary text-muted border border-border hover:bg-surface-tertiary hover:text-foreground'
-                      }`}
-                  >
-                    {step}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Airflow Direction Modes */}
-            <Tabs
-              selectedKey={airflow || 'auto'}
-              onSelectionChange={key => {
-                const mode = key as AirflowMode;
-                setAirflow(mode);
-                const cmdLabel = AIRFLOW_MODE_COMMAND_LABELS[mode] || 'Auto';
-                dispatchCommand(
-                  'climate_airflow_direction',
-                  cmdLabel,
-                  `Airflow: ${AIRFLOW_MODE_LABELS[mode]}`
-                );
-              }}
-              aria-label="Airflow Direction Modes"
-              className="w-full pt-1"
-            >
-              <Tabs.ListContainer className="p-1 rounded-xl bg-default border border-border text-xs w-full">
-                <Tabs.List className="!grid grid-cols-5 gap-1 !w-full !min-w-0 !p-0">
-                  {(['auto', 'face', 'face_feet', 'feet', 'defrost'] as AirflowMode[]).map(mode => {
-                    const label = AIRFLOW_MODE_LABELS[mode];
-                    const isSelected = (airflow || 'auto') === mode;
-                    const activeColorClass = heatActive === true
-                      ? 'text-warning'
-                      : 'text-accent';
-                    const indicatorClass = heatActive === true
-                      ? 'bg-warning-soft border-warning/50'
-                      : 'bg-accent-soft border-accent/50';
-                    return (
-                      <Tabs.Tab
-                        key={mode}
-                        id={mode}
-                        data-testid={`airflow-btn-${mode}`}
-                        aria-label={`Airflow: ${label}`}
-                        className={`relative !min-w-0 w-full px-0.5 py-1.5 min-h-[54px] rounded-lg transition-colors cursor-pointer text-center flex items-center justify-center ${
-                          isSelected
-                            ? activeColorClass
-                            : 'text-muted hover:text-foreground'
-                        }`}
-                      >
-                        <span title={label} className="relative z-10 w-full flex items-center justify-center">
-                          <AirflowDirectionIcon mode={mode} className="w-[52px] max-w-full h-[42px]" />
-                        </span>
-                        <Tabs.Indicator className={`rounded-lg border ${indicatorClass} shadow-sm`} />
-                      </Tabs.Tab>
-                    );
-                  })}
-                </Tabs.List>
-              </Tabs.ListContainer>
-            </Tabs>
-
-            {/* Cabin Heat / A/C Toggles */}
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                id="hvac-heat-toggle"
-                onClick={() => {
-                  const next = !(heatActive === true);
-                  setHeatActive(next);
-                  if (next) setHvacPower(true);
-                  dispatchCommand(
-                    'climate_heat_toggle',
-                    next ? 'Heat On' : 'Heat Off',
-                    next ? 'Cabin Heat Activated' : 'Cabin Heat Turned Off'
-                  );
-                }}
-                aria-pressed={heatActive === true}
-                className={`h-[52px] px-3 rounded-xl border font-bold tracking-wide transition-colors cursor-pointer flex items-center justify-center gap-2 ${
-                  heatActive === true
-                    ? 'bg-warning-soft text-warning border-warning/50 shadow-sm'
-                    : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                }`}
-              >
-                <Flame className={`w-5 h-5 ${heatActive === true ? 'text-warning' : 'text-muted'}`} />
-                <span>HEAT</span>
-              </button>
-
-              <button
-                type="button"
-                id="hvac-ac-toggle"
-                onClick={() => {
-                  const next = !(acActive === true);
-                  setAcActive(next);
-                  if (next) setHvacPower(true);
-                  dispatchCommand(
-                    'climate_ac_toggle',
-                    next ? 'A/C On' : 'A/C Off',
-                    next ? 'Cabin A/C Activated' : 'Cabin A/C Turned Off'
-                  );
-                }}
-                aria-pressed={acActive === true}
-                className={`h-[52px] px-3 rounded-xl border font-bold tracking-wide transition-colors cursor-pointer flex items-center justify-center gap-2 ${
-                  acActive === true
-                    ? 'bg-accent-soft text-accent border-accent/50 shadow-sm'
-                    : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                }`}
-              >
-                <Snowflake className={`w-5 h-5 ${acActive === true ? 'text-accent' : 'text-muted'}`} />
-                <span>A/C</span>
-              </button>
-            </div>
-
-            {/* Quick Climate Toggles (Front Defrost, Rear Defrost, Heated Wheel) */}
-            <div className="grid grid-cols-3 gap-2 pt-4 border-t border-separator text-xs">
-              <button
-                type="button"
-                id="front-defrost-btn"
-                title="Front Defrost"
-                aria-label="Front Defrost"
-                aria-pressed={frontDefrost === true}
-                onClick={() => {
-                  const nextF = frontDefrost === true ? false : true;
-                  runPreviewOrReadOnly('Front Defrost', () => {
-                    setFrontDefrost(nextF);
-                    triggerNotice(nextF ? 'Front Defrost MAX Preview' : 'Front Defrost Off (Preview)');
-                  });
-                }}
-                className={`min-h-[60px] py-1.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
-                  frontDefrost === true
-                    ? 'bg-warning-soft text-warning border-warning/50 shadow-sm'
-                    : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                }`}
-              >
-                <FrontDefrostIcon className="w-auto max-w-full h-[42px]" />
-                <span
-                  className={`w-4 h-1 rounded-full transition-colors ${
-                    frontDefrost === true ? 'bg-warning' : 'bg-surface-tertiary border border-border'
-                  }`}
-                />
-              </button>
-
-              <button
-                type="button"
-                id="rear-defrost-btn"
-                title="Rear Defrost & Heated Mirrors"
-                aria-label="Rear Defrost"
-                aria-pressed={rearDefrost === true}
-                onClick={() => {
-                  const next = rearDefrost === true ? false : true;
-                  setRearDefrost(next);
-                  dispatchCommand(
-                    'climate_rear_defrost',
-                    next ? 'Defroster & Mirrors On' : 'Defroster & Mirrors Off',
-                    next ? 'Rear Defrost Activated' : 'Rear Defrost Deactivated'
-                  );
-                }}
-                className={`min-h-[60px] py-1.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
-                  rearDefrost === true
-                    ? 'bg-warning-soft text-warning border-warning/50 shadow-sm'
-                    : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                }`}
-              >
-                <RearDefrostIcon className="w-auto max-w-full h-[42px]" />
-                <span
-                  className={`w-4 h-1 rounded-full transition-colors ${
-                    rearDefrost === true ? 'bg-warning' : 'bg-surface-tertiary border border-border'
-                  }`}
-                />
-              </button>
-
-              <button
-                type="button"
-                id="steering-wheel-heat-btn"
-                title="Heated Steering Wheel"
-                aria-label="Heated Steering Wheel"
-                aria-pressed={Boolean(steeringWheelHeat && steeringWheelHeat !== 'off')}
-                onClick={cycleSteeringHeat}
-                className={`min-h-[60px] py-1.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
-                  steeringWheelHeat && steeringWheelHeat !== 'off'
-                    ? 'bg-warning-soft text-warning border-warning/50 shadow-sm'
-                    : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                }`}
-              >
-                <HeatedWheelIcon className="w-auto max-w-full h-[42px]" />
-                <span
-                  className={`w-4 h-1 rounded-full transition-colors ${
-                    steeringWheelHeat && steeringWheelHeat !== 'off'
-                      ? 'bg-warning'
-                      : 'bg-surface-tertiary border border-border'
-                  }`}
-                />
-              </button>
-            </div>
-
-            {/* Seat Comfort Controls */}
-            <div className="pt-4 border-t border-separator text-xs">
-              <div className="grid grid-cols-2 gap-2">
-                {/* Driver Seat Controls */}
-                <div className="space-y-1.5">
-                  <span className="text-[11px] font-semibold text-foreground block text-center">Driver Seat</span>
-                  <div className="flex items-center gap-2">
-                    {/* Heat Button */}
-                    <button
-                      type="button"
-                      id="driver-seat-heat-btn"
-                      onClick={() => cycleSeatHeat(driverSeat, true)}
-                      title="Driver Seat Heating (Off/Low/Med/High)"
-                      className={`flex-1 h-[52px] rounded-xl border flex flex-col items-center justify-center transition-all duration-200 ${getSeatHeatLevel(driverSeat) > 0
-                        ? 'bg-warning-soft text-warning border-warning/50 shadow-sm scale-[1.01]'
-                        : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                        }`}
-                    >
-                      <Flame className={`w-5 h-5 ${getSeatHeatLevel(driverSeat) > 0 ? 'animate-pulse text-warning' : 'text-muted'}`} />
-                      <div className="flex gap-0.5 mt-0.5">
-                        {[1, 2, 3].map(i => (
-                          <span
-                            key={i}
-                            className={`w-1 h-1 rounded-full transition-all duration-200 ${i <= getSeatHeatLevel(driverSeat)
-                              ? 'bg-warning'
-                              : 'bg-surface-tertiary border border-border'
-                              }`}
-                          />
-                        ))}
-                      </div>
-                    </button>
-
-                    {/* Cool Button */}
-                    <button
-                      type="button"
-                      id="driver-seat-cool-btn"
-                      onClick={() => cycleSeatCool(driverSeat, true)}
-                      title="Driver Seat Ventilation (Off/Low/Med/High)"
-                      className={`flex-1 h-[52px] rounded-xl border flex flex-col items-center justify-center transition-all duration-200 ${getSeatCoolLevel(driverSeat) > 0
-                        ? 'bg-accent-soft text-accent border-accent/50 shadow-sm scale-[1.01]'
-                        : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                        }`}
-                    >
-                      <Snowflake className={`w-5 h-5 ${getSeatCoolLevel(driverSeat) > 0 ? 'text-accent' : 'text-muted'}`} />
-                      <div className="flex gap-0.5 mt-0.5">
-                        {[1, 2, 3].map(i => (
-                          <span
-                            key={i}
-                            className={`w-1 h-1 rounded-full transition-all duration-200 ${i <= getSeatCoolLevel(driverSeat)
-                              ? 'bg-accent'
-                              : 'bg-surface-tertiary border border-border'
-                              }`}
-                          />
-                        ))}
-                      </div>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Passenger Seat Controls */}
-                <div className="space-y-1.5">
-                  <span className="text-[11px] font-semibold text-foreground block text-center">Passenger Seat</span>
-                  <div className="flex items-center gap-2">
-                    {/* Heat Button */}
-                    <button
-                      type="button"
-                      id="pass-seat-heat-btn"
-                      onClick={() => cycleSeatHeat(passengerSeat, false)}
-                      title="Passenger Seat Heating (Off/Low/Med/High)"
-                      className={`flex-1 h-[52px] rounded-xl border flex flex-col items-center justify-center transition-all duration-200 ${getSeatHeatLevel(passengerSeat) > 0
-                        ? 'bg-warning-soft text-warning border-warning/50 shadow-sm scale-[1.01]'
-                        : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                        }`}
-                    >
-                      <Flame className={`w-5 h-5 ${getSeatHeatLevel(passengerSeat) > 0 ? 'animate-pulse text-warning' : 'text-muted'}`} />
-                      <div className="flex gap-0.5 mt-0.5">
-                        {[1, 2, 3].map(i => (
-                          <span
-                            key={i}
-                            className={`w-1 h-1 rounded-full transition-all duration-200 ${i <= getSeatHeatLevel(passengerSeat)
-                              ? 'bg-warning'
-                              : 'bg-surface-tertiary border border-border'
-                              }`}
-                          />
-                        ))}
-                      </div>
-                    </button>
-
-                    {/* Cool Button */}
-                    <button
-                      type="button"
-                      id="pass-seat-cool-btn"
-                      onClick={() => cycleSeatCool(passengerSeat, false)}
-                      title="Passenger Seat Ventilation (Off/Low/Med/High)"
-                      className={`flex-1 h-[52px] rounded-xl border flex flex-col items-center justify-center transition-all duration-200 ${getSeatCoolLevel(passengerSeat) > 0
-                        ? 'bg-accent-soft text-accent border-accent/50 shadow-sm scale-[1.01]'
-                        : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                        }`}
-                    >
-                      <Snowflake className={`w-5 h-5 ${getSeatCoolLevel(passengerSeat) > 0 ? 'text-accent' : 'text-muted'}`} />
-                      <div className="flex gap-0.5 mt-0.5">
-                        {[1, 2, 3].map(i => (
-                          <span
-                            key={i}
-                            className={`w-1 h-1 rounded-full transition-all duration-200 ${i <= getSeatCoolLevel(passengerSeat)
-                              ? 'bg-accent'
-                              : 'bg-surface-tertiary border border-border'
-                              }`}
-                          />
-                        ))}
-                      </div>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Rear Heated Seats Steppers */}
-            <div className="grid grid-cols-2 gap-2 pt-4 border-t border-separator text-xs">
-              <button
-                type="button"
-                id="rear-left-seat-comfort-btn"
-                onClick={() => cycleRearSeat(true)}
-                className={`p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${rearLeftSeat?.startsWith('heat')
-                  ? 'bg-warning-soft text-warning-soft-foreground border-warning/50 shadow-sm'
-                  : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                  }`}
-              >
-                <span className="text-[10px] block font-semibold opacity-75">Rear Left Seat</span>
-                <span className="font-bold font-mono">
-                  {rearLeftSeat === null ? '--' : rearLeftSeat.replace('_', ' ').toUpperCase()}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                id="rear-right-seat-comfort-btn"
-                onClick={() => cycleRearSeat(false)}
-                className={`p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${rearRightSeat?.startsWith('heat')
-                  ? 'bg-warning-soft text-warning-soft-foreground border-warning/50 shadow-sm'
-                  : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                  }`}
-              >
-                <span className="text-[10px] block font-semibold opacity-75">Rear Right Seat</span>
-                <span className="font-bold font-mono">
-                  {rearRightSeat === null ? '--' : rearRightSeat.replace('_', ' ').toUpperCase()}
-                </span>
-              </button>
-            </div>
-          </Card>
-
-          {/* Ambient Mood Lighting Card */}
-          <Card id="ambient-lighting-card" className="p-4 sm:p-5 rounded-2xl bg-surface border border-border shadow-surface space-y-4">
-            {/* Header: Title, Active Color Pill, Power Toggle */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-accent" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Ambient Mood Lighting</h3>
-                {ambientColor && (
-                  <div
-                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-border bg-surface-secondary text-[11px] font-medium"
-                    title={`Active Mood Lighting: ${ambientColor} (${ambientBrightness === 0 ? 'Off' : `Level ${ambientBrightness ?? '--'}`})`}
-                  >
-                    <span
-                      className="w-2.5 h-2.5 rounded-full shadow-sm ring-1 ring-border"
-                      style={{
-                        backgroundColor: activeColorHex,
-                        boxShadow: ambientBrightness && ambientBrightness > 0 ? `0 0 8px ${activeColorHex}` : 'none'
-                      }}
-                    />
-                    <span className="truncate max-w-[130px] font-mono text-[10px] text-foreground">
-                      {ambientColor.replace(/^Color \d+:\s*/i, '')}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Power Toggle Button */}
-              <button
-                type="button"
-                id="ambient-light-power-toggle"
-                onClick={() => {
-                  const isCurrentlyOff = ambientBrightness === 0;
-                  const nextLvl = isCurrentlyOff ? 7 : 0;
-                  setAmbientBrightness(nextLvl);
-                  const cmdLabel = nextLvl === 0 ? 'Off' : `Brightness Level ${nextLvl}`;
-                  dispatchCommand('ambient_light_brightness', cmdLabel, nextLvl === 0 ? 'Ambient Light Turned OFF' : `Ambient Light: Level ${nextLvl}`);
-                }}
-                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-colors cursor-pointer border ${ambientBrightness !== null && ambientBrightness > 0
-                  ? 'bg-accent text-accent-foreground border-accent shadow-sm'
-                  : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
-                }`}
-              >
-                {ambientBrightness !== null && ambientBrightness > 0 ? 'ON' : 'OFF'}
-              </button>
-            </div>
-
-            {/* Brightness Stepper Bar (Off to Level 10) */}
-            <div className="space-y-1.5 pt-1">
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-muted flex items-center gap-1.5">
-                  <Sun className="w-3.5 h-3.5 text-muted" />
-                  <span>Brightness Level</span>
-                </span>
-                <span className="font-mono font-bold text-foreground">
-                  {ambientBrightness === null ? '--' : ambientBrightness === 0 ? 'Off' : `Level ${ambientBrightness}`}
-                </span>
-              </div>
-              <div className="grid grid-cols-11 gap-1">
-                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(step => {
-                  const isActive = ambientBrightness === step;
-                  return (
-                    <button
-                      key={step}
-                      type="button"
-                      id={`ambient-brightness-step-${step}`}
-                      onClick={() => {
-                        setAmbientBrightness(step);
-                        const cmdLabel = step === 0 ? 'Off' : step === 10 ? 'Brightness Level 10 (Max)' : `Brightness Level ${step}`;
-                        dispatchCommand('ambient_light_brightness', cmdLabel, step === 0 ? 'Ambient Light Turned OFF' : `Ambient Light: Level ${step}`);
-                      }}
-                      title={step === 0 ? 'Off (0%)' : `Level ${step} (${step * 10}%)`}
-                      className={`h-7 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${isActive
-                        ? 'bg-accent text-accent-foreground shadow-sm ring-1 ring-accent scale-[1.03]'
-                        : ambientBrightness !== null && ambientBrightness >= step && step > 0
-                          ? 'bg-accent-soft text-accent border border-accent/30 hover:bg-accent-soft/80'
-                          : 'bg-surface-secondary text-muted border border-border hover:bg-surface-tertiary hover:text-foreground'
-                      }`}
-                    >
-                      {step === 0 ? '0' : step}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Factory OEM Dual-Color Themes (6 Themes) */}
+            {/* Dual-Tone Themes */}
             <div className="space-y-1.5 pt-2 border-t border-separator">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-muted block">Factory Dual-Tone Themes</span>
+              <span className="text-xs font-semibold text-muted block">Dual-Tone Themes</span>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-xs">
                 {AMBIENT_LIGHT_THEMES.map(t => {
                   const isSelected = ambientColor === t.label;
@@ -2698,9 +3521,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                         if (ambientBrightness === 0) setAmbientBrightness(7);
                         dispatchCommand('ambient_light_colors', t.label, `Theme Selected: ${t.name}`);
                       }}
-                      className={`p-2 rounded-xl border flex items-center gap-2 transition-all cursor-pointer text-left ${isSelected
-                        ? 'bg-accent-soft text-accent-soft-foreground border-accent/60 shadow-sm ring-1 ring-accent/40 font-bold'
-                        : 'bg-surface-secondary text-foreground/80 border-border hover:bg-surface-tertiary hover:text-foreground'
+                      className={`p-2 rounded-xl border flex items-center gap-2 transition-all cursor-pointer text-left ${
+                        isSelected
+                          ? 'bg-accent-soft text-accent-soft-foreground border-accent/60 shadow-sm font-bold'
+                          : 'bg-surface-secondary text-foreground/80 border-border hover:bg-surface-tertiary hover:text-foreground'
                       }`}
                     >
                       <span
@@ -2717,13 +3541,12 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
               </div>
             </div>
 
-            {/* Quick Popular Single Hues */}
+            {/* Popular Colors */}
             <div className="space-y-1.5 pt-2 border-t border-separator">
-              <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-wider text-muted">
-                <span>Popular Colors</span>
-                <span className="font-mono text-[9px] lowercase font-normal opacity-70">single hue presets</span>
+              <div className="flex items-center justify-between text-xs text-muted">
+                <span className="font-semibold">Quick Colors</span>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
                 {AMBIENT_QUICK_COLORS.map(c => {
                   const isSelected = ambientColor === c.label;
                   return (
@@ -2737,9 +3560,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                         dispatchCommand('ambient_light_colors', c.label, `Color: ${c.name}`);
                       }}
                       title={`${c.name} (${c.label})`}
-                      className={`group relative flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-all cursor-pointer ${isSelected
-                        ? 'bg-accent-soft text-accent border-accent/60 shadow-sm ring-1 ring-accent/40 font-bold scale-105'
-                        : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                      className={`group relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'bg-accent-soft text-accent border-accent/60 shadow-sm font-bold'
+                          : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
                       }`}
                     >
                       <span
@@ -2756,7 +3580,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
               </div>
             </div>
 
-            {/* Full 64-Color Palette Collapsible Drawer */}
+            {/* Collapsible 64-Color OEM Palette */}
             <div className="pt-2 border-t border-separator">
               <button
                 type="button"
@@ -2776,7 +3600,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
               {ambientPaletteExpanded && (
                 <div className="mt-2.5 p-2 rounded-xl bg-surface-secondary border border-border space-y-2">
-                  <div className="grid grid-cols-8 sm:grid-cols-8 gap-1.5 max-h-[190px] overflow-y-auto p-1 scrollbar-thin">
+                  <div className="grid grid-cols-8 gap-1.5 max-h-[190px] overflow-y-auto p-1 scrollbar-thin">
                     {AMBIENT_PALETTE_64.map(p => {
                       const isSelected = ambientColor === p.label;
                       return (
@@ -2790,9 +3614,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                                 if (ambientBrightness === 0) setAmbientBrightness(7);
                                 dispatchCommand('ambient_light_colors', p.label, `Color: ${p.name}`);
                               }}
-                              className={`w-full aspect-square rounded-md transition-all cursor-pointer relative flex items-center justify-center border ${isSelected
-                                ? 'ring-2 ring-accent scale-110 border-white z-10'
-                                : 'border-border/60 hover:scale-105 hover:border-foreground/40'
+                              className={`w-full aspect-square rounded-md transition-all cursor-pointer relative flex items-center justify-center border ${
+                                isSelected
+                                  ? 'ring-2 ring-accent scale-110 border-white z-10'
+                                  : 'border-border/60 hover:scale-105 hover:border-foreground/40'
                               }`}
                               style={{
                                 backgroundColor: p.hex,
@@ -2815,12 +3640,24 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   </div>
                 </div>
               )}
-            </div>
-          </Card>
+                    </div>
+                  </div>
+                )}
+              </ModalBody>
 
-        </div>
-
-      </div>
+              <ModalFooter className="px-5 py-3.5 border-t border-separator bg-surface-secondary/40 flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => setActiveOverlay(null)}
+                  className="px-5 py-2 rounded-xl bg-foreground text-background text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer"
+                >
+                  Done
+                </button>
+              </ModalFooter>
+            </ModalDialog>
+          </ModalContainer>
+        </ModalBackdrop>
+      </Modal>
     </div>
   );
 };

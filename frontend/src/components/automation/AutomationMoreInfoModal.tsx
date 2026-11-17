@@ -67,7 +67,7 @@ export const AutomationMoreInfoModal: React.FC<AutomationMoreInfoModalProps> = (
     <Modal isOpen={isOpen} onOpenChange={(open) => !open && onClose()}>
       <ModalBackdrop className="bg-backdrop backdrop-blur-sm fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
         <ModalContainer className="w-full max-w-lg">
-          <ModalDialog className="relative bg-overlay border border-border rounded-2xl shadow-overlay overflow-hidden flex flex-col max-h-[90vh]">
+          <ModalDialog className="relative bg-overlay border border-border rounded-2xl shadow-overlay overflow-hidden p-0 flex flex-col max-h-[90vh]">
             <ModalHeader className="px-5 py-4 border-b border-separator bg-surface">
               <div className="flex items-center gap-2.5 min-w-0 pr-10">
                 <span

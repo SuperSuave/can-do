@@ -4,6 +4,8 @@ import { DEFAULT_CATALOG, normalizeCatalog } from './data/defaultCatalog';
 import { validateCatalog } from './utils/canValidator';
 import { commandToAction, commandToCondition, commandToTrigger, exportToCandoJson, decompileAutomationRules } from './utils/automationConverters';
 import { resolveVariant, formatCommandForCatalog } from './utils/catalogUtils';
+import { decodeAmbientCanFrame, getAmbientColorHex } from './utils/cockpitDecoders';
+import { deviceWs } from './services/deviceWs';
 import { getSavedRepoConfig, saveRepoConfig } from './utils/githubHelper';
 import { isRunningOnDevice, resolveDeviceBaseUrl } from './utils/hostUtils';
 import { CommandFilter } from './components/CommandFilter';
@@ -112,6 +114,38 @@ export default function App() {
 
   const toggleTheme = () => {
     setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
+  };
+
+  // Ambient Mood Lighting state (synced with 0x455 CAN frames and VehicleDashboard widget)
+  const [ambientColor, setAmbientColor] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('cando_ambient_color');
+      if (saved) return saved;
+    } catch {}
+    return 'Dreamy Purple';
+  });
+  const [ambientBrightness, setAmbientBrightness] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('cando_ambient_brightness');
+      if (saved !== null) return parseInt(saved, 10);
+    } catch {}
+    return 7;
+  });
+
+  const activeAmbientHex = useMemo(() => getAmbientColorHex(ambientColor), [ambientColor]);
+
+  const handleAmbientColorChange = (nextColor: string) => {
+    setAmbientColor(nextColor);
+    try {
+      localStorage.setItem('cando_ambient_color', nextColor);
+    } catch {}
+  };
+
+  const handleAmbientBrightnessChange = (nextBrightness: number) => {
+    setAmbientBrightness(nextBrightness);
+    try {
+      localStorage.setItem('cando_ambient_brightness', String(nextBrightness));
+    } catch {}
   };
 
   // Two-header architecture:
@@ -236,6 +270,46 @@ export default function App() {
   const catalogRef = useRef<Catalog>(catalog);
   catalogRef.current = catalog;
   const needsCatalogDecompileRef = useRef<boolean>(catalog.commands.length === 0);
+
+  // Listen to live 0x455 CAN frames and ambient_light entity states across all tabs
+  useEffect(() => {
+    const unsubscribe = deviceWs.subscribe(data => {
+      if (data.type === 'state' && (data as any).entity && (data as any).state) {
+        const entity = (data as any).entity as string;
+        const stateStr = String((data as any).state);
+        if (entity === 'ambient_light_colors' || entity === 'ambient_mood_lighting') {
+          handleAmbientColorChange(stateStr);
+        } else if (entity === 'ambient_light_brightness') {
+          const match = stateStr.match(/(\d+)/);
+          if (match) {
+            handleAmbientBrightnessChange(parseInt(match[1], 10));
+          } else if (stateStr.toLowerCase().includes('off')) {
+            handleAmbientBrightnessChange(0);
+          }
+        }
+      } else if (data.type === 'can_frame' && (data as any).id) {
+        const normId = String((data as any).id).toLowerCase().replace(/^0x/, '');
+        const ambientCmd = catalogRef.current?.commands?.find(c => c.id === 'ambient_light_colors');
+        const ambientStateId = (ambientCmd?.network?.state_can_id || '455').toLowerCase().replace(/^0x/, '');
+        if (normId === ambientStateId || normId === '455') {
+          const hexClean = String((data as any).data || '').trim().replace(/\s+/g, '');
+          const bytes = (hexClean.match(/.{1,2}/g) || []).map(h => parseInt(h, 16));
+          if (bytes.length >= 6) {
+            const decoded = decodeAmbientCanFrame(bytes, ambientCmd?.options);
+            if (decoded) {
+              handleAmbientBrightnessChange(decoded.brightness);
+              if (decoded.activeOptionLabel) {
+                handleAmbientColorChange(decoded.activeOptionLabel);
+              }
+            }
+          }
+        }
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   // 2. Draft contribution tracking (Commands)
   const [draftAddedIds, setDraftAddedIds] = useState<string[]>(() => {
@@ -1202,7 +1276,17 @@ export default function App() {
 
         {/* Center: EV6 Climate-Bar Nav Easter Egg */}
         <div className="order-3 md:order-2 w-full md:w-auto flex justify-center min-w-0">
-          <div className="ev6-climate-bar max-w-full overflow-x-auto">
+          <div
+            className="ev6-climate-bar max-w-full overflow-x-auto"
+            style={{
+              borderColor: activeAmbientHex,
+              '--ambient-nav-border': activeAmbientHex,
+              '--ambient-nav-glow':
+                ambientBrightness > 0
+                  ? `0 4px 16px -4px color-mix(in oklab, ${activeAmbientHex} 45%, transparent)`
+                  : undefined,
+            } as React.CSSProperties}
+          >
             <Tabs
               selectedKey={activeMainTab}
               onSelectionChange={key => handleSetMainTab(key as 'dashboard' | 'automations' | 'catalog' | 'device')}
@@ -1552,6 +1636,11 @@ export default function App() {
       <VehicleDashboard
         catalog={catalog}
         unitSystem={userPreferences.unit_system}
+        demoTelemetryEnabled={Boolean(userPreferences.demo_telemetry_enabled)}
+        ambientColor={ambientColor}
+        ambientBrightness={ambientBrightness}
+        onAmbientColorChange={handleAmbientColorChange}
+        onAmbientBrightnessChange={handleAmbientBrightnessChange}
         activeVehicle={
           selectedVehicleId !== 'all'
             ? catalog.vehicles.find(v => v.id === selectedVehicleId)
