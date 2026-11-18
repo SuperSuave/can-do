@@ -1,10 +1,10 @@
 {
-  "version": "2026.11.6-b004",
+  "version": "2026.11.6-b005",
   "files": [
     {
-      "name": "B8ptGrtP.js.gz",
-      "path": "/spiffs/www/B8ptGrtP.js.gz",
-      "size": 44683
+      "name": "BGvAPfs0.js.gz",
+      "path": "/spiffs/www/BGvAPfs0.js.gz",
+      "size": 28458
     },
     {
       "name": "BdMWSxNz.js.gz",
@@ -12,9 +12,14 @@
       "size": 70567
     },
     {
-      "name": "CuQawZLC.js.gz",
-      "path": "/spiffs/www/CuQawZLC.js.gz",
-      "size": 28458
+      "name": "BtyxgJiV.js.gz",
+      "path": "/spiffs/www/BtyxgJiV.js.gz",
+      "size": 44681
+    },
+    {
+      "name": "DEGsRNRz.js.gz",
+      "path": "/spiffs/www/DEGsRNRz.js.gz",
+      "size": 83700
     },
     {
       "name": "DV7vRZAU.js.gz",
@@ -27,19 +32,14 @@
       "size": 9546
     },
     {
-      "name": "Wa4SgZNm.js.gz",
-      "path": "/spiffs/www/Wa4SgZNm.js.gz",
-      "size": 83700
-    },
-    {
       "name": "ZvF2C48M.js.gz",
       "path": "/spiffs/www/ZvF2C48M.js.gz",
       "size": 242235
     },
     {
-      "name": "index-DOWFMd.js.gz",
-      "path": "/spiffs/www/index-DOWFMd.js.gz",
-      "size": 79781
+      "name": "index-24dIwK.js.gz",
+      "path": "/spiffs/www/index-24dIwK.js.gz",
+      "size": 79778
     },
     {
       "name": "index-DUfrom.css.gz",
