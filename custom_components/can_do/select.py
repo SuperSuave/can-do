@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .can_utils import build_action_steps
+from .can_utils import build_action_steps, resolve_base_payload
 from .catalog_loader import check_match
 from .const import DOMAIN
 from .coordinator import CanDoDataCoordinator
@@ -102,6 +102,18 @@ class CanDoSelectEntity(CanDoEntity, SelectEntity):
         net = self.command.get("network", {})
         action_can_id = net.get("action_can_id", self.state_can_id or "0x000")
         delay_ms = net.get("delay_ms", 20)
+        bus = net.get("bus")
+
+        if (
+            self.entity_id_str == "battery_preconditioning"
+            or self.command.get("type") == "precondition"
+            or net.get("type") == "precondition"
+        ):
+            _LOGGER.info("Sending preconditioning entity command '%s' for '%s'", option, self.name)
+            await self.coordinator.async_send_entity_command(self.entity_id_str, option)
+            self._current_option = option
+            self.async_write_ha_state()
+            return
 
         target_opt = None
         for opt in self.command.get("options", []):
@@ -109,9 +121,9 @@ class CanDoSelectEntity(CanDoEntity, SelectEntity):
                 target_opt = opt
                 break
 
-        base_payload = self.coordinator.get_can_payload(action_can_id)
-        if not base_payload and self.state_can_id and self.state_can_id.lower() == action_can_id.lower():
-            base_payload = self.coordinator.get_can_payload(self.state_can_id)
+        base_payload = resolve_base_payload(
+            self.coordinator, self.command, action_can_id, self.state_can_id
+        )
         steps = build_action_steps(self.command, target_opt, base_payload)
         if self.entity_id_str == "ambient_mood_lamp_color" or net.get("type") == "isotp":
             _LOGGER.info("Sending ambient lamp entity command '%s' for '%s'", option, self.name)
@@ -150,10 +162,10 @@ class CanDoSelectEntity(CanDoEntity, SelectEntity):
                     {"payload": matched_hex, "repeat": 3, "delay_ms": 25},
                     {"payload": "0002082000000000", "repeat": 3, "delay_ms": 25},
                 ]
-                await self.coordinator.async_send_action("0x4AD", 25, burst_steps)
+                await self.coordinator.async_send_action("0x4AD", 25, burst_steps, bus=bus)
         elif steps:
             _LOGGER.info("Selecting option '%s' for '%s'", option, self.name)
-            await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
+            await self.coordinator.async_send_action(action_can_id, delay_ms, steps, bus=bus)
 
         self._current_option = option
         self.async_write_ha_state()

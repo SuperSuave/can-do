@@ -8,8 +8,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .can_utils import build_action_steps
-from .catalog_loader import check_match, parse_hex_val
+from .can_utils import (
+    build_action_steps,
+    find_switch_option,
+    is_off_option_label,
+    is_on_option_label,
+    resolve_base_payload,
+)
+from .catalog_loader import check_match
 from .const import DOMAIN
 from .coordinator import CanDoDataCoordinator
 from .entity import CanDoEntity
@@ -60,16 +66,20 @@ class CanDoSwitchEntity(CanDoEntity, SwitchEntity):
         if not payload:
             return self._is_on
 
-        # Check options for "On" / "Active" / "Enabled"
-        options = self.command.get("options", [])
-        for opt in options:
-            label = opt.get("label", "").lower()
-            if any(k in label for k in ["on", "active", "enabled", "heat", "1"]):
-                match_spec = opt.get("match") or opt.get("payload")
-                if match_spec and check_match(payload, match_spec, opt.get("mask")):
+        # Check options using word-boundary ON/OFF detection
+        on_opt = find_switch_option(self.command, True)
+        for opt in self.command.get("options", []):
+            label = opt.get("label", "")
+            match_spec = opt.get("match") or opt.get("payload")
+            is_off = is_off_option_label(label)
+            is_on = is_on_option_label(label) or (on_opt is opt and not is_off)
+            if match_spec and check_match(payload, match_spec, opt.get("mask")):
+                if is_off:
+                    return False
+                if is_on:
                     return True
-                if not match_spec and opt.get("default") and self._is_on:
-                    return True
+            elif not match_spec and is_on and opt.get("default") and self._is_on:
+                return True
 
         # Check command-level match
         if "match" in self.command:
@@ -77,75 +87,37 @@ class CanDoSwitchEntity(CanDoEntity, SwitchEntity):
 
         return self._is_on
 
-    async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn the switch on."""
+    async def _async_set_switch_state(self, turn_on: bool) -> None:
+        """Turn the switch on or off."""
+        if "remote_climate" in self.entity_id_str:
+            await self.coordinator.async_send_remote_climate(
+                action="start" if turn_on else "stop"
+            )
+            self._is_on = turn_on
+            self.async_write_ha_state()
+            return
+
         net = self.command.get("network", {})
         action_can_id = net.get("action_can_id", self.state_can_id or "0x000")
         delay_ms = net.get("delay_ms", 20)
+        bus = net.get("bus")
 
-        # Look for "On" option or default steps
-        target_opt = None
-        for opt in self.command.get("options", []):
-            label = opt.get("label", "").lower()
-            if any(k in label for k in ["on", "active", "enabled", "start"]):
-                target_opt = opt
-                break
-
-        # Resolve base_payload from live CAN state or command network defaults
-        base_payload = None
-        if self.state_can_id:
-            curr = self.coordinator.get_can_payload(self.state_can_id)
-            if curr and len(curr) == 8:
-                base_payload = list(curr)
-        if not base_payload:
-            net_base = self.command.get("network", {}).get("base_payload")
-            if isinstance(net_base, list) and len(net_base) == 8:
-                base_payload = []
-                for b in net_base:
-                    val, _ = parse_hex_val(b) if isinstance(b, str) else (int(b), False)
-                    base_payload.append(val & 0xFF)
+        target_opt = find_switch_option(self.command, turn_on)
+        base_payload = resolve_base_payload(
+            self.coordinator, self.command, action_can_id, self.state_can_id
+        )
 
         steps = build_action_steps(self.command, target_opt, base_payload)
-        if "remote_climate" in self.entity_id_str:
-            await self.coordinator.async_send_remote_climate(action="start")
         if steps:
-            await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
+            await self.coordinator.async_send_action(action_can_id, delay_ms, steps, bus=bus)
 
-        self._is_on = True
+        self._is_on = turn_on
         self.async_write_ha_state()
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn the switch on."""
+        await self._async_set_switch_state(True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
-        net = self.command.get("network", {})
-        action_can_id = net.get("action_can_id", self.state_can_id or "0x000")
-        delay_ms = net.get("delay_ms", 20)
-
-        target_opt = None
-        for opt in self.command.get("options", []):
-            label = opt.get("label", "").lower()
-            if any(k in label for k in ["off", "inactive", "disabled", "stop"]):
-                target_opt = opt
-                break
-
-        # Resolve base_payload from live CAN state or command network defaults
-        base_payload = None
-        if self.state_can_id:
-            curr = self.coordinator.get_can_payload(self.state_can_id)
-            if curr and len(curr) == 8:
-                base_payload = list(curr)
-        if not base_payload:
-            net_base = self.command.get("network", {}).get("base_payload")
-            if isinstance(net_base, list) and len(net_base) == 8:
-                base_payload = []
-                for b in net_base:
-                    val, _ = parse_hex_val(b) if isinstance(b, str) else (int(b), False)
-                    base_payload.append(val & 0xFF)
-
-        steps = build_action_steps(self.command, target_opt, base_payload)
-        if "remote_climate" in self.entity_id_str:
-            await self.coordinator.async_send_remote_climate(action="stop")
-        if steps:
-            await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
-
-        self._is_on = False
-        self.async_write_ha_state()
+        await self._async_set_switch_state(False)

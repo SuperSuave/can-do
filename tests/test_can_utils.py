@@ -1,5 +1,6 @@
 """Unit tests for CAN Do conversion and helper utilities."""
 
+import json
 import sys
 import types
 import unittest
@@ -16,7 +17,14 @@ if "custom_components.can_do" not in sys.modules:
     pkg.__file__ = str(can_do_dir / "__init__.py")
     sys.modules["custom_components.can_do"] = pkg
 
-from custom_components.can_do.can_utils import build_action_steps, build_hex_payload
+from custom_components.can_do.can_utils import (
+    build_action_steps,
+    build_hex_payload,
+    find_switch_option,
+    is_off_option_label,
+    is_on_option_label,
+    resolve_base_payload,
+)
 
 
 class TestBuildHexPayload(unittest.TestCase):
@@ -190,6 +198,124 @@ class TestBuildActionSteps(unittest.TestCase):
         self.assertEqual(len(steps), 2)
         self.assertEqual(steps[0]["payload"], "FF20304050607080")
         self.assertEqual(steps[1]["payload"], "10203040506070AA")
+
+    def test_preserves_step_can_id_bus_and_delay_type(self) -> None:
+        """Step-level can_id, bus, and delay step types should be preserved."""
+        command = {
+            "steps": [
+                {"can_id": "0x418", "bus": 1, "payload": {"D3": "0x01"}, "repeat": 3},
+                {"type": "delay", "delay_ms": 150},
+                {"action_can_id": "0x4A2", "payload": {"D3": "0xFF"}, "repeat": 2},
+            ]
+        }
+        steps = build_action_steps(command)
+        self.assertEqual(len(steps), 3)
+        self.assertEqual(steps[0]["can_id"], "0x418")
+        self.assertEqual(steps[0]["bus"], 1)
+        self.assertEqual(steps[0]["payload"], "0000010000000000")
+        self.assertEqual(steps[1], {"type": "delay", "delay_ms": 150})
+        self.assertEqual(steps[2]["can_id"], "0x4A2")
+        self.assertEqual(steps[2]["payload"], "0000FF0000000000")
+
+
+class TestSwitchOptionMatching(unittest.TestCase):
+    """Test word-boundary switch option detection across catalog switches."""
+
+    def test_word_boundary_prevents_substring_collisions(self) -> None:
+        """Words like 'only', 'ventilation', 'inactive', 'heat' must not false-match."""
+        self.assertTrue(is_off_option_label("Driver Only Off"))
+        self.assertFalse(is_on_option_label("Driver Only Off"))
+        self.assertTrue(is_on_option_label("Driver Only On"))
+
+        self.assertTrue(is_off_option_label("Smart Ventilation Off"))
+        self.assertFalse(is_on_option_label("Smart Ventilation Off"))
+        self.assertTrue(is_on_option_label("Smart Ventilation On"))
+
+        self.assertTrue(is_off_option_label("Turned OFF / Inactive"))
+        self.assertFalse(is_on_option_label("Turned OFF / Inactive"))
+        self.assertTrue(is_on_option_label("Turned ON / Active"))
+
+        self.assertTrue(is_off_option_label("Heat Off"))
+        self.assertFalse(is_on_option_label("Heat Off"))
+        self.assertTrue(is_on_option_label("Heat On"))
+
+    def test_all_catalog_switches_resolve_distinct_on_and_off_options(self) -> None:
+        """Every switch entity in can_do_catalog.json should map turn_on and turn_off cleanly."""
+        catalog_path = Path(__file__).resolve().parent.parent / "catalog" / "can_do_catalog.json"
+        catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+        switches = [
+            c for c in catalog.get("commands", [])
+            if c.get("ha_metadata", {}).get("domain") == "switch"
+        ]
+        self.assertGreaterEqual(len(switches), 17)
+
+        for cmd in switches:
+            on_opt = find_switch_option(cmd, True)
+            off_opt = find_switch_option(cmd, False)
+            self.assertIsNotNone(on_opt, f"{cmd['id']} missing ON option")
+            self.assertIsNotNone(off_opt, f"{cmd['id']} missing OFF option")
+            self.assertNotEqual(
+                on_opt.get("label"),
+                off_opt.get("label"),
+                f"{cmd['id']} resolved same option for ON and OFF",
+            )
+
+        by_id = {c["id"]: c for c in switches}
+        self.assertEqual(find_switch_option(by_id["climate_driver_only_toggle"], True)["label"], "Driver Only On")
+        self.assertEqual(find_switch_option(by_id["climate_driver_only_toggle"], False)["label"], "Driver Only Off")
+        self.assertEqual(find_switch_option(by_id["climate_smart_ventilation"], True)["label"], "Smart Ventilation On")
+        self.assertEqual(find_switch_option(by_id["climate_smart_ventilation"], False)["label"], "Smart Ventilation Off")
+        self.assertEqual(find_switch_option(by_id["climate_heat_toggle"], True)["label"], "Heat On")
+        self.assertEqual(find_switch_option(by_id["climate_heat_toggle"], False)["label"], "Heat Off")
+        self.assertEqual(find_switch_option(by_id["climate_ac_toggle"], True)["label"], "A/C On")
+        self.assertEqual(find_switch_option(by_id["climate_ac_toggle"], False)["label"], "A/C Off")
+        self.assertEqual(find_switch_option(by_id["climate_auto_defrost"], True)["label"], "Auto Defrost On")
+        self.assertEqual(find_switch_option(by_id["climate_auto_defrost"], False)["label"], "Auto Defrost Off")
+        self.assertEqual(find_switch_option(by_id["climate_sync_toggle"], True)["label"], "Sync Passenger to Driver")
+        self.assertEqual(find_switch_option(by_id["climate_sync_toggle"], False)["label"], "Dual Split / Sync Off")
+        self.assertEqual(find_switch_option(by_id["hazard_lights"], True)["label"], "Turned ON / Active")
+        self.assertEqual(find_switch_option(by_id["hazard_lights"], False)["label"], "Turned OFF / Inactive")
+        self.assertEqual(find_switch_option(by_id["heated_steering_wheel_toggle"], True)["label"], "Heated Steering Wheel On")
+        self.assertEqual(find_switch_option(by_id["heated_steering_wheel_toggle"], False)["label"], "Heated Steering Wheel Off")
+
+
+class TestResolveBasePayload(unittest.TestCase):
+    """Test base_payload isolation across state and action CAN IDs."""
+
+    class _MockCoord:
+        def __init__(self, payloads: dict[str, list[int]]) -> None:
+            self._payloads = payloads
+
+        def get_can_payload(self, can_id: str | None) -> list[int] | None:
+            return self._payloads.get((can_id or "").lower())
+
+    def test_inherits_live_frame_only_when_ids_match(self) -> None:
+        """Live state CAN payload must only seed base_payload when state_can_id == action_can_id."""
+        coord = self._MockCoord({"0x465": [0xAA] * 8, "0x60c": [0x19, 0x00, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x00]})
+
+        # Different CAN IDs (e.g. climate_driver_only_toggle: state 0x465 vs action 0x41D) -> must NOT inherit
+        cmd_diff = {"network": {"state_can_id": "0x465", "action_can_id": "0x41D"}}
+        self.assertIsNone(resolve_base_payload(coord, cmd_diff, "0x41D", "0x465"))
+
+        # Matching CAN IDs (e.g. audio_quiet_mode: 0x60C == 0x60C) -> inherits live frame copy
+        cmd_same = {"network": {"state_can_id": "0x60C", "action_can_id": "0x60C"}}
+        self.assertEqual(
+            resolve_base_payload(coord, cmd_same, "0x60C", "0x60C"),
+            [0x19, 0x00, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x00],
+        )
+
+        # Fallback to network.base_payload when live frame is unavailable or IDs differ
+        cmd_default = {
+            "network": {
+                "state_can_id": "0x465",
+                "action_can_id": "0x41D",
+                "base_payload": ["0x10", "0x00", "0x00", "0x00", "0x00", "0x00", "0x00", "0x00"],
+            }
+        }
+        self.assertEqual(
+            resolve_base_payload(coord, cmd_default, "0x41D", "0x465"),
+            [0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+        )
 
 
 if __name__ == "__main__":

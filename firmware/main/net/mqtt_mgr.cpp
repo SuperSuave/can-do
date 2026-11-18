@@ -496,19 +496,19 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
             // 1. Pack all 14 control topics into a SINGLE MQTT SUBSCRIBE packet (QoS 0)
             // Avoids 14 separate WebSocket frames AND avoids # wildcard broker echo on /state/*
-            std::string t_dev_tx       = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/tx";
+            std::string t_dev_tx       = MQTT_BASE_TOPIC + "/+/tx";
             std::string t_base_tx      = MQTT_BASE_TOPIC + "/tx";
-            std::string t_dev_notify   = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/notify";
+            std::string t_dev_notify   = MQTT_BASE_TOPIC + "/+/notify";
             std::string t_base_notify  = MQTT_BASE_TOPIC + "/notify";
-            std::string t_dev_nav      = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/nav/set";
+            std::string t_dev_nav      = MQTT_BASE_TOPIC + "/+/nav/set";
             std::string t_base_nav     = MQTT_BASE_TOPIC + "/nav/set";
-            std::string t_dev_sub_ids  = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/subscribe_ids";
+            std::string t_dev_sub_ids  = MQTT_BASE_TOPIC + "/+/subscribe_ids";
             std::string t_base_sub_ids = MQTT_BASE_TOPIC + "/subscribe_ids";
-            std::string t_dev_cfg_set  = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/set";
+            std::string t_dev_cfg_set  = MQTT_BASE_TOPIC + "/+/config/automations/set";
             std::string t_base_cfg_set = MQTT_BASE_TOPIC + "/config/automations/set";
-            std::string t_dev_cfg_get  = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/get";
+            std::string t_dev_cfg_get  = MQTT_BASE_TOPIC + "/+/config/automations/get";
             std::string t_base_cfg_get = MQTT_BASE_TOPIC + "/config/automations/get";
-            std::string t_dev_set_all  = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/set/#";
+            std::string t_dev_set_all  = MQTT_BASE_TOPIC + "/+/set/#";
             std::string t_base_set_all = MQTT_BASE_TOPIC + "/set/#";
 
             const esp_mqtt_topic_t sub_list[] = {
@@ -563,16 +563,39 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             break;
 
         case MQTT_EVENT_DATA: {
-            std::string config_set_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/set";
-            std::string config_get_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/get";
+            auto extract_target_topic_suffix = [](const std::string& t, std::string& out_suffix) -> bool {
+                const std::string base_prefix = MQTT_BASE_TOPIC + "/";
+                if (t.rfind(base_prefix, 0) != 0) return false;
+                std::string rest = t.substr(base_prefix.length());
 
-            if (event->current_data_offset == 0 && event->topic_len == config_set_topic.length() && 
-                strncmp(event->topic, config_set_topic.c_str(), event->topic_len) == 0) {
-                s_receiving_automations = true;
-                s_automations_tmp_file = fopen("/spiffs/automations.json.tmp", "w");
-                if (!s_automations_tmp_file) {
-                    ESP_LOGE(TAG, "Failed to open automations.json.tmp for writing");
-                    s_receiving_automations = false;
+                const std::string dev_prefix = DEVICE_ID + "/";
+                if (rest.rfind(dev_prefix, 0) == 0) {
+                    out_suffix = rest.substr(dev_prefix.length());
+                    return true;
+                }
+                if (rest.rfind("can-do/", 0) == 0) {
+                    out_suffix = rest.substr(7);
+                    return true;
+                }
+                if (rest == "tx" || rest == "notify" || rest == "nav/set" ||
+                    rest == "subscribe_ids" || rest == "config/automations/set" ||
+                    rest == "config/automations/get" || rest.rfind("set/", 0) == 0) {
+                    out_suffix = rest;
+                    return true;
+                }
+                return false;
+            };
+
+            if (event->current_data_offset == 0 && event->topic_len > 0) {
+                std::string init_topic(event->topic, event->topic_len);
+                std::string init_suffix;
+                if (extract_target_topic_suffix(init_topic, init_suffix) && init_suffix == "config/automations/set") {
+                    s_receiving_automations = true;
+                    s_automations_tmp_file = fopen("/spiffs/automations.json.tmp", "w");
+                    if (!s_automations_tmp_file) {
+                        ESP_LOGE(TAG, "Failed to open automations.json.tmp for writing");
+                        s_receiving_automations = false;
+                    }
                 }
             }
 
@@ -599,12 +622,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             std::string topic(event->topic, event->topic_len);
             std::string payload(event->data, event->data_len);
 
-            if (topic == config_get_topic || topic == (MQTT_BASE_TOPIC + "/config/automations/get")) {
-                s_auto_reload_pending.store(true);
-                mqtt_mgr_on_automations_reloaded();
-                return;
-            }
-
             std::string state_prefix = MQTT_BASE_TOPIC + "/state/";
             if (topic.rfind(state_prefix, 0) == 0 && topic.length() > state_prefix.length()) {
                 std::string entity_id = topic.substr(state_prefix.length());
@@ -612,16 +629,22 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 return;
             }
 
-            auto topic_ends_with = [](const std::string& str, const std::string& suffix) {
-                return str.length() >= suffix.length() && 
-                       str.compare(str.length() - suffix.length(), suffix.length(), suffix) == 0;
-            };
+            std::string suffix;
+            if (!extract_target_topic_suffix(topic, suffix)) {
+                return;
+            }
 
-            bool is_notify = (topic_ends_with(topic, "/notify") || topic == (MQTT_BASE_TOPIC + "/notify"));
-            bool is_nav_set = (topic_ends_with(topic, "/nav/set") || topic == (MQTT_BASE_TOPIC + "/nav/set"));
-            bool is_tx = (topic_ends_with(topic, "/tx") || topic == (MQTT_BASE_TOPIC + "/tx"));
-            bool is_sub_ids = (topic_ends_with(topic, "/subscribe_ids") || topic == (MQTT_BASE_TOPIC + "/subscribe_ids"));
-            bool is_set_cmd = (topic.find("/set/") != std::string::npos);
+            if (suffix == "config/automations/get") {
+                s_auto_reload_pending.store(true);
+                mqtt_mgr_on_automations_reloaded();
+                return;
+            }
+
+            bool is_notify = (suffix == "notify");
+            bool is_nav_set = (suffix == "nav/set");
+            bool is_tx = (suffix == "tx");
+            bool is_sub_ids = (suffix == "subscribe_ids");
+            bool is_set_cmd = (suffix.rfind("set/", 0) == 0);
 
             if (is_notify) {
                 std::string msg = payload;
@@ -740,57 +763,83 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             } else if (is_tx) {
                 cJSON* root = cJSON_Parse(payload.c_str());
                 if (root) {
-                    uint32_t can_id = 0;
-                    cJSON* id_item = cJSON_GetObjectItem(root, "can_id");
-                    if (id_item && cJSON_IsString(id_item)) {
-                        can_id = strtoul(id_item->valuestring, nullptr, 0);
-                    } else if (id_item && cJSON_IsNumber(id_item)) {
-                        can_id = (uint32_t)id_item->valueint;
+                    bool handled = false;
+                    cJSON* target_entity = cJSON_GetObjectItem(root, "entity");
+                    cJSON* target_cmd = cJSON_GetObjectItem(root, "command");
+                    if (cJSON_IsString(target_entity)) {
+                        const char* cmd_str = cJSON_IsString(target_cmd) ? target_cmd->valuestring : "";
+                        if (queue_entity_command(target_entity->valuestring, cmd_str)) {
+                            handled = true;
+                        }
                     }
 
-                    uint32_t delay_ms = 20;
-                    cJSON* del_item = cJSON_GetObjectItem(root, "delay_ms");
-                    if (del_item && cJSON_IsNumber(del_item)) {
-                        delay_ms = del_item->valueint;
-                    }
+                    if (!handled) {
+                        uint32_t can_id = 0;
+                        cJSON* id_item = cJSON_GetObjectItem(root, "can_id");
+                        if (id_item && cJSON_IsString(id_item)) {
+                            can_id = strtoul(id_item->valuestring, nullptr, 0);
+                        } else if (id_item && cJSON_IsNumber(id_item)) {
+                            can_id = (uint32_t)id_item->valueint;
+                        }
 
-                    std::vector<ActionStep> steps;
-                    cJSON* steps_arr = cJSON_GetObjectItem(root, "steps");
-                    if (steps_arr && cJSON_IsArray(steps_arr)) {
-                        int count = cJSON_GetArraySize(steps_arr);
-                        for (int i = 0; i < count; i++) {
-                            cJSON* s = cJSON_GetArrayItem(steps_arr, i);
-                            if (!s) continue;
-                            ActionStep step;
-                            step.type = ActionType::TRANSMIT_FRAME;
-                            step.can_id = can_id;
-                            step.mask = 0xFF;
-                            step.repeat = 1;
-                            step.delay_ms = delay_ms;
+                        uint8_t top_bus = 0;
+                        cJSON* bus_item = cJSON_GetObjectItem(root, "bus");
+                        if (bus_item && cJSON_IsNumber(bus_item)) {
+                            top_bus = (uint8_t)bus_item->valueint;
+                        } else if (bus_item && cJSON_IsString(bus_item)) {
+                            top_bus = (uint8_t)strtoul(bus_item->valuestring, nullptr, 0);
+                        }
 
-                            cJSON* rep = cJSON_GetObjectItem(s, "repeat");
-                            if (rep && cJSON_IsNumber(rep)) step.repeat = rep->valueint;
+                        uint32_t delay_ms = 20;
+                        cJSON* del_item = cJSON_GetObjectItem(root, "delay_ms");
+                        if (del_item && cJSON_IsNumber(del_item) && del_item->valueint >= 0) {
+                            delay_ms = (uint32_t)del_item->valueint;
+                        }
 
-                            cJSON* sdel = cJSON_GetObjectItem(s, "delay_ms");
-                            if (sdel && cJSON_IsNumber(sdel)) step.delay_ms = sdel->valueint;
-
-                            cJSON* pay = cJSON_GetObjectItem(s, "payload");
-                            if (pay && cJSON_IsString(pay)) {
-                                const char* hex = pay->valuestring;
-                                size_t hlen = strlen(hex);
-                                for (size_t b = 0; b < 8 && (b * 2 + 1) < hlen; b++) {
-                                    char byte_str[3] = {hex[b * 2], hex[b * 2 + 1], '\0'};
-                                    step.payload[b] = (uint8_t)strtoul(byte_str, nullptr, 16);
+                        std::vector<ActionStep> steps;
+                        cJSON* steps_arr = cJSON_GetObjectItem(root, "steps");
+                        if (steps_arr && cJSON_IsArray(steps_arr) && cJSON_GetArraySize(steps_arr) > 0) {
+                            cJSON* s_item = nullptr;
+                            cJSON_ArrayForEach(s_item, steps_arr) {
+                                ActionStep step;
+                                if (parse_action_step(s_item, step)) {
+                                    if (step.type == ActionType::TRANSMIT_FRAME) {
+                                        if (step.can_id == 0) step.can_id = can_id;
+                                        if (!cJSON_GetObjectItem(s_item, "bus")) step.bus = top_bus;
+                                        if (step.repeat == 0) step.repeat = 1;
+                                        if (step.delay_ms == delay_ms) step.delay_ms = 0;
+                                    }
+                                    if (step.type != ActionType::TRANSMIT_FRAME || step.can_id != 0) {
+                                        steps.push_back(std::move(step));
+                                    }
                                 }
                             }
-                            steps.push_back(step);
+                        } else if (can_id != 0 && cJSON_GetObjectItem(root, "payload")) {
+                            ActionStep step;
+                            if (parse_action_step(root, step)) {
+                                step.type = ActionType::TRANSMIT_FRAME;
+                                step.can_id = can_id;
+                                step.bus = top_bus;
+                                if (step.repeat == 0) step.repeat = 1;
+                                if (step.delay_ms == delay_ms) step.delay_ms = 0;
+                                steps.push_back(std::move(step));
+                            }
+                        }
+
+                        uint32_t burst_cid = can_id;
+                        if (burst_cid == 0) {
+                            for (const auto& st : steps) {
+                                if (st.type == ActionType::TRANSMIT_FRAME && st.can_id != 0) {
+                                    burst_cid = st.can_id;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!steps.empty()) {
+                            queue_action_steps(burst_cid, delay_ms, steps);
                         }
                     }
                     cJSON_Delete(root);
-
-                    if (!steps.empty()) {
-                        queue_action_steps(can_id, delay_ms, steps);
-                    }
                 }
             } else if (is_sub_ids) {
                 cJSON* root = cJSON_Parse(payload.c_str());
@@ -810,8 +859,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 }
                 if (root) cJSON_Delete(root);
             } else if (is_set_cmd) {
-                size_t set_pos = topic.find("/set/");
-                std::string entity_id = topic.substr(set_pos + 5);
+                std::string entity_id = suffix.substr(4);
                 if (s_mqtt_cmd_queue) {
                     MqttSetCmd cmd = {};
                     strncpy(cmd.entity_id, entity_id.c_str(), sizeof(cmd.entity_id) - 1);

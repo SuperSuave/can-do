@@ -61,7 +61,9 @@ class CanDoDataCoordinator:
         self.device_id: str = entry_data.get(CONF_DEVICE_ID, "auto")
         self.vehicle_id: str = entry_data.get(CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID)
         self.base_topic: str = entry_data.get(CONF_BASE_TOPIC, DEFAULT_BASE_TOPIC)
-        self.active_device_id: str | None = None if self.device_id in ("auto", "*", "") else self.device_id
+        self.active_device_id: str | None = (
+            None if self.device_id in ("auto", "*", "", "can-do") else self.device_id
+        )
 
         self.available: bool = True
         self.can_states: dict[str, list[int]] = {}
@@ -120,20 +122,26 @@ class CanDoDataCoordinator:
         """Return MQTT BLE device connection event wildcard."""
         return f"{self.base_topic}/+/ble_device"
 
+    def _device_topic(self, suffix: str) -> str:
+        """Return device-scoped MQTT topic when bound, else base topic."""
+        if self.active_device_id:
+            return f"{self.base_topic}/{self.active_device_id}/{suffix}"
+        return f"{self.base_topic}/{suffix}"
+
     @property
     def tx_topic(self) -> str:
         """Return MQTT raw action burst topic."""
-        return f"{self.base_topic}/{self.effective_device_id}/tx"
+        return self._device_topic("tx")
 
     @property
     def notify_topic(self) -> str:
         """Return MQTT cluster notification topic."""
-        return f"{self.base_topic}/{self.effective_device_id}/notify"
+        return self._device_topic("notify")
 
     @property
     def sub_ids_topic(self) -> str:
         """Return MQTT dynamic monitored CAN IDs topic."""
-        return f"{self.base_topic}/{self.effective_device_id}/subscribe_ids"
+        return self._device_topic("subscribe_ids")
 
     @property
     def active_ids_topic(self) -> str:
@@ -143,7 +151,12 @@ class CanDoDataCoordinator:
     @property
     def climate_topic(self) -> str:
         """Return MQTT remote climate set topic."""
-        return f"{self.base_topic}/{self.effective_device_id}/set/remote_climate"
+        return self._device_topic("set/remote_climate")
+
+    @property
+    def nav_topic(self) -> str:
+        """Return MQTT HUD navigation set topic."""
+        return self._device_topic("nav/set")
 
     async def async_start(self) -> None:
         """Subscribe to MQTT topics and request vehicle telemetry IDs."""
@@ -217,14 +230,21 @@ class CanDoDataCoordinator:
             unsub()
         self._unsub_list.clear()
 
+    def _bind_device_id(self, dev_id: str) -> bool:
+        """Bind coordinator to the first seen device ID; ignore messages from other devices."""
+        if not dev_id or dev_id == "+":
+            return True
+        if self.active_device_id and dev_id != self.active_device_id:
+            return False
+        if not self.active_device_id:
+            self.active_device_id = dev_id
+            _LOGGER.info("CAN Do coordinator bound to active device ID '%s'", dev_id)
+        return True
+
     async def async_publish_monitored_ids(self) -> None:
         """Publish list of monitored CAN IDs to ESP32."""
         payload = json.dumps(self.monitored_can_ids)
-        target_topic = (
-            f"{self.base_topic}/{self.active_device_id}/subscribe_ids"
-            if self.active_device_id
-            else f"{self.base_topic}/subscribe_ids"
-        )
+        target_topic = self.sub_ids_topic
         _LOGGER.debug(
             "Publishing %d monitored CAN IDs to %s",
             len(self.monitored_can_ids),
@@ -236,15 +256,8 @@ class CanDoDataCoordinator:
     def _handle_status_message(self, msg: mqtt.ReceiveMessage) -> None:
         """Handle LWT online/offline transition."""
         parts = msg.topic.split("/")
-        if len(parts) >= 3:
-            dev_id = parts[1]
-            if dev_id != "+":
-                if self.active_device_id and dev_id != self.active_device_id:
-                    # Ignore messages from other devices if we are already bound
-                    return
-                elif not self.active_device_id:
-                    self.active_device_id = dev_id
-                    _LOGGER.info("CAN Do coordinator bound to active device ID '%s'", dev_id)
+        if len(parts) >= 3 and not self._bind_device_id(parts[1]):
+            return
 
         status = msg.payload.strip().lower()
         new_avail = status == "online"
@@ -259,6 +272,11 @@ class CanDoDataCoordinator:
     @callback
     def _handle_active_ids_message(self, msg: mqtt.ReceiveMessage) -> None:
         """Handle incoming active bus manifest from ESP32."""
+        parts = msg.topic.split("/")
+        if len(parts) >= 3 and parts[-1] == "active_ids":
+            if not self._bind_device_id(parts[-2]):
+                return
+
         payload = msg.payload.strip()
         if not payload:
             return
@@ -298,13 +316,8 @@ class CanDoDataCoordinator:
         else:
             return
 
-        if dev_id != "+":
-            if self.active_device_id and dev_id != self.active_device_id:
-                # Ignore messages from other devices if we are already bound
-                return
-            elif not self.active_device_id:
-                self.active_device_id = dev_id
-                _LOGGER.info("CAN Do coordinator bound to active device ID '%s'", dev_id)
+        if not self._bind_device_id(dev_id):
+            return
 
         # Receiving live CAN states indicates the edge device is online
         if not self.available:
@@ -578,25 +591,27 @@ class CanDoDataCoordinator:
         return val
 
     async def async_send_action(
-        self, can_id: str, delay_ms: int, steps: list[dict[str, Any]]
+        self,
+        can_id: str,
+        delay_ms: int,
+        steps: list[dict[str, Any]],
+        bus: int | None = None,
     ) -> None:
         """Send raw action burst to ESP32 edge device over MQTT."""
-        payload_obj = {
+        payload_obj: dict[str, Any] = {
             "can_id": can_id,
             "delay_ms": delay_ms,
             "steps": steps,
         }
+        if bus is not None:
+            payload_obj["bus"] = bus
         json_payload = json.dumps(payload_obj)
         _LOGGER.debug("Sending CAN burst to %s: %s", self.tx_topic, json_payload)
         await mqtt.async_publish(self.hass, self.tx_topic, json_payload, qos=1)
 
     async def async_send_entity_command(self, entity_id: str, command: str) -> None:
         """Send high-level entity command (e.g. lock/unlock) to ESP32 edge device over MQTT."""
-        topic = (
-            f"{self.base_topic}/{self.active_device_id}/set/{entity_id}"
-            if self.active_device_id
-            else f"{self.base_topic}/set/{entity_id}"
-        )
+        topic = self._device_topic(f"set/{entity_id}")
         await mqtt.async_publish(self.hass, topic, command, qos=1)
 
     async def async_send_remote_climate(
@@ -614,11 +629,7 @@ class CanDoDataCoordinator:
             "duration": duration_sec,
         }
         json_payload = json.dumps(payload_obj)
-        topic = (
-            f"{self.base_topic}/{self.active_device_id}/set/remote_climate"
-            if self.active_device_id
-            else f"{self.base_topic}/set/remote_climate"
-        )
+        topic = self.climate_topic
         _LOGGER.info("Sending remote climate command to %s: %s", topic, json_payload)
         await mqtt.async_publish(self.hass, topic, json_payload, qos=1)
 
@@ -662,7 +673,7 @@ class CanDoDataCoordinator:
             payload_obj["camera_alert"] = camera_alert
 
         json_payload = json.dumps(payload_obj)
-        nav_topic = f"{self.base_topic}/nav/set"
+        nav_topic = self.nav_topic
         _LOGGER.info("Sending HUD navigation instruction to %s: %s", nav_topic, json_payload)
         await mqtt.async_publish(self.hass, nav_topic, json_payload, qos=1)
 
@@ -670,7 +681,7 @@ class CanDoDataCoordinator:
         """Clear active HUD navigation guidance on ESP32 edge device."""
         payload_obj = {"action": "clear"}
         json_payload = json.dumps(payload_obj)
-        nav_topic = f"{self.base_topic}/nav/set"
+        nav_topic = self.nav_topic
         _LOGGER.info("Clearing HUD navigation on %s", nav_topic)
         await mqtt.async_publish(self.hass, nav_topic, json_payload, qos=1)
 

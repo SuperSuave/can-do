@@ -1815,6 +1815,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
         }
 
         can_bus_t target_bus = (step.bus == 1) ? CAN_BUS_1 : CAN_BUS_0;
+        uint32_t frame_delay_ms = (step.delay_ms > 0) ? step.delay_ms : delay_ms;
         for (int r = 0; r < step.repeat; r++) {
             twai_message_t msg_to_send = tx_msg;
             fwd_result_t fwd_res = precondition_fwd_hook(&msg_to_send, target_bus);
@@ -1832,19 +1833,50 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             }
             if (can_send(target_bus, &msg_to_send, pdMS_TO_TICKS(10)) == ESP_OK) {
                 board_led_can_activity();
-                if (delay_ms > 0) {
-                    vTaskDelay(pdMS_TO_TICKS(delay_ms));
+                if (frame_delay_ms > 0) {
+                    vTaskDelay(pdMS_TO_TICKS(frame_delay_ms));
                 }
             } else {
                 ESP_LOGW(TAG, "CAN TX failed or queue full for ID 0x%03lX", (unsigned long)msg_to_send.identifier);
-                vTaskDelay(pdMS_TO_TICKS(delay_ms > 0 ? delay_ms : 2));
+                vTaskDelay(pdMS_TO_TICKS(frame_delay_ms > 0 ? frame_delay_ms : 2));
             }
         }
-
-        if (step.delay_ms > 0) {
-            vTaskDelay(pdMS_TO_TICKS(step.delay_ms));
-        }
     }
+}
+
+static bool has_word_ci(const std::string& haystack_lower, const char* needle_lower) {
+    if (!needle_lower || !*needle_lower) return false;
+    const size_t nlen = strlen(needle_lower);
+    size_t pos = 0;
+    while ((pos = haystack_lower.find(needle_lower, pos)) != std::string::npos) {
+        bool left_ok = (pos == 0) || !std::isalnum((unsigned char)haystack_lower[pos - 1]);
+        bool right_ok = (pos + nlen >= haystack_lower.length()) ||
+                        !std::isalnum((unsigned char)haystack_lower[pos + nlen]);
+        if (left_ok && right_ok) {
+            return true;
+        }
+        pos += 1;
+    }
+    return false;
+}
+
+static bool is_off_label_ci(const std::string& lower) {
+    return has_word_ci(lower, "off") ||
+           has_word_ci(lower, "inactive") ||
+           has_word_ci(lower, "disable") ||
+           has_word_ci(lower, "disabled") ||
+           has_word_ci(lower, "shut") ||
+           has_word_ci(lower, "stop") ||
+           has_word_ci(lower, "cancel");
+}
+
+static bool is_on_label_ci(const std::string& lower) {
+    if (is_off_label_ci(lower)) return false;
+    return has_word_ci(lower, "on") ||
+           has_word_ci(lower, "active") ||
+           has_word_ci(lower, "enable") ||
+           has_word_ci(lower, "enabled") ||
+           has_word_ci(lower, "start");
 }
 
 bool queue_entity_command(const std::string& entity_id, const std::string& command_label) {
@@ -2127,7 +2159,7 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
             if (currently_closed) is_open_cmd = true;
             else is_close_cmd = true;
         } else {
-            bool currently_on = (cur_lower.find("on") != std::string::npos || cur_lower.find("active") != std::string::npos || cur_lower.find("enable") != std::string::npos);
+            bool currently_on = is_on_label_ci(cur_lower);
             if (currently_on) is_off_cmd = true;
             else is_on_cmd = true;
         }
@@ -2178,29 +2210,31 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
                 break;
             }
         }
-    } else if (is_on_cmd) {
-        for (const auto& opt : entity.options) {
-            std::string opt_l = opt.label;
-            std::transform(opt_l.begin(), opt_l.end(), opt_l.begin(), ::tolower);
-            if (opt_l.find("on") != std::string::npos || opt_l.find("active") != std::string::npos || opt_l.find("enable") != std::string::npos) {
-                matched_opt = &opt;
-                break;
+    } else if (is_on_cmd || is_off_cmd) {
+        auto match_opt = [&](auto pred) -> const EntityOption* {
+            for (const auto& opt : entity.options) {
+                std::string opt_l = opt.label;
+                std::transform(opt_l.begin(), opt_l.end(), opt_l.begin(), ::tolower);
+                if (pred(opt_l)) return &opt;
             }
-        }
-        if (!matched_opt && !entity.options.empty()) {
-            matched_opt = &entity.options[0];
-        }
-    } else if (is_off_cmd) {
-        for (const auto& opt : entity.options) {
-            std::string opt_l = opt.label;
-            std::transform(opt_l.begin(), opt_l.end(), opt_l.begin(), ::tolower);
-            if (opt_l.find("off") != std::string::npos || opt_l.find("inactive") != std::string::npos || opt_l.find("disable") != std::string::npos) {
-                matched_opt = &opt;
-                break;
+            return nullptr;
+        };
+        if (is_on_cmd) {
+            matched_opt = match_opt([](const std::string& l) { return is_on_label_ci(l); });
+            if (!matched_opt) {
+                matched_opt = match_opt([](const std::string& l) { return !is_off_label_ci(l); });
             }
-        }
-        if (!matched_opt && entity.options.size() > 1) {
-            matched_opt = &entity.options[1];
+            if (!matched_opt && !entity.options.empty()) {
+                matched_opt = &entity.options[0];
+            }
+        } else {
+            matched_opt = match_opt([](const std::string& l) { return is_off_label_ci(l); });
+            if (!matched_opt) {
+                matched_opt = match_opt([](const std::string& l) { return !is_on_label_ci(l); });
+            }
+            if (!matched_opt && entity.options.size() > 1) {
+                matched_opt = &entity.options[1];
+            }
         }
     } else {
         // Pass 1: Exact case-insensitive label match (or implicit single-option / HA 'press' activation)
@@ -2248,7 +2282,7 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
         if (entity.ha_domain == "switch") {
             std::string l_lower = matched_opt->label;
             std::transform(l_lower.begin(), l_lower.end(), l_lower.begin(), ::tolower);
-            if (l_lower.find("off") != std::string::npos || l_lower.find("disable") != std::string::npos || l_lower.find("inactive") != std::string::npos) {
+            if (is_off_label_ci(l_lower)) {
                 payload = "OFF";
             } else {
                 payload = "ON";

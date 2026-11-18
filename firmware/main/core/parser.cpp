@@ -896,6 +896,37 @@ static void parse_steps(cJSON* steps_array, std::vector<ActionStep>& out_steps) 
     }
 }
 
+static void synthesize_step_from_payload(cJSON* payload_json, const CanEntity& entity, ActionStep& step) {
+    step.type = ActionType::TRANSMIT_FRAME;
+    step.can_id = entity.action_can_id ? entity.action_can_id : entity.state_can_id;
+    step.delay_ms = entity.delay_ms;
+    if (cJSON_IsString(payload_json) && payload_json->valuestring) {
+        std::string clean_hex;
+        for (const char* ch = payload_json->valuestring; *ch; ++ch) {
+            if (isxdigit((unsigned char)*ch)) clean_hex += *ch;
+        }
+        for (size_t i = 0; i + 1 < clean_hex.length() && (i / 2) < 8; i += 2) {
+            uint8_t byte_idx = (uint8_t)(i / 2);
+            step.payload[byte_idx] = (uint8_t)strtoul(clean_hex.substr(i, 2).c_str(), nullptr, 16);
+            step.mask |= (1 << byte_idx);
+        }
+    } else {
+        cJSON* p_item = nullptr;
+        cJSON_ArrayForEach(p_item, payload_json) {
+            int idx = get_d_index(p_item->string);
+            if (idx >= 0) {
+                if (cJSON_IsString(p_item)) {
+                    step.payload[idx] = parse_hex_string(p_item->valuestring);
+                    step.mask |= (1 << idx);
+                } else if (cJSON_IsNumber(p_item)) {
+                    step.payload[idx] = static_cast<uint8_t>(p_item->valueint);
+                    step.mask |= (1 << idx);
+                }
+            }
+        }
+    }
+}
+
 bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
     cJSON* id = cJSON_GetObjectItem(entity_json, "id");
     if (cJSON_IsString(id)) out_entity.id = id->valuestring;
@@ -931,11 +962,9 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
 
     // Options array
     cJSON* options_array = cJSON_GetObjectItem(entity_json, "options");
-    if (cJSON_IsArray(options_array)) {
+    if (cJSON_IsArray(options_array) && cJSON_GetArraySize(options_array) > 0) {
         int opt_count = cJSON_GetArraySize(options_array);
-        if (opt_count > 0) {
-            out_entity.options.reserve(opt_count);
-        }
+        out_entity.options.reserve(opt_count);
         cJSON* opt_json = nullptr;
         cJSON_ArrayForEach(opt_json, options_array) {
             EntityOption opt;
@@ -955,25 +984,9 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
             cJSON* opt_payload = cJSON_GetObjectItem(opt_json, "payload");
             if (opt.steps.empty() && opt_payload) {
                 ActionStep step;
-                step.type = ActionType::TRANSMIT_FRAME;
-                step.can_id = out_entity.action_can_id ? out_entity.action_can_id : out_entity.state_can_id;
-                step.delay_ms = out_entity.delay_ms;
-                cJSON* p_item = nullptr;
-                cJSON_ArrayForEach(p_item, opt_payload) {
-                    int idx = get_d_index(p_item->string);
-                    if (idx >= 0) {
-                        if (cJSON_IsString(p_item)) {
-                            step.payload[idx] = parse_hex_string(p_item->valuestring);
-                            step.mask |= (1 << idx);
-                        } else if (cJSON_IsNumber(p_item)) {
-                            step.payload[idx] = static_cast<uint8_t>(p_item->valueint);
-                            step.mask |= (1 << idx);
-                        }
-                    }
-                }
+                synthesize_step_from_payload(opt_payload, out_entity, step);
                 opt.steps.push_back(step);
             }
-
 
             // If no explicit steps array in a hud_nav entity, extract icon code from match (e.g. cluster_hud_navigation_tbt)
             if (opt.steps.empty() && is_hud_nav) {
@@ -1004,22 +1017,7 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
             parse_steps(root_steps, opt.steps);
             if (opt.steps.empty() && root_payload) {
                 ActionStep step;
-                step.type = ActionType::TRANSMIT_FRAME;
-                step.can_id = out_entity.action_can_id ? out_entity.action_can_id : out_entity.state_can_id;
-                step.delay_ms = out_entity.delay_ms;
-                cJSON* p_item = nullptr;
-                cJSON_ArrayForEach(p_item, root_payload) {
-                    int idx = get_d_index(p_item->string);
-                    if (idx >= 0) {
-                        if (cJSON_IsString(p_item)) {
-                            step.payload[idx] = parse_hex_string(p_item->valuestring);
-                            step.mask |= (1 << idx);
-                        } else if (cJSON_IsNumber(p_item)) {
-                            step.payload[idx] = static_cast<uint8_t>(p_item->valueint);
-                            step.mask |= (1 << idx);
-                        }
-                    }
-                }
+                synthesize_step_from_payload(root_payload, out_entity, step);
                 opt.steps.push_back(step);
             }
             out_entity.options.push_back(opt);

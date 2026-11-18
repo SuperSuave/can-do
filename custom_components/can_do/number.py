@@ -8,7 +8,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .catalog_loader import get_d_index, parse_hex_val
+from .can_utils import resolve_base_payload
+from .catalog_loader import get_d_index
 from .const import DOMAIN
 from .coordinator import CanDoDataCoordinator
 from .entity import CanDoEntity
@@ -84,28 +85,23 @@ class CanDoNumberEntity(CanDoEntity, NumberEntity):
         raw_val = round(value + self.offset) & 0xFF
         idx = get_d_index(self.byte_str)
 
-        # Preserve latest known CAN frame or fall back to neutral base payload
-        latest = self.coordinator.get_can_payload(self.state_can_id) if self.state_can_id else None
-        if latest and len(latest) == 8:
-            data = list(latest)
-        else:
-            net_base = self.command.get("network", {}).get("base_payload")
-            if isinstance(net_base, list) and len(net_base) == 8:
-                data = []
-                for b in net_base:
-                    val, _ = parse_hex_val(b) if isinstance(b, str) else (int(b), False)
-                    data.append(val & 0xFF)
-            else:
-                data = [0] * 8
+        # Preserve latest known CAN frame (only when state/action IDs match) or fall back to neutral base payload
+        data = (
+            resolve_base_payload(
+                self.coordinator, self.command, self.action_can_id, self.state_can_id
+            )
+            or [0] * 8
+        )
 
         if 0 <= idx < 8:
             data[idx] = raw_val
 
         hex_payload = "".join(f"{b:02X}" for b in data)
         steps = [{"payload": hex_payload, "repeat": 1, "delay_ms": 20}]
+        bus = self.command.get("network", {}).get("bus")
 
         _LOGGER.info("Setting %s to %.0f (raw 0x%02X)", self.name, value, raw_val)
-        await self.coordinator.async_send_action(self.action_can_id, 20, steps)
+        await self.coordinator.async_send_action(self.action_can_id, 20, steps, bus=bus)
 
         self._value = value
         self.async_write_ha_state()
