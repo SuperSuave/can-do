@@ -1417,8 +1417,20 @@ export function decompileActionList(
 
     if (raw.type === 'hud_nav' || raw.type === 'nav') {
       const navAction = raw.nav_action || raw.action || 'update';
+      const {
+        source_command_id: _sci,
+        source_command_name: _scn,
+        entity_id: _eid,
+        target_command_id: _tci,
+        command: _cmd,
+        option_label: _ol,
+        can_id: _cid,
+        payload: _pay,
+        steps: _steps,
+        ...cleanNavRaw
+      } = raw as any;
       result.push({
-        ...raw,
+        ...cleanNavRaw,
         id: raw.id || generateBlockId('act'),
         type: 'hud_nav',
         nav_action: navAction,
@@ -1985,6 +1997,34 @@ export function commandToAction(rawCmd: Command, opt?: CommandOption): Automatio
     };
   }
 
+  if (cmd.network?.type === 'hud_nav' || (cmd as any).type === 'hud_nav' || cmd.id === 'hud_turn_by_turn_maneuver') {
+    const matchD1 = chosenOpt?.match?.D1;
+    const parsedIcon = matchD1 ? parseInt(String(matchD1), 16) : NaN;
+    return {
+      id: actId,
+      type: 'hud_nav',
+      nav_action: 'update',
+      icon: !isNaN(parsedIcon) ? parsedIcon : 1,
+      distance_meters: 200,
+      bars: 4,
+      speed_limit: 0,
+      camera_alert: false,
+      street: '',
+      num_lanes: 0,
+      lane_directions: [],
+      lane_recommended: []
+    };
+  }
+
+  if (cmd.network?.type === 'track_popup' || (cmd as any).type === 'track_popup' || cmd.id === 'cluster_track_popup_message') {
+    return {
+      id: actId,
+      type: 'track_popup',
+      level: ((chosenOpt as any)?.level as 'info' | 'warning' | 'error') || 'info',
+      text: (chosenOpt as any)?.popup_message || chosenOpt?.popup || ''
+    };
+  }
+
   if (!chosenOpt && isRangeCommand(cmd)) {
     const net = cmd.network;
     const defaultPhys = getDefaultPhysicalValue(net);
@@ -2492,6 +2532,22 @@ export function resolveCatalogCommandForAction(
   catalog: Catalog
 ): { command?: Command; matchedOption?: CommandOption } {
   if (!catalog?.commands) return {};
+
+  const nonCatalogActionTypes = new Set([
+    'hud_nav',
+    'nav',
+    'track_popup',
+    'popup',
+    'delay',
+    'if_then',
+    'choose',
+    'wait_for',
+    'repeat_until',
+    'webhook'
+  ]);
+  if (act?.type && nonCatalogActionTypes.has(act.type)) {
+    return {};
+  }
 
   const index = getCatalogCommandIndex(catalog.commands);
 

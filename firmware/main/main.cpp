@@ -214,6 +214,7 @@ extern "C" void app_main(void) {
     ble_mgr_init();
 
     init_can_engine();
+    load_catalog_from_fs("/spiffs/catalog.json");
     load_automations_from_fs("/spiffs/automations.json");
     rtc_can_state_restore();
     uds_engine_init();

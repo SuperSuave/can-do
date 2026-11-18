@@ -72,6 +72,66 @@ export function canReadSystemClipboard(): boolean {
   );
 }
 
+export type ClipboardReadPermissionState = 'granted' | 'denied' | 'prompt' | 'unsupported';
+
+/**
+ * Safely queries clipboard-read permission without prompting the user.
+ */
+export async function queryClipboardReadPermission(): Promise<ClipboardReadPermissionState> {
+  if (!canReadSystemClipboard()) return 'unsupported';
+  if (typeof navigator === 'undefined' || !navigator.permissions?.query) {
+    return 'unsupported';
+  }
+  try {
+    const status = await navigator.permissions.query({ name: 'clipboard-read' as PermissionName });
+    if (status.state === 'granted' || status.state === 'denied' || status.state === 'prompt') {
+      return status.state;
+    }
+    return 'unsupported';
+  } catch {
+    return 'unsupported';
+  }
+}
+
+/**
+ * Checks whether a clipboard item can be pasted into the requested slot type.
+ */
+export function isClipboardCompatibleWithTarget(
+  item: AutomationClipboardItem | null | undefined,
+  targetType: ClipboardBlockType
+): boolean {
+  if (!item || !item.payload) return false;
+  const sourceType: ClipboardBlockType = item.type === 'branch' ? 'choice_branch' : item.type;
+  const normalizedTarget: ClipboardBlockType = targetType === 'branch' ? 'choice_branch' : targetType;
+  if (sourceType === normalizedTarget) return true;
+  if (
+    (sourceType === 'trigger' && normalizedTarget === 'condition') ||
+    (sourceType === 'condition' && normalizedTarget === 'trigger')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Avoid hijacking native Ctrl+V / Cmd+V when typing inside inputs, textareas, selects, or editable content.
+ */
+export function canAcceptGlobalPasteTarget(target: EventTarget | null): boolean {
+  if (!target || typeof target !== 'object') return true;
+  const el = target as { tagName?: string; isContentEditable?: boolean; closest?: (selector: string) => unknown };
+  const tag = typeof el.tagName === 'string' ? el.tagName.toUpperCase() : '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'OPTION') {
+    return false;
+  }
+  if (el.isContentEditable) {
+    return false;
+  }
+  if (typeof el.closest === 'function' && el.closest('[role="dialog"]')) {
+    return false;
+  }
+  return true;
+}
+
 /**
  * Serializes an AutomationClipboardItem into a portable JSON string for OS clipboard transfer.
  */

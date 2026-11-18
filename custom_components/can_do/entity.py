@@ -217,4 +217,11 @@ class CanDoEntity(Entity):
             except Exception:
                 pass
 
-        return state_val
+        attrs = None
+        if hasattr(self, "extra_state_attributes"):
+            try:
+                attrs = dict(self.extra_state_attributes)
+            except Exception:
+                attrs = None
+
+        return (state_val, attrs)

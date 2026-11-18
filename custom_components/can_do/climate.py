@@ -76,9 +76,17 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
     async def async_added_to_hass(self) -> None:
         """Register CAN state listener and auxiliary telemetry listeners."""
         await super().async_added_to_hass()
-        # Listen to ambient temp (0x226), climate telemetry (0x31B, 0x541, 0x418, 0x496, 0x587),
-        # VCU HVAC/contactor status (0x2AD, 0x2AE), DATC blower (0x384), and TMU (0x39B).
-        for aux_id in ("0x226", "0x31b", "0x541", "0x418", "0x496", "0x587", "0x2ad", "0x2ae", "0x384", "0x39b"):
+        # Listen to ambient temp (0x226), climate telemetry (0x31B, 0x541, 0x418, 0x465, 0x496, 0x49C, 0x475, 0x438, 0x453, 0x587),
+        # VCU HVAC/contactor status (0x2AD, 0x2AE), DATC blower (0x384), TMU (0x39B), and direct entity state keys.
+        aux_ids = (
+            "0x226", "0x31b", "0x541", "0x418", "0x465", "0x496", "0x49c", "0x475",
+            "0x438", "0x453", "0x587", "0x2ad", "0x2ae", "0x384", "0x39b",
+            "drivers_seat_comfort", "passengers_seat_comfort",
+            "rear_left_seat_comfort", "rear_right_seat_comfort",
+            "climate_driver_only_toggle", "heated_steering_wheel_toggle",
+            "climate_rear_defrost", "remote_climate_state",
+        )
+        for aux_id in aux_ids:
             if not self.state_can_id or aux_id != self.state_can_id.lower():
                 unsub = self.coordinator.register_listener(aux_id, self._handle_can_update)
                 self._aux_unsubs.append(unsub)
@@ -92,6 +100,19 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
 
     def _is_hvac_active(self) -> bool:
         """Determine if the vehicle HVAC system or remote climate is actively running."""
+        # 0. Check direct remote climate entity state if published by firmware
+        remote_state = self.coordinator.get_can_state("remote_climate_state")
+        if isinstance(remote_state, bool):
+            if remote_state:
+                return True
+        elif isinstance(remote_state, (int, float)) and remote_state != 0:
+            return True
+        elif isinstance(remote_state, str):
+            rs = remote_state.strip().lower()
+            if rs and not any(tok in rs for tok in ("off", "stop", "idle", "0", "false")):
+                if any(tok in rs for tok in ("on", "start", "active", "run", "heat", "cool", "1", "true")):
+                    return True
+
         # 1. Check Blower Fan Speed from 0x31B Byte D4 low nibble
         p_31b = self.coordinator.get_can_payload("0x31b")
         if p_31b and len(p_31b) >= 4:
@@ -99,11 +120,11 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
             if fan_raw > 0:
                 return True
 
-        # 2. Check DATC Blower Fan Speed (0x384 / DATC_07_200ms)
+        # 2. Check DATC Blower Fan Speed & active flag (0x384 / DATC_07_200ms)
         p_384 = self.coordinator.get_can_payload("0x384")
         if p_384 and len(p_384) >= 1:
             fan_raw = p_384[0] & 0x0F
-            if fan_raw > 0:
+            if fan_raw > 0 or (len(p_384) >= 4 and p_384[3] == 0x0A):
                 return True
 
         # 3. Check VCU Aircon Controller Status (0x02AD / VCU_04_100ms_3 Byte D1 bits 2-3)
@@ -228,55 +249,78 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
         if p_31b and len(p_31b) >= 5:
             attrs["air_recirculation"] = bool(p_31b[4] & 0x40)
 
-        # 2. Rear Defroster (0x541 Byte D1)
-        p_541 = self.coordinator.get_can_payload("0x541")
-        if p_541 and len(p_541) >= 1:
-            attrs["rear_defrost"] = bool(p_541[0] & 0x01)
+        # 2. Rear Defroster (direct entity state or 0x541 Byte D5 / data[4] & 0x10)
+        defrost_direct = self.coordinator.get_can_state("climate_rear_defrost")
+        if isinstance(defrost_direct, bool):
+            attrs["rear_defrost"] = defrost_direct
+        elif isinstance(defrost_direct, (int, float)):
+            attrs["rear_defrost"] = bool(defrost_direct != 0)
+        elif isinstance(defrost_direct, str):
+            ds = defrost_direct.lower()
+            if "off" in ds:
+                attrs["rear_defrost"] = False
+            elif "on" in ds or "defrost" in ds:
+                attrs["rear_defrost"] = True
+        else:
+            p_541 = self.coordinator.get_can_payload("0x541")
+            if p_541 and len(p_541) >= 5:
+                attrs["rear_defrost"] = bool(p_541[4] & 0x10)
 
-        # 3. Heated Steering Wheel (0x418 Byte D1)
-        p_418 = self.coordinator.get_can_payload("0x418")
-        if p_418 and len(p_418) >= 1:
-            wheel_val = p_418[0] & 0x03
-            attrs["heated_steering_wheel"] = ["Off", "On"][wheel_val] if wheel_val < 2 else "Unknown"
+        # 3. Heated Steering Wheel (direct entity state or 0x418 Byte D3 / data[2] & 0x01)
+        wheel_direct = self.coordinator.get_can_state("heated_steering_wheel_toggle")
+        if isinstance(wheel_direct, bool):
+            attrs["heated_steering_wheel"] = "On" if wheel_direct else "Off"
+        elif isinstance(wheel_direct, (int, float)):
+            attrs["heated_steering_wheel"] = "On" if wheel_direct != 0 else "Off"
+        elif isinstance(wheel_direct, str):
+            attrs["heated_steering_wheel"] = wheel_direct
+        else:
+            p_418 = self.coordinator.get_can_payload("0x418")
+            if p_418 and len(p_418) >= 3:
+                attrs["heated_steering_wheel"] = "On" if (p_418[2] & 0x01) else "Off"
 
-        # 4. Seat Comfort (0x496 Byte D1 / drivers_seat_comfort entity)
+        # 3b. Driver Only Climate Zone (direct entity state or 0x465 Byte D7: 0x04=On, 0x0C=Off)
+        driver_only_direct = self.coordinator.get_can_state("climate_driver_only_toggle")
+        if isinstance(driver_only_direct, bool):
+            attrs["driver_only"] = driver_only_direct
+        elif isinstance(driver_only_direct, (int, float)):
+            attrs["driver_only"] = bool(driver_only_direct != 0)
+        elif isinstance(driver_only_direct, str):
+            ds = driver_only_direct.lower()
+            if "off" in ds:
+                attrs["driver_only"] = False
+            elif "on" in ds:
+                attrs["driver_only"] = True
+        else:
+            p_465 = self.coordinator.get_can_payload("0x465")
+            if p_465 and len(p_465) >= 7:
+                attrs["driver_only"] = (p_465[6] & 0x0C) == 0x04
+
+        # 4. Seat Comfort (0x496 / 0x49C / 0x475 Byte D1 or direct entity states)
+        seat_map = {
+            0x16: "Off",
+            0x36: "Low Heat", 0x0E: "Low Heat",
+            0x4E: "Medium Heat", 0x0A: "Medium Heat",
+            0x46: "High Heat", 0x02: "High Heat",
+            0x1E: "Low Cool", 0x14: "Low Cool",
+            0x26: "Medium Cool", 0x12: "Medium Cool",
+            0x2E: "High Cool", 0x10: "High Cool",
+        }
         drv_direct = self.coordinator.get_can_state("drivers_seat_comfort")
         if isinstance(drv_direct, str):
             attrs["driver_seat_comfort"] = drv_direct
         else:
             p_496 = self.coordinator.get_can_payload("0x496")
-            if p_496 and len(p_496) >= 1:
-                d_raw = p_496[0]
-                seat_map = {
-                    0x16: "Off",
-                    0x36: "Low Heat", 0x0E: "Low Heat",
-                    0x4E: "Medium Heat", 0x0A: "Medium Heat",
-                    0x46: "High Heat", 0x02: "High Heat",
-                    0x1E: "Low Cool", 0x14: "Low Cool",
-                    0x26: "Medium Cool", 0x12: "Medium Cool",
-                    0x2E: "High Cool", 0x10: "High Cool",
-                }
-                if d_raw in seat_map:
-                    attrs["driver_seat_comfort"] = seat_map[d_raw]
+            if p_496 and len(p_496) >= 1 and p_496[0] in seat_map:
+                attrs["driver_seat_comfort"] = seat_map[p_496[0]]
 
         pass_direct = self.coordinator.get_can_state("passengers_seat_comfort")
         if isinstance(pass_direct, str):
             attrs["passenger_seat_comfort"] = pass_direct
         else:
-            p_475 = self.coordinator.get_can_payload("0x475")
-            if p_475 and len(p_475) >= 1:
-                d_raw = p_475[0]
-                seat_map = {
-                    0x16: "Off",
-                    0x36: "Low Heat", 0x0E: "Low Heat",
-                    0x4E: "Medium Heat", 0x0A: "Medium Heat",
-                    0x46: "High Heat", 0x02: "High Heat",
-                    0x1E: "Low Cool", 0x14: "Low Cool",
-                    0x26: "Medium Cool", 0x12: "Medium Cool",
-                    0x2E: "High Cool", 0x10: "High Cool",
-                }
-                if d_raw in seat_map:
-                    attrs["passenger_seat_comfort"] = seat_map[d_raw]
+            p_pass = self.coordinator.get_can_payload("0x49c") or self.coordinator.get_can_payload("0x475")
+            if p_pass and len(p_pass) >= 1 and p_pass[0] in seat_map:
+                attrs["passenger_seat_comfort"] = seat_map[p_pass[0]]
 
         p_438 = self.coordinator.get_can_payload("0x438")
         if p_438 and len(p_438) >= 1:
@@ -328,17 +372,27 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
 
         raw_val = max(0x06, min(0x1A, raw_val))
 
+        net = self.command.get("network", {})
+        bus = net.get("bus")
+
         data = [0] * 8
+        release_data = [0] * 8
         if self.command.get("id") == "climate_dual_cabin_temp":
             data[1] = raw_val  # D2 Driver
             data[7] = raw_val  # D8 Passenger
+            release_data[1] = 0xFF
+            release_data[7] = 0xFF
         else:
             idx = get_d_index(self.action_byte)
             if 0 <= idx < 8:
                 data[idx] = raw_val
+                release_data[idx] = 0xFF
 
         hex_payload = "".join(f"{b:02X}" for b in data)
         steps = [{"payload": hex_payload, "repeat": 2, "delay_ms": 20}]
+        if (self.action_can_id or "").lower() == "0x4a0":
+            release_hex = "".join(f"{b:02X}" for b in release_data)
+            steps.append({"payload": release_hex, "repeat": 2, "delay_ms": 20})
 
         _LOGGER.info(
             "Setting %s target temp to %.1f %s (raw 0x%02X on %s)",
@@ -348,7 +402,7 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
             raw_val,
             self.action_can_id,
         )
-        await self.coordinator.async_send_action(self.action_can_id, 20, steps)
+        await self.coordinator.async_send_action(self.action_can_id, 20, steps, bus=bus)
 
         self._hvac_mode = HVACMode.AUTO
         self.async_write_ha_state()
@@ -356,6 +410,8 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new HVAC mode."""
         self._hvac_mode = hvac_mode
+        net = self.command.get("network", {})
+        bus = net.get("bus")
         if hvac_mode == HVACMode.OFF:
             # Stop the remote climate background loop on ESP32
             await self.coordinator.async_send_remote_climate(action="stop")
@@ -369,7 +425,7 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
             if target_opt:
                 steps = build_action_steps(self.command, target_opt)
                 if steps:
-                    await self.coordinator.async_send_action(self.action_can_id, 20, steps)
+                    await self.coordinator.async_send_action(self.action_can_id, 20, steps, bus=bus)
         elif hvac_mode in (HVACMode.AUTO, HVACMode.HEAT_COOL):
             temp_c = self._target_temp
             if self.temperature_unit == UnitOfTemperature.FAHRENHEIT:

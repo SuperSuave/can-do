@@ -34,7 +34,6 @@ import {
 import { formatConditionSummary } from '../../utils/ruleSummaries';
 import {
   arrayMove,
-  canReadSystemClipboard,
   getActiveScopedDrag,
   setActiveScopedDrag
 } from '../../utils/automationClipboard';
@@ -1411,7 +1410,6 @@ export function ConditionListEditor({
   const listId = useId();
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
-  const hasSystemClipboard = canReadSystemClipboard();
 
   const handlePasteCondition = async () => {
     const pasted = await pasteFromClipboard('condition');
@@ -1538,7 +1536,7 @@ export function ConditionListEditor({
         </div>
       )}
 
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap mt-2">
         <button
           type="button"
           onClick={() => {
@@ -1560,7 +1558,7 @@ export function ConditionListEditor({
             onClick={() => {
               void handlePasteCondition();
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-accent-soft hover:bg-accent/20 text-accent-soft-foreground border border-accent/40 transition cursor-pointer"
+            className="ha-section-paste-btn bg-accent-soft hover:bg-accent/20 text-accent-soft-foreground border border-accent/40"
             title={`Paste copied condition "${clipboard.label}"`}
           >
             <ClipboardPaste className="w-3.5 h-3.5 text-accent" />
@@ -1574,25 +1572,11 @@ export function ConditionListEditor({
             onClick={() => {
               void handlePasteCondition();
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-warning-soft hover:bg-warning/20 text-warning-soft-foreground border border-warning/40 transition cursor-pointer"
+            className="ha-section-paste-btn bg-warning-soft hover:bg-warning/20 text-warning-soft-foreground border border-warning/40"
             title={`Convert & paste copied trigger "${clipboard.label}" as condition`}
           >
             <ClipboardPaste className="w-3.5 h-3.5 text-warning" />
             <span>Paste as Condition ({clipboard.label})</span>
-          </button>
-        )}
-
-        {clipboard?.type !== 'condition' && clipboard?.type !== 'trigger' && hasSystemClipboard && (
-          <button
-            type="button"
-            onClick={() => {
-              void handlePasteCondition();
-            }}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-surface-tertiary hover:bg-default-hover text-foreground/85 border border-border transition cursor-pointer"
-            title="Read a Trigger or Condition JSON block from system clipboard"
-          >
-            <ClipboardPaste className="w-3.5 h-3.5 text-accent" />
-            <span>Paste from Clipboard</span>
           </button>
         )}
       </div>

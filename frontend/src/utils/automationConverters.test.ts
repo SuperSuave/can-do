@@ -1911,5 +1911,51 @@ test('compileAutomationRule and decompileAutomationRule preserve trigger_mode an
   assert.strictEqual(decompiled.trigger_window_ms, 8000);
 });
 
+test('resolveCatalogCommandForAction skips non-catalog built-ins like hud_nav and commandToAction creates native hud_nav / track_popup actions', () => {
+  const catalog = createMockCatalog(2);
+  catalog.commands.push(
+    {
+      id: 'audio_sound_focus',
+      name: 'Infotainment Sound Stage Focus',
+      category: 'Cockpit & Controls',
+      roles: ['action', 'condition'],
+      network: { action_can_id: '0x60E', state_can_id: '0x60E', bus: 0 },
+      options: [
+        { label: 'Center', match: { D2: '0x0A', D3: '0x0A' }, payload: { D2: '0x0A', D3: '0x0A' }, default: true },
+      ],
+    },
+    {
+      id: 'hud_turn_by_turn_maneuver',
+      name: 'Windshield HUD Turn-by-Turn Navigation',
+      category: 'Cockpit & Controls',
+      roles: ['action', 'condition'],
+      network: { type: 'hud_nav', action_can_id: '0x29B', state_can_id: '0x29B', bus: 0 },
+      options: [
+        { label: 'Continue Straight', match: { D1: '0x01' }, mask: '0xFF', default: true },
+        { label: 'Turn Right 90°', match: { D1: '0x03' }, mask: '0xFF' },
+      ],
+    }
+  );
+
+  const taintedHud: AutomationAction = {
+    id: 'act_hud_stale',
+    type: 'hud_nav',
+    source_command_id: 'audio_sound_focus',
+    entity_id: 'audio_sound_focus',
+    can_id: '0x60E',
+    nav_action: 'update',
+    icon: 1,
+  };
+  const resolved = resolveCatalogCommandForAction(taintedHud, catalog);
+  assert.strictEqual(resolved.command, undefined, 'hud_nav must never resolve to a catalog command');
+
+  const hudCmd = catalog.commands.find(c => c.id === 'hud_turn_by_turn_maneuver')!;
+  const convertedHud = commandToAction(hudCmd, hudCmd.options![1]);
+  assert.strictEqual(convertedHud.type, 'hud_nav');
+  assert.strictEqual(convertedHud.nav_action, 'update');
+  assert.strictEqual(convertedHud.icon, 0x03);
+});
+
+
 
 

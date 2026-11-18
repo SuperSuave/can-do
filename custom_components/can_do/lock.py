@@ -102,6 +102,7 @@ class CanDoLockEntity(CanDoEntity, LockEntity):
         net = self.command.get("network", {})
         action_can_id = net.get("action_can_id", "0x000")
         delay_ms = net.get("delay_ms", 20)
+        bus = net.get("bus")
 
         target_opt = None
         for opt in self.command.get("options", []):
@@ -112,7 +113,7 @@ class CanDoLockEntity(CanDoEntity, LockEntity):
 
         steps = build_action_steps(self.command, target_opt)
         if steps and action_can_id != "0x000":
-            await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
+            await self.coordinator.async_send_action(action_can_id, delay_ms, steps, bus=bus)
         else:
             # Fallback to high-level entity command for edge engine
             await self.coordinator.async_send_entity_command(self.entity_id_str, "lock")
@@ -126,6 +127,7 @@ class CanDoLockEntity(CanDoEntity, LockEntity):
         net = self.command.get("network", {})
         action_can_id = net.get("action_can_id", "0x000")
         delay_ms = net.get("delay_ms", 20)
+        bus = net.get("bus")
 
         target_opt = None
         for opt in self.command.get("options", []):
@@ -136,7 +138,7 @@ class CanDoLockEntity(CanDoEntity, LockEntity):
 
         steps = build_action_steps(self.command, target_opt)
         if steps and action_can_id != "0x000":
-            await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
+            await self.coordinator.async_send_action(action_can_id, delay_ms, steps, bus=bus)
         else:
             # Fallback to high-level entity command for edge engine
             await self.coordinator.async_send_entity_command(self.entity_id_str, "unlock")

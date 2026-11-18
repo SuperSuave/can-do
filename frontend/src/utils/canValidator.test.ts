@@ -262,3 +262,61 @@ test('validateAutomationRules detects duplicate rule IDs and groups issues clean
   assert.match(dupReport.errors[0].message, /Duplicate rule ID/i);
 });
 
+test('validateAutomationRule enforces 50-character cluster popup toast limit (incl. 2-char severity icon)', () => {
+  const baseRule: AutomationRule = {
+    id: 'popup_len_check',
+    name: 'Popup Length Check',
+    enabled: true,
+    ha_expose: false,
+    ha_icon: 'mdi:message-alert',
+    exec_mode: 'one_shot',
+    cooldown_ms: 0,
+    triggers: [{ id: 't1', source: 'ble', type: 'ble_button', ble_button: 'volume_up' }],
+    conditions: [],
+    actions: [
+      {
+        id: 'a_pop_ok',
+        type: 'track_popup',
+        level: 'info',
+        text: 'A'.repeat(48) // 48 + 2 ("ⓘ ") = 50 chars -> valid
+      },
+      {
+        id: 'a_pop_too_long',
+        type: 'track_popup',
+        level: 'warning',
+        text: 'B'.repeat(49) // 49 + 2 ("⚠ ") = 51 chars -> invalid
+      },
+      {
+        id: 'a_cycle_ok',
+        type: 'cycle_entity',
+        entity_id: 'drivers_seat_comfort',
+        states: ['Off', 'High Heat'],
+        show_popup: true,
+        popup_prefix: 'Seat: ' // "Seat: High Heat" = 15 + 2 = 17 chars -> valid
+      },
+      {
+        id: 'a_cycle_too_long',
+        type: 'cycle_entity',
+        entity_id: 'drivers_seat_comfort',
+        states: ['Off', 'High Ventilation Cooling Mode'],
+        show_popup: true,
+        popup_prefix: 'Front Passenger Seat Comfort: ' // 30 + 29 + 2 = 61 chars -> invalid
+      },
+      {
+        id: 'a_cycle_muted_ok',
+        type: 'cycle_entity',
+        entity_id: 'drivers_seat_comfort',
+        states: ['Off', 'High Ventilation Cooling Mode'],
+        show_popup: false,
+        popup_prefix: 'Front Passenger Seat Comfort: '
+      }
+    ]
+  };
+
+  const issues = validateAutomationRule(baseRule, DEFAULT_CATALOG);
+  const popupErrors = issues.filter(i => i.type === 'error' && /50-character cluster limit/i.test(i.message));
+  assert.strictEqual(popupErrors.length, 2, 'Should flag both oversized track_popup and oversized enabled cycle_entity toast');
+  assert.ok(popupErrors.some(e => e.field === 'text' && /51 characters/i.test(e.message)));
+  assert.ok(popupErrors.some(e => e.field === 'popup_prefix' && /High Ventilation Cooling Mode/.test(e.message)));
+});
+

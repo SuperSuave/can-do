@@ -26,9 +26,12 @@ import {
   decodeRearSeatEntityUpdate,
   decodeSeatComfortByte,
   decodeSeatLevel,
+  decodeSignedInt8,
   decodeSunroofEntityState,
   decodeAmbientCanFrame,
   getAmbientColorHex,
+  isSameAmbientColor,
+  OptimisticHoldTracker,
   AMBIENT_PALETTE_64,
   AMBIENT_QUICK_COLORS,
   displayTempToFahrenheit,
@@ -194,21 +197,29 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
           });
         }
         if (driverTempFRef.current !== null) {
-          setDriverTemp(fahrenheitToDisplayTemp(driverTempFRef.current, nextUnit));
+          const convertedDriver = fahrenheitToDisplayTemp(driverTempFRef.current, nextUnit);
+          driverTempRef.current = convertedDriver;
+          setDriverTemp(convertedDriver);
         } else {
           setDriverTemp(prev => {
             if (prev === null) return null;
             const f = displayTempToFahrenheit(prev, nextUnit === 'C' ? 'F' : 'C');
-            return fahrenheitToDisplayTemp(f, nextUnit);
+            const converted = fahrenheitToDisplayTemp(f, nextUnit);
+            driverTempRef.current = converted;
+            return converted;
           });
         }
         if (passengerTempFRef.current !== null) {
-          setPassengerTemp(fahrenheitToDisplayTemp(passengerTempFRef.current, nextUnit));
+          const convertedPassenger = fahrenheitToDisplayTemp(passengerTempFRef.current, nextUnit);
+          passengerTempRef.current = convertedPassenger;
+          setPassengerTemp(convertedPassenger);
         } else {
           setPassengerTemp(prev => {
             if (prev === null) return null;
             const f = displayTempToFahrenheit(prev, nextUnit === 'C' ? 'F' : 'C');
-            return fahrenheitToDisplayTemp(f, nextUnit);
+            const converted = fahrenheitToDisplayTemp(f, nextUnit);
+            passengerTempRef.current = converted;
+            return converted;
           });
         }
       }
@@ -279,6 +290,35 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   const [climateSync, setClimateSync] = useState<boolean | null>(null);
   const turnSignalTimeoutRef = useRef<any>(null);
 
+  // Optimistic command hold tracker + synchronous refs so rapid taps & periodic CAN frames never clash
+  const optimisticHoldRef = useRef(new OptimisticHoldTracker());
+  const syncHold = (key: string, expectedValue: string, ttlMs = 1800) => {
+    optimisticHoldRef.current.setHold(key, expectedValue, ttlMs);
+  };
+  const acceptTelemetry = (key: string, incomingValue: string): boolean => {
+    return optimisticHoldRef.current.shouldAccept(key, incomingValue);
+  };
+
+  const driverSeatRef = useRef<SeatLevel | null>(null);
+  const passengerSeatRef = useRef<SeatLevel | null>(null);
+  const rearLeftSeatRef = useRef<SeatLevel | null>(null);
+  const rearRightSeatRef = useRef<SeatLevel | null>(null);
+  const steeringWheelHeatRef = useRef<SteeringHeatLevel | null>(null);
+  const lockedRef = useRef<boolean>(true);
+  const trunkOpenRef = useRef<boolean>(false);
+  const chargePortOpenRef = useRef<boolean>(false);
+  const driverOnlyRef = useRef<boolean | null>(null);
+  const heatActiveRef = useRef<boolean | null>(null);
+  const acActiveRef = useRef<boolean | null>(null);
+  const rearDefrostRef = useRef<boolean | null>(null);
+  const climateSyncRef = useRef<boolean | null>(null);
+  const hvacPowerRef = useRef<boolean | null>(null);
+  const driverTempRef = useRef<number | null>(null);
+  const passengerTempRef = useRef<number | null>(null);
+  const airflowRef = useRef<AirflowMode | null>(null);
+  const acChargeLimitRef = useRef<number | null>(null);
+  const dcChargeLimitRef = useRef<number | null>(null);
+
   // Remote Climate Hold-to-Toggle + Kia Startup Animation (prevents accidental activation)
   const REMOTE_CLIMATE_HOLD_MS = 1400;
   const [climateStartAnim, setClimateStartAnim] = useState<'idle' | 'starting' | 'stopping'>('idle');
@@ -300,10 +340,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   }, []);
 
   const executeRemoteClimateToggle = () => {
-    const next = hvacPower === true ? false : true;
+    const next = hvacPowerRef.current === true ? false : true;
+    hvacPowerRef.current = next;
     setHvacPower(next);
-    if (next && driverTemp === null) {
+    syncHold('remote_climate', String(next));
+    if (next && driverTempRef.current === null) {
       const def = tempUnit === 'C' ? 22 : 72;
+      driverTempRef.current = def;
+      passengerTempRef.current = def;
       setDriverTemp(def);
       setPassengerTemp(def);
       driverTempFRef.current = 72;
@@ -322,7 +366,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       'remote_climate_tmu',
       next ? 'Remote Climate On' : 'Remote Climate Off',
       next ? 'Cabin Climate Activated' : 'Cabin Climate Turned OFF',
-      0
+      0,
+      'remote_climate'
     );
   };
 
@@ -382,6 +427,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     return 'Color 24: Deep Purple / Violet';
   });
   const [ambientPaletteExpanded, setAmbientPaletteExpanded] = useState<boolean>(false);
+  const ambientBrightnessRef = useRef<number | null>(ambientBrightness);
+  const prevAmbientBrightnessRef = useRef<number>(
+    ambientBrightness !== null && ambientBrightness > 0 ? ambientBrightness : 7
+  );
 
   useEffect(() => {
     if (externalAmbientColor !== undefined && externalAmbientColor !== null && externalAmbientColor !== ambientColor) {
@@ -391,6 +440,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
   useEffect(() => {
     if (externalAmbientBrightness !== undefined && externalAmbientBrightness !== null && externalAmbientBrightness !== ambientBrightness) {
+      ambientBrightnessRef.current = externalAmbientBrightness;
+      if (externalAmbientBrightness > 0) {
+        prevAmbientBrightnessRef.current = externalAmbientBrightness;
+      }
       setAmbientBrightnessState(externalAmbientBrightness);
     }
   }, [externalAmbientBrightness]);
@@ -404,6 +457,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   };
 
   const setAmbientBrightness = (nextBrightness: number | null) => {
+    ambientBrightnessRef.current = nextBrightness;
+    if (nextBrightness !== null && nextBrightness > 0) {
+      prevAmbientBrightnessRef.current = nextBrightness;
+    }
     setAmbientBrightnessState(nextBrightness);
     if (nextBrightness !== null) {
       try { localStorage.setItem('cando_ambient_brightness', String(nextBrightness)); } catch {}
@@ -745,39 +802,70 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   };
 
   const setDirectAcLimit = (next: number) => {
+    acChargeLimitRef.current = next;
     setAcChargeLimit(next);
+    syncHold('ac_charging_limit', String(next));
     dispatchCommand('ac_charging_limit', `${next}%`, `AC Charge Limit: ${next}%`);
   };
 
   const setDirectDcLimit = (next: number) => {
+    dcChargeLimitRef.current = next;
     setDcChargeLimit(next);
+    syncHold('dc_charging_limit', String(next));
     dispatchCommand('dc_charging_limit', `${next}%`, `DC Fast Charge Limit: ${next}%`);
   };
 
+  const handleToggleChargePort = () => {
+    const next = !chargePortOpenRef.current;
+    chargePortOpenRef.current = next;
+    setChargePortOpen(next);
+    syncHold('charge_port', String(next));
+    dispatchCommand(
+      'charge_port',
+      next ? 'Opened / Open' : 'Closed / Shut',
+      next ? 'Charge Port Opened' : 'Charge Port Closed'
+    );
+  };
+
+  const handleToggleAmbientPower = () => {
+    const isCurrentlyOff = ambientBrightnessRef.current === null || ambientBrightnessRef.current === 0;
+    const nextLvl = isCurrentlyOff ? prevAmbientBrightnessRef.current : 0;
+    setAmbientBrightness(nextLvl);
+    syncHold('ambient_light_brightness', String(nextLvl));
+    const cmdLabel = nextLvl === 0 ? 'Off' : nextLvl === 10 ? 'Brightness Level 10 (Max)' : `Brightness Level ${nextLvl}`;
+    dispatchCommand('ambient_light_brightness', cmdLabel, nextLvl === 0 ? 'Ambient Light Turned OFF' : `Ambient Light: Level ${nextLvl}`);
+  };
+
   const cycleRearSeat = (isLeft: boolean) => {
-    const current = isLeft ? rearLeftSeat : rearRightSeat;
+    const current = isLeft ? rearLeftSeatRef.current : rearRightSeatRef.current;
     const cycle: SeatLevel[] = ['off', 'heat_low', 'heat_high'];
     const currentEffective = current || 'off';
     const nextIdx = (cycle.indexOf(currentEffective) + 1) % cycle.length;
     const next = cycle[nextIdx];
     const optionCmd = next === 'heat_high' ? 'High Heat' : next === 'heat_low' ? 'Low Heat' : 'Off';
     if (isLeft) {
+      rearLeftSeatRef.current = next;
       setRearLeftSeat(next);
+      syncHold('rear_left_seat_comfort', next);
       dispatchCommand('rear_left_seat_comfort', optionCmd, `Rear Left Seat: ${optionCmd}`);
     } else {
+      rearRightSeatRef.current = next;
       setRearRightSeat(next);
+      syncHold('rear_right_seat_comfort', next);
       dispatchCommand('rear_right_seat_comfort', optionCmd, `Rear Right Seat: ${optionCmd}`);
     }
   };
 
   // Hardware command dispatcher with per-entity debouncing (prevents slider/rapid-click HTTP flooding)
-  const dispatchCommand = (entity: string, cmd: string, fallbackDesc: string, debounceMs = 150) => {
+  const dispatchCommand = (entity: string, cmd: string, fallbackDesc: string, debounceMs = 150, holdKey?: string) => {
     const requestPayload = resolveDashboardCommandRequest(
       entity,
       cmd,
       catalogRef.current,
       activeVehicleRef.current
     );
+    const activeHoldKey = holdKey || entity;
+    optimisticHoldRef.current.extendHold(activeHoldKey, 1800);
 
     if (!connectedDeviceRef.current) {
       triggerNotice(fallbackDesc, 'success');
@@ -789,6 +877,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     }
     const send = async () => {
       delete commandTimersRef.current[entity];
+      optimisticHoldRef.current.extendHold(activeHoldKey, 1800);
       try {
         const baseUrl = resolveDeviceBaseUrl(localStorage.getItem('cando_device_host'));
         const res = await fetch(`${baseUrl}/api/command`, {
@@ -797,6 +886,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
           body: JSON.stringify(requestPayload)
         });
         if (!res.ok) {
+          optimisticHoldRef.current.clearHold(activeHoldKey);
           let errDetail = `HTTP ${res.status}`;
           try {
             const txt = await res.text();
@@ -807,6 +897,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         }
         triggerNotice(fallbackDesc, 'success');
       } catch {
+        optimisticHoldRef.current.clearHold(activeHoldKey);
         if (connectedDeviceRef.current) {
           triggerNotice(`Device unreachable: ${fallbackDesc}`, 'error');
         }
@@ -823,10 +914,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
   // Parser for high-level catalog entity states (broadcast via WebSocket or fetched via /api/states)
   const handleIncomingEntityState = (entity: string, stateStr: string) => {
+    const trimmed = stateStr.trim();
+    const normState = trimmed.toLowerCase();
+    if (!trimmed || normState === 'unknown' || trimmed === '--') {
+      return;
+    }
     if (!hasReceivedFrames) {
       setHasReceivedFrames(true);
     }
-    const normState = stateStr.toLowerCase();
     if (entity === 'doors_status') {
       if (normState.includes('all doors closed')) {
         setDoors({ frontLeft: false, frontRight: false, rearLeft: false, rearRight: false });
@@ -843,13 +938,36 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         else if (normState.includes('rear right door closed')) setDoors(d => ({ ...d, rearRight: false }));
       }
     } else if (entity === 'door_locks' || entity === 'doors_lock_state') {
-      setLocked(normState.includes('lock') && !normState.includes('unlock'));
+      if (normState.includes('unlock') || normState.includes('lock')) {
+        const nextLocked = normState.includes('lock') && !normState.includes('unlock');
+        if (acceptTelemetry('door_locks', String(nextLocked))) {
+          lockedRef.current = nextLocked;
+          setLocked(nextLocked);
+          if (autoFoldEnabledRef.current) {
+            setMirrorsFolded(nextLocked);
+          }
+        }
+      }
     } else if (entity === 'trunk' || entity === 'telematics_remote_tailgate' || entity === 'ptgm_tailgate_status') {
-      setTrunkOpen(normState.includes('open') && !normState.includes('close'));
+      if (normState.includes('open') || normState.includes('close')) {
+        const nextOpen = normState.includes('open') && !normState.includes('close');
+        if (acceptTelemetry('trunk', String(nextOpen))) {
+          trunkOpenRef.current = nextOpen;
+          setTrunkOpen(nextOpen);
+        }
+      }
     } else if (entity === 'hood') {
-      setHoodOpen(normState.includes('open') && !normState.includes('close'));
+      if (normState.includes('open') || normState.includes('close')) {
+        setHoodOpen(normState.includes('open') && !normState.includes('close'));
+      }
     } else if (entity === 'charge_port') {
-      setChargePortOpen(normState.includes('open') && !normState.includes('close'));
+      if (normState.includes('open') || normState.includes('close')) {
+        const nextOpen = normState.includes('open') && !normState.includes('close');
+        if (acceptTelemetry('charge_port', String(nextOpen))) {
+          chargePortOpenRef.current = nextOpen;
+          setChargePortOpen(nextOpen);
+        }
+      }
     } else if (entity === 'vehicle_gear_state' || entity === 'gear_shifter_dial' || entity === 'selected_gear') {
       if (normState.includes('park') || normState === 'p' || normState.includes('(p)')) setGear('P');
       else if (normState.includes('reverse') || normState === 'r' || normState.includes('(r)')) setGear('R');
@@ -859,54 +977,103 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       const charging = parseChargingEntityState(stateStr);
       setIsCharging(charging);
       if (!charging) setChargeRateKw(0);
+    } else if (entity === 'ev_charging_power') {
+      const match = stateStr.match(/(\d+(\.\d+)?)/);
+      if (match) {
+        const kw = parseFloat(match[1]);
+        if (kw >= 0 && kw <= 400) setChargeRateKw(kw);
+      }
     } else if (entity === 'ac_charging_limit') {
       const match = stateStr.match(/(\d+)/);
-      if (match) setAcChargeLimit(parseInt(match[1], 10));
+      if (match) {
+        const val = parseInt(match[1], 10);
+        if (acceptTelemetry('ac_charging_limit', String(val))) {
+          acChargeLimitRef.current = val;
+          setAcChargeLimit(val);
+        }
+      }
     } else if (entity === 'dc_charging_limit') {
       const match = stateStr.match(/(\d+)/);
-      if (match) setDcChargeLimit(parseInt(match[1], 10));
+      if (match) {
+        const val = parseInt(match[1], 10);
+        if (acceptTelemetry('dc_charging_limit', String(val))) {
+          dcChargeLimitRef.current = val;
+          setDcChargeLimit(val);
+        }
+      }
     } else if (entity === 'drivers_seat_comfort') {
-      setDriverSeat(decodeSeatLevel(stateStr));
+      const lvl = decodeSeatLevel(stateStr);
+      if (acceptTelemetry('drivers_seat_comfort', lvl)) {
+        driverSeatRef.current = lvl;
+        setDriverSeat(lvl);
+      }
     } else if (entity === 'passengers_seat_comfort') {
-      setPassengerSeat(decodeSeatLevel(stateStr));
+      const lvl = decodeSeatLevel(stateStr);
+      if (acceptTelemetry('passengers_seat_comfort', lvl)) {
+        passengerSeatRef.current = lvl;
+        setPassengerSeat(lvl);
+      }
     } else if (entity === 'rear_seats_comfort' || entity === 'rear_left_seat_comfort' || entity === 'rear_right_seat_comfort') {
       const rearUpdate = decodeRearSeatEntityUpdate(entity, stateStr);
-      if (rearUpdate.left !== undefined) setRearLeftSeat(rearUpdate.left);
-      if (rearUpdate.right !== undefined) setRearRightSeat(rearUpdate.right);
+      if (rearUpdate.left !== undefined && acceptTelemetry('rear_left_seat_comfort', rearUpdate.left)) {
+        rearLeftSeatRef.current = rearUpdate.left;
+        setRearLeftSeat(rearUpdate.left);
+      }
+      if (rearUpdate.right !== undefined && acceptTelemetry('rear_right_seat_comfort', rearUpdate.right)) {
+        rearRightSeatRef.current = rearUpdate.right;
+        setRearRightSeat(rearUpdate.right);
+      }
     } else if (entity === 'climate_driver_temp') {
       const tempF = parseSingleCabinTempToF(stateStr);
-      if (tempF !== null) {
+      if (tempF !== null && acceptTelemetry('climate_driver_temp', String(tempF))) {
         driverTempFRef.current = tempF;
-        setDriverTemp(fahrenheitToDisplayTemp(tempF, tempUnit));
+        const disp = fahrenheitToDisplayTemp(tempF, tempUnit);
+        driverTempRef.current = disp;
+        setDriverTemp(disp);
       }
     } else if (entity === 'climate_passenger_temp') {
       const tempF = parseSingleCabinTempToF(stateStr);
-      if (tempF !== null) {
+      if (tempF !== null && acceptTelemetry('climate_passenger_temp', String(tempF))) {
         passengerTempFRef.current = tempF;
-        setPassengerTemp(fahrenheitToDisplayTemp(tempF, tempUnit));
+        const disp = fahrenheitToDisplayTemp(tempF, tempUnit);
+        passengerTempRef.current = disp;
+        setPassengerTemp(disp);
       }
     } else if (entity === 'climate_dual_cabin_temp') {
       const { driverF, passengerF } = parseDualCabinTempToF(stateStr);
-      if (driverF !== null) {
+      if (driverF !== null && acceptTelemetry('climate_driver_temp', String(driverF))) {
         driverTempFRef.current = driverF;
-        setDriverTemp(fahrenheitToDisplayTemp(driverF, tempUnit));
+        const dispD = fahrenheitToDisplayTemp(driverF, tempUnit);
+        driverTempRef.current = dispD;
+        setDriverTemp(dispD);
       }
-      if (passengerF !== null) {
+      if (passengerF !== null && acceptTelemetry('climate_passenger_temp', String(passengerF))) {
         passengerTempFRef.current = passengerF;
-        setPassengerTemp(fahrenheitToDisplayTemp(passengerF, tempUnit));
+        const dispP = fahrenheitToDisplayTemp(passengerF, tempUnit);
+        passengerTempRef.current = dispP;
+        setPassengerTemp(dispP);
       }
     } else if (entity === 'heated_steering_wheel_toggle' || entity === 'heated_wheel_btn') {
-      setSteeringWheelHeat(parseBooleanEntityState(stateStr) ? 'on' : 'off');
+      const lvl: SteeringHeatLevel = parseBooleanEntityState(stateStr) ? 'on' : 'off';
+      if (acceptTelemetry('heated_steering_wheel_toggle', lvl)) {
+        steeringWheelHeatRef.current = lvl;
+        setSteeringWheelHeat(lvl);
+      }
     } else if (entity === 'hazard_lights') {
       setHazards(parseBooleanEntityState(stateStr));
     } else if (entity === 'cgw_welcome_mirror_light' || entity === 'power_mirrors' || entity === 'mirrors') {
-      const isEnabled = normState.includes('approach') || normState.includes('enable') || normState.includes('on') || (!normState.includes('disable') && !normState.includes('off'));
-      setAutoFoldEnabled(isEnabled);
-      autoFoldEnabledRef.current = isEnabled;
-      if (isEnabled && locked) {
-        setMirrorsFolded(true);
-      } else if (!locked) {
-        setMirrorsFolded(false);
+      if (normState.includes('approach') || normState.includes('enable') || normState.includes('on') || normState.includes('disable') || normState.includes('off')) {
+        const isEnabled =
+          (normState.includes('approach') || normState.includes('enable') || normState.includes('on')) &&
+          !normState.includes('disable') &&
+          !normState.includes('off');
+        setAutoFoldEnabled(isEnabled);
+        autoFoldEnabledRef.current = isEnabled;
+        if (isEnabled && lockedRef.current) {
+          setMirrorsFolded(true);
+        } else if (!lockedRef.current) {
+          setMirrorsFolded(false);
+        }
       }
     } else if (entity === 'turn_signal_left') {
       if (parseBooleanEntityState(stateStr)) setTurnSignal('left');
@@ -925,7 +1092,11 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       else if (normState.includes('right')) setTurnSignal('right');
       else setTurnSignal('off');
     } else if (entity === 'climate_rear_defrost' || entity === 'climate_rear_defog') {
-      setRearDefrost(parseBooleanEntityState(stateStr));
+      const nextDef = parseBooleanEntityState(stateStr);
+      if (acceptTelemetry('climate_rear_defrost', String(nextDef))) {
+        rearDefrostRef.current = nextDef;
+        setRearDefrost(nextDef);
+      }
     } else if (entity === 'front_defrost') {
       setFrontDefrost(parseBooleanEntityState(stateStr));
     } else if (entity === 'climate_fan_speed_level' || entity === 'fan_speed') {
@@ -933,17 +1104,38 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       if (match) setFanSpeed(parseInt(match[1], 10));
     } else if (entity === 'climate_airflow_direction' || entity === 'airflow_direction') {
       const decodedAf = decodeAirflowEntityState(stateStr);
-      if (decodedAf) setAirflow(decodedAf);
+      if (decodedAf && acceptTelemetry('climate_airflow_direction', decodedAf)) {
+        airflowRef.current = decodedAf;
+        setAirflow(decodedAf);
+      }
     } else if (entity === 'climate_driver_only_toggle' || entity === 'driver_only') {
-      setDriverOnly(parseBooleanEntityState(stateStr) || normState.includes('on') || normState.includes('driver only on'));
+      const isDo = parseBooleanEntityState(stateStr);
+      if (acceptTelemetry('climate_driver_only_toggle', String(isDo))) {
+        driverOnlyRef.current = isDo;
+        setDriverOnly(isDo);
+      }
     } else if (entity === 'climate_heat_toggle' || entity === 'heat_toggle' || entity === 'cabin_heat') {
-      setHeatActive(parseBooleanEntityState(stateStr) || normState.includes('on') || normState.includes('heat on'));
+      const isHeat = parseBooleanEntityState(stateStr);
+      if (acceptTelemetry('climate_heat_toggle', String(isHeat))) {
+        heatActiveRef.current = isHeat;
+        setHeatActive(isHeat);
+      }
     } else if (entity === 'climate_ac_toggle' || entity === 'ac_toggle' || entity === 'cabin_ac') {
-      setAcActive(parseBooleanEntityState(stateStr) || normState.includes('on') || normState.includes('a/c on'));
+      const isAc = parseBooleanEntityState(stateStr);
+      if (acceptTelemetry('climate_ac_toggle', String(isAc))) {
+        acActiveRef.current = isAc;
+        setAcActive(isAc);
+      }
     } else if (entity === 'climate_recirc_on') {
       setRecirc(parseBooleanEntityState(stateStr));
     } else if (entity === 'climate_sync_toggle') {
-      setClimateSync(!normState.includes('off') && !normState.includes('split'));
+      if (normState.includes('sync') || normState.includes('split') || normState.includes('on') || normState.includes('off')) {
+        const isSynced = !normState.includes('off') && !normState.includes('split');
+        if (acceptTelemetry('climate_sync_toggle', String(isSynced))) {
+          climateSyncRef.current = isSynced;
+          setClimateSync(isSynced);
+        }
+      }
     } else if (
       entity.includes('climate_start') ||
       entity === 'climate_power' ||
@@ -951,7 +1143,11 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       entity === 'remote_climate_tmu' ||
       entity === 'climate_fan_active'
     ) {
-      setHvacPower(parseBooleanEntityState(stateStr));
+      const active = parseBooleanEntityState(stateStr);
+      if (acceptTelemetry('remote_climate', String(active))) {
+        hvacPowerRef.current = active;
+        setHvacPower(active);
+      }
     } else if (entity === 'outdoor_temperature' || entity === 'cond_ambient_temperature' || entity === 'ambient_temperature') {
       const match = stateStr.match(/(-?\d+(\.\d+)?)/);
       if (match) setAmbientTempC(parseFloat(match[1]));
@@ -965,7 +1161,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
           rr: parseInt(match[4], 10),
         });
       }
-    } else if (entity === 'cond_hv_battery_soc' || entity.includes('battery_soc')) {
+    } else if (entity === 'cond_hv_battery_soc' || entity === 'bms_display_soc' || entity === 'bms_soc' || entity.includes('battery_soc')) {
       const match = stateStr.match(/(\d+(\.\d+)?)/);
       if (match) {
         const s = parseFloat(match[1]);
@@ -1002,13 +1198,13 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         odometerKmRef.current = km;
         setOdometer(formatOdometerFromKm(km, unitSystem));
       }
-    } else if (entity === 'hv_power_kw' || entity === 'bms_hv_kw') {
+    } else if (entity === 'hv_power_kw' || entity === 'bms_hv_kw' || entity === 'bms_hv_power_kw') {
       const match = stateStr.match(/(-?\d+(\.\d+)?)/);
       if (match) setHvPowerKw(parseFloat(match[1]));
-    } else if (entity === 'hv_battery_voltage' || entity === 'bms_hv_v') {
+    } else if (entity === 'hv_battery_voltage' || entity === 'bms_hv_v' || entity === 'bms_hv_voltage') {
       const match = stateStr.match(/(\d+(\.\d+)?)/);
       if (match) setHvVoltage(parseFloat(match[1]));
-    } else if (entity === 'hv_battery_current' || entity === 'bms_hv_a') {
+    } else if (entity === 'hv_battery_current' || entity === 'bms_hv_a' || entity === 'bms_hv_current') {
       const match = stateStr.match(/(-?\d+(\.\d+)?)/);
       if (match) setHvCurrent(parseFloat(match[1]));
     } else if (entity === 'hv_cell_delta_mv' || entity === 'bms_cell_delta_mv') {
@@ -1025,13 +1221,16 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         }));
       }
     } else if (entity === 'ambient_light_colors' || entity === 'ambient_mood_lighting') {
-      setAmbientColor(stateStr);
+      const matched = AMBIENT_PALETTE_64.find(p => isSameAmbientColor(p.label, trimmed));
+      const canonical = matched ? matched.label : trimmed;
+      if (acceptTelemetry('ambient_light_colors', canonical.toLowerCase())) {
+        setAmbientColor(canonical);
+      }
     } else if (entity === 'ambient_light_brightness') {
       const match = stateStr.match(/(\d+)/);
-      if (match) {
-        setAmbientBrightness(parseInt(match[1], 10));
-      } else if (stateStr.toLowerCase().includes('off')) {
-        setAmbientBrightness(0);
+      const lvl = match ? Math.max(0, Math.min(10, parseInt(match[1], 10))) : normState.includes('off') ? 0 : null;
+      if (lvl !== null && acceptTelemetry('ambient_light_brightness', String(lvl))) {
+        setAmbientBrightness(lvl);
       }
     }
   };
@@ -1039,13 +1238,13 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   const handleIncomingEntityStateRef = useRef(handleIncomingEntityState);
   handleIncomingEntityStateRef.current = handleIncomingEntityState;
   const handleIncomingCanFrameRef = useRef<(idStr: string, hexPayload: string) => void>(() => {});
+  const fetchCurrentStatesRef = useRef<() => Promise<void>>(async () => {});
 
   // 1. Initial State Synchronization & Fallback Polling via /api/states REST endpoint
   useEffect(() => {
     let cancelled = false;
     const fetchCurrentStates = async () => {
       if (typeof document !== 'undefined' && document.hidden) return;
-      if (deviceWs.getConnected()) return;
       try {
         const baseUrl = resolveDeviceBaseUrl(localStorage.getItem('cando_device_host'));
         const res = await fetch(`${baseUrl}/api/states`);
@@ -1063,8 +1262,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         // Device offline or standalone browser preview
       }
     };
+    fetchCurrentStatesRef.current = fetchCurrentStates;
     fetchCurrentStates();
-    // 3-second fallback synchronization to ensure connection renegotiation never leaves stale states
+    // 3-second synchronization keeps state aligned across reconnects and late-mounting views
     const syncInterval = setInterval(fetchCurrentStates, 3000);
     return () => {
       cancelled = true;
@@ -1078,6 +1278,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       setConnectedDevice(conn);
       if (conn) {
         triggerNotice('Connected to live CAN Do vehicle telemetry stream');
+        fetchCurrentStatesRef.current();
       }
     });
 
@@ -1170,10 +1371,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       }
     }
 
-    // BMS Module Min/Max Temperatures (Dynamically mapped from catalog, e.g. 0x152)
+    // BMS Module Min/Max Temperatures (Dynamically mapped from catalog, e.g. 0x152, signed int8 °C)
     else if ((normId === canMappings.hvTemps || normId === '152') && bytes.length >= 2) {
-      const minT = bytes[0];
-      const maxT = bytes[1];
+      const minT = decodeSignedInt8(bytes[0]);
+      const maxT = decodeSignedInt8(bytes[1]);
       setBatteryMinTempC(prev => (prev === minT ? prev : minT));
       setBatteryMaxTempC(prev => (prev === maxT ? prev : maxT));
       recordLog(idFormatted, canMappings.hvTempsName, `Min: ${minT}°C / Max: ${maxT}°C`, hexPayload, now);
@@ -1271,9 +1472,12 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       const isLocked = bytes.length >= 3 ? (bytes[2] === 0x00 || (bytes[2] & 0x40) === 0) : true;
       setDoors({ frontLeft: fl, frontRight: fr, rearLeft: rl, rearRight: rr });
       setHoodOpen(hood);
-      setLocked(isLocked);
-      if (autoFoldEnabledRef.current) {
-        setMirrorsFolded(isLocked);
+      if (acceptTelemetry('door_locks', String(isLocked))) {
+        lockedRef.current = isLocked;
+        setLocked(isLocked);
+        if (autoFoldEnabledRef.current) {
+          setMirrorsFolded(isLocked);
+        }
       }
       recordLog(idFormatted, canMappings.doorsName, `Doors: ${fl || fr || rl || rr ? 'Open' : 'Closed'}, Locks: ${isLocked ? 'Locked' : 'Unlocked'}`, hexPayload, now);
     }
@@ -1281,19 +1485,34 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     // Tailgate / Trunk Status (0x414 BCM latch, 0x3A6 PTGM power tailgate)
     else if ((normId === canMappings.trunk || normId === '414') && bytes.length >= 4) {
       const tr = Boolean(bytes[3] & 0x01);
-      setTrunkOpen(tr);
+      if (acceptTelemetry('trunk', String(tr))) {
+        trunkOpenRef.current = tr;
+        setTrunkOpen(tr);
+      }
       recordLog(idFormatted, canMappings.trunkName, tr ? 'Open' : 'Closed', hexPayload, now);
     } else if ((normId === canMappings.tailgateStatus || normId === '3a6') && bytes.length >= 1) {
       const st = bytes[0] & 0x0F;
-      if (st === 0x01 || st === 0x03) setTrunkOpen(true);
-      else if (st === 0x02) setTrunkOpen(false);
+      if (st === 0x01 || st === 0x03) {
+        if (acceptTelemetry('trunk', 'true')) {
+          trunkOpenRef.current = true;
+          setTrunkOpen(true);
+        }
+      } else if (st === 0x02) {
+        if (acceptTelemetry('trunk', 'false')) {
+          trunkOpenRef.current = false;
+          setTrunkOpen(false);
+        }
+      }
     }
 
     // EV Charge Port Door (Catalog/MICOM 0x3AA Byte D4: 0x01=Open, 0x02=Closed)
     else if (normId === canMappings.chargePort || normId === '3aa') {
       const cp = decodeChargePortCanFrame(normId, bytes, canMappings.chargePortOptions, canMappings.chargePort);
       if (cp !== null) {
-        setChargePortOpen(cp);
+        if (acceptTelemetry('charge_port', String(cp))) {
+          chargePortOpenRef.current = cp;
+          setChargePortOpen(cp);
+        }
         recordLog(idFormatted, canMappings.chargePortName, cp ? 'Open' : 'Closed', hexPayload, now);
       }
     }
@@ -1305,6 +1524,15 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         setIsCharging(charging);
         if (!charging) setChargeRateKw(0);
         recordLog(idFormatted, canMappings.chargingName, charging ? 'ACTIVE / PLUGGED IN' : 'INACTIVE', hexPayload, now);
+      }
+    }
+
+    // Live EV Charging Power (0x30E / OBC_01 Byte D7 [idx 6] in kW)
+    else if (normId === '30e' && bytes.length >= 7) {
+      const kw = bytes[6];
+      if (kw >= 0 && kw <= 255) {
+        setChargeRateKw(prev => (prev === kw ? prev : kw));
+        recordLog(idFormatted, 'EV Charging Power', `${kw} kW`, hexPayload, now);
       }
     }
 
@@ -1331,8 +1559,12 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       }
       if (rawD !== null) {
         const dF = 62 + (rawD - 0x06);
-        driverTempFRef.current = dF;
-        setDriverTemp(fahrenheitToDisplayTemp(dF, tempUnit));
+        if (acceptTelemetry('climate_driver_temp', String(dF))) {
+          driverTempFRef.current = dF;
+          const dispD = fahrenheitToDisplayTemp(dF, tempUnit);
+          driverTempRef.current = dispD;
+          setDriverTemp(dispD);
+        }
       }
 
       let rawP: number | null = null;
@@ -1344,24 +1576,33 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       }
       if (rawP !== null) {
         const pF = 62 + (rawP - 0x06);
-        passengerTempFRef.current = pF;
-        setPassengerTemp(fahrenheitToDisplayTemp(pF, tempUnit));
+        if (acceptTelemetry('climate_passenger_temp', String(pF))) {
+          passengerTempFRef.current = pF;
+          const dispP = fahrenheitToDisplayTemp(pF, tempUnit);
+          passengerTempRef.current = dispP;
+          setPassengerTemp(dispP);
+        }
       }
       recordLog(idFormatted, canMappings.climateTargetName, `Driver: ${rawD !== null ? `${rawD} (0x${rawD.toString(16)})` : '--'} / Pass: ${rawP !== null ? `${rawP} (0x${rawP.toString(16)})` : '--'}`, hexPayload, now);
     }
 
-    // Rear Defroster (Dynamically mapped from catalog, e.g. 0x541 with D5 match 0x10 mask 0xF0)
+    // Rear Defroster (Dynamically mapped from catalog, e.g. 0x541 Byte D5 [idx 4] bit 4: mask 0x10)
     else if (normId === canMappings.defrost && bytes.length >= 5) {
-      const def = (bytes[4] & 0xF0) === 0x10;
-      setRearDefrost(def);
+      const def = (bytes[4] & 0x10) !== 0;
+      if (acceptTelemetry('climate_rear_defrost', String(def))) {
+        rearDefrostRef.current = def;
+        setRearDefrost(def);
+      }
       recordLog(idFormatted, canMappings.defrostName, def ? 'DEFROST ON' : 'DEFROST OFF', hexPayload, now);
     }
 
-    // Heated Steering Wheel (Dynamically mapped from catalog, e.g. 0x418)
-    else if (normId === canMappings.steeringHeat && bytes.length >= 1) {
-      const val = bytes[0] & 0x03;
-      const lvl: SteeringHeatLevel = val > 0 ? 'on' : 'off';
-      setSteeringWheelHeat(lvl);
+    // Heated Steering Wheel (Catalog 0x418 Byte D3 [idx 2] bit 0: 0x01=On, 0x00=Off)
+    else if (normId === canMappings.steeringHeat && bytes.length >= 3) {
+      const lvl: SteeringHeatLevel = (bytes[2] & 0x01) !== 0 ? 'on' : 'off';
+      if (acceptTelemetry('heated_steering_wheel_toggle', lvl)) {
+        steeringWheelHeatRef.current = lvl;
+        setSteeringWheelHeat(lvl);
+      }
       recordLog(idFormatted, canMappings.steeringHeatName, lvl.toUpperCase(), hexPayload, now);
     }
 
@@ -1450,10 +1691,16 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       const b = bytes[0];
       const lvl: SeatLevel = b === 0x41 ? 'heat_high' : b === 0x31 ? 'heat_low' : 'off';
       if (normId === canMappings.rearLeftSeat || normId === '438') {
-        setRearLeftSeat(lvl);
+        if (acceptTelemetry('rear_left_seat_comfort', lvl)) {
+          rearLeftSeatRef.current = lvl;
+          setRearLeftSeat(lvl);
+        }
         recordLog(idFormatted, 'Rear Left Seat Comfort', lvl, hexPayload, now);
       } else {
-        setRearRightSeat(lvl);
+        if (acceptTelemetry('rear_right_seat_comfort', lvl)) {
+          rearRightSeatRef.current = lvl;
+          setRearRightSeat(lvl);
+        }
         recordLog(idFormatted, 'Rear Right Seat Comfort', lvl, hexPayload, now);
       }
     }
@@ -1461,14 +1708,20 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     // Driver Seat Comfort (Dynamically mapped from catalog, e.g. 0x496 Byte D1)
     else if ((normId === canMappings.driverSeat || normId === '496') && bytes.length >= 1) {
       const lvl = decodeSeatComfortByte(bytes[0]);
-      setDriverSeat(lvl);
+      if (acceptTelemetry('drivers_seat_comfort', lvl)) {
+        driverSeatRef.current = lvl;
+        setDriverSeat(lvl);
+      }
       recordLog(idFormatted, canMappings.driverSeatName, lvl, hexPayload, now);
     }
 
     // Passenger Seat Comfort (0x475 empirical EV6 / 0x49C catalog Gen3 Byte D1)
     else if ((normId === canMappings.passengerSeat || normId === '475' || normId === '49c') && bytes.length >= 1) {
       const lvl = decodeSeatComfortByte(bytes[0]);
-      setPassengerSeat(lvl);
+      if (acceptTelemetry('passengers_seat_comfort', lvl)) {
+        passengerSeatRef.current = lvl;
+        setPassengerSeat(lvl);
+      }
       recordLog(idFormatted, canMappings.passengerSeatName, lvl, hexPayload, now);
     }
 
@@ -1478,7 +1731,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       const speed = fanRaw >= 2 && fanRaw <= 9 ? fanRaw - 1 : 0;
       setFanSpeed(speed);
       const decodedAf = decodeAirflowCanByte(bytes[3]);
-      if (decodedAf) setAirflow(decodedAf);
+      if (decodedAf && acceptTelemetry('climate_airflow_direction', decodedAf)) {
+        airflowRef.current = decodedAf;
+        setAirflow(decodedAf);
+      }
       if (bytes.length >= 5) {
         setRecirc(Boolean(bytes[4] & 0x40));
       }
@@ -1489,7 +1745,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     else if ((normId === canMappings.driverOnly || normId === '465') && bytes.length >= 7) {
       const isDo = decodeDriverOnlyCanFrame(bytes);
       if (isDo !== null) {
-        setDriverOnly(isDo);
+        if (acceptTelemetry('climate_driver_only_toggle', String(isDo))) {
+          driverOnlyRef.current = isDo;
+          setDriverOnly(isDo);
+        }
         recordLog(idFormatted, canMappings.driverOnlyName, isDo ? 'Driver Only On' : 'Driver Only Off', hexPayload, now);
       }
     }
@@ -1497,7 +1756,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     // Remote Climate Execution State (DATC_07 0x384 D4 == 0x0A)
     else if (normId === '384' && bytes.length >= 4) {
       const remoteActive = bytes[3] === 0x0A;
-      setHvacPower(remoteActive);
+      if (acceptTelemetry('remote_climate', String(remoteActive))) {
+        hvacPowerRef.current = remoteActive;
+        setHvacPower(remoteActive);
+      }
     }
 
     // Charging Limits (Dynamically mapped from catalog, e.g. 0x1F9: AC limit Byte D3 [idx 2], DC limit Byte D4 [idx 3])
@@ -1508,14 +1770,17 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         if (bytes.length > idx) {
           const b = bytes[idx];
           if (b === 0x64) { ac = 50; break; }
-          else if (b === 0x78 || b === 0xa0 && idx !== 2) { ac = 60; break; }
-          else if (b === 0x8c || b === 0xc8 && idx !== 2) { ac = 70; break; }
-          else if (b === 0xa0 && idx === 2 || b === 0xf5) { ac = 80; break; }
+          else if (b === 0x78 || (b === 0xa0 && idx !== 2)) { ac = 60; break; }
+          else if (b === 0x8c || (b === 0xc8 && idx !== 2)) { ac = 70; break; }
+          else if ((b === 0xa0 && idx === 2) || b === 0xf5) { ac = 80; break; }
           else if (b === 0xb4 || b === 0x1d) { ac = 90; break; }
-          else if (b === 0xc8 && idx === 2 || b === 0x4a) { ac = 100; break; }
+          else if ((b === 0xc8 && idx === 2) || b === 0x4a) { ac = 100; break; }
         }
       }
-      if (ac !== null) setAcChargeLimit(ac);
+      if (ac !== null && acceptTelemetry('ac_charging_limit', String(ac))) {
+        acChargeLimitRef.current = ac;
+        setAcChargeLimit(ac);
+      }
 
       // DC Fast Charging Limit (catalog: D4): match 0x64=50%, 0x78=60%, 0x8C=70%, 0xA0=80%, 0xB4=90%, 0xC8=100%
       let dc: number | null = null;
@@ -1530,7 +1795,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
           else if (b === 0xc8) { dc = 100; break; }
         }
       }
-      if (dc !== null) setDcChargeLimit(dc);
+      if (dc !== null && acceptTelemetry('dc_charging_limit', String(dc))) {
+        dcChargeLimitRef.current = dc;
+        setDcChargeLimit(dc);
+      }
 
       recordLog(idFormatted, 'Charge Limits (AC / DC)', `AC: ${ac !== null ? `${ac}%` : '--'} | DC: ${dc !== null ? `${dc}%` : '--'}`, hexPayload, now);
     }
@@ -1551,8 +1819,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     else if ((normId === canMappings.ambientLight || normId === '455') && bytes.length >= 6) {
       const decoded = decodeAmbientCanFrame(bytes, canMappings.ambientLightOptions);
       if (decoded) {
-        setAmbientBrightness(decoded.brightness);
-        if (decoded.activeOptionLabel) {
+        if (acceptTelemetry('ambient_light_brightness', String(decoded.brightness))) {
+          setAmbientBrightness(decoded.brightness);
+        }
+        if (decoded.activeOptionLabel && acceptTelemetry('ambient_light_colors', decoded.activeOptionLabel.toLowerCase())) {
           setAmbientColor(decoded.activeOptionLabel);
         }
         recordLog(
@@ -1582,8 +1852,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     setBlinkState(false);
   }, [hazards, turnSignal]);
 
-  // Seat toggle helper - dynamically respects vehicle features (heated and/or ventilated seats)
-  const cycleSeat = (current: SeatLevel | null, isDriver: boolean) => {
+  // Seat toggle helper - uses live synchronous refs so rapid taps step cleanly without reverting
+  const cycleSeat = (_current: SeatLevel | null, isDriver: boolean) => {
     const hasHeat = equippedFeatures.has('heated_seats');
     const hasCool = equippedFeatures.has('ventilated_seats');
 
@@ -1596,7 +1866,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     if (hasHeat) cycle = cycle.concat(['heat_low', 'heat_med', 'heat_high']);
     if (hasCool) cycle = cycle.concat(['cool_low', 'cool_med', 'cool_high']);
 
-    const currentEffective = current || 'off';
+    const liveCurrent = isDriver ? driverSeatRef.current : passengerSeatRef.current;
+    const currentEffective = liveCurrent || 'off';
     const nextIdx = (cycle.indexOf(currentEffective) + 1) % cycle.length;
     const next = cycle[nextIdx];
     const seatOptionMap: Record<SeatLevel, string> = {
@@ -1610,22 +1881,27 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     };
     const optionCmd = seatOptionMap[next] || next;
     if (isDriver) {
+      driverSeatRef.current = next;
       setDriverSeat(next);
+      syncHold('drivers_seat_comfort', next);
       dispatchCommand('drivers_seat_comfort', optionCmd, `Driver Seat: ${next.replace('_', ' ').toUpperCase()}`);
     } else {
+      passengerSeatRef.current = next;
       setPassengerSeat(next);
+      syncHold('passengers_seat_comfort', next);
       dispatchCommand('passengers_seat_comfort', optionCmd, `Passenger Seat: ${next.replace('_', ' ').toUpperCase()}`);
     }
   };
 
-  const cycleSeatHeat = (current: SeatLevel | null, isDriver: boolean) => {
+  const cycleSeatHeat = (_current: SeatLevel | null, isDriver: boolean) => {
     if (!equippedFeatures.has('heated_seats')) {
       triggerNotice('Seat heating is not equipped on this trim');
       return;
     }
 
     const cycle: SeatLevel[] = ['off', 'heat_low', 'heat_med', 'heat_high'];
-    const currentEffective = (current && current.startsWith('heat')) ? current : 'off';
+    const liveCurrent = isDriver ? driverSeatRef.current : passengerSeatRef.current;
+    const currentEffective = (liveCurrent && liveCurrent.startsWith('heat')) ? liveCurrent : 'off';
     const nextIdx = (cycle.indexOf(currentEffective) + 1) % cycle.length;
     const next = cycle[nextIdx];
     const seatOptionMap: Record<SeatLevel, string> = {
@@ -1639,22 +1915,27 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     };
     const optionCmd = seatOptionMap[next] || next;
     if (isDriver) {
+      driverSeatRef.current = next;
       setDriverSeat(next);
+      syncHold('drivers_seat_comfort', next);
       dispatchCommand('drivers_seat_comfort', optionCmd, `Driver Seat Heat: ${next === 'off' ? 'OFF' : next.replace('heat_', '').toUpperCase()}`);
     } else {
+      passengerSeatRef.current = next;
       setPassengerSeat(next);
+      syncHold('passengers_seat_comfort', next);
       dispatchCommand('passengers_seat_comfort', optionCmd, `Passenger Seat Heat: ${next === 'off' ? 'OFF' : next.replace('heat_', '').toUpperCase()}`);
     }
   };
 
-  const cycleSeatCool = (current: SeatLevel | null, isDriver: boolean) => {
+  const cycleSeatCool = (_current: SeatLevel | null, isDriver: boolean) => {
     if (!equippedFeatures.has('ventilated_seats')) {
       triggerNotice('Seat ventilation is not equipped on this trim');
       return;
     }
 
     const cycle: SeatLevel[] = ['off', 'cool_low', 'cool_med', 'cool_high'];
-    const currentEffective = (current && current.startsWith('cool')) ? current : 'off';
+    const liveCurrent = isDriver ? driverSeatRef.current : passengerSeatRef.current;
+    const currentEffective = (liveCurrent && liveCurrent.startsWith('cool')) ? liveCurrent : 'off';
     const nextIdx = (cycle.indexOf(currentEffective) + 1) % cycle.length;
     const next = cycle[nextIdx];
     const seatOptionMap: Record<SeatLevel, string> = {
@@ -1668,10 +1949,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     };
     const optionCmd = seatOptionMap[next] || next;
     if (isDriver) {
+      driverSeatRef.current = next;
       setDriverSeat(next);
+      syncHold('drivers_seat_comfort', next);
       dispatchCommand('drivers_seat_comfort', optionCmd, `Driver Seat Vent: ${next === 'off' ? 'OFF' : next.replace('cool_', '').toUpperCase()}`);
     } else {
+      passengerSeatRef.current = next;
       setPassengerSeat(next);
+      syncHold('passengers_seat_comfort', next);
       dispatchCommand('passengers_seat_comfort', optionCmd, `Passenger Seat Vent: ${next === 'off' ? 'OFF' : next.replace('cool_', '').toUpperCase()}`);
     }
   };
@@ -1681,9 +1966,12 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       triggerNotice('Heated steering wheel is not equipped on this trim');
       return;
     }
-    const isCurrentlyOn = steeringWheelHeat === 'on' || steeringWheelHeat === 'high' || steeringWheelHeat === 'low';
+    const cur = steeringWheelHeatRef.current;
+    const isCurrentlyOn = cur === 'on' || cur === 'high' || cur === 'low';
     const next: SteeringHeatLevel = isCurrentlyOn ? 'off' : 'on';
+    steeringWheelHeatRef.current = next;
     setSteeringWheelHeat(next);
+    syncHold('heated_steering_wheel_toggle', next);
     dispatchCommand(
       'heated_steering_wheel_toggle',
       next === 'off' ? 'Heated Steering Wheel Off' : 'Heated Steering Wheel On',
@@ -1697,23 +1985,31 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     const step = tempUnit === 'C' ? (delta > 0 ? 0.5 : -0.5) : delta;
     const baseDefault = tempUnit === 'C' ? 21 : 70;
     if (isDriver) {
-      const cur = driverTemp !== null ? driverTemp : baseDefault;
+      const cur = driverTempRef.current !== null ? driverTempRef.current : baseDefault;
       const next = Math.max(minT, Math.min(maxT, tempUnit === 'C' ? Math.round((cur + step) * 2) / 2 : cur + step));
+      driverTempRef.current = next;
       setDriverTemp(next);
       const targetF = Math.max(62, Math.min(82, displayTempToFahrenheit(next, tempUnit)));
       driverTempFRef.current = targetF;
-      if (climateSync) {
+      syncHold('climate_driver_temp', String(targetF));
+      if (climateSyncRef.current !== false) {
+        passengerTempRef.current = next;
         setPassengerTemp(next);
         passengerTempFRef.current = targetF;
+        syncHold('climate_passenger_temp', String(targetF));
       }
       dispatchCommand('climate_driver_temp', `${targetF}°F`, `Driver Target Temp: ${next}°${tempUnit}`);
     } else {
-      const cur = passengerTemp !== null ? passengerTemp : baseDefault;
+      const cur = passengerTempRef.current !== null ? passengerTempRef.current : baseDefault;
       const next = Math.max(minT, Math.min(maxT, tempUnit === 'C' ? Math.round((cur + step) * 2) / 2 : cur + step));
+      passengerTempRef.current = next;
       setPassengerTemp(next);
+      climateSyncRef.current = false;
       setClimateSync(false);
+      syncHold('climate_sync_toggle', 'false');
       const targetF = Math.max(62, Math.min(82, displayTempToFahrenheit(next, tempUnit)));
       passengerTempFRef.current = targetF;
+      syncHold('climate_passenger_temp', String(targetF));
       dispatchCommand('climate_passenger_temp', `${targetF}°F`, `Passenger Target Temp: ${next}°${tempUnit}`);
     }
   };
@@ -1737,23 +2033,32 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   };
 
   const handleToggleTrunk = () => {
-    const next = !trunkOpen;
+    const next = !trunkOpenRef.current;
+    trunkOpenRef.current = next;
     setTrunkOpen(next);
+    syncHold('trunk', String(next));
     dispatchCommand(
       'telematics_remote_tailgate',
       next ? 'Open Tailgate / Trunk' : 'Close Tailgate / Trunk',
-      next ? 'Power Tailgate Opening' : 'Power Tailgate Closing'
+      next ? 'Power Tailgate Opening' : 'Power Tailgate Closing',
+      150,
+      'trunk'
     );
   };
 
   const setPresetTemp = (displayVal: number) => {
     const targetF = Math.max(62, Math.min(82, displayTempToFahrenheit(displayVal, tempUnit)));
+    driverTempRef.current = displayVal;
     setDriverTemp(displayVal);
     driverTempFRef.current = targetF;
-    if (climateSync !== false) {
+    syncHold('climate_driver_temp', String(targetF));
+    if (climateSyncRef.current !== false) {
+      climateSyncRef.current = true;
       setClimateSync(true);
+      passengerTempRef.current = displayVal;
       setPassengerTemp(displayVal);
       passengerTempFRef.current = targetF;
+      syncHold('climate_passenger_temp', String(targetF));
     }
     dispatchCommand('climate_driver_temp', `${targetF}°F`, `Cabin Target Temp: ${displayVal}°${tempUnit}`);
   };
@@ -2049,18 +2354,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                           onToggleDoor={toggleDoor}
                           onToggleHood={handleToggleHood}
                           onToggleTrunk={handleToggleTrunk}
-                          onToggleChargePort={() => {
-                            const next = !chargePortOpen;
-                            setChargePortOpen(next);
-                            dispatchCommand(
-                              'charge_port',
-                              next ? 'Opened / Open' : 'Closed / Shut',
-                              next ? 'Charge Port Opened' : 'Charge Port Closed'
-                            );
-                          }}
+                          onToggleChargePort={handleToggleChargePort}
                           onToggleSunroof={cycleSunroofState}
-                          onCycleDriverSeat={() => cycleSeat(driverSeat, true)}
-                          onCyclePassengerSeat={() => cycleSeat(passengerSeat, false)}
+                          onCycleDriverSeat={() => cycleSeat(driverSeatRef.current, true)}
+                          onCyclePassengerSeat={() => cycleSeat(passengerSeatRef.current, false)}
                           onCycleSteeringHeat={cycleSteeringHeat}
                         />
                       </div>
@@ -2236,11 +2533,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                       type="button"
                       id="lock-all-btn"
                       onClick={() => {
-                        const next = !locked;
+                        const next = !lockedRef.current;
+                        lockedRef.current = next;
                         setLocked(next);
+                        syncHold('door_locks', String(next));
                         if (next) {
                           setDoors({ frontLeft: false, frontRight: false, rearLeft: false, rearRight: false });
                           setHoodOpen(false);
+                          trunkOpenRef.current = false;
                           setTrunkOpen(false);
                         }
                         if (autoFoldEnabledRef.current) {
@@ -2475,15 +2775,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                     <button
                       type="button"
                       id="quick-charge-port-btn"
-                      onClick={() => {
-                        const next = !chargePortOpen;
-                        setChargePortOpen(next);
-                        dispatchCommand(
-                          'charge_port',
-                          next ? 'Opened / Open' : 'Closed / Shut',
-                          next ? 'Charge Port Opened' : 'Charge Port Closed'
-                        );
-                      }}
+                      onClick={handleToggleChargePort}
                       className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center transition-all cursor-pointer border active:scale-95 ${
                         isCharging
                           ? 'bg-success-soft text-success-soft-foreground border-success/60 shadow-sm'
@@ -2691,13 +2983,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
               <button
                 type="button"
                 id="ambient-light-power-toggle"
-                onClick={() => {
-                  const isCurrentlyOff = ambientBrightness === 0;
-                  const nextLvl = isCurrentlyOff ? 7 : 0;
-                  setAmbientBrightness(nextLvl);
-                  const cmdLabel = nextLvl === 0 ? 'Off' : `Brightness Level ${nextLvl}`;
-                  dispatchCommand('ambient_light_brightness', cmdLabel, nextLvl === 0 ? 'Ambient Light Turned OFF' : `Ambient Light: Level ${nextLvl}`);
-                }}
+                onClick={handleToggleAmbientPower}
                 className={`px-3.5 min-h-[38px] rounded-xl text-xs font-bold transition-colors cursor-pointer border shrink-0 ${
                   ambientBrightness !== null && ambientBrightness > 0
                     ? 'bg-accent text-accent-foreground border-accent shadow-sm'
@@ -3041,8 +3327,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   type="button"
                   id="driver-only-toggle-btn"
                   onClick={() => {
-                    const next = !(driverOnly === true);
+                    const next = !(driverOnlyRef.current === true);
+                    driverOnlyRef.current = next;
                     setDriverOnly(next);
+                    syncHold('climate_driver_only_toggle', String(next));
                     dispatchCommand(
                       'climate_driver_only_toggle',
                       next ? 'Driver Only On' : 'Driver Only Off',
@@ -3063,10 +3351,13 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   type="button"
                   id="climate-sync-toggle-btn"
                   onClick={() => {
-                    const next = !isSyncedMode;
+                    const next = !(climateSyncRef.current !== false);
+                    climateSyncRef.current = next;
                     setClimateSync(next);
-                    if (next && driverTemp !== null) {
-                      setPassengerTemp(driverTemp);
+                    syncHold('climate_sync_toggle', String(next));
+                    if (next && driverTempRef.current !== null) {
+                      passengerTempRef.current = driverTempRef.current;
+                      setPassengerTemp(driverTempRef.current);
                       passengerTempFRef.current = driverTempFRef.current;
                     }
                     dispatchCommand(
@@ -3121,8 +3412,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                       type="button"
                       id="hvac-heat-toggle"
                       onClick={() => {
-                        const next = !(heatActive === true);
+                        const next = !(heatActiveRef.current === true);
+                        heatActiveRef.current = next;
                         setHeatActive(next);
+                        syncHold('climate_heat_toggle', String(next));
                         dispatchCommand(
                           'climate_heat_toggle',
                           next ? 'Heat On' : 'Heat Off',
@@ -3144,8 +3437,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                       type="button"
                       id="hvac-ac-toggle"
                       onClick={() => {
-                        const next = !(acActive === true);
+                        const next = !(acActiveRef.current === true);
+                        acActiveRef.current = next;
                         setAcActive(next);
+                        syncHold('climate_ac_toggle', String(next));
                         dispatchCommand(
                           'climate_ac_toggle',
                           next ? 'A/C On' : 'A/C Off',
@@ -3301,8 +3596,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                       id="rear-defrost-btn"
                       aria-pressed={rearDefrost === true}
                       onClick={() => {
-                        const next = rearDefrost === true ? false : true;
+                        const next = !(rearDefrostRef.current === true);
+                        rearDefrostRef.current = next;
                         setRearDefrost(next);
+                        syncHold('climate_rear_defrost', String(next));
                         dispatchCommand(
                           'climate_rear_defrost',
                           next ? 'Defroster & Mirrors On' : 'Defroster & Mirrors Off',
@@ -3420,7 +3717,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                     selectedKey={airflow || 'auto'}
                     onSelectionChange={key => {
                       const mode = key as AirflowMode;
+                      airflowRef.current = mode;
                       setAirflow(mode);
+                      syncHold('climate_airflow_direction', mode);
                       const cmdLabel = AIRFLOW_MODE_COMMAND_LABELS[mode] || 'Auto';
                       dispatchCommand(
                         'climate_airflow_direction',
@@ -3488,13 +3787,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
                       <button
                         type="button"
-                        onClick={() => {
-                          const isCurrentlyOff = ambientBrightness === 0;
-                          const nextLvl = isCurrentlyOff ? 7 : 0;
-                          setAmbientBrightness(nextLvl);
-                          const cmdLabel = nextLvl === 0 ? 'Off' : `Brightness Level ${nextLvl}`;
-                          dispatchCommand('ambient_light_brightness', cmdLabel, nextLvl === 0 ? 'Ambient Light Turned OFF' : `Ambient Light: Level ${nextLvl}`);
-                        }}
+                        onClick={handleToggleAmbientPower}
                         className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer border ${
                           ambientBrightness !== null && ambientBrightness > 0
                             ? 'bg-accent text-accent-foreground border-accent shadow-sm'
@@ -3521,9 +3814,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   type="button"
                   aria-label="Decrease ambient brightness"
                   onClick={() => {
-                    const next = Math.max(0, (ambientBrightness ?? 7) - 1);
+                    const next = Math.max(0, (ambientBrightnessRef.current ?? prevAmbientBrightnessRef.current) - 1);
                     setAmbientBrightness(next);
-                    const cmdLabel = next === 0 ? 'Off' : `Brightness Level ${next}`;
+                    syncHold('ambient_light_brightness', String(next));
+                    const cmdLabel = next === 0 ? 'Off' : next === 10 ? 'Brightness Level 10 (Max)' : `Brightness Level ${next}`;
                     dispatchCommand('ambient_light_brightness', cmdLabel, next === 0 ? 'Ambient Light Turned OFF' : `Ambient Light: Level ${next}`);
                   }}
                   className="w-9 h-9 rounded-xl bg-surface-secondary hover:bg-surface-tertiary border border-border flex items-center justify-center text-foreground cursor-pointer shrink-0"
@@ -3540,6 +3834,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   onChange={e => {
                     const step = parseInt(e.target.value, 10);
                     setAmbientBrightness(step);
+                    syncHold('ambient_light_brightness', String(step));
                     const cmdLabel = step === 0 ? 'Off' : step === 10 ? 'Brightness Level 10 (Max)' : `Brightness Level ${step}`;
                     dispatchCommand('ambient_light_brightness', cmdLabel, step === 0 ? 'Ambient Light Turned OFF' : `Ambient Light: Level ${step}`);
                   }}
@@ -3550,8 +3845,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                   type="button"
                   aria-label="Increase ambient brightness"
                   onClick={() => {
-                    const next = Math.min(10, (ambientBrightness ?? 7) + 1);
+                    const next = Math.min(10, (ambientBrightnessRef.current ?? prevAmbientBrightnessRef.current) + 1);
                     setAmbientBrightness(next);
+                    syncHold('ambient_light_brightness', String(next));
                     const cmdLabel = next === 10 ? 'Brightness Level 10 (Max)' : `Brightness Level ${next}`;
                     dispatchCommand('ambient_light_brightness', cmdLabel, `Ambient Light: Level ${next}`);
                   }}
@@ -3569,7 +3865,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
                 {AMBIENT_QUICK_COLORS.map(c => {
-                  const isSelected = ambientColor === c.label;
+                  const isSelected = isSameAmbientColor(ambientColor, c.label);
                   return (
                     <button
                       key={c.label}
@@ -3577,7 +3873,12 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                       id={`ambient-quick-${c.name.toLowerCase().replace(/\s+/g, '-')}`}
                       onClick={() => {
                         setAmbientColor(c.label);
-                        if (ambientBrightness === 0) setAmbientBrightness(7);
+                        syncHold('ambient_light_colors', c.label.toLowerCase());
+                        if (ambientBrightnessRef.current === null || ambientBrightnessRef.current === 0) {
+                          const restoreLvl = prevAmbientBrightnessRef.current;
+                          setAmbientBrightness(restoreLvl);
+                          syncHold('ambient_light_brightness', String(restoreLvl));
+                        }
                         dispatchCommand('ambient_light_colors', c.label, `Color: ${c.name}`);
                       }}
                       title={`${c.name} (${c.label})`}
@@ -3623,7 +3924,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 <div className="mt-2.5 p-2 rounded-xl bg-surface-secondary border border-border space-y-2">
                   <div className="grid grid-cols-8 gap-1.5 max-h-[190px] overflow-y-auto p-1 scrollbar-thin">
                     {AMBIENT_PALETTE_64.map(p => {
-                      const isSelected = ambientColor === p.label;
+                      const isSelected = isSameAmbientColor(ambientColor, p.label);
                       return (
                         <Tooltip key={p.step}>
                           <Tooltip.Trigger>
@@ -3632,7 +3933,12 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                               id={`ambient-palette-step-${p.step}`}
                               onClick={() => {
                                 setAmbientColor(p.label);
-                                if (ambientBrightness === 0) setAmbientBrightness(7);
+                                syncHold('ambient_light_colors', p.label.toLowerCase());
+                                if (ambientBrightnessRef.current === null || ambientBrightnessRef.current === 0) {
+                                  const restoreLvl = prevAmbientBrightnessRef.current;
+                                  setAmbientBrightness(restoreLvl);
+                                  syncHold('ambient_light_brightness', String(restoreLvl));
+                                }
                                 dispatchCommand('ambient_light_colors', p.label, `Color: ${p.name}`);
                               }}
                               className={`w-full aspect-square rounded-md transition-all cursor-pointer relative flex items-center justify-center border ${

@@ -488,5 +488,68 @@ export function decodeAmbientCanFrame(
   return { brightness, activeOptionLabel, hexColor };
 }
 
+/**
+ * Decodes an unsigned 8-bit integer byte into signed two's complement (-128..127).
+ */
+export function decodeSignedInt8(byteVal: number): number {
+  const b = byteVal & 0xff;
+  return b > 127 ? b - 256 : b;
+}
 
+/**
+ * Compares two ambient color labels or palette names so catalog prefixes ("Color 8: Pure Cyan / Aqua Wave")
+ * match simplified firmware/MQTT names ("Pure Cyan / Aqua Wave").
+ */
+export function isSameAmbientColor(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false;
+  const na = a.trim().toLowerCase();
+  const nb = b.trim().toLowerCase();
+  if (na === nb) return true;
+  const stripPrefix = (s: string) => s.replace(/^color\s+\d+\s*:\s*/i, '').trim();
+  if (stripPrefix(na) === stripPrefix(nb)) return true;
+  const matchA = AMBIENT_PALETTE_64.find(
+    (p) => p.label.toLowerCase() === na || `color ${p.step}` === na || p.name.toLowerCase() === stripPrefix(na)
+  );
+  const matchB = AMBIENT_PALETTE_64.find(
+    (p) => p.label.toLowerCase() === nb || `color ${p.step}` === nb || p.name.toLowerCase() === stripPrefix(nb)
+  );
+  return Boolean(matchA && matchB && matchA.step === matchB.step);
+}
 
+/**
+ * Tracks short-lived optimistic holds after dispatching cockpit commands so periodic CAN frames
+ * (e.g. 200ms 0x496 seat state) do not revert the UI mid-cycle before TX completes.
+ */
+export class OptimisticHoldTracker {
+  private holds = new Map<string, { value: string; untilMs: number }>();
+
+  setHold(key: string, expectedValue: string, ttlMs = 1800, nowMs = Date.now()): void {
+    this.holds.set(key, { value: expectedValue, untilMs: nowMs + ttlMs });
+  }
+
+  extendHold(key: string, ttlMs = 1800, nowMs = Date.now()): void {
+    const existing = this.holds.get(key);
+    if (existing) {
+      existing.untilMs = Math.max(existing.untilMs, nowMs + ttlMs);
+    }
+  }
+
+  clearHold(key: string): void {
+    this.holds.delete(key);
+  }
+
+  shouldAccept(key: string, incomingValue: string, nowMs = Date.now()): boolean {
+    const entry = this.holds.get(key);
+    if (!entry) return true;
+    if (nowMs >= entry.untilMs) {
+      this.holds.delete(key);
+      return true;
+    }
+    if (entry.value === incomingValue) {
+      // Car confirmed the commanded state; release hold immediately.
+      this.holds.delete(key);
+      return true;
+    }
+    return false;
+  }
+}

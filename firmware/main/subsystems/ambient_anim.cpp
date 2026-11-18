@@ -107,16 +107,18 @@ static std::atomic<uint32_t> s_step_interval_ms{1500};
 static TaskHandle_t s_anim_task_handle = nullptr;
 
 static void send_raw_frame(uint32_t id, const uint8_t* data, uint8_t dlc) {
-    twai_status_info_t info;
-    if (can_engine_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING || info.tx_error_counter >= 128) {
-        return;
+    if (!can_bus_is_available(CAN_BUS_0)) {
+        twai_status_info_t info;
+        if (can_engine_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING) {
+            return;
+        }
     }
     twai_message_t tx_msg = {};
     tx_msg.identifier = id;
     tx_msg.data_length_code = dlc;
     tx_msg.extd = 0;
     tx_msg.rtr = 0;
-    tx_msg.ss = 1; // Single-Shot mode to avoid bus blocking
+    tx_msg.ss = 0; // Allow standard CAN arbitration and ACK retry on M-CAN
     memcpy(tx_msg.data, data, dlc);
     can_send(CAN_BUS_0, &tx_msg, pdMS_TO_TICKS(20));
 }

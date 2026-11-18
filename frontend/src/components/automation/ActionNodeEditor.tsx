@@ -1,4 +1,4 @@
-import React, { useState, useContext, useMemo, useId } from 'react';
+import React, { useState, useContext, useMemo, useId, useRef } from 'react';
 import { Tabs, Switch, Slider } from '@heroui/react';
 import {
   Play,
@@ -43,7 +43,6 @@ import {
 import { formatActionSummary } from '../../utils/ruleSummaries';
 import {
   arrayMove,
-  canReadSystemClipboard,
   getActiveScopedDrag,
   setActiveScopedDrag
 } from '../../utils/automationClipboard';
@@ -65,6 +64,12 @@ import {
 } from './liveEvaluator';
 import { ConditionListEditor } from './ConditionNodeEditor';
 import { AutomationClipboardContext } from './AutomationClipboardContext';
+import {
+  CLUSTER_POPUP_MAX_CODE_UNITS,
+  CLUSTER_POPUP_MAX_TEXT_CODE_UNITS,
+  getClusterPopupTotalCodeUnits,
+  resolveCycleEntityPopupText
+} from '../../utils/canValidator';
 
 export const HUD_MANEUVER_ICONS: { value: number; label: string; symbol: string }[] = [
   { value: 0x00, label: 'None / Idle (0x00)', symbol: '•' },
@@ -553,6 +558,8 @@ const CycleEntityStepperConfig: React.FC<CycleEntityStepperConfigProps> = ({
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [customStateInput, setCustomStateInput] = useState('');
+  const dragIdxRef = useRef<number | null>(null);
+  const chipListId = useId();
 
   const entId = act.entity_id || act.target_command_id || 'drivers_seat_comfort';
 
@@ -596,6 +603,21 @@ const CycleEntityStepperConfig: React.FC<CycleEntityStepperConfigProps> = ({
 
   const entityDisplayName = selectedCmd?.ha_metadata?.name || selectedCmd?.name || entId;
   const defaultPopupPrefix = `${entityDisplayName}: `;
+
+  const popupLengthCheck = useMemo(() => {
+    const effectivePrefix = act.popup_prefix !== undefined ? act.popup_prefix : defaultPopupPrefix;
+    const entries = activeStates.map(s => {
+      const resolved = resolveCycleEntityPopupText(effectivePrefix, entityDisplayName, s);
+      const totalChars = getClusterPopupTotalCodeUnits(resolved, true);
+      return { state: s, text: resolved, totalChars };
+    });
+    const maxEntry = entries.reduce(
+      (best, cur) => (cur.totalChars > best.totalChars ? cur : best),
+      entries[0] || { state: '', text: '', totalChars: 0 }
+    );
+    const overLimit = entries.filter(e => e.totalChars > CLUSTER_POPUP_MAX_CODE_UNITS);
+    return { entries, maxEntry, overLimit };
+  }, [activeStates, act.popup_prefix, defaultPopupPrefix, entityDisplayName]);
 
   // Live current state & next step preview
   const liveCurrentState = useMemo(() => {
@@ -934,7 +956,23 @@ const CycleEntityStepperConfig: React.FC<CycleEntityStepperConfigProps> = ({
           )}
         </div>
 
-        <div className="p-2 rounded-lg bg-surface-secondary/80 border border-border flex flex-wrap items-center gap-1.5 min-h-[42px]">
+        <div
+          className="p-2 rounded-lg bg-surface-secondary/80 border border-border flex flex-wrap items-center gap-1.5 min-h-[42px]"
+          onDragOver={e => {
+            if (dragIdxRef.current === null) return;
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = 'move';
+          }}
+          onDrop={e => {
+            if (dragIdxRef.current === null) return;
+            e.preventDefault();
+            e.stopPropagation();
+            dragIdxRef.current = null;
+            setDragIdx(null);
+            setDragOverIdx(null);
+          }}
+        >
           {activeStates.map((stateLabel, idx) => {
             const isDragging = dragIdx === idx;
             const isDragOver = dragOverIdx === idx && dragIdx !== idx;
@@ -945,29 +983,56 @@ const CycleEntityStepperConfig: React.FC<CycleEntityStepperConfigProps> = ({
               <React.Fragment key={`${stateLabel}-${idx}`}>
                 <div
                   draggable
+                  onPointerDown={e => {
+                    e.stopPropagation();
+                  }}
                   onDragStart={e => {
-                    setDragIdx(idx);
+                    e.stopPropagation();
+                    dragIdxRef.current = idx;
                     e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', String(idx));
+                    e.dataTransfer.setData('text/plain', `${chipListId}:${idx}`);
+                    requestAnimationFrame(() => setDragIdx(idx));
+                  }}
+                  onDragEnter={e => {
+                    if (dragIdxRef.current === null) return;
+                    e.preventDefault();
+                    e.stopPropagation();
                   }}
                   onDragOver={e => {
+                    if (dragIdxRef.current === null) return;
                     e.preventDefault();
+                    e.stopPropagation();
                     e.dataTransfer.dropEffect = 'move';
                     if (dragOverIdx !== idx) setDragOverIdx(idx);
                   }}
-                  onDragLeave={() => {
-                    if (dragOverIdx === idx) setDragOverIdx(null);
+                  onDragLeave={e => {
+                    e.stopPropagation();
+                    if (!e.currentTarget.contains(e.relatedTarget as Node) && dragOverIdx === idx) {
+                      setDragOverIdx(null);
+                    }
                   }}
                   onDrop={e => {
+                    e.stopPropagation();
+                    let from = dragIdxRef.current;
+                    if (from === null) {
+                      const raw = e.dataTransfer.getData('text/plain');
+                      if (raw.startsWith(`${chipListId}:`)) {
+                        const parsed = parseInt(raw.slice(chipListId.length + 1), 10);
+                        if (!isNaN(parsed)) from = parsed;
+                      }
+                    }
+                    if (from === null) return;
                     e.preventDefault();
-                    const from = dragIdx !== null ? dragIdx : parseInt(e.dataTransfer.getData('text/plain'), 10);
-                    if (!isNaN(from) && from !== idx) {
+                    if (from !== idx) {
                       moveChip(from, idx);
                     }
+                    dragIdxRef.current = null;
                     setDragIdx(null);
                     setDragOverIdx(null);
                   }}
-                  onDragEnd={() => {
+                  onDragEnd={e => {
+                    e.stopPropagation();
+                    dragIdxRef.current = null;
                     setDragIdx(null);
                     setDragOverIdx(null);
                   }}
@@ -988,6 +1053,8 @@ const CycleEntityStepperConfig: React.FC<CycleEntityStepperConfigProps> = ({
                   <div className="flex items-center gap-0.5 ml-1">
                     <button
                       type="button"
+                      draggable={false}
+                      onDragStart={e => e.preventDefault()}
                       onClick={() => moveChip(idx, idx - 1)}
                       disabled={idx === 0}
                       className="p-0.5 text-muted hover:text-foreground disabled:opacity-25 transition"
@@ -997,6 +1064,8 @@ const CycleEntityStepperConfig: React.FC<CycleEntityStepperConfigProps> = ({
                     </button>
                     <button
                       type="button"
+                      draggable={false}
+                      onDragStart={e => e.preventDefault()}
                       onClick={() => moveChip(idx, idx + 1)}
                       disabled={idx === activeStates.length - 1}
                       className="p-0.5 text-muted hover:text-foreground disabled:opacity-25 transition"
@@ -1007,6 +1076,8 @@ const CycleEntityStepperConfig: React.FC<CycleEntityStepperConfigProps> = ({
                     {activeStates.length > 2 && (
                       <button
                         type="button"
+                        draggable={false}
+                        onDragStart={e => e.preventDefault()}
                         onClick={() => removeChipAt(idx)}
                         className="p-0.5 text-muted hover:text-danger transition"
                         title="Remove from sequence"
@@ -1042,49 +1113,78 @@ const CycleEntityStepperConfig: React.FC<CycleEntityStepperConfigProps> = ({
       </div>
 
       {/* In-Cabin Confirmation Popup */}
-      <div className="pt-2.5 border-t border-separator grid grid-cols-1 sm:grid-cols-12 gap-2 text-[11px] items-center">
-        <div className="sm:col-span-5">
-          <Switch
-            isSelected={act.show_popup ?? true}
-            onChange={isSelected => onUpdate({ ...act, show_popup: isSelected })}
-            size="sm"
-            aria-label="Auto-show Cluster / HUD Popup Toast"
-          >
-            <Switch.Content>
-              <Switch.Control>
-                <Switch.Thumb />
-              </Switch.Control>
-              <span className="text-foreground">Auto-show Cluster Popup Toast</span>
-            </Switch.Content>
-          </Switch>
+      <div className="pt-2.5 border-t border-separator space-y-2 text-[11px]">
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+          <div className="sm:col-span-4">
+            <Switch
+              isSelected={act.show_popup ?? true}
+              onChange={isSelected => onUpdate({ ...act, show_popup: isSelected })}
+              size="sm"
+              aria-label="Auto-show Cluster / HUD Popup Toast"
+            >
+              <Switch.Content>
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
+                <span className="text-foreground">Auto-show Cluster Popup Toast</span>
+              </Switch.Content>
+            </Switch>
+          </div>
+          {act.show_popup !== false && (
+            <>
+              <div className="sm:col-span-6 flex items-center gap-1.5">
+                <span className="text-[10px] text-muted shrink-0" title="Supports {state} and {entity} placeholders">
+                  Popup Prefix / Template:
+                </span>
+                <input
+                  type="text"
+                  value={act.popup_prefix !== undefined ? act.popup_prefix : defaultPopupPrefix}
+                  onChange={e => onUpdate({ ...act, popup_prefix: e.target.value })}
+                  placeholder={`${defaultPopupPrefix} or {entity}: {state}`}
+                  className={`w-full bg-surface-secondary border rounded px-2 py-0.5 text-warning font-medium text-[11px] ${
+                    popupLengthCheck.overLimit.length > 0 ? 'border-danger focus:outline-none focus:ring-1 focus:ring-danger' : 'border-border'
+                  }`}
+                />
+                <span
+                  className={`text-[9px] font-mono shrink-0 ${
+                    popupLengthCheck.overLimit.length > 0
+                      ? 'text-danger font-bold'
+                      : popupLengthCheck.maxEntry.totalChars >= 45
+                      ? 'text-warning font-semibold'
+                      : 'text-muted'
+                  }`}
+                  title={`Longest resolved toast "${popupLengthCheck.maxEntry.text}" + 2-char severity icon (max ${CLUSTER_POPUP_MAX_CODE_UNITS} characters on cluster)`}
+                >
+                  {popupLengthCheck.maxEntry.totalChars}/{CLUSTER_POPUP_MAX_CODE_UNITS}
+                </span>
+              </div>
+              <div className="sm:col-span-2 flex items-center gap-1">
+                <select
+                  value={act.level || 'info'}
+                  onChange={e => onUpdate({ ...act, level: e.target.value as any })}
+                  className="w-full bg-surface-secondary border border-border rounded px-1.5 py-0.5 text-[10px] text-foreground"
+                  title="Popup Severity"
+                >
+                  <option value="info">Info</option>
+                  <option value="warning">Warning</option>
+                  <option value="error">Error</option>
+                </select>
+              </div>
+            </>
+          )}
         </div>
-        {act.show_popup !== false && (
-          <>
-            <div className="sm:col-span-5 flex items-center gap-1.5">
-              <span className="text-[10px] text-muted shrink-0" title="Supports {state} and {entity} placeholders">
-                Popup Prefix / Template:
-              </span>
-              <input
-                type="text"
-                value={act.popup_prefix !== undefined ? act.popup_prefix : defaultPopupPrefix}
-                onChange={e => onUpdate({ ...act, popup_prefix: e.target.value })}
-                placeholder={`${defaultPopupPrefix} or {entity}: {state}`}
-                className="w-full bg-surface-secondary border border-border rounded px-2 py-0.5 text-warning font-medium text-[11px]"
-              />
-            </div>
-            <div className="sm:col-span-2 flex items-center gap-1">
-              <select
-                value={act.level || 'info'}
-                onChange={e => onUpdate({ ...act, level: e.target.value as any })}
-                className="w-full bg-surface-secondary border border-border rounded px-1.5 py-0.5 text-[10px] text-foreground"
-                title="Popup Severity"
-              >
-                <option value="info">Info</option>
-                <option value="warning">Warning</option>
-                <option value="error">Error</option>
-              </select>
-            </div>
-          </>
+
+        {act.show_popup !== false && popupLengthCheck.overLimit.length > 0 && (
+          <div className="p-2 rounded bg-danger/10 border border-danger/40 text-[10px] text-danger flex items-start gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>
+              Toast exceeds the {CLUSTER_POPUP_MAX_CODE_UNITS}-character cluster limit (including 2-char severity icon) for{' '}
+              <strong>
+                {popupLengthCheck.overLimit.map(e => `"${e.state}" (${e.totalChars}/${CLUSTER_POPUP_MAX_CODE_UNITS})`).join(', ')}
+              </strong>
+              . Firmware drops oversized popups — shorten the prefix or use <code className="font-mono">{'{state}'}</code> (≤{CLUSTER_POPUP_MAX_TEXT_CODE_UNITS} chars before icon).
+            </span>
+          </div>
         )}
       </div>
     </div>
@@ -1518,7 +1618,6 @@ export function ActionNodeEditor({
   const [armedBranchIdx, setArmedBranchIdx] = useState<number | null>(null);
   const [branchDragIdx, setBranchDragIdx] = useState<number | null>(null);
   const [branchDragOverIdx, setBranchDragOverIdx] = useState<number | null>(null);
-  const hasSystemClipboard = canReadSystemClipboard();
 
   const dragClass = dragConfig?.isDragging
     ? 'opacity-50 ring-1 ring-accent/50'
@@ -1589,6 +1688,8 @@ export function ActionNodeEditor({
     'remote_climate',
     'track_popup',
     'popup',
+    'hud_nav',
+    'nav',
     'delay',
     'if_then',
     'choose',
@@ -1603,8 +1704,12 @@ export function ActionNodeEditor({
     act.type === 'transmit' ||
     !isBuiltinNonCanTx;
 
-  // Action naming & catalog resolution (available to all action types and actionButtons)
-  const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForAction(act, catalog) : { command: undefined, matchedOption: undefined };
+  // Action naming & catalog resolution (only CAN TX and cycle_entity resolve catalog commands)
+  const shouldResolveCatalogCmd = isCanTxAction || act.type === 'cycle_entity';
+  const { command: catalogCmd, matchedOption } =
+    catalog && shouldResolveCatalogCmd
+      ? resolveCatalogCommandForAction(act, catalog)
+      : { command: undefined, matchedOption: undefined };
   const hasOptions = isCanTxAction && !!(catalogCmd?.options && catalogCmd.options.length > 0);
   const isRangeEntity = isCanTxAction && isRangeCommand(catalogCmd);
   const hasPills = hasOptions && !isRangeEntity;
@@ -1612,27 +1717,29 @@ export function ActionNodeEditor({
   const actionName =
     act.type === 'cycle_entity'
       ? `Cycle ${catalogCmd?.ha_metadata?.name || catalogCmd?.name || act.entity_id || 'Entity'}`
+      : act.type === 'hud_nav' || act.type === 'nav'
+      ? 'HUD & Cluster Turn-by-Turn'
+      : act.type === 'track_popup' || act.type === 'popup'
+      ? 'Cluster Popup'
+      : act.type === 'precondition'
+      ? 'Battery Preconditioning'
+      : act.type === 'climate_target' || act.type === 'remote_climate'
+      ? 'Climate Target'
+      : act.type === 'delay'
+      ? `Delay ${act.delay_ms || act.ms || 0}ms`
+      : act.type === 'if_then'
+      ? 'IF-THEN-ELSE'
+      : act.type === 'choose'
+      ? 'CHOOSE'
+      : act.type === 'wait_for'
+      ? 'Wait For'
+      : act.type === 'repeat_until'
+      ? 'Repeat Until'
       : catalogCmd?.ha_metadata?.name ||
         catalogCmd?.name ||
         act.source_command_name ||
         (act.can_id
           ? `CAN Transmit ${formatCanId(act.can_id)}`
-          : act.type === 'if_then'
-          ? 'IF-THEN-ELSE'
-          : act.type === 'choose'
-          ? 'CHOOSE'
-          : act.type === 'wait_for'
-          ? 'Wait For'
-          : act.type === 'repeat_until'
-          ? 'Repeat Until'
-          : act.type === 'climate_target' || act.type === 'remote_climate'
-          ? 'Climate Target'
-          : act.type === 'precondition'
-          ? 'Battery Preconditioning'
-          : act.type === 'track_popup' || act.type === 'popup'
-          ? 'Cluster Popup'
-          : act.type === 'delay'
-          ? `Delay ${act.delay_ms || act.ms || 0}ms`
           : `Action ${index + 1}`);
 
   const actionButtons = (
@@ -2074,7 +2181,7 @@ export function ActionNodeEditor({
               })}
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap pt-1">
+            <div className="flex items-center gap-2 flex-wrap mt-2">
               <button
                 type="button"
                 onClick={() => {
@@ -2091,7 +2198,7 @@ export function ActionNodeEditor({
                 <span>Add Choice Branch</span>
               </button>
 
-              {clipboard?.type === 'choice_branch' ? (
+              {clipboard?.type === 'choice_branch' && (
                 <button
                   type="button"
                   onClick={() => {
@@ -2102,31 +2209,12 @@ export function ActionNodeEditor({
                       }
                     })();
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-500/15 hover:bg-purple-500/25 text-purple-600 dark:text-purple-400 border border-purple-500/40 transition cursor-pointer"
+                  className="ha-section-paste-btn bg-purple-500/15 hover:bg-purple-500/25 text-purple-600 dark:text-purple-400 border border-purple-500/40"
                   title={`Paste copied choice branch "${clipboard.label}"`}
                 >
                   <ClipboardPaste className="w-3.5 h-3.5" />
                   <span>Paste Branch ({clipboard.label})</span>
                 </button>
-              ) : (
-                hasSystemClipboard && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void (async () => {
-                        const pasted = await pasteFromClipboard('choice_branch');
-                        if (pasted) {
-                          onUpdate({ ...act, choices: [...(act.choices || []), pasted] });
-                        }
-                      })();
-                    }}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-surface-tertiary hover:bg-default-hover text-foreground/85 border border-border transition cursor-pointer"
-                    title="Read a Choose Branch JSON block from system clipboard"
-                  >
-                    <ClipboardPaste className="w-3.5 h-3.5 text-purple-500" />
-                    <span>Paste Branch from Clipboard</span>
-                  </button>
-                )
               )}
             </div>
 
@@ -2774,21 +2862,70 @@ export function ActionNodeEditor({
               <label className="block text-[10px] font-sans text-muted">Action Type</label>
               <select
                 value={isCanTx ? 'can_tx' : act.type === 'nav' ? 'hud_nav' : act.type}
-                onChange={e => onUpdate({ ...act, type: e.target.value as any })}
+                onChange={e => {
+                  const nextType = e.target.value as AutomationAction['type'];
+                  if (nextType === 'hud_nav') {
+                    const {
+                      source_command_id: _sci,
+                      source_command_name: _scn,
+                      entity_id: _eid,
+                      target_command_id: _tci,
+                      command: _cmd,
+                      option_label: _ol,
+                      can_id: _cid,
+                      bus: _bus,
+                      payload: _pay,
+                      steps: _steps,
+                      repeat: _rep,
+                      delay_ms: _del,
+                      popup_message: _pm,
+                      ...rest
+                    } = act as any;
+                    onUpdate({
+                      ...rest,
+                      type: 'hud_nav',
+                      nav_action: act.nav_action || (act.action === 'clear' ? 'clear' : 'update'),
+                      icon: act.icon ?? 1,
+                      distance_meters: act.distance_meters ?? 200,
+                      bars: act.bars ?? 4,
+                      speed_limit: act.speed_limit ?? 0,
+                      camera_alert: !!act.camera_alert,
+                      street: act.street ?? ''
+                    });
+                    return;
+                  }
+                  if (nextType !== 'can_tx' && nextType !== 'cycle_entity') {
+                    const {
+                      source_command_id: _sci,
+                      source_command_name: _scn,
+                      entity_id: _eid,
+                      target_command_id: _tci,
+                      command: _cmd,
+                      option_label: _ol,
+                      can_id: _cid,
+                      payload: _pay,
+                      steps: _steps,
+                      ...rest
+                    } = act as any;
+                    onUpdate({ ...rest, type: nextType });
+                    return;
+                  }
+                  onUpdate({ ...act, type: nextType });
+                }}
                 className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground font-sans"
               >
-                <option value="can_tx">can_tx (CAN Transmit)</option>
-                <option value="cycle_entity">cycle_entity (Cyclic Stepper)</option>
-                <option value="hud_nav">hud_nav (HUD Turn-by-Turn Guidance)</option>
-                <option value="precondition">precondition (E-GMP)</option>
-                <option value="climate_target">climate_target (HVAC Temp Target)</option>
-                <option value="track_popup">track_popup (Cluster Popup)</option>
-                <option value="delay">delay</option>
-                <option value="if_then">if_then (Conditional Branch)</option>
-                <option value="choose">choose (Multiple Choices)</option>
-                <option value="repeat_until">repeat_until (Loop)</option>
+                <option value="can_tx">CAN Transmit</option>
+                <option value="cycle_entity">Cyclic Stepper</option>
+                <option value="hud_nav">HUD Turn-by-Turn Guidance</option>
+                <option value="precondition">Battery Preconditioning (E-GMP)</option>
+                <option value="climate_target">HVAC Temp Target</option>
+                <option value="track_popup">Cluster Popup</option>
+                <option value="delay">Wait / Delay</option>
+                <option value="if_then">Conditional Branch</option>
+                <option value="choose">Multiple Choices</option>
+                <option value="repeat_until">Repeat Until (Loop)</option>
                 {act.type === 'webhook' && (
-                  <option value="webhook" disabled>webhook (Unsupported on ESP32)</option>
+                  <option value="webhook" disabled>Webhook (Unsupported on ESP32)</option>
                 )}
               </select>
             </div>
@@ -2897,38 +3034,59 @@ export function ActionNodeEditor({
               </>
             )}
 
-            {(act.type === 'track_popup' || act.type === 'popup') && (
-              <>
-                <div>
-                  <label className="block text-[10px] font-sans text-muted">Severity Level</label>
-                  <select
-                    value={act.level || 'info'}
-                    onChange={e => onUpdate({ ...act, level: e.target.value as any })}
-                    className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground font-sans"
-                  >
-                    <option value="info">Info</option>
-                    <option value="warning">Warning</option>
-                    <option value="error">Error</option>
-                  </select>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between">
-                    <label className="block text-[10px] font-sans text-muted">Popup Text</label>
-                    <span className="text-[9px] text-muted font-mono">
-                      {(act.text || act.popup_message || '').length}/50
-                    </span>
+            {(act.type === 'track_popup' || act.type === 'popup') && (() => {
+              const popupText = act.text || act.popup_message || '';
+              const totalToastChars = getClusterPopupTotalCodeUnits(popupText, true);
+              const isOverClusterLimit = totalToastChars > CLUSTER_POPUP_MAX_CODE_UNITS;
+              return (
+                <>
+                  <div>
+                    <label className="block text-[10px] font-sans text-muted">Severity Level</label>
+                    <select
+                      value={act.level || 'info'}
+                      onChange={e => onUpdate({ ...act, level: e.target.value as any })}
+                      className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground font-sans"
+                    >
+                      <option value="info">Info</option>
+                      <option value="warning">Warning</option>
+                      <option value="error">Error</option>
+                    </select>
                   </div>
-                  <input
-                    type="text"
-                    maxLength={50}
-                    value={act.text || act.popup_message || ''}
-                    onChange={e => onUpdate({ ...act, text: e.target.value, popup_message: e.target.value })}
-                    placeholder="Message text..."
-                    className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-warning font-medium"
-                  />
-                </div>
-              </>
-            )}
+                  <div className="sm:col-span-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[10px] font-sans text-muted">Popup Text</label>
+                      <span
+                        className={`text-[9px] font-mono ${
+                          isOverClusterLimit
+                            ? 'text-danger font-bold'
+                            : totalToastChars >= 45
+                            ? 'text-warning font-semibold'
+                            : 'text-muted'
+                        }`}
+                        title={`Includes 2-char severity icon prefix (max ${CLUSTER_POPUP_MAX_TEXT_CODE_UNITS} text chars = ${CLUSTER_POPUP_MAX_CODE_UNITS} total on cluster)`}
+                      >
+                        {totalToastChars}/{CLUSTER_POPUP_MAX_CODE_UNITS} (incl. icon)
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      maxLength={CLUSTER_POPUP_MAX_TEXT_CODE_UNITS}
+                      value={popupText}
+                      onChange={e => onUpdate({ ...act, text: e.target.value, popup_message: e.target.value })}
+                      placeholder={`Message text (max ${CLUSTER_POPUP_MAX_TEXT_CODE_UNITS} chars)...`}
+                      className={`w-full bg-surface-tertiary border rounded px-2 py-1 text-warning font-medium ${
+                        isOverClusterLimit ? 'border-danger focus:outline-none focus:ring-1 focus:ring-danger' : 'border-border'
+                      }`}
+                    />
+                    {isOverClusterLimit && (
+                      <p className="text-[10px] font-sans text-danger mt-1">
+                        Toast is {totalToastChars}/{CLUSTER_POPUP_MAX_CODE_UNITS} characters (including 2-char severity icon). Firmware drops popups over {CLUSTER_POPUP_MAX_CODE_UNITS} characters — shorten to ≤{CLUSTER_POPUP_MAX_TEXT_CODE_UNITS}.
+                      </p>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
 
             {act.type === 'cycle_entity' && (
               <CycleEntityStepperConfig
@@ -3311,7 +3469,6 @@ export function ActionListEditor({
   const listId = useId();
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
-  const hasSystemClipboard = canReadSystemClipboard();
 
   const handlePasteAction = async () => {
     const pasted = await pasteFromClipboard('action');
@@ -3439,7 +3596,7 @@ export function ActionListEditor({
         </div>
       )}
 
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap mt-2">
         <button
           type="button"
           onClick={() => {
@@ -3455,32 +3612,18 @@ export function ActionListEditor({
           <span>Add Action</span>
         </button>
 
-        {clipboard?.type === 'action' ? (
+        {clipboard?.type === 'action' && (
           <button
             type="button"
             onClick={() => {
               void handlePasteAction();
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-success-soft hover:bg-success/20 text-success-soft-foreground border border-success/40 transition cursor-pointer"
+            className="ha-section-paste-btn bg-success-soft hover:bg-success/20 text-success-soft-foreground border border-success/40"
             title={`Paste copied action: "${clipboard.label}"`}
           >
             <ClipboardPaste className="w-3.5 h-3.5 text-success" />
             <span>Paste Action ({clipboard.label})</span>
           </button>
-        ) : (
-          hasSystemClipboard && (
-            <button
-              type="button"
-              onClick={() => {
-                void handlePasteAction();
-              }}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-surface-tertiary hover:bg-default-hover text-foreground/85 border border-border transition cursor-pointer"
-              title="Read an Action JSON block from system clipboard"
-            >
-              <ClipboardPaste className="w-3.5 h-3.5 text-success" />
-              <span>Paste from Clipboard</span>
-            </button>
-          )
         )}
       </div>
     </div>

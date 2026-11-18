@@ -224,10 +224,12 @@ class CanDoBinarySensorEntity(CanDoEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool | None:
         """Return True if binary sensor is triggered / active."""
-        # 0. Direct entity string/boolean state from coordinator (e.g. "Open" / "Closed" / "Active" / "Off")
+        # 0. Direct entity string/boolean/numeric state from coordinator (e.g. "Open" / "Closed" / "Active" / "Off" / 1.0)
         direct_str = self.coordinator.get_can_state(self.entity_id_str)
         if isinstance(direct_str, bool):
             return direct_str
+        if isinstance(direct_str, (int, float)):
+            return bool(direct_str != 0)
         if isinstance(direct_str, str):
             if _is_bs_off_label(direct_str):
                 return False

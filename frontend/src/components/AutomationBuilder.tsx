@@ -116,9 +116,12 @@ import { matchesRuleSearch } from '../utils/ruleSummaries';
 import { validateAutomationRules, AutomationValidationReport } from '../utils/canValidator';
 import {
   arrayMove,
+  canAcceptGlobalPasteTarget,
   canReadSystemClipboard,
+  ClipboardReadPermissionState,
   getActiveScopedDrag,
   parseClipboardText,
+  queryClipboardReadPermission,
   resolveClipboardPaste,
   serializeClipboardEnvelope,
   setActiveScopedDrag
@@ -222,22 +225,41 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const triggerListId = useId();
   const [triggerDragIdx, setTriggerDragIdx] = useState<number | null>(null);
   const [triggerDragOverIdx, setTriggerDragOverIdx] = useState<number | null>(null);
-  const hasSystemClipboard = canReadSystemClipboard();
 
   const showClipboardToast = useCallback((message: string, type: 'success' | 'error' | 'info') => {
     setActionTestToast({ message, type });
     setTimeout(() => setActionTestToast(null), 3200);
   }, []);
 
-  // Global Automation Clipboard state
+  const persistClipboardStorage = useCallback((item: AutomationClipboardItem | null) => {
+    try {
+      if (item) {
+        const serialized = JSON.stringify(item);
+        localStorage.setItem(CLIPBOARD_STORAGE_KEY, serialized);
+        sessionStorage.setItem(CLIPBOARD_STORAGE_KEY, serialized);
+      } else {
+        localStorage.removeItem(CLIPBOARD_STORAGE_KEY);
+        sessionStorage.removeItem(CLIPBOARD_STORAGE_KEY);
+      }
+    } catch {
+      // Storage quota or disabled
+    }
+  }, []);
+
+  // Global Automation Clipboard state (synced across tabs via localStorage + OS clipboard when granted / on Ctrl+V)
   const [clipboard, setClipboard] = useState<AutomationClipboardItem | null>(() => {
     try {
-      const saved = sessionStorage.getItem(CLIPBOARD_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : null;
+      const saved = localStorage.getItem(CLIPBOARD_STORAGE_KEY) || sessionStorage.getItem(CLIPBOARD_STORAGE_KEY);
+      if (!saved) return null;
+      const parsed = JSON.parse(saved);
+      return parsed && typeof parsed === 'object' && parsed.type && parsed.payload ? parsed : null;
     } catch {
       return null;
     }
   });
+  const clipboardOriginRef = useRef<'app' | 'system' | 'paste' | null>(clipboard ? 'app' : null);
+  const osClipboardSyncedRef = useRef(false);
+  const clipboardPermissionRef = useRef<ClipboardReadPermissionState>('prompt');
 
   const copyToClipboard = useCallback((type: ClipboardBlockType, payload: any, label: string) => {
     const item: AutomationClipboardItem = {
@@ -246,16 +268,16 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
       timestamp: Date.now(),
       label
     };
+    clipboardOriginRef.current = 'app';
+    osClipboardSyncedRef.current = false;
     setClipboard(item);
-    try {
-      sessionStorage.setItem(CLIPBOARD_STORAGE_KEY, JSON.stringify(item));
-    } catch {
-      // Storage quota or disabled
-    }
+    persistClipboardStorage(item);
+
     if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
       void navigator.clipboard
         .writeText(serializeClipboardEnvelope(item))
         .then(() => {
+          osClipboardSyncedRef.current = true;
           showClipboardToast(`Copied "${label}" to system clipboard.`, 'success');
         })
         .catch(() => {
@@ -264,14 +286,152 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     } else {
       showClipboardToast(`Copied "${label}" (in-app clipboard).`, 'info');
     }
-  }, [showClipboardToast]);
+  }, [persistClipboardStorage, showClipboardToast]);
 
   const clearClipboard = useCallback(() => {
+    clipboardOriginRef.current = null;
+    osClipboardSyncedRef.current = false;
     setClipboard(null);
+    persistClipboardStorage(null);
+  }, [persistClipboardStorage]);
+
+  const syncFromSystemClipboard = useCallback(async () => {
+    if (!canReadSystemClipboard()) return;
+    if (clipboardPermissionRef.current !== 'granted') return;
     try {
-      sessionStorage.removeItem(CLIPBOARD_STORAGE_KEY);
-    } catch {}
+      const rawText = await navigator.clipboard.readText();
+      const parsed = parseClipboardText(rawText);
+      if (parsed) {
+        setClipboard(prev => {
+          const prevPayload = prev ? JSON.stringify(prev.payload) : '';
+          const nextPayload = JSON.stringify(parsed.payload);
+          if (prev && prev.type === parsed.type && prev.label === parsed.label && prevPayload === nextPayload) {
+            return prev;
+          }
+          clipboardOriginRef.current = 'system';
+          osClipboardSyncedRef.current = true;
+          persistClipboardStorage(parsed);
+          return parsed;
+        });
+      } else if (clipboardOriginRef.current === 'system' || osClipboardSyncedRef.current) {
+        // OS clipboard now holds non-CAN-Do content (plain text, URL, etc.) -> hide stale Paste pills
+        clipboardOriginRef.current = null;
+        osClipboardSyncedRef.current = false;
+        setClipboard(null);
+        persistClipboardStorage(null);
+      }
+    } catch {
+      // Document may not be focused or permission revoked; keep existing state
+    }
+  }, [persistClipboardStorage]);
+
+  // 1. Cross-tab clipboard sync via localStorage storage events
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key !== CLIPBOARD_STORAGE_KEY) return;
+      if (!e.newValue) {
+        clipboardOriginRef.current = null;
+        osClipboardSyncedRef.current = false;
+        setClipboard(null);
+        return;
+      }
+      try {
+        const parsed = JSON.parse(e.newValue);
+        if (parsed && typeof parsed === 'object' && parsed.type && parsed.payload) {
+          clipboardOriginRef.current = 'app';
+          setClipboard(parsed);
+        }
+      } catch {
+        // Ignore malformed storage payload
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
   }, []);
+
+  // 2. Silent OS clipboard inspection when 'clipboard-read' permission is already granted
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    let active = true;
+    let permStatus: PermissionStatus | null = null;
+
+    const refreshClipboard = () => {
+      if (!active) return;
+      if (clipboardPermissionRef.current === 'granted') {
+        void syncFromSystemClipboard();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshClipboard();
+      }
+    };
+
+    const initPermissionWatcher = async () => {
+      const state = await queryClipboardReadPermission();
+      if (!active) return;
+      clipboardPermissionRef.current = state;
+      if (state === 'granted') {
+        void syncFromSystemClipboard();
+      }
+      if (typeof navigator !== 'undefined' && navigator.permissions?.query) {
+        try {
+          permStatus = await navigator.permissions.query({ name: 'clipboard-read' as PermissionName });
+          if (!active) return;
+          permStatus.onchange = () => {
+            if (!active || !permStatus) return;
+            clipboardPermissionRef.current = permStatus.state as ClipboardReadPermissionState;
+            if (permStatus.state === 'granted') {
+              void syncFromSystemClipboard();
+            } else if (permStatus.state === 'denied' && clipboardOriginRef.current === 'system') {
+              clearClipboard();
+            }
+          };
+        } catch {
+          // Browser doesn't support clipboard-read permission query (e.g. Firefox/Safari)
+        }
+      }
+    };
+
+    void initPermissionWatcher();
+    window.addEventListener('focus', refreshClipboard);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      active = false;
+      if (permStatus) permStatus.onchange = null;
+      window.removeEventListener('focus', refreshClipboard);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [clearClipboard, syncFromSystemClipboard]);
+
+  // 3. Zero-permission Ctrl+V / Cmd+V global paste detection (only outside form inputs/modals)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleWindowPaste = (e: ClipboardEvent) => {
+      if (!canAcceptGlobalPasteTarget(e.target)) return;
+      const rawText = e.clipboardData?.getData('text/plain') || '';
+      if (!rawText) return;
+      const parsed = parseClipboardText(rawText);
+      if (!parsed) return;
+      e.preventDefault();
+      clipboardOriginRef.current = 'paste';
+      osClipboardSyncedRef.current = true;
+      setClipboard(parsed);
+      persistClipboardStorage(parsed);
+      const friendlyType =
+        parsed.type === 'choice_branch' || parsed.type === 'branch'
+          ? 'Choice Branch'
+          : parsed.type.charAt(0).toUpperCase() + parsed.type.slice(1);
+      showClipboardToast(
+        `Loaded ${friendlyType} "${parsed.label}" from clipboard — click Paste in the matching section.`,
+        'info'
+      );
+    };
+    window.addEventListener('paste', handleWindowPaste);
+    return () => window.removeEventListener('paste', handleWindowPaste);
+  }, [persistClipboardStorage, showClipboardToast]);
 
   const pastePayload = useCallback((targetType?: ClipboardBlockType): any | null => {
     if (!clipboard) return null;
@@ -280,18 +440,18 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   }, [clipboard]);
 
   const pasteFromClipboard = useCallback(async (targetType: ClipboardBlockType): Promise<any | null> => {
-    // 1. Try reading fresh JSON from OS system clipboard first (supports cross-tab & JSON Inspector paste)
-    if (canReadSystemClipboard()) {
+    // 1. If OS clipboard read permission is already granted, read fresh OS clipboard first
+    if (clipboardPermissionRef.current === 'granted' && canReadSystemClipboard()) {
       try {
         const rawText = await navigator.clipboard.readText();
         const parsedSystemItem = parseClipboardText(rawText);
         if (parsedSystemItem) {
           const res = resolveClipboardPaste(parsedSystemItem, targetType);
           if (res.ok) {
+            clipboardOriginRef.current = 'system';
+            osClipboardSyncedRef.current = true;
             setClipboard(parsedSystemItem);
-            try {
-              sessionStorage.setItem(CLIPBOARD_STORAGE_KEY, JSON.stringify(parsedSystemItem));
-            } catch {}
+            persistClipboardStorage(parsedSystemItem);
             showClipboardToast(
               res.convertedFrom
                 ? `Pasted & converted "${parsedSystemItem.label}" from system clipboard.`
@@ -306,11 +466,11 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           return null;
         }
       } catch {
-        // Permission denied or focus restriction — silently fall back to sessionStorage state
+        // Fall through to cached clipboard item
       }
     }
 
-    // 2. Fallback to sessionStorage in-app clipboard
+    // 2. Use cached in-app / cross-tab / Ctrl+V clipboard item without prompting for OS permissions
     if (clipboard) {
       const res = resolveClipboardPaste(clipboard, targetType);
       if (res.ok) {
@@ -322,9 +482,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
       return null;
     }
 
-    showClipboardToast('System clipboard does not contain a valid CAN Do block JSON.', 'info');
+    showClipboardToast('Clipboard does not contain a valid CAN Do block JSON.', 'info');
     return null;
-  }, [clipboard, showClipboardToast]);
+  }, [clipboard, persistClipboardStorage, showClipboardToast]);
 
   const [useMqttSync, setUseMqttSync] = useState(false);
   const [mqttRemoteConfig, setMqttRemoteConfig] = useState({
@@ -1872,11 +2032,10 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onPress={() =>
+                  <div className="flex items-center gap-2 flex-wrap mt-2">
+                    <button
+                      type="button"
+                      onClick={() =>
                         openAddTriggerDialog(newTrig =>
                           handleUpdateActiveRule({ triggers: [...activeRule.triggers, newTrig] })
                         )
@@ -1885,13 +2044,12 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     >
                       <Plus className="w-4 h-4" />
                       <span>Add Trigger</span>
-                    </Button>
+                    </button>
 
                     {clipboard?.type === 'trigger' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onPress={() => {
+                      <button
+                        type="button"
+                        onClick={() => {
                           void (async () => {
                             const pasted = await pasteFromClipboard('trigger');
                             if (pasted) {
@@ -1899,19 +2057,18 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                             }
                           })();
                         }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-warning-soft hover:opacity-90 text-warning-soft-foreground border border-warning/40 transition cursor-pointer"
+                        className="ha-section-paste-btn bg-warning-soft hover:opacity-90 text-warning-soft-foreground border border-warning/40"
                         aria-label={`Paste copied trigger "${clipboard.label}"`}
                       >
                         <ClipboardPaste className="w-3.5 h-3.5 text-warning" />
                         <span>Paste Trigger ({clipboard.label})</span>
-                      </Button>
+                      </button>
                     )}
 
                     {clipboard?.type === 'condition' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onPress={() => {
+                      <button
+                        type="button"
+                        onClick={() => {
                           void (async () => {
                             const pasted = await pasteFromClipboard('trigger');
                             if (pasted) {
@@ -1919,32 +2076,12 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                             }
                           })();
                         }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-accent-soft hover:opacity-90 text-accent-soft-foreground border border-accent/40 transition cursor-pointer"
+                        className="ha-section-paste-btn bg-accent-soft hover:opacity-90 text-accent-soft-foreground border border-accent/40"
                         aria-label={`Convert & paste copied condition "${clipboard.label}" as trigger`}
                       >
                         <ClipboardPaste className="w-3.5 h-3.5 text-accent" />
                         <span>Paste as Trigger ({clipboard.label})</span>
-                      </Button>
-                    )}
-
-                    {clipboard?.type !== 'trigger' && clipboard?.type !== 'condition' && hasSystemClipboard && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onPress={() => {
-                          void (async () => {
-                            const pasted = await pasteFromClipboard('trigger');
-                            if (pasted) {
-                              handleUpdateActiveRule({ triggers: [...activeRule.triggers, pasted] });
-                            }
-                          })();
-                        }}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-surface-tertiary hover:bg-default-hover text-foreground/85 border border-border transition cursor-pointer"
-                        aria-label="Read a Trigger or Condition JSON block from system clipboard"
-                      >
-                        <ClipboardPaste className="w-3.5 h-3.5 text-warning" />
-                        <span>Paste from Clipboard</span>
-                      </Button>
+                      </button>
                     )}
                   </div>
                 </>

@@ -65,8 +65,8 @@ class CanDoSelectEntity(CanDoEntity, SelectEntity):
                     if lbl in self.options:
                         return lbl
 
-                # Fallback for E-GMP seat comfort (0x496 Driver, 0x475 Passenger)
-                if self.state_can_id.lower() in ("0x496", "0x475") and len(payload) >= 1:
+                # Fallback for E-GMP seat comfort (0x496 Driver, 0x49C/0x475 Passenger)
+                if self.state_can_id.lower() in ("0x496", "0x49c", "0x475") and len(payload) >= 1:
                     b = payload[0]
                     if b in (0x46, 0x02):
                         return "High Heat"
@@ -86,10 +86,17 @@ class CanDoSelectEntity(CanDoEntity, SelectEntity):
             if isinstance(payload, str) and payload in self.options:
                 return payload
 
-        # 2. Direct decoded entity state from coordinator (e.g. from WiCAN / ESP32 emit_live_entity_state)
+        # 2. Direct decoded entity state from coordinator (e.g. from ESP32 emit_live_entity_state)
         entity_val = self.coordinator.get_can_state(self.entity_id_str)
-        if entity_val and isinstance(entity_val, str) and entity_val in self.options:
-            return entity_val
+        if entity_val is not None:
+            if isinstance(entity_val, str) and entity_val in self.options:
+                return entity_val
+            if isinstance(entity_val, (int, float)) and not isinstance(entity_val, bool):
+                candidates = [str(int(entity_val)) if float(entity_val).is_integer() else str(entity_val)]
+                candidates.append(f"{candidates[0]}%")
+                for cand in candidates:
+                    if cand in self.options:
+                        return cand
 
         return self._current_option
 
@@ -125,44 +132,9 @@ class CanDoSelectEntity(CanDoEntity, SelectEntity):
             self.coordinator, self.command, action_can_id, self.state_can_id
         )
         steps = build_action_steps(self.command, target_opt, base_payload)
-        if self.entity_id_str == "ambient_mood_lamp_color" or net.get("type") == "isotp":
+        if self.entity_id_str in ("ambient_mood_lamp_color", "ambient_light_colors", "ambient_mood_lighting") or net.get("type") == "isotp":
             _LOGGER.info("Sending ambient lamp entity command '%s' for '%s'", option, self.name)
             await self.coordinator.async_send_entity_command(self.entity_id_str, option)
-
-            # Map ambient mood lamp presets to corresponding 0x4AD 2-stage frame bursts
-            hex_map: dict[str, str] = {
-                "cyan": "0064530F00000000",
-                "aqua": "0064530F00000000",
-                "amber": "FF50720700000000",
-                "sunset": "FF50720700000000",
-                "orange": "FF50720700000000",
-                "violet": "8000F00F00000000",
-                "purple": "8000F00F00000000",
-                "white": "FEB4530A00000000",
-                "champagne": "FEB4530A00000000",
-                "red": "FE88000000000000",
-                "crimson": "FE88000000000000",
-                "green": "F7FC630B00000000",
-                "mint": "F7FC630B00000000",
-                "lime": "F7FC630B00000000",
-                "blue": "0054F10F00000000",
-                "pink": "FF00100F00000000",
-                "magenta": "FF00100F00000000",
-                "off": "0000000000000000",
-            }
-            opt_lower = option.lower()
-            matched_hex = None
-            for key, hx in hex_map.items():
-                if key in opt_lower:
-                    matched_hex = hx
-                    break
-
-            if matched_hex:
-                burst_steps = [
-                    {"payload": matched_hex, "repeat": 3, "delay_ms": 25},
-                    {"payload": "0002082000000000", "repeat": 3, "delay_ms": 25},
-                ]
-                await self.coordinator.async_send_action("0x4AD", 25, burst_steps, bus=bus)
         elif steps:
             _LOGGER.info("Selecting option '%s' for '%s'", option, self.name)
             await self.coordinator.async_send_action(action_can_id, delay_ms, steps, bus=bus)

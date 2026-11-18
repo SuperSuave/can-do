@@ -114,6 +114,27 @@ std::unordered_map<std::string, std::string> get_live_state_cache(void) {
     return s_live_state_cache;
 }
 
+static void append_json_escaped(std::string& out, const std::string& val) {
+    for (char ch : val) {
+        if (ch == '"') out += "\\\"";
+        else if (ch == '\\') out += "\\\\";
+        else if (ch == '\n') out += "\\n";
+        else if (ch == '\r') out += "\\r";
+        else if (ch == '\t') out += "\\t";
+        else if (static_cast<uint8_t>(ch) >= 0x20) out += ch;
+    }
+}
+
+static std::string build_ws_state_json(const std::string& entity_id, const std::string& state) {
+    std::string out = "{\"type\":\"state\",\"entity\":\"";
+    out.reserve(entity_id.length() + state.length() + 40);
+    append_json_escaped(out, entity_id);
+    out += "\",\"state\":\"";
+    append_json_escaped(out, state);
+    out += "\"}";
+    return out;
+}
+
 void broadcast_ws_state(const std::string& entity_id, const std::string& state) {
     {
         std::lock_guard<std::mutex> lock(s_state_cache_mutex);
@@ -124,9 +145,7 @@ void broadcast_ws_state(const std::string& entity_id, const std::string& state) 
         s_live_state_cache[entity_id] = state;
     }
     if (!s_has_ws_clients_cached.load(std::memory_order_relaxed)) return;
-    char buf[256];
-    snprintf(buf, sizeof(buf), "{\"type\":\"state\",\"entity\":\"%s\",\"state\":\"%s\"}", entity_id.c_str(), state.c_str());
-    broadcast_ws_raw(buf);
+    broadcast_ws_raw(build_ws_state_json(entity_id, state));
 }
 
 void broadcast_ws_can_frame(const twai_message_t* msg) {
@@ -135,13 +154,17 @@ void broadcast_ws_can_frame(const twai_message_t* msg) {
 }
 
 void broadcast_ws_automation_event(const std::string& id, const std::string& name) {
-    char buf[256];
-    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-    snprintf(buf, sizeof(buf),
-             "{\"type\":\"automation_fired\",\"id\":\"%s\",\"name\":\"%s\",\"ts\":%lu}",
-             id.c_str(), name.c_str(), (unsigned long)now_ms);
     if (!s_has_ws_clients_cached.load(std::memory_order_relaxed)) return;
-    broadcast_ws_raw(buf);
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    std::string out = "{\"type\":\"automation_fired\",\"id\":\"";
+    out.reserve(id.length() + name.length() + 64);
+    append_json_escaped(out, id);
+    out += "\",\"name\":\"";
+    append_json_escaped(out, name);
+    char ts_buf[32];
+    snprintf(ts_buf, sizeof(ts_buf), "\",\"ts\":%lu}", (unsigned long)now_ms);
+    out += ts_buf;
+    broadcast_ws_raw(out);
 }
 
 struct ws_log_item_t {
@@ -2469,6 +2492,47 @@ static esp_err_t api_nav_handler(httpd_req_t *req) {
     }
 }
 
+static void ws_send_initial_snapshot(void *arg) {
+    int *fd_ptr = static_cast<int*>(arg);
+    if (!fd_ptr) return;
+    int fd = *fd_ptr;
+    delete fd_ptr;
+
+    if (!global_web_server || httpd_ws_get_fd_info(global_web_server, fd) != HTTPD_WS_CLIENT_WEBSOCKET) {
+        return;
+    }
+
+    std::unordered_map<std::string, std::string> merged = get_live_state_cache();
+    {
+        std::lock_guard<std::mutex> lock(g_catalog_mutex);
+        for (const auto& entity : global_catalog) {
+            if (!entity.current_state.empty() && entity.current_state != "Unknown") {
+                if (merged.find(entity.id) == merged.end()) {
+                    merged[entity.id] = entity.current_state;
+                }
+            }
+        }
+    }
+    if (merged.find("cond_aux_12v_battery") == merged.end()) {
+        std::string vbat = vbat_sensor_get_last_str();
+        if (!vbat.empty() && vbat != "Unknown") {
+            merged["cond_aux_12v_battery"] = vbat;
+        }
+    }
+
+    for (const auto& pair : merged) {
+        if (pair.second.empty() || pair.second == "Unknown") continue;
+        std::string json = build_ws_state_json(pair.first, pair.second);
+        httpd_ws_frame_t ws_pkt = {};
+        ws_pkt.payload = reinterpret_cast<uint8_t*>(const_cast<char*>(json.c_str()));
+        ws_pkt.len = json.length();
+        ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+        if (httpd_ws_send_frame_async(global_web_server, fd, &ws_pkt) != ESP_OK) {
+            break;
+        }
+    }
+}
+
 static esp_err_t ws_handler(httpd_req_t *req) {
     if (req->method == HTTP_GET) {
         int sockfd = httpd_req_to_sockfd(req);
@@ -2478,6 +2542,10 @@ static esp_err_t ws_handler(httpd_req_t *req) {
         tv.tv_usec = 200000; // 200ms send timeout so a suspended or stalled browser tab never blocks httpd
         setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
         s_has_ws_clients_cached.store(true, std::memory_order_relaxed);
+        int *fd_copy = new (std::nothrow) int(sockfd);
+        if (fd_copy && httpd_queue_work(global_web_server, ws_send_initial_snapshot, fd_copy) != ESP_OK) {
+            delete fd_copy;
+        }
         return ESP_OK;
     }
 

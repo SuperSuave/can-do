@@ -14,7 +14,10 @@ import {
   decodeAirflowEntityState,
   decodeDriverOnlyCanFrame,
   decodeAmbientCanFrame,
+  decodeSignedInt8,
   getAmbientColorHex,
+  isSameAmbientColor,
+  OptimisticHoldTracker,
   AMBIENT_PALETTE_64,
   AIRFLOW_MODE_COMMAND_LABELS,
   displayTempToFahrenheit,
@@ -302,5 +305,93 @@ test('AMBIENT_PALETTE_64 covers all 64 catalog options', () => {
     );
   }
 });
+
+test('decodeSignedInt8 converts negative two-complement BMS temperatures cleanly', () => {
+  assert.strictEqual(decodeSignedInt8(0x00), 0);
+  assert.strictEqual(decodeSignedInt8(0x19), 25);
+  assert.strictEqual(decodeSignedInt8(0x7F), 127);
+  assert.strictEqual(decodeSignedInt8(0xFB), -5);
+  assert.strictEqual(decodeSignedInt8(0xEC), -20);
+  assert.strictEqual(decodeSignedInt8(0x80), -128);
+});
+
+test('isSameAmbientColor matches prefixed catalog labels with unprefixed palette names', () => {
+  assert.strictEqual(
+    isSameAmbientColor('Color 8: Pure Cyan / Aqua Wave', 'Pure Cyan / Aqua Wave'),
+    true
+  );
+  assert.strictEqual(
+    isSameAmbientColor('Color 24: Deep Purple / Violet', 'color 24'),
+    true
+  );
+  assert.strictEqual(
+    isSameAmbientColor('Color 8: Pure Cyan / Aqua Wave', 'Color 46: Crimson Red'),
+    false
+  );
+});
+
+test('parseBooleanEntityState never treats "Driver Only Off" as true', () => {
+  assert.strictEqual(parseBooleanEntityState('Driver Only Off'), false);
+  assert.strictEqual(parseBooleanEntityState('Driver Only On'), true);
+  assert.strictEqual(parseBooleanEntityState('Defroster & Mirrors Off'), false);
+  assert.strictEqual(parseBooleanEntityState('Defroster & Mirrors On'), true);
+  assert.strictEqual(parseBooleanEntityState('Heated Steering Wheel Off'), false);
+  assert.strictEqual(parseBooleanEntityState('Heated Steering Wheel On'), true);
+});
+
+test('OptimisticHoldTracker holds stale frames during TTL and releases on matching confirmation', () => {
+  const tracker = new OptimisticHoldTracker();
+  tracker.setHold('drivers_seat_comfort', 'heat_high', 1800, 1000);
+
+  // Stale medium heat frame at t=1200 is ignored while optimistic hold is active
+  assert.strictEqual(tracker.shouldAccept('drivers_seat_comfort', 'heat_med', 1200), false);
+  // Extending hold keeps protection active across debounce/TX
+  tracker.extendHold('drivers_seat_comfort', 1800, 1500);
+  assert.strictEqual(tracker.shouldAccept('drivers_seat_comfort', 'heat_med', 2900), false);
+
+  // Confirmed value immediately releases hold
+  assert.strictEqual(tracker.shouldAccept('drivers_seat_comfort', 'heat_high', 3000), true);
+  // After release, subsequent changes from the car are accepted immediately
+  assert.strictEqual(tracker.shouldAccept('drivers_seat_comfort', 'heat_med', 3100), true);
+
+  // Expiration releases hold after TTL
+  tracker.setHold('door_locks', 'false', 1000, 5000);
+  assert.strictEqual(tracker.shouldAccept('door_locks', 'true', 6000), true);
+});
+
+test('catalog seat comfort entities all define full 8-byte 0x4A2 steps and climate_sync_toggle uses 0x4A0', () => {
+  const seatIds = [
+    'drivers_seat_comfort',
+    'passengers_seat_comfort',
+    'rear_left_seat_comfort',
+    'rear_right_seat_comfort',
+  ];
+  const expectedKeys = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'];
+
+  for (const id of seatIds) {
+    const cmd = catalog.commands.find(c => c.id === id);
+    assert.ok(cmd, `${id} must exist in catalog`);
+    for (const opt of cmd.options) {
+      assert.ok(Array.isArray(opt.steps) && opt.steps.length >= 2, `${id} option "${opt.label}" must have active + release steps`);
+      for (const step of opt.steps) {
+        const payload = step.payload as Record<string, string>;
+        for (const k of expectedKeys) {
+          assert.ok(k in payload, `${id} option "${opt.label}" step missing ${k}`);
+        }
+        assert.strictEqual(payload.D3, '0xFF');
+        assert.strictEqual(payload.D4, '0x03');
+      }
+    }
+  }
+
+  const syncCmd = catalog.commands.find(c => c.id === 'climate_sync_toggle');
+  assert.ok(syncCmd);
+  assert.strictEqual(syncCmd.network?.action_can_id, '0x4A0');
+  assert.strictEqual(syncCmd.options.length, 2);
+  for (const opt of syncCmd.options) {
+    assert.ok(Array.isArray(opt.steps) && opt.steps.length >= 2);
+  }
+});
+
 
 

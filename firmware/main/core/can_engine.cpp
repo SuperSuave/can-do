@@ -2011,35 +2011,65 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
         std::string new_state = command_label;
         uint8_t payload_4ad[4] = {0};
         bool has_4ad = false;
+        bool is_off_req = false;
 
         // 1. Check if an animated effect is requested
         if (ambient_anim_start_by_name(cmd_lower)) {
             new_state = ambient_anim_get_effect_name();
-            broadcast_ws_state(entity_id, new_state);
+            {
+                std::lock_guard<std::mutex> lock(g_catalog_mutex);
+                for (auto& cat_ent : global_catalog) {
+                    if (cat_ent.id == entity_id || cat_ent.id == "ambient_light_colors") {
+                        cat_ent.current_state = new_state;
+                    }
+                }
+            }
             mqtt_mgr_publish_entity_state(entity_id, new_state);
+            broadcast_ws_state(entity_id, new_state);
+            if (entity_id != "ambient_light_colors") {
+                mqtt_mgr_publish_entity_state("ambient_light_colors", new_state);
+                broadcast_ws_state("ambient_light_colors", new_state);
+            }
             return true;
         }
 
         // If not an animation, stop any running animation task so static color holds
         ambient_anim_stop();
 
+        auto resolve_catalog_color_label = [&](uint8_t b0, uint8_t b1, uint8_t b2, uint8_t b3) -> std::string {
+            std::lock_guard<std::mutex> lock(g_catalog_mutex);
+            for (const auto& cat_ent : global_catalog) {
+                if (cat_ent.id == "ambient_light_colors") {
+                    for (const auto& opt : cat_ent.options) {
+                        if (!opt.steps.empty()) {
+                            const uint8_t* p = opt.steps[0].payload;
+                            if (p[0] == b0 && p[1] == b1 && p[2] == b2 && (p[3] & 0xBF) == (b3 & 0xBF)) {
+                                return opt.label;
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+            return "";
+        };
+
         // 2. Off command
         if (cmd_lower.find("off") != std::string::npos || cmd_lower == "0" || cmd_lower == "false" || cmd_lower == "disable") {
             new_state = "Mood Light Off";
-            ambient_anim_send_off(0);
-            broadcast_ws_state(entity_id, new_state);
-            mqtt_mgr_publish_entity_state(entity_id, new_state);
-            return true;
+            is_off_req = true;
+            has_4ad = true;
         }
-
         // 3. JSON commands (RGB or palette color index)
-        if (!command_label.empty() && command_label[0] == '{') {
+        else if (!command_label.empty() && command_label[0] == '{') {
             cJSON* root = cJSON_Parse(command_label.c_str());
             if (root) {
                 cJSON* idx_it = cJSON_GetObjectItem(root, "color_index");
                 if (!idx_it) idx_it = cJSON_GetObjectItem(root, "index");
                 if (idx_it && cJSON_IsNumber(idx_it) && idx_it->valueint >= 1 && idx_it->valueint <= 64) {
                     ambient_anim_get_palette_color((uint8_t)idx_it->valueint, payload_4ad);
+                    std::string resolved = resolve_catalog_color_label(payload_4ad[0], payload_4ad[1], payload_4ad[2], payload_4ad[3]);
+                    if (!resolved.empty()) new_state = resolved;
                     has_4ad = true;
                 } else {
                     cJSON* r_it = cJSON_GetObjectItem(root, "r");
@@ -2055,51 +2085,63 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
                         uint8_t b = (uint8_t)b_it->valueint;
                         uint8_t pal_idx = ambient_anim_find_closest_palette_index(r, g, b);
                         ambient_anim_get_palette_color(pal_idx, payload_4ad);
+                        std::string resolved = resolve_catalog_color_label(payload_4ad[0], payload_4ad[1], payload_4ad[2], payload_4ad[3]);
+                        if (!resolved.empty()) new_state = resolved;
                         has_4ad = true;
                     }
                 }
                 cJSON_Delete(root);
             }
         }
-        // 6. Explicit 'Color X' index, direct color keyword, or raw hex
+        // 4. Explicit 'Color X' index, catalog option label, direct color keyword, or raw hex
         else {
             int parsed_idx = 0;
             if (sscanf(cmd_lower.c_str(), "color %d", &parsed_idx) == 1 || sscanf(cmd_lower.c_str(), "%d", &parsed_idx) == 1) {
                 if (parsed_idx >= 1 && parsed_idx <= 64) {
                     ambient_anim_get_palette_color((uint8_t)parsed_idx, payload_4ad);
+                    std::string resolved = resolve_catalog_color_label(payload_4ad[0], payload_4ad[1], payload_4ad[2], payload_4ad[3]);
+                    if (!resolved.empty()) new_state = resolved;
                     has_4ad = true;
                 }
             } else if (cmd_lower.find("cyan") != std::string::npos || cmd_lower.find("aqua") != std::string::npos) {
                 ambient_anim_get_palette_color(8, payload_4ad); // Pure Cyan
-                new_state = "Pure Cyan / Aqua Wave";
+                std::string resolved = resolve_catalog_color_label(payload_4ad[0], payload_4ad[1], payload_4ad[2], payload_4ad[3]);
+                new_state = !resolved.empty() ? resolved : "Pure Cyan / Aqua Wave";
                 has_4ad = true;
             } else if (cmd_lower.find("amber") != std::string::npos || cmd_lower.find("orange") != std::string::npos || cmd_lower.find("sunset") != std::string::npos) {
                 ambient_anim_get_palette_color(57, payload_4ad); // Warm Sunset / Amber
-                new_state = "Warm Sunset / Amber";
+                std::string resolved = resolve_catalog_color_label(payload_4ad[0], payload_4ad[1], payload_4ad[2], payload_4ad[3]);
+                new_state = !resolved.empty() ? resolved : "Warm Sunset / Amber";
                 has_4ad = true;
             } else if (cmd_lower.find("violet") != std::string::npos || cmd_lower.find("purple") != std::string::npos) {
                 ambient_anim_get_palette_color(24, payload_4ad); // Deep Purple
-                new_state = "Deep Purple / Violet";
+                std::string resolved = resolve_catalog_color_label(payload_4ad[0], payload_4ad[1], payload_4ad[2], payload_4ad[3]);
+                new_state = !resolved.empty() ? resolved : "Deep Purple / Violet";
                 has_4ad = true;
             } else if (cmd_lower.find("white") != std::string::npos || cmd_lower.find("champagne") != std::string::npos) {
                 ambient_anim_get_palette_color(64, payload_4ad); // Champagne White
-                new_state = "Warm White / Champagne";
+                std::string resolved = resolve_catalog_color_label(payload_4ad[0], payload_4ad[1], payload_4ad[2], payload_4ad[3]);
+                new_state = !resolved.empty() ? resolved : "Warm White / Champagne";
                 has_4ad = true;
             } else if (cmd_lower.find("red") != std::string::npos || cmd_lower.find("crimson") != std::string::npos) {
                 ambient_anim_get_palette_color(46, payload_4ad); // Crimson Red
-                new_state = "Crimson Red";
+                std::string resolved = resolve_catalog_color_label(payload_4ad[0], payload_4ad[1], payload_4ad[2], payload_4ad[3]);
+                new_state = !resolved.empty() ? resolved : "Crimson Red";
                 has_4ad = true;
             } else if (cmd_lower.find("green") != std::string::npos || cmd_lower.find("mint") != std::string::npos || cmd_lower.find("lime") != std::string::npos) {
                 ambient_anim_get_palette_color(1, payload_4ad); // Lime / Mint Glow
-                new_state = "Lime / Mint Glow";
+                std::string resolved = resolve_catalog_color_label(payload_4ad[0], payload_4ad[1], payload_4ad[2], payload_4ad[3]);
+                new_state = !resolved.empty() ? resolved : "Lime / Mint Glow";
                 has_4ad = true;
             } else if (cmd_lower.find("blue") != std::string::npos) {
                 ambient_anim_get_palette_color(15, payload_4ad); // Electric Blue
-                new_state = "Electric Blue";
+                std::string resolved = resolve_catalog_color_label(payload_4ad[0], payload_4ad[1], payload_4ad[2], payload_4ad[3]);
+                new_state = !resolved.empty() ? resolved : "Electric Blue";
                 has_4ad = true;
             } else if (cmd_lower.find("pink") != std::string::npos || cmd_lower.find("magenta") != std::string::npos) {
                 ambient_anim_get_palette_color(33, payload_4ad); // Magenta / Neon Pink
-                new_state = "Magenta / Neon Pink";
+                std::string resolved = resolve_catalog_color_label(payload_4ad[0], payload_4ad[1], payload_4ad[2], payload_4ad[3]);
+                new_state = !resolved.empty() ? resolved : "Magenta / Neon Pink";
                 has_4ad = true;
             } else {
                 std::string clean_hex;
@@ -2110,19 +2152,61 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
                     for (size_t i = 0; i < 4; i++) {
                         payload_4ad[i] = (uint8_t)strtoul(clean_hex.substr(i * 2, 2).c_str(), nullptr, 16);
                     }
+                    std::string resolved = resolve_catalog_color_label(payload_4ad[0], payload_4ad[1], payload_4ad[2], payload_4ad[3]);
+                    if (!resolved.empty()) new_state = resolved;
                     has_4ad = true;
                 }
             }
         }
 
         if (has_4ad) {
-            ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, payload_4ad);
-            ok = true;
+            std::vector<ActionStep> amb_steps;
+            ActionStep s1 = {};
+            s1.type = ActionType::TRANSMIT_FRAME;
+            s1.can_id = AMBIENT_CAN_ID_DASH;
+            s1.bus = 0;
+            s1.mask = 0xFF;
+            s1.repeat = 3;
+            s1.delay_ms = 25;
+            if (!is_off_req) {
+                s1.payload[0] = payload_4ad[0];
+                s1.payload[1] = payload_4ad[1];
+                s1.payload[2] = payload_4ad[2];
+                s1.payload[3] = payload_4ad[3];
+            }
+            amb_steps.push_back(s1);
+
+            ActionStep s2 = {};
+            s2.type = ActionType::TRANSMIT_FRAME;
+            s2.can_id = AMBIENT_CAN_ID_DASH;
+            s2.bus = 0;
+            s2.mask = 0xFF;
+            s2.repeat = 3;
+            s2.delay_ms = 25;
+            s2.payload[0] = 0x00;
+            s2.payload[1] = 0x02;
+            s2.payload[2] = 0x08;
+            s2.payload[3] = 0x20;
+            amb_steps.push_back(s2);
+
+            ok = queue_action_steps(AMBIENT_CAN_ID_DASH, 25, amb_steps, "ambient_light");
         }
 
         if (ok) {
-            broadcast_ws_state(entity_id, new_state);
+            {
+                std::lock_guard<std::mutex> lock(g_catalog_mutex);
+                for (auto& cat_ent : global_catalog) {
+                    if (cat_ent.id == entity_id || cat_ent.id == "ambient_light_colors") {
+                        cat_ent.current_state = new_state;
+                    }
+                }
+            }
             mqtt_mgr_publish_entity_state(entity_id, new_state);
+            broadcast_ws_state(entity_id, new_state);
+            if (entity_id != "ambient_light_colors") {
+                mqtt_mgr_publish_entity_state("ambient_light_colors", new_state);
+                broadcast_ws_state("ambient_light_colors", new_state);
+            }
         }
         return ok;
     }
@@ -2277,7 +2361,15 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
     uint32_t cid = entity.action_can_id ? entity.action_can_id : entity.state_can_id;
     bool ok = queue_action_steps(cid, entity.delay_ms, matched_opt->steps, entity.id);
     if (ok) {
-        entity.current_state = matched_opt->label;
+        {
+            std::lock_guard<std::mutex> lock(g_catalog_mutex);
+            for (auto& cat_ent : global_catalog) {
+                if (cat_ent.id == entity.id) {
+                    cat_ent.current_state = matched_opt->label;
+                    break;
+                }
+            }
+        }
         std::string payload = matched_opt->label;
         if (entity.ha_domain == "switch") {
             std::string l_lower = matched_opt->label;
@@ -2375,18 +2467,22 @@ bool queue_action_steps_ptr(uint32_t can_id, uint32_t delay_ms, const std::vecto
     return queue_action_steps(can_id, delay_ms, *steps, trigger_id, rule_is_running);
 }
 
-static void emit_live_entity_state(const std::string& entity_id, const std::string& state) {
+static void emit_live_entity_state_split(const std::string& entity_id, const std::string& mqtt_state, const std::string& ws_state) {
     {
         std::lock_guard<std::mutex> lock(g_catalog_mutex);
         for (auto& entity : global_catalog) {
             if (entity.id == entity_id) {
-                entity.current_state = state;
+                entity.current_state = ws_state;
                 break;
             }
         }
     }
-    mqtt_mgr_publish_entity_state(entity_id, state);
-    broadcast_ws_state(entity_id, state);
+    mqtt_mgr_publish_entity_state(entity_id, mqtt_state);
+    broadcast_ws_state(entity_id, ws_state);
+}
+
+static void emit_live_entity_state(const std::string& entity_id, const std::string& state) {
+    emit_live_entity_state_split(entity_id, state, state);
 }
 
 void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t data_length_code) {
@@ -2941,26 +3037,26 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
         }
     }
 
-    // Rear Defroster (0x541 Byte 4 mask 0xF0 == 0x10)
+    // Rear Defroster (0x541 Byte 4 [D5] Bit 4: mask 0x10)
     if (identifier == 0x541 && data_length_code >= 5) {
-        bool def = ((data[4] & 0xF0) == 0x10);
+        bool def = ((data[4] & 0x10) != 0);
         static int s_last_def = -1;
         int def_int = def ? 1 : 0;
         if (def_int != s_last_def) {
             s_last_def = def_int;
-            emit_live_entity_state("climate_rear_defrost", def ? "ON" : "OFF");
-            emit_live_entity_state("climate_rear_defog", def ? "ON" : "OFF");
+            emit_live_entity_state_split("climate_rear_defrost", def ? "ON" : "OFF", def ? "Defroster & Mirrors On" : "Defroster & Mirrors Off");
+            emit_live_entity_state_split("climate_rear_defog", def ? "ON" : "OFF", def ? "Defroster & Mirrors On" : "Defroster & Mirrors Off");
         }
     }
 
-    // Heated Steering Wheel (0x418 Byte 0 & 0x03)
-    if (identifier == 0x418 && data_length_code >= 1) {
-        bool st_heat = ((data[0] & 0x03) > 0);
+    // Heated Steering Wheel (0x418 Byte 2 [D3] Bit 0: 0x01 = On, 0x00 = Off)
+    if (identifier == 0x418 && data_length_code >= 3) {
+        bool st_heat = ((data[2] & 0x01) != 0);
         static int s_last_st_heat = -1;
         int heat_int = st_heat ? 1 : 0;
         if (heat_int != s_last_st_heat) {
             s_last_st_heat = heat_int;
-            emit_live_entity_state("heated_steering_wheel_toggle", st_heat ? "ON" : "OFF");
+            emit_live_entity_state_split("heated_steering_wheel_toggle", st_heat ? "ON" : "OFF", st_heat ? "Heated Steering Wheel On" : "Heated Steering Wheel Off");
         }
     }
 
@@ -3106,6 +3202,73 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
         if (s_state != s_last_roof) {
             s_last_roof = s_state;
             emit_live_entity_state("sunroof_extended", s_state);
+        }
+    }
+
+    // Driver-Only Climate Zone (0x465 Byte 6 [D7]: 0x04 = Driver Only On, 0x0C = Off)
+    if (identifier == 0x465 && data_length_code >= 7) {
+        uint8_t d7 = data[6];
+        if (d7 == 0x04 || d7 == 0x0C) {
+            bool dr_only = (d7 == 0x04);
+            static int s_last_dr_only = -1;
+            int dr_int = dr_only ? 1 : 0;
+            if (dr_int != s_last_dr_only) {
+                s_last_dr_only = dr_int;
+                emit_live_entity_state_split("climate_driver_only_toggle", dr_only ? "ON" : "OFF", dr_only ? "Driver Only On" : "Driver Only Off");
+            }
+        }
+    }
+
+    // Ambient Mood Lighting Status & Color (0x455 Byte 0 [D1]: 0x41=Off..0x4B=Lvl10, Bytes 2..5 [D3..D6]: RGB+flag)
+    if (identifier == 0x455 && data_length_code >= 6) {
+        uint8_t b0 = data[0];
+        if (b0 >= 0x41 && b0 <= 0x4B) {
+            int lvl = (int)(b0 - 0x41);
+            static int s_last_amb_bri = -1;
+            if (lvl != s_last_amb_bri) {
+                s_last_amb_bri = lvl;
+                char bri_buf[32];
+                if (lvl == 0) {
+                    snprintf(bri_buf, sizeof(bri_buf), "Off");
+                } else if (lvl == 10) {
+                    snprintf(bri_buf, sizeof(bri_buf), "Brightness Level 10 (Max)");
+                } else {
+                    snprintf(bri_buf, sizeof(bri_buf), "Brightness Level %d", lvl);
+                }
+                emit_live_entity_state("ambient_light_brightness", bri_buf);
+            }
+        }
+
+        if (!ambient_anim_is_active()) {
+            uint8_t c0 = data[2], c1 = data[3], c2 = data[4], c3 = data[5];
+            if (c0 != 0 || c1 != 0 || c2 != 0 || (c3 & 0xBF) != 0) {
+                static uint32_t s_last_amb_color_sig = 0;
+                uint32_t sig = ((uint32_t)c0 << 24) | ((uint32_t)c1 << 16) | ((uint32_t)c2 << 8) | (uint32_t)(c3 & 0xBF);
+                if (sig != s_last_amb_color_sig) {
+                    s_last_amb_color_sig = sig;
+                    std::string matched_color;
+                    {
+                        std::lock_guard<std::mutex> lock(g_catalog_mutex);
+                        for (const auto& cat_ent : global_catalog) {
+                            if (cat_ent.id == "ambient_light_colors") {
+                                for (const auto& opt : cat_ent.options) {
+                                    if (!opt.steps.empty()) {
+                                        const uint8_t* p = opt.steps[0].payload;
+                                        if (p[0] == c0 && p[1] == c1 && p[2] == c2 && (p[3] & 0xBF) == (c3 & 0xBF)) {
+                                            matched_color = opt.label;
+                                            break;
+                                        }
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    if (!matched_color.empty()) {
+                        emit_live_entity_state("ambient_light_colors", matched_color);
+                    }
+                }
+            }
         }
     }
 }

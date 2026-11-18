@@ -185,9 +185,9 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
         self._attr_effect_list = effects if effects else list(PALETTE_64_RGB_MAP.keys())
 
     async def async_added_to_hass(self) -> None:
-        """Register CAN state listeners for 0x455 (infotainment) and 0x2DB (MLU hardware)."""
+        """Register CAN state listeners for 0x455 (infotainment), 0x2DB (MLU hardware), and direct ambient entity states."""
         await super().async_added_to_hass()
-        for can_id in ("0x455", "0x2db"):
+        for can_id in ("0x455", "0x2db", "ambient_light_colors", "ambient_light_brightness", "ambient_mood_lighting"):
             if can_id != (self.state_can_id or "").lower():
                 unsub = self.coordinator.register_listener(can_id, self._handle_can_update)
                 self._unsub_listeners.append(unsub)
@@ -214,6 +214,17 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
             elif mood_bits == 0x00:
                 return False
 
+        # 3b. Check live entity state for ambient_light_brightness if emitted as scalar/label
+        bright_direct = self.coordinator.get_can_state("ambient_light_brightness")
+        if isinstance(bright_direct, (int, float)):
+            return bright_direct > 0
+        if isinstance(bright_direct, str):
+            bs = bright_direct.strip().lower()
+            if bs == "off" or bs == "0":
+                return False
+            if "brightness" in bs:
+                return True
+
         # 4. Fall back to optimistic state
         return self._is_on
 
@@ -226,7 +237,7 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
 
     @property
     def effect(self) -> str | None:
-        """Return current effect preset decoded from live 0x455 telemetry."""
+        """Return current effect preset decoded from live 0x455 telemetry or entity state."""
         raw_455 = self.coordinator.get_can_payload("0x455")
         if raw_455 and len(raw_455) >= 6:
             color_sig = (raw_455[2], raw_455[3], raw_455[4], raw_455[5])
@@ -236,6 +247,16 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
                 if matched_label in PALETTE_64_RGB_MAP:
                     self._rgb_color = PALETTE_64_RGB_MAP[matched_label]
                 return matched_label
+
+        # Fallback to direct entity state published by ESP32 (e.g. animations or preset sync)
+        for state_key in (self.entity_id_str, "ambient_light_colors", "ambient_mood_lighting"):
+            direct = self.coordinator.get_can_state(state_key)
+            if isinstance(direct, str) and direct and "off" not in direct.lower():
+                if direct in self._options_by_label or direct in DYNAMIC_ANIMATIONS or direct in PALETTE_64_RGB_MAP:
+                    self._effect = direct
+                    if direct in PALETTE_64_RGB_MAP:
+                        self._rgb_color = PALETTE_64_RGB_MAP[direct]
+                    return direct
 
         return self._effect
 
@@ -251,6 +272,21 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
                 return val
             # When light is off, preserve last non-zero brightness so HA doesn't wipe slider
             return self._brightness
+
+        bright_direct = self.coordinator.get_can_state("ambient_light_brightness")
+        if isinstance(bright_direct, (int, float)) and bright_direct > 0:
+            lvl = max(1, min(10, round(bright_direct)))
+            val = int(round((lvl / 10.0) * 255))
+            self._brightness = val
+            return val
+        if isinstance(bright_direct, str):
+            import re
+            m = re.search(r"level\s*(\d+)", bright_direct, re.IGNORECASE)
+            if m:
+                lvl = max(1, min(10, int(m.group(1))))
+                val = int(round((lvl / 10.0) * 255))
+                self._brightness = val
+                return val
 
         return self._brightness
 
@@ -294,7 +330,15 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
         net = self.command.get("network", {})
         action_can_id = net.get("action_can_id", "0x4AD")
         delay_ms = net.get("delay_ms", 25)
+        bus = net.get("bus")
         entity_cmd_id = self.entity_id_str or "ambient_light_colors"
+        edge_managed = entity_cmd_id in (
+            "ambient_mood_lamp_color",
+            "ambient_mood_lighting",
+            "ambient_light_colors",
+            "mood_lighting",
+            "ambient_light",
+        )
 
         target_opt = None
         r, g, b = self._rgb_color
@@ -307,7 +351,7 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
             if target_opt:
                 self._effect = target_opt.get("label")
 
-            # 1. Send RGB payload to edge engine
+            # Firmware queue_entity_command handles RGB -> closest 64-palette color + 2-stage 0x4AD TX + MQTT/WS sync
             rgb_payload = json.dumps({"r": r, "g": g, "b": b, "mode": 1})
             _LOGGER.info("Sending Ambient Light RGB (%d, %d, %d) to coordinator", r, g, b)
             await self.coordinator.async_send_entity_command(entity_cmd_id, rgb_payload)
@@ -337,8 +381,8 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
             await self.coordinator.async_send_entity_command(entity_cmd_id, cmd_name)
             color_changed = True
 
-        # 2. Transmit 2-stage CAN burst for target color option to Dash (0x4AD)
-        if color_changed and target_opt:
+        # Only transmit fallback raw 0x4AD burst when entity ID is not natively handled by firmware queue_entity_command
+        if color_changed and target_opt and not edge_managed:
             steps = build_action_steps(self.command, target_opt)
             if steps:
                 for s in steps:
@@ -346,9 +390,9 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
                         s["repeat"] = 3
                     s["delay_ms"] = delay_ms
                 _LOGGER.info("Sending 0x4AD 2-stage burst (%d steps) for ambient light color", len(steps))
-                await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
+                await self.coordinator.async_send_action(action_can_id, delay_ms, steps, bus=bus)
 
-        # 3. Transmit 2-stage CAN burst for brightness adjustment
+        # Transmit 2-stage CAN burst for brightness adjustment
         if ATTR_BRIGHTNESS in kwargs:
             brightness = kwargs[ATTR_BRIGHTNESS]
             self._brightness = brightness
@@ -364,7 +408,7 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
                 {"payload": "0002082000000000", "repeat": 3, "delay_ms": delay_ms},
             ]
             _LOGGER.info("Setting ambient light brightness to level %d (HA %d)", level, brightness)
-            await self.coordinator.async_send_action(action_can_id, delay_ms, brightness_steps)
+            await self.coordinator.async_send_action(action_can_id, delay_ms, brightness_steps, bus=bus)
         elif not self.is_on:
             # If turning on from OFF without explicit brightness, restore last known brightness level (default 10)
             level = max(1, min(10, round((self._brightness / 255.0) * 10))) if self._brightness > 0 else 10
@@ -375,7 +419,7 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
                 {"payload": "0002082000000000", "repeat": 3, "delay_ms": delay_ms},
             ]
             _LOGGER.info("Activating ambient light at brightness level %d", level)
-            await self.coordinator.async_send_action(action_can_id, delay_ms, brightness_steps)
+            await self.coordinator.async_send_action(action_can_id, delay_ms, brightness_steps, bus=bus)
 
         self._is_on = True
         self.async_write_ha_state()
@@ -385,18 +429,19 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
         net = self.command.get("network", {})
         action_can_id = net.get("action_can_id", "0x4AD")
         delay_ms = net.get("delay_ms", 25)
+        bus = net.get("bus")
         entity_cmd_id = self.entity_id_str or "ambient_light_colors"
 
         _LOGGER.info("Turning off ambient mood lighting")
-        # 1. Send ambient light off command to edge engine
+        # 1. Stop any running animation & publish off state in edge engine
         await self.coordinator.async_send_entity_command(entity_cmd_id, "off")
 
-        # 2. Transmit 2-stage CAN burst to power off ambient lighting on 0x4AD
+        # 2. Transmit 2-stage CAN burst to set brightness to Off (0x41 on 0x455)
         off_steps = [
             {"payload": "000208A000000000", "repeat": 3, "delay_ms": delay_ms},
             {"payload": "0002082000000000", "repeat": 3, "delay_ms": delay_ms},
         ]
-        await self.coordinator.async_send_action(action_can_id, delay_ms, off_steps)
+        await self.coordinator.async_send_action(action_can_id, delay_ms, off_steps, bus=bus)
 
         self._is_on = False
         self.async_write_ha_state()

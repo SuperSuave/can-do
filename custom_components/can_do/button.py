@@ -42,6 +42,7 @@ class CanDoButtonEntity(CanDoEntity, ButtonEntity):
         net = self.command.get("network", {})
         action_can_id = net.get("action_can_id", "0x000")
         delay_ms = net.get("delay_ms", 20)
+        bus = net.get("bus")
 
         # Use default option if present, else first option
         default_opt = None
@@ -53,8 +54,9 @@ class CanDoButtonEntity(CanDoEntity, ButtonEntity):
             default_opt = self.command["options"][0]
 
         steps = build_action_steps(self.command, default_opt)
-        if steps:
+        if steps and action_can_id != "0x000":
             _LOGGER.info("Pressing button '%s' (ID %s, %d steps)", self.name, action_can_id, len(steps))
-            await self.coordinator.async_send_action(action_can_id, delay_ms, steps)
+            await self.coordinator.async_send_action(action_can_id, delay_ms, steps, bus=bus)
         else:
-            _LOGGER.warning("Button '%s' has no valid action steps defined", self.name)
+            _LOGGER.info("Pressing button '%s' via entity command fallback", self.name)
+            await self.coordinator.async_send_entity_command(self.entity_id_str, "press")

@@ -2,6 +2,7 @@
 
 import json
 import logging
+import math
 from collections.abc import Callable
 from typing import Any
 
@@ -328,32 +329,48 @@ class CanDoDataCoordinator:
         if not hex_payload:
             return
 
-        # Handle direct decimal float telemetry (never overwrite raw 0x... CAN ID byte arrays with floats!)
-        if can_id in ("vbat", "cond_aux_12v_battery") or can_id.startswith("bms_") or (not can_id.startswith("0x") and "." in hex_payload):
-            try:
-                clean_num = hex_payload.split()[0]
-                val = float(clean_num)
-                prev_val = self.can_states.get(can_id)
-                self.can_states[can_id] = val
-                if not isinstance(prev_val, (int, float)) or abs(prev_val - val) >= 0.05:
-                    self._notify_can_listeners(can_id)
-                    if can_id in ("vbat", "cond_aux_12v_battery"):
-                        for k in ("vbat", "cond_aux_12v_battery"):
-                            self.can_states[k] = val
-                            self._notify_can_listeners(k)
-                    elif can_id.startswith("bms_"):
-                        for alias in _BMS_ALIASES.get(can_id, []):
-                            self.can_states[alias] = val
-                            self._notify_can_listeners(alias)
+        # Handle direct decimal/numeric telemetry on non-0x entity topics (never overwrite raw 0x... CAN ID byte arrays!)
+        if not can_id.startswith("0x"):
+            clean_num = hex_payload.split()[0]
+            num_check = clean_num[1:] if clean_num.startswith(("+", "-")) else clean_num
+            is_numeric_scalar = bool(num_check) and num_check.replace(".", "", 1).isdigit()
+            if can_id in ("vbat", "cond_aux_12v_battery") or can_id.startswith("bms_") or is_numeric_scalar:
+                try:
+                    val = float(clean_num)
+                    if math.isfinite(val):
+                        prev_val = self.can_states.get(can_id)
+                        self.can_states[can_id] = val
+                        delta_thresh = (
+                            0.05
+                            if ("." in clean_num or can_id in ("vbat", "cond_aux_12v_battery") or can_id.startswith("bms_"))
+                            else 0.001
+                        )
+                        if (
+                            not isinstance(prev_val, (int, float))
+                            or isinstance(prev_val, bool)
+                            or abs(prev_val - val) >= delta_thresh
+                        ):
+                            self._notify_can_listeners(can_id)
+                            if can_id in ("vbat", "cond_aux_12v_battery"):
+                                for k in ("vbat", "cond_aux_12v_battery"):
+                                    self.can_states[k] = val
+                                    self._notify_can_listeners(k)
+                            elif can_id.startswith("bms_"):
+                                for alias in _BMS_ALIASES.get(can_id, []):
+                                    self.can_states[alias] = val
+                                    self._notify_can_listeners(alias)
+                        return
+                except ValueError:
+                    pass
+
+        # Raw CAN frames come on 0x... topics (2-16 even hex chars). Entity string labels (e.g. "P", "D", "Low Heat")
+        # must never be truncated or parsed as hex byte arrays.
+        if can_id.startswith("0x"):
+            if len(hex_payload) < 2:
                 return
-            except ValueError:
-                pass
-
-        if len(hex_payload) < 2:
-            return
-
-        # Check if payload is a raw hex CAN frame (even length, <=16 chars, valid hex)
-        is_hex = (len(hex_payload) % 2 == 0) and len(hex_payload) <= 16 and all(c in "0123456789abcdefABCDEF" for c in hex_payload)
+            is_hex = (len(hex_payload) % 2 == 0) and len(hex_payload) <= 16 and all(c in "0123456789abcdefABCDEF" for c in hex_payload)
+        else:
+            is_hex = False
         if is_hex:
             try:
                 byte_vals = [

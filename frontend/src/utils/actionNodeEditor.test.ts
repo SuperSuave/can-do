@@ -2,8 +2,10 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import ReactDOMServer from 'react-dom/server';
-import { ActionNodeEditor } from '../components/automation/ActionNodeEditor';
-import type { AutomationAction } from '../types/automation';
+import { ActionNodeEditor, ActionListEditor } from '../components/automation/ActionNodeEditor';
+import { ConditionListEditor } from '../components/automation/ConditionNodeEditor';
+import { AutomationClipboardContext, AutomationClipboardContextType } from '../components/automation/AutomationClipboardContext';
+import type { AutomationAction, AutomationClipboardItem } from '../types/automation';
 import type { Catalog } from '../types/catalog';
 
 const testCatalog: Catalog = {
@@ -290,6 +292,241 @@ describe('ActionNodeEditor card mode preservation', () => {
     assert.ok(html.includes('Multi-Lane Guidance'), 'Must render Multi-Lane Guidance switch');
     assert.ok(html.includes('Lane 1') && html.includes('Lane 2') && html.includes('Lane 3'), 'Must render 3 lane columns');
   });
-});
 
+  it('shows only friendly names for action types in the selector and enforces 50-char cluster popup limit', () => {
+    const canTxAction: AutomationAction = {
+      id: 'act_can_friendly',
+      type: 'can_tx',
+      can_id: '0x524',
+      payload: '00 00 00 00 00 00 00 00',
+    };
+
+    const canTxHtml = ReactDOMServer.renderToString(
+      React.createElement(ActionNodeEditor, {
+        act: canTxAction,
+        index: 0,
+        depth: 0,
+        availableTriggers: [],
+        catalog: testCatalog,
+        onUpdate: () => {},
+        onDelete: () => {},
+      })
+    ).replace(/<!-- -->/g, '');
+
+    assert.ok(canTxHtml.includes('>CAN Transmit<'), 'Must show friendly CAN Transmit option');
+    assert.ok(canTxHtml.includes('>Cyclic Stepper<'), 'Must show friendly Cyclic Stepper option');
+    assert.ok(canTxHtml.includes('>Cluster Popup<'), 'Must show friendly Cluster Popup option');
+    assert.ok(canTxHtml.includes('>Wait / Delay<'), 'Must show friendly Wait / Delay option');
+    assert.ok(!canTxHtml.includes('can_tx ('), 'Must not show raw can_tx identifier in action type dropdown');
+    assert.ok(!canTxHtml.includes('track_popup ('), 'Must not show raw track_popup identifier in action type dropdown');
+    assert.ok(!canTxHtml.includes('cycle_entity ('), 'Must not show raw cycle_entity identifier in action type dropdown');
+
+    const longPopupAction: AutomationAction = {
+      id: 'act_pop_long',
+      type: 'track_popup',
+      level: 'info',
+      text: 'X'.repeat(49), // 49 + 2 ("ⓘ ") = 51 > 50
+    };
+
+    const popupHtml = ReactDOMServer.renderToString(
+      React.createElement(ActionNodeEditor, {
+        act: longPopupAction,
+        index: 0,
+        depth: 0,
+        availableTriggers: [],
+        catalog: testCatalog,
+        onUpdate: () => {},
+        onDelete: () => {},
+      })
+    ).replace(/<!-- -->/g, '');
+
+    assert.ok(popupHtml.includes('51/50 (incl. icon)'), 'Must display total character count including 2-char severity icon');
+    assert.ok(popupHtml.includes('maxLength="48"'), 'Must cap track_popup text input at 48 characters (50 with icon)');
+    assert.ok(popupHtml.includes('Firmware drops popups over 50 characters'), 'Must warn when existing popup text exceeds 50 total chars');
+
+    const longCycleAction: AutomationAction = {
+      id: 'act_cycle_long',
+      type: 'cycle_entity',
+      entity_id: 'drivers_seat_comfort',
+      states: ['Off', 'Very Long Heated And Ventilated Seat State Label'],
+      show_popup: true,
+      popup_prefix: 'Driver Seat: ',
+    };
+
+    const cycleHtml = ReactDOMServer.renderToString(
+      React.createElement(ActionNodeEditor, {
+        act: longCycleAction,
+        index: 0,
+        depth: 0,
+        availableTriggers: [],
+        catalog: testCatalog,
+        onUpdate: () => {},
+        onDelete: () => {},
+      })
+    ).replace(/<!-- -->/g, '');
+
+    assert.ok(cycleHtml.includes('Toast exceeds the 50-character cluster limit'), 'Must warn when cycle_entity resolved toast exceeds 50 characters');
+    assert.ok(cycleHtml.includes('draggable="true"'), 'Must render cycle_entity sequence chips as draggable');
+  });
+
+  it('never renders hud_nav as Infotainment Sound Stage Focus even if stale catalog metadata or 0x60E is present', () => {
+    const soundStageCatalog: Catalog = {
+      can_do_version: '1.0.0',
+      vehicles: [],
+      commands: [
+        ...testCatalog.commands,
+        {
+          id: 'audio_sound_focus',
+          name: 'Infotainment Sound Stage Focus',
+          category: 'Cockpit & Controls',
+          roles: ['action', 'condition'],
+          ha_metadata: { name: 'Infotainment Sound Stage Focus', domain: 'select' },
+          network: { action_can_id: '0x60E', state_can_id: '0x60E', bus: 0 },
+          options: [
+            { label: 'Center', match: { D2: '0x0A', D3: '0x0A' }, payload: { D2: '0x0A', D3: '0x0A' }, default: true },
+            { label: 'Front Driver', match: { D2: '0x05', D3: '0x0E' }, payload: { D2: '0x05', D3: '0x0E' } },
+          ],
+        },
+      ],
+    };
+
+    const taintedHudAction: AutomationAction = {
+      id: 'act_hud_tainted',
+      type: 'hud_nav',
+      nav_action: 'update',
+      icon: 0x03,
+      street: 'Market St',
+      distance_meters: 150,
+      bars: 4,
+      speed_limit: 55,
+      // Simulate leftover metadata when switching an action from Infotainment Sound Stage Focus -> HUD Turn-by-Turn
+      source_command_id: 'audio_sound_focus',
+      entity_id: 'audio_sound_focus',
+      source_command_name: 'Infotainment Sound Stage Focus',
+      can_id: '0x60E',
+      option_label: 'Center',
+      payload: { D2: '0x0A', D3: '0x0A' },
+    };
+
+    const html = ReactDOMServer.renderToString(
+      React.createElement(ActionNodeEditor, {
+        act: taintedHudAction,
+        index: 0,
+        depth: 0,
+        availableTriggers: [],
+        catalog: soundStageCatalog,
+        onUpdate: () => {},
+        onDelete: () => {},
+      })
+    ).replace(/<!-- -->/g, '');
+
+    assert.ok(
+      html.includes('HUD &amp; Cluster Turn-by-Turn') || html.includes('HUD & Cluster Turn-by-Turn'),
+      'Card header must show HUD & Cluster Turn-by-Turn'
+    );
+    assert.ok(html.includes('HUD &amp; Cluster Turn-by-Turn Navigation') || html.includes('HUD & Cluster Turn-by-Turn Navigation'), 'Must render HudNavActionConfig directly without collapsing behind Details');
+    assert.ok(!html.includes('Infotainment Sound Stage Focus'), 'Must never render Infotainment Sound Stage Focus for hud_nav');
+    assert.ok(!html.includes('Front Driver</button>'), 'Must not render Sound Stage option pills on hud_nav');
+    assert.ok(!html.includes('Target CAN ID'), 'Must not render raw CAN Transmit fields on hud_nav');
+    assert.ok(html.includes('<option value="hud_nav" selected=""') || html.includes('selected="" value="hud_nav"') || html.includes('<option value="hud_nav" selected'), 'Action Type selector must select hud_nav');
+  });
+
+  it('shows aligned paste buttons only in sections compatible with valid clipboard entries', () => {
+    const makeCtx = (clipboard: AutomationClipboardItem | null): AutomationClipboardContextType => ({
+      clipboard,
+      copyToClipboard: () => {},
+      clearClipboard: () => {},
+      pastePayload: () => null,
+      pasteFromClipboard: async () => null,
+    });
+
+    // Empty clipboard -> no Paste buttons in Conditions or Actions
+    const emptyActHtml = ReactDOMServer.renderToString(
+      React.createElement(
+        AutomationClipboardContext.Provider,
+        { value: makeCtx(null) },
+        React.createElement(ActionListEditor, {
+          actions: [],
+          availableTriggers: [],
+          catalog: testCatalog,
+          onUpdate: () => {},
+        })
+      )
+    ).replace(/<!-- -->/g, '');
+    const emptyCondHtml = ReactDOMServer.renderToString(
+      React.createElement(
+        AutomationClipboardContext.Provider,
+        { value: makeCtx(null) },
+        React.createElement(ConditionListEditor, {
+          conditions: [],
+          availableTriggers: [],
+          catalog: testCatalog,
+          onUpdate: () => {},
+        })
+      )
+    ).replace(/<!-- -->/g, '');
+
+    assert.ok(!emptyActHtml.includes('Paste from Clipboard'), 'Must not show generic Paste from Clipboard in Actions');
+    assert.ok(!emptyCondHtml.includes('Paste from Clipboard'), 'Must not show generic Paste from Clipboard in Conditions');
+    assert.ok(!emptyActHtml.includes('ha-section-paste-btn'), 'Must hide Action paste button when clipboard is empty');
+    assert.ok(!emptyCondHtml.includes('ha-section-paste-btn'), 'Must hide Condition paste button when clipboard is empty');
+
+    // Action in clipboard -> shown & aligned in Actions, hidden in Conditions
+    const actionCtx = makeCtx({
+      type: 'action',
+      label: 'Test Popup',
+      payload: { id: 'a1', type: 'track_popup', text: 'Hi' },
+    });
+    const withActionInActHtml = ReactDOMServer.renderToString(
+      React.createElement(
+        AutomationClipboardContext.Provider,
+        { value: actionCtx },
+        React.createElement(ActionListEditor, {
+          actions: [],
+          availableTriggers: [],
+          catalog: testCatalog,
+          onUpdate: () => {},
+        })
+      )
+    ).replace(/<!-- -->/g, '');
+    const withActionInCondHtml = ReactDOMServer.renderToString(
+      React.createElement(
+        AutomationClipboardContext.Provider,
+        { value: actionCtx },
+        React.createElement(ConditionListEditor, {
+          conditions: [],
+          availableTriggers: [],
+          catalog: testCatalog,
+          onUpdate: () => {},
+        })
+      )
+    ).replace(/<!-- -->/g, '');
+
+    assert.ok(withActionInActHtml.includes('ha-section-paste-btn'), 'Must use aligned ha-section-paste-btn class');
+    assert.ok(withActionInActHtml.includes('Paste Action (Test Popup)'), 'Must show typed Paste Action button');
+    assert.ok(!withActionInCondHtml.includes('ha-section-paste-btn'), 'Must not show paste button in incompatible Condition section');
+
+    // Trigger in clipboard -> shown as cross-pasted Condition button
+    const trigCtx = makeCtx({
+      type: 'trigger',
+      label: 'Brake Pressed',
+      payload: { id: 't1', source: 'can', can_id: '0x200', to: '0x01' },
+    });
+    const withTrigInCondHtml = ReactDOMServer.renderToString(
+      React.createElement(
+        AutomationClipboardContext.Provider,
+        { value: trigCtx },
+        React.createElement(ConditionListEditor, {
+          conditions: [],
+          availableTriggers: [],
+          catalog: testCatalog,
+          onUpdate: () => {},
+        })
+      )
+    ).replace(/<!-- -->/g, '');
+
+    assert.ok(withTrigInCondHtml.includes('ha-section-paste-btn'), 'Must use aligned ha-section-paste-btn class for cross-paste');
+    assert.ok(withTrigInCondHtml.includes('Paste as Condition (Brake Pressed)'), 'Must offer Paste as Condition for compatible trigger');
+  });
+});
 

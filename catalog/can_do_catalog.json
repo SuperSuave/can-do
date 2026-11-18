@@ -1866,8 +1866,9 @@
       },
       "network": {
         "bus": 0,
-        "type": "can_rx",
-        "action_can_id": "0x4A0"
+        "type": "can_tx",
+        "action_can_id": "0x4A0",
+        "delay_ms": 20
       },
       "options": [
         {
@@ -1876,14 +1877,46 @@
             "D4": "0x0B"
           },
           "mask": "0xFF",
-          "default": true
+          "default": true,
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x0B"
+              },
+              "repeat": 3,
+              "delay_ms": 20
+            },
+            {
+              "payload": {
+                "D4": "0xFF"
+              },
+              "repeat": 3,
+              "delay_ms": 20
+            }
+          ]
         },
         {
           "label": "Dual Split / Sync Off",
           "payload": {
             "D4": "0x07"
           },
-          "mask": "0xFF"
+          "mask": "0xFF",
+          "steps": [
+            {
+              "payload": {
+                "D4": "0x07"
+              },
+              "repeat": 3,
+              "delay_ms": 20
+            },
+            {
+              "payload": {
+                "D4": "0xFF"
+              },
+              "repeat": 3,
+              "delay_ms": 20
+            }
+          ]
         }
       ],
       "subcategory": "HVAC Controls",
@@ -3154,15 +3187,31 @@
           "steps": [
             {
               "payload": {
-                "D5": "0x2F"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0x2F",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D5": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         },
@@ -3176,15 +3225,31 @@
           "steps": [
             {
               "payload": {
-                "D5": "0x6F"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0x6F",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D5": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         },
@@ -3198,15 +3263,31 @@
           "steps": [
             {
               "payload": {
-                "D5": "0x7F"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0x7F",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D5": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         },
@@ -3220,15 +3301,31 @@
           "steps": [
             {
               "payload": {
-                "D5": "0x8F"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0x8F",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D5": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         },
@@ -3242,15 +3339,31 @@
           "steps": [
             {
               "payload": {
-                "D5": "0x3F"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0x3F",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D5": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         },
@@ -3264,15 +3377,31 @@
           "steps": [
             {
               "payload": {
-                "D5": "0x4F"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0x4F",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D5": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         },
@@ -3286,15 +3415,31 @@
           "steps": [
             {
               "payload": {
-                "D5": "0x5F"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0x5F",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D5": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         }
@@ -3342,15 +3487,31 @@
           "steps": [
             {
               "payload": {
-                "D5": "0xF2"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xF2",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D5": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         },
@@ -3364,15 +3525,31 @@
           "steps": [
             {
               "payload": {
-                "D5": "0xF6"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xF6",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D5": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         },
@@ -3386,15 +3563,31 @@
           "steps": [
             {
               "payload": {
-                "D5": "0xF7"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xF7",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D5": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         },
@@ -3408,15 +3601,31 @@
           "steps": [
             {
               "payload": {
-                "D5": "0xF8"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xF8",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D5": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         },
@@ -3430,15 +3639,31 @@
           "steps": [
             {
               "payload": {
-                "D5": "0xF3"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xF3",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D5": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         },
@@ -3452,15 +3677,31 @@
           "steps": [
             {
               "payload": {
-                "D5": "0xF4"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xF4",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D5": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         },
@@ -3474,15 +3715,31 @@
           "steps": [
             {
               "payload": {
-                "D5": "0xF5"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xF5",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D5": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         }
@@ -3530,15 +3787,31 @@
           "steps": [
             {
               "payload": {
-                "D6": "0x2F"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0x2F",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D6": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         },
@@ -3551,15 +3824,31 @@
           "steps": [
             {
               "payload": {
-                "D6": "0x6F"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0x6F",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D6": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         },
@@ -3572,15 +3861,31 @@
           "steps": [
             {
               "payload": {
-                "D6": "0x8F"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0x8F",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D6": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ],
           "default": true
@@ -3628,15 +3933,31 @@
           "steps": [
             {
               "payload": {
-                "D6": "0xF2"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xF2",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D6": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         },
@@ -3648,15 +3969,31 @@
           "steps": [
             {
               "payload": {
-                "D6": "0xF6"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xF6",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D6": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         },
@@ -3668,15 +4005,31 @@
           "steps": [
             {
               "payload": {
-                "D6": "0xF8"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xF8",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             },
             {
               "payload": {
-                "D6": "0xFF"
+                "D1": "0x00",
+                "D2": "0x00",
+                "D3": "0xFF",
+                "D4": "0x03",
+                "D5": "0xFF",
+                "D6": "0xFF",
+                "D7": "0x00",
+                "D8": "0x00"
               },
-              "repeat": 3
+              "repeat": 3,
+              "delay_ms": 20
             }
           ]
         }
@@ -6771,9 +7124,10 @@
       ],
       "network": {
         "bus": 0,
-        "type": "can_rx",
+        "type": "can_rx_tx",
         "state_can_id": "0x31B",
-        "action_can_id": "0x49F"
+        "action_can_id": "0x49F",
+        "delay_ms": 25
       },
       "options": [
         {
@@ -6833,13 +7187,15 @@
               "payload": {
                 "D4": "0x2F"
               },
-              "repeat": 3
+              "repeat": 3,
+              "can_id": "0x49F"
             },
             {
               "payload": {
                 "D4": "0xFF"
               },
-              "repeat": 3
+              "repeat": 3,
+              "can_id": "0x49F"
             }
           ],
           "mask": "0xF0"

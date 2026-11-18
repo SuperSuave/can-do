@@ -6,6 +6,38 @@ import {
   AutomationAction
 } from '../types/automation';
 
+// Cluster track-selection popup payload limit (firmware/main/subsystems/track_popup.h):
+// 50 UTF-16 code units total, including the 2-char severity prefix ("ⓘ ", "⚠ ", "‼ ")
+// prepended by track_popup_show_info / _warning / _error.
+export const CLUSTER_POPUP_MAX_CODE_UNITS = 50;
+export const CLUSTER_POPUP_SEVERITY_PREFIX_LEN = 2;
+export const CLUSTER_POPUP_MAX_TEXT_CODE_UNITS =
+  CLUSTER_POPUP_MAX_CODE_UNITS - CLUSTER_POPUP_SEVERITY_PREFIX_LEN;
+
+export function resolveCycleEntityPopupText(
+  popupPrefix: string | undefined,
+  entityName: string,
+  stateLabel: string
+): string {
+  const prefix = popupPrefix ?? '';
+  if (prefix.length > 0) {
+    if (prefix.includes('{state}') || prefix.includes('{entity}')) {
+      return prefix
+        .replace(/\{state\}/g, stateLabel)
+        .replace(/\{entity\}/g, entityName);
+    }
+    return `${prefix}${stateLabel}`;
+  }
+  return `${entityName}: ${stateLabel}`;
+}
+
+export function getClusterPopupTotalCodeUnits(
+  text: string,
+  includeSeverityPrefix: boolean = true
+): number {
+  return text.length + (includeSeverityPrefix ? CLUSTER_POPUP_SEVERITY_PREFIX_LEN : 0);
+}
+
 // Helper to validate single hex byte or wildcard
 export function isValidPayloadToken(token: string): boolean {
   if (!token) return false;
@@ -1227,9 +1259,10 @@ function validateActionNode(
 
   if (aType === 'cycle_entity') {
     const entId = (act.entity_id || act.target_command_id || '').trim();
+    const cmd = entId && catalog?.commands?.length ? findCatalogCommand(entId, catalog) : undefined;
     if (!entId) {
       push('error', 'entity_id', 'Cycle Entity action is missing a target entity.');
-    } else if (catalog?.commands && catalog.commands.length > 0 && !findCatalogCommand(entId, catalog)) {
+    } else if (catalog?.commands && catalog.commands.length > 0 && !cmd) {
       push('warning', 'entity_id', `Entity '${entId}' was not found in the active catalog.`);
     }
 
@@ -1237,6 +1270,27 @@ function validateActionNode(
       push('error', 'states', `Cycle Entity action${entId ? ` for '${entId}'` : ''} has 0 states selected.`);
     } else if (act.states.length === 1) {
       push('warning', 'states', `Cycle Entity action for '${entId || 'entity'}' only has 1 state; add 2+ states to cycle.`);
+    }
+
+    if (act.show_popup !== false && Array.isArray(act.states) && act.states.length > 0) {
+      const entityName = cmd?.ha_metadata?.name || cmd?.name || entId || 'Entity';
+      let worstState = '';
+      let worstTotal = 0;
+      for (const stateLabel of act.states) {
+        const resolved = resolveCycleEntityPopupText(act.popup_prefix, entityName, stateLabel);
+        const totalUnits = getClusterPopupTotalCodeUnits(resolved, true);
+        if (totalUnits > worstTotal) {
+          worstTotal = totalUnits;
+          worstState = stateLabel;
+        }
+      }
+      if (worstTotal > CLUSTER_POPUP_MAX_CODE_UNITS) {
+        push(
+          'error',
+          'popup_prefix',
+          `Cluster popup toast for "${worstState}" winds up ${worstTotal} characters (including 2-char severity icon), exceeding the ${CLUSTER_POPUP_MAX_CODE_UNITS}-character cluster limit — shorten the Popup Prefix / Template so it stays ≤${CLUSTER_POPUP_MAX_TEXT_CODE_UNITS} characters.`
+        );
+      }
     }
     return;
   }
@@ -1250,8 +1304,18 @@ function validateActionNode(
   }
 
   if (aType === 'track_popup' || aType === 'popup') {
-    if (!(act.text || act.popup_message)?.trim()) {
+    const rawText = act.text || act.popup_message || '';
+    if (!rawText.trim()) {
       push('error', 'text', 'Head unit popup action has empty message text.');
+    } else {
+      const totalUnits = getClusterPopupTotalCodeUnits(rawText, true);
+      if (totalUnits > CLUSTER_POPUP_MAX_CODE_UNITS) {
+        push(
+          'error',
+          'text',
+          `Cluster popup toast is ${totalUnits} characters (including 2-char severity icon), exceeding the ${CLUSTER_POPUP_MAX_CODE_UNITS}-character cluster limit — shorten text to ≤${CLUSTER_POPUP_MAX_TEXT_CODE_UNITS} characters.`
+        );
+      }
     }
     return;
   }

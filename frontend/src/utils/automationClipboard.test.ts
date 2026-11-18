@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   arrayMove,
+  canAcceptGlobalPasteTarget,
+  isClipboardCompatibleWithTarget,
   serializeClipboardEnvelope,
   parseClipboardText,
   resolveClipboardPaste,
@@ -132,4 +134,45 @@ test('resolveClipboardPaste regenerates IDs, converts trigger <-> condition, and
   if (!badRes.ok) {
     assert.match(badRes.reason, /Trigger block.*cannot be pasted into Actions/i);
   }
+});
+
+test('isClipboardCompatibleWithTarget enforces smart section compatibility', () => {
+  const trigItem: AutomationClipboardItem = { type: 'trigger', label: 'Door Open', payload: { id: 't1', source: 'can' } };
+  const condItem: AutomationClipboardItem = { type: 'condition', label: 'Parked', payload: { id: 'c1', type: 'can_state' } };
+  const actItem: AutomationClipboardItem = { type: 'action', label: 'Popup', payload: { id: 'a1', type: 'track_popup' } };
+  const branchItem: AutomationClipboardItem = { type: 'choice_branch', label: 'Branch 1', payload: { conditions: [], sequence: [] } };
+
+  assert.equal(isClipboardCompatibleWithTarget(null, 'action'), false);
+  assert.equal(isClipboardCompatibleWithTarget(trigItem, 'trigger'), true);
+  assert.equal(isClipboardCompatibleWithTarget(trigItem, 'condition'), true);
+  assert.equal(isClipboardCompatibleWithTarget(trigItem, 'action'), false);
+  assert.equal(isClipboardCompatibleWithTarget(trigItem, 'choice_branch'), false);
+
+  assert.equal(isClipboardCompatibleWithTarget(condItem, 'condition'), true);
+  assert.equal(isClipboardCompatibleWithTarget(condItem, 'trigger'), true);
+  assert.equal(isClipboardCompatibleWithTarget(condItem, 'action'), false);
+
+  assert.equal(isClipboardCompatibleWithTarget(actItem, 'action'), true);
+  assert.equal(isClipboardCompatibleWithTarget(actItem, 'trigger'), false);
+  assert.equal(isClipboardCompatibleWithTarget(actItem, 'condition'), false);
+
+  assert.equal(isClipboardCompatibleWithTarget(branchItem, 'choice_branch'), true);
+  assert.equal(isClipboardCompatibleWithTarget(branchItem, 'branch'), true);
+  assert.equal(isClipboardCompatibleWithTarget(branchItem, 'action'), false);
+});
+
+test('canAcceptGlobalPasteTarget ignores editable controls and modal dialogs', () => {
+  assert.equal(canAcceptGlobalPasteTarget(null), true);
+  assert.equal(canAcceptGlobalPasteTarget({ tagName: 'DIV' } as unknown as EventTarget), true);
+  assert.equal(canAcceptGlobalPasteTarget({ tagName: 'INPUT' } as unknown as EventTarget), false);
+  assert.equal(canAcceptGlobalPasteTarget({ tagName: 'textarea' } as unknown as EventTarget), false);
+  assert.equal(canAcceptGlobalPasteTarget({ tagName: 'SELECT' } as unknown as EventTarget), false);
+  assert.equal(canAcceptGlobalPasteTarget({ tagName: 'DIV', isContentEditable: true } as unknown as EventTarget), false);
+  assert.equal(
+    canAcceptGlobalPasteTarget({
+      tagName: 'DIV',
+      closest: (sel: string) => (sel === '[role="dialog"]' ? {} : null)
+    } as unknown as EventTarget),
+    false
+  );
 });
