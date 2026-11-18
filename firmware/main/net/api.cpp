@@ -442,7 +442,7 @@ static esp_err_t api_command_handler(httpd_req_t *req) {
         int r = httpd_req_recv(req, &body[total_read], content_len - total_read);
         if (r <= 0) {
             if (r == HTTPD_SOCK_ERR_TIMEOUT) continue;
-            httpd_resp_send_err(req, HTTPD_408_REQUEST_TIMEOUT, "Failed to receive request body");
+            httpd_resp_send_err(req, HTTPD_408_REQ_TIMEOUT, "Failed to receive request body");
             return ESP_FAIL;
         }
         total_read += static_cast<size_t>(r);
