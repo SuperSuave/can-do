@@ -4,7 +4,12 @@ import {
   isValidPayloadToken,
   validatePayloadString,
   validatePayload,
+  validateAutomationRule,
+  validateAutomationRules
 } from './canValidator.js';
+import { AutomationRule } from '../types/automation.js';
+import { DEFAULT_CATALOG } from '../data/defaultCatalog.js';
+import { DEFAULT_AUTOMATION_RULES } from '../data/defaultAutomations.js';
 
 test('validatePayloadString handles empty, undefined, and whitespace inputs', () => {
   assert.deepStrictEqual(validatePayloadString(undefined), { isValid: true, byteCount: 0 });
@@ -126,3 +131,134 @@ test('validatePayload handles ByteMap and hex object formats', () => {
   const badKeyMap = validatePayload({ D0: '0x01' });
   assert.strictEqual(badKeyMap.isValid, false);
 });
+
+test('validateAutomationRules passes DEFAULT_AUTOMATION_RULES with zero issues', () => {
+  const report = validateAutomationRules(DEFAULT_AUTOMATION_RULES, DEFAULT_CATALOG);
+  assert.strictEqual(report.isValid, true);
+  assert.strictEqual(report.errors.length, 0);
+  assert.strictEqual(report.warnings.length, 0);
+});
+
+test('validateAutomationRule catches 1-based byte errors, bad CAN IDs, and wildcards on edge', () => {
+  const brokenRule: AutomationRule = {
+    id: 'bad_rule',
+    name: 'Broken CAN Rule',
+    enabled: true,
+    ha_expose: false,
+    ha_icon: 'mdi:car',
+    exec_mode: 'one_shot',
+    cooldown_ms: 0,
+    triggers: [
+      {
+        id: 't1',
+        source: 'can',
+        type: 'byte_transition',
+        can_id: 'NOT_HEX',
+        byte: 'D0',
+        from: '*',
+        to: '0x10'
+      }
+    ],
+    conditions: [
+      {
+        id: 'c1',
+        type: 'can_state',
+        can_id: '0x4A2',
+        byte: 'D9',
+        value: '0xGG'
+      }
+    ],
+    actions: [
+      {
+        id: 'a1',
+        type: 'can_tx',
+        can_id: '0x4A2',
+        payload: { D1: '0x**' }
+      }
+    ]
+  };
+
+  const issues = validateAutomationRule(brokenRule, DEFAULT_CATALOG);
+  const errors = issues.filter(i => i.type === 'error');
+  assert.ok(errors.some(e => e.section === 'trigger' && /CAN ID/i.test(e.message)));
+  assert.ok(errors.some(e => e.section === 'trigger' && /D0.*D1–D8/i.test(e.message)));
+  assert.ok(errors.some(e => e.section === 'trigger' && /Wildcard/i.test(e.message)));
+  assert.ok(errors.some(e => e.section === 'condition' && /D9.*D1–D8/i.test(e.message)));
+  assert.ok(errors.some(e => e.section === 'condition' && /0xGG/i.test(e.message)));
+  assert.ok(errors.some(e => e.section === 'action' && /Wildcard/i.test(e.message)));
+});
+
+test('validateAutomationRule validates cycle_entity, control flow, and multi-trigger warnings', () => {
+  const rule: AutomationRule = {
+    id: 'cycle_check',
+    name: 'Cycle + Flow Check',
+    enabled: true,
+    ha_expose: true,
+    ha_icon: 'mdi:car-seat-heater',
+    exec_mode: 'one_shot',
+    trigger_mode: 'sequence',
+    cooldown_ms: 500,
+    triggers: [
+      { id: 't1', source: 'ble', type: 'ble_button', ble_button: 'volume_up' }
+    ],
+    conditions: [],
+    actions: [
+      {
+        id: 'a_cycle_empty',
+        type: 'cycle_entity',
+        entity_id: 'nonexistent_entity',
+        states: []
+      },
+      {
+        id: 'a_if',
+        type: 'if_then',
+        conditions: [],
+        then: [],
+        else: []
+      },
+      {
+        id: 'a_wait',
+        type: 'wait_for',
+        timeout_ms: 5000
+      },
+      {
+        id: 'a_hud',
+        type: 'hud_nav',
+        nav_action: 'update',
+        icon: 1,
+        num_lanes: 12
+      }
+    ]
+  };
+
+  const populatedCatalog = {
+    ...DEFAULT_CATALOG,
+    commands: [
+      {
+        id: 'drivers_seat_comfort',
+        name: 'Driver Seat Comfort',
+        category: 'Climate',
+        roles: ['action' as const],
+        state_can_id: '0x4A2',
+        action_can_id: '0x4A2'
+      }
+    ]
+  };
+  const issues = validateAutomationRule(rule, populatedCatalog);
+  assert.ok(issues.some(i => i.type === 'warning' && /2 or more triggers/i.test(i.message)));
+  assert.ok(issues.some(i => i.type === 'warning' && /not found in the active catalog/i.test(i.message)));
+  assert.ok(issues.some(i => i.type === 'error' && /0 states selected/i.test(i.message)));
+  assert.ok(issues.some(i => i.type === 'error' && /no actions in either Then or Else/i.test(i.message)));
+  assert.ok(issues.some(i => i.type === 'error' && /requires at least one stop condition/i.test(i.message)));
+  assert.ok(issues.some(i => i.type === 'error' && /between 0 and 8/i.test(i.message)));
+});
+
+test('validateAutomationRules detects duplicate rule IDs and groups issues cleanly', () => {
+  const baseRule = DEFAULT_AUTOMATION_RULES[0];
+  const dupReport = validateAutomationRules([baseRule, { ...baseRule }], DEFAULT_CATALOG);
+  assert.strictEqual(dupReport.isValid, false);
+  assert.strictEqual(dupReport.errors.length, 2);
+  assert.ok(dupReport.issuesByRuleId[baseRule.id]?.length === 2);
+  assert.match(dupReport.errors[0].message, /Duplicate rule ID/i);
+});
+

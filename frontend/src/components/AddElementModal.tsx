@@ -31,7 +31,9 @@ import {
   ChevronRight,
   Shield,
   Send,
-  RotateCw
+  RotateCw,
+  Repeat,
+  Navigation
 } from 'lucide-react';
 
 export interface AddElementTarget {
@@ -377,6 +379,21 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         })
       },
       {
+        id: 'flow_repeat_until',
+        title: 'Repeat Until (Loop)',
+        desc: 'Repeat a sequence of actions on an interval until a stop condition or timeout is met',
+        icon: Repeat,
+        color: 'text-warning bg-warning-soft border-warning/30',
+        create: (): AutomationAction => ({
+          id: `act_repeat_${Date.now().toString(36)}`,
+          type: 'repeat_until',
+          interval_ms: 1000,
+          timeout_ms: 30000,
+          sequence: [],
+          conditions: []
+        })
+      },
+      {
         id: 'act_can_tx',
         title: 'Custom CAN Transmit',
         desc: 'Specify custom CAN frames with repeat and delay timing',
@@ -403,6 +420,27 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           type: 'track_popup',
           level: 'info',
           text: ''
+        })
+      },
+      {
+        id: 'hud_nav',
+        title: 'HUD / Cluster Navigation Guidance',
+        desc: 'Project turn-by-turn maneuver icon, distance (ft/mi or m/km), street name, speed limit, and lane guidance on the HUD & Cluster',
+        icon: Navigation,
+        color: 'text-accent bg-accent-soft border-accent/30',
+        create: (): AutomationAction => ({
+          id: `act_hud_${Date.now().toString(36)}`,
+          type: 'hud_nav',
+          nav_action: 'update',
+          icon: 1,
+          distance_meters: 200,
+          bars: 4,
+          speed_limit: 0,
+          camera_alert: false,
+          street: '',
+          num_lanes: 0,
+          lane_directions: [],
+          lane_recommended: []
         })
       },
       {

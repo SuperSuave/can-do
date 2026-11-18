@@ -84,6 +84,7 @@ enum class ActionType {
     DELAY,
     IF_THEN,
     CHOOSE,
+    CYCLE_ENTITY,
     TRACK_POPUP,
     CLIMATE_TARGET,
     PRECONDITION,
@@ -144,9 +145,17 @@ struct ActionStep {
     std::vector<ActionStep> then_steps;
     std::vector<ActionStep> else_steps;
 
-    // For CHOOSE
+    // For CHOOSE / CYCLE_ENTITY
     std::vector<ChoiceBranch> choices;
     std::vector<ActionStep> default_steps;
+    std::vector<std::string> cycle_states;
+    std::string cycle_direction = "forward"; // "forward", "reverse", "ping_pong"
+    bool cycle_wrap = true;
+    std::string cycle_fallback_state = "__first__";
+    bool cycle_show_popup = true;
+    std::string cycle_popup_prefix;
+    bool cycle_ping_pong = false;
+    std::shared_ptr<std::atomic<int>> ping_pong_dir; // +1 forward, -1 reverse
 
     // For REPEAT_UNTIL / WAIT_FOR
     uint32_t interval_ms = 1000;
@@ -231,6 +240,12 @@ struct MultiClickState {
     bool pending = false;
 };
 
+struct TriggerCombineState {
+    std::vector<uint32_t> last_hit_ms;
+    size_t seq_step = 0;
+    uint32_t seq_last_hit_ms = 0;
+};
+
 struct AutomationRule {
     std::string id;
     std::string name;
@@ -239,10 +254,12 @@ struct AutomationRule {
     bool hold_beep = false;
     std::string ha_icon = "mdi:car-cog";
     uint32_t cooldown_ms = 0;
-    std::string exec_mode = "one_shot"; // "one_shot", "toggle", "continuous_hold", etc.
+    std::string exec_mode = "one_shot"; // Retained for schema compatibility
     std::string trigger_mode = "any";   // "any", "all", "sequence"
+    uint32_t trigger_window_ms = 8000;  // Window for "all" and "sequence" trigger modes (ms)
     uint32_t last_exec_time_ms = 0;
     std::shared_ptr<std::atomic<bool>> is_running = std::make_shared<std::atomic<bool>>(false);
+    std::shared_ptr<TriggerCombineState> trigger_state = std::make_shared<TriggerCombineState>();
     std::vector<AutomationTrigger> triggers;
     std::vector<AutomationCondition> conditions;
     std::vector<ActionStep> actions;

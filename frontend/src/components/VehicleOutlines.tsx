@@ -1700,7 +1700,7 @@ export const FrontFasciaHeadlightSignature: React.FC<FrontFasciaHeadlightProps> 
                 <path key={`i5-emblem-${idx}`} d={d} fill="currentColor" />
               ))}
             </g>
-            <g id="ioniq5-headlight-left" transform={IONIQ5_FASCIA.leftTransform}>
+            <g id="ioniq5-headlight-left">
               <g id="ioniq5-beams-left">
                 <g className={lowBeamClass}>
                   {renderBeamRect(
@@ -1708,7 +1708,7 @@ export const FrontFasciaHeadlightSignature: React.FC<FrontFasciaHeadlightProps> 
                     'ioniq5-low-beam-left',
                     isMainBeamOn,
                     isHighBeam ? 0.92 : 0.82,
-                    10,
+                    12,
                     isMainBeamOn
                   )}
                 </g>
@@ -1718,7 +1718,7 @@ export const FrontFasciaHeadlightSignature: React.FC<FrontFasciaHeadlightProps> 
                     'ioniq5-high-beam-left',
                     isMainBeamOn,
                     isHighBeam ? 0.96 : 0.14,
-                    10,
+                    12,
                     isHighBeam
                   )}
                 </g>
@@ -1733,7 +1733,7 @@ export const FrontFasciaHeadlightSignature: React.FC<FrontFasciaHeadlightProps> 
                 ))}
               </g>
             </g>
-            <g id="ioniq5-headlight-right" transform={IONIQ5_FASCIA.rightTransform}>
+            <g id="ioniq5-headlight-right">
               <g id="ioniq5-beams-right">
                 <g className={lowBeamClass}>
                   {renderBeamRect(
@@ -1741,7 +1741,7 @@ export const FrontFasciaHeadlightSignature: React.FC<FrontFasciaHeadlightProps> 
                     'ioniq5-low-beam-right',
                     isMainBeamOn,
                     isHighBeam ? 0.92 : 0.82,
-                    10,
+                    12,
                     isMainBeamOn
                   )}
                 </g>
@@ -1751,7 +1751,7 @@ export const FrontFasciaHeadlightSignature: React.FC<FrontFasciaHeadlightProps> 
                     'ioniq5-high-beam-right',
                     isMainBeamOn,
                     isHighBeam ? 0.96 : 0.14,
-                    10,
+                    12,
                     isHighBeam
                   )}
                 </g>

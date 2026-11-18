@@ -12,7 +12,7 @@ import {
   Slider
 } from '@heroui/react';
 import { X, Settings, Sliders, Shield, Tag } from 'lucide-react';
-import { AutomationRule, ExecutionMode, TriggerCombineMode } from '../../types/automation';
+import { AutomationRule, TriggerCombineMode } from '../../types/automation';
 import { HaToggleSwitch } from './HaToggleSwitch';
 
 export interface AutomationSettingsModalProps {
@@ -29,11 +29,9 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
   onSaveSettings
 }) => {
   const [name, setName] = useState('');
-  const [execMode, setExecMode] = useState<ExecutionMode>('one_shot');
   const [triggerMode, setTriggerMode] = useState<TriggerCombineMode>('any');
+  const [triggerWindowSec, setTriggerWindowSec] = useState(8);
   const [cooldownMs, setCooldownMs] = useState(0);
-  const [timeoutResetMs, setTimeoutResetMs] = useState(0);
-  const [autoRevertSec, setAutoRevertSec] = useState(0);
   const [haExpose, setHaExpose] = useState(true);
   const [holdBeep, setHoldBeep] = useState(false);
   const [haIcon, setHaIcon] = useState('mdi:car-cog');
@@ -43,11 +41,10 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
   useEffect(() => {
     if (rule) {
       setName(rule.name || '');
-      setExecMode(rule.exec_mode || 'one_shot');
       setTriggerMode(rule.trigger_mode || 'any');
+      const winMs = rule.trigger_window_ms ?? rule.timeout_reset_ms ?? 8000;
+      setTriggerWindowSec(Math.max(1, Math.min(30, Math.round(winMs / 1000))));
       setCooldownMs(rule.cooldown_ms || 0);
-      setTimeoutResetMs(rule.timeout_reset_ms || 0);
-      setAutoRevertSec(rule.auto_revert_sec || 0);
       setHaExpose(rule.ha_expose !== false);
       setHoldBeep(Boolean(rule.hold_beep));
       setHaIcon(rule.ha_icon || 'mdi:car-cog');
@@ -61,11 +58,10 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
   const handleSave = () => {
     onSaveSettings(rule.id, {
       name: name.trim() || rule.name,
-      exec_mode: execMode,
+      exec_mode: rule.exec_mode || 'one_shot',
       trigger_mode: triggerMode,
+      trigger_window_ms: triggerMode === 'any' ? rule.trigger_window_ms : (Math.max(1, Number(triggerWindowSec) || 8) * 1000),
       cooldown_ms: Number(cooldownMs) || 0,
-      timeout_reset_ms: Number(timeoutResetMs) || 0,
-      auto_revert_sec: Number(autoRevertSec) || 0,
       ha_expose: haExpose,
       hold_beep: holdBeep,
       ha_icon: haIcon.trim() || 'mdi:car-cog',
@@ -130,25 +126,8 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
                 />
               </div>
 
-              {/* Execution & Trigger Modes */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-muted mb-1">
-                    Execution Mode
-                  </label>
-                  <select
-                    value={execMode}
-                    onChange={(e) => setExecMode(e.target.value as ExecutionMode)}
-                    className="w-full px-2.5 py-1.5 rounded-xl bg-surface-secondary border border-border text-foreground text-xs focus:outline-none focus:border-accent"
-                  >
-                    <option value="one_shot">One Shot (Fire Once)</option>
-                    <option value="toggle">Toggle (Flip State)</option>
-                    <option value="continuous_hold">Continuous Hold</option>
-                    <option value="on_change">On Change (State Diff)</option>
-                    <option value="poll_verify">Poll & Verify</option>
-                  </select>
-                </div>
-
+              {/* Trigger Combining Mode */}
+              <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-semibold text-muted mb-1">
                     Trigger Mode
@@ -158,11 +137,57 @@ export const AutomationSettingsModal: React.FC<AutomationSettingsModalProps> = (
                     onChange={(e) => setTriggerMode(e.target.value as TriggerCombineMode)}
                     className="w-full px-2.5 py-1.5 rounded-xl bg-surface-secondary border border-border text-foreground text-xs focus:outline-none focus:border-accent"
                   >
-                    <option value="any">Any Trigger (OR)</option>
-                    <option value="all">All Triggers (AND)</option>
-                    <option value="sequence">Sequence (In Order)</option>
+                    <option value="any">Any Trigger (OR — Fires whenever any trigger hits)</option>
+                    <option value="all">All Triggers (AND — Requires every trigger within window)</option>
+                    <option value="sequence">Sequence (In Order — Trigger 1 → Trigger 2 → ...)</option>
                   </select>
                 </div>
+
+                {triggerMode !== 'any' && (
+                  <div className="p-3 rounded-xl bg-surface-secondary border border-border space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-foreground">
+                        {triggerMode === 'sequence' ? 'Sequence Step Window' : 'Combined Trigger Window'}
+                      </label>
+                      <span className="text-xs font-mono text-accent">
+                        {triggerWindowSec} s
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Slider
+                        minValue={1}
+                        maxValue={15}
+                        step={1}
+                        value={triggerWindowSec}
+                        onChange={(val) => {
+                          const num = typeof val === 'number' ? val : val[0];
+                          setTriggerWindowSec(num);
+                        }}
+                        aria-label="Multi-trigger time window in seconds"
+                        className="flex-1"
+                      >
+                        <Slider.Track className="h-1.5 bg-surface-tertiary rounded-full cursor-pointer relative">
+                          <Slider.Fill className="bg-accent rounded-full h-full" />
+                          <Slider.Thumb className="w-3.5 h-3.5 bg-accent border-2 border-surface rounded-full shadow cursor-grab active:cursor-grabbing focus:outline-none" />
+                        </Slider.Track>
+                      </Slider>
+                      <input
+                        type="number"
+                        min="1"
+                        max="60"
+                        step="1"
+                        value={triggerWindowSec}
+                        onChange={(e) => setTriggerWindowSec(Math.max(1, Math.min(60, parseInt(e.target.value) || 8)))}
+                        className="w-16 bg-surface-tertiary border border-border rounded px-1.5 py-1 text-foreground font-mono text-xs focus:outline-none focus:border-accent text-right"
+                      />
+                    </div>
+                    <p className="text-[11px] text-muted">
+                      {triggerMode === 'sequence'
+                        ? `Each trigger must happen within ${triggerWindowSec}s of the previous one in list order.`
+                        : `All triggers must either be active or have fired within ${triggerWindowSec}s of each other.`}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Cooldown Slider */}

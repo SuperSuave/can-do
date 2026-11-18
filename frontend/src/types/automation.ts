@@ -141,7 +141,7 @@ export interface CycleEntityAction {
   type: 'cycle_entity';
   entity_id: string;
   states: string[];
-  direction?: 'forward' | 'reverse';
+  direction?: 'forward' | 'reverse' | 'ping_pong';
   wrap?: boolean;
   fallback_state?: string;
   show_popup?: boolean;
@@ -176,7 +176,7 @@ export type PopupLevel = 'info' | 'warning' | 'error';
 export interface AutomationAction {
   id: string;
   _clientId?: string;
-  type: 'can_tx' | 'transmit' | 'entity_command' | 'delay' | 'precondition' | 'climate_target' | 'webhook' | 'choose' | 'if_then' | 'track_popup' | 'popup' | 'repeat_until' | 'wait_for' | 'cycle_entity' | string;
+  type: 'can_tx' | 'transmit' | 'entity_command' | 'delay' | 'precondition' | 'climate_target' | 'hud_nav' | 'webhook' | 'choose' | 'if_then' | 'track_popup' | 'popup' | 'repeat_until' | 'wait_for' | 'cycle_entity' | string;
   level?: PopupLevel;
   text?: string;
   popup_message?: string;
@@ -207,13 +207,29 @@ export interface AutomationAction {
   option_label?: string;
   // For cycle_entity
   states?: string[];
-  direction?: 'forward' | 'reverse';
+  direction?: 'forward' | 'reverse' | 'ping_pong' | number;
   wrap?: boolean;
   fallback_state?: string;
   show_popup?: boolean;
   popup_prefix?: string;
   webhook_url?: string;
   webhook_method?: 'GET' | 'POST';
+
+  // For hud_nav
+  nav_action?: 'update' | 'clear' | string;
+  action?: string;
+  icon?: number;
+  direction_deg?: number;
+  distance_meters?: number;
+  distance?: number;
+  bars?: number;
+  speed_limit?: number;
+  camera_alert?: boolean;
+  street?: string;
+  num_lanes?: number;
+  lanes?: number;
+  lane_directions?: number[];
+  lane_recommended?: number[];
 
   // For if_then
   conditions?: AutomationCondition[];
@@ -240,6 +256,7 @@ export interface AutomationRule {
   ha_icon: string;
   exec_mode: ExecutionMode;
   trigger_mode?: TriggerCombineMode;
+  trigger_window_ms?: number;
   cooldown_ms: number;
   timeout_reset_ms?: number;
   reset_can_id?: string;

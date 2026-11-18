@@ -173,17 +173,23 @@ export const AutomationMoreInfoModal: React.FC<AutomationMoreInfoModalProps> = (
               {/* Execution Specs */}
               <div className="p-3 rounded-xl bg-surface-secondary border border-border space-y-2 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-muted">Execution Mode</span>
-                  <span className="font-semibold text-foreground capitalize">
-                    {rule.exec_mode?.replace('_', ' ') || 'One Shot'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
                   <span className="text-muted">Trigger Mode</span>
-                  <span className="font-semibold text-foreground capitalize">
-                    {rule.trigger_mode || 'any'}
+                  <span className="font-semibold text-foreground uppercase">
+                    {rule.trigger_mode === 'all'
+                      ? 'All Triggers (AND)'
+                      : rule.trigger_mode === 'sequence'
+                        ? 'Sequence (In Order)'
+                        : 'Any Trigger (OR)'}
                   </span>
                 </div>
+                {rule.trigger_mode && rule.trigger_mode !== 'any' && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted">Trigger Window</span>
+                    <span className="font-mono text-accent">
+                      {Math.round((rule.trigger_window_ms ?? rule.timeout_reset_ms ?? 8000) / 1000)}s
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-muted">Cooldown</span>
                   <span className="font-mono text-accent">

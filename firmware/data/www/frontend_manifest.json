@@ -2,64 +2,64 @@
   "version": "2026.11.6-b003",
   "files": [
     {
+      "name": "BE3rCEL4.js.gz",
+      "path": "/spiffs/www/BE3rCEL4.js.gz",
+      "size": 83698
+    },
+    {
       "name": "BdMWSxNz.js.gz",
       "path": "/spiffs/www/BdMWSxNz.js.gz",
       "size": 70567
     },
     {
-      "name": "BE-4yqEH.js.gz",
-      "path": "/spiffs/www/BE-4yqEH.js.gz",
-      "size": 28417
+      "name": "D4LK_tHB.js.gz",
+      "path": "/spiffs/www/D4LK_tHB.js.gz",
+      "size": 28456
     },
     {
-      "name": "BnO-OvJa.js.gz",
-      "path": "/spiffs/www/BnO-OvJa.js.gz",
-      "size": 58850
+      "name": "IMn2EYxC.js.gz",
+      "path": "/spiffs/www/IMn2EYxC.js.gz",
+      "size": 9546
     },
     {
-      "name": "CnqFkmj-.js.gz",
-      "path": "/spiffs/www/CnqFkmj-.js.gz",
-      "size": 43256
-    },
-    {
-      "name": "Dww5fJe7.js.gz",
-      "path": "/spiffs/www/Dww5fJe7.js.gz",
-      "size": 9094
-    },
-    {
-      "name": "index-BqNzuG.css.gz",
-      "path": "/spiffs/www/index-BqNzuG.css.gz",
-      "size": 55558
-    },
-    {
-      "name": "index-zzsxh3.js.gz",
-      "path": "/spiffs/www/index-zzsxh3.js.gz",
-      "size": 79346
-    },
-    {
-      "name": "index.html",
-      "path": "/spiffs/www/index.html",
-      "size": 5298
-    },
-    {
-      "name": "index.html.gz",
-      "path": "/spiffs/www/index.html.gz",
-      "size": 2064
-    },
-    {
-      "name": "logo.svg",
-      "path": "/spiffs/www/logo.svg",
-      "size": 8221
-    },
-    {
-      "name": "s9WmsOU6.js.gz",
-      "path": "/spiffs/www/s9WmsOU6.js.gz",
-      "size": 34786
+      "name": "N88bm9Y9.js.gz",
+      "path": "/spiffs/www/N88bm9Y9.js.gz",
+      "size": 43161
     },
     {
       "name": "ZvF2C48M.js.gz",
       "path": "/spiffs/www/ZvF2C48M.js.gz",
       "size": 242235
+    },
+    {
+      "name": "index-DUfrom.css.gz",
+      "path": "/spiffs/www/index-DUfrom.css.gz",
+      "size": 55822
+    },
+    {
+      "name": "index-oIg_Df.js.gz",
+      "path": "/spiffs/www/index-oIg_Df.js.gz",
+      "size": 79779
+    },
+    {
+      "name": "index.html",
+      "path": "/spiffs/www/index.html",
+      "size": 5220
+    },
+    {
+      "name": "index.html.gz",
+      "path": "/spiffs/www/index.html.gz",
+      "size": 2053
+    },
+    {
+      "name": "logo.svg",
+      "path": "/spiffs/www/logo.svg",
+      "size": 8217
+    },
+    {
+      "name": "tB-kVcrU.js.gz",
+      "path": "/spiffs/www/tB-kVcrU.js.gz",
+      "size": 38836
     }
   ]
 }

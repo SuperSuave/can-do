@@ -12,11 +12,13 @@ import {
   Signal,
   Wifi,
   Radio,
-  Sliders
+  Sliders,
+  GripVertical
 } from 'lucide-react';
 import { AutomationTrigger, AutomationAction, AutomationCondition } from '../../types/automation';
 import { Catalog, CommandOption } from '../../types/catalog';
 import { compileToByteMap, resolveCatalogCommandForTrigger, applyOptionToTrigger, formatDefaultTriggerName } from '../../utils/automationConverters';
+import { formatTriggerSummary } from '../../utils/ruleSummaries';
 import { groupOptionsIntoGridRows, OptionGridGroup, LiveWifiStatus, LiveBleItem } from './liveEvaluator';
 import { DayOfWeekPicker } from './DayOfWeekPicker';
 import { BleButtonComboPicker } from '../BleButtonComboPicker';
@@ -24,6 +26,15 @@ import { BleDeviceSelect, BleBeaconSelect, BleActionSelect } from '../BleSelects
 import { SustainedDurationInput } from './SustainedDurationInput';
 import { AutomationClipboardContext } from './AutomationClipboardContext';
 import { NumericRangeNodeEditor } from './NumericRangeNodeEditor';
+
+export interface NodeDragConfig {
+  onDragStart: (e: React.DragEvent) => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
+  isDragging: boolean;
+  isDragOver: boolean;
+}
 
 export interface TriggerNodeEditorProps {
   key?: React.Key;
@@ -39,6 +50,7 @@ export interface TriggerNodeEditorProps {
   onMoveDown?: () => void;
   isFirst?: boolean;
   isLast?: boolean;
+  dragConfig?: NodeDragConfig;
 }
 
 export function TriggerNodeEditor({
@@ -54,10 +66,56 @@ export function TriggerNodeEditor({
   onMoveDown,
   isFirst,
   isLast,
+  dragConfig,
 }: TriggerNodeEditorProps) {
   const [showAdvanced, setShowAdvanced] = useState(Boolean((trig as any)._showAdvanced));
   const [collapsed, setCollapsed] = useState(false);
+  const [dragArmed, setDragArmed] = useState(false);
   const { copyToClipboard } = useContext(AutomationClipboardContext);
+
+  const dragClass = dragConfig?.isDragging
+    ? 'opacity-50 ring-1 ring-accent/50'
+    : dragConfig?.isDragOver
+    ? 'ring-2 ring-accent border-accent bg-accent-soft/15'
+    : '';
+
+  const cardDragProps = dragConfig
+    ? {
+        draggable: dragArmed,
+        onDragStart: (e: React.DragEvent) => {
+          if (!dragArmed) {
+            e.preventDefault();
+            return;
+          }
+          dragConfig.onDragStart(e);
+        },
+        onDragOver: dragConfig.onDragOver,
+        onDrop: (e: React.DragEvent) => {
+          setDragArmed(false);
+          dragConfig.onDrop(e);
+        },
+        onDragEnd: () => {
+          setDragArmed(false);
+          dragConfig.onDragEnd();
+        },
+        onPointerUp: () => setDragArmed(false)
+      }
+    : {};
+
+  const dragHandle = dragConfig ? (
+    <span
+      onPointerDown={e => {
+        e.stopPropagation();
+        setDragArmed(true);
+      }}
+      onPointerUp={() => setDragArmed(false)}
+      className="cursor-grab active:cursor-grabbing text-muted hover:text-foreground p-0.5 shrink-0 touch-none"
+      title="Drag to reorder"
+      aria-label="Drag trigger to reorder"
+    >
+      <GripVertical className="w-3.5 h-3.5" />
+    </span>
+  ) : null;
 
   const activeClickCount = trig.click_count && trig.click_count >= 1 ? trig.click_count : 1;
 
@@ -206,10 +264,12 @@ export function TriggerNodeEditor({
   if (trig.type === 'time_schedule' || trig.source === 'time') {
     return (
       <div
-        className="p-3.5 rounded-xl bg-surface-secondary border border-border space-y-2.5 text-xs"
+        {...cardDragProps}
+        className={`p-3.5 rounded-xl bg-surface-secondary border border-border space-y-2.5 text-xs transition-all ${dragClass}`}
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
+            {dragHandle}
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
@@ -224,6 +284,12 @@ export function TriggerNodeEditor({
           </div>
           {actionButtons}
         </div>
+
+        {collapsed && (
+          <div className="px-2.5 py-1.5 rounded-lg bg-surface-tertiary/70 border border-border/60 font-mono text-[11px] text-muted truncate">
+            {formatTriggerSummary(trig, catalog)}
+          </div>
+        )}
 
         {!collapsed && (
           <>
@@ -267,10 +333,12 @@ export function TriggerNodeEditor({
 
     return (
       <div
-        className="p-3.5 rounded-xl bg-surface-secondary border border-accent/40 space-y-2.5 text-xs shadow-sm"
+        {...cardDragProps}
+        className={`p-3.5 rounded-xl bg-surface-secondary border border-accent/40 space-y-2.5 text-xs shadow-sm transition-all ${dragClass}`}
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
+            {dragHandle}
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
@@ -285,6 +353,12 @@ export function TriggerNodeEditor({
           </div>
           {actionButtons}
         </div>
+
+        {collapsed && (
+          <div className="px-2.5 py-1.5 rounded-lg bg-surface-tertiary/70 border border-border/60 font-mono text-[11px] text-muted truncate">
+            {formatTriggerSummary(trig, catalog)}
+          </div>
+        )}
 
         {!collapsed && (
           <div className="space-y-2.5">
@@ -351,9 +425,13 @@ export function TriggerNodeEditor({
     const currentMode = isPairedDeviceMode ? 'paired_device' : 'phone_beacon';
 
     return (
-      <div className="p-3.5 rounded-xl bg-surface-secondary border border-purple-500/40 space-y-2.5 text-xs shadow-sm">
+      <div
+        {...cardDragProps}
+        className={`p-3.5 rounded-xl bg-surface-secondary border border-purple-500/40 space-y-2.5 text-xs shadow-sm transition-all ${dragClass}`}
+      >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
+            {dragHandle}
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
@@ -368,6 +446,12 @@ export function TriggerNodeEditor({
           </div>
           {actionButtons}
         </div>
+
+        {collapsed && (
+          <div className="px-2.5 py-1.5 rounded-lg bg-surface-tertiary/70 border border-border/60 font-mono text-[11px] text-muted truncate">
+            {formatTriggerSummary(trig, catalog)}
+          </div>
+        )}
 
         {!collapsed && (
           <div className="space-y-2.5">
@@ -568,9 +652,13 @@ export function TriggerNodeEditor({
   // Wi-Fi / Device Trigger
   if (trig.type === 'wifi' || trig.type === 'wifi_event' || trig.source === 'wifi') {
     return (
-      <div className="p-3.5 rounded-xl bg-surface-secondary border border-accent/40 space-y-2.5 text-xs shadow-sm">
+      <div
+        {...cardDragProps}
+        className={`p-3.5 rounded-xl bg-surface-secondary border border-accent/40 space-y-2.5 text-xs shadow-sm transition-all ${dragClass}`}
+      >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
+            {dragHandle}
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
@@ -585,6 +673,12 @@ export function TriggerNodeEditor({
           </div>
           {actionButtons}
         </div>
+
+        {collapsed && (
+          <div className="px-2.5 py-1.5 rounded-lg bg-surface-tertiary/70 border border-border/60 font-mono text-[11px] text-muted truncate">
+            {formatTriggerSummary(trig, catalog)}
+          </div>
+        )}
 
         {!collapsed && (
           <>
@@ -745,10 +839,14 @@ export function TriggerNodeEditor({
     defaultCanName;
 
   return (
-    <div className="p-2.5 sm:p-3.5 rounded-xl bg-surface-secondary border border-border hover:border-border-secondary space-y-2.5 text-xs transition-all shadow-sm min-w-0 overflow-hidden">
+    <div
+      {...cardDragProps}
+      className={`p-2.5 sm:p-3.5 rounded-xl bg-surface-secondary border border-border hover:border-border-secondary space-y-2.5 text-xs transition-all shadow-sm min-w-0 overflow-hidden ${dragClass}`}
+    >
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+          {dragHandle}
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}
@@ -783,6 +881,12 @@ export function TriggerNodeEditor({
           {actionButtons}
         </div>
       </div>
+
+      {collapsed && (
+        <div className="px-2.5 py-1.5 rounded-lg bg-surface-tertiary/70 border border-border/60 font-mono text-[11px] text-muted truncate">
+          {formatTriggerSummary(trig, catalog)}
+        </div>
+      )}
 
       {!collapsed && (
         <>

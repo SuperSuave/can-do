@@ -348,13 +348,16 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
   }
 
   if (act.type === 'repeat_until' || act.type === 'wait_for') {
+    const rawConds = act.conditions && act.conditions.length > 0 ? act.conditions : (act.condition ? [act.condition] : []);
+    const compiledConds = rawConds.map(c => compileCondition(c, catalog));
     return {
       ...(act.id ? { id: act.id } : {}),
       type: act.type,
-      interval_ms: act.interval_ms || 1000,
-      timeout_ms: act.timeout_ms || 30000,
-      condition: act.condition ? compileCondition(act.condition, catalog) : undefined,
-      sequence: act.sequence ? compileActionList(act.sequence, catalog) : undefined
+      interval_ms: act.interval_ms || (act.type === 'wait_for' ? 50 : 1000),
+      timeout_ms: act.timeout_ms || (act.type === 'wait_for' ? 10000 : 30000),
+      ...(compiledConds.length === 1 ? { condition: compiledConds[0] } : {}),
+      ...(compiledConds.length > 1 ? { conditions: compiledConds } : {}),
+      ...(act.sequence ? { sequence: compileActionList(act.sequence, catalog) } : {})
     };
   }
 
@@ -387,87 +390,67 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
     };
   }
 
-  if (act.type === 'cycle_entity') {
-    const entId = act.entity_id || act.target_command_id || 'seat_heater_driver';
-    const cmd = catalog.commands?.find(c => c.id === entId || c.entity_id === entId);
-    const states = act.states && act.states.length > 0 ? act.states : ['Off', 'Low Heat', 'Medium Heat', 'High Heat'];
-    const isReverse = act.direction === 'reverse';
-    const wrap = act.wrap !== false;
-
-    const choices = states.map((state, idx) => {
-      let nextIdx = isReverse ? idx - 1 : idx + 1;
-      if (nextIdx >= states.length) nextIdx = wrap ? 0 : states.length - 1;
-      if (nextIdx < 0) nextIdx = wrap ? states.length - 1 : 0;
-      const nextState = states[nextIdx];
-
-      const curOpt = cmd?.options?.find(o => o.label.toLowerCase() === state.toLowerCase() || o.id === state);
-      const nextOpt = cmd?.options?.find(o => o.label.toLowerCase() === nextState.toLowerCase() || o.id === nextState);
-
-      const cond: AutomationCondition = cmd && curOpt ? commandToCondition(cmd, curOpt) : {
-        id: `cond_cycle_${idx}`,
-        type: 'can_state',
-        can_id: act.can_id || '0x000',
-        bus: act.bus ?? 0,
-        value: state
-      };
-
-      const seqActs: any[] = [];
-      if (cmd && nextOpt) {
-        seqActs.push(commandToAction(cmd, nextOpt));
-      } else if (act.can_id) {
-        seqActs.push({
-          type: 'transmit',
-          can_id: act.can_id,
-          bus: act.bus ?? 0,
-          payload: { D1: '0x01' },
-          repeat: 1
-        });
-      }
-
-      if (act.show_popup !== false) {
-        seqActs.push({
-          type: 'track_popup',
-          level: 'info',
-          text: `${act.popup_prefix !== undefined ? act.popup_prefix : 'Driver Seat: '}${nextOpt?.label || nextState}`
-        });
-      }
-
+  if (act.type === 'hud_nav' || act.type === 'nav') {
+    const navAction = act.nav_action || act.action || 'update';
+    if (navAction === 'clear') {
       return {
-        conditions: [compileCondition(cond, catalog)],
-        sequence: compileActionList(seqActs, catalog)
+        ...(act.id ? { id: act.id } : {}),
+        type: 'hud_nav',
+        action: 'clear'
       };
-    });
+    }
 
-    const fallbackState = act.fallback_state || states[0];
-    const fallbackOpt = cmd?.options?.find(o => o.label.toLowerCase() === fallbackState.toLowerCase() || o.id === fallbackState);
-    const defaultActs: any[] = [];
-    if (cmd && fallbackOpt) {
-      defaultActs.push(commandToAction(cmd, fallbackOpt));
-    }
-    if (act.show_popup !== false) {
-      defaultActs.push({
-        type: 'track_popup',
-        level: 'info',
-        text: `${act.popup_prefix !== undefined ? act.popup_prefix : 'Driver Seat: '}${fallbackOpt?.label || fallbackState}`
-      });
-    }
+    const numLanes = act.num_lanes ?? act.lanes ?? 0;
+    const distanceMeters = act.distance_meters ?? act.distance;
+    const directionDeg =
+      act.direction_deg ?? (typeof act.direction === 'number' ? act.direction : undefined);
 
     return {
       ...(act.id ? { id: act.id } : {}),
-      type: 'choose',
-      choices,
-      default: compileActionList(defaultActs, catalog),
-      _cycle_entity: {
-        ...(act.id ? { id: act.id } : {}),
-        entity_id: entId,
-        ...(act.target_command_id ? { target_command_id: act.target_command_id } : {}),
-        states,
-        ...(act.direction ? { direction: act.direction } : {}),
-        wrap,
-        ...(act.fallback_state ? { fallback_state: act.fallback_state } : {}),
-        show_popup: act.show_popup !== false,
-        ...(act.popup_prefix !== undefined ? { popup_prefix: act.popup_prefix } : {})
-      }
+      type: 'hud_nav',
+      icon: act.icon ?? 1,
+      ...(directionDeg !== undefined ? { direction_deg: directionDeg } : {}),
+      ...(distanceMeters !== undefined ? { distance_meters: distanceMeters } : {}),
+      ...(act.bars !== undefined ? { bars: act.bars } : {}),
+      ...(act.speed_limit !== undefined ? { speed_limit: act.speed_limit } : {}),
+      ...(act.camera_alert !== undefined ? { camera_alert: !!act.camera_alert } : {}),
+      ...(act.street ? { street: act.street } : {}),
+      ...(numLanes > 0
+        ? {
+            num_lanes: numLanes,
+            lane_directions: Array.isArray(act.lane_directions)
+              ? act.lane_directions.slice(0, 8)
+              : Array(numLanes).fill(1),
+            lane_recommended: Array.isArray(act.lane_recommended)
+              ? act.lane_recommended.slice(0, 8)
+              : Array(numLanes).fill(0)
+          }
+        : {})
+    };
+  }
+
+  if (act.type === 'cycle_entity') {
+    const entId = act.entity_id || act.target_command_id || 'drivers_seat_comfort';
+    const cmd = catalog.commands?.find(c => c.id === entId || c.entity_id === entId);
+    const defaultStates = cmd?.options && cmd.options.length > 0
+      ? cmd.options.map(o => o.label)
+      : ['Off', 'Low Heat', 'Medium Heat', 'High Heat'];
+    const states = act.states && act.states.length > 0 ? act.states : defaultStates;
+
+    return {
+      ...(act.id ? { id: act.id } : {}),
+      type: 'cycle_entity',
+      entity_id: cmd?.id || entId,
+      ...(act.target_command_id && act.target_command_id !== (cmd?.id || entId)
+        ? { target_command_id: act.target_command_id }
+        : {}),
+      states,
+      direction: act.direction || 'forward',
+      wrap: act.wrap !== false,
+      fallback_state: act.fallback_state || '__first__',
+      show_popup: act.show_popup !== false,
+      ...(act.popup_prefix !== undefined ? { popup_prefix: act.popup_prefix } : {}),
+      level: act.level || 'info'
     };
   }
 
@@ -801,6 +784,15 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
     };
   }
 
+  if (act.type === 'webhook') {
+    return {
+      ...(act.id ? { id: act.id } : {}),
+      type: 'webhook',
+      ...(act.webhook_url ? { webhook_url: act.webhook_url } : {}),
+      ...(act.webhook_method ? { webhook_method: act.webhook_method } : {})
+    };
+  }
+
   const payload = compileToByteMap(act.payload || act.to_payload);
   return {
     ...(act.id ? { id: act.id } : {}),
@@ -1095,7 +1087,30 @@ export function decompileActionList(
       continue;
     }
 
-    // 1. Control-flow actions: choose (including _cycle_entity restoration), if_then, repeat_until, wait_for
+    // 1. Control-flow actions: cycle_entity (native Option B + legacy _cycle_entity restoration), choose, if_then, repeat_until, wait_for
+    if (raw.type === 'cycle_entity') {
+      const entId = raw.entity_id || raw.target_command_id || 'drivers_seat_comfort';
+      const cmd = catalog.commands?.find(c => c.id === entId || c.entity_id === entId);
+      const fallbackStates = cmd?.options && cmd.options.length > 0
+        ? cmd.options.map(o => o.label)
+        : ['Off', 'Low Heat', 'Medium Heat', 'High Heat'];
+      result.push({
+        id: raw.id || generateBlockId('act'),
+        type: 'cycle_entity',
+        entity_id: entId,
+        ...(raw.target_command_id ? { target_command_id: raw.target_command_id } : {}),
+        states: Array.isArray(raw.states) && raw.states.length > 0 ? raw.states : fallbackStates,
+        direction: raw.direction || 'forward',
+        wrap: raw.wrap !== false,
+        fallback_state: raw.fallback_state || '__first__',
+        show_popup: raw.show_popup !== false,
+        ...(raw.popup_prefix !== undefined ? { popup_prefix: raw.popup_prefix } : {}),
+        level: raw.level || 'info'
+      });
+      i++;
+      continue;
+    }
+
     if (raw.type === 'choose') {
       if (raw._cycle_entity && typeof raw._cycle_entity === 'object') {
         const ce = raw._cycle_entity;
@@ -1109,7 +1124,8 @@ export function decompileActionList(
           wrap: ce.wrap !== false,
           ...(ce.fallback_state ? { fallback_state: ce.fallback_state } : {}),
           show_popup: ce.show_popup !== false,
-          ...(ce.popup_prefix !== undefined ? { popup_prefix: ce.popup_prefix } : {})
+          ...(ce.popup_prefix !== undefined ? { popup_prefix: ce.popup_prefix } : {}),
+          ...(ce.level ? { level: ce.level } : {})
         });
         i++;
         continue;
@@ -1152,11 +1168,16 @@ export function decompileActionList(
     }
 
     if (raw.type === 'repeat_until' || raw.type === 'wait_for') {
+      const rawConds = Array.isArray(raw.conditions) && raw.conditions.length > 0
+        ? raw.conditions
+        : (raw.condition ? [raw.condition] : []);
+      const decompiledConds = rawConds.map((c: any) => decompileCondition(c, catalog));
       result.push({
         ...raw,
         id: raw.id || generateBlockId('act'),
         type: raw.type,
-        condition: raw.condition ? decompileCondition(raw.condition, catalog) : undefined,
+        condition: decompiledConds[0],
+        ...(decompiledConds.length > 0 ? { conditions: decompiledConds } : {}),
         sequence: Array.isArray(raw.sequence) ? decompileActionList(raw.sequence, catalog) : undefined
       });
       i++;
@@ -1394,6 +1415,31 @@ export function decompileActionList(
       continue;
     }
 
+    if (raw.type === 'hud_nav' || raw.type === 'nav') {
+      const navAction = raw.nav_action || raw.action || 'update';
+      result.push({
+        ...raw,
+        id: raw.id || generateBlockId('act'),
+        type: 'hud_nav',
+        nav_action: navAction,
+        action: navAction,
+        icon: raw.icon ?? 1,
+        direction_deg: raw.direction_deg ?? (typeof raw.direction === 'number' ? raw.direction : 0),
+        distance_meters: raw.distance_meters ?? raw.distance ?? 200,
+        bars: raw.bars ?? 4,
+        speed_limit: raw.speed_limit ?? 0,
+        camera_alert: !!raw.camera_alert,
+        street: raw.street ?? '',
+        num_lanes: raw.num_lanes ?? raw.lanes ?? 0,
+        lane_directions: Array.isArray(raw.lane_directions) ? raw.lane_directions : [],
+        lane_recommended: Array.isArray(raw.lane_recommended)
+          ? raw.lane_recommended.map((v: any) => (v ? 1 : 0))
+          : []
+      });
+      i++;
+      continue;
+    }
+
     result.push({
       ...raw,
       id: raw.id || generateBlockId('act')
@@ -1476,6 +1522,9 @@ export function decompileAutomationRule(
     ha_icon: rawRule.ha_icon || 'mdi:car-cog',
     exec_mode: rawRule.exec_mode || 'one_shot',
     trigger_mode: rawRule.trigger_mode || 'any',
+    ...(rawRule.trigger_window_ms !== undefined || rawRule.timeout_reset_ms !== undefined
+      ? { trigger_window_ms: rawRule.trigger_window_ms ?? rawRule.timeout_reset_ms }
+      : {}),
     cooldown_ms: rawRule.cooldown_ms ?? 500,
     triggers,
     conditions,
@@ -1511,6 +1560,7 @@ export function compileAutomationRule(
     ha_icon: rule.ha_icon || 'mdi:car-cog',
     exec_mode: rule.exec_mode || 'one_shot',
     trigger_mode: rule.trigger_mode || 'any',
+    ...(rule.trigger_window_ms ? { trigger_window_ms: rule.trigger_window_ms } : {}),
     cooldown_ms: rule.cooldown_ms ?? 500,
     ...(rule.timeout_reset_ms ? { timeout_reset_ms: rule.timeout_reset_ms } : {}),
     ...(rule.category ? { category: rule.category } : {}),

@@ -429,12 +429,26 @@ static esp_err_t api_states_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_command_handler(httpd_req_t *req) {
-    char buf[512];
-    int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
-    if (ret <= 0) return ESP_FAIL;
-    buf[ret] = '\0';
+    set_cors_headers(req);
+    size_t content_len = req->content_len;
+    if (content_len == 0 || content_len > 8192) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid request body size");
+        return ESP_FAIL;
+    }
 
-    cJSON *root = cJSON_Parse(buf);
+    std::string body(content_len, '\0');
+    size_t total_read = 0;
+    while (total_read < content_len) {
+        int r = httpd_req_recv(req, &body[total_read], content_len - total_read);
+        if (r <= 0) {
+            if (r == HTTPD_SOCK_ERR_TIMEOUT) continue;
+            httpd_resp_send_err(req, HTTPD_408_REQUEST_TIMEOUT, "Failed to receive request body");
+            return ESP_FAIL;
+        }
+        total_read += static_cast<size_t>(r);
+    }
+
+    cJSON *root = cJSON_Parse(body.c_str());
     if (!root) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
         return ESP_FAIL;
@@ -448,36 +462,81 @@ static esp_err_t api_command_handler(httpd_req_t *req) {
         const char* cmd_str = cJSON_IsString(target_cmd) ? target_cmd->valuestring : "";
         if (queue_entity_command(target_entity->valuestring, cmd_str)) {
             cJSON_Delete(root);
+            httpd_resp_set_type(req, "application/json");
             httpd_resp_sendstr(req, "{\"status\": \"queued\"}");
             return ESP_OK;
         }
     }
 
-    // Direct CAN frame fallback (or fallback if entity was not resolved in catalog)
-    if (cJSON_IsString(target_can_id) || cJSON_IsNumber(target_can_id)) {
-        uint32_t cid = 0;
-        if (cJSON_IsString(target_can_id)) {
-            cid = strtoul(target_can_id->valuestring, nullptr, 0);
-        } else {
-            cid = (uint32_t)target_can_id->valuedouble;
-        }
+    uint32_t cid = 0;
+    if (cJSON_IsString(target_can_id)) {
+        cid = strtoul(target_can_id->valuestring, nullptr, 0);
+    } else if (cJSON_IsNumber(target_can_id)) {
+        cid = (uint32_t)target_can_id->valuedouble;
+    }
 
+    cJSON *bus_item = cJSON_GetObjectItem(root, "bus");
+    uint8_t top_bus = 0;
+    if (cJSON_IsNumber(bus_item)) {
+        top_bus = (uint8_t)bus_item->valuedouble;
+    } else if (cJSON_IsString(bus_item)) {
+        top_bus = (uint8_t)strtoul(bus_item->valuestring, nullptr, 0);
+    }
+
+    cJSON *delay_item = cJSON_GetObjectItem(root, "delay_ms");
+    uint32_t top_delay_ms = (cJSON_IsNumber(delay_item) && delay_item->valuedouble >= 0)
+        ? (uint32_t)delay_item->valuedouble
+        : 20;
+
+    // Multi-step CAN sequence fallback (e.g. door_locks, seat comfort, charging limits, airflow, press/release bursts)
+    cJSON *steps_item = cJSON_GetObjectItem(root, "steps");
+    if (cJSON_IsArray(steps_item) && cJSON_GetArraySize(steps_item) > 0) {
+        std::vector<ActionStep> parsed_steps;
+        cJSON *s_item = nullptr;
+        cJSON_ArrayForEach(s_item, steps_item) {
+            ActionStep step;
+            if (parse_action_step(s_item, step)) {
+                if (step.type == ActionType::TRANSMIT_FRAME && step.can_id == 0) {
+                    step.can_id = cid;
+                }
+                if (!cJSON_GetObjectItem(s_item, "bus")) {
+                    step.bus = top_bus;
+                }
+                if (step.type != ActionType::TRANSMIT_FRAME || step.can_id != 0) {
+                    parsed_steps.push_back(std::move(step));
+                }
+            }
+        }
+        uint32_t burst_cid = cid;
+        if (burst_cid == 0) {
+            for (const auto& st : parsed_steps) {
+                if (st.type == ActionType::TRANSMIT_FRAME && st.can_id != 0) {
+                    burst_cid = st.can_id;
+                    break;
+                }
+            }
+        }
+        if (!parsed_steps.empty() && queue_action_steps(burst_cid, top_delay_ms, parsed_steps)) {
+            cJSON_Delete(root);
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_sendstr(req, "{\"status\": \"queued\"}");
+            return ESP_OK;
+        }
+    }
+
+    // Single-frame direct CAN fallback (or fallback if entity was not resolved in catalog / param_range)
+    if (cid != 0) {
         cJSON *payload_item = cJSON_GetObjectItem(root, "payload");
         cJSON *repeat_item = cJSON_GetObjectItem(root, "repeat");
-        cJSON *delay_item = cJSON_GetObjectItem(root, "delay_ms");
-        cJSON *bus_item = cJSON_GetObjectItem(root, "bus");
 
         ActionStep step = {};
         step.type = ActionType::TRANSMIT_FRAME;
         step.can_id = cid;
-        step.repeat = cJSON_IsNumber(repeat_item) ? (int)repeat_item->valuedouble : 1;
-        step.delay_ms = cJSON_IsNumber(delay_item) ? (uint32_t)delay_item->valuedouble : 0;
+        int rep_val = cJSON_IsNumber(repeat_item) ? (int)repeat_item->valuedouble : 1;
+        step.repeat = (uint8_t)std::max(1, std::min(255, rep_val));
+        step.delay_ms = (cJSON_IsNumber(delay_item) && delay_item->valuedouble >= 0) ? (uint32_t)delay_item->valuedouble : 0;
         step.mask = 0xFF;
-        if (cJSON_IsNumber(bus_item)) {
-            step.bus = (uint8_t)bus_item->valuedouble;
-        } else if (cJSON_IsString(bus_item)) {
-            step.bus = (uint8_t)strtoul(bus_item->valuestring, nullptr, 0);
-        }
+        step.bus = top_bus;
 
         if (cJSON_IsString(payload_item)) {
             // Hex string e.g. "01 02 03 04" or "01020304"
@@ -502,8 +561,9 @@ static esp_err_t api_command_handler(httpd_req_t *req) {
         }
 
         std::vector<ActionStep> steps = { step };
-        if (queue_action_steps(cid, step.delay_ms, steps)) {
+        if (queue_action_steps(cid, top_delay_ms, steps)) {
             cJSON_Delete(root);
+            httpd_resp_set_type(req, "application/json");
             httpd_resp_sendstr(req, "{\"status\": \"queued\"}");
             return ESP_OK;
         }
@@ -515,12 +575,25 @@ static esp_err_t api_command_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_test_automation_handler(httpd_req_t *req) {
-    char buf[256];
-    int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
-    if (ret <= 0) return ESP_FAIL;
-    buf[ret] = '\0';
+    set_cors_headers(req);
+    size_t content_len = req->content_len;
+    if (content_len == 0 || content_len > 16384) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid request body size");
+        return ESP_FAIL;
+    }
 
-    cJSON *root = cJSON_Parse(buf);
+    std::string body(content_len, '\0');
+    size_t total_read = 0;
+    while (total_read < content_len) {
+        int r = httpd_req_recv(req, &body[total_read], content_len - total_read);
+        if (r <= 0) {
+            if (r == HTTPD_SOCK_ERR_TIMEOUT) continue;
+            return ESP_FAIL;
+        }
+        total_read += static_cast<size_t>(r);
+    }
+
+    cJSON *root = cJSON_Parse(body.c_str());
     if (!root) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
         return ESP_FAIL;
@@ -528,34 +601,70 @@ static esp_err_t api_test_automation_handler(httpd_req_t *req) {
 
     cJSON *id_item = cJSON_GetObjectItem(root, "id");
     cJSON *mode_item = cJSON_GetObjectItem(root, "mode");
+    cJSON *inline_actions_item = cJSON_GetObjectItem(root, "actions");
     const char* req_id = cJSON_IsString(id_item) ? id_item->valuestring : "";
     const char* mode = cJSON_IsString(mode_item) ? mode_item->valuestring : "dry_run";
     bool is_dry_run = (strcmp(mode, "dry_run") == 0);
-    bool is_live_fire = (!is_dry_run && strcmp(mode, "live_fire") == 0);
+    bool is_live_fire = (!is_dry_run && (strcmp(mode, "live_fire") == 0 || strcmp(mode, "run_actions") == 0));
 
     bool found = false;
     bool dry_passed = true;
     std::string debug_msg = "All conditions passed";
+    std::string fired_name = req_id;
+    std::vector<ActionStep> inline_steps;
+    bool has_inline_steps = false;
+
+    if (is_live_fire && cJSON_IsArray(inline_actions_item) && cJSON_GetArraySize(inline_actions_item) > 0) {
+        cJSON *a_sub = nullptr;
+        cJSON_ArrayForEach(a_sub, inline_actions_item) {
+            ActionStep step;
+            if (parse_action_step(a_sub, step)) {
+                inline_steps.push_back(std::move(step));
+            }
+        }
+        has_inline_steps = !inline_steps.empty();
+    }
 
     if (is_dry_run || is_live_fire) {
-        std::lock_guard<std::mutex> lock(g_automations_mutex);
-        for (const auto& rule : global_automations) {
-            if (rule.id == req_id) {
-                found = true;
-                if (is_dry_run) {
-                    for (const auto& cond : rule.conditions) {
-                        if (!evaluate_condition(cond)) {
-                            dry_passed = false;
-                            char tmp[64];
-                            snprintf(tmp, sizeof(tmp), "Condition failed on CAN ID 0x%03lX", (unsigned long)cond.can_id);
-                            debug_msg = tmp;
-                            break;
+        std::vector<ActionStep> matched_steps;
+        std::shared_ptr<std::atomic<bool>> matched_running;
+        if (has_inline_steps) {
+            found = true;
+        }
+        {
+            std::lock_guard<std::mutex> lock(g_automations_mutex);
+            for (const auto& rule : global_automations) {
+                if (rule.id == req_id) {
+                    found = true;
+                    fired_name = rule.name.empty() ? rule.id : rule.name;
+                    if (is_dry_run) {
+                        for (const auto& cond : rule.conditions) {
+                            if (!evaluate_condition(cond)) {
+                                dry_passed = false;
+                                char tmp[64];
+                                snprintf(tmp, sizeof(tmp), "Condition failed on CAN ID 0x%03lX", (unsigned long)cond.can_id);
+                                debug_msg = tmp;
+                                break;
+                            }
                         }
+                    } else if (!has_inline_steps) {
+                        // Bypass rule.enabled and rule.cooldown_ms for manual test execution
+                        matched_steps = rule.actions;
+                        matched_running = rule.is_running;
                     }
-                } else {
-                    queue_action_steps_ptr(0, 20, &rule.actions);
+                    break;
                 }
-                break;
+            }
+        }
+
+        if (is_live_fire && found) {
+            if (has_inline_steps) {
+                queue_action_steps(0, 20, inline_steps, "manual_test");
+            } else if (!matched_steps.empty()) {
+                queue_action_steps(0, 20, matched_steps, "manual_test", matched_running);
+            }
+            if (req_id[0] != '\0') {
+                broadcast_ws_automation_event(req_id, fired_name);
             }
         }
     }
@@ -564,8 +673,18 @@ static esp_err_t api_test_automation_handler(httpd_req_t *req) {
     if (found) {
         httpd_resp_set_type(req, "application/json");
         if (is_dry_run) {
-            std::string resp = std::string("{\"status\":\"ok\",\"passed\":") + (dry_passed ? "true" : "false") + ",\"message\":\"" + debug_msg + "\"}";
-            httpd_resp_sendstr(req, resp.c_str());
+            cJSON *resp_obj = cJSON_CreateObject();
+            cJSON_AddStringToObject(resp_obj, "status", "ok");
+            cJSON_AddBoolToObject(resp_obj, "passed", dry_passed);
+            cJSON_AddStringToObject(resp_obj, "message", debug_msg.c_str());
+            char *resp_str = cJSON_PrintUnformatted(resp_obj);
+            cJSON_Delete(resp_obj);
+            if (resp_str) {
+                httpd_resp_sendstr(req, resp_str);
+                free(resp_str);
+            } else {
+                httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
+            }
         } else {
             httpd_resp_sendstr(req, "{\"status\":\"ok\",\"message\":\"Live fire actions queued\"}");
         }
@@ -597,6 +716,7 @@ static esp_err_t api_automations_diagnostics_handler(httpd_req_t *req) {
         cJSON_AddStringToObject(rule_obj, "ha_icon", rule.ha_icon.c_str());
         cJSON_AddStringToObject(rule_obj, "exec_mode", rule.exec_mode.c_str());
         cJSON_AddStringToObject(rule_obj, "trigger_mode", rule.trigger_mode.c_str());
+        cJSON_AddNumberToObject(rule_obj, "trigger_window_ms", rule.trigger_window_ms);
         cJSON_AddNumberToObject(rule_obj, "cooldown_ms", rule.cooldown_ms);
         cJSON_AddNumberToObject(rule_obj, "last_exec_ms", rule.last_exec_time_ms);
         if (rule.last_exec_time_ms > 0 && now_ms >= rule.last_exec_time_ms) {
@@ -777,6 +897,17 @@ static esp_err_t api_automations_diagnostics_handler(httpd_req_t *req) {
                 cJSON_AddStringToObject(a_obj, "type", "precondition");
                 cJSON_AddStringToObject(a_obj, "mode", act.precon_mode.c_str());
                 cJSON_AddStringToObject(a_obj, "action", act.precon_action.c_str());
+            } else if (act.type == ActionType::CYCLE_ENTITY) {
+                cJSON_AddStringToObject(a_obj, "type", "cycle_entity");
+                cJSON_AddStringToObject(a_obj, "entity_id", act.entity_id.c_str());
+                cJSON_AddStringToObject(a_obj, "direction", act.cycle_direction.c_str());
+                cJSON_AddBoolToObject(a_obj, "wrap", act.cycle_wrap);
+                cJSON_AddNumberToObject(a_obj, "state_count", (double)act.cycle_states.size());
+            } else if (act.type == ActionType::HUD_NAV) {
+                cJSON_AddStringToObject(a_obj, "type", "hud_nav");
+                cJSON_AddStringToObject(a_obj, "action", act.nav_action.empty() ? "update" : act.nav_action.c_str());
+                cJSON_AddNumberToObject(a_obj, "icon", act.nav_icon);
+                cJSON_AddNumberToObject(a_obj, "distance_meters", act.nav_distance_meters);
             } else {
                 cJSON_AddStringToObject(a_obj, "type", "other");
             }
@@ -1374,6 +1505,7 @@ static esp_err_t api_post_preferences_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_system_status_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     cJSON *root = cJSON_CreateObject();
 #if CONFIG_IDF_TARGET_ESP32S3
     bool bus0_ok = dual_can_is_available(CAN_BUS_0);
@@ -1547,6 +1679,7 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_system_set_time_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     char buf[256] = {0};
     int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
     if (ret <= 0) {
@@ -1613,6 +1746,7 @@ static void collect_spiffs_files_recursive(const char *dir_path, cJSON *arr) {
 }
 
 static esp_err_t api_system_control_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     if (req->content_len == 0 || req->content_len > 16384) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
         return ESP_FAIL;
@@ -1773,6 +1907,7 @@ static esp_err_t api_system_control_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_wifi_status_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     NetworkStatusInfo st = network_mgr_get_status();
     cJSON *root = cJSON_CreateObject();
     cJSON_AddBoolToObject(root, "sta_connected", st.sta_connected);
@@ -1801,6 +1936,7 @@ static esp_err_t api_wifi_status_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_wifi_get_networks_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     auto list = network_mgr_get_known_networks();
     cJSON *root = cJSON_CreateArray();
     for (const auto& net : list) {
@@ -1818,6 +1954,7 @@ static esp_err_t api_wifi_get_networks_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_wifi_post_networks_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     char buf[256];
     int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
     if (ret <= 0) return ESP_FAIL;
@@ -1928,6 +2065,7 @@ static esp_err_t api_wifi_delete_networks_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_wifi_scan_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     if (!network_mgr_is_scanning()) {
         network_mgr_start_scan();
     }
@@ -1955,6 +2093,7 @@ static esp_err_t api_wifi_scan_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_wifi_settings_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     char buf[256];
     int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
     if (ret <= 0) return ESP_FAIL;
@@ -1987,6 +2126,7 @@ static esp_err_t api_wifi_settings_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_mqtt_get_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     MqttConfig cfg = mqtt_mgr_get_config();
     cJSON *root = cJSON_CreateObject();
     cJSON_AddBoolToObject(root, "enabled", cfg.enabled);
@@ -2005,6 +2145,7 @@ static esp_err_t api_mqtt_get_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_mqtt_post_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     char buf[512];
     int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
     if (ret <= 0) return ESP_FAIL;
@@ -2056,6 +2197,7 @@ static esp_err_t api_mqtt_post_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_can_monitored_ids_get_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     std::vector<uint32_t> ids = mqtt_mgr_get_monitored_ids();
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "count", (double)ids.size());
@@ -2076,6 +2218,7 @@ static esp_err_t api_can_monitored_ids_get_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_can_monitored_ids_post_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     char buf[2048];
     int ret = httpd_req_recv(req, buf, std::min(req->content_len, static_cast<size_t>(sizeof(buf) - 1)));
     if (ret <= 0) return ESP_FAIL;
@@ -2124,7 +2267,7 @@ static esp_err_t api_can_monitored_ids_post_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_can_monitored_ids_reset_handler(httpd_req_t *req) {
-    (void)req;
+    set_cors_headers(req);
     mqtt_mgr_reset_monitored_ids();
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"status\":\"ok\",\"message\":\"Restored default monitored CAN IDs\"}");
@@ -2132,6 +2275,7 @@ static esp_err_t api_can_monitored_ids_reset_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_can_active_ids_get_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     std::vector<uint32_t> active = can_engine_get_active_ids();
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "count", (double)active.size());
@@ -2151,6 +2295,7 @@ static esp_err_t api_can_active_ids_get_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_notify_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     char buf[256];
     int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
     if (ret <= 0) {
@@ -2209,6 +2354,7 @@ static esp_err_t api_notify_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_nav_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     char buf[1024];
     int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
     if (ret <= 0) {
@@ -2588,6 +2734,7 @@ httpd_handle_t start_webserver(void) {
         reg_uri("/api/notify", HTTP_POST, api_notify_handler);
         reg_uri("/api/nav", HTTP_POST, api_nav_handler);
         reg_uri("/api/test_automation", HTTP_POST, api_test_automation_handler);
+        reg_uri("/api/automations/test", HTTP_POST, api_test_automation_handler);
         reg_uri("/api/automations/diagnostics", HTTP_GET, api_automations_diagnostics_handler);
         reg_uri("/api/automations", HTTP_GET, api_get_automations_handler);
         reg_uri("/api/automations", HTTP_POST, api_post_automations_handler);

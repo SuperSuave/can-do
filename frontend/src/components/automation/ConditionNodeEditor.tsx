@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useId } from 'react';
 import {
   Check,
   HelpCircle,
@@ -18,6 +18,7 @@ import {
   Sliders,
   Plus,
   ClipboardPaste,
+  GripVertical,
   X
 } from 'lucide-react';
 import { AutomationCondition, AutomationTrigger } from '../../types/automation';
@@ -30,6 +31,14 @@ import {
   regenerateConditionIds,
   compileToByteMap
 } from '../../utils/automationConverters';
+import { formatConditionSummary } from '../../utils/ruleSummaries';
+import {
+  arrayMove,
+  canReadSystemClipboard,
+  getActiveScopedDrag,
+  setActiveScopedDrag
+} from '../../utils/automationClipboard';
+import type { NodeDragConfig } from './TriggerNodeEditor';
 import {
   groupOptionsIntoGridRows,
   OptionGridGroup,
@@ -65,6 +74,7 @@ export interface ConditionNodeEditorProps {
   isFirst?: boolean;
   isLast?: boolean;
   onOpenAddConditionDialog?: (onAdd: (cond: AutomationCondition) => void) => void;
+  dragConfig?: NodeDragConfig;
 }
 
 export interface ConditionListEditorProps {
@@ -101,10 +111,12 @@ export function ConditionNodeEditor({
   onMoveDown,
   isFirst,
   isLast,
-  onOpenAddConditionDialog
+  onOpenAddConditionDialog,
+  dragConfig
 }: ConditionNodeEditorProps) {
   const { copyToClipboard } = useContext(AutomationClipboardContext);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [dragArmed, setDragArmed] = useState(false);
   const [multiSelectMode, setMultiSelectMode] = useState<boolean>(() => {
     return !!(cond.selected_options && cond.selected_options.length > 1) ||
            !!(cond.match && Object.keys(cond.match).length > 1);
@@ -121,6 +133,50 @@ export function ConditionNodeEditor({
     (cond.type === 'and_group' ? 'and' : cond.type === 'or_group' ? 'or' : cond.type === 'not_group' ? 'not' : 'and');
 
   const [collapsed, setCollapsed] = useState(false);
+
+  const dragClass = dragConfig?.isDragging
+    ? 'opacity-50 ring-1 ring-accent/50'
+    : dragConfig?.isDragOver
+    ? 'ring-2 ring-accent border-accent bg-accent-soft/15'
+    : '';
+
+  const cardDragProps = dragConfig
+    ? {
+        draggable: dragArmed,
+        onDragStart: (e: React.DragEvent) => {
+          if (!dragArmed) {
+            e.preventDefault();
+            return;
+          }
+          dragConfig.onDragStart(e);
+        },
+        onDragOver: dragConfig.onDragOver,
+        onDrop: (e: React.DragEvent) => {
+          setDragArmed(false);
+          dragConfig.onDrop(e);
+        },
+        onDragEnd: () => {
+          setDragArmed(false);
+          dragConfig.onDragEnd();
+        },
+        onPointerUp: () => setDragArmed(false)
+      }
+    : {};
+
+  const dragHandle = dragConfig ? (
+    <span
+      onPointerDown={e => {
+        e.stopPropagation();
+        setDragArmed(true);
+      }}
+      onPointerUp={() => setDragArmed(false)}
+      className="cursor-grab active:cursor-grabbing text-muted hover:text-foreground p-0.5 shrink-0 touch-none"
+      title="Drag to reorder"
+      aria-label="Drag condition to reorder"
+    >
+      <GripVertical className="w-3.5 h-3.5" />
+    </span>
+  ) : null;
 
   // Evaluate current condition state against live telemetry
   const evalResult = evaluateConditionState(cond, liveFrames, entityStates, lastFiredTriggerId, catalog, liveWifiStatus, liveBleMap);
@@ -213,9 +269,13 @@ export function ConditionNodeEditor({
         : 'bg-danger-soft text-danger-soft-foreground border-danger/40';
 
     return (
-      <div className={`p-2.5 sm:p-3 rounded-xl border ${borderCls} space-y-2 text-xs transition-all min-w-0 overflow-hidden`}>
+      <div
+        {...cardDragProps}
+        className={`p-2.5 sm:p-3 rounded-xl border ${borderCls} space-y-2 text-xs transition-all min-w-0 overflow-hidden ${dragClass}`}
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap min-w-0">
+            {dragHandle}
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
@@ -240,6 +300,12 @@ export function ConditionNodeEditor({
             {actionButtons}
           </div>
         </div>
+
+        {collapsed && (
+          <div className="px-2.5 py-1.5 rounded-lg bg-surface-tertiary/70 border border-border/60 font-mono text-[11px] text-muted truncate">
+            {formatConditionSummary(cond, catalog)}
+          </div>
+        )}
 
         {!collapsed && (
           <div className="space-y-2">
@@ -274,9 +340,13 @@ export function ConditionNodeEditor({
   if (cond.type === 'triggered_by' || cond.type === 'trigger' || cond.trigger_id !== undefined) {
     const matchedTrig = (availableTriggers || []).find(t => t.id === cond.trigger_id);
     return (
-      <div className="p-2.5 sm:p-3 rounded-xl bg-surface-secondary border border-warning/40 space-y-2 text-xs min-w-0 overflow-hidden">
+      <div
+        {...cardDragProps}
+        className={`p-2.5 sm:p-3 rounded-xl bg-surface-secondary border border-warning/40 space-y-2 text-xs transition-all min-w-0 overflow-hidden ${dragClass}`}
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            {dragHandle}
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
@@ -296,6 +366,12 @@ export function ConditionNodeEditor({
             {actionButtons}
           </div>
         </div>
+
+        {collapsed && (
+          <div className="px-2.5 py-1.5 rounded-lg bg-surface-tertiary/70 border border-border/60 font-mono text-[11px] text-muted truncate">
+            {formatConditionSummary(cond, catalog)}
+          </div>
+        )}
 
         {!collapsed && (
           <>
@@ -346,9 +422,13 @@ export function ConditionNodeEditor({
   // Time window condition
   if (cond.type === 'time_condition' || cond.type === 'time') {
     return (
-      <div className="p-2.5 sm:p-3 rounded-xl bg-surface-secondary border border-accent/40 space-y-2 text-xs min-w-0 overflow-hidden">
+      <div
+        {...cardDragProps}
+        className={`p-2.5 sm:p-3 rounded-xl bg-surface-secondary border border-accent/40 space-y-2 text-xs transition-all min-w-0 overflow-hidden ${dragClass}`}
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
+            {dragHandle}
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
@@ -368,6 +448,12 @@ export function ConditionNodeEditor({
             {actionButtons}
           </div>
         </div>
+
+        {collapsed && (
+          <div className="px-2.5 py-1.5 rounded-lg bg-surface-tertiary/70 border border-border/60 font-mono text-[11px] text-muted truncate">
+            {formatConditionSummary(cond, catalog)}
+          </div>
+        )}
 
         {!collapsed && (
           <>
@@ -406,9 +492,13 @@ export function ConditionNodeEditor({
   if (cond.type === 'device_state' || cond.type === 'wifi' || cond.type === 'wifi_condition') {
     const prop = cond.device_property || 'wifi_ssid';
     return (
-      <div className="p-2.5 sm:p-3 rounded-xl bg-surface-secondary border border-accent/40 space-y-2 text-xs min-w-0 overflow-hidden">
+      <div
+        {...cardDragProps}
+        className={`p-2.5 sm:p-3 rounded-xl bg-surface-secondary border border-accent/40 space-y-2 text-xs transition-all min-w-0 overflow-hidden ${dragClass}`}
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
+            {dragHandle}
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
@@ -428,6 +518,12 @@ export function ConditionNodeEditor({
             {actionButtons}
           </div>
         </div>
+
+        {collapsed && (
+          <div className="px-2.5 py-1.5 rounded-lg bg-surface-tertiary/70 border border-border/60 font-mono text-[11px] text-muted truncate">
+            {formatConditionSummary(cond, catalog)}
+          </div>
+        )}
 
         {!collapsed && (
           <div className="space-y-2 pt-2 border-t border-separator">
@@ -678,9 +774,13 @@ export function ConditionNodeEditor({
     const currentMode = isDeviceMode ? 'paired_device' : 'phone_beacon';
 
     return (
-      <div className="p-2.5 sm:p-3 rounded-xl bg-surface-secondary border border-purple-500/40 space-y-2 text-xs min-w-0 overflow-hidden">
+      <div
+        {...cardDragProps}
+        className={`p-2.5 sm:p-3 rounded-xl bg-surface-secondary border border-purple-500/40 space-y-2 text-xs transition-all min-w-0 overflow-hidden ${dragClass}`}
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
+            {dragHandle}
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
@@ -700,6 +800,12 @@ export function ConditionNodeEditor({
             {actionButtons}
           </div>
         </div>
+
+        {collapsed && (
+          <div className="px-2.5 py-1.5 rounded-lg bg-surface-tertiary/70 border border-border/60 font-mono text-[11px] text-muted truncate">
+            {formatConditionSummary(cond, catalog)}
+          </div>
+        )}
 
         {!collapsed && (
           <div className="space-y-2 pt-2 border-t border-separator">
@@ -871,9 +977,13 @@ export function ConditionNodeEditor({
     const btn = cond.ble_button ?? cond.target_string ?? 'any';
     const act = cond.ble_action || 'press';
     return (
-      <div className="p-2.5 sm:p-3 rounded-xl bg-surface-secondary border border-accent/40 space-y-2 text-xs min-w-0 overflow-hidden">
+      <div
+        {...cardDragProps}
+        className={`p-2.5 sm:p-3 rounded-xl bg-surface-secondary border border-accent/40 space-y-2 text-xs transition-all min-w-0 overflow-hidden ${dragClass}`}
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
+            {dragHandle}
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
@@ -893,6 +1003,12 @@ export function ConditionNodeEditor({
             {actionButtons}
           </div>
         </div>
+
+        {collapsed && (
+          <div className="px-2.5 py-1.5 rounded-lg bg-surface-tertiary/70 border border-border/60 font-mono text-[11px] text-muted truncate">
+            {formatConditionSummary(cond, catalog)}
+          </div>
+        )}
 
         {!collapsed && (
           <div className="space-y-2 pt-2 border-t border-separator">
@@ -998,10 +1114,14 @@ export function ConditionNodeEditor({
   );
 
   return (
-    <div className="p-2.5 sm:p-3.5 rounded-xl bg-surface-secondary border border-border hover:border-border-secondary space-y-2.5 text-xs transition-all shadow-sm min-w-0 overflow-hidden">
+    <div
+      {...cardDragProps}
+      className={`p-2.5 sm:p-3.5 rounded-xl bg-surface-secondary border border-border hover:border-border-secondary space-y-2.5 text-xs transition-all shadow-sm min-w-0 overflow-hidden ${dragClass}`}
+    >
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+          {dragHandle}
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}
@@ -1051,6 +1171,12 @@ export function ConditionNodeEditor({
           {actionButtons}
         </div>
       </div>
+
+      {collapsed && (
+        <div className="px-2.5 py-1.5 rounded-lg bg-surface-tertiary/70 border border-border/60 font-mono text-[11px] text-muted truncate">
+          {formatConditionSummary(cond, catalog)}
+        </div>
+      )}
 
       {!collapsed && (
         <>
@@ -1281,7 +1407,18 @@ export function ConditionListEditor({
   onUpdate,
   onOpenAddConditionDialog
 }: ConditionListEditorProps) {
-  const { clipboard, pastePayload } = useContext(AutomationClipboardContext);
+  const { clipboard, pasteFromClipboard } = useContext(AutomationClipboardContext);
+  const listId = useId();
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const hasSystemClipboard = canReadSystemClipboard();
+
+  const handlePasteCondition = async () => {
+    const pasted = await pasteFromClipboard('condition');
+    if (pasted) {
+      onUpdate([...conditions, pasted]);
+    }
+  };
 
   const addDefaultCondition = () => {
     const next = [...conditions];
@@ -1345,22 +1482,56 @@ export function ConditionListEditor({
                           onUpdate(next);
                         }}
                         onMoveUp={idx > 0 ? () => {
-                          const next = [...conditions];
-                          const temp = next[idx];
-                          next[idx] = next[idx - 1];
-                          next[idx - 1] = temp;
-                          onUpdate(next);
+                          onUpdate(arrayMove(conditions, idx, idx - 1));
                         } : undefined}
                         onMoveDown={idx < conditions.length - 1 ? () => {
-                          const next = [...conditions];
-                          const temp = next[idx];
-                          next[idx] = next[idx + 1];
-                          next[idx + 1] = temp;
-                          onUpdate(next);
+                          onUpdate(arrayMove(conditions, idx, idx + 1));
                         } : undefined}
                         isFirst={idx === 0}
                         isLast={idx === conditions.length - 1}
                         onOpenAddConditionDialog={onOpenAddConditionDialog}
+                        dragConfig={
+                          conditions.length > 1
+                            ? {
+                                onDragStart: e => {
+                                  e.stopPropagation();
+                                  e.dataTransfer.effectAllowed = 'move';
+                                  e.dataTransfer.setData('text/plain', `${listId}:${idx}`);
+                                  setActiveScopedDrag({ listId, index: idx });
+                                  setDragIdx(idx);
+                                },
+                                onDragOver: e => {
+                                  const active = getActiveScopedDrag();
+                                  if (active?.listId !== listId) return;
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  e.dataTransfer.dropEffect = 'move';
+                                  if (dragOverIdx !== idx) {
+                                    setDragOverIdx(idx);
+                                  }
+                                },
+                                onDrop: e => {
+                                  const active = getActiveScopedDrag();
+                                  if (active?.listId !== listId) return;
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (active.index !== idx) {
+                                    onUpdate(arrayMove(conditions, active.index, idx));
+                                  }
+                                  setActiveScopedDrag(null);
+                                  setDragIdx(null);
+                                  setDragOverIdx(null);
+                                },
+                                onDragEnd: () => {
+                                  setActiveScopedDrag(null);
+                                  setDragIdx(null);
+                                  setDragOverIdx(null);
+                                },
+                                isDragging: dragIdx === idx,
+                                isDragOver: dragOverIdx === idx && dragIdx !== idx
+                              }
+                            : undefined
+                        }
                       />
                     );
                   })}
@@ -1387,8 +1558,7 @@ export function ConditionListEditor({
           <button
             type="button"
             onClick={() => {
-              const pasted = pastePayload('condition');
-              if (pasted) onUpdate([...conditions, pasted]);
+              void handlePasteCondition();
             }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-accent-soft hover:bg-accent/20 text-accent-soft-foreground border border-accent/40 transition cursor-pointer"
             title={`Paste copied condition "${clipboard.label}"`}
@@ -1402,14 +1572,27 @@ export function ConditionListEditor({
           <button
             type="button"
             onClick={() => {
-              const pasted = pastePayload('condition');
-              if (pasted) onUpdate([...conditions, pasted]);
+              void handlePasteCondition();
             }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-warning-soft hover:bg-warning/20 text-warning-soft-foreground border border-warning/40 transition cursor-pointer"
             title={`Convert & paste copied trigger "${clipboard.label}" as condition`}
           >
             <ClipboardPaste className="w-3.5 h-3.5 text-warning" />
             <span>Paste as Condition ({clipboard.label})</span>
+          </button>
+        )}
+
+        {clipboard?.type !== 'condition' && clipboard?.type !== 'trigger' && hasSystemClipboard && (
+          <button
+            type="button"
+            onClick={() => {
+              void handlePasteCondition();
+            }}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-surface-tertiary hover:bg-default-hover text-foreground/85 border border-border transition cursor-pointer"
+            title="Read a Trigger or Condition JSON block from system clipboard"
+          >
+            <ClipboardPaste className="w-3.5 h-3.5 text-accent" />
+            <span>Paste from Clipboard</span>
           </button>
         )}
       </div>

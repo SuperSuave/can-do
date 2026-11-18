@@ -719,7 +719,7 @@ test('compileToByteMap converts numeric values and JSON object strings into clea
   });
 });
 
-test('compileAction desugars cycle_entity into native choose action with sequential state transitions', () => {
+test('compileAction compiles cycle_entity into compact native Option B action object', () => {
   const catalog: Catalog = {
     can_do_version: '1.0.0',
     vehicles: [],
@@ -744,32 +744,22 @@ test('compileAction desugars cycle_entity into native choose action with sequent
     type: 'cycle_entity',
     entity_id: 'seat_heater',
     states: ['Off', 'Low', 'High'],
+    direction: 'forward',
     wrap: true,
+    fallback_state: '__first__',
     show_popup: false,
   };
 
   const compiled = compileAction(cycleAct, catalog);
-  assert.strictEqual(compiled.type, 'choose');
-  assert.strictEqual(compiled.choices.length, 3);
-
-  // Branch 0: If Off -> Transmit Low
-  assert.strictEqual(compiled.choices[0].conditions[0].value, '0x00');
-  assert.strictEqual(compiled.choices[0].sequence[0].type, 'transmit');
-  assert.deepStrictEqual(compiled.choices[0].sequence[0].payload, { D1: '0x01' });
-
-  // Branch 1: If Low -> Transmit High
-  assert.strictEqual(compiled.choices[1].conditions[0].value, '0x01');
-  assert.strictEqual(compiled.choices[1].sequence[0].type, 'transmit');
-  assert.deepStrictEqual(compiled.choices[1].sequence[0].payload, { D1: '0x02' });
-
-  // Branch 2: If High -> Transmit Off (wrap)
-  assert.strictEqual(compiled.choices[2].conditions[0].value, '0x02');
-  assert.strictEqual(compiled.choices[2].sequence[0].type, 'transmit');
-  assert.deepStrictEqual(compiled.choices[2].sequence[0].payload, { D1: '0x00' });
-
-  // Default fallback -> Transmit Off
-  assert.strictEqual(compiled.default[0].type, 'transmit');
-  assert.deepStrictEqual(compiled.default[0].payload, { D1: '0x00' });
+  assert.strictEqual(compiled.type, 'cycle_entity');
+  assert.strictEqual(compiled.entity_id, 'seat_heater');
+  assert.deepStrictEqual(compiled.states, ['Off', 'Low', 'High']);
+  assert.strictEqual(compiled.direction, 'forward');
+  assert.strictEqual(compiled.wrap, true);
+  assert.strictEqual(compiled.fallback_state, '__first__');
+  assert.strictEqual(compiled.show_popup, false);
+  assert.strictEqual(compiled.level, 'info');
+  assert.strictEqual(compiled.choices, undefined);
 });
 
 test('compileAction compiles climate_target preserving target_temp_c, defrost, and duration_minutes', () => {
@@ -1702,3 +1692,224 @@ test('resolveCatalogCommandForAction resolves ambient_mood_lighting alias, exact
   assert.strictEqual(compiledSingle.source_command_id, 'hazard_lights');
   assert.strictEqual(compiledSingle.option_label, 'Turned ON / Active');
 });
+
+test('compileAction and decompileActionList round-trip repeat_until and wait_for with conditions array', () => {
+  const catalog = createMockCatalog(5);
+
+  // Single condition passed via conditions[] (e.g. edited via ConditionListEditor) compiles to condition
+  const waitSingle: AutomationAction = {
+    id: 'act_wait_single',
+    type: 'wait_for',
+    interval_ms: 50,
+    timeout_ms: 5000,
+    conditions: [
+      { id: 'c1', type: 'ble_button', ble_button: 'volume_up', ble_action: 'press' } as AutomationCondition,
+    ],
+  };
+  const compiledWaitSingle = compileAction(waitSingle, catalog);
+  assert.strictEqual(compiledWaitSingle.type, 'wait_for');
+  assert.ok(compiledWaitSingle.condition, 'Single condition in conditions[] should compile to condition');
+  assert.strictEqual(compiledWaitSingle.condition.ble_button, 'volume_up');
+
+  // Multiple conditions in repeat_until compile to conditions[] and preserve sequence
+  const repeatMulti: AutomationAction = {
+    id: 'act_repeat_multi',
+    type: 'repeat_until',
+    interval_ms: 500,
+    timeout_ms: 20000,
+    conditions: [
+      { id: 'c1', type: 'can_state', can_id: '0x226', byte: 'D1', mask: '0xFF', operator: 'equal', value: '0x00' },
+      { id: 'c2', type: 'ble_button', ble_button: 'mute', ble_action: 'press' } as AutomationCondition,
+    ],
+    sequence: [
+      { id: 'seq_1', type: 'track_popup', level: 'info', text: 'Repeating' },
+    ],
+  };
+  const compiledRepeat = compileAction(repeatMulti, catalog);
+  assert.strictEqual(compiledRepeat.type, 'repeat_until');
+  assert.strictEqual(compiledRepeat.interval_ms, 500);
+  assert.strictEqual(compiledRepeat.timeout_ms, 20000);
+  assert.strictEqual(compiledRepeat.conditions?.length, 2);
+  assert.strictEqual(compiledRepeat.sequence?.length, 1);
+
+  const decompiled = decompileActionList([compiledRepeat], catalog);
+  assert.strictEqual(decompiled.length, 1);
+  assert.strictEqual(decompiled[0].type, 'repeat_until');
+  assert.strictEqual(decompiled[0].conditions?.length, 2);
+  assert.ok(decompiled[0].condition);
+  assert.strictEqual(decompiled[0].sequence?.length, 1);
+
+  // Legacy webhook should not compile into an empty transmit frame
+  const compiledWebhook = compileAction(
+    { id: 'act_wh', type: 'webhook', webhook_url: 'https://example.com', webhook_method: 'POST' },
+    catalog
+  );
+  assert.strictEqual(compiledWebhook.type, 'webhook');
+  assert.strictEqual(compiledWebhook.webhook_url, 'https://example.com');
+});
+
+test('compileAction and decompileActionList handle cycle_entity ping_pong, popup templates, fallback modes, and legacy choose compatibility', () => {
+  const catalog: Catalog = {
+    can_do_version: '1.0.0',
+    vehicles: [],
+    commands: [
+      {
+        id: 'drivers_seat_comfort',
+        name: 'Driver Seat Comfort',
+        category: 'Climate & Comfort',
+        roles: ['action', 'condition'],
+        network: { action_can_id: '0x4A2', state_can_id: '0x496', bus: 0 },
+        options: [
+          { label: 'Off', match: { D3: '0x00' }, payload: { D5: '0x2F' } },
+          { label: 'Low Heat', match: { D3: '0x01' }, payload: { D5: '0x6F' } },
+          { label: 'Medium Heat', match: { D3: '0x02' }, payload: { D5: '0x7F' } },
+          { label: 'High Heat', match: { D3: '0x03' }, payload: { D5: '0x8F' } },
+        ],
+      },
+    ],
+  };
+
+  const cyclePingPong: AutomationAction = {
+    id: 'act_cycle_pp',
+    type: 'cycle_entity',
+    entity_id: 'drivers_seat_comfort',
+    states: ['Off', 'Low Heat', 'High Heat'],
+    direction: 'ping_pong',
+    fallback_state: '__first__',
+    show_popup: true,
+    popup_prefix: '{entity}: {state}!',
+    level: 'warning',
+  };
+
+  const compiled = compileAction(cyclePingPong, catalog);
+  assert.strictEqual(compiled.type, 'cycle_entity');
+  assert.strictEqual(compiled.entity_id, 'drivers_seat_comfort');
+  assert.deepStrictEqual(compiled.states, ['Off', 'Low Heat', 'High Heat']);
+  assert.strictEqual(compiled.direction, 'ping_pong');
+  assert.strictEqual(compiled.fallback_state, '__first__');
+  assert.strictEqual(compiled.show_popup, true);
+  assert.strictEqual(compiled.popup_prefix, '{entity}: {state}!');
+  assert.strictEqual(compiled.level, 'warning');
+
+  // Round-trip decompile restores native cycle_entity
+  const decompiled = decompileActionList([compiled], catalog);
+  assert.strictEqual(decompiled.length, 1);
+  assert.strictEqual(decompiled[0].type, 'cycle_entity');
+  assert.strictEqual(decompiled[0].direction, 'ping_pong');
+  assert.deepStrictEqual(decompiled[0].states, ['Off', 'Low Heat', 'High Heat']);
+  assert.strictEqual(decompiled[0].popup_prefix, '{entity}: {state}!');
+  assert.strictEqual(decompiled[0].level, 'warning');
+
+  // Fallback '__none__' is preserved verbatim
+  const compiledNoFallback = compileAction(
+    { ...cyclePingPong, fallback_state: '__none__' },
+    catalog
+  );
+  assert.strictEqual(compiledNoFallback.fallback_state, '__none__');
+
+  // Legacy exported choose + _cycle_entity format still decompiles cleanly into cycle_entity
+  const legacyDecompiled = decompileActionList([
+    {
+      id: 'act_legacy_pp',
+      type: 'choose',
+      choices: [],
+      default: [],
+      _cycle_entity: {
+        entity_id: 'drivers_seat_comfort',
+        states: ['Off', 'Low Heat', 'High Heat'],
+        direction: 'ping_pong',
+        wrap: true,
+        fallback_state: '__first__',
+        show_popup: true,
+        popup_prefix: '{entity}: {state}!',
+        level: 'warning',
+      },
+    },
+  ], catalog);
+  assert.strictEqual(legacyDecompiled.length, 1);
+  assert.strictEqual(legacyDecompiled[0].type, 'cycle_entity');
+  assert.strictEqual(legacyDecompiled[0].direction, 'ping_pong');
+  assert.strictEqual(legacyDecompiled[0].level, 'warning');
+});
+
+test('compileAction and decompileActionList round-trip hud_nav update and clear actions', () => {
+  const catalog = createMockCatalog(2);
+
+  const hudUpdate: AutomationAction = {
+    id: 'act_hud_update',
+    type: 'hud_nav',
+    nav_action: 'update',
+    icon: 0x08, // Turn Left
+    direction_deg: 270,
+    distance_meters: 400,
+    bars: 5,
+    speed_limit: 88, // 55 mph in km/h
+    camera_alert: true,
+    street: 'I-5 North',
+    num_lanes: 4,
+    lane_directions: [8, 1, 1, 3],
+    lane_recommended: [1, 0, 0, 0],
+  };
+
+  const compiledUpdate = compileAction(hudUpdate, catalog);
+  assert.strictEqual(compiledUpdate.type, 'hud_nav');
+  assert.strictEqual(compiledUpdate.icon, 0x08);
+  assert.strictEqual(compiledUpdate.direction_deg, 270);
+  assert.strictEqual(compiledUpdate.distance_meters, 400);
+  assert.strictEqual(compiledUpdate.bars, 5);
+  assert.strictEqual(compiledUpdate.speed_limit, 88);
+  assert.strictEqual(compiledUpdate.camera_alert, true);
+  assert.strictEqual(compiledUpdate.street, 'I-5 North');
+  assert.strictEqual(compiledUpdate.num_lanes, 4);
+  assert.deepStrictEqual(compiledUpdate.lane_directions, [8, 1, 1, 3]);
+  assert.deepStrictEqual(compiledUpdate.lane_recommended, [1, 0, 0, 0]);
+
+  const compiledClear = compileAction(
+    { id: 'act_hud_clear', type: 'hud_nav', nav_action: 'clear' },
+    catalog
+  );
+  assert.strictEqual(compiledClear.type, 'hud_nav');
+  assert.strictEqual(compiledClear.action, 'clear');
+
+  const decompiled = decompileActionList([compiledUpdate, compiledClear], catalog);
+  assert.strictEqual(decompiled.length, 2);
+  assert.strictEqual(decompiled[0].type, 'hud_nav');
+  assert.strictEqual(decompiled[0].icon, 0x08);
+  assert.strictEqual(decompiled[0].distance_meters, 400);
+  assert.strictEqual(decompiled[0].speed_limit, 88);
+  assert.strictEqual(decompiled[0].num_lanes, 4);
+  assert.strictEqual(decompiled[1].type, 'hud_nav');
+  assert.strictEqual(decompiled[1].nav_action, 'clear');
+});
+
+test('compileAutomationRule and decompileAutomationRule preserve trigger_mode and trigger_window_ms', () => {
+  const catalog = createMockCatalog(2);
+  const seqRule: AutomationRule = {
+    id: 'rule_seq_win',
+    name: 'Two-Button Secret Sequence',
+    enabled: true,
+    ha_expose: true,
+    ha_icon: 'mdi:gesture-tap-hold',
+    exec_mode: 'one_shot',
+    trigger_mode: 'sequence',
+    trigger_window_ms: 8000,
+    cooldown_ms: 500,
+    triggers: [
+      { id: 't1', source: 'ble', type: 'ble_button', ble_button: 'mute', to: 'press' },
+      { id: 't2', source: 'ble', type: 'ble_button', ble_button: 'volume_down', to: 'press' },
+    ],
+    conditions: [],
+    actions: [{ id: 'a1', type: 'track_popup', level: 'info', text: 'Sequence Matched!' }],
+  };
+
+  const compiled = compileAutomationRule(seqRule, catalog);
+  assert.strictEqual(compiled.trigger_mode, 'sequence');
+  assert.strictEqual(compiled.trigger_window_ms, 8000);
+
+  const decompiled = decompileAutomationRule(compiled, catalog);
+  assert.strictEqual(decompiled.trigger_mode, 'sequence');
+  assert.strictEqual(decompiled.trigger_window_ms, 8000);
+});
+
+
+

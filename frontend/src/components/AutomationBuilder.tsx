@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useContext, createContext } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useContext, useId, createContext } from 'react';
 import { createPortal } from 'react-dom';
 import mqtt from 'mqtt';
 import { Switch, Button, CloseButton, ButtonGroup, Slider } from '@heroui/react';
@@ -39,7 +39,8 @@ import {
   normalizeCanId,
   formatCanId,
   decompileAutomationRule,
-  decompileAutomationRules
+  decompileAutomationRules,
+  compileActionList
 } from '../utils/automationConverters';
 import { getDefaultEspIp, resolveDeviceBaseUrl, isRunningOnDevice } from '../utils/hostUtils';
 import { deviceWs } from '../services/deviceWs';
@@ -96,7 +97,9 @@ import {
   ClipboardCopy,
   ClipboardPaste,
   ClipboardCheck,
-  Tag
+  Tag,
+  Ban,
+  CheckCircle2
 } from 'lucide-react';
 import { AddElementModal, AddElementTarget } from './AddElementModal';
 import { CommunityAutomationsModal } from './CommunityAutomationsModal';
@@ -106,6 +109,20 @@ import { AutomationActionMenu } from './automation/AutomationActionMenu';
 import { AutomationMoreInfoModal } from './automation/AutomationMoreInfoModal';
 import { AutomationCategoryModal } from './automation/AutomationCategoryModal';
 import { AutomationSettingsModal } from './automation/AutomationSettingsModal';
+import { PrePushValidationModal } from './automation/PrePushValidationModal';
+import { RuleSimulatorModal } from './automation/RuleSimulatorModal';
+import { RuleFireRecord } from '../utils/ruleSimulator';
+import { matchesRuleSearch } from '../utils/ruleSummaries';
+import { validateAutomationRules, AutomationValidationReport } from '../utils/canValidator';
+import {
+  arrayMove,
+  canReadSystemClipboard,
+  getActiveScopedDrag,
+  parseClipboardText,
+  resolveClipboardPaste,
+  serializeClipboardEnvelope,
+  setActiveScopedDrag
+} from '../utils/automationClipboard';
 
 interface AutomationBuilderProps {
   catalog: Catalog;
@@ -158,11 +175,16 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   );
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedRuleIdsForDelete, setSelectedRuleIdsForDelete] = useState<Set<string>>(new Set());
+  const [ruleSearchQuery, setRuleSearchQuery] = useState('');
+  const [showBulkCategoryInput, setShowBulkCategoryInput] = useState(false);
+  const [bulkCategoryValue, setBulkCategoryValue] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
   const [addElementTarget, setAddElementTarget] = useState<AddElementTarget | null>(null);
   const [showSimulateModal, setShowSimulateModal] = useState(false);
   const [showCommunityModal, setShowCommunityModal] = useState(false);
-  const [simulationLog, setSimulationLog] = useState<string[]>([]);
+  const [ruleFireStats, setRuleFireStats] = useState<Record<string, RuleFireRecord>>({});
+  const [recentlyFiredIds, setRecentlyFiredIds] = useState<Set<string>>(new Set());
+  const [relativeTimeTick, setRelativeTimeTick] = useState<number>(() => Date.now());
   const [espIp, setEspIp] = useState<string>(() => getDefaultEspIp());
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
@@ -170,6 +192,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [moreInfoRule, setMoreInfoRule] = useState<AutomationRule | null>(null);
   const [editingCategoryRule, setEditingCategoryRule] = useState<AutomationRule | null>(null);
   const [editingSettingsRule, setEditingSettingsRule] = useState<AutomationRule | null>(null);
+  const [prePushReport, setPrePushReport] = useState<AutomationValidationReport | null>(null);
   const lastPushedJsonRef = useRef<string>(JSON.stringify(rules));
   const hasUnpushedChanges = lastPushedJsonRef.current !== JSON.stringify(rules);
 
@@ -195,6 +218,17 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const portalTarget = mounted && typeof document !== 'undefined' ? document.getElementById('ha-fab-stack') : null;
 
 
+  const [actionTestToast, setActionTestToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const triggerListId = useId();
+  const [triggerDragIdx, setTriggerDragIdx] = useState<number | null>(null);
+  const [triggerDragOverIdx, setTriggerDragOverIdx] = useState<number | null>(null);
+  const hasSystemClipboard = canReadSystemClipboard();
+
+  const showClipboardToast = useCallback((message: string, type: 'success' | 'error' | 'info') => {
+    setActionTestToast({ message, type });
+    setTimeout(() => setActionTestToast(null), 3200);
+  }, []);
+
   // Global Automation Clipboard state
   const [clipboard, setClipboard] = useState<AutomationClipboardItem | null>(() => {
     try {
@@ -218,7 +252,19 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     } catch {
       // Storage quota or disabled
     }
-  }, []);
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      void navigator.clipboard
+        .writeText(serializeClipboardEnvelope(item))
+        .then(() => {
+          showClipboardToast(`Copied "${label}" to system clipboard.`, 'success');
+        })
+        .catch(() => {
+          showClipboardToast(`Copied "${label}" (in-app clipboard).`, 'info');
+        });
+    } else {
+      showClipboardToast(`Copied "${label}" (in-app clipboard).`, 'info');
+    }
+  }, [showClipboardToast]);
 
   const clearClipboard = useCallback(() => {
     setClipboard(null);
@@ -229,29 +275,56 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
   const pastePayload = useCallback((targetType?: ClipboardBlockType): any | null => {
     if (!clipboard) return null;
-    const cloned = deepClone(clipboard.payload);
-    if (clipboard.type === 'trigger') {
-      if (targetType === 'condition') {
-        const cond = convertTriggerToCondition(cloned);
-        return regenerateConditionIds(cond);
-      }
-      return regenerateTriggerIds(cloned);
-    }
-    if (clipboard.type === 'condition') {
-      if (targetType === 'trigger') {
-        const trig = convertConditionToTrigger(cloned);
-        return regenerateTriggerIds(trig);
-      }
-      return regenerateConditionIds(cloned);
-    }
-    if (clipboard.type === 'action') {
-      return regenerateActionIds(cloned);
-    }
-    if (clipboard.type === 'branch') {
-      return regenerateBranchIds(cloned, true);
-    }
-    return cloned;
+    const res = resolveClipboardPaste(clipboard, targetType || clipboard.type);
+    return res.ok ? res.data : null;
   }, [clipboard]);
+
+  const pasteFromClipboard = useCallback(async (targetType: ClipboardBlockType): Promise<any | null> => {
+    // 1. Try reading fresh JSON from OS system clipboard first (supports cross-tab & JSON Inspector paste)
+    if (canReadSystemClipboard()) {
+      try {
+        const rawText = await navigator.clipboard.readText();
+        const parsedSystemItem = parseClipboardText(rawText);
+        if (parsedSystemItem) {
+          const res = resolveClipboardPaste(parsedSystemItem, targetType);
+          if (res.ok) {
+            setClipboard(parsedSystemItem);
+            try {
+              sessionStorage.setItem(CLIPBOARD_STORAGE_KEY, JSON.stringify(parsedSystemItem));
+            } catch {}
+            showClipboardToast(
+              res.convertedFrom
+                ? `Pasted & converted "${parsedSystemItem.label}" from system clipboard.`
+                : `Pasted "${parsedSystemItem.label}" from system clipboard.`,
+              'success'
+            );
+            return res.data;
+          }
+          if ('reason' in res) {
+            showClipboardToast(res.reason, 'error');
+          }
+          return null;
+        }
+      } catch {
+        // Permission denied or focus restriction — silently fall back to sessionStorage state
+      }
+    }
+
+    // 2. Fallback to sessionStorage in-app clipboard
+    if (clipboard) {
+      const res = resolveClipboardPaste(clipboard, targetType);
+      if (res.ok) {
+        return res.data;
+      }
+      if ('reason' in res) {
+        showClipboardToast(res.reason, 'error');
+      }
+      return null;
+    }
+
+    showClipboardToast('System clipboard does not contain a valid CAN Do block JSON.', 'info');
+    return null;
+  }, [clipboard, showClipboardToast]);
 
   const [useMqttSync, setUseMqttSync] = useState(false);
   const [mqttRemoteConfig, setMqttRemoteConfig] = useState({
@@ -273,7 +346,6 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [liveFrames, setLiveFrames] = useState<Map<string, { data: string }>>(new Map());
   const [entityStates, setEntityStates] = useState<Map<string, string>>(new Map());
   const [lastFiredTriggerId, setLastFiredTriggerId] = useState<string | undefined>();
-  const [actionTestToast, setActionTestToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // Live Wi-Fi & BLE status for condition validity & threshold auto-population
   const [liveWifiStatus, setLiveWifiStatus] = useState<LiveWifiStatus | null>(null);
@@ -282,6 +354,53 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
   const framesRef = useRef<Map<string, { data: string }>>(new Map());
   const entityStatesRef = useRef<Map<string, string>>(new Map());
+  const pingPongDirRef = useRef<Map<string, number>>(new Map());
+  const fireTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  const recordRuleFired = useCallback((ruleId: string) => {
+    if (!ruleId) return;
+    const now = Date.now();
+    setRelativeTimeTick(now);
+    setRuleFireStats(prev => {
+      const existing = prev[ruleId];
+      // Guard against duplicate WS + HTTP echo within 400ms
+      if (existing && now - existing.lastFiredAt < 400) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [ruleId]: {
+          lastFiredAt: now,
+          count: (existing?.count || 0) + 1
+        }
+      };
+    });
+    setRecentlyFiredIds(prev => {
+      const next = new Set(prev);
+      next.add(ruleId);
+      return next;
+    });
+    const prevTimer = fireTimersRef.current.get(ruleId);
+    if (prevTimer) clearTimeout(prevTimer);
+    const timer = setTimeout(() => {
+      setRecentlyFiredIds(prev => {
+        if (!prev.has(ruleId)) return prev;
+        const next = new Set(prev);
+        next.delete(ruleId);
+        return next;
+      });
+    }, 2500);
+    fireTimersRef.current.set(ruleId, timer);
+  }, []);
+
+  // Periodic tick to keep "Just now" -> "Xs ago" -> "Xm ago" -> "Xh ago" badges fresh
+  useEffect(() => {
+    if (Object.keys(ruleFireStats).length === 0) return;
+    const interval = setInterval(() => {
+      setRelativeTimeTick(Date.now());
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [ruleFireStats]);
 
   // WebSocket connection & background polling for live telemetry
   React.useEffect(() => {
@@ -400,6 +519,10 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         if ((msg as any).trigger_id) {
           setLastFiredTriggerId((msg as any).trigger_id);
         }
+        const firedRuleId = String((msg as any).id || (msg as any).rule_id || '').trim();
+        if (firedRuleId) {
+          recordRuleFired(firedRuleId);
+        }
       } else if (msg.type === 'wifi_status') {
         const wData = msg as any;
         setLiveWifiStatus({
@@ -464,33 +587,67 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
       // Flow 2: Wait For Condition
       if (act.type === 'wait_for') {
-        const condList = act.conditions || (act.condition ? [act.condition] : []);
+        const condList = act.conditions && act.conditions.length > 0 ? act.conditions : (act.condition ? [act.condition] : []);
         if (condList.length === 0) {
           setActionTestToast({ message: 'Wait-for action has no target condition (will proceed immediately)', type: 'info' });
           setTimeout(() => setActionTestToast(null), 4000);
           return;
         }
-        const evalRes = evaluateConditionState(condList[0], liveFrames, entityStates, lastFiredTriggerId, catalog);
-        const isMatched = evalRes.state === 'valid';
+        const results = condList.map(c => evaluateConditionState(c, liveFrames, entityStates, lastFiredTriggerId, catalog, liveWifiStatus, liveBleMap));
+        const matchedResult = results.find(r => r.state === 'valid') || results[0];
+        const isMatched = matchedResult.state === 'valid';
         setActionTestToast({
-          message: `Wait-for condition: ${isMatched ? 'MATCHED' : evalRes.state === 'invalid' ? 'NOT MET' : 'Awaiting telemetry'} (${evalRes.reason || 'live state'})`,
+          message: `Wait-for condition: ${isMatched ? 'MATCHED' : matchedResult.state === 'invalid' ? 'NOT MET' : 'Awaiting telemetry'} (${matchedResult.reason || 'live state'})`,
           type: isMatched ? 'success' : 'info'
         });
         setTimeout(() => setActionTestToast(null), 4500);
         return;
       }
 
+      // Flow 2b: Repeat Until (Loop) - preview 1 safe iteration when stop condition is not yet met
+      if (act.type === 'repeat_until') {
+        const condList = act.conditions && act.conditions.length > 0 ? act.conditions : (act.condition ? [act.condition] : []);
+        const seq = act.sequence || [];
+        if (condList.length > 0) {
+          const results = condList.map(c => evaluateConditionState(c, liveFrames, entityStates, lastFiredTriggerId, catalog, liveWifiStatus, liveBleMap));
+          const met = results.some(r => r.state === 'valid');
+          if (met) {
+            setActionTestToast({
+              message: 'Repeat-Until stop condition is ALREADY MET; loop skipped.',
+              type: 'success'
+            });
+            setTimeout(() => setActionTestToast(null), 4000);
+            return;
+          }
+        }
+        if (seq.length === 0) {
+          setActionTestToast({ message: 'Repeat-Until has no loop body actions to execute.', type: 'info' });
+          setTimeout(() => setActionTestToast(null), 3500);
+          return;
+        }
+        setActionTestToast({
+          message: `Repeat-Until: Running 1 preview pass (${seq.length} action${seq.length !== 1 ? 's' : ''})...`,
+          type: 'info'
+        });
+        for (const subAct of seq) {
+          await handleTestSingleAction(subAct);
+        }
+        return;
+      }
+
       // Flow 3: IF-THEN-ELSE
       if (act.type === 'if_then') {
         const condList = act.conditions || [];
-        const passed = condList.length === 0 || condList.every(c => evaluateConditionState(c, liveFrames, entityStates, lastFiredTriggerId, catalog).state === 'valid');
+        const passed = condList.length === 0 || condList.every(c => evaluateConditionState(c, liveFrames, entityStates, lastFiredTriggerId, catalog, liveWifiStatus, liveBleMap).state === 'valid');
         const branchActs = passed ? (act.then || []) : (act.else || []);
         setActionTestToast({
-          message: `IF-THEN evaluated to ${passed ? 'TRUE' : 'FALSE'}. Testing ${branchActs.length > 0 ? `action in ${passed ? 'THEN' : 'ELSE'}` : `empty ${passed ? 'THEN' : 'ELSE'} branch`}`,
+          message: `IF-THEN evaluated to ${passed ? 'TRUE' : 'FALSE'}. ${branchActs.length > 0 ? `Testing ${branchActs.length} action(s) in ${passed ? 'THEN' : 'ELSE'} branch` : `Empty ${passed ? 'THEN' : 'ELSE'} branch`}`,
           type: 'info'
         });
         if (branchActs.length > 0) {
-          await handleTestSingleAction(branchActs[0]);
+          for (const subAct of branchActs) {
+            await handleTestSingleAction(subAct);
+          }
         } else {
           setTimeout(() => setActionTestToast(null), 4000);
         }
@@ -505,7 +662,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         for (let i = 0; i < choices.length; i++) {
           const ch = choices[i];
           const conds = ch.conditions || [];
-          if (conds.length > 0 && conds.every(c => evaluateConditionState(c, liveFrames, entityStates, lastFiredTriggerId, catalog).state === 'valid')) {
+          if (conds.length === 0 || conds.every(c => evaluateConditionState(c, liveFrames, entityStates, lastFiredTriggerId, catalog, liveWifiStatus, liveBleMap).state === 'valid')) {
             matchedBranch = ch.sequence || [];
             matchedIdx = i;
             break;
@@ -515,25 +672,31 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           matchedBranch = act.default || [];
         }
         setActionTestToast({
-          message: `CHOOSE branch: ${matchedIdx >= 0 ? `Branch #${matchedIdx + 1}` : 'DEFAULT'}. Testing ${matchedBranch.length > 0 ? 'action' : 'empty sequence'}`,
+          message: `CHOOSE branch: ${matchedIdx >= 0 ? `Branch #${matchedIdx + 1}` : 'DEFAULT'}. ${matchedBranch.length > 0 ? `Testing ${matchedBranch.length} action(s)` : 'Empty sequence'}`,
           type: 'info'
         });
         if (matchedBranch.length > 0) {
-          await handleTestSingleAction(matchedBranch[0]);
+          for (const subAct of matchedBranch) {
+            await handleTestSingleAction(subAct);
+          }
         } else {
           setTimeout(() => setActionTestToast(null), 4000);
         }
         return;
       }
 
-      // Flow 5: Webhook
-      if (act.type === 'webhook' && act.webhook_url) {
-        await fetch(act.webhook_url, {
-          method: act.webhook_method || 'POST',
-          mode: 'no-cors'
-        });
-        setActionTestToast({ message: `Webhook dispatched to ${act.webhook_url}`, type: 'success' });
-        setTimeout(() => setActionTestToast(null), 4000);
+      // Flow 5: Legacy Webhook
+      if (act.type === 'webhook') {
+        if (act.webhook_url) {
+          await fetch(act.webhook_url, {
+            method: act.webhook_method || 'POST',
+            mode: 'no-cors'
+          });
+          setActionTestToast({ message: `Browser-only webhook dispatched to ${act.webhook_url} (not executed by ESP32)`, type: 'info' });
+        } else {
+          setActionTestToast({ message: 'Webhook actions are not supported on offline ESP32 firmware.', type: 'error' });
+        }
+        setTimeout(() => setActionTestToast(null), 4500);
         return;
       }
 
@@ -556,34 +719,143 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         }
       }
 
+      // Flow 6b: HUD / Cluster Turn-by-Turn Navigation Guidance
+      if (act.type === 'hud_nav' || act.type === 'nav') {
+        const navMode = (act.nav_action || act.action || 'update') === 'clear' ? 'clear' : 'update';
+        const distMeters = act.distance_meters ?? act.distance ?? 200;
+        const navPayload =
+          navMode === 'clear'
+            ? { action: 'clear' }
+            : {
+                action: 'update',
+                icon: act.icon ?? 1,
+                direction_deg: act.direction_deg ?? 0,
+                distance_meters: distMeters,
+                bars: act.bars ?? 4,
+                speed_limit: act.speed_limit ?? 0,
+                camera_alert: !!act.camera_alert,
+                street: act.street || '',
+                ...(act.num_lanes || act.lanes
+                  ? {
+                      num_lanes: act.num_lanes ?? act.lanes,
+                      lane_directions: act.lane_directions || [],
+                      lane_recommended: act.lane_recommended || []
+                    }
+                  : {})
+              };
+        try {
+          const res = await fetch(`${base}/api/nav`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(navPayload)
+          });
+          if (res.ok) {
+            setActionTestToast({
+              message:
+                navMode === 'clear'
+                  ? 'Cleared HUD navigation guidance'
+                  : `Projected HUD guidance${act.street ? `: "${act.street}"` : ''}`,
+              type: 'success'
+            });
+            setTimeout(() => setActionTestToast(null), 4000);
+            return;
+          }
+        } catch {
+          //Offline / preview fallback toast
+        }
+        setActionTestToast({
+          message:
+            navMode === 'clear'
+              ? 'Simulated HUD navigation clear'
+              : `Simulated HUD guidance${act.street ? `: "${act.street}"` : ''} (${Math.round(distMeters * 3.28084)} ft / ${distMeters}m)`,
+          type: 'info'
+        });
+        setTimeout(() => setActionTestToast(null), 4000);
+        return;
+      }
+
       // Flow: Cycle Entity State Stepper (must run before generic CAN / multi-step flows!)
       if (act.type === 'cycle_entity') {
         const entId = act.entity_id || act.target_command_id || 'drivers_seat_comfort';
-        const states = act.states && act.states.length > 0 ? act.states : ['Off', 'Low Heat', 'Medium Heat', 'High Heat'];
-        const curState = entityStates.get(entId.toLowerCase()) || entityStates.get(entId) || act.fallback_state || states[0];
+        const { command: cycleCmd } = catalog
+          ? resolveCatalogCommandForAction({ ...act, entity_id: entId }, catalog)
+          : { command: undefined };
+        const defaultStates =
+          cycleCmd?.options && cycleCmd.options.length > 0
+            ? cycleCmd.options.map(o => o.label)
+            : ['Off', 'Low Heat', 'Medium Heat', 'High Heat'];
+        const states = act.states && act.states.length > 0 ? act.states : defaultStates;
+        const curState =
+          entityStatesRef.current.get(entId.toLowerCase()) ||
+          entityStatesRef.current.get(entId) ||
+          entityStates.get(entId.toLowerCase()) ||
+          entityStates.get(entId) ||
+          states[0];
         const curIdx = states.findIndex(s => s.toLowerCase() === curState.toLowerCase());
         const dir = act.direction || 'forward';
-        let nextIdx = 0;
-        if (dir === 'forward') {
-          nextIdx = curIdx >= 0 ? curIdx + 1 : 0;
+
+        let nextState: string | null = null;
+        if (curIdx < 0) {
+          const fb = act.fallback_state || '__first__';
+          if (fb === '__none__') {
+            setActionTestToast({
+              message: `Cycle ${entId}: current state "${curState}" is outside sequence (Fallback: Do Nothing)`,
+              type: 'info'
+            });
+            setTimeout(() => setActionTestToast(null), 4000);
+            return;
+          }
+          nextState = fb === '__first__' ? states[0] : fb;
+          if (dir === 'ping_pong') {
+            pingPongDirRef.current.set(act.id || entId, 1);
+          }
+        } else if (dir === 'ping_pong') {
+          const ppKey = act.id || entId;
+          let ppDir = pingPongDirRef.current.get(ppKey) ?? 1;
+          if (curIdx === 0) ppDir = 1;
+          else if (curIdx === states.length - 1) ppDir = -1;
+          const nextIdx = Math.max(0, Math.min(states.length - 1, curIdx + ppDir));
+          nextState = states[nextIdx];
+          if (ppDir > 0 && nextIdx >= states.length - 1) {
+            pingPongDirRef.current.set(ppKey, -1);
+          } else if (ppDir < 0 && nextIdx <= 0) {
+            pingPongDirRef.current.set(ppKey, 1);
+          } else {
+            pingPongDirRef.current.set(ppKey, ppDir);
+          }
+        } else if (dir === 'forward') {
+          let nextIdx = curIdx + 1;
           if (nextIdx >= states.length) {
             nextIdx = act.wrap !== false ? 0 : states.length - 1;
           }
+          nextState = states[nextIdx];
         } else {
-          nextIdx = curIdx >= 0 ? curIdx - 1 : 0;
+          let nextIdx = curIdx - 1;
           if (nextIdx < 0) {
             nextIdx = act.wrap !== false ? states.length - 1 : 0;
           }
+          nextState = states[nextIdx];
         }
-        const nextState = states[nextIdx];
-        const { command: cycleCmd } = catalog ? resolveCatalogCommandForAction({ ...act, entity_id: entId, option_label: nextState, command: nextState }, catalog) : { command: undefined };
-        const nextOpt = cycleCmd?.options?.find(o => o.label.toLowerCase() === nextState.toLowerCase() || o.id === nextState);
+
+        const nextOpt = cycleCmd?.options?.find(
+          o => o.label.toLowerCase() === nextState!.toLowerCase() || o.id === nextState
+        );
         if (cycleCmd && nextOpt) {
           const syntheticAct = commandToAction(cycleCmd, nextOpt);
           await handleTestSingleAction(syntheticAct);
         }
+
+        // Update local entity state map so consecutive Test clicks step cleanly through the sequence
+        entityStatesRef.current.set(entId.toLowerCase(), nextState);
+        entityStatesRef.current.set(entId, nextState);
+        if (cycleCmd?.id) {
+          entityStatesRef.current.set(cycleCmd.id.toLowerCase(), nextState);
+          entityStatesRef.current.set(cycleCmd.id, nextState);
+        }
+        setEntityStates(new Map(entityStatesRef.current));
+
         setActionTestToast({
-          message: `Cycle ${entId}: ${curState} ➔ ${nextState} (${dir}, wrap=${act.wrap !== false})`,
+          message: `Cycle ${entId}: ${curState} ➔ ${nextState} (${dir}${dir === 'ping_pong' ? ' bounce' : `, wrap=${act.wrap !== false}`})`,
           type: 'success'
         });
         setTimeout(() => setActionTestToast(null), 4000);
@@ -881,21 +1153,46 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     }
     setActionTestToast({ message: `Executing ${acts.length} action(s) for "${targetRule.name}"...`, type: 'info' });
     try {
-      for (const act of acts) {
-        await handleTestSingleAction(act);
+      const compiledActions = compileActionList(acts, catalog);
+      const base = resolveDeviceBaseUrl(espIp);
+      let handledByDevice = false;
+      try {
+        const res = await fetch(`${base}/api/automations/test`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: targetRule.id,
+            mode: 'live_fire',
+            actions: compiledActions
+          })
+        });
+        if (res.ok) {
+          handledByDevice = true;
+        }
+      } catch {
+        // Offline / preview sandbox fallback
       }
-      setActionTestToast({ message: `Executed actions for "${targetRule.name}" successfully!`, type: 'success' });
+
+      if (!handledByDevice) {
+        for (const act of acts) {
+          await handleTestSingleAction(act);
+        }
+      }
+
+      recordRuleFired(targetRule.id);
+      setActionTestToast({
+        message: handledByDevice
+          ? `ESP32 executed "${targetRule.name}" actions!`
+          : `Executed actions for "${targetRule.name}" locally!`,
+        type: 'success'
+      });
     } catch (err: any) {
       setActionTestToast({ message: `Error running actions: ${err?.message || err}`, type: 'error' });
     }
     setTimeout(() => setActionTestToast(null), 4000);
   };
 
-  const handleSimulateRuleFor = async (targetRule: AutomationRule) => {
-    setSelectedRuleId(targetRule.id);
-    setShowSimulateModal(true);
-    setSimulationLog([`[Dry Run / Trace Diagnostics] Rule: "${targetRule.name}" (${targetRule.id})...`]);
-
+  const queryHardwareDryRun = async (targetRule: AutomationRule): Promise<{ passed: boolean; message: string } | null> => {
     try {
       const base = resolveDeviceBaseUrl(espIp);
       const res = await fetch(`${base}/api/automations/test`, {
@@ -905,41 +1202,20 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
       });
       if (res.ok) {
         const data = await res.json();
-        const logs = [
-          `[ESP32 Diagnostics] Target Rule: "${targetRule.name}" (${targetRule.id})`,
-          `[Engine Evaluation] Result: ${data.passed ? 'PASSED (Rule armed)' : 'FAILED / INACTIVE'}`,
-          `[Message] ${data.message || 'No additional details'}`
-        ];
-        setSimulationLog(logs);
-        return;
+        return {
+          passed: Boolean(data.passed),
+          message: data.message || (data.passed ? 'PASSED (Rule armed on ESP32)' : 'FAILED / INACTIVE on ESP32')
+        };
       }
     } catch {
-      // Offline fallback: evaluate locally
+      // Offline / unreachable
     }
+    return null;
+  };
 
-    const trigs = targetRule.triggers || [];
-    const conds = targetRule.conditions || [];
-    const acts = targetRule.actions || [];
-    const logs = [
-      `[Local Evaluator] Rule: "${targetRule.name}"`,
-      `[Trigger Engine] Monitoring ${trigs.length} trigger pattern(s)...`
-    ];
-
-    let allCondsPass = true;
-    conds.forEach((cond, idx) => {
-      const res = evaluateConditionState(cond, liveFrames, entityStates, lastFiredTriggerId, catalog, liveWifiStatus, liveBleMap);
-      logs.push(`  [Condition #${idx + 1}] ${res.state.toUpperCase()}: ${res.reason || ''}`);
-      if (res.state === 'invalid') allCondsPass = false;
-    });
-
-    if (allCondsPass) {
-      logs.push(`[Condition Evaluator] ALL PASS: Rule conditions satisfied for ${acts.length} action(s).`);
-    } else {
-      logs.push(`[Condition Evaluator] CONDITIONS FAILED: Rule actions will NOT fire.`);
-    }
-
-    logs.push(`[Status] Cooldown configured for ${targetRule.cooldown_ms || 0}ms.`);
-    setSimulationLog(logs);
+  const handleSimulateRuleFor = (targetRule: AutomationRule) => {
+    setSelectedRuleId(targetRule.id);
+    setShowSimulateModal(true);
   };
 
   const handleAddRule = () => {
@@ -1038,6 +1314,40 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     }
     setSelectedRuleIdsForDelete(new Set());
     setIsSelectMode(false);
+    setShowBulkCategoryInput(false);
+  };
+
+  const handleBatchEnable = (enabled: boolean) => {
+    if (selectedRuleIdsForDelete.size === 0) return;
+    onUpdateRules(
+      rules.map(r => (selectedRuleIdsForDelete.has(r.id) ? { ...r, enabled } : r))
+    );
+  };
+
+  const handleBatchAssignCategory = () => {
+    if (selectedRuleIdsForDelete.size === 0) return;
+    const trimmed = bulkCategoryValue.trim();
+    onUpdateRules(
+      rules.map(r => (selectedRuleIdsForDelete.has(r.id) ? { ...r, category: trimmed } : r))
+    );
+    setShowBulkCategoryInput(false);
+    setBulkCategoryValue('');
+  };
+
+  const handleBatchExportSelected = () => {
+    if (selectedRuleIdsForDelete.size === 0) return;
+    const selected = rules.filter(r => selectedRuleIdsForDelete.has(r.id));
+    if (selected.length === 0) return;
+    const jsonStr = exportToCandoJson(selected, settings, catalog);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `automations-selected-${selected.length}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const handleDownloadJson = () => {
@@ -1053,7 +1363,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const handlePushToEsp = async () => {
+  const executePushToEsp = async () => {
     setSyncing(true);
 
     if (useMqttSync) {
@@ -1124,6 +1434,15 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     } finally {
       setSyncing(false);
     }
+  };
+
+  const handlePushToEsp = () => {
+    const report = validateAutomationRules(rules, catalog);
+    if (report.errors.length > 0 || report.warnings.length > 0) {
+      setPrePushReport(report);
+      return;
+    }
+    void executePushToEsp();
   };
 
   const handlePullFromEsp = async () => {
@@ -1251,55 +1570,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     }
   };
 
-  const handleSimulateRule = async () => {
+  const handleSimulateRule = () => {
     if (!activeRule) return;
     setShowSimulateModal(true);
-    setSimulationLog(['[Dry Run] Querying device engine /api/automations/test...']);
-
-    try {
-      const base = resolveDeviceBaseUrl(espIp);
-      const res = await fetch(`${base}/api/automations/test`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: activeRule.id, mode: 'dry_run' })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const logs = [
-          `[ESP32 Diagnostics] Target Rule: "${activeRule.name}" (${activeRule.id})`,
-          `[Engine Evaluation] Result: ${data.passed ? 'PASSED (Rule armed)' : 'FAILED / INACTIVE'}`,
-          `[Message] ${data.message || 'No additional details'}`
-        ];
-        setSimulationLog(logs);
-        return;
-      }
-    } catch {
-      // Offline fallback: evaluate locally
-    }
-
-    const trigs = activeRule.triggers || [];
-    const conds = activeRule.conditions || [];
-    const acts = activeRule.actions || [];
-    const logs = [
-      `[Local Evaluator] Rule: "${activeRule.name}"`,
-      `[Trigger Engine] Monitoring ${trigs.length} trigger pattern(s)...`
-    ];
-
-    let allCondsPass = true;
-    conds.forEach((cond, idx) => {
-      const res = evaluateConditionState(cond, liveFrames, entityStates, lastFiredTriggerId, catalog, liveWifiStatus, liveBleMap);
-      logs.push(`  [Condition #${idx + 1}] ${res.state.toUpperCase()}: ${res.reason || ''}`);
-      if (res.state === 'invalid') allCondsPass = false;
-    });
-
-    if (allCondsPass) {
-      logs.push(`[Condition Evaluator] ALL PASS: Rule conditions satisfied for ${acts.length} action(s).`);
-    } else {
-      logs.push(`[Condition Evaluator] CONDITIONS FAILED: Rule actions will NOT fire.`);
-    }
-
-    logs.push(`[Status] Cooldown configured for ${activeRule.cooldown_ms || 0}ms.`);
-    setSimulationLog(logs);
   };
 
   const openAddTriggerDialog = (onAdd: (t: AutomationTrigger) => void) => {
@@ -1330,7 +1603,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   };
 
   return (
-    <AutomationClipboardContext.Provider value={{ clipboard, copyToClipboard, clearClipboard, pastePayload }}>
+    <AutomationClipboardContext.Provider value={{ clipboard, copyToClipboard, clearClipboard, pastePayload, pasteFromClipboard }}>
       <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 min-w-0">
       {/* Main Builder Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-w-0">
@@ -1542,21 +1815,57 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                               handleUpdateActiveRule({ triggers: next });
                             }}
                             onMoveUp={tIdx > 0 ? () => {
-                              const next = [...activeRule.triggers];
-                              const temp = next[tIdx];
-                              next[tIdx] = next[tIdx - 1];
-                              next[tIdx - 1] = temp;
-                              handleUpdateActiveRule({ triggers: next });
+                              handleUpdateActiveRule({ triggers: arrayMove(activeRule.triggers, tIdx, tIdx - 1) });
                             } : undefined}
                             onMoveDown={tIdx < activeRule.triggers.length - 1 ? () => {
-                              const next = [...activeRule.triggers];
-                              const temp = next[tIdx];
-                              next[tIdx] = next[tIdx + 1];
-                              next[tIdx + 1] = temp;
-                              handleUpdateActiveRule({ triggers: next });
+                              handleUpdateActiveRule({ triggers: arrayMove(activeRule.triggers, tIdx, tIdx + 1) });
                             } : undefined}
                             isFirst={tIdx === 0}
                             isLast={tIdx === activeRule.triggers.length - 1}
+                            dragConfig={
+                              activeRule.triggers.length > 1
+                                ? {
+                                    onDragStart: e => {
+                                      e.stopPropagation();
+                                      e.dataTransfer.effectAllowed = 'move';
+                                      e.dataTransfer.setData('text/plain', `${triggerListId}:${tIdx}`);
+                                      setActiveScopedDrag({ listId: triggerListId, index: tIdx });
+                                      setTriggerDragIdx(tIdx);
+                                    },
+                                    onDragOver: e => {
+                                      const active = getActiveScopedDrag();
+                                      if (active?.listId !== triggerListId) return;
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      e.dataTransfer.dropEffect = 'move';
+                                      if (triggerDragOverIdx !== tIdx) {
+                                        setTriggerDragOverIdx(tIdx);
+                                      }
+                                    },
+                                    onDrop: e => {
+                                      const active = getActiveScopedDrag();
+                                      if (active?.listId !== triggerListId) return;
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      if (active.index !== tIdx) {
+                                        handleUpdateActiveRule({
+                                          triggers: arrayMove(activeRule.triggers, active.index, tIdx)
+                                        });
+                                      }
+                                      setActiveScopedDrag(null);
+                                      setTriggerDragIdx(null);
+                                      setTriggerDragOverIdx(null);
+                                    },
+                                    onDragEnd: () => {
+                                      setActiveScopedDrag(null);
+                                      setTriggerDragIdx(null);
+                                      setTriggerDragOverIdx(null);
+                                    },
+                                    isDragging: triggerDragIdx === tIdx,
+                                    isDragOver: triggerDragOverIdx === tIdx && triggerDragIdx !== tIdx
+                                  }
+                                : undefined
+                            }
                           />
                         );
                       })}
@@ -1583,10 +1892,12 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                         variant="outline"
                         size="sm"
                         onPress={() => {
-                          const pasted = pastePayload('trigger');
-                          if (pasted) {
-                            handleUpdateActiveRule({ triggers: [...activeRule.triggers, pasted] });
-                          }
+                          void (async () => {
+                            const pasted = await pasteFromClipboard('trigger');
+                            if (pasted) {
+                              handleUpdateActiveRule({ triggers: [...activeRule.triggers, pasted] });
+                            }
+                          })();
                         }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-warning-soft hover:opacity-90 text-warning-soft-foreground border border-warning/40 transition cursor-pointer"
                         aria-label={`Paste copied trigger "${clipboard.label}"`}
@@ -1601,16 +1912,38 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                         variant="outline"
                         size="sm"
                         onPress={() => {
-                          const pasted = pastePayload('trigger');
-                          if (pasted) {
-                            handleUpdateActiveRule({ triggers: [...activeRule.triggers, pasted] });
-                          }
+                          void (async () => {
+                            const pasted = await pasteFromClipboard('trigger');
+                            if (pasted) {
+                              handleUpdateActiveRule({ triggers: [...activeRule.triggers, pasted] });
+                            }
+                          })();
                         }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-accent-soft hover:opacity-90 text-accent-soft-foreground border border-accent/40 transition cursor-pointer"
                         aria-label={`Convert & paste copied condition "${clipboard.label}" as trigger`}
                       >
                         <ClipboardPaste className="w-3.5 h-3.5 text-accent" />
                         <span>Paste as Trigger ({clipboard.label})</span>
+                      </Button>
+                    )}
+
+                    {clipboard?.type !== 'trigger' && clipboard?.type !== 'condition' && hasSystemClipboard && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onPress={() => {
+                          void (async () => {
+                            const pasted = await pasteFromClipboard('trigger');
+                            if (pasted) {
+                              handleUpdateActiveRule({ triggers: [...activeRule.triggers, pasted] });
+                            }
+                          })();
+                        }}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-surface-tertiary hover:bg-default-hover text-foreground/85 border border-border transition cursor-pointer"
+                        aria-label="Read a Trigger or Condition JSON block from system clipboard"
+                      >
+                        <ClipboardPaste className="w-3.5 h-3.5 text-warning" />
+                        <span>Paste from Clipboard</span>
                       </Button>
                     )}
                   </div>
@@ -1869,50 +2202,123 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-between gap-2 flex-wrap bg-surface-secondary -m-1 p-2 rounded-xl border border-border">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-accent">
-                    Select Mode
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (selectedRuleIdsForDelete.size === rules.length) {
-                        setSelectedRuleIdsForDelete(new Set());
-                      } else {
-                        setSelectedRuleIdsForDelete(new Set(rules.map(r => r.id)));
-                      }
-                    }}
-                    className="text-[11px] text-muted hover:text-accent transition underline underline-offset-2"
-                  >
-                    {selectedRuleIdsForDelete.size === rules.length ? 'Deselect All' : 'Select All'}
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  {selectedRuleIdsForDelete.size > 0 && (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onPress={handleBatchDelete}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-danger hover:bg-danger-hover text-danger-foreground transition shadow-sm animate-pulse"
+              <div className="space-y-2 bg-surface-secondary -m-1 p-2.5 rounded-xl border border-border">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-accent">
+                      Select ({selectedRuleIdsForDelete.size})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const visibleIds = rules
+                          .filter(r => matchesRuleSearch(r, ruleSearchQuery, catalog))
+                          .map(r => r.id);
+                        const allVisibleSelected =
+                          visibleIds.length > 0 && visibleIds.every(id => selectedRuleIdsForDelete.has(id));
+                        if (allVisibleSelected) {
+                          setSelectedRuleIdsForDelete(new Set());
+                        } else {
+                          setSelectedRuleIdsForDelete(new Set(visibleIds));
+                        }
+                      }}
+                      className="text-[11px] text-muted hover:text-accent transition underline underline-offset-2 cursor-pointer"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Delete ({selectedRuleIdsForDelete.size})</span>
-                    </Button>
-                  )}
+                      {selectedRuleIdsForDelete.size > 0 && selectedRuleIdsForDelete.size >= rules.filter(r => matchesRuleSearch(r, ruleSearchQuery, catalog)).length
+                        ? 'Deselect All'
+                        : 'Select All'}
+                    </button>
+                  </div>
+
                   <Button
                     variant="outline"
                     size="sm"
                     onPress={() => {
                       setIsSelectMode(false);
                       setSelectedRuleIdsForDelete(new Set());
+                      setShowBulkCategoryInput(false);
                     }}
                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-surface-tertiary hover:bg-default-hover text-foreground border border-border transition"
                   >
                     <span>Done</span>
                   </Button>
                 </div>
+
+                {selectedRuleIdsForDelete.size > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1.5 border-t border-separator">
+                    <button
+                      type="button"
+                      onClick={() => handleBatchEnable(true)}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-success-soft text-success border border-success/30 hover:opacity-90 transition cursor-pointer"
+                      title="Enable selected rules"
+                    >
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>Enable</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleBatchEnable(false)}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-surface-tertiary text-muted hover:text-foreground border border-border transition cursor-pointer"
+                      title="Disable selected rules"
+                    >
+                      <Ban className="w-3 h-3" />
+                      <span>Disable</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowBulkCategoryInput(v => !v)}
+                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold border transition cursor-pointer ${
+                        showBulkCategoryInput
+                          ? 'bg-accent-soft text-accent border-accent/40'
+                          : 'bg-surface-tertiary text-foreground border-border hover:bg-default-hover'
+                      }`}
+                      title="Assign category to selected rules"
+                    >
+                      <Tag className="w-3 h-3 text-accent" />
+                      <span>Category</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBatchExportSelected}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-surface-tertiary text-foreground border border-border hover:bg-default-hover transition cursor-pointer"
+                      title="Export selected rules to JSON"
+                    >
+                      <Download className="w-3 h-3 text-accent" />
+                      <span>Export</span>
+                    </button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onPress={handleBatchDelete}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-danger hover:bg-danger-hover text-danger-foreground transition ml-auto"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Delete ({selectedRuleIdsForDelete.size})</span>
+                    </Button>
+                  </div>
+                )}
+
+                {selectedRuleIdsForDelete.size > 0 && showBulkCategoryInput && (
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <input
+                      type="text"
+                      value={bulkCategoryValue}
+                      onChange={(e) => setBulkCategoryValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleBatchAssignCategory();
+                      }}
+                      placeholder="Category name (blank clears)..."
+                      className="flex-1 min-w-0 px-2 py-1 rounded-lg bg-surface border border-border text-xs text-foreground focus:outline-none focus:border-accent"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleBatchAssignCategory}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-accent text-accent-foreground hover:bg-accent-hover transition cursor-pointer"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2019,27 +2425,72 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               )}
             </div>
 
+            {/* Compact Rule Search Bar (Option B) */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-muted absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={ruleSearchQuery}
+                onChange={(e) => setRuleSearchQuery(e.target.value)}
+                placeholder="Search rules, CAN IDs, entities..."
+                aria-label="Filter automations"
+                className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-surface-secondary border border-border text-xs text-foreground placeholder:text-muted focus:outline-none focus:border-accent"
+              />
+              {ruleSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setRuleSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-muted hover:text-foreground rounded cursor-pointer"
+                  aria-label="Clear rule search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
             <div className="space-y-1.5 max-h-[380px] overflow-y-auto pr-1">
-              {rules.map((rule, idx) => (
-                <SwipeableRuleItem
-                  key={rule.id}
-                  rule={rule}
-                  idx={idx}
-                  isSelected={rule.id === activeRule?.id}
-                  isSelectMode={isSelectMode}
-                  isCheckedForDelete={selectedRuleIdsForDelete.has(rule.id)}
-                  onToggleCheck={handleToggleCheckForDelete}
-                  onSelect={setSelectedRuleId}
-                  onDuplicate={handleDuplicateRule}
-                  onDelete={handleDeleteRule}
-                  onToggleEnabled={(id, enabled) => handleUpdateRule(id, { enabled })}
-                  onRunActions={handleRunAllRuleActions}
-                  onShowTraces={handleSimulateRuleFor}
-                  onMoreInfo={(r) => setMoreInfoRule(r)}
-                  onEditSettings={(r) => setEditingSettingsRule(r)}
-                  onEditCategory={(r) => setEditingCategoryRule(r)}
-                />
-              ))}
+              {(() => {
+                const filteredRules = rules.filter(r => matchesRuleSearch(r, ruleSearchQuery, catalog));
+                if (filteredRules.length === 0) {
+                  return (
+                    <div className="p-4 text-center rounded-xl border border-dashed border-border text-xs text-muted space-y-1.5">
+                      <div>No rules match &ldquo;{ruleSearchQuery.trim()}&rdquo;.</div>
+                      {ruleSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setRuleSearchQuery('')}
+                          className="text-accent hover:underline font-semibold cursor-pointer"
+                        >
+                          Clear search
+                        </button>
+                      )}
+                    </div>
+                  );
+                }
+                return filteredRules.map((rule, idx) => (
+                  <SwipeableRuleItem
+                    key={rule.id}
+                    rule={rule}
+                    idx={idx}
+                    isSelected={rule.id === activeRule?.id}
+                    isSelectMode={isSelectMode}
+                    isCheckedForDelete={selectedRuleIdsForDelete.has(rule.id)}
+                    fireRecord={ruleFireStats[rule.id]}
+                    isRecentlyFired={recentlyFiredIds.has(rule.id)}
+                    nowMs={relativeTimeTick}
+                    onToggleCheck={handleToggleCheckForDelete}
+                    onSelect={setSelectedRuleId}
+                    onDuplicate={handleDuplicateRule}
+                    onDelete={handleDeleteRule}
+                    onToggleEnabled={(id, enabled) => handleUpdateRule(id, { enabled })}
+                    onRunActions={handleRunAllRuleActions}
+                    onShowTraces={handleSimulateRuleFor}
+                    onMoreInfo={(r) => setMoreInfoRule(r)}
+                    onEditSettings={(r) => setEditingSettingsRule(r)}
+                    onEditCategory={(r) => setEditingCategoryRule(r)}
+                  />
+                ));
+              })()}
             </div>
           </div>
         </div>
@@ -2085,55 +2536,19 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         />
       )}
 
-      {/* MODAL: Rule Dry Run / Simulation Log */}
-      {showSimulateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-backdrop backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-xl bg-overlay text-overlay-foreground border border-border rounded-2xl shadow-overlay overflow-hidden flex flex-col">
-            <div className="p-4 border-b border-separator bg-surface flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-accent-soft text-accent flex items-center justify-center">
-                  <Play className="w-4 h-4 fill-current" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-foreground">Rule Simulation Dry-Run</h3>
-                  <p className="text-[11px] text-muted">
-                    Emulating ESP32 reactive rule evaluation pipeline
-                  </p>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                isIconOnly
-                onPress={() => setShowSimulateModal(false)}
-                className="text-muted hover:text-foreground p-1 rounded-lg hover:bg-default-hover"
-                aria-label="Close simulation modal"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-
-            <div className="p-4 bg-surface-secondary font-mono text-xs text-success space-y-1 max-h-80 overflow-y-auto leading-relaxed select-text">
-              {simulationLog.map((line, idx) => (
-                <div key={idx} className={line.startsWith('[Sim Ingress]') ? 'text-warning' : line.startsWith('  ->') ? 'text-accent pl-2' : ''}>
-                  {line}
-                </div>
-              ))}
-            </div>
-
-            <div className="p-3 border-t border-separator bg-surface flex items-center justify-end">
-              <Button
-                variant="secondary"
-                size="sm"
-                onPress={() => setShowSimulateModal(false)}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-surface-secondary hover:bg-default-hover text-foreground border border-border transition"
-              >
-                Close Log
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* MODAL: Interactive Offline Rule Dry-Run Simulator */}
+      <RuleSimulatorModal
+        rule={activeRule || null}
+        isOpen={showSimulateModal}
+        onClose={() => setShowSimulateModal(false)}
+        catalog={catalog}
+        liveFrames={liveFrames}
+        entityStates={entityStates}
+        liveWifiStatus={liveWifiStatus}
+        liveBleMap={liveBleMap}
+        lastFiredTriggerId={lastFiredTriggerId}
+        onQueryHardwareDryRun={queryHardwareDryRun}
+      />
 
       {/* MODAL: Automation More Info */}
       <AutomationMoreInfoModal
@@ -2161,6 +2576,23 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         isOpen={Boolean(editingSettingsRule)}
         onClose={() => setEditingSettingsRule(null)}
         onSaveSettings={(id, updates) => handleUpdateRule(id, updates)}
+      />
+
+      {/* MODAL: Pre-Push Validation Check */}
+      <PrePushValidationModal
+        report={prePushReport}
+        isOpen={Boolean(prePushReport)}
+        onClose={() => setPrePushReport(null)}
+        onJumpToRule={(ruleId) => {
+          if (ruleId && ruleId !== '(missing-id)') {
+            setSelectedRuleId(ruleId);
+          }
+          setPrePushReport(null);
+        }}
+        onPushAnyway={() => {
+          setPrePushReport(null);
+          void executePushToEsp();
+        }}
       />
 
       {/* Floating Clipboard Indicator */}

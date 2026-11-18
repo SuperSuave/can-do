@@ -53,8 +53,8 @@ describe('FrontFasciaHeadlightSignature Remade SVG Integration', () => {
 
     assert.ok(lowRight, 'ioniq5-low-beam-right rect must be rendered');
     assert.ok(highRight, 'ioniq5-high-beam-right rect must be rendered');
-    assert.ok(lowRight[0].includes('y="1594.57"'), 'ioniq5-low-beam-right must use y=1594.57');
-    assert.ok(highRight[0].includes('y="1594.57"'), 'ioniq5-high-beam-right must align at y=1594.57');
+    assert.ok(lowRight[0].includes('y="1540"'), 'ioniq5-low-beam-right must use y=1540');
+    assert.ok(highRight[0].includes('y="1540"'), 'ioniq5-high-beam-right must align at y=1540');
   });
 
   it('differentiates low beam, high beam, turn signals, and hood ajar states', () => {

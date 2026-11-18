@@ -16,6 +16,7 @@ import {
 import { Catalog, Command, Vehicle } from '../types/catalog';
 import { isRunningOnDevice, resolveDeviceBaseUrl } from '../utils/hostUtils';
 import { resolveVariant } from '../utils/catalogUtils';
+import { resolveDashboardCommandRequest } from '../utils/dashboardCommands';
 import {
   decodeAirflowCanByte,
   decodeAirflowEntityState,
@@ -293,6 +294,8 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     return () => {
       if (startAnimTimerRef.current) clearTimeout(startAnimTimerRef.current);
       if (holdRafRef.current !== null) cancelAnimationFrame(holdRafRef.current);
+      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+      Object.values(commandTimersRef.current).forEach((t) => clearTimeout(t));
     };
   }, []);
 
@@ -430,9 +433,29 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   const [activeOverlay, setActiveOverlay] = useState<CockpitOverlay>(null);
   const [hasReceivedFrames, setHasReceivedFrames] = useState<boolean>(false);
   const [speedKph, setSpeedKph] = useState<number>(0);
-  const [connectedDevice, setConnectedDevice] = useState<boolean>(false);
-  const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
+  const [connectedDevice, setConnectedDevice] = useState<boolean>(() => deviceWs.getConnected());
+  const [feedbackNotice, setFeedbackNotice] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const appliedDemoRef = useRef<boolean>(false);
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commandTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const catalogRef = useRef(catalog);
+  catalogRef.current = catalog;
+  const activeVehicleRef = useRef(activeVehicle);
+  activeVehicleRef.current = activeVehicle;
+  const connectedDeviceRef = useRef(connectedDevice);
+  connectedDeviceRef.current = connectedDevice;
+
+  useEffect(() => {
+    if (isRunningOnDevice()) {
+      try {
+        const currentHost = localStorage.getItem('cando_device_host');
+        if (currentHost !== 'auto') {
+          localStorage.setItem('cando_device_host', 'auto');
+          deviceWs.reconnect();
+        }
+      } catch {}
+    }
+  }, []);
 
   const openClosureLabels = [
     doors.frontLeft ? 'Driver Door' : null,
@@ -664,11 +687,15 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   }, [catalog, activeVehicle]);
 
   // Temporary feedback toast
-  const triggerNotice = (msg: string) => {
-    setFeedbackNotice(msg);
-    setTimeout(() => {
+  const triggerNotice = (msg: string, type: 'success' | 'error' = 'success') => {
+    if (noticeTimerRef.current) {
+      clearTimeout(noticeTimerRef.current);
+    }
+    setFeedbackNotice({ msg, type });
+    noticeTimerRef.current = setTimeout(() => {
+      noticeTimerRef.current = null;
       setFeedbackNotice(null);
-    }, 2800);
+    }, type === 'error' ? 4000 : 2800);
   };
 
   // Bench preview helper for telemetry-only cockpit items that have no CAN TX actuator
@@ -744,9 +771,18 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   };
 
   // Hardware command dispatcher with per-entity debouncing (prevents slider/rapid-click HTTP flooding)
-  const commandTimersRef = useRef<Record<string, any>>({});
   const dispatchCommand = (entity: string, cmd: string, fallbackDesc: string, debounceMs = 150) => {
-    triggerNotice(fallbackDesc);
+    const requestPayload = resolveDashboardCommandRequest(
+      entity,
+      cmd,
+      catalogRef.current,
+      activeVehicleRef.current
+    );
+
+    if (!connectedDeviceRef.current) {
+      triggerNotice(fallbackDesc, 'success');
+    }
+
     if (commandTimersRef.current[entity]) {
       clearTimeout(commandTimersRef.current[entity]);
       delete commandTimersRef.current[entity];
@@ -755,13 +791,25 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       delete commandTimersRef.current[entity];
       try {
         const baseUrl = resolveDeviceBaseUrl(localStorage.getItem('cando_device_host'));
-        await fetch(`${baseUrl}/api/command`, {
+        const res = await fetch(`${baseUrl}/api/command`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ entity, command: cmd })
+          body: JSON.stringify(requestPayload)
         });
+        if (!res.ok) {
+          let errDetail = `HTTP ${res.status}`;
+          try {
+            const txt = await res.text();
+            if (txt && txt.length < 120) errDetail = txt;
+          } catch {}
+          triggerNotice(`Command failed (${errDetail}): ${fallbackDesc}`, 'error');
+          return;
+        }
+        triggerNotice(fallbackDesc, 'success');
       } catch {
-        // Offline / standalone browser preview mode
+        if (connectedDeviceRef.current) {
+          triggerNotice(`Device unreachable: ${fallbackDesc}`, 'error');
+        }
       }
     };
     if (debounceMs > 0) {
@@ -1742,9 +1790,19 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
       {/* Toast Notice */}
       {feedbackNotice && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-overlay border border-accent/40 text-overlay-foreground text-xs shadow-overlay animate-slideUp">
-          <CheckCircle2 className="w-4 h-4 text-accent shrink-0" />
-          <span className="font-medium">{feedbackNotice}</span>
+        <div
+          className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-overlay text-overlay-foreground text-xs shadow-overlay animate-slideUp border ${
+            feedbackNotice.type === 'error'
+              ? 'border-danger/60 text-danger'
+              : 'border-accent/40'
+          }`}
+        >
+          {feedbackNotice.type === 'error' ? (
+            <AlertTriangle className="w-4 h-4 text-danger shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 text-accent shrink-0" />
+          )}
+          <span className="font-medium">{feedbackNotice.msg}</span>
         </div>
       )}
 

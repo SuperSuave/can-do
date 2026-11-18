@@ -1,4 +1,10 @@
 import { Command, Catalog, ValidationIssue, CatalogValidationReport, Vehicle } from '../types/catalog';
+import {
+  AutomationRule,
+  AutomationTrigger,
+  AutomationCondition,
+  AutomationAction
+} from '../types/automation';
 
 // Helper to validate single hex byte or wildcard
 export function isValidPayloadToken(token: string): boolean {
@@ -712,3 +718,756 @@ export function validateCatalog(catalog: Catalog): CatalogValidationReport {
     roleCounts
   };
 }
+
+// ============================================================================
+// Pre-Push Automation Validation
+// ============================================================================
+
+export interface AutomationValidationIssue {
+  type: 'error' | 'warning';
+  ruleId: string;
+  ruleName: string;
+  section: 'general' | 'trigger' | 'condition' | 'action';
+  itemIndex?: number;
+  field?: string;
+  message: string;
+}
+
+export interface AutomationValidationReport {
+  isValid: boolean;
+  hasWarnings: boolean;
+  errors: AutomationValidationIssue[];
+  warnings: AutomationValidationIssue[];
+  issuesByRuleId: Record<string, AutomationValidationIssue[]>;
+}
+
+const VALID_1_BASED_BYTE_KEY_RE = /^D[1-8]$/i;
+
+function isValidByteKey(key: string): boolean {
+  return VALID_1_BASED_BYTE_KEY_RE.test(key.trim());
+}
+
+function checkEdgeHexOrNumeric(val: unknown): { isValid: boolean; error?: string } {
+  if (val === undefined || val === null) return { isValid: true };
+  if (typeof val === 'number') {
+    return Number.isFinite(val)
+      ? { isValid: true }
+      : { isValid: false, error: 'Numeric byte value is not finite.' };
+  }
+  const s = String(val).trim();
+  if (!s) return { isValid: true };
+  if (/[*?]/.test(s)) {
+    return {
+      isValid: false,
+      error: `Wildcard '${s}' is not supported on the ESP32 engine; use an exact hex byte and bitmask.`
+    };
+  }
+  if (/^0x[0-9A-Fa-f]{1,2}$/i.test(s) || /^[0-9A-Fa-f]{1,2}$/.test(s) || /^-?\d+(\.\d+)?$/.test(s)) {
+    return { isValid: true };
+  }
+  return {
+    isValid: false,
+    error: `Invalid byte/value '${s}'. Expected hex byte (e.g. '0x10') or decimal number.`
+  };
+}
+
+function checkEdgePayload(
+  payload: string | Record<string, string> | undefined,
+  allowWildcards: boolean
+): { isValid: boolean; isEmpty: boolean; error?: string } {
+  if (!payload) return { isValid: true, isEmpty: true };
+
+  if (typeof payload === 'object') {
+    if ('hex' in payload || 'data' in payload || 'raw' in payload) {
+      const hexVal = (payload.hex ?? payload.data ?? payload.raw) as string;
+      const res = validatePayload({ hex: hexVal });
+      return { isValid: res.isValid, isEmpty: res.byteCount === 0, error: res.error };
+    }
+    const keys = Object.keys(payload);
+    if (keys.length === 0) return { isValid: true, isEmpty: true };
+    for (const k of keys) {
+      if (!isValidByteKey(k)) {
+        return {
+          isValid: false,
+          isEmpty: false,
+          error: `Invalid byte key '${k}'. Byte positions must use 1-based indexing (D1–D8).`
+        };
+      }
+      const v = String(payload[k] ?? '').trim();
+      if (!allowWildcards && /[*?]/.test(v)) {
+        return {
+          isValid: false,
+          isEmpty: false,
+          error: `Wildcard '${v}' in ${k} is not allowed on the ESP32 engine.`
+        };
+      }
+      if (!allowWildcards) {
+        const hexCheck = checkEdgeHexOrNumeric(v);
+        if (!hexCheck.isValid) {
+          return { isValid: false, isEmpty: false, error: `${k}: ${hexCheck.error}` };
+        }
+      } else {
+        const res = validatePayload({ [k]: v });
+        if (!res.isValid) {
+          return { isValid: false, isEmpty: false, error: res.error };
+        }
+      }
+    }
+    return { isValid: true, isEmpty: false };
+  }
+
+  const trimmed = String(payload).trim();
+  if (!trimmed) return { isValid: true, isEmpty: true };
+
+  if (!allowWildcards && /[*?]/.test(trimmed)) {
+    return {
+      isValid: false,
+      isEmpty: false,
+      error: `Wildcards ('*'/'?') are not supported in ESP32 transmit or edge payloads ('${trimmed}').`
+    };
+  }
+  const strRes = validatePayloadString(trimmed);
+  return { isValid: strRes.isValid, isEmpty: strRes.byteCount === 0, error: strRes.error };
+}
+
+function findCatalogCommand(id: string | undefined, catalog?: Catalog): Command | undefined {
+  if (!id || !catalog?.commands) return undefined;
+  return catalog.commands.find(c => c.id === id || c.entity_id === id);
+}
+
+function validateTriggerNode(
+  trig: AutomationTrigger,
+  idx: number,
+  ruleMeta: { id: string; name: string },
+  rule: AutomationRule,
+  catalog: Catalog | undefined,
+  issues: AutomationValidationIssue[]
+) {
+  const push = (type: 'error' | 'warning', field: string | undefined, message: string) => {
+    issues.push({
+      type,
+      ruleId: ruleMeta.id,
+      ruleName: ruleMeta.name,
+      section: 'trigger',
+      itemIndex: idx,
+      field,
+      message: `Trigger #${idx + 1}: ${message}`
+    });
+  };
+
+  const tType = trig.type || '';
+  const tSource = trig.source || '';
+
+  if (tType === 'time_schedule' || tSource === 'time') {
+    if (trig.time) {
+      if (!/^([01]?\d|2[0-3]):[0-5]\d$/.test(trig.time.trim())) {
+        push('error', 'time', `Invalid time format '${trig.time}'. Expected HH:MM (24-hour).`);
+      }
+    } else if (!trig.interval_sec || trig.interval_sec <= 0) {
+      push('error', 'time', 'Time schedule trigger requires a valid HH:MM time or positive interval.');
+    }
+    return;
+  }
+
+  if (tType === 'ble_button' || tType === 'ble_key' || (tSource === 'ble' && trig.ble_button !== undefined)) {
+    if (!trig.ble_button?.trim() && !trig.source_command_id) {
+      push('error', 'ble_button', 'Bluetooth button trigger has no button selected.');
+    }
+    return;
+  }
+
+  if (
+    tType === 'ble_presence' ||
+    tType === 'ble_beacon' ||
+    tType === 'beacon' ||
+    tSource === 'ble' ||
+    tType === 'wifi' ||
+    tType === 'wifi_event' ||
+    tType === 'device_event' ||
+    tSource === 'wifi'
+  ) {
+    return;
+  }
+
+  if (tSource === 'voltage' || tType === 'voltage') {
+    const val = parseFloat(String(trig.voltage_val ?? trig.value ?? ''));
+    if (isNaN(val) || val <= 0 || val > 100) {
+      push('error', 'voltage_val', 'Voltage trigger requires a valid voltage threshold (0–100 V).');
+    }
+    return;
+  }
+
+  if (tSource === 'mqtt' || tType === 'mqtt') {
+    if (!trig.mqtt_topic?.trim()) {
+      push('error', 'mqtt_topic', 'MQTT trigger is missing a topic filter.');
+    }
+    return;
+  }
+
+  // CAN Trigger (can_rx, byte_transition, preset, default CAN)
+  const catalogCmd = findCatalogCommand(trig.source_command_id || trig.target_entity_id, catalog);
+  const canId = trig.can_id || catalogCmd?.state_can_id;
+
+  if (!canId || !canId.trim()) {
+    push('error', 'can_id', 'CAN trigger is missing a CAN ID.');
+  } else {
+    const idCheck = validateCanId(canId);
+    if (!idCheck.isValid) {
+      push('error', 'can_id', idCheck.error || `Invalid CAN ID '${canId}'.`);
+    } else if (canId.trim().toLowerCase() === '0x000') {
+      push('warning', 'can_id', 'CAN ID is set to placeholder 0x000.');
+    }
+  }
+
+  const byteKey = trig.byte || trig.evaluate?.byte;
+  if (byteKey && !isValidByteKey(byteKey)) {
+    push('error', 'byte', `Invalid byte position '${byteKey}' (must use 1-based indexing D1–D8).`);
+  }
+  if (trig.byte_index !== undefined && (!Number.isInteger(trig.byte_index) || trig.byte_index < 0 || trig.byte_index > 7)) {
+    push('error', 'byte_index', `Byte index ${trig.byte_index} is out of bounds (expected 0–7 internal offset).`);
+  }
+
+  for (const [field, val] of [
+    ['from', trig.from],
+    ['to', trig.to],
+    ['value', trig.value ?? trig.evaluate?.value],
+    ['mask', typeof trig.mask === 'string' ? trig.mask : trig.evaluate?.mask]
+  ] as const) {
+    if (typeof val === 'string' && val.trim() !== '') {
+      const check = checkEdgeHexOrNumeric(val);
+      if (!check.isValid) {
+        push('error', field, check.error || `Invalid ${field} value.`);
+      }
+    }
+  }
+
+  for (const [field, mapVal] of [
+    ['from_payload', trig.from_payload],
+    ['to_payload', trig.to_payload],
+    ['match_payload', trig.match_payload],
+    ['match', trig.match]
+  ] as const) {
+    if (mapVal) {
+      const pCheck = checkEdgePayload(mapVal as any, false);
+      if (!pCheck.isValid) {
+        push('error', field, pCheck.error || `Invalid ${field}.`);
+      }
+    }
+  }
+
+  // Warn on rapid periodic CAN RX triggers with no cooldown/sustained/transition check
+  const isRawCanRx = tType === 'can_rx';
+  const hasSustained = Boolean(trig.for_ms || trig.for_sec || (trig.click_count && trig.click_count > 1));
+  const hasTransition = trig.from !== undefined && trig.from !== '';
+  if (isRawCanRx && !hasSustained && !hasTransition && (rule.cooldown_ms ?? 0) < 250) {
+    push(
+      'warning',
+      'cooldown_ms',
+      'Periodic CAN RX trigger has no sustained duration or >= 250ms cooldown and may re-fire rapidly.'
+    );
+  }
+}
+
+function validateConditionNode(
+  cond: AutomationCondition,
+  idx: number,
+  ruleMeta: { id: string; name: string },
+  catalog: Catalog | undefined,
+  issues: AutomationValidationIssue[],
+  pathPrefix = ''
+) {
+  const prefix = pathPrefix ? `${pathPrefix}Condition #${idx + 1}` : `Condition #${idx + 1}`;
+  const push = (type: 'error' | 'warning', field: string | undefined, message: string) => {
+    issues.push({
+      type,
+      ruleId: ruleMeta.id,
+      ruleName: ruleMeta.name,
+      section: 'condition',
+      itemIndex: pathPrefix ? undefined : idx,
+      field,
+      message: `${prefix}: ${message}`
+    });
+  };
+
+  // Logic groups (AND / OR / NOT)
+  const isLogicGroup =
+    cond.logic === 'and' ||
+    cond.logic === 'or' ||
+    cond.logic === 'not' ||
+    cond.type === 'and' ||
+    cond.type === 'or' ||
+    cond.type === 'not' ||
+    cond.type === 'and_group' ||
+    cond.type === 'or_group' ||
+    cond.type === 'not_group';
+
+  if (isLogicGroup) {
+    const children: AutomationCondition[] =
+      cond.conditions ||
+      cond.and ||
+      cond.or ||
+      (Array.isArray(cond.not) ? cond.not : cond.not ? [cond.not] : []);
+    if (children.length === 0) {
+      push('warning', 'conditions', 'Logic group has no child conditions.');
+    } else {
+      children.forEach((child, cIdx) => {
+        validateConditionNode(child, cIdx, ruleMeta, catalog, issues, `${prefix} ▸ `);
+      });
+    }
+    return;
+  }
+
+  const cType = cond.type || '';
+  if (cType === 'triggered_by' || cType === 'trigger') {
+    if (!cond.trigger_id?.trim()) {
+      push('warning', 'trigger_id', 'Triggered-by condition has no trigger selected.');
+    }
+    return;
+  }
+
+  if (cType === 'time_condition' || cType === 'time') {
+    if (cond.start_time && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(cond.start_time.trim())) {
+      push('error', 'start_time', `Invalid start time '${cond.start_time}'. Expected HH:MM.`);
+    }
+    if (cond.end_time && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(cond.end_time.trim())) {
+      push('error', 'end_time', `Invalid end time '${cond.end_time}'. Expected HH:MM.`);
+    }
+    return;
+  }
+
+  if (cType === 'voltage') {
+    const val = parseFloat(String(cond.value ?? cond.voltage_val ?? ''));
+    if (isNaN(val) || val <= 0 || val > 100) {
+      push('error', 'voltage_val', 'Voltage condition requires a valid voltage threshold (0–100 V).');
+    }
+    return;
+  }
+
+  if (
+    cType === 'device_state' ||
+    cType === 'wifi' ||
+    cType === 'wifi_condition' ||
+    cType === 'ble_button' ||
+    cType === 'ble_key' ||
+    cType === 'ble_device' ||
+    cType === 'ble_beacon' ||
+    cType === 'beacon' ||
+    cType === 'ble_presence' ||
+    cType === 'ble'
+  ) {
+    return;
+  }
+
+  // CAN condition
+  const catalogCmd = findCatalogCommand(cond.source_command_id, catalog);
+  const canId = cond.can_id || catalogCmd?.state_can_id;
+
+  if (!canId || !canId.trim()) {
+    push('error', 'can_id', 'CAN condition is missing a CAN ID.');
+  } else {
+    const idCheck = validateCanId(canId);
+    if (!idCheck.isValid) {
+      push('error', 'can_id', idCheck.error || `Invalid CAN ID '${canId}'.`);
+    } else if (canId.trim().toLowerCase() === '0x000') {
+      push('warning', 'can_id', 'CAN ID is set to placeholder 0x000.');
+    }
+  }
+
+  const byteKey = cond.byte || cond.evaluate?.byte;
+  if (byteKey && !isValidByteKey(byteKey)) {
+    push('error', 'byte', `Invalid byte position '${byteKey}' (must use 1-based indexing D1–D8).`);
+  }
+  if (cond.byte_index !== undefined && (!Number.isInteger(cond.byte_index) || cond.byte_index < 0 || cond.byte_index > 7)) {
+    push('error', 'byte_index', `Byte index ${cond.byte_index} is out of bounds (expected 0–7 internal offset).`);
+  }
+
+  const targetVal = cond.value ?? cond.evaluate?.value;
+  if (typeof targetVal === 'string' && targetVal.trim() !== '') {
+    const check = checkEdgeHexOrNumeric(targetVal);
+    if (!check.isValid) {
+      push('error', 'value', check.error || 'Invalid condition target value.');
+    }
+  }
+
+  const maskVal = cond.mask ?? cond.evaluate?.mask;
+  if (typeof maskVal === 'string' && maskVal.trim() !== '') {
+    const check = checkEdgeHexOrNumeric(maskVal);
+    if (!check.isValid) {
+      push('error', 'mask', check.error || 'Invalid bitmask value.');
+    }
+  } else if (maskVal && typeof maskVal === 'object') {
+    const pCheck = checkEdgePayload(maskVal as Record<string, string>, false);
+    if (!pCheck.isValid) {
+      push('error', 'mask', pCheck.error || 'Invalid bitmask ByteMap.');
+    }
+  }
+
+  for (const [field, mapVal] of [
+    ['match', cond.match],
+    ['match_payload', cond.match_payload]
+  ] as const) {
+    if (mapVal) {
+      const pCheck = checkEdgePayload(mapVal as any, false);
+      if (!pCheck.isValid) {
+        push('error', field, pCheck.error || `Invalid ${field}.`);
+      }
+    }
+  }
+}
+
+function validateActionNode(
+  act: AutomationAction,
+  idx: number,
+  ruleMeta: { id: string; name: string },
+  catalog: Catalog | undefined,
+  issues: AutomationValidationIssue[],
+  pathPrefix = ''
+) {
+  const prefix = pathPrefix ? `${pathPrefix}Action #${idx + 1}` : `Action #${idx + 1}`;
+  const push = (type: 'error' | 'warning', field: string | undefined, message: string) => {
+    issues.push({
+      type,
+      ruleId: ruleMeta.id,
+      ruleName: ruleMeta.name,
+      section: 'action',
+      itemIndex: pathPrefix ? undefined : idx,
+      field,
+      message: `${prefix}: ${message}`
+    });
+  };
+
+  const aType = act.type;
+
+  if (aType === 'if_then') {
+    if (!act.conditions || act.conditions.length === 0) {
+      push('warning', 'conditions', 'If / Then block has no conditions (Then branch will always run).');
+    } else {
+      act.conditions.forEach((c, cIdx) =>
+        validateConditionNode(c, cIdx, ruleMeta, catalog, issues, `${prefix} (If) ▸ `)
+      );
+    }
+
+    const thenList = act.then || [];
+    const elseList = act.else || [];
+    if (thenList.length === 0 && elseList.length === 0) {
+      push('error', 'then', 'If / Then block has no actions in either Then or Else.');
+    } else {
+      thenList.forEach((sub, sIdx) =>
+        validateActionNode(sub, sIdx, ruleMeta, catalog, issues, `${prefix} (Then) ▸ `)
+      );
+      elseList.forEach((sub, sIdx) =>
+        validateActionNode(sub, sIdx, ruleMeta, catalog, issues, `${prefix} (Else) ▸ `)
+      );
+    }
+    return;
+  }
+
+  if (aType === 'choose') {
+    const choices = act.choices || [];
+    const def = act.default || [];
+    if (choices.length === 0 && def.length === 0) {
+      push('error', 'choices', 'Choose block has no conditional branches or default actions.');
+      return;
+    }
+
+    choices.forEach((branch, bIdx) => {
+      const bLabel = branch.label?.trim() ? `Branch "${branch.label}"` : `Branch #${bIdx + 1}`;
+      if (!branch.conditions || branch.conditions.length === 0) {
+        push('warning', `choices[${bIdx}].conditions`, `${bLabel} has no conditions and will always match first.`);
+      } else {
+        branch.conditions.forEach((c, cIdx) =>
+          validateConditionNode(c, cIdx, ruleMeta, catalog, issues, `${prefix} (${bLabel}) ▸ `)
+        );
+      }
+
+      if (!branch.sequence || branch.sequence.length === 0) {
+        push('error', `choices[${bIdx}].sequence`, `${bLabel} has no actions.`);
+      } else {
+        branch.sequence.forEach((sub, sIdx) =>
+          validateActionNode(sub, sIdx, ruleMeta, catalog, issues, `${prefix} (${bLabel}) ▸ `)
+        );
+      }
+    });
+
+    def.forEach((sub, sIdx) =>
+      validateActionNode(sub, sIdx, ruleMeta, catalog, issues, `${prefix} (Default) ▸ `)
+    );
+    return;
+  }
+
+  if (aType === 'wait_for' || aType === 'repeat_until') {
+    const label = aType === 'wait_for' ? 'Wait For' : 'Repeat Until';
+    const conds = act.conditions && act.conditions.length > 0 ? act.conditions : (act.condition ? [act.condition] : []);
+    if (conds.length === 0) {
+      push('error', 'condition', `${label} requires at least one stop condition.`);
+    } else {
+      conds.forEach((c, cIdx) =>
+        validateConditionNode(c, cIdx, ruleMeta, catalog, issues, `${prefix} (${label}) ▸ `)
+      );
+    }
+
+    if (act.timeout_ms !== undefined && (isNaN(Number(act.timeout_ms)) || Number(act.timeout_ms) <= 0)) {
+      push('error', 'timeout_ms', `${label} timeout must be greater than 0 ms.`);
+    }
+    if (act.interval_ms !== undefined && (isNaN(Number(act.interval_ms)) || Number(act.interval_ms) <= 0)) {
+      push('error', 'interval_ms', `${label} check interval must be greater than 0 ms.`);
+    }
+
+    if (aType === 'repeat_until') {
+      if (!act.sequence || act.sequence.length === 0) {
+        push('error', 'sequence', 'Repeat Until block has no actions in its loop sequence.');
+      } else {
+        act.sequence.forEach((sub, sIdx) =>
+          validateActionNode(sub, sIdx, ruleMeta, catalog, issues, `${prefix} (Loop) ▸ `)
+        );
+      }
+    }
+    return;
+  }
+
+  if (aType === 'cycle_entity') {
+    const entId = (act.entity_id || act.target_command_id || '').trim();
+    if (!entId) {
+      push('error', 'entity_id', 'Cycle Entity action is missing a target entity.');
+    } else if (catalog?.commands && catalog.commands.length > 0 && !findCatalogCommand(entId, catalog)) {
+      push('warning', 'entity_id', `Entity '${entId}' was not found in the active catalog.`);
+    }
+
+    if (!Array.isArray(act.states) || act.states.length === 0) {
+      push('error', 'states', `Cycle Entity action${entId ? ` for '${entId}'` : ''} has 0 states selected.`);
+    } else if (act.states.length === 1) {
+      push('warning', 'states', `Cycle Entity action for '${entId || 'entity'}' only has 1 state; add 2+ states to cycle.`);
+    }
+    return;
+  }
+
+  if (aType === 'delay') {
+    const ms = act.delay_ms ?? act.ms;
+    if (ms === undefined || isNaN(Number(ms)) || Number(ms) <= 0) {
+      push('error', 'delay_ms', 'Delay action must have a positive duration in milliseconds.');
+    }
+    return;
+  }
+
+  if (aType === 'track_popup' || aType === 'popup') {
+    if (!(act.text || act.popup_message)?.trim()) {
+      push('error', 'text', 'Head unit popup action has empty message text.');
+    }
+    return;
+  }
+
+  if (aType === 'hud_nav' || aType === 'nav') {
+    const navMode = act.nav_action || act.action || 'update';
+    if (navMode !== 'clear') {
+      const lanes = act.num_lanes ?? act.lanes ?? 0;
+      if (lanes < 0 || lanes > 8) {
+        push('error', 'num_lanes', 'HUD Navigation lane count must be between 0 and 8.');
+      }
+    }
+    return;
+  }
+
+  if (aType === 'climate_target' || aType === 'remote_climate') {
+    const temp = act.target_temp_c ?? act.target_c;
+    if (temp !== undefined && (isNaN(Number(temp)) || Number(temp) < 10 || Number(temp) > 35)) {
+      push('warning', 'target_temp_c', `Climate target temperature ${temp}°C is outside normal E-GMP range (14–30°C).`);
+    }
+    return;
+  }
+
+  if (aType === 'precondition') {
+    return;
+  }
+
+  if (aType === 'webhook') {
+    push('warning', 'type', 'Webhook actions cannot run offline on the ESP32; consider CAN TX or Home Assistant MQTT.');
+    return;
+  }
+
+  // Default: can_tx / transmit / entity_command
+  const catalogCmd = findCatalogCommand(
+    act.entity_id || act.source_command_id || act.target_command_id,
+    catalog
+  );
+
+  if (act.steps && act.steps.length > 0) {
+    act.steps.forEach((step, sIdx) => {
+      if (step.type === 'delay') {
+        const ms = step.delay_ms ?? step.ms;
+        if (ms !== undefined && (isNaN(Number(ms)) || Number(ms) <= 0)) {
+          push('error', `steps[${sIdx}]`, `Step #${sIdx + 1} delay must be > 0 ms.`);
+        }
+        return;
+      }
+      const stepCanId = step.can_id || step.action_can_id || act.can_id || catalogCmd?.action_can_id || catalogCmd?.state_can_id;
+      if (!stepCanId || !stepCanId.trim()) {
+        push('error', `steps[${sIdx}].can_id`, `Step #${sIdx + 1} is missing a CAN ID.`);
+      } else {
+        const idCheck = validateCanId(stepCanId);
+        if (!idCheck.isValid) {
+          push('error', `steps[${sIdx}].can_id`, `Step #${sIdx + 1}: ${idCheck.error}`);
+        }
+      }
+
+      const pCheck = checkEdgePayload(step.payload as any, false);
+      if (!pCheck.isValid) {
+        push('error', `steps[${sIdx}].payload`, `Step #${sIdx + 1}: ${pCheck.error}`);
+      } else if (pCheck.isEmpty) {
+        push('error', `steps[${sIdx}].payload`, `Step #${sIdx + 1} has an empty CAN payload.`);
+      }
+    });
+    return;
+  }
+
+  if (aType === 'entity_command' && (act.target_command_id || act.entity_id) && catalogCmd) {
+    return;
+  }
+
+  const canId = act.can_id || catalogCmd?.action_can_id || catalogCmd?.state_can_id;
+  if (!canId || !canId.trim()) {
+    push('error', 'can_id', 'CAN Transmit action is missing a target CAN ID.');
+  } else {
+    const idCheck = validateCanId(canId);
+    if (!idCheck.isValid) {
+      push('error', 'can_id', idCheck.error || `Invalid CAN ID '${canId}'.`);
+    } else if (canId.trim().toLowerCase() === '0x000') {
+      push('warning', 'can_id', 'CAN ID is set to placeholder 0x000.');
+    }
+  }
+
+  const effectivePayload = act.payload ?? act.to_payload;
+  const pCheck = checkEdgePayload(effectivePayload as any, false);
+  if (!pCheck.isValid) {
+    push('error', 'payload', pCheck.error || 'Invalid CAN TX payload.');
+  } else if (pCheck.isEmpty && !act.option_label && !act.command) {
+    push('error', 'payload', 'CAN Transmit action has an empty payload.');
+  }
+}
+
+export function validateAutomationRule(
+  rule: AutomationRule,
+  catalog?: Catalog,
+  isDuplicateId: boolean = false
+): AutomationValidationIssue[] {
+  const issues: AutomationValidationIssue[] = [];
+  const ruleMeta = {
+    id: rule.id || '(missing-id)',
+    name: rule.name?.trim() || rule.id || 'Unnamed Rule'
+  };
+
+  if (!rule.id || !rule.id.trim()) {
+    issues.push({
+      type: 'error',
+      ruleId: ruleMeta.id,
+      ruleName: ruleMeta.name,
+      section: 'general',
+      field: 'id',
+      message: 'Rule is missing a unique ID.'
+    });
+  } else if (isDuplicateId) {
+    issues.push({
+      type: 'error',
+      ruleId: ruleMeta.id,
+      ruleName: ruleMeta.name,
+      section: 'general',
+      field: 'id',
+      message: `Duplicate rule ID '${rule.id}' conflicts with another rule.`
+    });
+  }
+
+  if (!rule.name || !rule.name.trim()) {
+    issues.push({
+      type: 'warning',
+      ruleId: ruleMeta.id,
+      ruleName: ruleMeta.name,
+      section: 'general',
+      field: 'name',
+      message: 'Rule has an empty name.'
+    });
+  }
+
+  const triggers = rule.triggers || [];
+  const conditions = rule.conditions || [];
+  const actions = rule.actions || [];
+
+  if (rule.enabled && triggers.length === 0) {
+    issues.push({
+      type: 'warning',
+      ruleId: ruleMeta.id,
+      ruleName: ruleMeta.name,
+      section: 'trigger',
+      message: 'Enabled rule has no triggers (will only run manually or from Home Assistant).'
+    });
+  }
+
+  if ((rule.trigger_mode === 'all' || rule.trigger_mode === 'sequence') && triggers.length < 2) {
+    issues.push({
+      type: 'warning',
+      ruleId: ruleMeta.id,
+      ruleName: ruleMeta.name,
+      section: 'general',
+      field: 'trigger_mode',
+      message: `Trigger Mode is '${rule.trigger_mode === 'all' ? 'All Triggers (AND)' : 'Sequence'}', which requires 2 or more triggers.`
+    });
+  }
+
+  if (actions.length === 0) {
+    issues.push({
+      type: 'error',
+      ruleId: ruleMeta.id,
+      ruleName: ruleMeta.name,
+      section: 'action',
+      message: 'Rule has no actions configured.'
+    });
+  }
+
+  triggers.forEach((trig, idx) => validateTriggerNode(trig, idx, ruleMeta, rule, catalog, issues));
+  conditions.forEach((cond, idx) => validateConditionNode(cond, idx, ruleMeta, catalog, issues));
+  actions.forEach((act, idx) => validateActionNode(act, idx, ruleMeta, catalog, issues));
+
+  return issues;
+}
+
+export function validateAutomationRules(
+  rules: AutomationRule[],
+  catalog?: Catalog
+): AutomationValidationReport {
+  const errors: AutomationValidationIssue[] = [];
+  const warnings: AutomationValidationIssue[] = [];
+  const issuesByRuleId: Record<string, AutomationValidationIssue[]> = {};
+  const idCounts = new Map<string, number>();
+
+  for (const r of rules) {
+    if (r.id) {
+      idCounts.set(r.id, (idCounts.get(r.id) || 0) + 1);
+    }
+  }
+
+  for (const rule of rules) {
+    const isDup = Boolean(rule.id && (idCounts.get(rule.id) || 0) > 1);
+    const ruleIssues = validateAutomationRule(rule, catalog, isDup);
+    if (ruleIssues.length > 0) {
+      const key = rule.id || '(missing-id)';
+      if (!issuesByRuleId[key]) {
+        issuesByRuleId[key] = [];
+      }
+      for (const issue of ruleIssues) {
+        issuesByRuleId[key].push(issue);
+        if (issue.type === 'error') {
+          errors.push(issue);
+        } else {
+          warnings.push(issue);
+        }
+      }
+    }
+  }
+
+  return {
+    isValid: errors.length === 0,
+    hasWarnings: warnings.length > 0,
+    errors,
+    warnings,
+    issuesByRuleId
+  };
+}
+

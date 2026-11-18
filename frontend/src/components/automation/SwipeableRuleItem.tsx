@@ -1,9 +1,10 @@
 import React from 'react';
 import { Checkbox } from '@heroui/react';
 import { AutomationRule } from '../../types/automation';
-import { Tag } from 'lucide-react';
+import { Tag, Zap } from 'lucide-react';
 import { HaToggleSwitch } from './HaToggleSwitch';
 import { AutomationActionMenu } from './AutomationActionMenu';
+import { RuleFireRecord, formatRelativeFiredTime } from '../../utils/ruleSimulator';
 
 export interface SwipeableRuleItemProps {
   rule: AutomationRule;
@@ -11,6 +12,9 @@ export interface SwipeableRuleItemProps {
   isSelected: boolean;
   isSelectMode: boolean;
   isCheckedForDelete: boolean;
+  fireRecord?: RuleFireRecord;
+  isRecentlyFired?: boolean;
+  nowMs?: number;
   onToggleCheck: (id: string) => void;
   onSelect: (id: string) => void;
   onDuplicate: (rule: AutomationRule) => void;
@@ -29,6 +33,9 @@ export const SwipeableRuleItem: React.FC<SwipeableRuleItemProps> = ({
   isSelected,
   isSelectMode,
   isCheckedForDelete,
+  fireRecord,
+  isRecentlyFired = false,
+  nowMs = Date.now(),
   onToggleCheck,
   onSelect,
   onDuplicate,
@@ -52,9 +59,11 @@ export const SwipeableRuleItem: React.FC<SwipeableRuleItemProps> = ({
     <div
       onClick={handleClick}
       className={`relative z-10 p-2.5 rounded-xl cursor-pointer border text-left flex items-center justify-between gap-2.5 transition-all duration-150 select-none ${
-        isSelected
-          ? 'bg-surface-secondary border-accent shadow-sm text-foreground ring-1 ring-accent/30'
-          : 'bg-surface border-border text-foreground hover:bg-surface-secondary hover:border-border-secondary'
+        isRecentlyFired
+          ? 'bg-success-soft/30 border-success ring-2 ring-success/40 shadow-sm text-foreground'
+          : isSelected
+            ? 'bg-surface-secondary border-accent shadow-sm text-foreground ring-1 ring-accent/30'
+            : 'bg-surface border-border text-foreground hover:bg-surface-secondary hover:border-border-secondary'
       }`}
     >
       {/* Left side: Selection Checkbox / Status Indicator + Title + Badges */}
@@ -73,11 +82,16 @@ export const SwipeableRuleItem: React.FC<SwipeableRuleItemProps> = ({
             </Checkbox>
           </div>
         ) : (
-          <span
-            className={`w-2 h-2 rounded-full flex-shrink-0 transition-colors ${
-              rule.enabled ? 'bg-success' : 'bg-muted/50'
-            }`}
-          />
+          <span className="relative flex w-2 h-2 flex-shrink-0">
+            {isRecentlyFired && (
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+            )}
+            <span
+              className={`relative inline-flex w-2 h-2 rounded-full transition-colors ${
+                rule.enabled ? 'bg-success' : 'bg-muted/50'
+              }`}
+            />
+          </span>
         )}
 
         <div className="min-w-0 flex-1">
@@ -107,6 +121,20 @@ export const SwipeableRuleItem: React.FC<SwipeableRuleItemProps> = ({
                 {rule.cooldown_ms}ms
               </span>
             ) : null}
+            {fireRecord && (
+              <span
+                className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-sans font-semibold border transition-colors ${
+                  isRecentlyFired
+                    ? 'bg-success text-white border-success'
+                    : 'bg-success-soft text-success border-success/30'
+                }`}
+                title={`Last fired at ${new Date(fireRecord.lastFiredAt).toLocaleTimeString()} (${fireRecord.count} time${fireRecord.count !== 1 ? 's' : ''} this session)`}
+              >
+                <Zap className="w-2.5 h-2.5 flex-shrink-0" />
+                <span>Fired {formatRelativeFiredTime(fireRecord.lastFiredAt, nowMs)}</span>
+                {fireRecord.count > 1 && <span>({fireRecord.count}×)</span>}
+              </span>
+            )}
           </div>
         </div>
       </div>

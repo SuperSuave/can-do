@@ -8,12 +8,14 @@ export interface AutomationClipboardContextType {
   copyToClipboard: (type: ClipboardBlockType, data: any, label: string) => void;
   clearClipboard: () => void;
   pastePayload: (targetType?: ClipboardBlockType) => any;
+  pasteFromClipboard: (targetType: ClipboardBlockType) => Promise<any | null>;
 }
 
 export const AutomationClipboardContext = createContext<AutomationClipboardContextType>({
   clipboard: null,
   copyToClipboard: () => {},
   clearClipboard: () => {},
-  pastePayload: () => null
+  pastePayload: () => null,
+  pasteFromClipboard: async () => null
 });
 

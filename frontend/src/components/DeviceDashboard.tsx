@@ -155,6 +155,8 @@ export interface AutomationDiag {
   last_fired?: string;
   conditions_met?: boolean;
   exec_mode?: string;
+  trigger_mode?: string;
+  trigger_window_ms?: number;
   cooldown_ms?: number;
   last_exec_ms?: number;
   last_exec_sec_ago?: number;
@@ -1537,7 +1539,10 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
 
                   <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-3 border-t border-separator text-muted">
                     <div>
-                      Mode: <strong className="text-accent uppercase">{rule.exec_mode || 'one_shot'}</strong>
+                      Trigger Mode: <strong className="text-accent uppercase">{rule.trigger_mode || 'any'}</strong>
+                      {rule.trigger_mode && rule.trigger_mode !== 'any' && (
+                        <span className="text-muted"> ({Math.round((rule.trigger_window_ms ?? 8000) / 1000)}s)</span>
+                      )}
                     </div>
                     <div>
                       Cooldown: <strong className="text-foreground">{rule.cooldown_ms ?? 500}ms</strong>

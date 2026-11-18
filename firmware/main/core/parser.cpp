@@ -721,6 +721,61 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
                 }
             }
         }
+        cJSON* ce_meta = cJSON_GetObjectItem(a_item, "_cycle_entity");
+        if (ce_meta && cJSON_IsObject(ce_meta)) {
+            cJSON* dir_item = cJSON_GetObjectItem(ce_meta, "direction");
+            if (dir_item && cJSON_IsString(dir_item) && strcmp(dir_item->valuestring, "ping_pong") == 0) {
+                step.cycle_ping_pong = true;
+                step.ping_pong_dir = std::make_shared<std::atomic<int>>(1);
+            }
+        }
+        return true;
+    } else if (strcmp(type_str, "cycle_entity") == 0) {
+        step.type = ActionType::CYCLE_ENTITY;
+        cJSON* eid = cJSON_GetObjectItem(a_item, "entity_id");
+        if (!eid) eid = cJSON_GetObjectItem(a_item, "target_command_id");
+        if (cJSON_IsString(eid) && eid->valuestring) step.entity_id = eid->valuestring;
+
+        cJSON* states_arr = cJSON_GetObjectItem(a_item, "states");
+        if (cJSON_IsArray(states_arr)) {
+            cJSON* st = nullptr;
+            cJSON_ArrayForEach(st, states_arr) {
+                if (cJSON_IsString(st) && st->valuestring && st->valuestring[0] != '\0') {
+                    step.cycle_states.emplace_back(st->valuestring);
+                }
+            }
+        }
+
+        cJSON* dir = cJSON_GetObjectItem(a_item, "direction");
+        if (cJSON_IsString(dir) && dir->valuestring) {
+            step.cycle_direction = dir->valuestring;
+        } else {
+            step.cycle_direction = "forward";
+        }
+        if (step.cycle_direction == "ping_pong") {
+            step.cycle_ping_pong = true;
+            step.ping_pong_dir = std::make_shared<std::atomic<int>>(1);
+        }
+
+        cJSON* wrap = cJSON_GetObjectItem(a_item, "wrap");
+        if (cJSON_IsBool(wrap)) step.cycle_wrap = cJSON_IsTrue(wrap);
+        else step.cycle_wrap = true;
+
+        cJSON* fb = cJSON_GetObjectItem(a_item, "fallback_state");
+        if (cJSON_IsString(fb) && fb->valuestring) step.cycle_fallback_state = fb->valuestring;
+        else step.cycle_fallback_state = "__first__";
+
+        cJSON* show_pop = cJSON_GetObjectItem(a_item, "show_popup");
+        if (cJSON_IsBool(show_pop)) step.cycle_show_popup = cJSON_IsTrue(show_pop);
+        else step.cycle_show_popup = true;
+
+        cJSON* pref = cJSON_GetObjectItem(a_item, "popup_prefix");
+        if (cJSON_IsString(pref) && pref->valuestring) step.cycle_popup_prefix = pref->valuestring;
+
+        cJSON* lvl = cJSON_GetObjectItem(a_item, "level");
+        if (cJSON_IsString(lvl) && lvl->valuestring) step.popup_level = lvl->valuestring;
+        else step.popup_level = "info";
+
         return true;
     } else if (strcmp(type_str, "repeat_until") == 0 || strcmp(type_str, "wait_for") == 0) {
         step.type = (strcmp(type_str, "wait_for") == 0) ? ActionType::WAIT_FOR : ActionType::REPEAT_UNTIL;
@@ -1002,6 +1057,13 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
 
     cJSON* trig_m = cJSON_GetObjectItem(auto_json, "trigger_mode");
     if (cJSON_IsString(trig_m)) out_rule.trigger_mode = trig_m->valuestring;
+
+    cJSON* trig_win = cJSON_GetObjectItem(auto_json, "trigger_window_ms");
+    if (!trig_win) trig_win = cJSON_GetObjectItem(auto_json, "timeout_reset_ms");
+    if (trig_win && cJSON_IsNumber(trig_win) && trig_win->valueint >= 500) {
+        uint32_t win = static_cast<uint32_t>(trig_win->valueint);
+        out_rule.trigger_window_ms = (win > 60000) ? 60000 : win;
+    }
 
     // Triggers
     cJSON* trigs = cJSON_GetObjectItem(auto_json, "triggers");
