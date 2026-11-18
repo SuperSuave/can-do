@@ -5,6 +5,8 @@ import logging
 import os
 from typing import Any
 
+from .const import VERSION
+
 _LOGGER = logging.getLogger(__name__)
 
 # Track which (command_id, vehicle_id) pairs have already emitted a variant
@@ -16,38 +18,53 @@ _VEHICLE_CACHE: dict[str, dict[str, Any]] | None = None
 
 
 def load_catalog() -> dict[str, Any]:
-    """Load can_do_catalog.json from repository or local cache."""
+    """Load can_do_catalog.json from repository, fresh local cache, or GitHub."""
     global _CATALOG_DATA
     if _CATALOG_DATA is not None:
         return _CATALOG_DATA
 
-    candidates = [
-        # 1. Monorepo root canonical catalog (single source of truth in git)
-        os.path.abspath(
-            os.path.join(
-                os.path.dirname(__file__),
-                "..",
-                "..",
-                "catalog",
-                "can_do_catalog.json",
-            )
-        ),
-        # 2. Local fallback / HACS cached catalog
-        os.path.join(os.path.dirname(__file__), "can_do_catalog.json"),
-    ]
+    repo_catalog = os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "catalog",
+            "can_do_catalog.json",
+        )
+    )
+    local_cache = os.path.join(os.path.dirname(__file__), "can_do_catalog.json")
 
-    for path in candidates:
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                _CATALOG_DATA = json.load(f)
-                _LOGGER.debug("Loaded CAN Do catalog from %s", path)
+    # 1. Monorepo root canonical catalog (single source of truth in git)
+    try:
+        with open(repo_catalog, "r", encoding="utf-8") as f:
+            _CATALOG_DATA = json.load(f)
+            _LOGGER.debug("Loaded CAN Do catalog from %s", repo_catalog)
+            return _CATALOG_DATA
+    except FileNotFoundError:
+        pass
+    except Exception as ex:
+        _LOGGER.error("Failed to parse catalog at %s: %s", repo_catalog, ex)
+
+    # 2. Local HACS cached catalog (use directly if version matches integration VERSION)
+    cached_data: dict[str, Any] | None = None
+    try:
+        with open(local_cache, "r", encoding="utf-8") as f:
+            cached_data = json.load(f)
+            if cached_data.get("can_do_version") == VERSION:
+                _LOGGER.debug("Loaded CAN Do catalog from %s (v%s)", local_cache, VERSION)
+                _CATALOG_DATA = cached_data
                 return _CATALOG_DATA
-        except FileNotFoundError:
-            continue
-        except Exception as ex:
-            _LOGGER.error("Failed to parse catalog at %s: %s", path, ex)
+            _LOGGER.info(
+                "Cached catalog version '%s' differs from integration '%s'; refreshing",
+                cached_data.get("can_do_version"),
+                VERSION,
+            )
+    except FileNotFoundError:
+        pass
+    except Exception as ex:
+        _LOGGER.error("Failed to parse catalog at %s: %s", local_cache, ex)
 
-    # 3. Dynamic fetch for standalone HACS installations without repo clone
+    # 3. Dynamic fetch for standalone HACS installations without repo clone or with stale cache
     online_url = "https://raw.githubusercontent.com/SuperSuave/can-do/main/catalog/can_do_catalog.json"
     try:
         import urllib.request
@@ -55,7 +72,6 @@ def load_catalog() -> dict[str, Any]:
         with urllib.request.urlopen(online_url, timeout=10) as resp:
             data = resp.read()
             _CATALOG_DATA = json.loads(data.decode("utf-8"))
-            local_cache = os.path.join(os.path.dirname(__file__), "can_do_catalog.json")
             try:
                 with open(local_cache, "wb") as f:
                     f.write(data)
@@ -64,6 +80,11 @@ def load_catalog() -> dict[str, Any]:
             return _CATALOG_DATA
     except Exception as ex:
         _LOGGER.warning("Could not fetch remote catalog: %s", ex)
+
+    if cached_data is not None:
+        _LOGGER.warning("Using stale cached CAN Do catalog from %s", local_cache)
+        _CATALOG_DATA = cached_data
+        return _CATALOG_DATA
 
     _LOGGER.error("Could not locate can_do_catalog.json in candidates")
     _CATALOG_DATA = {"can_do_version": "unknown", "vehicles": [], "commands": []}

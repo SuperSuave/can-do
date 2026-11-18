@@ -256,7 +256,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
         cid = self.entity_id_str.lower()
 
         # Infer Device Class & Units
-        if "speed" in cid or unit in ("km/h", "kph", "mph"):
+        if unit in ("km/h", "kph", "mph") or "cluster_vehicle_speed" in cid or "wheel_speeds" in cid:
             self._attr_device_class = SensorDeviceClass.SPEED
             self._attr_state_class = SensorStateClass.MEASUREMENT
             self._attr_native_unit_of_measurement = UnitOfSpeed.MILES_PER_HOUR if "mph" in unit else UnitOfSpeed.KILOMETERS_PER_HOUR
@@ -289,23 +289,41 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
             self._attr_state_class = SensorStateClass.MEASUREMENT
             self._attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
 
+    def _match_discrete_options(self, payload: list[int]) -> str | None:
+        """Match raw CAN payload against catalog option conditions or evaluate rules."""
+        for opt in self.command.get("options", []):
+            match_spec = opt.get("match")
+            if match_spec and check_match(payload, match_spec, opt.get("mask")):
+                return opt.get("label")
+
+            evaluate = opt.get("evaluate")
+            if evaluate:
+                byte_str = evaluate.get("byte", "")
+                op = str(evaluate.get("operator", "")).strip().lower()
+                val, _ = parse_hex_val(evaluate.get("value", 0))
+                idx = get_d_index(byte_str)
+                if 0 <= idx < len(payload):
+                    actual = payload[idx]
+                    if (
+                        (op in ("greater_than", ">") and actual > val)
+                        or (op in ("less_than", "<") and actual < val)
+                        or (op in ("greater_than_or_equal", ">=") and actual >= val)
+                        or (op in ("less_than_or_equal", "<=") and actual <= val)
+                        or (op in ("equal", "eq", "==", "=") and actual == val)
+                        or (op in ("not_equal", "!=") and actual != val)
+                    ):
+                        return opt.get("label")
+        return None
+
     @property
     def native_value(self) -> Any:
         """Return the current sensor state with human-interpreted values."""
-        payload = None
-        if self.state_can_id:
-            payload = self.coordinator.get_can_payload(self.state_can_id)
-        if payload is None:
-            payload = self.coordinator.get_can_state(self.entity_id_str)
+        direct_entity_val = self.coordinator.get_can_state(self.entity_id_str)
+        if isinstance(direct_entity_val, (int, float)) and not isinstance(direct_entity_val, bool):
+            return round(float(direct_entity_val), 2)
 
         cid = self.entity_id_str.lower()
-        if payload is None and ("12v" in cid or "aux" in cid):
-            payload = (
-                self.coordinator.get_can_state("cond_aux_12v_battery")
-                or self.coordinator.get_can_state("vbat")
-                or self.coordinator.get_can_payload("0x1cf")
-            )
-        elif payload is None and "bms" in cid:
+        if "bms" in cid:
             bms_aliases = {
                 "bms_display_soc": "bms_soc",
                 "bms_soc": "bms_display_soc",
@@ -318,7 +336,31 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
             }
             alias = bms_aliases.get(cid)
             if alias:
-                payload = self.coordinator.get_can_state(alias)
+                alias_val = self.coordinator.get_can_state(alias)
+                if isinstance(alias_val, (int, float)) and not isinstance(alias_val, bool):
+                    return round(float(alias_val), 2)
+                if direct_entity_val is None:
+                    direct_entity_val = alias_val
+
+        if "12v" in cid or "aux" in cid:
+            for aux_key in ("cond_aux_12v_battery", "vbat"):
+                aux_val = self.coordinator.get_can_state(aux_key)
+                if isinstance(aux_val, (int, float)) and not isinstance(aux_val, bool):
+                    val = round(float(aux_val), 1)
+                    if 8.0 <= val <= 16.5:
+                        return val
+
+        payload = None
+        if self.state_can_id and self.state_can_id.lower() == "0x7ec" and cid.startswith("bms_"):
+            payload = direct_entity_val
+        else:
+            if self.state_can_id:
+                payload = self.coordinator.get_can_payload(self.state_can_id)
+            if payload is None:
+                payload = direct_entity_val
+
+        if payload is None and ("12v" in cid or "aux" in cid):
+            payload = self.coordinator.get_can_payload("0x1cf")
 
         if not payload and payload != 0:
             return self._last_native_val
@@ -401,6 +443,19 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
             if len(payload) >= 1:
                 raw = payload[0]
                 temp_c = float(raw if raw < 128 else raw - 256)
+                if self._attr_native_unit_of_measurement == UnitOfTemperature.FAHRENHEIT:
+                    return round(temp_c * 1.8 + 32, 1)
+                return temp_c
+
+        # 1E2. BMS Cell Extremes Voltage (0x5D6: Byte D1 = Max Cell * 0.02V, D3 = Min Cell * 0.02V)
+        if cid == "bms_cell_extremes_voltage" or (self.state_can_id and self.state_can_id.lower() == "0x5d6"):
+            if isinstance(payload, list) and len(payload) >= 1 and payload[0] > 0:
+                return round(payload[0] * 0.02, 2)
+
+        # 1E3. BMS Module Extremes Temperature (0x5D7: Byte D1 = Max - 40C, D2 = Min - 40C)
+        if cid == "bms_module_extremes_temp" or (self.state_can_id and self.state_can_id.lower() == "0x5d7"):
+            if isinstance(payload, list) and len(payload) >= 1 and 0 < payload[0] < 255:
+                temp_c = float(payload[0] - 40)
                 if self._attr_native_unit_of_measurement == UnitOfTemperature.FAHRENHEIT:
                     return round(temp_c * 1.8 + 32, 1)
                 return temp_c
@@ -495,12 +550,21 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                 raw = payload[6] | (payload[7] << 8)
                 return 0 if raw == 0xFFFF else raw
 
-        # 1K. Generic Linear Scale
+        # 1K. Discrete Options (prioritized when unit is absent) vs Generic Linear Scale
+        if self.command.get("options") and not net.get("unit"):
+            opt_label = self._match_discrete_options(payload)
+            if opt_label is not None:
+                return opt_label
+
         if self.command.get("type") == "linear_scale" or "min" in net:
             state_byte = net.get("state_byte", "D1")
             idx = get_d_index(state_byte)
             if 0 <= idx < len(payload):
                 raw = payload[idx]
+                state_mask = net.get("state_mask")
+                if state_mask is not None:
+                    mask_val, _ = parse_hex_val(state_mask)
+                    raw &= mask_val
                 min_val = net.get("min", 0)
                 max_val = net.get("max", 255)
                 raw_min = parse_hex_val(net.get("raw_min", 0))[0]
@@ -511,21 +575,9 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                 return raw
 
         # 2. Discrete Options Match
-        for opt in self.command.get("options", []):
-            match_spec = opt.get("match")
-            if match_spec and check_match(payload, match_spec, opt.get("mask")):
-                return opt.get("label")
-
-            evaluate = opt.get("evaluate")
-            if evaluate:
-                byte_str = evaluate.get("byte", "")
-                op = evaluate.get("operator", "")
-                val, _ = parse_hex_val(evaluate.get("value", 0))
-                idx = get_d_index(byte_str)
-                if 0 <= idx < len(payload):
-                    actual = payload[idx]
-                    if op == "greater_than" and actual > val or op == "less_than" and actual < val or op in ("equal", "eq") and actual == val:
-                        return opt.get("label")
+        opt_label = self._match_discrete_options(payload)
+        if opt_label is not None:
+            return opt_label
 
         # 3. Command-Level Binary Match
         if "match" in self.command:
@@ -565,4 +617,14 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                         attrs["threshold"] = "Warm (> 25°C / 77°F)"
                     else:
                         attrs["threshold"] = "Comfortable (15-25°C / 59-77°F)"
+                elif self.state_can_id.lower() == "0x5d6" and len(payload) >= 3:
+                    if payload[0] > 0:
+                        attrs["max_cell_voltage_v"] = round(payload[0] * 0.02, 2)
+                    if payload[2] > 0:
+                        attrs["min_cell_voltage_v"] = round(payload[2] * 0.02, 2)
+                elif self.state_can_id.lower() == "0x5d7" and len(payload) >= 2:
+                    if 0 < payload[0] < 255:
+                        attrs["max_module_temp_c"] = payload[0] - 40
+                    if 0 < payload[1] < 255:
+                        attrs["min_module_temp_c"] = payload[1] - 40
         return attrs

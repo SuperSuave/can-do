@@ -627,6 +627,12 @@ def main():
     out_path.write_text(cleaned_text + "\n", encoding="utf-8")
     print(f"[+] Cleaned & Validated Catalog Saved: {out_path} ({len(cleaned_text):,} bytes)")
 
+    default_catalog = Path("catalog/can_do_catalog.json")
+    ha_catalog = Path("custom_components/can_do/can_do_catalog.json")
+    if out_path.resolve() == default_catalog.resolve() and ha_catalog.is_file():
+        ha_catalog.write_text(cleaned_text + "\n", encoding="utf-8")
+        print(f"[+] Synced HACS Bundled Catalog: {ha_catalog}")
+
     if args.esp32:
         esp_data = strip_for_esp32(cleaned)
         esp_text = json.dumps(esp_data, separators=(",", ":"), ensure_ascii=False)

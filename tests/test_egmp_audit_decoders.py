@@ -81,10 +81,25 @@ class BinarySensorDeviceClass:
     LOCK = "lock"
     GARAGE_DOOR = "garage_door"
     BATTERY_CHARGING = "battery_charging"
+    OPENING = "opening"
+    OCCUPANCY = "occupancy"
+    WINDOW = "window"
 
 
 ha_bs.BinarySensorEntity = BinarySensorEntity
 ha_bs.BinarySensorDeviceClass = BinarySensorDeviceClass
+
+ha_event = _reg_mod("homeassistant.components.event")
+
+
+class EventEntity:
+    def _trigger_event(self, event_type, event_data=None):
+        if not hasattr(self, "triggered_events"):
+            self.triggered_events = []
+        self.triggered_events.append((event_type, event_data))
+
+
+ha_event.EventEntity = EventEntity
 
 ha_const = _reg_mod("homeassistant.const")
 ha_const.PERCENTAGE = "%"
@@ -129,6 +144,10 @@ class Entity:
     def __init__(self, *args, **kwargs):
         pass
 
+    @property
+    def name(self):
+        return getattr(self, "_attr_name", None)
+
     async def async_added_to_hass(self):
         pass
 
@@ -158,6 +177,7 @@ from custom_components.can_do.catalog_loader import (
     resolve_variant,
 )
 from custom_components.can_do.coordinator import CanDoDataCoordinator
+from custom_components.can_do.event import CanDoEventEntity
 from custom_components.can_do.sensor import CanDoSensorEntity
 
 
@@ -456,6 +476,149 @@ class TestEgmpAuditDecoders(unittest.TestCase):
         self.assertFalse(bs.is_on)
         self.coordinator.can_states["doors_status"] = "Driver Door Open"
         self.assertTrue(bs.is_on)
+
+    def test_direct_bms_and_12v_float_priority_over_raw_frames(self):
+        """Direct BMS (0x7EC) and 12V (vbat/0x1CF) float telemetry must not be shadowed by raw frames."""
+        soc_sensor = CanDoSensorEntity(self.coordinator, self.commands_by_id["bms_display_soc"])
+        hv_v_sensor = CanDoSensorEntity(self.coordinator, self.commands_by_id["bms_hv_voltage"])
+        v12_sensor = CanDoSensorEntity(self.coordinator, self.commands_by_id["cond_aux_12v_battery"])
+
+        # Raw 0x7EC ISO-TP frame and 0x1CF regen paddle frame present on bus
+        self.coordinator.can_states["0x7ec"] = [0x03, 0x7F, 0x22, 0x12, 0x00, 0x00, 0x00, 0xC8]
+        self.coordinator.can_states["0x1cf"] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+
+        # Even before direct float arrives, bms_display_soc must not misread 0x7EC D8 (0xC8 -> 100%)
+        self.assertIsNone(soc_sensor.native_value)
+
+        # Once direct float telemetry arrives (via aliases or entity_id), it takes precedence
+        self.coordinator.can_states["bms_soc"] = 78.4
+        self.coordinator.can_states["bms_hv_v"] = 742.6
+        self.coordinator.can_states["vbat"] = 13.8
+
+        self.assertEqual(soc_sensor.native_value, 78.4)
+        self.assertEqual(hv_v_sensor.native_value, 742.6)
+        self.assertEqual(v12_sensor.native_value, 13.8)
+
+    def test_fan_speed_speed_limit_and_bms_extremes_sensors(self):
+        """Verify 0x31B fan speed discrete matching, 0x1FA state_class omission, and 0x5D6/0x5D7 decoding."""
+        # 1. climate_fan_speed_level (0x31B D4 low nibble with high-nibble airflow bits 0x20 set)
+        fan_sensor = CanDoSensorEntity(self.coordinator, self.commands_by_id["climate_fan_speed_level"])
+        self.coordinator.can_states["0x31b"] = [0x00, 0x00, 0x00, 0x24, 0x00, 0x00, 0x00, 0x00]
+        self.assertEqual(fan_sensor.native_value, "Speed 3")
+
+        # 2. camera_speed_limit_sign (0x1FA) returns string and must not set MEASUREMENT state_class
+        cam_sensor = CanDoSensorEntity(self.coordinator, self.commands_by_id["camera_speed_limit_sign"])
+        self.assertFalse(hasattr(cam_sensor, "_attr_state_class"))
+        self.coordinator.can_states["0x1fa"] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x69, 0x00, 0x00]
+        self.assertEqual(cam_sensor.native_value, "Speed Limit 65 mph / 105 km/h")
+
+        # 3. bms_cell_extremes_voltage (0x5D6): D1=0xC0 (192 * 0.02 = 3.84V), D3=0xBC (188 * 0.02 = 3.76V)
+        cell_sensor = CanDoSensorEntity(self.coordinator, self.commands_by_id["bms_cell_extremes_voltage"])
+        self.coordinator.can_states["0x5d6"] = [0xC0, 0x00, 0xBC, 0x00, 0x00, 0x00, 0x00, 0x00]
+        self.assertEqual(cell_sensor.native_value, 3.84)
+        cell_attrs = cell_sensor.extra_state_attributes
+        self.assertEqual(cell_attrs["max_cell_voltage_v"], 3.84)
+        self.assertEqual(cell_attrs["min_cell_voltage_v"], 3.76)
+
+        # 4. bms_module_extremes_temp (0x5D7): D1=0x3F (63 - 40 = 23C), D2=0x3D (61 - 40 = 21C)
+        mod_sensor = CanDoSensorEntity(self.coordinator, self.commands_by_id["bms_module_extremes_temp"])
+        self.coordinator.can_states["0x5d7"] = [0x3F, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        self.assertEqual(mod_sensor.native_value, 23.0)
+        mod_attrs = mod_sensor.extra_state_attributes
+        self.assertEqual(mod_attrs["max_module_temp_c"], 23)
+        self.assertEqual(mod_attrs["min_module_temp_c"], 21)
+
+    def test_multi_door_and_word_boundary_binary_sensors(self):
+        """Any open door on 0x411 must keep doors_status ON, and ready/unbuckled/illuminated labels work."""
+        doors_bs = CanDoBinarySensorEntity(self.coordinator, self.commands_by_id["doors_status"])
+
+        # Driver door closed (D4=0x00), Passenger door open (D5=0x04)
+        self.coordinator.can_states["0x411"] = [0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00]
+        self.assertTrue(doors_bs.is_on)
+
+        # Driver door closed (D4=0x00), Rear Left door open (D7=0x10)
+        self.coordinator.can_states["0x411"] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00]
+        self.assertTrue(doors_bs.is_on)
+
+        # All doors closed
+        self.coordinator.can_states["0x411"] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        self.assertFalse(doors_bs.is_on)
+
+        # Ready / Unbuckled / Illuminated direct & CAN option matching
+        car_ready = CanDoBinarySensorEntity(self.coordinator, self.commands_by_id["car_ready_state"])
+        self.coordinator.can_states["car_ready_state"] = "Vehicle Ready"
+        self.assertTrue(car_ready.is_on)
+        self.coordinator.can_states["car_ready_state"] = "Vehicle Awake Not Ready"
+        self.assertFalse(car_ready.is_on)
+
+        ev_ready = CanDoBinarySensorEntity(self.coordinator, self.commands_by_id["ev_system_ready"])
+        self.coordinator.can_states["ev_system_ready"] = "EV Ready (Drive Mode)"
+        self.assertTrue(ev_ready.is_on)
+        self.coordinator.can_states["ev_system_ready"] = "EV Not Ready (Standby/Off)"
+        self.assertFalse(ev_ready.is_on)
+
+        seatbelts = CanDoBinarySensorEntity(self.coordinator, self.commands_by_id["seatbelts_status"])
+        self.coordinator.can_states["seatbelts_status"] = "Driver Unbuckled"
+        self.assertTrue(seatbelts.is_on)
+        self.coordinator.can_states["seatbelts_status"] = "Driver Buckled"
+        self.assertFalse(seatbelts.is_on)
+
+        mlu_status = CanDoBinarySensorEntity(self.coordinator, self.commands_by_id["mlu_ambient_light_status"])
+        self.coordinator.can_states["mlu_ambient_light_status"] = "Illuminated"
+        self.assertTrue(mlu_status.is_on)
+        self.coordinator.can_states["mlu_ambient_light_status"] = "Off"
+        self.assertFalse(mlu_status.is_on)
+
+    def test_event_entity_fires_all_non_idle_options(self):
+        """Multi-option event entities must fire rising-edge events for all options and ignore Idle."""
+        # 1. sw_volume (Volume Up = opt 0, Volume Down = opt 1)
+        vol_cmd = self.commands_by_id["sw_volume"]
+        vol_ev = CanDoEventEntity(self.coordinator, vol_cmd)
+        vol_down_opt = next(o for o in vol_cmd["options"] if "down" in o["label"].lower())
+        vol_down_match = vol_down_opt["match"]
+        # Build matching 8-byte payload for Volume Down on 0x448
+        frame = [0] * 8
+        for k, v in vol_down_match.items():
+            frame[int(k[1:]) - 1] = int(v, 16)
+        self.coordinator.can_states["0x448"] = frame
+        vol_ev._handle_can_update()
+        self.assertEqual(len(getattr(vol_ev, "triggered_events", [])), 1)
+        self.assertEqual(vol_ev.triggered_events[0], ("press", {"option": vol_down_opt["label"]}))
+
+        # Repeated identical frame must not re-fire
+        vol_ev._handle_can_update()
+        self.assertEqual(len(vol_ev.triggered_events), 1)
+
+        # 2. steering_paddles (Left = opt 0, Right = opt 1)
+        pad_cmd = self.commands_by_id["steering_paddles"]
+        pad_ev = CanDoEventEntity(self.coordinator, pad_cmd)
+        right_opt = next(o for o in pad_cmd["options"] if "right" in o["label"].lower())
+        p_frame = [0] * 8
+        for k, v in right_opt["match"].items():
+            p_frame[int(k[1:]) - 1] = int(v, 16)
+        self.coordinator.can_states["0x1cf"] = p_frame
+        pad_ev._handle_can_update()
+        self.assertEqual(pad_ev.triggered_events, [("press", {"option": right_opt["label"]})])
+
+        # 3. cluster_brightness (Idle = opt 0, Brightness Up (+) = opt 1)
+        bri_cmd = self.commands_by_id["cluster_brightness"]
+        bri_ev = CanDoEventEntity(self.coordinator, bri_cmd)
+        idle_opt = next(o for o in bri_cmd["options"] if o["label"] == "Idle")
+        up_opt = next(o for o in bri_cmd["options"] if "up" in o["label"].lower())
+
+        idle_frame = [0] * 8
+        for k, v in idle_opt["match"].items():
+            idle_frame[int(k[1:]) - 1] = int(v, 16)
+        self.coordinator.can_states["0x474"] = idle_frame
+        bri_ev._handle_can_update()
+        self.assertEqual(getattr(bri_ev, "triggered_events", []), [])
+
+        up_frame = [0] * 8
+        for k, v in up_opt["match"].items():
+            up_frame[int(k[1:]) - 1] = int(v, 16)
+        self.coordinator.can_states["0x474"] = up_frame
+        bri_ev._handle_can_update()
+        self.assertEqual(bri_ev.triggered_events, [("press", {"option": up_opt["label"]})])
 
 
 if __name__ == "__main__":

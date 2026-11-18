@@ -1,6 +1,7 @@
 """Binary sensor platform for CAN Do integration."""
 
 import logging
+import re
 import time
 from typing import Any
 
@@ -18,6 +19,27 @@ from .coordinator import CanDoDataCoordinator
 from .entity import CanDoEntity
 
 _LOGGER = logging.getLogger(__name__)
+
+_BS_OFF_RE = re.compile(
+    r"\b(closed|shut|inactive|released|locked|off|no|false|disconnected|not\s+charging|not\s+ready|normal|disabled?|buckled|asleep|standby|not\s+in\s+perimeter)\b",
+    re.IGNORECASE,
+)
+_BS_ON_RE = re.compile(
+    r"\b(open|opened|opening|active|touched|detected|unlocked|unbuckled|on|yes|true|pressed|charging|clamped|engaged|warning|fault|low|ready|tilted|windbreak|triggering|illuminated|proximity\s+zone)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_bs_off_label(label: str) -> bool:
+    """Return True if a binary sensor label indicates an inactive/closed/normal state."""
+    return bool(label and _BS_OFF_RE.search(label))
+
+
+def _is_bs_on_label(label: str) -> bool:
+    """Return True if a binary sensor label indicates an active/open/triggered state."""
+    if not label or _is_bs_off_label(label):
+        return False
+    return bool(_BS_ON_RE.search(label))
 
 
 async def async_setup_entry(
@@ -207,10 +229,9 @@ class CanDoBinarySensorEntity(CanDoEntity, BinarySensorEntity):
         if isinstance(direct_str, bool):
             return direct_str
         if isinstance(direct_str, str):
-            ds = direct_str.lower()
-            if any(k in ds for k in ["closed", "inactive", "released", "locked", "off", "no", "false", "disconnected", "not charging"]):
+            if _is_bs_off_label(direct_str):
                 return False
-            if any(k in ds for k in ["open", "active", "touched", "detected", "unlocked", "on", "yes", "true", "charging", "warning", "fault", "low", "clamped", "engaged"]):
+            if _is_bs_on_label(direct_str):
                 return True
 
         if not self.state_can_id:
@@ -222,20 +243,22 @@ class CanDoBinarySensorEntity(CanDoEntity, BinarySensorEntity):
                 return True
             return None
 
-        # 1. Match against options if present
+        # 1. Match against options: evaluate all active/open options before inactive/closed options
         is_active: bool | None = None
-        for opt in self.command.get("options", []):
-            label = opt.get("label", "").lower()
+        options = self.command.get("options", [])
+        for opt in options:
+            label = opt.get("label", "")
             match_spec = opt.get("match") or opt.get("payload")
-            if not match_spec:
-                continue
-            if any(k in label for k in ["closed", "inactive", "released", "locked", "off", "no", "false", "disconnected", "not charging", "normal"]):
-                if check_match(payload, match_spec, opt.get("mask")):
+            if match_spec and _is_bs_on_label(label) and check_match(payload, match_spec, opt.get("mask")):
+                is_active = True
+                break
+
+        if is_active is None:
+            for opt in options:
+                label = opt.get("label", "")
+                match_spec = opt.get("match") or opt.get("payload")
+                if match_spec and _is_bs_off_label(label) and check_match(payload, match_spec, opt.get("mask")):
                     is_active = False
-                    break
-            elif any(k in label for k in ["open", "active", "touched", "detected", "unlocked", "on", "yes", "true", "pressed", "charging", "clamped", "engaged", "warning", "fault", "low"]):
-                if check_match(payload, match_spec, opt.get("mask")):
-                    is_active = True
                     break
 
         # 2. Check command-level match

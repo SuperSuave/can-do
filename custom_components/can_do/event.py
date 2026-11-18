@@ -102,11 +102,19 @@ class CanDoEventEntity(CanDoEntity, EventEntity):
     """Event entity representing steering wheel and physical button press events."""
 
     _attr_event_types = ["press"]
+    _IDLE_OPTION_LABELS = {"idle", "none", "off", "released"}
 
     def __init__(self, coordinator: CanDoDataCoordinator, command: dict[str, Any]) -> None:
         """Initialize event entity."""
         super().__init__(coordinator, command)
         self._last_matched: bool = False
+        self._last_matched_option: str | None = None
+        event_types = ["press"]
+        for opt in command.get("options", []):
+            lbl = opt.get("label", "").strip()
+            if lbl and lbl.lower() not in self._IDLE_OPTION_LABELS and lbl not in event_types:
+                event_types.append(lbl)
+        self._attr_event_types = event_types
 
     def _handle_can_update(self) -> None:
         """Evaluate if incoming CAN frame triggers the event."""
@@ -117,14 +125,30 @@ class CanDoEventEntity(CanDoEntity, EventEntity):
         if not payload:
             return
 
+        options = self.command.get("options", [])
+        if options:
+            matched_label: str | None = None
+            for opt in options:
+                label = opt.get("label", "").strip()
+                if label.lower() in self._IDLE_OPTION_LABELS:
+                    continue
+                match_spec = opt.get("match") or opt.get("payload")
+                if match_spec and check_match(payload, match_spec, opt.get("mask")):
+                    matched_label = label or "press"
+                    break
+
+            if matched_label is not None and matched_label != self._last_matched_option:
+                _LOGGER.debug("Button event fired for '%s' (%s)", self.name, matched_label)
+                self._trigger_event("press", {"option": matched_label})
+                self.async_write_ha_state()
+
+            self._last_matched_option = matched_label
+            self._last_matched = matched_label is not None
+            return
+
         is_now_match = False
         if "match" in self.command:
             is_now_match = check_match(payload, self.command["match"], self.command.get("mask"))
-        elif self.command.get("options"):
-            first_opt = self.command["options"][0]
-            match_spec = first_opt.get("match") or first_opt.get("payload")
-            if match_spec:
-                is_now_match = check_match(payload, match_spec, first_opt.get("mask"))
 
         # Fire event on rising edge transition (unmatched -> matched)
         if is_now_match and not self._last_matched:
