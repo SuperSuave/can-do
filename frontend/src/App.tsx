@@ -274,9 +274,16 @@ export default function App() {
   catalogRef.current = catalog;
   const needsCatalogDecompileRef = useRef<boolean>(catalog.commands.length === 0);
 
+  const activeMainTabRef = useRef<'dashboard' | 'automations' | 'catalog' | 'device'>('dashboard');
+
   // Listen to live 0x455 CAN frames and ambient_light entity states across all tabs
   useEffect(() => {
     const unsubscribe = deviceWs.subscribe(data => {
+      // While VehicleDashboard is mounted, it owns ambient WS reconciliation (with OptimisticHoldTracker)
+      // and propagates accepted updates back up via onAmbientColorChange / onAmbientBrightnessChange.
+      if (activeMainTabRef.current === 'dashboard') {
+        return;
+      }
       if (data.type === 'state' && (data as any).entity && (data as any).state) {
         const entity = (data as any).entity as string;
         const stateStr = String((data as any).state);
@@ -384,6 +391,7 @@ export default function App() {
     }
     return 'dashboard';
   });
+  activeMainTabRef.current = activeMainTab;
 
   const [catalogSubTab, setCatalogSubTab] = useState<'messages' | 'vehicles'>(() => {
     try {

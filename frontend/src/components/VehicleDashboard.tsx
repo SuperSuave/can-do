@@ -446,6 +446,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
   useEffect(() => {
     if (externalAmbientColor !== undefined && externalAmbientColor !== null && externalAmbientColor !== ambientColor) {
+      if (!acceptTelemetry('ambient_light_colors', externalAmbientColor.trim().toLowerCase())) {
+        return;
+      }
       ambientColorRef.current = externalAmbientColor;
       if (!isAmbientDynamicEffect(externalAmbientColor)) {
         lastStaticAmbientColorRef.current = externalAmbientColor;
@@ -456,6 +459,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
   useEffect(() => {
     if (externalAmbientBrightness !== undefined && externalAmbientBrightness !== null && externalAmbientBrightness !== ambientBrightness) {
+      if (!acceptTelemetry('ambient_light_brightness', String(externalAmbientBrightness))) {
+        return;
+      }
       ambientBrightnessRef.current = externalAmbientBrightness;
       if (externalAmbientBrightness > 0) {
         prevAmbientBrightnessRef.current = externalAmbientBrightness;
@@ -3917,9 +3923,11 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                         setAmbientColor(t.label);
                         syncHold('ambient_light_colors', t.label.toLowerCase());
                         if (ambientBrightnessRef.current === null || ambientBrightnessRef.current === 0) {
-                          const restoreLvl = prevAmbientBrightnessRef.current;
+                          const restoreLvl = Math.max(1, Math.min(10, prevAmbientBrightnessRef.current || 7));
                           setAmbientBrightness(restoreLvl);
                           syncHold('ambient_light_brightness', String(restoreLvl));
+                          const restoreCmd = restoreLvl === 10 ? 'Brightness Level 10 (Max)' : `Brightness Level ${restoreLvl}`;
+                          dispatchCommand('ambient_light_brightness', restoreCmd, `Ambient Light: Level ${restoreLvl}`);
                         }
                         dispatchCommand('ambient_light_colors', t.label, `Theme: ${t.name}`);
                       }}
@@ -3967,9 +3975,11 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                         setAmbientColor(eff.label);
                         syncHold('ambient_light_colors', eff.label.toLowerCase());
                         if (ambientBrightnessRef.current === null || ambientBrightnessRef.current === 0) {
-                          const restoreLvl = prevAmbientBrightnessRef.current;
+                          const restoreLvl = Math.max(1, Math.min(10, prevAmbientBrightnessRef.current || 7));
                           setAmbientBrightness(restoreLvl);
                           syncHold('ambient_light_brightness', String(restoreLvl));
+                          const restoreCmd = restoreLvl === 10 ? 'Brightness Level 10 (Max)' : `Brightness Level ${restoreLvl}`;
+                          dispatchCommand('ambient_light_brightness', restoreCmd, `Ambient Light: Level ${restoreLvl}`);
                         }
                         dispatchCommand('ambient_light_colors', eff.label, `Effect: ${effName}`);
                       }}
@@ -4011,9 +4021,11 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                         setAmbientColor(c.label);
                         syncHold('ambient_light_colors', c.label.toLowerCase());
                         if (ambientBrightnessRef.current === null || ambientBrightnessRef.current === 0) {
-                          const restoreLvl = prevAmbientBrightnessRef.current;
+                          const restoreLvl = Math.max(1, Math.min(10, prevAmbientBrightnessRef.current || 7));
                           setAmbientBrightness(restoreLvl);
                           syncHold('ambient_light_brightness', String(restoreLvl));
+                          const restoreCmd = restoreLvl === 10 ? 'Brightness Level 10 (Max)' : `Brightness Level ${restoreLvl}`;
+                          dispatchCommand('ambient_light_brightness', restoreCmd, `Ambient Light: Level ${restoreLvl}`);
                         }
                         dispatchCommand('ambient_light_colors', c.label, `Color: ${c.name}`);
                       }}
@@ -4071,9 +4083,11 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                                 setAmbientColor(p.label);
                                 syncHold('ambient_light_colors', p.label.toLowerCase());
                                 if (ambientBrightnessRef.current === null || ambientBrightnessRef.current === 0) {
-                                  const restoreLvl = prevAmbientBrightnessRef.current;
+                                  const restoreLvl = Math.max(1, Math.min(10, prevAmbientBrightnessRef.current || 7));
                                   setAmbientBrightness(restoreLvl);
                                   syncHold('ambient_light_brightness', String(restoreLvl));
+                                  const restoreCmd = restoreLvl === 10 ? 'Brightness Level 10 (Max)' : `Brightness Level ${restoreLvl}`;
+                                  dispatchCommand('ambient_light_brightness', restoreCmd, `Ambient Light: Level ${restoreLvl}`);
                                 }
                                 dispatchCommand('ambient_light_colors', p.label, `Color: ${p.name}`);
                               }}

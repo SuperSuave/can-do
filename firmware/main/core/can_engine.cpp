@@ -2628,6 +2628,9 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
             for (auto* entity_ptr : cat_it->second) {
                 if (!entity_ptr) continue;
                 auto& entity = *entity_ptr;
+                if (is_ambient_entity_id(entity.id) && ambient_anim_is_active()) {
+                    continue;
+                }
 
                 for (const auto& opt : entity.options) {
                     if (is_match(data, opt)) {

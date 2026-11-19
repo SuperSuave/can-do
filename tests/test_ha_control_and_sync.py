@@ -6,7 +6,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 
 def _ensure_mod(name: str) -> types.ModuleType:
@@ -335,20 +335,71 @@ class TestHaControlAndSync(unittest.TestCase):
         self.assertEqual(ent.effect, "Color 8: Pure Cyan / Aqua Wave")
         self.assertEqual(ent.brightness, round((7 / 10.0) * 255))
 
-        # Selecting color while ON dispatches only async_send_entity_command (no duplicate raw 0x4AD color burst)
+        # Selecting color while ON dispatches only async_send_entity_command with resolved preset label
         self.coordinator.async_send_entity_command = AsyncMock()
         self.coordinator.async_send_action = AsyncMock()
         _run(ent.async_turn_on(rgb_color=(0, 255, 255)))
-        self.coordinator.async_send_entity_command.assert_awaited_once()
+        self.coordinator.async_send_entity_command.assert_awaited_once_with(
+            "ambient_light_colors", "Color 8: Pure Cyan / Aqua Wave"
+        )
         self.coordinator.async_send_action.assert_not_awaited()
 
-        # Turning off stops animations via entity command + sends brightness-off burst with bus
+        # Bug 5: Picking Dreamy Purple RGB (128, 0, 128) resolves OEM theme label instead of raw RGB JSON
+        self.coordinator.async_send_entity_command.reset_mock()
+        _run(ent.async_turn_on(rgb_color=(128, 0, 128)))
+        self.coordinator.async_send_entity_command.assert_awaited_once_with(
+            "ambient_light_colors", "Dreamy Purple"
+        )
+        self.coordinator.async_send_action.assert_not_awaited()
+
+        # Turning off stops animations + sets brightness to Off strictly via /set entity commands (never raw /tx)
         self.coordinator.async_send_entity_command.reset_mock()
         _run(ent.async_turn_off())
-        self.coordinator.async_send_entity_command.assert_awaited_once_with("ambient_light_colors", "off")
-        self.coordinator.async_send_action.assert_awaited_once()
-        _, kwargs = self.coordinator.async_send_action.await_args
-        self.assertEqual(kwargs.get("bus"), light_cmd["network"].get("bus"))
+        self.assertEqual(
+            self.coordinator.async_send_entity_command.await_args_list,
+            [
+                call("ambient_light_colors", "off"),
+                call("ambient_light_brightness", "Off"),
+            ],
+        )
+        self.coordinator.async_send_action.assert_not_awaited()
+
+        # Bug 3: Turning on from OFF with effect dispatches color then restored brightness via entity commands
+        self.coordinator.can_states["ambient_light_brightness"] = "Off"
+        self.assertFalse(ent.is_on)
+        self.coordinator.async_send_entity_command.reset_mock()
+        _run(ent.async_turn_on(effect="Dreamy Purple"))
+        self.assertEqual(
+            self.coordinator.async_send_entity_command.await_args_list,
+            [
+                call("ambient_light_colors", "Dreamy Purple"),
+                call("ambient_light_brightness", "Brightness Level 7"),
+            ],
+        )
+        self.coordinator.async_send_action.assert_not_awaited()
+
+        # Fresh light entity starting OFF with default brightness=255 restores Brightness Level 10 (Max)
+        fresh_ent = CanDoLightEntity(self.coordinator, light_cmd)
+        fresh_ent.async_write_ha_state = MagicMock()
+        self.assertFalse(fresh_ent.is_on)
+        self.coordinator.async_send_entity_command.reset_mock()
+        _run(fresh_ent.async_turn_on(effect="Dreamy Purple"))
+        self.assertEqual(
+            self.coordinator.async_send_entity_command.await_args_list,
+            [
+                call("ambient_light_colors", "Dreamy Purple"),
+                call("ambient_light_brightness", "Brightness Level 10 (Max)"),
+            ],
+        )
+        self.coordinator.async_send_action.assert_not_awaited()
+
+        # Explicit HA brightness=178 maps to Brightness Level 7 via entity command
+        self.coordinator.async_send_entity_command.reset_mock()
+        _run(ent.async_turn_on(brightness=178))
+        self.coordinator.async_send_entity_command.assert_awaited_once_with(
+            "ambient_light_brightness", "Brightness Level 7"
+        )
+        self.coordinator.async_send_action.assert_not_awaited()
 
     def test_light_single_zone_effects_and_factory_themes(self):
         """Ambient light exposes 64 palette colors + 6 single-color factory themes + 7 single-zone animations (no dual-tone)."""

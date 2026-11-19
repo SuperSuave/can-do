@@ -366,13 +366,16 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
             r, g, b = kwargs[ATTR_RGB_COLOR]
             self._rgb_color = (r, g, b)
             target_opt = self._find_closest_preset(r, g, b)
-            if target_opt:
-                self._effect = target_opt.get("label")
-
-            # Firmware queue_entity_command handles RGB -> closest 64-palette color + 2-stage 0x4AD TX + MQTT/WS sync
-            rgb_payload = json.dumps({"r": r, "g": g, "b": b, "mode": 1})
-            _LOGGER.info("Sending Ambient Light RGB (%d, %d, %d) to coordinator", r, g, b)
-            await self.coordinator.async_send_entity_command(entity_cmd_id, rgb_payload)
+            target_label = target_opt.get("label") if target_opt else None
+            if target_label:
+                self._effect = target_label
+                _LOGGER.info("Sending Ambient Light preset '%s' for RGB (%d, %d, %d)", target_label, r, g, b)
+                await self.coordinator.async_send_entity_command(entity_cmd_id, target_label)
+            else:
+                # Fallback: firmware queue_entity_command handles RGB -> closest 64-palette color + 2-stage 0x4AD TX + MQTT/WS sync
+                rgb_payload = json.dumps({"r": r, "g": g, "b": b, "mode": 1})
+                _LOGGER.info("Sending Ambient Light RGB (%d, %d, %d) to coordinator", r, g, b)
+                await self.coordinator.async_send_entity_command(entity_cmd_id, rgb_payload)
             color_changed = True
 
         elif ATTR_EFFECT in kwargs:
@@ -410,7 +413,7 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
                 _LOGGER.info("Sending 0x4AD 2-stage burst (%d steps) for ambient light color", len(steps))
                 await self.coordinator.async_send_action(action_can_id, delay_ms, steps, bus=bus)
 
-        # Transmit 2-stage CAN burst for brightness adjustment
+        # Dispatch 2-stage brightness command via entity command for strict FIFO ordering and optimistic sync
         if ATTR_BRIGHTNESS in kwargs:
             brightness = kwargs[ATTR_BRIGHTNESS]
             self._brightness = brightness
@@ -419,47 +422,29 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
                 return
 
             level = max(1, min(10, round((brightness / 255.0) * 10)))
-            d4_byte = 0x20 if (level % 2 != 0) else 0xA0
-            d5_byte = (level + 1) // 2
-            brightness_steps = [
-                {"payload": f"000208{d4_byte:02X}{d5_byte:02X}000000", "repeat": 3, "delay_ms": delay_ms},
-                {"payload": "0002082000000000", "repeat": 3, "delay_ms": delay_ms},
-            ]
-            _LOGGER.info("Setting ambient light brightness to level %d (HA %d)", level, brightness)
-            await self.coordinator.async_send_action(action_can_id, delay_ms, brightness_steps, bus=bus)
+            brightness_cmd = "Brightness Level 10 (Max)" if level == 10 else f"Brightness Level {level}"
+            _LOGGER.info("Setting ambient light brightness to '%s' (HA %d)", brightness_cmd, brightness)
+            await self.coordinator.async_send_entity_command("ambient_light_brightness", brightness_cmd)
         elif not self.is_on:
             # If turning on from OFF without explicit brightness, restore last known brightness level (default 10)
             level = max(1, min(10, round((self._brightness / 255.0) * 10))) if self._brightness > 0 else 10
-            d4_byte = 0x20 if (level % 2 != 0) else 0xA0
-            d5_byte = (level + 1) // 2
-            brightness_steps = [
-                {"payload": f"000208{d4_byte:02X}{d5_byte:02X}000000", "repeat": 3, "delay_ms": delay_ms},
-                {"payload": "0002082000000000", "repeat": 3, "delay_ms": delay_ms},
-            ]
-            _LOGGER.info("Activating ambient light at brightness level %d", level)
-            await self.coordinator.async_send_action(action_can_id, delay_ms, brightness_steps, bus=bus)
+            brightness_cmd = "Brightness Level 10 (Max)" if level == 10 else f"Brightness Level {level}"
+            _LOGGER.info("Activating ambient light at '%s'", brightness_cmd)
+            await self.coordinator.async_send_entity_command("ambient_light_brightness", brightness_cmd)
 
         self._is_on = True
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the ambient lighting off."""
-        net = self.command.get("network", {})
-        action_can_id = net.get("action_can_id", "0x4AD")
-        delay_ms = net.get("delay_ms", 25)
-        bus = net.get("bus")
         entity_cmd_id = self.entity_id_str or "ambient_light_colors"
 
         _LOGGER.info("Turning off ambient mood lighting")
         # 1. Stop any running animation & publish off state in edge engine
         await self.coordinator.async_send_entity_command(entity_cmd_id, "off")
 
-        # 2. Transmit 2-stage CAN burst to set brightness to Off (0x41 on 0x455)
-        off_steps = [
-            {"payload": "000208A000000000", "repeat": 3, "delay_ms": delay_ms},
-            {"payload": "0002082000000000", "repeat": 3, "delay_ms": delay_ms},
-        ]
-        await self.coordinator.async_send_action(action_can_id, delay_ms, off_steps, bus=bus)
+        # 2. Transmit 2-stage CAN burst to set brightness to Off (0x41 on 0x455) via entity command
+        await self.coordinator.async_send_entity_command("ambient_light_brightness", "Off")
 
         self._is_on = False
         self.async_write_ha_state()
