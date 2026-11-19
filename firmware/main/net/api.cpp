@@ -1915,7 +1915,7 @@ static esp_err_t api_system_control_handler(httpd_req_t *req) {
     }
 
     cJSON *mitm_item = cJSON_GetObjectItem(root, "mitm_bridge_enabled");
-    if (cJSON_IsBool(mitm_item) && (!act_item || !cJSON_IsString(act_item) || strcmp(act_item->valuestring, "toggle_mitm_bridge") != 0)) {
+    if (cJSON_IsBool(mitm_item) && (!action_item || !cJSON_IsString(action_item) || strcmp(action_item->valuestring, "toggle_mitm_bridge") != 0)) {
         set_mitm_bridge_enabled(cJSON_IsTrue(mitm_item));
     }
 
