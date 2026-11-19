@@ -177,14 +177,10 @@ static void ambient_anim_task(void* pvParameters) {
 
     uint32_t step_count = 0;
 
-    // Anchor colors for holiday & dynamic modes
-    const uint8_t* c_lime    = PALETTE_64[0];  // #1  Lime / Mint Glow
+    // Anchor colors for dynamic modes
     const uint8_t* c_cyan    = PALETTE_64[7];  // #8  Pure Cyan
     const uint8_t* c_blue    = PALETTE_64[14]; // #15 Electric Blue
-    const uint8_t* c_purple  = PALETTE_64[23]; // #24 Deep Purple / Violet
-    const uint8_t* c_magenta = PALETTE_64[32]; // #33 Magenta / Neon Pink
     const uint8_t* c_red     = PALETTE_64[45]; // #46 Crimson Red
-    const uint8_t* c_amber   = PALETTE_64[56]; // #57 Warm Sunset / Amber
     const uint8_t* c_white   = PALETTE_64[63]; // #64 Warm White / Champagne
 
     while (true) {
@@ -200,47 +196,10 @@ static void ambient_anim_task(void* pvParameters) {
             case AmbientEffect::RAINBOW_WAVE: {
                 // Smooth continuous 64-step progression around the color wheel
                 uint8_t idx_dash = (step_count % 64);
-                uint8_t idx_doors = ((step_count + 8) % 64); // 8 steps (~45 deg) offset for 2-tone wave
 
                 ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, PALETTE_64[idx_dash]);
 
                 uint32_t delay_ms = interval > 0 ? interval : 600;
-                vTaskDelay(pdMS_TO_TICKS(delay_ms));
-                break;
-            }
-
-            case AmbientEffect::CHRISTMAS_WAVE: {
-                // 🎄 Alternate Crimson Red and Lime Green
-                bool swap = (step_count % 2 == 1);
-                const uint8_t* dash_col = swap ? c_lime : c_red;
-
-                ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, dash_col);
-
-                uint32_t delay_ms = interval > 0 ? interval : 1500;
-                vTaskDelay(pdMS_TO_TICKS(delay_ms));
-                break;
-            }
-
-            case AmbientEffect::HALLOWEEN_WAVE: {
-                // 🎃 Alternate Pumpkin Amber and Witch Violet
-                bool swap = (step_count % 2 == 1);
-                const uint8_t* dash_col = swap ? c_purple : c_amber;
-
-                ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, dash_col);
-
-                uint32_t delay_ms = interval > 0 ? interval : 1500;
-                vTaskDelay(pdMS_TO_TICKS(delay_ms));
-                break;
-            }
-
-            case AmbientEffect::VALENTINE_WAVE: {
-                // 💖 Alternate Neon Pink and Crimson Red
-                bool swap = (step_count % 2 == 1);
-                const uint8_t* dash_col = swap ? c_red : c_magenta;
-
-                ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, dash_col);
-
-                uint32_t delay_ms = interval > 0 ? interval : 1500;
                 vTaskDelay(pdMS_TO_TICKS(delay_ms));
                 break;
             }
@@ -352,20 +311,12 @@ bool ambient_anim_start_by_name(const std::string& name) {
     std::string lower = name;
     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
 
+    if (lower.rfind("color ", 0) == 0) {
+        return false;
+    }
+
     if (lower.find("rainbow") != std::string::npos) {
         ambient_anim_start(AmbientEffect::RAINBOW_WAVE, 600);
-        return true;
-    }
-    if (lower.find("christmas") != std::string::npos || lower.find("xmas") != std::string::npos) {
-        ambient_anim_start(AmbientEffect::CHRISTMAS_WAVE, 1500);
-        return true;
-    }
-    if (lower.find("halloween") != std::string::npos) {
-        ambient_anim_start(AmbientEffect::HALLOWEEN_WAVE, 1500);
-        return true;
-    }
-    if (lower.find("valentine") != std::string::npos) {
-        ambient_anim_start(AmbientEffect::VALENTINE_WAVE, 1500);
         return true;
     }
     if (lower.find("4th") != std::string::npos || lower.find("fourth") != std::string::npos || lower.find("patriotic") != std::string::npos) {
@@ -380,7 +331,7 @@ bool ambient_anim_start_by_name(const std::string& name) {
         ambient_anim_start(AmbientEffect::OCEAN_TIDE, 1800);
         return true;
     }
-    if (lower.find("sunset") != std::string::npos) {
+    if (lower.find("sunset glow") != std::string::npos || lower == "sunset") {
         ambient_anim_start(AmbientEffect::SUNSET_GLOW, 2000);
         return true;
     }
@@ -412,9 +363,6 @@ std::string ambient_anim_get_effect_name(void) {
     if (!s_running.load()) return "off";
     switch (s_current_effect.load()) {
         case AmbientEffect::RAINBOW_WAVE: return "Rainbow Spectrum Wave";
-        case AmbientEffect::CHRISTMAS_WAVE: return "Christmas Dual-Tone Wave";
-        case AmbientEffect::HALLOWEEN_WAVE: return "Halloween Dual-Tone Wave";
-        case AmbientEffect::VALENTINE_WAVE: return "Valentine's Dual-Tone Wave";
         case AmbientEffect::FOURTH_JULY_WAVE: return "4th of July Patriotic Wave";
         case AmbientEffect::POLICE_STROBE: return "Police Strobe";
         case AmbientEffect::OCEAN_TIDE: return "Ocean Tide";

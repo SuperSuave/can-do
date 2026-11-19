@@ -107,6 +107,8 @@ test('all discrete dashboard controls resolve valid CAN IDs and payloads/steps',
     ['climate_airflow_direction', 'Body & Legs', '0x49F'],
     ['ac_charging_limit', '80%', '0x4C5'],
     ['dc_charging_limit', '90%', '0x4C5'],
+    ['ambient_light_colors', 'Dreamy Purple', '0x4AD'],
+    ['ambient_light_colors', 'Golden Insight / Orange Delight', '0x4AD'],
     ['ambient_light_colors', 'Color 24: Deep Purple / Violet', '0x4AD'],
   ];
 
@@ -128,10 +130,29 @@ test('all discrete dashboard controls resolve valid CAN IDs and payloads/steps',
 
 test('remote_climate_tmu stays delegated to native ESP32 subsystem', () => {
   const req = resolveDashboardCommandRequest('remote_climate_tmu', 'Remote Climate On', realCatalog, ev6Vehicle);
+  assert.strictEqual(req.entity, 'remote_climate_tmu');
   assert.deepStrictEqual(req, {
     entity: 'remote_climate_tmu',
     command: 'Remote Climate On',
   });
+});
+
+test('ambient_light_colors dynamic animations delegate to ESP32 ambient_anim without static steps fallback', () => {
+  const rainbow = resolveDashboardCommandRequest('ambient_light_colors', 'Rainbow Spectrum Wave', realCatalog, ev6Vehicle);
+  assert.deepStrictEqual(rainbow, {
+    entity: 'ambient_light_colors',
+    command: 'Rainbow Spectrum Wave',
+  });
+
+  const sunsetGlow = resolveDashboardCommandRequest('ambient_light_colors', 'Sunset Glow', realCatalog, ev6Vehicle);
+  assert.deepStrictEqual(sunsetGlow, {
+    entity: 'ambient_light_colors',
+    command: 'Sunset Glow',
+  });
+
+  const warmSunset = resolveDashboardCommandRequest('ambient_light_colors', 'Color 57: Warm Sunset / Amber', realCatalog, ev6Vehicle);
+  assert.strictEqual(warmSunset.can_id, '0x4AD');
+  assert.ok(Array.isArray(warmSunset.steps) && warmSunset.steps.length === 2);
 });
 
 test('resolveDashboardCommandRequest applies vehicle variant network and option overrides', () => {

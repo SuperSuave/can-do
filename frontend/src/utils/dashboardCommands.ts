@@ -165,6 +165,21 @@ export function resolveDashboardCommandRequest(
     return base;
   }
 
+  if (cmd.effects && cmd.effects.length > 0) {
+    const cmdLower = commandLabel.trim().toLowerCase();
+    const matchedEffect = cmd.effects.find(
+      (e) =>
+        e.label.trim().toLowerCase() === cmdLower ||
+        (e.name && e.name.trim().toLowerCase() === cmdLower)
+    );
+    if (matchedEffect) {
+      return {
+        entity: entityId,
+        command: matchedEffect.label,
+      };
+    }
+  }
+
   const matchedOption = findOptionForDashboardCommand(cmd.options, commandLabel);
   if (matchedOption) {
     const canonicalCommand = matchedOption.label || commandLabel;

@@ -528,5 +528,60 @@ describe('ActionNodeEditor card mode preservation', () => {
     assert.ok(withTrigInCondHtml.includes('ha-section-paste-btn'), 'Must use aligned ha-section-paste-btn class for cross-paste');
     assert.ok(withTrigInCondHtml.includes('Paste as Condition (Brake Pressed)'), 'Must offer Paste as Condition for compatible trigger');
   });
+
+  it('renders Dynamic Animations pills for ambient_light_colors and preserves compact catalog card on entity_command effect', () => {
+    const ambientCatalog: Catalog = {
+      can_do_version: '1.0.0',
+      vehicles: [],
+      commands: [
+        {
+          id: 'ambient_light_colors',
+          name: 'Ambient Light Colors',
+          category: 'Cockpit & Controls',
+          roles: ['action'],
+          ha_metadata: { name: 'Ambient Mood Lighting', domain: 'light' },
+          network: { action_can_id: '0x4AD', state_can_id: '0x455', bus: 0, delay_ms: 25 },
+          options: [
+            { label: 'Dreamy Purple', steps: [{ payload: '6B69551900000000' }, { payload: '0002082000000000' }] },
+            { label: 'Color 8: Pure Cyan / Aqua Wave', steps: [{ payload: '0064530F00000000' }, { payload: '0002082000000000' }] },
+          ],
+          effects: [
+            { label: 'Rainbow Spectrum Wave', name: 'Rainbow Wave', hex: '#ff00ff', description: '64-color sweep' },
+            { label: 'Sunset Glow', name: 'Sunset Glow', hex: '#ff8c00', description: 'Warm embers' },
+          ],
+        },
+      ],
+    };
+
+    const effAction: AutomationAction = {
+      id: 'act_amb_eff',
+      type: 'entity_command',
+      entity_id: 'ambient_light_colors',
+      source_command_id: 'ambient_light_colors',
+      command: 'Sunset Glow',
+      option_label: 'Sunset Glow',
+      can_id: '0x4AD',
+      bus: 0,
+    };
+
+    const html = ReactDOMServer.renderToString(
+      React.createElement(ActionNodeEditor, {
+        act: effAction,
+        index: 0,
+        depth: 1,
+        availableTriggers: [],
+        catalog: ambientCatalog,
+        onUpdate: () => {},
+        onDelete: () => {},
+        onDuplicate: () => {},
+      })
+    ).replace(/<!-- -->/g, '');
+
+    assert.ok(html.includes('Dynamic Animations (Offline Edge)'), 'Must show Dynamic Animations section');
+    assert.ok(html.includes('Rainbow Spectrum Wave'), 'Must list Rainbow Spectrum Wave pill');
+    assert.ok(html.includes('Sunset Glow'), 'Must list Sunset Glow pill');
+    assert.ok(html.includes('Dreamy Purple'), 'Must still list static factory themes and palette options');
+    assert.ok(!html.includes('Target CAN ID'), 'Must stay in compact catalog mode instead of raw Custom CAN TX');
+  });
 });
 

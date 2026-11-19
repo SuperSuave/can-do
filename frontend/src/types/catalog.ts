@@ -102,6 +102,13 @@ export interface CommandOption {
   [key: string]: any;
 }
 
+export interface CommandEffect {
+  label: string;
+  name?: string;
+  hex?: string;
+  description?: string;
+}
+
 export interface CommandStep {
   type?: 'transmit_frame' | 'delay' | string;
   can_id?: string;
@@ -205,6 +212,7 @@ export interface Command {
   popup_message?: string;
   popup_message_imperial?: string;
   options?: CommandOption[];
+  effects?: CommandEffect[];
   steps?: CommandStep[];
   notes?: string;
   tested_vehicle?: string;

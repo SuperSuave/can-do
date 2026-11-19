@@ -101,13 +101,17 @@ PALETTE_64_RGB_MAP: dict[str, tuple[int, int, int]] = {
     "Crimson Red": (255, 0, 0),
     "Warm Sunset / Amber": (255, 140, 0),
     "Warm White / Champagne": (255, 240, 220),
+    # Factory Themes (Single-Color OEM Presets)
+    "Golden Insight / Orange Delight": (255, 140, 0),
+    "Blue Flight": (0, 120, 212),
+    "Peaceful Forest": (16, 124, 65),
+    "Dreamy Purple": (128, 0, 128),
+    "Violet Cloud": (167, 137, 245),
+    "Refreshing Sea": (0, 191, 255),
 }
 
 DYNAMIC_ANIMATIONS: list[str] = [
     "Rainbow Spectrum Wave",
-    "Christmas Dual-Tone Wave",
-    "Halloween Dual-Tone Wave",
-    "Valentine's Dual-Tone Wave",
     "4th of July Patriotic Wave",
     "Police Strobe",
     "Ocean Tide",
@@ -153,13 +157,22 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
 
         # Build effect list & fast O(1) 4-byte color match map from catalog options
         raw_options = self.command.get("options", [])
+        raw_effects = self.command.get("effects", [])
+        catalog_effect_labels = [
+            e["label"]
+            for e in raw_effects
+            if isinstance(e, dict) and isinstance(e.get("label"), str) and e.get("label")
+        ]
+        dynamic_effect_labels = catalog_effect_labels if catalog_effect_labels else list(DYNAMIC_ANIMATIONS)
+        self._dynamic_effects: set[str] = set(dynamic_effect_labels)
         self._options_by_label: dict[str, dict[str, Any]] = {}
         self._color_bytes_to_label: dict[tuple[int, int, int, int], str] = {}
         effects: list[str] = []
 
         # Add dynamic edge animation presets first for convenient access
-        for anim in DYNAMIC_ANIMATIONS:
-            effects.append(anim)
+        for anim in dynamic_effect_labels:
+            if anim not in effects:
+                effects.append(anim)
 
         for opt in raw_options:
             label = opt.get("label", "")
@@ -252,7 +265,12 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
         for state_key in (self.entity_id_str, "ambient_light_colors", "ambient_mood_lighting"):
             direct = self.coordinator.get_can_state(state_key)
             if isinstance(direct, str) and direct and "off" not in direct.lower():
-                if direct in self._options_by_label or direct in DYNAMIC_ANIMATIONS or direct in PALETTE_64_RGB_MAP:
+                if (
+                    direct in self._options_by_label
+                    or direct in self._dynamic_effects
+                    or direct in DYNAMIC_ANIMATIONS
+                    or direct in PALETTE_64_RGB_MAP
+                ):
                     self._effect = direct
                     if direct in PALETTE_64_RGB_MAP:
                         self._rgb_color = PALETTE_64_RGB_MAP[direct]

@@ -25,6 +25,7 @@ import {
   commandToAction,
   applyOptionToTrigger,
   applyOptionsToCondition,
+  applyEffectToAction,
   formatDefaultTriggerName,
 } from './automationConverters.js';
 import type { Catalog, Command } from '../types/catalog.js';
@@ -1954,6 +1955,87 @@ test('resolveCatalogCommandForAction skips non-catalog built-ins like hud_nav an
   assert.strictEqual(convertedHud.type, 'hud_nav');
   assert.strictEqual(convertedHud.nav_action, 'update');
   assert.strictEqual(convertedHud.icon, 0x03);
+});
+
+test('applyEffectToAction, compileAction, and decompileActionList preserve dynamic ambient animations as entity_command', () => {
+  const catalog = createMockCatalog(1);
+  const ambientCmd: Command = {
+    id: 'ambient_light_colors',
+    name: 'Ambient Light Colors',
+    category: 'Cockpit & Controls',
+    roles: ['action', 'trigger'],
+    ha_metadata: { name: 'Ambient Mood Lighting', domain: 'light' },
+    network: { bus: 0, type: 'can_rx_tx', action_can_id: '0x4AD', delay_ms: 25, state_can_id: '0x455' },
+    options: [
+      {
+        label: 'Golden Insight / Orange Delight',
+        steps: [
+          { payload: 'D0C1751500000000', repeat: 3, delay_ms: 25 },
+          { payload: '0002082000000000', repeat: 3, delay_ms: 25 },
+        ],
+      },
+      {
+        label: 'Color 8: Pure Cyan / Aqua Wave',
+        steps: [
+          { payload: '0064530F00000000', repeat: 3, delay_ms: 25 },
+          { payload: '0002082000000000', repeat: 3, delay_ms: 25 },
+        ],
+      },
+    ],
+    effects: [
+      { label: 'Rainbow Spectrum Wave', name: 'Rainbow Wave', hex: '#ff00ff' },
+      { label: 'Sunset Glow', name: 'Sunset Glow', hex: '#ff8c00' },
+    ],
+  };
+  catalog.commands.push(ambientCmd);
+
+  // Applying a dynamic effect produces a clean entity_command without stale static CAN steps
+  const applied = applyEffectToAction(
+    {
+      id: 'act_amb_1',
+      type: 'can_tx',
+      payload: { D1: '0xD0' },
+      steps: [{ can_id: '0x4AD', bus: 0, payload: { D1: '0xD0' }, repeat: 3, delay_ms: 25 }],
+    },
+    ambientCmd,
+    ambientCmd.effects![0]
+  );
+  assert.strictEqual(applied.type, 'entity_command');
+  assert.strictEqual(applied.entity_id, 'ambient_light_colors');
+  assert.strictEqual(applied.command, 'Rainbow Spectrum Wave');
+  assert.strictEqual(applied.steps, undefined);
+  assert.strictEqual(applied.payload, undefined);
+
+  // Compilation preserves type='entity_command' and never falls back to options[0]
+  const compiled = compileAction(applied, catalog);
+  assert.strictEqual(compiled.type, 'entity_command');
+  assert.strictEqual(compiled.entity_id, 'ambient_light_colors');
+  assert.strictEqual(compiled.command, 'Rainbow Spectrum Wave');
+
+  // Even a legacy can_tx action carrying an effect label compiles to entity_command
+  const compiledFromLegacy = compileAction(
+    {
+      id: 'act_amb_legacy',
+      type: 'can_tx',
+      entity_id: 'ambient_light_colors',
+      can_id: '0x4AD',
+      command: 'Sunset Glow',
+      option_label: 'Sunset Glow',
+    },
+    catalog
+  );
+  assert.strictEqual(compiledFromLegacy.type, 'entity_command');
+  assert.strictEqual(compiledFromLegacy.entity_id, 'ambient_light_colors');
+  assert.strictEqual(compiledFromLegacy.command, 'Sunset Glow');
+
+  // Decompiling preserves entity_command cleanly without flattening to Golden Insight / options[0]
+  const decompiled = decompileActionList([compiled, compiledFromLegacy], catalog);
+  assert.strictEqual(decompiled.length, 2);
+  assert.strictEqual(decompiled[0].type, 'entity_command');
+  assert.strictEqual(decompiled[0].command, 'Rainbow Spectrum Wave');
+  assert.strictEqual(decompiled[0].option_label, 'Rainbow Spectrum Wave');
+  assert.strictEqual(decompiled[1].type, 'entity_command');
+  assert.strictEqual(decompiled[1].command, 'Sunset Glow');
 });
 
 

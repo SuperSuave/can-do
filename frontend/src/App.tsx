@@ -4,7 +4,7 @@ import { DEFAULT_CATALOG, normalizeCatalog } from './data/defaultCatalog';
 import { validateCatalog } from './utils/canValidator';
 import { commandToAction, commandToCondition, commandToTrigger, exportToCandoJson, decompileAutomationRules } from './utils/automationConverters';
 import { resolveVariant, formatCommandForCatalog } from './utils/catalogUtils';
-import { decodeAmbientCanFrame, getAmbientColorHex } from './utils/cockpitDecoders';
+import { decodeAmbientCanFrame, getAmbientColorHex, isAmbientDynamicEffect } from './utils/cockpitDecoders';
 import { deviceWs } from './services/deviceWs';
 import { getSavedRepoConfig, saveRepoConfig } from './utils/githubHelper';
 import { isRunningOnDevice, resolveDeviceBaseUrl } from './utils/hostUtils';
@@ -124,6 +124,8 @@ export default function App() {
     } catch {}
     return 'Color 24: Deep Purple / Violet';
   });
+  const ambientColorRef = useRef<string>(ambientColor);
+  ambientColorRef.current = ambientColor;
   const [ambientBrightness, setAmbientBrightness] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('cando_ambient_brightness');
@@ -135,6 +137,7 @@ export default function App() {
   const activeAmbientHex = useMemo(() => getAmbientColorHex(ambientColor), [ambientColor]);
 
   const handleAmbientColorChange = (nextColor: string) => {
+    ambientColorRef.current = nextColor;
     setAmbientColor(nextColor);
     try {
       localStorage.setItem('cando_ambient_color', nextColor);
@@ -298,7 +301,7 @@ export default function App() {
             const decoded = decodeAmbientCanFrame(bytes, ambientCmd?.options);
             if (decoded) {
               handleAmbientBrightnessChange(decoded.brightness);
-              if (decoded.activeOptionLabel) {
+              if (decoded.activeOptionLabel && !isAmbientDynamicEffect(ambientColorRef.current)) {
                 handleAmbientColorChange(decoded.activeOptionLabel);
               }
             }

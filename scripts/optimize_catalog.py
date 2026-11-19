@@ -527,6 +527,14 @@ def validate_catalog(catalog: Dict[str, Any]) -> Tuple[List[str], List[str]]:
                 if not BYTE_KEY_RE.match(str(ev.get("byte", ""))):
                     errors.append(f"{o_ctx}.evaluate: invalid byte '{ev.get('byte')}'")
 
+        if "effects" in cmd:
+            if not isinstance(cmd["effects"], list):
+                errors.append(f"commands[{cid}].effects: must be a list")
+            else:
+                for e_idx, eff in enumerate(cmd["effects"]):
+                    if not isinstance(eff, dict) or not isinstance(eff.get("label"), str) or not eff["label"].strip():
+                        errors.append(f"commands[{cid}].effects[{e_idx}]: missing valid 'label' string")
+
     # Validate Automations & Cross-References
     for idx, auto in enumerate(catalog.get("automations", [])):
         aid = auto.get("id", f"index_{idx}")
@@ -553,7 +561,9 @@ def validate_catalog(catalog: Dict[str, Any]) -> Tuple[List[str], List[str]]:
                         errors.append(
                             f"automations[{aid}]: action targets read-only entity '{target_id}' (missing 'action' role)"
                         )
-                    opt_labels = {o.get("label") for o in target_cmd.get("options", [])}
+                    opt_labels = {o.get("label") for o in target_cmd.get("options", [])} | {
+                        e.get("label") for e in target_cmd.get("effects", []) if isinstance(e, dict)
+                    }
                     if opt_labels and target_cmd_label not in opt_labels:
                         errors.append(
                             f"automations[{aid}]: command '{target_cmd_label}' not found in '{target_id}' options {opt_labels}"
@@ -569,6 +579,7 @@ def strip_for_esp32(catalog: Dict[str, Any]) -> Dict[str, Any]:
     ui_keys = {
         "ha_metadata", "category", "subcategory", "contributor", "contributors",
         "notes", "device_class", "popup_message", "state_can_id", "action_can_id",
+        "effects",
     }
     for cmd in runtime.get("commands", []):
         for k in ui_keys:

@@ -12,7 +12,8 @@ import {
   resolveCatalogCommandForCondition,
   resolveCatalogCommandForAction,
   resolveCatalogCommandForTrigger,
-  formatDefaultTriggerName
+  formatDefaultTriggerName,
+  findMatchingEffectForAction
 } from './automationConverters';
 import {
   evaluateConditionState,
@@ -786,8 +787,22 @@ export function simulateAutomationRule(
     const resolved = context.catalog ? resolveCatalogCommandForAction(act, context.catalog) : {};
     const cmd = resolved.command;
     const opt = resolved.matchedOption;
+    const eff = cmd ? findMatchingEffectForAction(cmd, act) : undefined;
     const canId = formatCanId(act.can_id || cmd?.action_can_id || cmd?.state_can_id || '0x000');
     const label = cmd?.name || act.source_command_name || canId;
+    if (cmd && eff) {
+      nextEntityStates.set(cmd.id, eff.label);
+      nextEntityStates.set(cmd.id.toLowerCase(), eff.label);
+      plannedTxCount += 1;
+      traces.push({
+        phase: 'action',
+        status: 'tx',
+        title: `Action #${idx + 1} [Edge Animation]: ${label} → ${eff.label}`,
+        detail: `Entity: ${cmd.id} | Offline ESP32 animation on ${canId} (Bus ${act.bus ?? cmd?.action_bus ?? cmd?.bus ?? 0})`,
+        indent
+      });
+      return;
+    }
     const optLabel = act.option_label || act.command || opt?.label;
     const byteMap = compileToByteMap(act.payload || act.to_payload || opt?.payload || opt?.match);
     const bytePairs = Object.entries(byteMap)

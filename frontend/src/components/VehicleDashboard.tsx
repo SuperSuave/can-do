@@ -32,8 +32,11 @@ import {
   getAmbientColorHex,
   isSameAmbientColor,
   OptimisticHoldTracker,
+  AMBIENT_DYNAMIC_EFFECTS,
+  AMBIENT_LIGHT_THEMES,
   AMBIENT_PALETTE_64,
   AMBIENT_QUICK_COLORS,
+  isAmbientDynamicEffect,
   displayTempToFahrenheit,
   fahrenheitToDisplayTemp,
   formatOdometerFromKm,
@@ -427,6 +430,13 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     return 'Color 24: Deep Purple / Violet';
   });
   const [ambientPaletteExpanded, setAmbientPaletteExpanded] = useState<boolean>(false);
+  const ambientColorRef = useRef<string | null>(ambientColor);
+  ambientColorRef.current = ambientColor;
+  const lastStaticAmbientColorRef = useRef<string>(
+    ambientColor && !isAmbientDynamicEffect(ambientColor)
+      ? ambientColor
+      : 'Color 24: Deep Purple / Violet'
+  );
   const ambientBrightnessRef = useRef<number | null>(ambientBrightness);
   const prevAmbientBrightnessRef = useRef<number>(
     ambientBrightness !== null && ambientBrightness > 0 ? ambientBrightness : 7
@@ -434,6 +444,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
 
   useEffect(() => {
     if (externalAmbientColor !== undefined && externalAmbientColor !== null && externalAmbientColor !== ambientColor) {
+      ambientColorRef.current = externalAmbientColor;
+      if (!isAmbientDynamicEffect(externalAmbientColor)) {
+        lastStaticAmbientColorRef.current = externalAmbientColor;
+      }
       setAmbientColorState(externalAmbientColor);
     }
   }, [externalAmbientColor]);
@@ -449,6 +463,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   }, [externalAmbientBrightness]);
 
   const setAmbientColor = (nextColor: string | null) => {
+    ambientColorRef.current = nextColor;
+    if (nextColor && !isAmbientDynamicEffect(nextColor)) {
+      lastStaticAmbientColorRef.current = nextColor;
+    }
     setAmbientColorState(nextColor);
     if (nextColor) {
       try { localStorage.setItem('cando_ambient_color', nextColor); } catch {}
@@ -739,6 +757,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       ambientLight: getCanId('ambient_light_colors', '455'),
       ambientLightName: findCmd('ambient_light_colors')?.ha_metadata?.name || 'Ambient Mood Lighting',
       ambientLightOptions: findCmd('ambient_light_colors')?.options || [],
+      ambientLightEffects: findCmd('ambient_light_colors')?.effects || AMBIENT_DYNAMIC_EFFECTS,
       ambientBrightness: getCanId('ambient_light_brightness', '455'),
     };
   }, [catalog, activeVehicle]);
@@ -830,6 +849,9 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   const handleToggleAmbientPower = () => {
     const isCurrentlyOff = ambientBrightnessRef.current === null || ambientBrightnessRef.current === 0;
     const nextLvl = isCurrentlyOff ? prevAmbientBrightnessRef.current : 0;
+    if (nextLvl === 0 && isAmbientDynamicEffect(ambientColorRef.current)) {
+      setAmbientColor(lastStaticAmbientColorRef.current);
+    }
     setAmbientBrightness(nextLvl);
     syncHold('ambient_light_brightness', String(nextLvl));
     const cmdLabel = nextLvl === 0 ? 'Off' : nextLvl === 10 ? 'Brightness Level 10 (Max)' : `Brightness Level ${nextLvl}`;
@@ -1221,7 +1243,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         }));
       }
     } else if (entity === 'ambient_light_colors' || entity === 'ambient_mood_lighting') {
-      const matched = AMBIENT_PALETTE_64.find(p => isSameAmbientColor(p.label, trimmed));
+      const matched =
+        AMBIENT_DYNAMIC_EFFECTS.find(e => isSameAmbientColor(e.label, trimmed)) ||
+        AMBIENT_LIGHT_THEMES.find(t => isSameAmbientColor(t.label, trimmed)) ||
+        AMBIENT_PALETTE_64.find(p => isSameAmbientColor(p.label, trimmed));
       const canonical = matched ? matched.label : trimmed;
       if (acceptTelemetry('ambient_light_colors', canonical.toLowerCase())) {
         setAmbientColor(canonical);
@@ -1822,13 +1847,14 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         if (acceptTelemetry('ambient_light_brightness', String(decoded.brightness))) {
           setAmbientBrightness(decoded.brightness);
         }
-        if (decoded.activeOptionLabel && acceptTelemetry('ambient_light_colors', decoded.activeOptionLabel.toLowerCase())) {
+        const activeIsAnim = isAmbientDynamicEffect(ambientColorRef.current);
+        if (decoded.activeOptionLabel && !activeIsAnim && acceptTelemetry('ambient_light_colors', decoded.activeOptionLabel.toLowerCase())) {
           setAmbientColor(decoded.activeOptionLabel);
         }
         recordLog(
           idFormatted,
           canMappings.ambientLightName,
-          `Level ${decoded.brightness} (${decoded.activeOptionLabel || 'Custom'})`,
+          `Level ${decoded.brightness} (${activeIsAnim ? ambientColorRef.current : (decoded.activeOptionLabel || 'Custom')})`,
           hexPayload,
           now
         );
@@ -3855,6 +3881,100 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
+              </div>
+            </div>
+
+            {/* Factory Themes (Single-Color OEM Presets) */}
+            <div className="space-y-1.5 pt-2 border-t border-separator">
+              <div className="flex items-center justify-between text-xs text-muted">
+                <span className="font-semibold">Factory Themes</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-xs">
+                {AMBIENT_LIGHT_THEMES.map(t => {
+                  const isSelected = isSameAmbientColor(ambientColor, t.label);
+                  return (
+                    <button
+                      key={t.label}
+                      type="button"
+                      id={`ambient-theme-${t.name.toLowerCase().replace(/\s+/g, '-')}`}
+                      onClick={() => {
+                        setAmbientColor(t.label);
+                        syncHold('ambient_light_colors', t.label.toLowerCase());
+                        if (ambientBrightnessRef.current === null || ambientBrightnessRef.current === 0) {
+                          const restoreLvl = prevAmbientBrightnessRef.current;
+                          setAmbientBrightness(restoreLvl);
+                          syncHold('ambient_light_brightness', String(restoreLvl));
+                        }
+                        dispatchCommand('ambient_light_colors', t.label, `Theme: ${t.name}`);
+                      }}
+                      title={t.label}
+                      className={`p-2 rounded-xl border flex items-center gap-2 transition-all cursor-pointer text-left ${
+                        isSelected
+                          ? 'bg-accent-soft text-accent border-accent/60 shadow-sm font-bold'
+                          : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                      }`}
+                    >
+                      <span
+                        className="w-3.5 h-3.5 rounded-full flex-shrink-0 shadow-sm ring-1 ring-black/20"
+                        style={{
+                          backgroundColor: t.hex,
+                          boxShadow: isSelected ? `0 0 8px ${t.hex}` : 'none'
+                        }}
+                      />
+                      <span className="text-[11px] font-medium leading-tight truncate">{t.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Dynamic Effects (Offline Edge Animations) */}
+            <div className="space-y-1.5 pt-2 border-t border-separator">
+              <div className="flex items-center justify-between text-xs text-muted">
+                <span className="font-semibold flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-accent" />
+                  <span>Dynamic Effects</span>
+                </span>
+                <span className="text-[10px] font-mono text-muted">Edge Offline</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-xs">
+                {canMappings.ambientLightEffects.map(eff => {
+                  const isSelected = isSameAmbientColor(ambientColor, eff.label);
+                  const effHex = eff.hex || '#00ffff';
+                  const effName = eff.name || eff.label;
+                  return (
+                    <button
+                      key={eff.label}
+                      type="button"
+                      id={`ambient-effect-${effName.toLowerCase().replace(/\s+/g, '-')}`}
+                      onClick={() => {
+                        setAmbientColor(eff.label);
+                        syncHold('ambient_light_colors', eff.label.toLowerCase());
+                        if (ambientBrightnessRef.current === null || ambientBrightnessRef.current === 0) {
+                          const restoreLvl = prevAmbientBrightnessRef.current;
+                          setAmbientBrightness(restoreLvl);
+                          syncHold('ambient_light_brightness', String(restoreLvl));
+                        }
+                        dispatchCommand('ambient_light_colors', eff.label, `Effect: ${effName}`);
+                      }}
+                      title={eff.description ? `${eff.label} — ${eff.description}` : eff.label}
+                      className={`p-2 rounded-xl border flex items-center gap-2 transition-all cursor-pointer text-left ${
+                        isSelected
+                          ? 'bg-accent-soft text-accent border-accent/60 shadow-sm font-bold'
+                          : 'bg-surface-secondary text-muted border-border hover:text-foreground hover:bg-surface-tertiary'
+                      }`}
+                    >
+                      <span
+                        className="w-3.5 h-3.5 rounded-full flex-shrink-0 shadow-sm ring-1 ring-black/20"
+                        style={{
+                          backgroundColor: effHex,
+                          boxShadow: isSelected ? `0 0 8px ${effHex}` : 'none'
+                        }}
+                      />
+                      <span className="text-[11px] font-medium leading-tight truncate">{effName}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

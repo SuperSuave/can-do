@@ -356,6 +356,21 @@ export function decodeDriverOnlyCanFrame(bytes: number[]): boolean | null {
   return null;
 }
 
+export interface AmbientThemeOption {
+  label: string;
+  name: string;
+  hex: string;
+}
+
+export const AMBIENT_LIGHT_THEMES: AmbientThemeOption[] = [
+  { label: 'Golden Insight / Orange Delight', name: 'Golden Insight', hex: '#ff8c00' },
+  { label: 'Blue Flight', name: 'Blue Flight', hex: '#0078d4' },
+  { label: 'Peaceful Forest', name: 'Peaceful Forest', hex: '#107c41' },
+  { label: 'Dreamy Purple', name: 'Dreamy Purple', hex: '#800080' },
+  { label: 'Violet Cloud', name: 'Violet Cloud', hex: '#a789f5' },
+  { label: 'Refreshing Sea', name: 'Refreshing Sea', hex: '#00bfff' },
+];
+
 export interface AmbientPaletteOption {
   step: number;
   label: string;
@@ -440,12 +455,47 @@ export const AMBIENT_QUICK_COLORS = [
   { label: 'Color 1: Lime / Mint Glow', name: 'Lime Mint', hex: '#46ff46' },
 ];
 
+export interface AmbientEffectOption {
+  label: string;
+  name: string;
+  hex: string;
+  description: string;
+}
+
+export const AMBIENT_DYNAMIC_EFFECTS: AmbientEffectOption[] = [
+  { label: 'Rainbow Spectrum Wave', name: 'Rainbow Wave', hex: '#ff00ff', description: 'Smooth 64-color continuous spectrum sweep' },
+  { label: '4th of July Patriotic Wave', name: 'Patriotic Wave', hex: '#0078ff', description: 'Rotating Red, Champagne White, and Electric Blue' },
+  { label: 'Police Strobe', name: 'Police Strobe', hex: '#ff0000', description: 'Rapid Red and Electric Blue alternating strobe' },
+  { label: 'Ocean Tide', name: 'Ocean Tide', hex: '#00d7ff', description: 'Slow surge across Cyan, Sky Blue, and Electric Blue' },
+  { label: 'Sunset Glow', name: 'Sunset Glow', hex: '#ff8c00', description: 'Warm embers cycling Crimson, Amber, and Gold' },
+  { label: 'Northern Lights Aurora', name: 'Aurora', hex: '#46ff46', description: 'Shifting Emerald Lime, Mint, and Pure Cyan hues' },
+  { label: 'Ambient Breathe', name: 'Breathe', hex: '#00ffff', description: 'Smooth luminous intensity pulsing' },
+];
+
+export function isAmbientDynamicEffect(label?: string | null): boolean {
+  if (!label) return false;
+  const norm = label.trim().toLowerCase();
+  return AMBIENT_DYNAMIC_EFFECTS.some(
+    (e) => e.label.toLowerCase() === norm || e.name.toLowerCase() === norm
+  );
+}
+
 /**
  * Resolves a hex color code from an ambient light option label or partial name.
  */
 export function getAmbientColorHex(label?: string | null): string {
   if (!label) return '#00ffff';
   const norm = label.trim().toLowerCase();
+  for (const e of AMBIENT_DYNAMIC_EFFECTS) {
+    if (e.label.toLowerCase() === norm || e.name.toLowerCase() === norm) {
+      return e.hex;
+    }
+  }
+  for (const t of AMBIENT_LIGHT_THEMES) {
+    if (t.label.toLowerCase() === norm || t.name.toLowerCase() === norm || norm.includes(t.name.toLowerCase())) {
+      return t.hex;
+    }
+  }
   for (const p of AMBIENT_PALETTE_64) {
     if (p.label.toLowerCase() === norm || norm === `color ${p.step}` || norm.startsWith(`color ${p.step}:`)) {
       return p.hex;
@@ -505,6 +555,20 @@ export function isSameAmbientColor(a?: string | null, b?: string | null): boolea
   const na = a.trim().toLowerCase();
   const nb = b.trim().toLowerCase();
   if (na === nb) return true;
+  const effA = AMBIENT_DYNAMIC_EFFECTS.find(
+    (e) => e.label.toLowerCase() === na || e.name.toLowerCase() === na
+  );
+  const effB = AMBIENT_DYNAMIC_EFFECTS.find(
+    (e) => e.label.toLowerCase() === nb || e.name.toLowerCase() === nb
+  );
+  if (effA && effB) return effA.label === effB.label;
+  const themeA = AMBIENT_LIGHT_THEMES.find(
+    (t) => t.label.toLowerCase() === na || t.name.toLowerCase() === na
+  );
+  const themeB = AMBIENT_LIGHT_THEMES.find(
+    (t) => t.label.toLowerCase() === nb || t.name.toLowerCase() === nb
+  );
+  if (themeA && themeB) return themeA.label === themeB.label;
   const stripPrefix = (s: string) => s.replace(/^color\s+\d+\s*:\s*/i, '').trim();
   if (stripPrefix(na) === stripPrefix(nb)) return true;
   const matchA = AMBIENT_PALETTE_64.find(

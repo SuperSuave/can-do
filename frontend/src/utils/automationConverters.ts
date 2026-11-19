@@ -8,7 +8,7 @@ import {
   AutomationActionStep,
   ChoiceBranch
 } from '../types/automation';
-import { Command, CommandOption, Catalog, ByteMap, Vehicle } from '../types/catalog';
+import { Command, CommandEffect, CommandOption, Catalog, ByteMap, Vehicle } from '../types/catalog';
 import { DEFAULT_CATALOG } from '../data/defaultCatalog';
 import {
   resolveVariant,
@@ -467,8 +467,20 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
   if (act.type === 'transmit' || act.type === 'can_tx') {
     const isAmbient = (act.entity_id || act.source_command_id) === 'ambient_light_colors' || (act.entity_id || act.source_command_id) === 'ambient_mood_lighting' || formatCanId(act.can_id) === '0x4AD';
     const resolvedForFallback = catalog ? resolveCatalogCommandForAction(act, catalog) : {};
-    const fallbackOptSteps = resolvedForFallback.matchedOption?.steps;
     const fallbackCmd = resolvedForFallback.command;
+    const matchedEffect = fallbackCmd ? findMatchingEffectForAction(fallbackCmd, act) : undefined;
+    if (fallbackCmd && matchedEffect) {
+      return {
+        ...(act.id ? { id: act.id } : {}),
+        type: 'entity_command',
+        entity_id: fallbackCmd.id,
+        command: matchedEffect.label,
+        source_command_id: fallbackCmd.id,
+        source_command_name: fallbackCmd.ha_metadata?.name || fallbackCmd.name || fallbackCmd.id,
+        option_label: matchedEffect.label
+      };
+    }
+    const fallbackOptSteps = resolvedForFallback.matchedOption?.steps;
     const fallbackOpt = resolvedForFallback.matchedOption;
 
     // If act has no explicit steps yet, but resolves to a catalog option with multi-step burst, use those steps
@@ -564,6 +576,19 @@ export function compileAction(act: AutomationAction, catalog: Catalog = DEFAULT_
     const cmd = rawCmd ? resolveVariant(rawCmd, null) : undefined;
 
     if (cmd) {
+      const matchedEffect = findMatchingEffectForAction(cmd, act);
+      if (matchedEffect) {
+        return {
+          ...(act.id ? { id: act.id } : {}),
+          type: 'entity_command',
+          entity_id: cmd.id,
+          command: matchedEffect.label,
+          source_command_id: cmd.id,
+          source_command_name: cmd.ha_metadata?.name || cmd.name || cmd.id,
+          option_label: matchedEffect.label
+        };
+      }
+
       if (cmd.type === 'climate_target') {
         const isPass = act.zone === 'passenger';
         const tempC = act.target_temp_c ?? (cmd as any).target_temp_c ?? 21.0;
@@ -1258,6 +1283,37 @@ export function decompileActionList(
         result.push(candidateAction);
       }
       continue;
+    }
+
+    // 2.5 Preserve catalog dynamic animation entity_command steps without flattening into static options
+    if (raw.type === 'entity_command') {
+      const entityAct: AutomationAction = {
+        ...raw,
+        id: raw.id || generateBlockId('act'),
+        type: 'entity_command',
+      };
+      const { command: effCmd } = resolveCatalogCommandForAction(entityAct, catalog);
+      const matchedEff = findMatchingEffectForAction(effCmd, entityAct);
+      if (effCmd && matchedEff) {
+        const defaultCanId = formatCanId(
+          effCmd.network?.action_can_id || effCmd.action_can_id || effCmd.network?.state_can_id || effCmd.state_can_id || '0x000'
+        );
+        const defaultBus = effCmd.network?.bus ?? effCmd.action_bus ?? effCmd.bus ?? raw.bus ?? 0;
+        const cmdDisplayName = effCmd.ha_metadata?.name || effCmd.name || effCmd.id;
+        result.push({
+          ...entityAct,
+          type: 'entity_command',
+          entity_id: effCmd.id,
+          source_command_id: effCmd.id,
+          source_command_name: cmdDisplayName,
+          command: matchedEff.label,
+          option_label: matchedEff.label,
+          can_id: defaultCanId,
+          bus: defaultBus,
+        });
+        i++;
+        continue;
+      }
     }
 
     // 3. Pass 2: Heuristic catalog multi-step coalescing for untagged/legacy automations.json rules
@@ -2509,8 +2565,20 @@ function findBestScoredOptionForAction(
   return bestOpt && highestScore > 0 ? { opt: bestOpt, score: highestScore } : null;
 }
 
+export function findMatchingEffectForAction(cmd: Command | undefined, act: AutomationAction): CommandEffect | undefined {
+  if (!cmd?.effects || cmd.effects.length === 0) return undefined;
+  const target = (act.option_label || act.command || '').trim().toLowerCase();
+  if (!target) return undefined;
+  return cmd.effects.find(
+    (e) =>
+      e.label.trim().toLowerCase() === target ||
+      (e.name && e.name.trim().toLowerCase() === target)
+  );
+}
+
 function findMatchingOptionForAction(cmd: Command, act: AutomationAction, allowFallback = true): CommandOption | undefined {
   if (!cmd.options || cmd.options.length === 0) return undefined;
+  if (findMatchingEffectForAction(cmd, act)) return undefined;
   // Fast path: if no label, command, payload, or steps to match against, return default/first option immediately
   const hasCriteria = !!(act.option_label || act.command || act.payload || (act.steps && act.steps.length > 0));
   if (!hasCriteria) {
@@ -2898,6 +2966,33 @@ export function applyOptionToAction(act: AutomationAction, rawCmd: Command, opt:
     delay_ms: delayMs,
     steps: cleanSteps && cleanSteps.length > 1 ? cleanSteps : undefined,
     popup_message: opt.popup || `${cmdDisplayName} - ${opt.label}`
+  };
+}
+
+/**
+ * Apply a selected dynamic animation effect to an action as an edge entity_command.
+ */
+export function applyEffectToAction(act: AutomationAction, rawCmd: Command, eff: CommandEffect): AutomationAction {
+  const cmd = resolveVariant(rawCmd, null);
+  const canId = cmd.network?.action_can_id || cmd.action_can_id || cmd.network?.state_can_id || cmd.state_can_id || act.can_id || '0x000';
+  const cmdDisplayName = cmd.ha_metadata?.name || cmd.name || cmd.id;
+  const bus = cmd.network?.bus ?? cmd.action_bus ?? cmd.bus ?? act.bus ?? 0;
+
+  return {
+    ...act,
+    type: 'entity_command',
+    source_command_id: cmd.id,
+    source_command_name: cmdDisplayName,
+    entity_id: cmd.id,
+    command: eff.label,
+    option_label: eff.label,
+    can_id: canId,
+    bus,
+    payload: undefined,
+    repeat: undefined,
+    delay_ms: undefined,
+    steps: undefined,
+    popup_message: `${cmdDisplayName} - ${eff.name || eff.label}`,
   };
 }
 

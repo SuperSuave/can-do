@@ -28,13 +28,16 @@ import {
   GripVertical,
   X,
   Check,
-  Navigation
+  Navigation,
+  Sparkles
 } from 'lucide-react';
 import { AutomationAction, AutomationCondition, AutomationTrigger, AutomationActionStep, ChoiceBranch } from '../../types/automation';
-import { Catalog, Command, CommandOption, ByteMap } from '../../types/catalog';
+import { Catalog, Command, CommandEffect, CommandOption, ByteMap } from '../../types/catalog';
 import {
   resolveCatalogCommandForAction,
   applyOptionToAction,
+  applyEffectToAction,
+  findMatchingEffectForAction,
   formatCanId,
   regenerateBranchIds,
   compileToByteMap,
@@ -585,10 +588,13 @@ const CycleEntityStepperConfig: React.FC<CycleEntityStepperConfigProps> = ({
   }, [showAllEntities, allMultiOptionCommands, stateReadableCommands, selectedCmd]);
 
   const catalogOptionLabels = useMemo(() => {
-    if (selectedCmd?.options && selectedCmd.options.length > 0) {
-      return selectedCmd.options.map(o => o.label);
-    }
-    return ['Off', 'Low Heat', 'Medium Heat', 'High Heat'];
+    const optLabels =
+      selectedCmd?.options && selectedCmd.options.length > 0
+        ? selectedCmd.options.map(o => o.label)
+        : ['Off', 'Low Heat', 'Medium Heat', 'High Heat'];
+    const effLabels = (selectedCmd?.effects || []).map(e => e.label).filter(Boolean);
+    if (effLabels.length === 0) return optLabels;
+    return [...optLabels, ...effLabels.filter(l => !optLabels.includes(l))];
   }, [selectedCmd]);
 
   const activeStates = useMemo(() => {
@@ -1710,10 +1716,12 @@ export function ActionNodeEditor({
     catalog && shouldResolveCatalogCmd
       ? resolveCatalogCommandForAction(act, catalog)
       : { command: undefined, matchedOption: undefined };
+  const catalogEffects = catalogCmd?.effects || [];
   const hasOptions = isCanTxAction && !!(catalogCmd?.options && catalogCmd.options.length > 0);
+  const hasEffects = isCanTxAction && catalogEffects.length > 0;
   const isRangeEntity = isCanTxAction && isRangeCommand(catalogCmd);
   const hasPills = hasOptions && !isRangeEntity;
-  const hasCompactCatalogView = hasPills || isRangeEntity || (isCanTxAction && Boolean(catalogCmd));
+  const hasCompactCatalogView = hasPills || hasEffects || isRangeEntity || (isCanTxAction && Boolean(catalogCmd));
   const actionName =
     act.type === 'cycle_entity'
       ? `Cycle ${catalogCmd?.ha_metadata?.name || catalogCmd?.name || act.entity_id || 'Entity'}`
@@ -2768,6 +2776,50 @@ export function ActionNodeEditor({
       {!collapsed && (
         <>
 
+      {/* Dynamic Edge Animations (Offline ESP32 Effects) */}
+      {hasEffects && catalogCmd && (() => {
+        const matchedEffect = findMatchingEffectForAction(catalogCmd, act);
+        return (
+          <div className="space-y-1.5 pt-0.5">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-accent">
+              <Sparkles className="w-3 h-3 text-accent shrink-0" />
+              <span>Dynamic Animations (Offline Edge)</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+              {catalogEffects.map((eff: CommandEffect, effIdx: number) => {
+                const isEffSelected = matchedEffect
+                  ? matchedEffect.label.toLowerCase().trim() === eff.label.toLowerCase().trim()
+                  : activeOptionLabel === eff.label.toLowerCase().trim();
+                return (
+                  <button
+                    key={eff.label || effIdx}
+                    type="button"
+                    onClick={() => {
+                      const updated = applyEffectToAction(act, catalogCmd, eff);
+                      onUpdate(updated);
+                    }}
+                    title={eff.description || eff.label}
+                    className={`w-full px-2 py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 border cursor-pointer text-center ${
+                      isEffSelected
+                        ? 'bg-accent-soft text-accent-soft-foreground border-accent/60 font-semibold shadow-sm ring-1 ring-accent/30'
+                        : 'bg-surface-tertiary text-foreground/85 hover:text-foreground hover:bg-default-hover border-border'
+                    }`}
+                  >
+                    {eff.hex && (
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-black/20"
+                        style={{ backgroundColor: eff.hex }}
+                      />
+                    )}
+                    <span className="truncate">{eff.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Option Selector Big Pills in Smart Grid Rows */}
       {hasPills && (
         <div className="space-y-1.5 pt-0.5">
@@ -2789,7 +2841,7 @@ export function ActionNodeEditor({
                 {group.items.map(({ opt, origIndex }) => {
                   const isSelected = activeOptionLabel
                     ? opt.label.toLowerCase().trim() === activeOptionLabel
-                    : origIndex === 0;
+                    : !hasEffects && origIndex === 0;
 
                   return (
                     <button
@@ -2831,7 +2883,7 @@ export function ActionNodeEditor({
       )}
 
       {/* Compact Catalog Action Card for 0-option catalog commands (e.g. surround_view_camera) */}
-      {isCanTxAction && catalogCmd && !hasPills && !isRangeEntity && !showAdvanced && (
+      {isCanTxAction && catalogCmd && !hasPills && !hasEffects && !isRangeEntity && !showAdvanced && (
         <div className="p-2.5 rounded-lg bg-surface-tertiary/60 border border-border flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2 min-w-0">
             <span className="px-2 py-0.5 rounded bg-success-soft text-success-soft-foreground border border-success/40 font-semibold text-[10px] uppercase tracking-wider shrink-0">

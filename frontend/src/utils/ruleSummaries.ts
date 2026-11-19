@@ -10,7 +10,8 @@ import {
   compileToByteMap,
   resolveCatalogCommandForTrigger,
   resolveCatalogCommandForCondition,
-  resolveCatalogCommandForAction
+  resolveCatalogCommandForAction,
+  findMatchingEffectForAction
 } from './automationConverters';
 
 function collectTextTokens(values: unknown[], out: string[]) {
@@ -376,6 +377,10 @@ export function formatActionSummary(act: AutomationAction, catalog?: Catalog): s
   const resolved = catalog ? resolveCatalogCommandForAction(act, catalog) : {};
   const cmd = resolved.command;
   const opt = resolved.matchedOption;
+  const eff = cmd ? findMatchingEffectForAction(cmd, act) : undefined;
+  if (eff) {
+    return `Ambient Effect · ${eff.label}`;
+  }
   const cid = formatCanId(act.can_id || cmd?.action_can_id || cmd?.state_can_id || '0x000');
 
   if (act.steps && act.steps.length > 1) {

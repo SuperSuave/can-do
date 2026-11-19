@@ -350,6 +350,39 @@ class TestHaControlAndSync(unittest.TestCase):
         _, kwargs = self.coordinator.async_send_action.await_args
         self.assertEqual(kwargs.get("bus"), light_cmd["network"].get("bus"))
 
+    def test_light_single_zone_effects_and_factory_themes(self):
+        """Ambient light exposes 64 palette colors + 6 single-color factory themes + 7 single-zone animations (no dual-tone)."""
+        light_cmd = self.commands["ambient_light_colors"]
+        ent = CanDoLightEntity(self.coordinator, light_cmd)
+        effects = getattr(ent, "effect_list", None) or ent._attr_effect_list
+
+        self.assertEqual(len(effects), 77)
+        for effect in effects:
+            lower = effect.lower()
+            self.assertNotIn("dual-tone", lower)
+            self.assertNotIn("dual tone", lower)
+
+        factory_themes = (
+            "Golden Insight / Orange Delight",
+            "Blue Flight",
+            "Peaceful Forest",
+            "Dreamy Purple",
+            "Violet Cloud",
+            "Refreshing Sea",
+        )
+        for theme in factory_themes:
+            self.assertIn(theme, effects)
+
+        catalog_effects = light_cmd.get("effects", [])
+        self.assertEqual(len(catalog_effects), 7)
+        for eff in catalog_effects:
+            self.assertIn(eff["label"], effects)
+
+        # Verify 0x455 Dreamy Purple telemetry decodes accurately
+        self.coordinator.can_states["0x455"] = [0x4B, 0x00, 0x6B, 0x69, 0x55, 0x59, 0x00, 0x00]
+        self.assertEqual(ent.effect, "Dreamy Purple")
+        self.assertEqual(ent.rgb_color, (128, 0, 128))
+
     def test_select_lock_cover_button_bus_and_fallbacks(self):
         """Verify 0x49c select fallback, scalar match, bus forwarding on lock/cover/button, and button entity fallback."""
         pass_seat = CanDoSelectEntity(self.coordinator, self.commands["passengers_seat_comfort"])

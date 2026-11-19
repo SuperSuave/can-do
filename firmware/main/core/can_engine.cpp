@@ -1505,6 +1505,14 @@ static void update_sustained_trigger_state(const AutomationTrigger& trig, bool n
     }
 }
 
+static bool is_ambient_entity_id(const std::string& id) {
+    return strcasecmp(id.c_str(), "ambient_light_colors") == 0 ||
+           strcasecmp(id.c_str(), "ambient_mood_lighting") == 0 ||
+           strcasecmp(id.c_str(), "ambient_mood_lamp_color") == 0 ||
+           strcasecmp(id.c_str(), "mood_lighting") == 0 ||
+           strcasecmp(id.c_str(), "ambient_light") == 0;
+}
+
 void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, uint32_t delay_ms) {
     twai_message_t tx_msg = {};
     tx_msg.extd = 0;
@@ -1517,6 +1525,29 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
         }
 
         if (step.type == ActionType::ENTITY_COMMAND) {
+            if (is_ambient_entity_id(step.entity_id)) {
+                if (ambient_anim_start_by_name(step.command)) {
+                    std::string new_state = ambient_anim_get_effect_name();
+                    mitm_arm_entity("ambient_light_colors");
+                    {
+                        std::lock_guard<std::mutex> lock(g_catalog_mutex);
+                        for (auto& cat_ent : global_catalog) {
+                            if (strcasecmp(cat_ent.id.c_str(), step.entity_id.c_str()) == 0 ||
+                                cat_ent.id == "ambient_light_colors") {
+                                cat_ent.current_state = new_state;
+                            }
+                        }
+                    }
+                    mqtt_mgr_publish_entity_state("ambient_light_colors", new_state);
+                    broadcast_ws_state("ambient_light_colors", new_state);
+                    continue;
+                }
+                if (strcasecmp(step.command.c_str(), "stop") == 0) {
+                    ambient_anim_stop();
+                    continue;
+                }
+            }
+
             bool executed_inline = false;
             uint32_t tx_can_id = 0;
             uint32_t tx_delay_ms = 0;
@@ -1539,9 +1570,12 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                 }
             }
             if (executed_inline) {
+                if (is_ambient_entity_id(step.entity_id)) {
+                    ambient_anim_stop();
+                }
                 mitm_arm_entity(step.entity_id);
                 execute_can_burst(tx_can_id, tx_steps, tx_delay_ms);
-            } else {
+            } else if (!queue_entity_command(step.entity_id, step.command)) {
                 ESP_LOGW(TAG, "Entity '%s' command '%s' not found for inline execution",
                          step.entity_id.c_str(), step.command.c_str());
             }
@@ -1693,7 +1727,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             };
 
             int cur_idx = -1;
-            if (entity.state_can_id != 0) {
+            if (entity.state_can_id != 0 && !(is_ambient_entity_id(entity.id) && ambient_anim_is_active())) {
                 uint8_t frame[8] = {0};
                 if (get_cached_can_frame(entity.state_can_id, frame)) {
                     for (int idx = 0; idx < (int)states.size(); ++idx) {
@@ -1753,28 +1787,36 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             }
 
             const EntityOption* target_opt = find_option_by_label(target_label);
-            if (!target_opt) {
+            std::string resolved_label = target_label;
+            if (target_opt) {
+                if (is_ambient_entity_id(entity.id)) {
+                    ambient_anim_stop();
+                }
+                uint32_t tx_can_id = entity.action_can_id ? entity.action_can_id : entity.state_can_id;
+                mitm_arm_entity(entity.id);
+                execute_can_burst(tx_can_id, target_opt->steps, entity.delay_ms);
+                resolved_label = target_opt->label;
+            } else if (is_ambient_entity_id(entity.id) && ambient_anim_start_by_name(target_label)) {
+                resolved_label = ambient_anim_get_effect_name();
+                mitm_arm_entity(entity.id);
+            } else {
                 ESP_LOGW(TAG, "CYCLE_ENTITY: Target state '%s' not found in entity '%s'", target_label.c_str(), step.entity_id.c_str());
                 continue;
             }
-
-            uint32_t tx_can_id = entity.action_can_id ? entity.action_can_id : entity.state_can_id;
-            mitm_arm_entity(entity.id);
-            execute_can_burst(tx_can_id, target_opt->steps, entity.delay_ms);
 
             // Sync live entity state cache and broadcast outside g_catalog_mutex
             {
                 std::lock_guard<std::mutex> lock(g_catalog_mutex);
                 for (auto& cat_ent : global_catalog) {
                     if (cat_ent.id == entity.id) {
-                        cat_ent.current_state = target_opt->label;
+                        cat_ent.current_state = resolved_label;
                         break;
                     }
                 }
             }
-            std::string mqtt_payload = target_opt->label;
+            std::string mqtt_payload = resolved_label;
             if (entity.ha_domain == "switch") {
-                std::string l_lower = target_opt->label;
+                std::string l_lower = resolved_label;
                 std::transform(l_lower.begin(), l_lower.end(), l_lower.begin(), ::tolower);
                 if (l_lower.find("off") != std::string::npos || l_lower.find("disable") != std::string::npos || l_lower.find("inactive") != std::string::npos) {
                     mqtt_payload = "OFF";
@@ -1783,7 +1825,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                 }
             }
             mqtt_mgr_publish_entity_state(entity.id, mqtt_payload);
-            broadcast_ws_state(entity.id, target_opt->label);
+            broadcast_ws_state(entity.id, resolved_label);
 
             if (step.cycle_show_popup) {
                 std::string ent_name = !entity.ha_name.empty() ? entity.ha_name : step.entity_id;
@@ -1794,8 +1836,8 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                         popup_txt = tmpl;
                         size_t pos = 0;
                         while ((pos = popup_txt.find("{state}", pos)) != std::string::npos) {
-                            popup_txt.replace(pos, 7, target_opt->label);
-                            pos += target_opt->label.length();
+                            popup_txt.replace(pos, 7, resolved_label);
+                            pos += resolved_label.length();
                         }
                         pos = 0;
                         while ((pos = popup_txt.find("{entity}", pos)) != std::string::npos) {
@@ -1803,10 +1845,10 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                             pos += ent_name.length();
                         }
                     } else {
-                        popup_txt = tmpl + target_opt->label;
+                        popup_txt = tmpl + resolved_label;
                     }
                 } else {
-                    popup_txt = ent_name + ": " + target_opt->label;
+                    popup_txt = ent_name + ": " + resolved_label;
                 }
 
                 if (step.popup_level == "warning") {
@@ -1857,6 +1899,14 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
         for (int i = 0; i < 8; i++) {
             if (step.mask & (1 << i)) {
                 tx_msg.data[i] = step.payload[i];
+            }
+        }
+
+        if (tx_msg.identifier == AMBIENT_CAN_ID_DASH && ambient_anim_is_active()) {
+            const bool is_brightness_ctrl = (tx_msg.data[0] == 0x00 && tx_msg.data[1] == 0x02 && tx_msg.data[2] == 0x08);
+            const bool is_brightness_off = is_brightness_ctrl && (tx_msg.data[3] == 0xA0 && tx_msg.data[4] == 0x00);
+            if (!is_brightness_ctrl || is_brightness_off) {
+                ambient_anim_stop();
             }
         }
 
@@ -2108,7 +2158,33 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
             is_off_req = true;
             has_4ad = true;
         }
-        // 3. JSON commands (RGB or palette color index)
+        // 3. Factory Themes (Single-Color OEM Presets)
+        else if (cmd_lower.find("golden") != std::string::npos || cmd_lower.find("orange delight") != std::string::npos) {
+            payload_4ad[0] = 0xD0; payload_4ad[1] = 0xC1; payload_4ad[2] = 0x75; payload_4ad[3] = 0x15;
+            new_state = "Golden Insight / Orange Delight";
+            has_4ad = true;
+        } else if (cmd_lower.find("blue flight") != std::string::npos) {
+            payload_4ad[0] = 0x4F; payload_4ad[1] = 0x29; payload_4ad[2] = 0x36; payload_4ad[3] = 0x1C;
+            new_state = "Blue Flight";
+            has_4ad = true;
+        } else if (cmd_lower.find("peaceful forest") != std::string::npos) {
+            payload_4ad[0] = 0x7F; payload_4ad[1] = 0x69; payload_4ad[2] = 0xA6; payload_4ad[3] = 0x17;
+            new_state = "Peaceful Forest";
+            has_4ad = true;
+        } else if (cmd_lower.find("dreamy purple") != std::string::npos) {
+            payload_4ad[0] = 0x6B; payload_4ad[1] = 0x69; payload_4ad[2] = 0x55; payload_4ad[3] = 0x19;
+            new_state = "Dreamy Purple";
+            has_4ad = true;
+        } else if (cmd_lower.find("violet cloud") != std::string::npos) {
+            payload_4ad[0] = 0xA7; payload_4ad[1] = 0x89; payload_4ad[2] = 0xF5; payload_4ad[3] = 0x17;
+            new_state = "Violet Cloud";
+            has_4ad = true;
+        } else if (cmd_lower.find("refreshing sea") != std::string::npos) {
+            payload_4ad[0] = 0x32; payload_4ad[1] = 0x69; payload_4ad[2] = 0xE6; payload_4ad[3] = 0x19;
+            new_state = "Refreshing Sea";
+            has_4ad = true;
+        }
+        // 4. JSON commands (RGB or palette color index)
         else if (!command_label.empty() && command_label[0] == '{') {
             cJSON* root = cJSON_Parse(command_label.c_str());
             if (root) {

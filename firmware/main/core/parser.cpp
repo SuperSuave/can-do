@@ -646,7 +646,9 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
     if (strcmp(type_str, "entity_command") == 0) {
         step.type = ActionType::ENTITY_COMMAND;
         cJSON* eid = cJSON_GetObjectItem(a_item, "entity_id");
+        if (!eid) eid = cJSON_GetObjectItem(a_item, "entity");
         cJSON* cmd = cJSON_GetObjectItem(a_item, "command");
+        if (!cmd) cmd = cJSON_GetObjectItem(a_item, "option_label");
         if (cJSON_IsString(eid)) step.entity_id = eid->valuestring;
         if (cJSON_IsString(cmd)) step.command = cmd->valuestring;
         return true;

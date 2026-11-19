@@ -18,7 +18,10 @@ import {
   getAmbientColorHex,
   isSameAmbientColor,
   OptimisticHoldTracker,
+  AMBIENT_DYNAMIC_EFFECTS,
+  AMBIENT_LIGHT_THEMES,
   AMBIENT_PALETTE_64,
+  isAmbientDynamicEffect,
   AIRFLOW_MODE_COMMAND_LABELS,
   displayTempToFahrenheit,
   fahrenheitToDisplayTemp,
@@ -289,13 +292,40 @@ test('decodeAmbientCanFrame decodes 0x455 brightness level and active color opti
   assert.strictEqual(res3.brightness, 10);
   assert.strictEqual(res3.activeOptionLabel, 'Color 46: Crimson Red');
   assert.strictEqual(res3.hexColor, '#ff0000');
+
+  // Payload 4: Dreamy Purple factory theme at Level 10
+  // 4B 00 6B 69 55 59 00 00
+  const dreamyPurple = [0x4b, 0x00, 0x6b, 0x69, 0x55, 0x59, 0x00, 0x00];
+  const res4 = decodeAmbientCanFrame(dreamyPurple, ambientCmd.options);
+  assert.ok(res4);
+  assert.strictEqual(res4.brightness, 10);
+  assert.strictEqual(res4.activeOptionLabel, 'Dreamy Purple');
+  assert.strictEqual(res4.hexColor, '#800080');
+
+  // Payload 5: Golden Insight / Orange Delight factory theme at Level 10
+  // 4B 00 D0 C1 75 55 00 00
+  const goldenInsight = [0x4b, 0x00, 0xd0, 0xc1, 0x75, 0x55, 0x00, 0x00];
+  const res5 = decodeAmbientCanFrame(goldenInsight, ambientCmd.options);
+  assert.ok(res5);
+  assert.strictEqual(res5.brightness, 10);
+  assert.strictEqual(res5.activeOptionLabel, 'Golden Insight / Orange Delight');
+  assert.strictEqual(res5.hexColor, '#ff8c00');
 });
 
-test('AMBIENT_PALETTE_64 covers all 64 catalog options', () => {
+test('AMBIENT_LIGHT_THEMES and AMBIENT_PALETTE_64 cover all 70 catalog options', () => {
   const ambientCmd = catalog.commands.find(c => c.id === 'ambient_light_colors') as Command;
   assert.ok(ambientCmd, 'ambient_light_colors must exist in catalog');
-  assert.strictEqual(ambientCmd.options.length, 64);
+  assert.strictEqual(ambientCmd.options.length, 70);
+  assert.strictEqual(AMBIENT_LIGHT_THEMES.length, 6);
   assert.strictEqual(AMBIENT_PALETTE_64.length, 64);
+
+  // Every theme in AMBIENT_LIGHT_THEMES exists in catalog options
+  for (const t of AMBIENT_LIGHT_THEMES) {
+    assert.ok(
+      ambientCmd.options.some(o => o.label === t.label),
+      `Theme "${t.label}" must exist in catalog options`
+    );
+  }
 
   // Every palette color in AMBIENT_PALETTE_64 exists in catalog options
   for (const p of AMBIENT_PALETTE_64) {
@@ -304,6 +334,23 @@ test('AMBIENT_PALETTE_64 covers all 64 catalog options', () => {
       `Palette color "${p.label}" must exist in catalog options`
     );
   }
+
+  // Every dynamic effect in AMBIENT_DYNAMIC_EFFECTS matches catalog.effects
+  const catEffects = ambientCmd.effects || [];
+  assert.strictEqual(catEffects.length, 7);
+  assert.strictEqual(AMBIENT_DYNAMIC_EFFECTS.length, 7);
+  for (const e of AMBIENT_DYNAMIC_EFFECTS) {
+    assert.ok(
+      catEffects.some(ce => ce.label === e.label),
+      `Dynamic effect "${e.label}" must exist in catalog.effects`
+    );
+    assert.strictEqual(isAmbientDynamicEffect(e.label), true);
+    assert.strictEqual(isAmbientDynamicEffect(e.name), true);
+    assert.strictEqual(getAmbientColorHex(e.label), e.hex);
+    assert.strictEqual(isSameAmbientColor(e.label, e.name), true);
+  }
+  assert.strictEqual(isAmbientDynamicEffect('Dreamy Purple'), false);
+  assert.strictEqual(isAmbientDynamicEffect('Color 57: Warm Sunset / Amber'), false);
 });
 
 test('decodeSignedInt8 converts negative two-complement BMS temperatures cleanly', () => {
@@ -328,6 +375,11 @@ test('isSameAmbientColor matches prefixed catalog labels with unprefixed palette
     isSameAmbientColor('Color 8: Pure Cyan / Aqua Wave', 'Color 46: Crimson Red'),
     false
   );
+  assert.strictEqual(
+    isSameAmbientColor('Golden Insight / Orange Delight', 'Golden Insight'),
+    true
+  );
+  assert.strictEqual(getAmbientColorHex('Blue Flight'), '#0078d4');
 });
 
 test('parseBooleanEntityState never treats "Driver Only Off" as true', () => {

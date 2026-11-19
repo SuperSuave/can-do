@@ -208,7 +208,7 @@ class TestRemoteClimate(unittest.TestCase):
         self.assertIn("ambient_light_brightness", cmds)
         self.assertNotIn("ha_metadata", cmds["ambient_light_brightness"])
 
-        # 3. Verify all 64 color options in ambient_light_colors have unique 4-byte match blocks
+        # 3. Verify all 70 color options (6 factory themes + 64 palette colors) have unique 4-byte match blocks
         color_cmd = cmds["ambient_light_colors"]
         seen_matches = set()
         for opt in color_cmd.get("options", []):
@@ -221,7 +221,7 @@ class TestRemoteClimate(unittest.TestCase):
             match_key = (match["D3"], match["D4"], match["D5"], match["D6"])
             self.assertNotIn(match_key, seen_matches, f"Duplicate match key for {opt.get('label')}")
             seen_matches.add(match_key)
-        self.assertEqual(len(seen_matches), 64)
+        self.assertEqual(len(seen_matches), 70)
 
         # 4. Verify all 10 brightness level steps match the formula
         brightness_cmd = cmds["ambient_light_brightness"]

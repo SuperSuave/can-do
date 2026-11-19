@@ -14,10 +14,7 @@ extern "C" {
 enum class AmbientEffect {
     NONE = 0,
     RAINBOW_WAVE,
-    CHRISTMAS_WAVE,    // 🎄 Red & Green 2-Tone Alternating Swap
-    HALLOWEEN_WAVE,    // 🎃 Orange & Purple 2-Tone Alternating Swap
-    VALENTINE_WAVE,    // 💖 Neon Pink & Crimson Red 2-Tone Swap
-    FOURTH_JULY_WAVE,  // 🎆 Red, White & Blue 3-Tone Patriotic Sweep
+    FOURTH_JULY_WAVE,  // 🎆 Red, White & Blue Patriotic Sweep
     POLICE_STROBE,     // 🚨 Rapid Red / Blue Alternating Strobe
     OCEAN_TIDE,        // 🌊 Cyan & Electric Blue Marine Flow
     SUNSET_GLOW,       // 🌅 Red, Amber & Warm Gold Sunset
@@ -39,8 +36,8 @@ void ambient_anim_start(AmbientEffect effect, uint32_t step_interval_ms = 0);
 
 /**
  * @brief Start ambient animation by case-insensitive name / keyword.
- * Matches keywords like "rainbow", "christmas", "xmas", "halloween", "valentine",
- * "4th of july", "fourth of july", "police", "strobe", "ocean", "sunset", "aurora", "breathe".
+ * Matches keywords like "rainbow", "4th of july", "fourth of july",
+ * "police", "strobe", "ocean", "sunset", "aurora", "breathe".
  * @return true if an animation was matched and started, false otherwise.
  */
 bool ambient_anim_start_by_name(const std::string& name);
@@ -62,14 +59,14 @@ std::string ambient_anim_get_effect_name(void);
 
 /**
  * @brief Transmit verified 2-stage ambient lighting burst (Stage 1 color + Stage 2 latch).
- * @param can_id Target CAN ID (0x4AD for Dash, 0x48F for Doors).
+ * @param can_id Target CAN ID (0x4AD).
  * @param payload_4bytes 4-byte color definition [D1, D2, D3, D4].
  */
 void ambient_anim_send_burst(uint32_t can_id, const uint8_t* payload_4bytes);
 
 /**
  * @brief Transmit 2-stage burst to power off ambient lamps.
- * @param can_id Target CAN ID (0x4AD or 0x48F, or 0 for both).
+ * @param can_id Target CAN ID (0x4AD, or 0 for default).
  */
 void ambient_anim_send_off(uint32_t can_id = 0);
 
