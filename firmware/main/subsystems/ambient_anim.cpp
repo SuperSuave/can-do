@@ -144,11 +144,6 @@ void ambient_anim_send_burst(uint32_t can_id, const uint8_t* payload_4bytes) {
     }
 }
 
-void ambient_anim_send_off(uint32_t can_id) {
-    const uint8_t off_color[4] = { 0x00, 0x00, 0x00, 0x00 };
-    ambient_anim_send_burst(AMBIENT_CAN_ID_DASH, off_color);
-}
-
 bool ambient_anim_get_palette_color(uint8_t index, uint8_t* out_payload) {
     if (index < 1 || index > 64 || !out_payload) return false;
     memcpy(out_payload, PALETTE_64[index - 1], 4);

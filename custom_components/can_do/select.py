@@ -132,8 +132,8 @@ class CanDoSelectEntity(CanDoEntity, SelectEntity):
             self.coordinator, self.command, action_can_id, self.state_can_id
         )
         steps = build_action_steps(self.command, target_opt, base_payload)
-        if self.entity_id_str in ("ambient_mood_lamp_color", "ambient_light_colors", "ambient_mood_lighting") or net.get("type") == "isotp":
-            _LOGGER.info("Sending ambient lamp entity command '%s' for '%s'", option, self.name)
+        if net.get("type") == "isotp":
+            _LOGGER.info("Sending ISO-TP entity command '%s' for '%s'", option, self.name)
             await self.coordinator.async_send_entity_command(self.entity_id_str, option)
         elif steps:
             _LOGGER.info("Selecting option '%s' for '%s'", option, self.name)

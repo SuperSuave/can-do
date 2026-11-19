@@ -148,11 +148,6 @@ void broadcast_ws_state(const std::string& entity_id, const std::string& state) 
     broadcast_ws_raw(build_ws_state_json(entity_id, state));
 }
 
-void broadcast_ws_can_frame(const twai_message_t* msg) {
-    (void)msg;
-    // Raw CAN frame streaming disabled on WebSocket & UART to guarantee deterministic latency
-}
-
 void broadcast_ws_automation_event(const std::string& id, const std::string& name) {
     if (!s_has_ws_clients_cached.load(std::memory_order_relaxed)) return;
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);

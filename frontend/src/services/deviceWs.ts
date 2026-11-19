@@ -89,36 +89,14 @@ class DeviceWebSocketService {
           });
         };
 
-        // 1. Bare JSON array initial state snapshot: [{"entity":"...","state":"..."}]
-        if (Array.isArray(parsed)) {
-          dispatch({ type: 'states_dump', data: parsed });
-          parsed.forEach((item: any) => {
-            if (item && item.entity && item.state !== undefined) {
-              dispatch({ type: 'state', entity: item.entity, state: String(item.state) });
-            }
-          });
-          return;
-        }
-
-        // 2. Batch dump: {"type":"states_dump","data":[{"entity":"...","state":"..."}]}
-        if (parsed && parsed.type === 'states_dump' && Array.isArray(parsed.data)) {
-          dispatch(parsed);
-          parsed.data.forEach((item: any) => {
-            if (item && item.entity && item.state !== undefined) {
-              dispatch({ type: 'state', entity: item.entity, state: String(item.state) });
-            }
-          });
-          return;
-        }
-
-        // 3. BLE events: normalize button / button_name across firmware variants
+        // 1. BLE events: normalize button / button_name across firmware variants
         if (parsed && parsed.type === 'ble_event') {
           const btn = parsed.button || parsed.button_name || '';
           parsed.button = btn;
           parsed.button_name = btn;
         }
 
-        // 4. Standard message dispatch
+        // 2. Standard message dispatch
         dispatch(parsed);
       };
 

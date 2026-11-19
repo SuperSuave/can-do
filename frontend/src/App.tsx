@@ -4,7 +4,7 @@ import { DEFAULT_CATALOG, normalizeCatalog } from './data/defaultCatalog';
 import { validateCatalog } from './utils/canValidator';
 import { commandToAction, commandToCondition, commandToTrigger, exportToCandoJson, decompileAutomationRules } from './utils/automationConverters';
 import { resolveVariant, formatCommandForCatalog } from './utils/catalogUtils';
-import { decodeAmbientCanFrame, getAmbientColorHex, isAmbientDynamicEffect } from './utils/cockpitDecoders';
+import { getAmbientColorHex } from './utils/cockpitDecoders';
 import { deviceWs } from './services/deviceWs';
 import { getSavedRepoConfig, saveRepoConfig } from './utils/githubHelper';
 import { isRunningOnDevice, resolveDeviceBaseUrl } from './utils/hostUtils';
@@ -124,8 +124,6 @@ export default function App() {
     } catch {}
     return 'Color 24: Deep Purple / Violet';
   });
-  const ambientColorRef = useRef<string>(ambientColor);
-  ambientColorRef.current = ambientColor;
   const [ambientBrightness, setAmbientBrightness] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('cando_ambient_brightness');
@@ -137,7 +135,6 @@ export default function App() {
   const activeAmbientHex = useMemo(() => getAmbientColorHex(ambientColor), [ambientColor]);
 
   const handleAmbientColorChange = (nextColor: string) => {
-    ambientColorRef.current = nextColor;
     setAmbientColor(nextColor);
     try {
       localStorage.setItem('cando_ambient_color', nextColor);
@@ -276,7 +273,7 @@ export default function App() {
 
   const activeMainTabRef = useRef<'dashboard' | 'automations' | 'catalog' | 'device'>('dashboard');
 
-  // Listen to live 0x455 CAN frames and ambient_light entity states across all tabs
+  // Listen to live ambient_light entity states across all tabs
   useEffect(() => {
     const unsubscribe = deviceWs.subscribe(data => {
       // While VehicleDashboard is mounted, it owns ambient WS reconciliation (with OptimisticHoldTracker)
@@ -295,23 +292,6 @@ export default function App() {
             handleAmbientBrightnessChange(parseInt(match[1], 10));
           } else if (stateStr.toLowerCase().includes('off')) {
             handleAmbientBrightnessChange(0);
-          }
-        }
-      } else if (data.type === 'can_frame' && (data as any).id) {
-        const normId = String((data as any).id).toLowerCase().replace(/^0x/, '');
-        const ambientCmd = catalogRef.current?.commands?.find(c => c.id === 'ambient_light_colors');
-        const ambientStateId = (ambientCmd?.network?.state_can_id || '455').toLowerCase().replace(/^0x/, '');
-        if (normId === ambientStateId || normId === '455') {
-          const hexClean = String((data as any).data || '').trim().replace(/\s+/g, '');
-          const bytes = (hexClean.match(/.{1,2}/g) || []).map(h => parseInt(h, 16));
-          if (bytes.length >= 6) {
-            const decoded = decodeAmbientCanFrame(bytes, ambientCmd?.options);
-            if (decoded) {
-              handleAmbientBrightnessChange(decoded.brightness);
-              if (decoded.activeOptionLabel && !isAmbientDynamicEffect(ambientColorRef.current)) {
-                handleAmbientColorChange(decoded.activeOptionLabel);
-              }
-            }
           }
         }
       }

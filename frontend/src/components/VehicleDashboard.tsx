@@ -29,7 +29,6 @@ import {
   decodeSeatLevel,
   decodeSignedInt8,
   decodeSunroofEntityState,
-  decodeAmbientCanFrame,
   getAmbientColorHex,
   isSameAmbientColor,
   OptimisticHoldTracker,
@@ -762,9 +761,6 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       acToggleName: findCmd('climate_ac_toggle')?.ha_metadata?.name || 'Climate A/C Toggle',
       airflow: getCanId('climate_airflow_direction', '31b'),
       airflowName: findCmd('climate_airflow_direction')?.ha_metadata?.name || 'Climate Airflow Direction',
-      ambientLight: getCanId('ambient_light_colors', '455'),
-      ambientLightName: findCmd('ambient_light_colors')?.ha_metadata?.name || 'Ambient Mood Lighting',
-      ambientLightOptions: findCmd('ambient_light_colors')?.options || [],
       ambientLightEffects: findCmd('ambient_light_colors')?.effects || AMBIENT_DYNAMIC_EFFECTS,
       ambientBrightness: getCanId('ambient_light_brightness', '455'),
     };
@@ -1331,8 +1327,6 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     const unsubscribeMsgs = deviceWs.subscribe((data) => {
       if (data.type === 'state' && (data as any).entity && (data as any).state) {
         handleIncomingEntityStateRef.current((data as any).entity, (data as any).state);
-      } else if (data.type === 'can_frame' && (data as any).id) {
-        handleIncomingCanFrameRef.current((data as any).id, (data as any).data || '');
       }
     });
 
@@ -1869,27 +1863,6 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       if (fl > 20 && fl < 55) {
         setTpms({ fl, fr, rl, rr });
         recordLog(idFormatted, canMappings.tpmsName, `FL:${fl} FR:${fr} RL:${rl} RR:${rr} PSI`, hexPayload, now);
-      }
-    }
-
-    // Ambient Mood Lighting (0x455 / M-CAN: D1=Brightness, D3..D6=Color signature)
-    else if ((normId === canMappings.ambientLight || normId === '455') && bytes.length >= 6) {
-      const decoded = decodeAmbientCanFrame(bytes, canMappings.ambientLightOptions);
-      if (decoded) {
-        if (acceptTelemetry('ambient_light_brightness', String(decoded.brightness))) {
-          setAmbientBrightness(decoded.brightness);
-        }
-        const activeIsAnim = isAmbientDynamicEffect(ambientColorRef.current);
-        if (decoded.activeOptionLabel && !activeIsAnim && acceptTelemetry('ambient_light_colors', decoded.activeOptionLabel.toLowerCase())) {
-          setAmbientColor(decoded.activeOptionLabel);
-        }
-        recordLog(
-          idFormatted,
-          canMappings.ambientLightName,
-          `Level ${decoded.brightness} (${activeIsAnim ? ambientColorRef.current : (decoded.activeOptionLabel || 'Custom')})`,
-          hexPayload,
-          now
-        );
       }
     }
 

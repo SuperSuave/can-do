@@ -17,7 +17,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .can_utils import build_action_steps
 from .const import DOMAIN
 from .coordinator import CanDoDataCoordinator
 from .entity import CanDoEntity
@@ -130,9 +129,6 @@ async def async_setup_entry(
 
     for cmd in coordinator.commands:
         if cmd.get("ha_metadata", {}).get("domain") == "light":
-            # Guard: ensure brightness slider commands are not registered as standalone light entities
-            if cmd.get("id") in ("ambient_light_brightness", "ambient_mood_light_brightness"):
-                continue
             entities.append(CanDoLightEntity(coordinator, cmd))
 
     async_add_entities(entities)
@@ -218,16 +214,7 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
         if raw_455 and len(raw_455) >= 1:
             return (raw_455[0] & 0x0F) > 1
 
-        # 3. Check live CAN frame 0x410 status if available (Byte D4 bits 6-7)
-        raw_410 = self.coordinator.get_can_payload("0x410")
-        if raw_410 and len(raw_410) >= 4:
-            mood_bits = raw_410[3] & 0xC0
-            if mood_bits == 0x40:
-                return True
-            elif mood_bits == 0x00:
-                return False
-
-        # 3b. Check live entity state for ambient_light_brightness if emitted as scalar/label
+        # 3. Check live entity state for ambient_light_brightness if emitted as scalar/label
         bright_direct = self.coordinator.get_can_state("ambient_light_brightness")
         if isinstance(bright_direct, (int, float)):
             return bright_direct > 0
@@ -345,22 +332,7 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the ambient lighting on, set color, effect, or brightness."""
-        net = self.command.get("network", {})
-        action_can_id = net.get("action_can_id", "0x4AD")
-        delay_ms = net.get("delay_ms", 25)
-        bus = net.get("bus")
         entity_cmd_id = self.entity_id_str or "ambient_light_colors"
-        edge_managed = entity_cmd_id in (
-            "ambient_mood_lamp_color",
-            "ambient_mood_lighting",
-            "ambient_light_colors",
-            "mood_lighting",
-            "ambient_light",
-        )
-
-        target_opt = None
-        r, g, b = self._rgb_color
-        color_changed = False
 
         if ATTR_RGB_COLOR in kwargs:
             r, g, b = kwargs[ATTR_RGB_COLOR]
@@ -376,42 +348,24 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
                 rgb_payload = json.dumps({"r": r, "g": g, "b": b, "mode": 1})
                 _LOGGER.info("Sending Ambient Light RGB (%d, %d, %d) to coordinator", r, g, b)
                 await self.coordinator.async_send_entity_command(entity_cmd_id, rgb_payload)
-            color_changed = True
 
         elif ATTR_EFFECT in kwargs:
             effect_name = kwargs[ATTR_EFFECT]
             self._effect = effect_name
-            target_opt = self._options_by_label.get(effect_name)
             if effect_name in PALETTE_64_RGB_MAP:
                 self._rgb_color = PALETTE_64_RGB_MAP[effect_name]
 
             _LOGGER.info("Selecting Ambient Light effect preset '%s'", effect_name)
             await self.coordinator.async_send_entity_command(entity_cmd_id, effect_name)
-            color_changed = True
 
         elif ATTR_BRIGHTNESS not in kwargs:
             # Simple turn on: use current effect / RGB preset
-            if self._effect and self._effect in self._options_by_label:
-                target_opt = self._options_by_label[self._effect]
-            elif self._options_by_label:
-                target_opt = next(iter(self._options_by_label.values()))
-                self._effect = target_opt.get("label")
+            if not (self._effect and self._effect in self._options_by_label) and self._options_by_label:
+                self._effect = next(iter(self._options_by_label.values())).get("label")
 
             cmd_name = self._effect or "Color 8: Pure Cyan / Aqua Wave"
             _LOGGER.info("Turning on Ambient Light with default preset '%s'", cmd_name)
             await self.coordinator.async_send_entity_command(entity_cmd_id, cmd_name)
-            color_changed = True
-
-        # Only transmit fallback raw 0x4AD burst when entity ID is not natively handled by firmware queue_entity_command
-        if color_changed and target_opt and not edge_managed:
-            steps = build_action_steps(self.command, target_opt)
-            if steps:
-                for s in steps:
-                    if s.get("repeat", 1) < 3:
-                        s["repeat"] = 3
-                    s["delay_ms"] = delay_ms
-                _LOGGER.info("Sending 0x4AD 2-stage burst (%d steps) for ambient light color", len(steps))
-                await self.coordinator.async_send_action(action_can_id, delay_ms, steps, bus=bus)
 
         # Dispatch 2-stage brightness command via entity command for strict FIFO ordering and optimistic sync
         if ATTR_BRIGHTNESS in kwargs:

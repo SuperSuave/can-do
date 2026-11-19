@@ -65,12 +65,6 @@ std::string ambient_anim_get_effect_name(void);
 void ambient_anim_send_burst(uint32_t can_id, const uint8_t* payload_4bytes);
 
 /**
- * @brief Transmit 2-stage burst to power off ambient lamps.
- * @param can_id Target CAN ID (0x4AD, or 0 for default).
- */
-void ambient_anim_send_off(uint32_t can_id = 0);
-
-/**
  * @brief Get 4-byte payload for palette color by 1-based index (1..64).
  * @param index 1..64
  * @param out_payload Array of 4 bytes to receive [D1, D2, D3, D4]
