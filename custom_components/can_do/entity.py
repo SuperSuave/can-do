@@ -64,6 +64,9 @@ class CanDoEntity(Entity):
         """Return True if coordinator is available and CAN ID is active (if active filtering is enabled)."""
         if not self.coordinator.available:
             return False
+        cid = self.entity_id_str.lower()
+        if cid in ("outdoor_temperature", "cond_ambient_temperature", "ambient_temperature") or "ambient_temp" in cid:
+            return any(self.coordinator.is_can_id_active(x) for x in ("0x31c", "0x227", "0x226"))
         if self.state_can_id and not self.coordinator.is_can_id_active(self.state_can_id):
             return False
         return True
@@ -110,6 +113,8 @@ class CanDoEntity(Entity):
         listen_ids.add(self.entity_id_str.lower())
 
         cid = self.entity_id_str.lower()
+        if cid in ("outdoor_temperature", "cond_ambient_temperature", "ambient_temperature") or "ambient_temp" in cid:
+            listen_ids.update(["0x31c", "0x227", "0x226", "outdoor_temperature"])
         if "12v" in cid or "aux" in cid:
             listen_ids.update(["vbat", "cond_aux_12v_battery", "0x1cf"])
 

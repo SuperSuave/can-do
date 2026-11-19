@@ -101,6 +101,36 @@ class EventEntity:
 
 ha_event.EventEntity = EventEntity
 
+ha_climate = _reg_mod("homeassistant.components.climate")
+if not hasattr(ha_climate, "ClimateEntity"):
+    class ClimateEntity:
+        @property
+        def name(self):
+            return getattr(self, "_attr_name", "")
+
+        @property
+        def temperature_unit(self):
+            return getattr(self, "_attr_temperature_unit", "°F")
+
+    class ClimateEntityFeature:
+        TARGET_TEMPERATURE = 1
+
+    class HVACAction:
+        OFF = "off"
+        HEATING = "heating"
+        COOLING = "cooling"
+        IDLE = "idle"
+
+    class HVACMode:
+        AUTO = "auto"
+        HEAT_COOL = "heat_cool"
+        OFF = "off"
+
+    ha_climate.ClimateEntity = ClimateEntity
+    ha_climate.ClimateEntityFeature = ClimateEntityFeature
+    ha_climate.HVACAction = HVACAction
+    ha_climate.HVACMode = HVACMode
+
 ha_const = _reg_mod("homeassistant.const")
 ha_const.PERCENTAGE = "%"
 ha_const.UnitOfElectricCurrent = MagicMock()
@@ -176,6 +206,7 @@ from custom_components.can_do.catalog_loader import (
     load_catalog,
     resolve_variant,
 )
+from custom_components.can_do.climate import CanDoClimateEntity
 from custom_components.can_do.coordinator import CanDoDataCoordinator
 from custom_components.can_do.event import CanDoEventEntity
 from custom_components.can_do.sensor import CanDoSensorEntity
@@ -619,6 +650,61 @@ class TestEgmpAuditDecoders(unittest.TestCase):
         self.coordinator.can_states["0x474"] = up_frame
         bri_ev._handle_can_update()
         self.assertEqual(bri_ev.triggered_events, [("press", {"option": up_opt["label"]})])
+
+    def test_outdoor_temperature_0x31c_and_fallbacks(self):
+        """Verify 0x31C primary outdoor temp, 0x227/0x226 fallbacks, and 0xFF 419°F suppression."""
+        out_cmd = resolve_variant(self.commands_by_id["outdoor_temperature"], "kia_ev6")
+        self.assertEqual(out_cmd["network"]["state_can_id"], "0x31C")
+        self.assertIn("0x31c", get_monitored_can_ids("kia_ev6"))
+
+        # 1. Real US EV6 0x226 (D4=0xFF) must return None (NOT 215°C / 419°F) and no Warm threshold
+        sensor = CanDoSensorEntity(self.coordinator, out_cmd)
+        self.coordinator.can_states["0x226"] = [0x06, 0xDD, 0x71, 0xFF, 0x62, 0x20, 0x08, 0x42]
+        self.assertIsNone(sensor.native_value)
+        self.assertNotIn("threshold", sensor.extra_state_attributes)
+
+        # 2. Real EV6 0x31C (D1=0x79 -> 19.5°C) + F-mode climate entity (67.1°F)
+        self.hass.config.units.temperature_unit = ha_const.UnitOfTemperature.FAHRENHEIT
+        climate_ent = CanDoClimateEntity(
+            self.coordinator, resolve_variant(self.commands_by_id["climate_driver_temp"], "kia_ev6"), self.hass
+        )
+        self.coordinator.can_states["0x31c"] = [0x79, 0x7A, 0xFF, 0x00, 0x00, 0x5C, 0x09, 0x00]
+        sensor._handle_can_update()
+        self.assertEqual(sensor.native_value, 19.5)
+        self.assertEqual(sensor.extra_state_attributes.get("threshold"), "Comfortable (15-25°C / 59-77°F)")
+        self.assertEqual(climate_ent.current_temperature, 67.1)
+
+        # Invalid sentinel 0x00 / 0xFF on 0x31C preserves last valid value on cached sensor, None on fresh sensor
+        self.coordinator.can_states["0x31c"] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        self.assertEqual(sensor.native_value, 19.5)
+        fresh_sensor = CanDoSensorEntity(self.coordinator, out_cmd)
+        self.assertIsNone(fresh_sensor.native_value)
+        self.coordinator.can_states["0x31c"] = [0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        self.assertIsNone(fresh_sensor.native_value)
+
+        # 3. 0x227 US °F fallback when 0x31C absent (67°F = 19.44°C), IGN-OFF 0xFF rejected
+        self.coordinator.can_states.pop("0x31c", None)
+        self.coordinator.can_states["0x227"] = [0x02, 0x4A, 0xE0, 0x0C, 0x00, 0xF1, 0x5F, 0x03]
+        self.assertEqual(fresh_sensor.native_value, 19.4)
+        self.assertEqual(climate_ent.current_temperature, 67.0)
+
+        self.coordinator.can_states["0x227"] = [0x02, 0xA9, 0x79, 0x0D, 0x00, 0xF0, 0xFF, 0x07]
+        self.assertIsNone(fresh_sensor.native_value)
+
+        # 4. 0x226 Metric fallback when 0x31C and 0x227 are absent/invalid (0x3C -> 20.0°C)
+        self.coordinator.can_states.pop("0x227", None)
+        self.coordinator.can_states["0x226"] = [0x00, 0x00, 0x00, 0x3C, 0x00, 0x00, 0x00, 0x00]
+        self.assertEqual(fresh_sensor.native_value, 20.0)
+
+        # 5. 0x31C takes precedence over both 0x227 and 0x226
+        self.coordinator.can_states["0x227"] = [0x02, 0x4A, 0xE0, 0x0C, 0x00, 0xF1, 0x5F, 0x03]
+        self.coordinator.can_states["0x31c"] = [0x8A, 0x84, 0xFF, 0x01, 0x02, 0x60, 0x32, 0x00]
+        self.assertEqual(fresh_sensor.native_value, 28.0)
+
+        # 6. 0x31C is in firmware s_default_monitored_ids
+        mqtt_mgr_path = Path(__file__).resolve().parent.parent / "firmware" / "main" / "net" / "mqtt_mgr.cpp"
+        mqtt_mgr_src = mqtt_mgr_path.read_text(encoding="utf-8")
+        self.assertIn("0x31C", mqtt_mgr_src)
 
 
 if __name__ == "__main__":

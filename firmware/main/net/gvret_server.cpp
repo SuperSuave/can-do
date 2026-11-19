@@ -3,6 +3,8 @@
 #include "can.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"
+#include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -22,6 +24,8 @@ static const char* TAG = "GVRET";
 #define GVRET_FLUSH_INTERVAL_MS 10
 
 static QueueHandle_t s_gvret_queue = nullptr;
+static StaticQueue_t s_gvret_queue_struct;
+static uint8_t* s_gvret_queue_storage = nullptr;
 static std::atomic<int> s_client_count{0};
 static int s_active_client_fd = -1;
 static std::atomic<bool> s_disconnect_requested{false};
@@ -487,7 +491,16 @@ static void gvret_server_task(void* pvParameters) {
 
 esp_err_t gvret_server_init(uint16_t port) {
     if (!s_gvret_queue) {
-        s_gvret_queue = xQueueCreate(GVRET_QUEUE_SIZE, sizeof(can_fd_frame_t));
+#if CONFIG_SPIRAM
+        s_gvret_queue_storage = static_cast<uint8_t*>(
+            heap_caps_malloc_prefer(GVRET_QUEUE_SIZE * sizeof(can_fd_frame_t), 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT));
+        if (s_gvret_queue_storage) {
+            s_gvret_queue = xQueueCreateStatic(GVRET_QUEUE_SIZE, sizeof(can_fd_frame_t), s_gvret_queue_storage, &s_gvret_queue_struct);
+        }
+#endif
+        if (!s_gvret_queue) {
+            s_gvret_queue = xQueueCreate(GVRET_QUEUE_SIZE, sizeof(can_fd_frame_t));
+        }
         if (!s_gvret_queue) return ESP_ERR_NO_MEM;
     }
 

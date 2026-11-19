@@ -376,10 +376,12 @@ test('rawByteToPhysical, physicalToRawByte, and buildRangeActionPayload handle p
     D8: '0x00',
   });
 
-  // 3. Negative offset temperature schema (outdoor_temperature: -40..215 °C <-> 0x00..0xFF)
-  const outdoorNet = { min: -40, max: 215, factor: 1, offset: -40, unit: '°C' };
-  assert.strictEqual(physicalToRawByte(0, outdoorNet), 40);
-  assert.strictEqual(rawByteToPhysical(40, outdoorNet).val, 0);
+  // 3. Negative offset temperature schema (outdoor_temperature: 0x31C D1 -40..60 °C <-> 0x02..0xCA, factor 0.5, offset -41)
+  const outdoorNet = { min: -40, max: 60, factor: 0.5, offset: -41, unit: '°C' };
+  assert.strictEqual(physicalToRawByte(0, outdoorNet), 0x52);
+  assert.strictEqual(rawByteToPhysical(0x52, outdoorNet).val, 0);
+  assert.strictEqual(physicalToRawByte(19.5, outdoorNet), 0x79);
+  assert.strictEqual(rawByteToPhysical(0x79, outdoorNet).val, 19.5);
 });
 
 test('formatCommandForCatalog preserves param_range type and network range metadata', () => {

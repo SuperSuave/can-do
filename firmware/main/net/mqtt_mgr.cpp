@@ -45,6 +45,8 @@ struct MqttSetCmd {
     char payload[384];
 };
 static QueueHandle_t s_mqtt_cmd_queue = nullptr;
+static StaticQueue_t s_mqtt_cmd_queue_struct;
+static uint8_t* s_mqtt_cmd_queue_storage = nullptr;
 
 static void mqtt_cmd_worker_task(void* arg) {
     (void)arg;
@@ -134,7 +136,7 @@ static inline void mqtt_enqueue_nonblocking(const char* topic, const char* data,
 static const std::unordered_set<uint32_t> s_default_monitored_ids = {
     0x038, 0x045, 0x070, 0x0A2, 0x130, 0x151, 0x152, 0x1AC, 0x1BA, 0x1CF, 0x1F1, 0x1F9, 0x1FA,
     0x200, 0x203, 0x220, 0x226, 0x227, 0x25C, 0x29B, 0x29C, 0x2AD, 0x2AF, 0x2C0, 0x2DB, 0x2FC,
-    0x30B, 0x30C, 0x30E, 0x31B, 0x321, 0x324, 0x326, 0x327, 0x328, 0x340, 0x380, 0x384,
+    0x30B, 0x30C, 0x30E, 0x31B, 0x31C, 0x321, 0x324, 0x326, 0x327, 0x328, 0x340, 0x380, 0x384,
     0x38C, 0x38D, 0x39B, 0x3A1, 0x3A2, 0x3A6, 0x3AA, 0x3C1,
     0x410, 0x411, 0x412, 0x413, 0x414, 0x418, 0x41D, 0x420, 0x421, 0x435, 0x436, 0x438,
     0x442, 0x448, 0x450, 0x453, 0x455, 0x465, 0x474, 0x475, 0x476, 0x477, 0x478, 0x47F,
@@ -967,7 +969,12 @@ void mqtt_mgr_init(void) {
         }
     }
     if (!s_mqtt_cmd_queue) {
-        s_mqtt_cmd_queue = xQueueCreate(16, sizeof(MqttSetCmd));
+        s_mqtt_cmd_queue_storage = (uint8_t*)alloc_mqtt_pub_buf(16 * sizeof(MqttSetCmd));
+        if (s_mqtt_cmd_queue_storage) {
+            s_mqtt_cmd_queue = xQueueCreateStatic(16, sizeof(MqttSetCmd), s_mqtt_cmd_queue_storage, &s_mqtt_cmd_queue_struct);
+        } else {
+            s_mqtt_cmd_queue = xQueueCreate(16, sizeof(MqttSetCmd));
+        }
         if (s_mqtt_cmd_queue) {
             xTaskCreate(mqtt_cmd_worker_task, "mqtt_cmd", 4096, nullptr, 4, nullptr);
         }
@@ -1013,12 +1020,23 @@ void mqtt_mgr_start(void) {
     mqtt_cfg.task.stack_size = 6144;
 
     global_mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
-    if (global_mqtt_client) {
-        if (esp_mqtt_client_register_event(global_mqtt_client, MQTT_EVENT_ANY, mqtt_event_handler, nullptr) != ESP_OK ||
-            esp_mqtt_client_start(global_mqtt_client) != ESP_OK) {
-            esp_mqtt_client_destroy(global_mqtt_client);
-            global_mqtt_client = nullptr;
-        }
+    if (!global_mqtt_client) {
+        ESP_LOGE(TAG, "esp_mqtt_client_init failed (free=%lu, internal=%lu)",
+                 (unsigned long)esp_get_free_heap_size(),
+                 (unsigned long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+        return;
+    }
+    esp_err_t err = esp_mqtt_client_register_event(global_mqtt_client, MQTT_EVENT_ANY, mqtt_event_handler, nullptr);
+    if (err == ESP_OK) {
+        err = esp_mqtt_client_start(global_mqtt_client);
+    }
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "MQTT client start failed (%s; free=%lu, internal=%lu)",
+                 esp_err_to_name(err),
+                 (unsigned long)esp_get_free_heap_size(),
+                 (unsigned long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+        esp_mqtt_client_destroy(global_mqtt_client);
+        global_mqtt_client = nullptr;
     }
 }
 

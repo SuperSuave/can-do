@@ -89,7 +89,11 @@ idf.py -p <PORT> flash monitor
 5. **Firmware Concurrency, Memory & Radio Guardrails (Do Not Regress)**:
    - **Lock Ordering**: Never call `mqtt_mgr_publish_*`, `broadcast_ws_*`, or `can_engine_on_*` while holding `s_ble_mutex`, `g_automations_mutex`, or `g_catalog_mutex` (`esp_mqtt_client_enqueue` takes `MQTT_API_LOCK`, which causes AB-BA deadlocks and freezes `nimble_host`/`httpd`).
    - **MQTT Timeouts & Callbacks**: Keep `mqtt_cfg.network.timeout_ms <= 2000` (< 3s `can_rx_task` TWDT), set `s_mqtt_connected = true` *after* `esp_mqtt_client_subscribe_multiple()`, and never run `load_automations_from_fs()` synchronously on `esp_mqtt_task`.
-   - **PSRAM & Stack Limits**: Keep `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096`, `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y`, and `CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=6144` in `sdkconfig.defaults.esp32s3` so internal DRAM stays well above the 32 KB DMA reserve.
+   - **PSRAM, Internal DRAM & Stack Limits**:
+     - Keep `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096`, `CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=32768`, `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y`, and `CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=6144` in `sdkconfig.defaults.esp32s3`. Because allocations `<= 4096 B` default to internal DRAM, hundreds of small STL vectors/structs will silently drain internal SRAM down to the 32 KB reserve and cause `esp_mqtt_client_start()` (`Error create mqtt task`), `net_ready` (SNTP/mDNS), and `cloud_ota_task` to fail even with >1.5 MB PSRAM free.
+     - Use `PsramVector` / `PsramAllocator` (`firmware/main/core/psram_alloc.h`) for bulk catalog/index containers, keep `EntityOption::steps` on compact `CatalogStep` (never automation `ActionStep`), and back large non-ISR FreeRTOS queues (>2 KB) with PSRAM via `xQueueCreateStatic()` on `CONFIG_SPIRAM` targets.
+     - Never place stacks of tasks that touch Flash, LittleFS, or NVS (`esp_mqtt_task`, `mqtt_cmd`, `httpd`) in PSRAM.
+     - Never guard memory using `esp_get_free_heap_size()` alone on PSRAM targets; verify `heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) >= 48 KB` (`internal_free_heap` in `/api/system/status`).
    - **Wi-Fi + BLE Coex**: Keep `WIFI_ALL_CHANNEL_SCAN` + `WIFI_CONNECT_AP_BY_SIGNAL` + `listen_interval = 1` in `network_mgr.cpp`, and remember `NimBLEScan::setInterval`/`setWindow` take **milliseconds** (not `0.625 ms` units).
 6. **Thread Context Handoff**:
    - When finishing complex or multi-step tasks, summarize modified files, current state, and the logical next action so new threads can resume without loss of context.

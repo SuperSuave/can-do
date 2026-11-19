@@ -150,7 +150,10 @@ static void app_ip_event_handler(void* arg, esp_event_base_t event_base, int32_t
         auto event = static_cast<ip_event_got_ip_t*>(event_data);
         ESP_LOGI(TAG, "Network ready. IP: " IPSTR, IP2STR(&event->ip_info.ip));
         if (!s_sntp_initialized || !s_mdns_initialized) {
-            xTaskCreate(network_ready_task, "net_ready", 4096, nullptr, 3, nullptr);
+            if (xTaskCreate(network_ready_task, "net_ready", 4096, nullptr, 3, nullptr) != pdPASS) {
+                ESP_LOGE(TAG, "Failed to create net_ready task (internal free: %lu B)",
+                         (unsigned long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+            }
         }
     }
 }
@@ -232,6 +235,12 @@ extern "C" void app_main(void) {
 #endif
     rtc_crash_record_event("boot_complete");
 
-    ESP_LOGI(TAG, "Hardware & Network Initialization complete. Free heap: %lu bytes",
-             (unsigned long)esp_get_free_heap_size());
+    size_t free_heap = esp_get_free_heap_size();
+    size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    ESP_LOGI(TAG, "Hardware & Network Initialization complete. Free heap: %lu bytes (internal DRAM: %lu bytes)",
+             (unsigned long)free_heap, (unsigned long)internal_free);
+    if (internal_free < 49152) {
+        ESP_LOGW(TAG, "Low internal DRAM at boot (%lu bytes < 48 KB); Wi-Fi/MQTT/OTA tasks may fail",
+                 (unsigned long)internal_free);
+    }
 }

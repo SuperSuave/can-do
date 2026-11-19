@@ -13,6 +13,7 @@ import {
   decodeAirflowCanByte,
   decodeAirflowEntityState,
   decodeDriverOnlyCanFrame,
+  decodeOutdoorTempCanFrame,
   decodeAmbientCanFrame,
   decodeSignedInt8,
   getAmbientColorHex,
@@ -443,6 +444,24 @@ test('catalog seat comfort entities all define full 8-byte 0x4A2 steps and clima
   for (const opt of syncCmd.options) {
     assert.ok(Array.isArray(opt.steps) && opt.steps.length >= 2);
   }
+});
+
+test('decodeOutdoorTempCanFrame decodes 0x31C primary and 0x227/0x226 fallbacks while rejecting 0xFF sentinels', () => {
+  assert.strictEqual(decodeOutdoorTempCanFrame('31c', [0x79, 0x7a, 0xff, 0x00, 0x00, 0x5c, 0x09, 0x00]), 19.5);
+  assert.strictEqual(decodeOutdoorTempCanFrame('31c', [0x02]), -40);
+  assert.strictEqual(decodeOutdoorTempCanFrame('31c', [0xca]), 60);
+  assert.strictEqual(decodeOutdoorTempCanFrame('31c', [0x00]), null);
+  assert.strictEqual(decodeOutdoorTempCanFrame('31c', [0x01]), null);
+  assert.strictEqual(decodeOutdoorTempCanFrame('31c', [0xcb]), null);
+  assert.strictEqual(decodeOutdoorTempCanFrame('31c', [0xff]), null);
+
+  assert.strictEqual(decodeOutdoorTempCanFrame('227', [0x02, 0x4a, 0xe0, 0x0c, 0x00, 0xf1, 0x5f, 0x03]), 19.4);
+  assert.strictEqual(decodeOutdoorTempCanFrame('227', [0x02, 0x2c, 0xe1, 0x0c, 0x00, 0xf1, 0xd7, 0x03]), 27.8);
+  assert.strictEqual(decodeOutdoorTempCanFrame('227', [0x02, 0xa9, 0x79, 0x0d, 0x00, 0xf0, 0xff, 0x07]), null);
+
+  assert.strictEqual(decodeOutdoorTempCanFrame('226', [0x00, 0x00, 0x00, 0x3c]), 20);
+  assert.strictEqual(decodeOutdoorTempCanFrame('226', [0x06, 0xdd, 0x71, 0xff]), null);
+  assert.strictEqual(decodeOutdoorTempCanFrame('226', [0x00, 0x00, 0x00, 0x65]), null);
 });
 
 

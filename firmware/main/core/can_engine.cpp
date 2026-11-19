@@ -1560,7 +1560,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                             if (strcasecmp(option.label.c_str(), step.command.c_str()) == 0 || (entity.options.size() == 1 && step.command.empty())) {
                                 tx_can_id = entity.action_can_id;
                                 tx_delay_ms = entity.delay_ms;
-                                tx_steps = option.steps;
+                                tx_steps = catalog_steps_to_action_steps(option.steps);
                                 executed_inline = true;
                                 break;
                             }
@@ -1794,7 +1794,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                 }
                 uint32_t tx_can_id = entity.action_can_id ? entity.action_can_id : entity.state_can_id;
                 mitm_arm_entity(entity.id);
-                execute_can_burst(tx_can_id, target_opt->steps, entity.delay_ms);
+                execute_can_burst(tx_can_id, catalog_steps_to_action_steps(target_opt->steps), entity.delay_ms);
                 resolved_label = target_opt->label;
             } else if (is_ambient_entity_id(entity.id) && ambient_anim_start_by_name(target_label)) {
                 resolved_label = ambient_anim_get_effect_name();
@@ -2484,7 +2484,7 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
 
     uint32_t cid = entity.action_can_id ? entity.action_can_id : entity.state_can_id;
     mitm_arm_entity(entity.id);
-    bool ok = queue_action_steps(cid, entity.delay_ms, matched_opt->steps, entity.id);
+    bool ok = queue_action_steps(cid, entity.delay_ms, catalog_steps_to_action_steps(matched_opt->steps), entity.id);
     if (ok) {
         {
             std::lock_guard<std::mutex> lock(g_catalog_mutex);
@@ -2701,18 +2701,44 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
         }
     }
 
-    // Outdoor Temperature (0x226 Byte 3 = raw - 40 C)
-    if (identifier == 0x226 && data_length_code >= 4) {
-        uint8_t raw = data[3];
-        if (raw > 0 && raw < 255) {
-            int c = (int)raw - 40;
-            static int s_last_temp = 999;
-            static uint32_t s_last_amb_ms = 0;
-            if (c != s_last_temp && (now_ms - s_last_amb_ms >= 100)) {
-                s_last_temp = c;
+    // Outdoor Temperature (Primary: 0x31C D1 = raw*0.5 - 41 C; Fallbacks: 0x227 CLU_OutTempF, 0x226 D4 CLU_OutTempC)
+    if (identifier == 0x31C || identifier == 0x227 || identifier == 0x226) {
+        static int s_last_temp_tenths = 9999;
+        static uint32_t s_last_amb_ms = 0;
+        static uint32_t s_last_31c_temp_ms = 0;
+        float temp_c = 0.0f;
+        bool valid = false;
+
+        if (identifier == 0x31C && data_length_code >= 1) {
+            uint8_t raw = data[0];
+            if (raw >= 2 && raw <= 202) {
+                temp_c = (raw * 0.5f) - 41.0f;
+                s_last_31c_temp_ms = now_ms;
+                valid = true;
+            }
+        } else if (s_last_31c_temp_ms == 0 || (now_ms - s_last_31c_temp_ms > 5000)) {
+            if (identifier == 0x227 && data_length_code >= 8) {
+                uint8_t raw_f = ((data[7] & 0x07) << 5) | ((data[6] >> 3) & 0x1F);
+                if (raw_f > 0 && raw_f <= 180) {
+                    temp_c = ((float)((int)raw_f - 40) - 32.0f) * (5.0f / 9.0f);
+                    valid = true;
+                }
+            } else if (identifier == 0x226 && data_length_code >= 4) {
+                uint8_t raw_c = data[3];
+                if (raw_c > 0 && raw_c <= 100) {
+                    temp_c = (float)((int)raw_c - 40);
+                    valid = true;
+                }
+            }
+        }
+
+        if (valid) {
+            int tenths = (int)std::lroundf(temp_c * 10.0f);
+            if (tenths != s_last_temp_tenths && (now_ms - s_last_amb_ms >= 100)) {
+                s_last_temp_tenths = tenths;
                 s_last_amb_ms = now_ms;
                 char temp_str[16];
-                snprintf(temp_str, sizeof(temp_str), "%d °C", c);
+                snprintf(temp_str, sizeof(temp_str), "%.1f °C", tenths / 10.0f);
                 emit_live_entity_state("outdoor_temperature", temp_str);
             }
         }

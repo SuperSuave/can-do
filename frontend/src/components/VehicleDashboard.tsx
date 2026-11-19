@@ -23,6 +23,7 @@ import {
   decodeChargePortCanFrame,
   decodeChargingCanFrame,
   decodeDriverOnlyCanFrame,
+  decodeOutdoorTempCanFrame,
   decodeRearSeatEntityUpdate,
   decodeSeatComfortByte,
   decodeSeatLevel,
@@ -181,6 +182,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
   const [ambientTempC, setAmbientTempC] = useState<number | null>(null);
   const [tempUnit, setTempUnit] = useState<'F' | 'C'>(() => (unitSystem === 'metric' ? 'C' : 'F'));
   const odometerKmRef = useRef<number | null>(null);
+  const lastOutdoor31cMsRef = useRef<number>(0);
   const driverTempFRef = useRef<number | null>(null);
   const passengerTempFRef = useRef<number | null>(null);
 
@@ -690,7 +692,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       speed: getCanId('cluster_vehicle_speed', '1ac'),
       speedName: findCmd('cluster_vehicle_speed')?.ha_metadata?.name || 'Cluster Speedometer',
       wheelSpeeds: getCanId('wheel_speeds', '0a2'),
-      ambientTemp: getCanId('outdoor_temperature', getCanId('cond_ambient_temperature', '226')),
+      ambientTemp: getCanId('outdoor_temperature', getCanId('cond_ambient_temperature', '31c')),
       ambientTempName: findCmd('outdoor_temperature')?.ha_metadata?.name || findCmd('cond_ambient_temperature')?.ha_metadata?.name || 'Outdoor Temperature',
       hvSoc: getCanId('cond_hv_battery_soc', '2fc'),
       hvSocName: findCmd('cond_hv_battery_soc')?.ha_metadata?.name || 'Traction Battery SOC',
@@ -1172,7 +1174,10 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       }
     } else if (entity === 'outdoor_temperature' || entity === 'cond_ambient_temperature' || entity === 'ambient_temperature') {
       const match = stateStr.match(/(-?\d+(\.\d+)?)/);
-      if (match) setAmbientTempC(parseFloat(match[1]));
+      if (match) {
+        const val = parseFloat(match[1]);
+        if (val >= -40 && val <= 60) setAmbientTempC(val);
+      }
     } else if (entity === 'wheel_speeds' || entity === 'tpms_tire_pressures' || entity === 'tpms') {
       const match = stateStr.match(/fl:\s*(\d+).*fr:\s*(\d+).*rl:\s*(\d+).*rr:\s*(\d+)/i);
       if (match) {
@@ -1341,6 +1346,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     const hexClean = hexPayload.trim().replace(/\s+/g, '');
     const bytes = (hexClean.match(/.{1,2}/g) || []).map(h => parseInt(h, 16));
     const now = new Date().toLocaleTimeString();
+    const nowMs = Date.now();
 
     // Road Speed (Cluster 0x1AC Byte 0 = kph, or Wheel Speeds 0x0A2 16-bit LE = factor 0.03125 kph, or 0x1A0)
     if ((normId === canMappings.speed || normId === '1ac') && bytes.length >= 1) {
@@ -1364,13 +1370,16 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       recordLog(idFormatted, 'ESC Road Speed', `${kph} km/h (${mph} mph)`, hexPayload, now);
     }
 
-    // Ambient Outdoor Temperature (Dynamically mapped from catalog, e.g. 0x226)
-    else if ((normId === canMappings.ambientTemp || normId === '226') && bytes.length >= 4) {
-      const raw = bytes[3];
-      if (raw >= 0 && raw < 255) {
-        const c = raw - 40;
-        setAmbientTempC(prev => (prev === c ? prev : c));
-        recordLog(idFormatted, canMappings.ambientTempName, `${c}°C (${Math.round(c * 1.8 + 32)}°F)`, hexPayload, now);
+    // Ambient Outdoor Temperature (Primary: 0x31C D1; Metric fallback: 0x226 D4)
+    else if (normId === canMappings.ambientTemp || normId === '31c' || normId === '226') {
+      const is31c = normId === '31c';
+      if (is31c || nowMs - lastOutdoor31cMsRef.current > 5000) {
+        const c = decodeOutdoorTempCanFrame(normId, bytes);
+        if (c !== null) {
+          if (is31c) lastOutdoor31cMsRef.current = nowMs;
+          setAmbientTempC(prev => (prev === c ? prev : c));
+          recordLog(idFormatted, canMappings.ambientTempName, `${c}°C (${Math.round(c * 1.8 + 32)}°F)`, hexPayload, now);
+        }
       }
     }
 
@@ -1561,7 +1570,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
       }
     }
 
-    // Odometer (Dynamically mapped from catalog, e.g. 0x227: D2-D4 24-bit LE in 0.1 km units)
+    // Odometer (Dynamically mapped from catalog, e.g. 0x227: D2-D4 24-bit LE in 0.1 km units; US °F OutTemp fallback on bits 51-58)
     else if ((normId === canMappings.odometer || normId === '227') && bytes.length >= 4) {
       const rawOdo = bytes[1] | (bytes[2] << 8) | (bytes[3] << 16);
       if (rawOdo > 0) {
@@ -1570,6 +1579,13 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         const displayOdo = formatOdometerFromKm(km, unitSystem);
         setOdometer(displayOdo);
         recordLog(idFormatted, canMappings.odometerName, `${displayOdo.toLocaleString()} ${unitSystem === 'metric' ? 'km' : 'mi'}`, hexPayload, now);
+      }
+      if (bytes.length >= 8 && nowMs - lastOutdoor31cMsRef.current > 5000) {
+        const c = decodeOutdoorTempCanFrame('227', bytes);
+        if (c !== null) {
+          setAmbientTempC(prev => (prev === c ? prev : c));
+          recordLog(idFormatted, canMappings.ambientTempName, `${c}°C (${Math.round(c * 1.8 + 32)}°F)`, hexPayload, now);
+        }
       }
     }
 

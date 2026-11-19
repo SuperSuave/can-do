@@ -1,12 +1,14 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <vector>
 #include <array>
 #include <memory>
 #include <atomic>
 #include <mutex>
+#include "psram_alloc.h"
 
 struct SustainedState {
     std::mutex mtx;
@@ -164,15 +166,43 @@ struct ActionStep {
     std::vector<ActionStep> sequence;
 };
 
+struct CatalogStep {
+    ActionType type = ActionType::TRANSMIT_FRAME; // TRANSMIT_FRAME, DELAY, or HUD_NAV
+    uint32_t can_id = 0;
+    uint32_t delay_ms = 0;
+    uint8_t bus = 0;
+    uint8_t payload[8] = {0};
+    uint8_t mask = 0;
+    uint8_t repeat = 1;
+    uint8_t nav_icon = 0;
+};
+
+inline std::vector<ActionStep> catalog_steps_to_action_steps(const PsramVector<CatalogStep>& src) {
+    std::vector<ActionStep> out;
+    out.reserve(src.size());
+    for (const auto& cs : src) {
+        ActionStep a;
+        a.type = cs.type;
+        a.can_id = cs.can_id;
+        a.delay_ms = cs.delay_ms;
+        a.bus = cs.bus;
+        std::memcpy(a.payload, cs.payload, sizeof(a.payload));
+        a.mask = cs.mask;
+        a.repeat = cs.repeat;
+        a.nav_icon = cs.nav_icon;
+        out.push_back(std::move(a));
+    }
+    return out;
+}
+
 struct EntityOption {
     std::string label;
-    std::string requires_feature;
     bool is_default = false;
     uint8_t match_payload[8] = {0};
     uint8_t match_mask = 0;
     uint8_t invert_mask = 0; // Bit set if comparison is inverted ('!0x..')
     uint8_t byte_masks[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
-    std::vector<ActionStep> steps;
+    PsramVector<CatalogStep> steps;
 };
 
 enum class MitmMode {
@@ -185,8 +215,8 @@ struct EntityMitmConfig {
     MitmMode mode = MitmMode::NONE;
     uint8_t source_bus = 1;
     uint8_t target_bus = 0;
-    std::vector<uint32_t> block_can_ids;
-    std::vector<uint32_t> reverse_block_can_ids;
+    PsramVector<uint32_t> block_can_ids;
+    PsramVector<uint32_t> reverse_block_can_ids;
     bool has_match = false;
     uint8_t match_payload[8] = {0};
     uint8_t match_mask = 0;
@@ -208,7 +238,7 @@ struct CanEntity {
     uint8_t action_bus = 0;
     EntityMitmConfig mitm;
 
-    std::vector<EntityOption> options;
+    PsramVector<EntityOption> options;
     std::string current_state = "";
 };
 

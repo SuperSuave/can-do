@@ -155,3 +155,27 @@ def build_action_steps(
         )
 
     return steps
+
+
+def decode_outdoor_temperature_c(
+    p_31c: list[int] | None = None,
+    p_227: list[int] | None = None,
+    p_226: list[int] | None = None,
+) -> float | None:
+    """Decode E-GMP outdoor ambient temperature in °C from 0x31C (primary) or 0x227/0x226 fallbacks."""
+    if isinstance(p_31c, list) and len(p_31c) >= 1:
+        raw = p_31c[0]
+        if 2 <= raw <= 202:
+            return round(raw * 0.5 - 41.0, 1)
+
+    if isinstance(p_227, list) and len(p_227) >= 8:
+        raw_f = ((p_227[7] & 0x07) << 5) | ((p_227[6] >> 3) & 0x1F)
+        if 0 < raw_f <= 180:
+            return round(((raw_f - 40) - 32.0) / 1.8, 2)
+
+    if isinstance(p_226, list) and len(p_226) >= 4:
+        raw_c = p_226[3]
+        if 0 < raw_c <= 100:
+            return float(raw_c - 40)
+
+    return None

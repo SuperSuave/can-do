@@ -11,13 +11,15 @@
 #include <type_traits>
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"
+#include "sdkconfig.h"
 #include "timezone_mgr.h"
 
 static const char* TAG = "CATALOG_PARSER";
 
-std::vector<CanEntity> global_catalog;
-static std::list<CanEntity> s_dynamic_entities;
-std::unordered_map<uint32_t, std::vector<CanEntity*>> catalog_by_can_id;
+PsramVector<CanEntity> global_catalog;
+static PsramList<CanEntity> s_dynamic_entities;
+PsramUnorderedMap<uint32_t, PsramVector<CanEntity*>> catalog_by_can_id;
 std::vector<AutomationRule> global_automations;
 std::mutex g_catalog_mutex;
 std::mutex g_automations_mutex;
@@ -30,8 +32,8 @@ struct CompiledMitmRule {
     int64_t active_until_ms = 0;
 };
 
-static std::vector<CompiledMitmRule> s_mitm_rules;
-static std::unordered_map<uint32_t, std::vector<size_t>> s_mitm_rules_by_can_id;
+static PsramVector<CompiledMitmRule> s_mitm_rules;
+static PsramUnorderedMap<uint32_t, PsramVector<size_t>> s_mitm_rules_by_can_id;
 static std::mutex s_mitm_mutex;
 
 static void rebuild_mitm_rules_locked(void) {
@@ -46,8 +48,8 @@ static void rebuild_mitm_rules_locked(void) {
         }
     }
 
-    std::vector<CompiledMitmRule> new_rules;
-    std::unordered_map<uint32_t, std::vector<size_t>> new_by_can_id;
+    PsramVector<CompiledMitmRule> new_rules;
+    PsramUnorderedMap<uint32_t, PsramVector<size_t>> new_by_can_id;
 
     auto collect_entity = [&](const CanEntity& entity) {
         if (entity.mitm.mode == MitmMode::NONE) return;
@@ -1040,30 +1042,20 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
     return false;
 }
 
-static void parse_steps(cJSON* steps_array, std::vector<ActionStep>& out_steps) {
-    if (!steps_array) return;
-    cJSON* step_json = nullptr;
-    cJSON_ArrayForEach(step_json, steps_array) {
-        ActionStep step;
-        if (parse_action_step(step_json, step)) {
-            out_steps.push_back(step);
-        }
-    }
-}
-
-static void synthesize_step_from_payload(cJSON* payload_json, const CanEntity& entity, ActionStep& step) {
-    step.type = ActionType::TRANSMIT_FRAME;
-    step.can_id = entity.action_can_id ? entity.action_can_id : entity.state_can_id;
-    step.bus = entity.action_bus;
-    step.delay_ms = entity.delay_ms;
+static void parse_catalog_payload(cJSON* payload_json, CatalogStep& step) {
+    if (!payload_json) return;
     if (cJSON_IsString(payload_json) && payload_json->valuestring) {
-        std::string clean_hex;
-        for (const char* ch = payload_json->valuestring; *ch; ++ch) {
-            if (isxdigit((unsigned char)*ch)) clean_hex += *ch;
+        char clean_hex[17] = {0};
+        size_t clean_len = 0;
+        for (const char* ch = payload_json->valuestring; *ch && clean_len < 16; ++ch) {
+            if (isxdigit((unsigned char)*ch)) {
+                clean_hex[clean_len++] = *ch;
+            }
         }
-        for (size_t i = 0; i + 1 < clean_hex.length() && (i / 2) < 8; i += 2) {
-            uint8_t byte_idx = (uint8_t)(i / 2);
-            step.payload[byte_idx] = (uint8_t)strtoul(clean_hex.substr(i, 2).c_str(), nullptr, 16);
+        for (size_t i = 0; i + 1 < clean_len && (i / 2) < 8; i += 2) {
+            uint8_t byte_idx = static_cast<uint8_t>(i / 2);
+            char hex_byte[3] = { clean_hex[i], clean_hex[i + 1], '\0' };
+            step.payload[byte_idx] = static_cast<uint8_t>(strtoul(hex_byte, nullptr, 16));
             step.mask |= (1 << byte_idx);
         }
     } else {
@@ -1083,7 +1075,74 @@ static void synthesize_step_from_payload(cJSON* payload_json, const CanEntity& e
     }
 }
 
-bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
+static bool parse_catalog_step(cJSON* a_item, CatalogStep& step) {
+    if (!a_item) return false;
+    cJSON* type = cJSON_GetObjectItem(a_item, "type");
+    const char* type_str = cJSON_IsString(type) ? type->valuestring : "";
+
+    if (strcmp(type_str, "delay") == 0) {
+        step.type = ActionType::DELAY;
+        cJSON* ms = cJSON_GetObjectItem(a_item, "ms");
+        if (!ms) ms = cJSON_GetObjectItem(a_item, "delay_ms");
+        if (!ms) ms = cJSON_GetObjectItem(a_item, "delay");
+        if (!ms) ms = cJSON_GetObjectItem(a_item, "dwell_ms");
+        if (cJSON_IsNumber(ms)) step.delay_ms = static_cast<uint32_t>(ms->valueint);
+        return true;
+    }
+    if (strcmp(type_str, "hud_nav") == 0 || strcmp(type_str, "nav") == 0) {
+        step.type = ActionType::HUD_NAV;
+        cJSON* ic = cJSON_GetObjectItem(a_item, "icon");
+        if (ic && cJSON_IsNumber(ic)) step.nav_icon = static_cast<uint8_t>(ic->valueint);
+        else step.nav_icon = 1;
+        return true;
+    }
+
+    step.type = ActionType::TRANSMIT_FRAME;
+    cJSON* cid = cJSON_GetObjectItem(a_item, "can_id");
+    if (!cid) cid = cJSON_GetObjectItem(a_item, "action_can_id");
+    if (cJSON_IsString(cid)) step.can_id = strtol(cid->valuestring, nullptr, 16);
+    else if (cJSON_IsNumber(cid)) step.can_id = static_cast<uint32_t>(cid->valueint);
+
+    cJSON* bus = cJSON_GetObjectItem(a_item, "bus");
+    if (cJSON_IsNumber(bus)) step.bus = static_cast<uint8_t>(bus->valueint);
+
+    cJSON* rep = cJSON_GetObjectItem(a_item, "repeat");
+    if (cJSON_IsNumber(rep)) step.repeat = static_cast<uint8_t>(rep->valueint);
+
+    cJSON* del = cJSON_GetObjectItem(a_item, "delay_ms");
+    if (!del) del = cJSON_GetObjectItem(a_item, "dwell_ms");
+    if (!del) del = cJSON_GetObjectItem(a_item, "delay");
+    if (!del) del = cJSON_GetObjectItem(a_item, "dwell");
+    if (cJSON_IsNumber(del)) step.delay_ms = static_cast<uint32_t>(del->valueint);
+
+    parse_catalog_payload(cJSON_GetObjectItem(a_item, "payload"), step);
+    return true;
+}
+
+static void parse_steps(cJSON* steps_array, PsramVector<CatalogStep>& out_steps) {
+    if (!steps_array || !cJSON_IsArray(steps_array)) return;
+    int count = cJSON_GetArraySize(steps_array);
+    if (count > 0) {
+        out_steps.reserve(count);
+    }
+    cJSON* step_json = nullptr;
+    cJSON_ArrayForEach(step_json, steps_array) {
+        CatalogStep step;
+        if (parse_catalog_step(step_json, step)) {
+            out_steps.push_back(step);
+        }
+    }
+}
+
+static void synthesize_step_from_payload(cJSON* payload_json, const CanEntity& entity, CatalogStep& step) {
+    step.type = ActionType::TRANSMIT_FRAME;
+    step.can_id = entity.action_can_id ? entity.action_can_id : entity.state_can_id;
+    step.bus = entity.action_bus;
+    step.delay_ms = entity.delay_ms;
+    parse_catalog_payload(payload_json, step);
+}
+
+bool parse_entity(cJSON* entity_json, CanEntity& out_entity, bool include_discovery_meta) {
     cJSON* id = cJSON_GetObjectItem(entity_json, "id");
     if (cJSON_IsString(id)) out_entity.id = id->valuestring;
     else return false;
@@ -1093,10 +1152,10 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
     if (ha_meta) {
         cJSON* name = cJSON_GetObjectItem(ha_meta, "name");
         cJSON* domain = cJSON_GetObjectItem(ha_meta, "domain");
-        cJSON* icon = cJSON_GetObjectItem(ha_meta, "icon");
+        cJSON* icon = include_discovery_meta ? cJSON_GetObjectItem(ha_meta, "icon") : nullptr;
         if (cJSON_IsString(name)) out_entity.ha_name = name->valuestring;
         if (cJSON_IsString(domain)) out_entity.ha_domain = domain->valuestring;
-        if (cJSON_IsString(icon)) out_entity.ha_icon = icon->valuestring;
+        if (icon && cJSON_IsString(icon)) out_entity.ha_icon = icon->valuestring;
     }
 
     // Network configuration
@@ -1138,7 +1197,7 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
             if (cJSON_IsNumber(dst_bus) && dst_bus->valueint >= 0 && dst_bus->valueint <= 4) {
                 out_entity.mitm.target_bus = static_cast<uint8_t>(dst_bus->valueint);
             }
-            auto parse_id_array = [](cJSON* arr, std::vector<uint32_t>& out_ids) {
+            auto parse_id_array = [](cJSON* arr, PsramVector<uint32_t>& out_ids) {
                 if (!cJSON_IsArray(arr)) return;
                 cJSON* item = nullptr;
                 cJSON_ArrayForEach(item, arr) {
@@ -1183,26 +1242,23 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
             cJSON* label = cJSON_GetObjectItem(opt_json, "label");
             if (cJSON_IsString(label)) opt.label = label->valuestring;
 
-            cJSON* req_feat = cJSON_GetObjectItem(opt_json, "requires_feature");
-            if (cJSON_IsString(req_feat)) opt.requires_feature = req_feat->valuestring;
-
             cJSON* def = cJSON_GetObjectItem(opt_json, "default");
             if (cJSON_IsBool(def)) opt.is_default = cJSON_IsTrue(def);
 
             parse_byte_match(cJSON_GetObjectItem(opt_json, "match"), opt.match_payload, opt.match_mask, opt.invert_mask, opt.byte_masks, cJSON_GetObjectItem(opt_json, "mask"));
             parse_steps(cJSON_GetObjectItem(opt_json, "steps"), opt.steps);
 
-            // If no explicit steps array but option provides CAN payload (e.g. Kids Mode / Quiet Mode), synthesize an ActionStep
+            // If no explicit steps array but option provides CAN payload (e.g. Kids Mode / Quiet Mode), synthesize a CatalogStep
             cJSON* opt_payload = cJSON_GetObjectItem(opt_json, "payload");
             if (opt.steps.empty() && opt_payload) {
-                ActionStep step;
+                CatalogStep step;
                 synthesize_step_from_payload(opt_payload, out_entity, step);
                 opt.steps.push_back(step);
             }
 
             // If no explicit steps array in a hud_nav entity, extract icon code from match (e.g. cluster_hud_navigation_tbt)
             if (opt.steps.empty() && is_hud_nav) {
-                ActionStep step;
+                CatalogStep step;
                 step.type = ActionType::HUD_NAV;
                 cJSON* m = cJSON_GetObjectItem(opt_json, "match");
                 if (m) {
@@ -1228,11 +1284,11 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
             parse_byte_match(root_match, opt.match_payload, opt.match_mask, opt.invert_mask, opt.byte_masks, cJSON_GetObjectItem(entity_json, "mask"));
             parse_steps(root_steps, opt.steps);
             if (opt.steps.empty() && root_payload) {
-                ActionStep step;
+                CatalogStep step;
                 synthesize_step_from_payload(root_payload, out_entity, step);
                 opt.steps.push_back(step);
             }
-            out_entity.options.push_back(opt);
+            out_entity.options.push_back(std::move(opt));
         }
     }
 
@@ -1604,13 +1660,23 @@ static bool stream_parse_array_from_file(FILE* f, const char* target_key, Handle
 }
 
 bool load_catalog_from_fs(const char* filepath) {
-    ESP_LOGI(TAG, "Loading catalog from %s (free heap: %lu)", filepath, (unsigned long)esp_get_free_heap_size());
+    size_t total_before = esp_get_free_heap_size();
+    size_t internal_before = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    ESP_LOGI(TAG, "Loading catalog from %s (free heap: %lu, internal free: %lu)",
+             filepath, (unsigned long)total_before, (unsigned long)internal_before);
     // On ESP32-C3 CAN coprocessor mode, catalog and UI are hosted and executed on the UI bridge.
     // Full catalog parsing into C3 RAM requires >150KB heap; skip if heap is low to prevent bad_alloc abort.
-    if (esp_get_free_heap_size() < 120000) {
+    if (total_before < 120000) {
         ESP_LOGI(TAG, "Skipping catalog RAM caching to preserve memory for CAN coprocessor.");
         return true;
     }
+#if CONFIG_SPIRAM
+    if (internal_before < 40960 && global_catalog.empty()) {
+        ESP_LOGW(TAG, "Skipping catalog RAM caching to preserve internal DRAM (%lu B free)",
+                 (unsigned long)internal_before);
+        return true;
+    }
+#endif
     struct stat st;
     if (stat(filepath, &st) != 0) {
         ESP_LOGE(TAG, "Failed to stat catalog file: %s", filepath);
@@ -1626,7 +1692,7 @@ bool load_catalog_from_fs(const char* filepath) {
     // Heap-backed 4KB I/O buffer (automatically freed on fclose by libc)
     setvbuf(f, nullptr, _IOFBF, 4096);
 
-    std::vector<CanEntity> new_catalog;
+    PsramVector<CanEntity> new_catalog;
     std::vector<AutomationRule> new_autos;
 
     auto commit_catalog = [&]() {
@@ -1647,8 +1713,13 @@ bool load_catalog_from_fs(const char* filepath) {
             auto_count = global_automations.size();
             id_count = catalog_by_can_id.size();
         }
-        ESP_LOGI(TAG, "Catalog loaded: %zu entities, %zu automations, %zu indexed CAN IDs",
-                 cat_count, auto_count, id_count);
+        size_t internal_after = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        ESP_LOGI(TAG, "Catalog loaded: %zu entities, %zu automations, %zu indexed CAN IDs (internal free: %lu B)",
+                 cat_count, auto_count, id_count, (unsigned long)internal_after);
+        if (internal_after < 49152) {
+            ESP_LOGW(TAG, "Low internal DRAM after catalog load (%lu B < 48 KB); MQTT/Wi-Fi/OTA allocations at risk",
+                     (unsigned long)internal_after);
+        }
     };
 
     // For large catalog files (> 16KB), use low-RAM streaming parser
@@ -1660,8 +1731,8 @@ bool load_catalog_from_fs(const char* filepath) {
         clearerr(f);
         bool ok = stream_parse_array_from_file(f, "commands", [&](cJSON* cmd_json) {
             CanEntity entity;
-            if (parse_entity(cmd_json, entity)) {
-                new_catalog.push_back(entity);
+            if (parse_entity(cmd_json, entity, false)) {
+                new_catalog.push_back(std::move(entity));
             }
         });
         if (!ok) {
@@ -1669,8 +1740,8 @@ bool load_catalog_from_fs(const char* filepath) {
             clearerr(f);
             stream_parse_array_from_file(f, "entities", [&](cJSON* cmd_json) {
                 CanEntity entity;
-                if (parse_entity(cmd_json, entity)) {
-                    new_catalog.push_back(entity);
+                if (parse_entity(cmd_json, entity, false)) {
+                    new_catalog.push_back(std::move(entity));
                 }
             });
         }
@@ -1721,8 +1792,8 @@ bool load_catalog_from_fs(const char* filepath) {
         cJSON* cmd_json = nullptr;
         cJSON_ArrayForEach(cmd_json, cmds_array) {
             CanEntity entity;
-            if (parse_entity(cmd_json, entity)) {
-                new_catalog.push_back(entity);
+            if (parse_entity(cmd_json, entity, false)) {
+                new_catalog.push_back(std::move(entity));
             }
         }
     }

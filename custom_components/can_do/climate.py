@@ -15,7 +15,7 @@ from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .can_utils import build_action_steps
+from .can_utils import build_action_steps, decode_outdoor_temperature_c
 from .catalog_loader import get_d_index
 from .const import DOMAIN
 from .coordinator import CanDoDataCoordinator
@@ -76,10 +76,11 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
     async def async_added_to_hass(self) -> None:
         """Register CAN state listener and auxiliary telemetry listeners."""
         await super().async_added_to_hass()
-        # Listen to ambient temp (0x226), climate telemetry (0x31B, 0x541, 0x418, 0x465, 0x496, 0x49C, 0x475, 0x438, 0x453, 0x587),
+        # Listen to ambient temp (0x31C, 0x227, 0x226, outdoor_temperature), climate telemetry (0x31B, 0x541, 0x418, 0x465, 0x496, 0x49C, 0x475, 0x438, 0x453, 0x587),
         # VCU HVAC/contactor status (0x2AD, 0x2AE), DATC blower (0x384), TMU (0x39B), and direct entity state keys.
         aux_ids = (
-            "0x226", "0x31b", "0x541", "0x418", "0x465", "0x496", "0x49c", "0x475",
+            "0x31c", "0x227", "0x226", "outdoor_temperature",
+            "0x31b", "0x541", "0x418", "0x465", "0x496", "0x49c", "0x475",
             "0x438", "0x453", "0x587", "0x2ad", "0x2ae", "0x384", "0x39b",
             "drivers_seat_comfort", "passengers_seat_comfort",
             "rear_left_seat_comfort", "rear_right_seat_comfort",
@@ -187,15 +188,22 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
 
     @property
     def current_temperature(self) -> float | None:
-        """Return current outdoor ambient temperature from CAN ID 0x226 Byte D4 ([B3])."""
-        payload = self.coordinator.get_can_payload("0x226")
-        if payload and len(payload) >= 4:
-            raw = payload[3]
-            if 0 < raw < 255:
-                temp_c = float(raw - 40)
-                if self.temperature_unit == UnitOfTemperature.FAHRENHEIT:
-                    return round(temp_c * 1.8 + 32, 1)
-                return round(temp_c, 1)
+        """Return current outdoor ambient temperature from 0x31C (primary) or 0x227/0x226 fallbacks."""
+        temp_c = decode_outdoor_temperature_c(
+            self.coordinator.get_can_payload("0x31c"),
+            self.coordinator.get_can_payload("0x227"),
+            self.coordinator.get_can_payload("0x226"),
+        )
+        if temp_c is None:
+            direct = self.coordinator.get_can_state("outdoor_temperature")
+            if isinstance(direct, (int, float)) and not isinstance(direct, bool):
+                val = float(direct)
+                if -40.0 <= val <= 60.0:
+                    temp_c = val
+        if temp_c is not None:
+            if self.temperature_unit == UnitOfTemperature.FAHRENHEIT:
+                return round(temp_c * 1.8 + 32.0, 1)
+            return round(temp_c, 1)
         return None
 
     @property

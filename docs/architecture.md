@@ -294,9 +294,16 @@ To prevent lock-order deadlocks, Task Watchdog (TWDT) resets, internal SRAM exha
    - Never call `load_automations_from_fs()` or heavy LittleFS parsers directly inside `MQTT_EVENT_DATA` (offload via `mqtt_auto_reload_task`).
    - In `MQTT_EVENT_CONNECTED`, only set `s_mqtt_connected = true` *after* `esp_mqtt_client_subscribe_multiple()` returns.
    - Keep `mqtt_cfg.network.timeout_ms <= 2000` so a stalled TCP write inside `esp_mqtt_task` never blocks `MQTT_API_LOCK` past `can_rx_task`'s 3,000 ms Task Watchdog.
-3. **Internal SRAM vs. PSRAM Threshold (`sdkconfig.defaults.esp32s3`)**:
+3. **Internal SRAM vs. PSRAM Allocation & Threshold (`sdkconfig.defaults.esp32s3`, `psram_alloc.h`)**:
    - Keep `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096`, `CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=32768`, `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y`, and `CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=6144`.
    - Raising `ALWAYSINTERNAL` to `16384` forces `cJSON`, `std::string`/`std::vector`, and socket buffers into internal DRAM and starves Wi-Fi/BLE DMA below the 32 KB reserve.
+   - **Sub-4 KB Internal DRAM Exhaustion Trap**: Even with `ALWAYSINTERNAL=4096`, every standard `malloc`/`new` <= 4096 bytes lands in internal DRAM until non-reserved internal SRAM hits 0 (leaving only the 32 KB `MALLOC_CAP_INTERNAL`-only reserve). Subsequent FreeRTOS tasks (`esp_mqtt_client_start()` -> `Error create mqtt task`, `network_ready_task` for SNTP/mDNS, `cloud_ota_task`) and SPI/Wi-Fi DMA drain that 32 KB reserve and silently fail.
+   - **Required Patterns**:
+     - Use `PsramVector` / `PsramList` / `PsramUnorderedMap` / `PsramAllocator` (`firmware/main/core/psram_alloc.h`) for bulk long-lived containers such as `global_catalog`, `catalog_by_can_id`, and `s_mitm_rules`.
+     - Never embed full ~730-byte automation `ActionStep` structs inside catalog options; `EntityOption::steps` uses compact `CatalogStep` (~24 bytes) and converts on-demand via `catalog_steps_to_action_steps()`.
+     - Back large non-ISR FreeRTOS queues (> 2 KB, e.g. `s_mqtt_pub_queue`, `s_mqtt_cmd_queue`, `s_gvret_queue`) with PSRAM via `heap_caps_malloc_prefer(..., MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT)` + `xQueueCreateStatic()`.
+     - **Flash/SPI Safety**: Never place stacks of tasks that access Flash, LittleFS, or NVS (`esp_mqtt_task`, `mqtt_cmd`, `httpd`) in PSRAM (`CONFIG_MQTT_TASK_STACK_ON_EXTERNAL_MEMORY` must remain off while `mqtt_event_handler` touches LittleFS/SPIFFS).
+     - Maintain steady-state `internal_free_heap >= 48 KB` in `/api/system/status`; never rely solely on `esp_get_free_heap_size()` on PSRAM targets.
 4. **Wi-Fi Mesh Selection & BLE Coexistence (`network_mgr.cpp`, `ble_mgr.cpp`)**:
    - `sta_config` must set `WIFI_ALL_CHANNEL_SCAN`, `WIFI_CONNECT_AP_BY_SIGNAL`, and `listen_interval = 1` so the STA associates with the strongest BSSID rather than the lowest channel mesh node under BLE coexistence sleep.
    - `NimBLEScan::setInterval()` and `setWindow()` in `h2zero/esp-nimble-cpp` take **milliseconds** (not `0.625 ms` HCI units).

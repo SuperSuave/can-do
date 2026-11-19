@@ -617,3 +617,33 @@ export class OptimisticHoldTracker {
     return false;
   }
 }
+
+/**
+ * Decodes E-GMP outdoor ambient temperature in °C from 0x31C (primary DATC_31_1000ms_2)
+ * or 0x227 (CLU_02_100ms_2 °F) / 0x226 (CLU_02_100ms_1 °C) fallbacks.
+ */
+export function decodeOutdoorTempCanFrame(normId: string, bytes: number[]): number | null {
+  const id = normId.toLowerCase().replace(/^0x/, '');
+  if (id === '31c' && bytes.length >= 1) {
+    const raw = bytes[0];
+    if (raw >= 2 && raw <= 202) {
+      return raw * 0.5 - 41;
+    }
+    return null;
+  }
+  if (id === '227' && bytes.length >= 8) {
+    const rawF = ((bytes[7] & 0x07) << 5) | ((bytes[6] >> 3) & 0x1F);
+    if (rawF > 0 && rawF <= 180) {
+      return Math.round((((rawF - 40) - 32) / 1.8) * 10) / 10;
+    }
+    return null;
+  }
+  if (id === '226' && bytes.length >= 4) {
+    const rawC = bytes[3];
+    if (rawC > 0 && rawC <= 100) {
+      return rawC - 40;
+    }
+    return null;
+  }
+  return null;
+}

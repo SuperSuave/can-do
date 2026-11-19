@@ -8,8 +8,8 @@
 #include <mutex>
 #include <atomic>
 
-extern std::vector<CanEntity> global_catalog;
-extern std::unordered_map<uint32_t, std::vector<CanEntity*>> catalog_by_can_id;
+extern PsramVector<CanEntity> global_catalog;
+extern PsramUnorderedMap<uint32_t, PsramVector<CanEntity*>> catalog_by_can_id;
 extern std::vector<AutomationRule> global_automations;
 extern std::mutex g_catalog_mutex;
 extern std::mutex g_automations_mutex;
@@ -29,7 +29,7 @@ ConditionOperator parse_operator(const char* op_str);
 bool parse_single_condition(cJSON* c_item, AutomationCondition& cond);
 bool parse_action_step(cJSON* a_item, ActionStep& step);
 
-bool parse_entity(cJSON* entity_json, CanEntity& out_entity);
+bool parse_entity(cJSON* entity_json, CanEntity& out_entity, bool include_discovery_meta = true);
 bool parse_automation(cJSON* auto_json, AutomationRule& out_rule);
 bool load_catalog_from_fs(const char* filepath);
 bool load_automations_from_fs(const char* filepath = "/spiffs/automations.json");

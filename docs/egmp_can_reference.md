@@ -354,7 +354,7 @@ The vehicle confirms active remote climate operation across multiple independent
 | **`0x5F5`** | `DATC1` | Byte `D2` | `0xFF` | `CR_Datc_DrTargetTempC`| Driver Displayed Target Temp in $0.5^\circ\text{C}$ steps |
 | **`0x5F5`** | `DATC1` | Byte `D3` | `0xFF` | `CR_Datc_DrTargetTempF`| Driver Displayed Target Temp in $^\circ\text{F}$ integer (`0x44` = 68°F, `0x48` = 72°F) |
 | **`0x31B`** | `HVAC` | Byte `D4` | `0x0F` | `CF_Datc_BlowerFan` | Blower fan speed status (`0` = Off, `1`–`8` = Active) |
-| **`0x226`** | `Outdoor_Temp` | Byte `D4` | `0xFF` | `CR_Datc_OutAirTemp` | Ambient outdoor temperature ($\text{Temp\_C} = \text{raw} - 40$) |
+| **`0x31C`** | `DATC_31_1000ms_2` | Byte `D1` | `0xFF` | `CR_Datc_OutTempC` | Ambient outdoor temperature ($\text{Temp\_C} = (\text{raw} \times 0.5) - 41$, valid `0x02`–`0xCA`; fallback `0x227` bits 51–58 `CLU_OutTempF` / `0x226` `D4` `CLU_OutTempC` which is `0xFF` on US °F vehicles) |
 
 ---
 

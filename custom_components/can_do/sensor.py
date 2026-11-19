@@ -1,6 +1,7 @@
 """Sensor platform for CAN Do integration with linear scaling & counter filtering."""
 
 import logging
+import re
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -21,6 +22,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .can_utils import decode_outdoor_temperature_c
 from .catalog_loader import check_match, get_d_index, parse_hex_val
 from .const import DOMAIN
 from .coordinator import CanDoDataCoordinator
@@ -319,10 +321,42 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
     def native_value(self) -> Any:
         """Return the current sensor state with human-interpreted values."""
         direct_entity_val = self.coordinator.get_can_state(self.entity_id_str)
+        cid = self.entity_id_str.lower()
+        is_outdoor_temp = (
+            cid in ("outdoor_temperature", "cond_ambient_temperature", "ambient_temperature")
+            or "ambient_temp" in cid
+            or (bool(self.state_can_id) and self.state_can_id.lower() in ("0x31c", "0x226") and "temp" in cid)
+        )
+        if is_outdoor_temp:
+            temp_c: float | None = None
+            if isinstance(direct_entity_val, (int, float)) and not isinstance(direct_entity_val, bool):
+                val = float(direct_entity_val)
+                if -40.0 <= val <= 60.0:
+                    temp_c = val
+            elif isinstance(direct_entity_val, str):
+                m = re.search(r"[-+]?\d*\.?\d+", direct_entity_val)
+                if m:
+                    try:
+                        val = float(m.group(0))
+                        if -40.0 <= val <= 60.0:
+                            temp_c = val
+                    except ValueError:
+                        pass
+            if temp_c is None:
+                temp_c = decode_outdoor_temperature_c(
+                    self.coordinator.get_can_payload("0x31c"),
+                    self.coordinator.get_can_payload("0x227"),
+                    self.coordinator.get_can_payload("0x226"),
+                )
+            if temp_c is not None:
+                if self._attr_native_unit_of_measurement == UnitOfTemperature.FAHRENHEIT:
+                    return round(temp_c * 1.8 + 32.0, 1)
+                return round(temp_c, 1)
+            return self._last_native_val
+
         if isinstance(direct_entity_val, (int, float)) and not isinstance(direct_entity_val, bool):
             return round(float(direct_entity_val), 2)
 
-        cid = self.entity_id_str.lower()
         if "bms" in cid:
             bms_aliases = {
                 "bms_display_soc": "bms_soc",
@@ -427,16 +461,6 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                     if self._attr_native_unit_of_measurement == UnitOfTemperature.FAHRENHEIT:
                         return 62 + (raw - 0x06)
                     return round(17.0 + (raw - 0x06) * 0.5, 1)
-
-        # 1D. Outdoor Temperature (0x226: Byte D4 = deg C + 40, [B3])
-        if cid == "outdoor_temperature" or "ambient_temp" in cid or cid == "cond_ambient_temperature" or (self.state_can_id.lower() == "0x226" and "temp" in cid):
-            if len(payload) >= 4:
-                raw = payload[3]
-                if 0 < raw < 255:
-                    temp_c = float(raw - 40)
-                    if self._attr_native_unit_of_measurement == UnitOfTemperature.FAHRENHEIT:
-                        return round(temp_c * 1.8 + 32, 1)
-                    return round(temp_c, 1)
 
         # 1E. HV Battery Module Temperatures (0x152: Byte D1=Min, D2=Max signed deg C)
         if "battery_temp" in cid or cid == "hv_battery_temperatures" or (self.state_can_id.lower() == "0x152" and "temp" in cid):
@@ -599,6 +623,28 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return raw CAN telemetry bytes and decoded thresholds as state attributes."""
         attrs: dict[str, Any] = {}
+        cid = self.entity_id_str.lower()
+        is_outdoor_temp = (
+            cid in ("outdoor_temperature", "cond_ambient_temperature", "ambient_temperature")
+            or "ambient_temp" in cid
+            or (bool(self.state_can_id) and self.state_can_id.lower() in ("0x31c", "0x226") and "temp" in cid)
+        )
+        if is_outdoor_temp:
+            temp_c = decode_outdoor_temperature_c(
+                self.coordinator.get_can_payload("0x31c"),
+                self.coordinator.get_can_payload("0x227"),
+                self.coordinator.get_can_payload("0x226"),
+            )
+            if temp_c is not None:
+                if temp_c <= 0.0:
+                    attrs["threshold"] = "Freezing (<= 0°C / 32°F)"
+                elif temp_c < 15.0:
+                    attrs["threshold"] = "Cold (< 15°C / 59°F)"
+                elif temp_c > 25.0:
+                    attrs["threshold"] = "Warm (> 25°C / 77°F)"
+                else:
+                    attrs["threshold"] = "Comfortable (15-25°C / 59-77°F)"
+
         if self.state_can_id:
             payload = self.coordinator.get_can_payload(self.state_can_id)
             if isinstance(payload, list):
@@ -606,18 +652,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                 for i, b in enumerate(payload):
                     attrs[f"D{i+1}"] = f"0x{b:02X}"
 
-                # Add human-friendly thresholds for ambient temperature
-                if self.state_can_id.lower() == "0x226" and len(payload) >= 4:
-                    raw = payload[3]
-                    if raw <= 40:
-                        attrs["threshold"] = "Freezing (<= 0°C / 32°F)"
-                    elif raw < 55:
-                        attrs["threshold"] = "Cold (< 15°C / 59°F)"
-                    elif raw > 65:
-                        attrs["threshold"] = "Warm (> 25°C / 77°F)"
-                    else:
-                        attrs["threshold"] = "Comfortable (15-25°C / 59-77°F)"
-                elif self.state_can_id.lower() == "0x5d6" and len(payload) >= 3:
+                if self.state_can_id.lower() == "0x5d6" and len(payload) >= 3:
                     if payload[0] > 0:
                         attrs["max_cell_voltage_v"] = round(payload[0] * 0.02, 2)
                     if payload[2] > 0:

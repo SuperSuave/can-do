@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.11.6-b007",
+  "can_do_version": "2026.11.6-b008",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -7046,23 +7046,23 @@
       "network": {
         "bus": 0,
         "type": "can_rx",
-        "state_can_id": "0x226",
-        "state_byte": "D4",
+        "state_can_id": "0x31C",
+        "state_byte": "D1",
         "mask": "0xFF",
         "unit": "°C",
-        "factor": 1,
-        "offset": -40,
+        "factor": 0.5,
+        "offset": -41,
         "min": -40,
-        "max": 215,
-        "step": 1
+        "max": 60,
+        "step": 0.5
       },
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Decoded outdoor ambient temperature from frame 0x226 Byte D4: raw - 40 °C (Start Bit 24, Length 8)."
+        "notes": "Decoded outdoor ambient temperature (CR_Datc_OutTempC) from DATC_31_1000ms_2 frame 0x31C Byte D1: (raw * 0.5) - 41 °C (valid raw 0x02..0xCA = -40..60 °C). Note: CLU_02_100ms_1 0x226 Byte D4 is CLU_OutTempC (always 0xFF on US °F clusters), and 0x227 bits 51-58 is CLU_OutTempF."
       },
       "subcategory": "Environment",
-      "state_can_id": "0x226"
+      "state_can_id": "0x31C"
     },
     {
       "id": "hv_battery_temperatures",

@@ -109,7 +109,7 @@ This document constitutes an exhaustive technical audit of all **154 entities** 
 | 60 | **`ambient_mood_lighting`** | `light` | `None` | - | - | 75 options | 0 pkts | VIRTUAL_OR_UDS |
 | 61 | **`vehicle_gear_state`** | `sensor` | `0x45` | 0x45 | - | D6 (mask 0x70) | 0 pkts | CUSTOM_OR_UNCONFIRMED |
 | 62 | **`cond_charging`** | `sensor` | `0x594` | **0x326** / **0x30B** | - | {'D3': '0x01'} | 0 pkts | **UPGRADED (Gen3 0x326 / 0x30B)** |
-| 63 | **`outdoor_temperature`** | `sensor` | `0x226` | 0x226 | CLU_02_100ms_1 | D4 (raw - 40°C) | 666 pkts | VERIFIED_GEN3_NATIVE |
+| 63 | **`outdoor_temperature`** | `sensor` | `0x31C` | 0x31C | DATC_31_1000ms_2 | D1 ((raw * 0.5) - 41°C) | 313 pkts | VERIFIED_GEN3_NATIVE |
 | 64 | **`hv_battery_temperatures`** | `sensor` | `0x152` | 0x152 | BMS_10_100ms_2 | 4 options | 819 pkts | VERIFIED_GEN3_NATIVE |
 | 65 | **`cond_hv_battery_soc`** | `sensor` | `0x2FC` | 0x2FC | BMS_02_100ms_2 | 3 options | 815 pkts | VERIFIED_GEN3_NATIVE |
 | 66 | **`cond_aux_12v_battery`** | `sensor` | `0x1CF` | 0x1CF | - | D6 (mask -) | 0 pkts | CUSTOM_OR_UNCONFIRMED |
