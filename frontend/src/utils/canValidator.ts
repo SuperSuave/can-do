@@ -346,22 +346,139 @@ export function validateCommand(
 
   // Bus validation
   const effectiveBus = command.network?.bus ?? command.bus;
-  if (effectiveBus !== undefined && (typeof effectiveBus !== 'number' || effectiveBus < 0)) {
+  if (effectiveBus !== undefined && (typeof effectiveBus !== 'number' || !Number.isInteger(effectiveBus) || effectiveBus < 0 || effectiveBus > 4)) {
     issues.push({
       type: 'error',
       field: 'bus',
-      message: 'Bus must be a non-negative integer (e.g. 0 for primary CAN, 1 for secondary).',
+      message: 'Bus must be an integer between 0 and 4 (e.g. 0 for primary CAN, 1 for secondary).',
       commandId: command.id
     });
   }
 
-  if (command.action_bus !== undefined && (typeof command.action_bus !== 'number' || command.action_bus < 0)) {
+  const effectiveActionBus = command.network?.action_bus ?? command.action_bus;
+  if (effectiveActionBus !== undefined && (typeof effectiveActionBus !== 'number' || !Number.isInteger(effectiveActionBus) || effectiveActionBus < 0 || effectiveActionBus > 4)) {
     issues.push({
       type: 'error',
       field: 'action_bus',
-      message: 'Action Bus must be a non-negative integer.',
+      message: 'Action Bus must be an integer between 0 and 4.',
       commandId: command.id
     });
+  }
+
+  // MITM bridge rule validation
+  const mitm = command.network?.mitm;
+  if (mitm) {
+    if (mitm.mode && !['none', 'always', 'on_demand'].includes(mitm.mode)) {
+      issues.push({
+        type: 'error',
+        field: 'network.mitm.mode',
+        message: `Invalid MITM mode '${mitm.mode}'. Must be 'none', 'always', or 'on_demand'.`,
+        commandId: command.id
+      });
+    }
+    if (mitm.source_bus !== undefined && (typeof mitm.source_bus !== 'number' || !Number.isInteger(mitm.source_bus) || mitm.source_bus < 0 || mitm.source_bus > 4)) {
+      issues.push({
+        type: 'error',
+        field: 'network.mitm.source_bus',
+        message: 'MITM Source Bus must be an integer between 0 and 4.',
+        commandId: command.id
+      });
+    }
+    if (mitm.target_bus !== undefined && (typeof mitm.target_bus !== 'number' || !Number.isInteger(mitm.target_bus) || mitm.target_bus < 0 || mitm.target_bus > 4)) {
+      issues.push({
+        type: 'error',
+        field: 'network.mitm.target_bus',
+        message: 'MITM Target Bus must be an integer between 0 and 4.',
+        commandId: command.id
+      });
+    }
+    if (
+      mitm.mode &&
+      mitm.mode !== 'none' &&
+      mitm.source_bus !== undefined &&
+      mitm.target_bus !== undefined &&
+      mitm.source_bus === mitm.target_bus
+    ) {
+      issues.push({
+        type: 'error',
+        field: 'network.mitm.target_bus',
+        message: 'MITM Source Bus and Target Bus must be different physical buses.',
+        commandId: command.id
+      });
+    }
+
+    const validateIdList = (ids: string[] | undefined, field: string, label: string) => {
+      if (!ids) return;
+      ids.forEach((cid, idx) => {
+        if (!cid || cid.trim() === '') {
+          issues.push({
+            type: 'error',
+            field: `${field}[${idx}]`,
+            message: `${label} #${idx + 1} cannot be empty.`,
+            commandId: command.id
+          });
+          return;
+        }
+        const res = validateCanId(cid);
+        if (!res.isValid) {
+          issues.push({
+            type: 'error',
+            field: `${field}[${idx}]`,
+            message: `${label} CAN ID error (${cid}): ${res.error}`,
+            commandId: command.id
+          });
+        }
+      });
+    };
+
+    validateIdList(mitm.block_can_ids, 'network.mitm.block_can_ids', 'MITM Forward Block');
+    validateIdList(mitm.reverse_block_can_ids, 'network.mitm.reverse_block_can_ids', 'MITM Reverse Block');
+
+    if (
+      mitm.mode &&
+      mitm.mode !== 'none' &&
+      (!mitm.block_can_ids || mitm.block_can_ids.length === 0) &&
+      (!mitm.reverse_block_can_ids || mitm.reverse_block_can_ids.length === 0)
+    ) {
+      issues.push({
+        type: 'warning',
+        field: 'network.mitm.block_can_ids',
+        message: `MITM mode is '${mitm.mode}' but no forward or reverse block CAN IDs are configured.`,
+        commandId: command.id
+      });
+    }
+
+    if (mitm.match !== undefined) {
+      const matchRes = validatePayload(mitm.match);
+      if (!matchRes.isValid) {
+        issues.push({
+          type: 'error',
+          field: 'network.mitm.match',
+          message: `MITM match filter error: ${matchRes.error}`,
+          commandId: command.id
+        });
+      }
+    }
+
+    if (mitm.mask !== undefined && mitm.mask !== '') {
+      if (!/^0x[0-9A-Fa-f]{1,2}$/i.test(mitm.mask.trim())) {
+        issues.push({
+          type: 'error',
+          field: 'network.mitm.mask',
+          message: `Invalid MITM mask '${mitm.mask}'. Expected single-byte hex like '0xFF'.`,
+          commandId: command.id
+        });
+      }
+    }
+
+    if (mitm.hold_ms !== undefined && (typeof mitm.hold_ms !== 'number' || !Number.isFinite(mitm.hold_ms) || mitm.hold_ms < 0)) {
+      issues.push({
+        type: 'error',
+        field: 'network.mitm.hold_ms',
+        message: 'MITM Hold duration (ms) must be a non-negative number.',
+        commandId: command.id
+      });
+    }
   }
 
   // Payload validations

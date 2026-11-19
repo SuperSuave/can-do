@@ -175,6 +175,26 @@ struct EntityOption {
     std::vector<ActionStep> steps;
 };
 
+enum class MitmMode {
+    NONE = 0,
+    ALWAYS = 1,
+    ON_DEMAND = 2
+};
+
+struct EntityMitmConfig {
+    MitmMode mode = MitmMode::NONE;
+    uint8_t source_bus = 1;
+    uint8_t target_bus = 0;
+    std::vector<uint32_t> block_can_ids;
+    std::vector<uint32_t> reverse_block_can_ids;
+    bool has_match = false;
+    uint8_t match_payload[8] = {0};
+    uint8_t match_mask = 0;
+    uint8_t invert_mask = 0;
+    uint8_t byte_masks[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+    uint32_t hold_ms = 5000;
+};
+
 struct CanEntity {
     std::string id;
     std::string ha_name;
@@ -184,6 +204,9 @@ struct CanEntity {
     uint32_t state_can_id = 0;
     uint32_t action_can_id = 0;
     uint32_t delay_ms = 20;
+    uint8_t bus = 0;
+    uint8_t action_bus = 0;
+    EntityMitmConfig mitm;
 
     std::vector<EntityOption> options;
     std::string current_state = "";

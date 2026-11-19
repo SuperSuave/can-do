@@ -263,6 +263,24 @@ Compilation: A build-time script flattens the JS catalog into a wildcard-free ca
 
 Flashing / Deployment: The binary is flashed via USB initially; subsequent updates are pushed wirelessly via the MD3 web dashboard (/api/upload or /api/ota).
 
+4. **Catalog-Driven Dual-CAN MITM Bridge (`network.mitm`)**:
+   - On dual-CAN hardware (`CAN_BUS_0 <-> CAN_BUS_1`, when `mitm_bridge_enabled` is enabled and `sniffer_mode`/`hardware_listen_only` are disabled), frames received on a physical bus are evaluated by subsystem forwarding hooks (`precondition_fwd_hook`, `hud_nav_fwd`) and catalog `network.mitm` rules before bridging to the opposite bus:
+     ```json
+     "mitm": {
+       "mode": "on_demand",
+       "source_bus": 1,
+       "target_bus": 0,
+       "block_can_ids": ["0x6E0"],
+       "reverse_block_can_ids": ["0x6BE"],
+       "match": { "D1": "0x10" },
+       "mask": "0xFF",
+       "hold_ms": 5000
+     }
+     ```
+   - `mode`: `"none"` (disabled), `"always"` (block whenever MITM bridge is active), or `"on_demand"` (arm for `hold_ms` when the entity or one of its blocked CAN IDs is actuated by an automation/command).
+   - `source_bus` / `target_bus`: Forward blocking blocks `block_can_ids` received on `source_bus` heading to `target_bus`; optional `reverse_block_can_ids` blocks frames received on `target_bus` heading to `source_bus` (e.g., ISO-TP Flow Control `0x6BE`/`0x6C0`).
+   - Optional `match` (`D1`..`D8`) + `mask` restrict suppression to frames whose payload bytes match numerically (`(actual & mask) == (target & mask)`).
+
 ---
 
 ## 🔒 Firmware Concurrency, Memory & Coexistence Invariants

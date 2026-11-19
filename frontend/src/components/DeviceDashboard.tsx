@@ -83,6 +83,7 @@ export interface SystemStatus {
   automations_enabled: boolean;
   sniffer_mode: boolean;
   hardware_listen_only: boolean;
+  mitm_bridge_enabled?: boolean;
   gvret_clients: number;
   twai_state: string;
   tx_error_counter: number;
@@ -758,6 +759,35 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     }
   };
 
+  // Controls: Dual-CAN MITM Bridge Toggle
+  const handleToggleMitmBridge = async (nextVal?: boolean) => {
+    if (!status) return;
+    const target = typeof nextVal === 'boolean' ? nextVal : !status.mitm_bridge_enabled;
+    try {
+      const res = await fetch(getApiUrl('/api/system/control'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'toggle_mitm_bridge',
+          mitm_bridge_enabled: target
+        })
+      });
+      if (res.ok) {
+        const nextPrefs = saveUserPreferences({ mitm_bridge_enabled: target });
+        setLocalPrefs(nextPrefs);
+        if (onUpdatePreferences) {
+          onUpdatePreferences({ mitm_bridge_enabled: target });
+        }
+        fetchStatus();
+        showNotice(`Dual-CAN MITM Bridge ${target ? 'ENABLED (CAN0 <-> CAN1 Filtering)' : 'DISABLED (Transparent)'}`);
+      } else {
+        showNotice('Failed to update MITM bridge state', 'error');
+      }
+    } catch (e: any) {
+      showNotice(`Failed to toggle MITM bridge: ${e.message}`, 'error');
+    }
+  };
+
   // System: Sync Time & Timezone from Browser
   const handleSyncTime = async () => {
     try {
@@ -1342,6 +1372,50 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
               </Switch.Content>
             </Switch>
           </div>
+          {status?.dual_can && (
+            <div className="text-[11px] text-muted mt-2 pt-2 border-t border-separator flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="font-semibold text-foreground flex items-center gap-1.5">
+                  <span>MITM Bridge</span>
+                  <span
+                    className={`font-mono text-[10px] ${
+                      status.sniffer_mode || status.hardware_listen_only
+                        ? 'text-warning'
+                        : status.mitm_bridge_enabled
+                          ? 'text-accent'
+                          : 'text-muted'
+                    }`}
+                  >
+                    {status.sniffer_mode || status.hardware_listen_only
+                      ? 'PAUSED'
+                      : status.mitm_bridge_enabled
+                        ? 'ACTIVE'
+                        : 'BYPASS'}
+                  </span>
+                </div>
+                <span className="text-[10px] text-muted block truncate">
+                  {status.sniffer_mode || status.hardware_listen_only
+                    ? 'Silenced by passive/listen-only mode'
+                    : status.mitm_bridge_enabled
+                      ? 'CAN0 <-> CAN1 catalog filtering active'
+                      : 'Enable only with dual-bus MITM harness'}
+                </span>
+              </div>
+              <Switch
+                isSelected={status?.mitm_bridge_enabled ?? false}
+                isDisabled={Boolean(status?.sniffer_mode || status?.hardware_listen_only)}
+                onChange={handleToggleMitmBridge}
+                size="sm"
+                aria-label="Toggle Dual-CAN MITM Bridge"
+              >
+                <Switch.Content>
+                  <Switch.Control>
+                    <Switch.Thumb />
+                  </Switch.Control>
+                </Switch.Content>
+              </Switch>
+            </div>
+          )}
         </Card>
       </div>
 

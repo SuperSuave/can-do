@@ -17,11 +17,14 @@ extern QueueHandle_t tx_command_queue;
 extern std::atomic<bool> g_automations_enabled;
 extern std::atomic<bool> g_sniffer_mode;
 extern std::atomic<bool> g_hardware_listen_only;
+extern std::atomic<bool> g_mitm_bridge_enabled;
 extern std::atomic<bool> g_twai_reconfig_pending;
 extern std::atomic<twai_mode_t> g_twai_requested_mode;
 
 void set_automations_enabled(bool enabled);
 void set_sniffer_mode(bool enabled, bool hardware_listen_only);
+void set_mitm_bridge_enabled(bool enabled);
+void can_engine_load_preferences(void);
 
 void init_can_engine(void);
 esp_err_t can_engine_get_status_info(twai_status_info_t* status_info);

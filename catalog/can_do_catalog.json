@@ -4299,7 +4299,15 @@
       "network": {
         "bus": 0,
         "type": "precondition",
-        "action_can_id": "0x0C7"
+        "action_can_id": "0x0C7",
+        "mitm": {
+          "mode": "on_demand",
+          "source_bus": 1,
+          "target_bus": 0,
+          "block_can_ids": [
+            "0x0C7"
+          ]
+        }
       },
       "subcategory": "Preconditioning",
       "action_can_id": "0x0C7"
@@ -4424,6 +4432,18 @@
             "tx_id": "0x6D2",
             "flow_control_id": "0x6B2"
           }
+        },
+        "mitm": {
+          "mode": "on_demand",
+          "source_bus": 1,
+          "target_bus": 0,
+          "block_can_ids": [
+            "0x6E0"
+          ],
+          "reverse_block_can_ids": [
+            "0x6BE"
+          ],
+          "hold_ms": 5000
         }
       },
       "options": [
@@ -4486,7 +4506,17 @@
         "bus": 0,
         "type": "can_tx",
         "action_can_id": "0x4E8",
-        "control_can_id": "0x4CC"
+        "control_can_id": "0x4CC",
+        "mitm": {
+          "mode": "on_demand",
+          "source_bus": 1,
+          "target_bus": 0,
+          "block_can_ids": [
+            "0x4E8",
+            "0x4CC"
+          ],
+          "hold_ms": 5000
+        }
       },
       "options": [
         {
@@ -7712,7 +7742,21 @@
         "state_can_id": "0x29B",
         "action_can_id": "0x29B",
         "street_isotp_can_id": "0x6E2",
-        "street_fc_can_id": "0x6C0"
+        "street_fc_can_id": "0x6C0",
+        "mitm": {
+          "mode": "on_demand",
+          "source_bus": 1,
+          "target_bus": 0,
+          "block_can_ids": [
+            "0x29B",
+            "0x29C",
+            "0x6E2"
+          ],
+          "reverse_block_can_ids": [
+            "0x6C0"
+          ],
+          "hold_ms": 5000
+        }
       },
       "options": [
         {

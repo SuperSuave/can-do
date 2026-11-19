@@ -218,6 +218,7 @@ extern "C" void app_main(void) {
     load_automations_from_fs("/spiffs/automations.json");
     rtc_can_state_restore();
     uds_engine_init();
+    can_engine_load_preferences();
     power_mgr_init();
     usb_can_init();
 

@@ -11,11 +11,11 @@ import {
   ModalBody,
   ModalFooter
 } from '@heroui/react';
-import { Command, CommandRole, CommandNetwork, Catalog, CommandOption, CommandStep, ContributorInfo, getCommandContributors } from '../types/catalog';
+import { Command, CommandRole, CommandNetwork, CommandMitmConfig, MitmMode, Catalog, CommandOption, CommandStep, ContributorInfo, getCommandContributors, ByteMap } from '../types/catalog';
 import { validateCommand, getAllKnownFeatures } from '../utils/canValidator';
 import { parseCanCaptureNote } from '../utils/canCaptureParser';
 import { compileToByteMap } from '../utils/automationConverters';
-import { isRangeCommand, physicalToRawByte, rawByteToPhysical, getDefaultPhysicalValue } from '../utils/catalogUtils';
+import { cleanMitmConfig, isRangeCommand, physicalToRawByte, rawByteToPhysical, getDefaultPhysicalValue } from '../utils/catalogUtils';
 import { PayloadByteVisualizer } from './PayloadByteVisualizer';
 import { PayloadByteEditor } from './PayloadByteEditor';
 import { StateDefinitionsEditor } from './StateDefinitionsEditor';
@@ -120,10 +120,37 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
   const [activePayloadMode, setActivePayloadMode] = useState<'transition' | 'match' | 'options' | 'steps' | 'range'>('transition');
   const [rangeEncodingMode, setRangeEncodingMode] = useState<'raw_bounds' | 'factor_offset'>('raw_bounds');
   const [basePayloadInput, setBasePayloadInput] = useState('');
+  const [mitmBlockIdsInput, setMitmBlockIdsInput] = useState('');
+  const [mitmReverseBlockIdsInput, setMitmReverseBlockIdsInput] = useState('');
+  const [mitmMatchInput, setMitmMatchInput] = useState('');
   const [isIdManuallyEdited, setIsIdManuallyEdited] = useState(false);
   const [contributorsList, setContributorsList] = useState<ContributorInfo[]>([
     { name: '', github: '', notes: '', tested_vehicle: '', role: '' }
   ]);
+
+  const formatMitmMatchString = (match?: ByteMap): string => {
+    if (!match || typeof match !== 'object') return '';
+    return Object.entries(match)
+      .filter(([k, v]) => Boolean(k && v))
+      .map(([k, v]) => `${k}:${v}`)
+      .join(' ');
+  };
+
+  const parseMitmMatchString = (raw: string): ByteMap | undefined => {
+    const trimmed = raw.trim();
+    if (!trimmed) return undefined;
+    const out: ByteMap = {};
+    const tokens = trimmed.split(/[\s,;]+/).filter(Boolean);
+    for (const tok of tokens) {
+      const m = tok.match(/^(D[1-8])[:=]((?:0x)?[0-9a-fA-F]{1,2})$/i);
+      if (m) {
+        const key = m[1].toUpperCase();
+        const hex = m[2].replace(/^0x/i, '').toUpperCase().padStart(2, '0');
+        out[key] = `0x${hex}`;
+      }
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+  };
 
   const handleAddContributor = () => {
     setContributorsList(prev => [...prev, { name: '', github: '', notes: '', tested_vehicle: '', role: '' }]);
@@ -213,9 +240,14 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
         state_can_id: stateCan,
         action_can_id: actionCan,
         bus: initialCommand.bus ?? initialCommand.network?.bus ?? 0,
+        action_bus: initialCommand.action_bus ?? initialCommand.network?.action_bus,
       });
       setIsIdManuallyEdited(true);
       setTagsInput(initialCommand.tags?.join(', ') || '');
+      const initialMitm = initialCommand.network?.mitm;
+      setMitmBlockIdsInput(initialMitm?.block_can_ids?.join(', ') || '');
+      setMitmReverseBlockIdsInput(initialMitm?.reverse_block_can_ids?.join(', ') || '');
+      setMitmMatchInput(formatMitmMatchString(initialMitm?.match));
       const bp = initialCommand.network?.base_payload;
       setBasePayloadInput(
         Array.isArray(bp)
@@ -263,6 +295,8 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
         roles: ['trigger'],
         state_can_id: '0x',
         bus: 0,
+        action_bus: undefined,
+        network: undefined,
         from_payload: '* * * * * 0*',
         to_payload: '* * * * * 1*',
         match_payload: '',
@@ -281,6 +315,9 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
       setIsIdManuallyEdited(false);
       setTagsInput('');
       setBasePayloadInput('');
+      setMitmBlockIdsInput('');
+      setMitmReverseBlockIdsInput('');
+      setMitmMatchInput('');
       setRangeEncodingMode('raw_bounds');
       setActivePayloadMode('transition');
 
@@ -508,15 +545,25 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
     const isRange = activePayloadMode === 'range' || cleaned.type === 'param_range';
 
     // Ensure network structure is preserved and synchronized
+    const resolvedActionBus = formData.action_bus ?? formData.network?.action_bus;
+    const normalizedMitm = cleanMitmConfig(formData.network?.mitm);
     cleaned.network = {
       ...(formData.network || {}),
       bus: cleaned.bus ?? 0,
+      ...(resolvedActionBus !== undefined ? { action_bus: resolvedActionBus } : {}),
       type: isRange
         ? (cleaned.action_can_id ? (cleaned.state_can_id ? 'can_rx_tx' : 'can_tx') : 'can_rx')
         : (cleaned.type || formData.network?.type || (cleaned.action_can_id ? 'can_rx_tx' : 'can_rx')),
       ...(cleaned.state_can_id ? { state_can_id: cleaned.state_can_id } : {}),
       ...(cleaned.action_can_id ? { action_can_id: cleaned.action_can_id } : {}),
+      ...(normalizedMitm ? { mitm: normalizedMitm } : {}),
     };
+    if (resolvedActionBus === undefined) {
+      delete cleaned.network.action_bus;
+    }
+    if (!normalizedMitm) {
+      delete cleaned.network.mitm;
+    }
 
     if (isRange) {
       cleaned.type = 'param_range';
@@ -1026,6 +1073,260 @@ export const CommandEditorModal: React.FC<CommandEditorModalProps> = ({
                       </div>
                     </div>
                   )}
+
+                  {/* Dual-CAN MITM Blocking Rules */}
+                  <div className="pt-3 border-t border-separator space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground">
+                          Dual-CAN MITM Bridge Blocking
+                        </label>
+                        <span className="text-[10px] text-muted block">
+                          Suppresses stock ECU/Head-Unit frames across the CAN0 &lt;-&gt; CAN1 gateway bridge when active.
+                        </span>
+                      </div>
+                      <select
+                        value={formData.network?.mitm?.mode || 'none'}
+                        onChange={e => {
+                          const mode = e.target.value as MitmMode;
+                          const prevMitm = formData.network?.mitm;
+                          const nextNet: CommandNetwork = { ...(formData.network || {}) };
+                          if (mode === 'none') {
+                            delete nextNet.mitm;
+                          } else {
+                            nextNet.mitm = {
+                              mode,
+                              source_bus: prevMitm?.source_bus ?? 1,
+                              target_bus: prevMitm?.target_bus ?? 0,
+                              ...(prevMitm?.block_can_ids ? { block_can_ids: prevMitm.block_can_ids } : {}),
+                              ...(prevMitm?.reverse_block_can_ids ? { reverse_block_can_ids: prevMitm.reverse_block_can_ids } : {}),
+                              ...(prevMitm?.match ? { match: prevMitm.match } : {}),
+                              ...(prevMitm?.mask ? { mask: prevMitm.mask } : {}),
+                              ...(mode === 'on_demand' ? { hold_ms: prevMitm?.hold_ms ?? 5000 } : {}),
+                            };
+                          }
+                          setFormData({ ...formData, network: nextNet });
+                        }}
+                        className="px-3 py-1.5 rounded-[8px] bg-surface-tertiary border border-border text-xs font-medium text-foreground focus:outline-none focus:border-focus"
+                      >
+                        <option value="none">Disabled (Pass-Through)</option>
+                        <option value="on_demand">On-Demand (While Command Active)</option>
+                        <option value="always">Always Block on Bridge</option>
+                      </select>
+                    </div>
+
+                    {formData.network?.mitm && formData.network.mitm.mode !== 'none' && (
+                      <div className="space-y-3 p-3 rounded-[10px] bg-surface-tertiary/60 border border-border">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-foreground mb-1">
+                              Source Bus (Rx)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="4"
+                              value={formData.network.mitm.source_bus ?? 1}
+                              onChange={e => {
+                                const val = parseInt(e.target.value, 10);
+                                setFormData({
+                                  ...formData,
+                                  network: {
+                                    ...(formData.network || {}),
+                                    mitm: {
+                                      ...formData.network!.mitm!,
+                                      source_bus: Number.isNaN(val) ? 1 : val,
+                                    }
+                                  }
+                                });
+                              }}
+                              className="w-full px-2.5 py-1.5 rounded-[8px] bg-surface border border-border font-mono text-xs text-foreground focus:outline-none focus:border-focus"
+                            />
+                            <span className="text-[10px] text-muted mt-0.5 block">
+                              e.g. 1 (Head Unit / CAN1)
+                            </span>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-foreground mb-1">
+                              Target Bus (Blocked To)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="4"
+                              value={formData.network.mitm.target_bus ?? 0}
+                              onChange={e => {
+                                const val = parseInt(e.target.value, 10);
+                                setFormData({
+                                  ...formData,
+                                  network: {
+                                    ...(formData.network || {}),
+                                    mitm: {
+                                      ...formData.network!.mitm!,
+                                      target_bus: Number.isNaN(val) ? 0 : val,
+                                    }
+                                  }
+                                });
+                              }}
+                              className="w-full px-2.5 py-1.5 rounded-[8px] bg-surface border border-border font-mono text-xs text-foreground focus:outline-none focus:border-focus"
+                            />
+                            <span className="text-[10px] text-muted mt-0.5 block">
+                              e.g. 0 (Vehicle / Cluster CAN0)
+                            </span>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-foreground mb-1">
+                              Hold Window (ms)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="500"
+                              disabled={formData.network.mitm.mode === 'always'}
+                              placeholder={formData.network.mitm.mode === 'always' ? 'Permanent' : '5000'}
+                              value={formData.network.mitm.mode === 'always' ? '' : (formData.network.mitm.hold_ms ?? '')}
+                              onChange={e => {
+                                const raw = e.target.value;
+                                const nextMitm: CommandMitmConfig = { ...formData.network!.mitm! };
+                                if (raw === '') {
+                                  delete nextMitm.hold_ms;
+                                } else {
+                                  const num = parseInt(raw, 10);
+                                  nextMitm.hold_ms = Number.isNaN(num) ? 0 : num;
+                                }
+                                setFormData({
+                                  ...formData,
+                                  network: { ...(formData.network || {}), mitm: nextMitm }
+                                });
+                              }}
+                              className="w-full px-2.5 py-1.5 rounded-[8px] bg-surface border border-border font-mono text-xs text-foreground focus:outline-none focus:border-focus disabled:opacity-50"
+                            />
+                            <span className="text-[10px] text-muted mt-0.5 block">
+                              {formData.network.mitm.mode === 'always' ? 'Active whenever bridge is enabled' : 'Duration after command triggers (e.g. 5000)'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-foreground mb-1">
+                              Forward Block CAN IDs (Source -&gt; Target)
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g. 0x6E0 or 0x4E8, 0x4CC"
+                              value={mitmBlockIdsInput}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setMitmBlockIdsInput(val);
+                                const parsed = val.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
+                                const nextMitm: CommandMitmConfig = { ...formData.network!.mitm! };
+                                if (parsed.length > 0) {
+                                  nextMitm.block_can_ids = parsed;
+                                } else {
+                                  delete nextMitm.block_can_ids;
+                                }
+                                setFormData({
+                                  ...formData,
+                                  network: { ...(formData.network || {}), mitm: nextMitm }
+                                });
+                              }}
+                              className="w-full px-2.5 py-1.5 rounded-[8px] bg-surface border border-border font-mono text-xs text-accent focus:outline-none focus:border-focus"
+                            />
+                            <span className="text-[10px] text-muted mt-0.5 block">
+                              Comma-separated hex IDs blocked from Source Bus to Target Bus.
+                            </span>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-foreground mb-1">
+                              Reverse Block CAN IDs (Target -&gt; Source, Optional)
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g. 0x6BE (ISO-TP Flow Control)"
+                              value={mitmReverseBlockIdsInput}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setMitmReverseBlockIdsInput(val);
+                                const parsed = val.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
+                                const nextMitm: CommandMitmConfig = { ...formData.network!.mitm! };
+                                if (parsed.length > 0) {
+                                  nextMitm.reverse_block_can_ids = parsed;
+                                } else {
+                                  delete nextMitm.reverse_block_can_ids;
+                                }
+                                setFormData({
+                                  ...formData,
+                                  network: { ...(formData.network || {}), mitm: nextMitm }
+                                });
+                              }}
+                              className="w-full px-2.5 py-1.5 rounded-[8px] bg-surface border border-border font-mono text-xs text-foreground focus:outline-none focus:border-focus"
+                            />
+                            <span className="text-[10px] text-muted mt-0.5 block">
+                              Optional return-path IDs blocked (e.g. 0x6BE / 0x6C0 FC frames).
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="sm:col-span-2">
+                            <label className="block text-[11px] font-semibold text-foreground mb-1">
+                              Optional Payload Match Filter (1-Based D1..D8)
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g. D1:0x10 D2:0x02 (leave empty to match any payload)"
+                              value={mitmMatchInput}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setMitmMatchInput(val);
+                                const parsed = parseMitmMatchString(val);
+                                const nextMitm: CommandMitmConfig = { ...formData.network!.mitm! };
+                                if (parsed) {
+                                  nextMitm.match = parsed;
+                                } else {
+                                  delete nextMitm.match;
+                                }
+                                setFormData({
+                                  ...formData,
+                                  network: { ...(formData.network || {}), mitm: nextMitm }
+                                });
+                              }}
+                              className="w-full px-2.5 py-1.5 rounded-[8px] bg-surface border border-border font-mono text-xs text-foreground focus:outline-none focus:border-focus"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-foreground mb-1">
+                              Match Mask (Optional)
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="0xFF"
+                              value={formData.network.mitm.mask || ''}
+                              onChange={e => {
+                                const val = e.target.value.trim();
+                                const nextMitm: CommandMitmConfig = { ...formData.network!.mitm! };
+                                if (val) {
+                                  nextMitm.mask = val;
+                                } else {
+                                  delete nextMitm.mask;
+                                }
+                                setFormData({
+                                  ...formData,
+                                  network: { ...(formData.network || {}), mitm: nextMitm }
+                                });
+                              }}
+                              className="w-full px-2.5 py-1.5 rounded-[8px] bg-surface border border-border font-mono text-xs text-foreground focus:outline-none focus:border-focus"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Row 4: Payload Mode Selector */}

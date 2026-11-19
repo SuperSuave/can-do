@@ -4,6 +4,7 @@ import {
   isValidPayloadToken,
   validatePayloadString,
   validatePayload,
+  validateCommand,
   validateAutomationRule,
   validateAutomationRules
 } from './canValidator.js';
@@ -318,5 +319,81 @@ test('validateAutomationRule enforces 50-character cluster popup toast limit (in
   assert.strictEqual(popupErrors.length, 2, 'Should flag both oversized track_popup and oversized enabled cycle_entity toast');
   assert.ok(popupErrors.some(e => e.field === 'text' && /51 characters/i.test(e.message)));
   assert.ok(popupErrors.some(e => e.field === 'popup_prefix' && /High Ventilation Cooling Mode/.test(e.message)));
+});
+
+test('validateCommand validates network.mitm configuration and flags invalid rules', () => {
+  const validCmd = {
+    id: 'test_mitm_cmd',
+    name: 'Test MITM Command',
+    category: 'Cockpit & Controls',
+    roles: ['action' as const],
+    network: {
+      bus: 0,
+      action_bus: 0,
+      type: 'can_tx',
+      action_can_id: '0x6E0',
+      mitm: {
+        mode: 'on_demand' as const,
+        source_bus: 1,
+        target_bus: 0,
+        block_can_ids: ['0x6E0'],
+        reverse_block_can_ids: ['0x6BE'],
+        match: { D1: '0x10' },
+        mask: '0xFF',
+        hold_ms: 5000,
+      },
+    },
+  };
+  const okIssues = validateCommand(validCmd, DEFAULT_CATALOG);
+  assert.strictEqual(okIssues.filter(i => i.type === 'error' || i.type === 'warning').length, 0);
+
+  const brokenCmd = {
+    id: 'bad_mitm_cmd',
+    name: 'Bad MITM Command',
+    category: 'Cockpit & Controls',
+    roles: ['action' as const],
+    network: {
+      bus: 0,
+      action_bus: 9,
+      type: 'can_tx',
+      action_can_id: '0x4E8',
+      mitm: {
+        mode: 'always' as const,
+        source_bus: 1,
+        target_bus: 1,
+        block_can_ids: ['INVALID_HEX'],
+        reverse_block_can_ids: ['0xZZ'],
+        mask: '0xZZ',
+        hold_ms: -10,
+      },
+    },
+  };
+  const badIssues = validateCommand(brokenCmd, DEFAULT_CATALOG);
+  const errors = badIssues.filter(i => i.type === 'error');
+  assert.ok(errors.some(e => e.field === 'action_bus'));
+  assert.ok(errors.some(e => e.field === 'network.mitm.target_bus' && /must be different/i.test(e.message)));
+  assert.ok(errors.some(e => e.field === 'network.mitm.block_can_ids[0]'));
+  assert.ok(errors.some(e => e.field === 'network.mitm.reverse_block_can_ids[0]'));
+  assert.ok(errors.some(e => e.field === 'network.mitm.mask'));
+  assert.ok(errors.some(e => e.field === 'network.mitm.hold_ms'));
+
+  const emptyBlockCmd = {
+    id: 'empty_mitm_ids',
+    name: 'Empty MITM IDs',
+    category: 'Cockpit & Controls',
+    roles: ['action' as const],
+    network: {
+      bus: 0,
+      type: 'can_tx',
+      action_can_id: '0x4E8',
+      mitm: {
+        mode: 'on_demand' as const,
+        source_bus: 1,
+        target_bus: 0,
+      },
+    },
+  };
+  const warnIssues = validateCommand(emptyBlockCmd, DEFAULT_CATALOG);
+  assert.ok(warnIssues.some(i => i.type === 'warning' && /no forward or reverse block CAN IDs/i.test(i.message)));
 });
 

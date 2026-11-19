@@ -17,8 +17,22 @@ export type CommandType =
 
 export type ByteMap = Record<string, string>;
 
+export type MitmMode = 'none' | 'always' | 'on_demand';
+
+export interface CommandMitmConfig {
+  mode: MitmMode;
+  source_bus?: number;
+  target_bus?: number;
+  block_can_ids?: string[];
+  reverse_block_can_ids?: string[];
+  match?: ByteMap;
+  mask?: string;
+  hold_ms?: number;
+}
+
 export interface CommandNetwork {
   bus?: number;
+  action_bus?: number;
   type?: string;
   state_can_id?: string;
   action_can_id?: string;
@@ -26,7 +40,10 @@ export interface CommandNetwork {
   flow_control_can_id?: string;
   trigger_frame_can_id?: string;
   control_can_id?: string;
+  street_isotp_can_id?: string;
+  street_fc_can_id?: string;
   transports?: Record<string, { tx_id: string; flow_control_id: string }>;
+  mitm?: CommandMitmConfig;
   byte?: string;
   state_byte?: string;
   action_byte?: string;

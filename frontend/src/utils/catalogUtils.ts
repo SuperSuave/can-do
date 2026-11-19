@@ -8,7 +8,7 @@
  *   // resolved.network and resolved.options now reflect the correct variant.
  */
 
-import { Command, CommandNetwork, CommandOption, Vehicle, ByteMap, Catalog } from '../types/catalog';
+import { Command, CommandMitmConfig, CommandNetwork, CommandOption, Vehicle, ByteMap, Catalog } from '../types/catalog';
 
 /**
  * Normalize a byte identifier (e.g. 'D2', 'd2', '2', 2) to canonical 1-based 'D1'..'D8'.
@@ -457,6 +457,44 @@ export function cleanToByteMap(input: string | ByteMap | undefined): ByteMap {
  * - Completely strips deprecated legacy fields: from_payload, to_payload, match_payload, wildcard strings
  * - Cleans option definitions and steps to native ByteMaps
  */
+function normalizeCanIdToken(raw: string | undefined): string | undefined {
+  if (!raw || typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  const stripped = trimmed.replace(/^0x/i, '').toUpperCase();
+  if (!/^[0-9A-F]{1,8}$/.test(stripped)) return trimmed;
+  const normalized = stripped.length <= 3 ? stripped.padStart(3, '0') : stripped;
+  return `0x${normalized}`;
+}
+
+export function cleanMitmConfig(mitm: CommandNetwork['mitm']): CommandMitmConfig | undefined {
+  if (!mitm || typeof mitm !== 'object') return undefined;
+  const mode = mitm.mode;
+  if (!mode || mode === 'none') return undefined;
+
+  const blockIds = Array.isArray(mitm.block_can_ids)
+    ? mitm.block_can_ids.map(normalizeCanIdToken).filter((id): id is string => Boolean(id))
+    : [];
+  const reverseBlockIds = Array.isArray(mitm.reverse_block_can_ids)
+    ? mitm.reverse_block_can_ids.map(normalizeCanIdToken).filter((id): id is string => Boolean(id))
+    : [];
+  const cleanMatch = mitm.match && typeof mitm.match === 'object' ? cleanToByteMap(mitm.match) : undefined;
+  const cleanMask = mitm.mask && typeof mitm.mask === 'string' && mitm.mask.trim()
+    ? `0x${mitm.mask.trim().replace(/^0x/i, '').toUpperCase().padStart(2, '0')}`
+    : undefined;
+
+  return {
+    mode,
+    ...(mitm.source_bus !== undefined ? { source_bus: mitm.source_bus } : {}),
+    ...(mitm.target_bus !== undefined ? { target_bus: mitm.target_bus } : {}),
+    ...(blockIds.length > 0 ? { block_can_ids: blockIds } : {}),
+    ...(reverseBlockIds.length > 0 ? { reverse_block_can_ids: reverseBlockIds } : {}),
+    ...(cleanMatch && Object.keys(cleanMatch).length > 0 ? { match: cleanMatch } : {}),
+    ...(cleanMask ? { mask: cleanMask } : {}),
+    ...(mitm.hold_ms !== undefined && mitm.hold_ms >= 0 ? { hold_ms: mitm.hold_ms } : {}),
+  };
+}
+
 export function formatCommandForCatalog(cmd: Command): Command {
   const name = cmd.ha_metadata?.name || cmd.name || cmd.id;
   const isAction = cmd.roles.includes('action') && !cmd.roles.includes('trigger');
@@ -472,16 +510,26 @@ export function formatCommandForCatalog(cmd: Command): Command {
   };
 
   const bus = cmd.network?.bus ?? cmd.bus ?? 0;
+  const actionBus = cmd.network?.action_bus ?? cmd.action_bus;
   const stateCanId = cmd.network?.state_can_id || cmd.state_can_id;
   const actionCanId = cmd.network?.action_can_id || cmd.action_can_id;
   const delayMs = cmd.network?.delay_ms ?? cmd.delay_ms;
   const netType = cmd.network?.type || (actionCanId && !stateCanId ? 'can_tx' : 'can_rx');
+  const cleanMitm = cleanMitmConfig(cmd.network?.mitm);
 
   const network: any = {
     bus,
+    ...(actionBus !== undefined ? { action_bus: actionBus } : {}),
     type: netType,
     ...(stateCanId ? { state_can_id: stateCanId } : {}),
     ...(actionCanId ? { action_can_id: actionCanId } : {}),
+    ...(cmd.network?.flow_control_can_id ? { flow_control_can_id: cmd.network.flow_control_can_id } : {}),
+    ...(cmd.network?.trigger_frame_can_id ? { trigger_frame_can_id: cmd.network.trigger_frame_can_id } : {}),
+    ...(cmd.network?.control_can_id ? { control_can_id: cmd.network.control_can_id } : {}),
+    ...(cmd.network?.street_isotp_can_id ? { street_isotp_can_id: cmd.network.street_isotp_can_id } : {}),
+    ...(cmd.network?.street_fc_can_id ? { street_fc_can_id: cmd.network.street_fc_can_id } : {}),
+    ...(cmd.network?.transports ? { transports: cmd.network.transports } : {}),
+    ...(cleanMitm ? { mitm: cleanMitm } : {}),
     ...(cmd.network?.byte ? { byte: cmd.network.byte } : {}),
     ...(cmd.network?.state_byte ? { state_byte: cmd.network.state_byte } : {}),
     ...(cmd.network?.action_byte ? { action_byte: cmd.network.action_byte } : {}),
@@ -624,9 +672,17 @@ export function formatCommandForCatalog(cmd: Command): Command {
   // Format variants
   let formattedVariants: any[] | undefined = undefined;
   if (cmd.variants && cmd.variants.length > 0) {
-    formattedVariants = cmd.variants.map(v => ({
-      targets: v.targets,
-      ...(v.network ? { network: v.network } : {}),
+    formattedVariants = cmd.variants.map(v => {
+      const cleanedVariantNetwork = v.network ? {
+        ...v.network,
+        ...(v.network.mitm ? { mitm: cleanMitmConfig(v.network.mitm) } : {}),
+      } : undefined;
+      if (cleanedVariantNetwork && !cleanedVariantNetwork.mitm) {
+        delete cleanedVariantNetwork.mitm;
+      }
+      return {
+        targets: v.targets,
+        ...(cleanedVariantNetwork ? { network: cleanedVariantNetwork } : {}),
       ...(v.options ? {
         options: v.options.map(opt => {
           const optClean: any = { label: opt.label };
@@ -653,7 +709,8 @@ export function formatCommandForCatalog(cmd: Command): Command {
           return optClean;
         })
       } : {})
-    }));
+    };
+    });
   }
 
   const result: any = {

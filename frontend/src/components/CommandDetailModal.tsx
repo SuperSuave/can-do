@@ -836,6 +836,32 @@ export const CommandDetailModal: React.FC<CommandDetailModalProps> = ({
                           <div className="font-mono text-accent">{command.expression}</div>
                         </div>
                       )}
+                      {command.network?.mitm && command.network.mitm.mode !== 'none' && (
+                        <div className="p-3 col-span-2 sm:col-span-3 rounded-lg bg-surface-secondary border border-border space-y-1.5">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className="text-muted">Dual-CAN MITM Blocking</span>
+                            <span className="font-mono text-[11px] font-semibold text-warning">
+                              {command.network.mitm.mode === 'always'
+                                ? 'ALWAYS BLOCK'
+                                : `ON-DEMAND (${command.network.mitm.hold_ms ?? 5000} ms)`}
+                              {' • '}
+                              Bus {command.network.mitm.source_bus ?? 1} &rarr; Bus {command.network.mitm.target_bus ?? 0}
+                            </span>
+                          </div>
+                          {command.network.mitm.block_can_ids && command.network.mitm.block_can_ids.length > 0 && (
+                            <div className="font-mono text-[11px] text-foreground">
+                              <span className="text-muted">Forward Block: </span>
+                              {command.network.mitm.block_can_ids.join(', ')}
+                            </div>
+                          )}
+                          {command.network.mitm.reverse_block_can_ids && command.network.mitm.reverse_block_can_ids.length > 0 && (
+                            <div className="font-mono text-[11px] text-foreground">
+                              <span className="text-muted">Reverse Block: </span>
+                              {command.network.mitm.reverse_block_can_ids.join(', ')}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 

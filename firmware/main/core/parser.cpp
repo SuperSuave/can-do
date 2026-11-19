@@ -7,8 +7,10 @@
 #include <cstring>
 #include <list>
 #include <unordered_set>
+#include <algorithm>
 #include <type_traits>
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "timezone_mgr.h"
 
 static const char* TAG = "CATALOG_PARSER";
@@ -20,6 +22,75 @@ std::vector<AutomationRule> global_automations;
 std::mutex g_catalog_mutex;
 std::mutex g_automations_mutex;
 std::atomic<uint32_t> g_automations_gen{1};
+std::atomic<bool> g_has_mitm_rules{false};
+
+struct CompiledMitmRule {
+    std::string entity_id;
+    EntityMitmConfig cfg;
+    int64_t active_until_ms = 0;
+};
+
+static std::vector<CompiledMitmRule> s_mitm_rules;
+static std::unordered_map<uint32_t, std::vector<size_t>> s_mitm_rules_by_can_id;
+static std::mutex s_mitm_mutex;
+
+static void rebuild_mitm_rules_locked(void) {
+    int64_t now_ms = esp_timer_get_time() / 1000LL;
+    std::unordered_map<std::string, int64_t> prev_armed;
+    {
+        std::lock_guard<std::mutex> mlock(s_mitm_mutex);
+        for (const auto& rule : s_mitm_rules) {
+            if (rule.active_until_ms > now_ms) {
+                prev_armed[rule.entity_id] = rule.active_until_ms;
+            }
+        }
+    }
+
+    std::vector<CompiledMitmRule> new_rules;
+    std::unordered_map<uint32_t, std::vector<size_t>> new_by_can_id;
+
+    auto collect_entity = [&](const CanEntity& entity) {
+        if (entity.mitm.mode == MitmMode::NONE) return;
+        if (entity.mitm.block_can_ids.empty() && entity.mitm.reverse_block_can_ids.empty()) return;
+
+        CompiledMitmRule rule;
+        rule.entity_id = entity.id;
+        rule.cfg = entity.mitm;
+        auto armed_it = prev_armed.find(entity.id);
+        if (armed_it != prev_armed.end()) {
+            rule.active_until_ms = armed_it->second;
+        }
+        size_t idx = new_rules.size();
+        new_rules.push_back(std::move(rule));
+
+        for (uint32_t cid : entity.mitm.block_can_ids) {
+            auto& vec = new_by_can_id[cid];
+            if (std::find(vec.begin(), vec.end(), idx) == vec.end()) {
+                vec.push_back(idx);
+            }
+        }
+        for (uint32_t cid : entity.mitm.reverse_block_can_ids) {
+            auto& vec = new_by_can_id[cid];
+            if (std::find(vec.begin(), vec.end(), idx) == vec.end()) {
+                vec.push_back(idx);
+            }
+        }
+    };
+
+    for (const auto& entity : global_catalog) {
+        collect_entity(entity);
+    }
+    for (const auto& entity : s_dynamic_entities) {
+        collect_entity(entity);
+    }
+
+    {
+        std::lock_guard<std::mutex> mlock(s_mitm_mutex);
+        s_mitm_rules.swap(new_rules);
+        s_mitm_rules_by_can_id.swap(new_by_can_id);
+        g_has_mitm_rules.store(!s_mitm_rules.empty(), std::memory_order_release);
+    }
+}
 
 static void rebuild_catalog_can_id_index_locked(void) {
     catalog_by_can_id.clear();
@@ -33,11 +104,93 @@ static void rebuild_catalog_can_id_index_locked(void) {
             catalog_by_can_id[entity.state_can_id].push_back(&entity);
         }
     }
+    rebuild_mitm_rules_locked();
 }
 
 void rebuild_catalog_can_id_index(void) {
     std::lock_guard<std::mutex> lock(g_catalog_mutex);
     rebuild_catalog_can_id_index_locked();
+}
+
+void mitm_arm_entity(const std::string& entity_id, uint32_t hold_ms_override) {
+    if (entity_id.empty() || !g_has_mitm_rules.load(std::memory_order_acquire)) return;
+    int64_t now_ms = esp_timer_get_time() / 1000LL;
+    std::lock_guard<std::mutex> mlock(s_mitm_mutex);
+    for (auto& rule : s_mitm_rules) {
+        if (rule.entity_id == entity_id && rule.cfg.mode == MitmMode::ON_DEMAND) {
+            uint32_t hold = hold_ms_override > 0 ? hold_ms_override : (rule.cfg.hold_ms > 0 ? rule.cfg.hold_ms : 5000);
+            int64_t until = now_ms + static_cast<int64_t>(hold);
+            if (until > rule.active_until_ms) {
+                rule.active_until_ms = until;
+            }
+        }
+    }
+}
+
+void mitm_arm_can_id(uint32_t can_id, uint32_t hold_ms_override) {
+    if (can_id == 0 || !g_has_mitm_rules.load(std::memory_order_acquire)) return;
+    int64_t now_ms = esp_timer_get_time() / 1000LL;
+    std::lock_guard<std::mutex> mlock(s_mitm_mutex);
+    auto it = s_mitm_rules_by_can_id.find(can_id);
+    if (it == s_mitm_rules_by_can_id.end()) return;
+    for (size_t idx : it->second) {
+        if (idx >= s_mitm_rules.size()) continue;
+        auto& rule = s_mitm_rules[idx];
+        if (rule.cfg.mode != MitmMode::ON_DEMAND) continue;
+        if (std::find(rule.cfg.block_can_ids.begin(), rule.cfg.block_can_ids.end(), can_id) != rule.cfg.block_can_ids.end()) {
+            uint32_t hold = hold_ms_override > 0 ? hold_ms_override : (rule.cfg.hold_ms > 0 ? rule.cfg.hold_ms : 5000);
+            int64_t until = now_ms + static_cast<int64_t>(hold);
+            if (until > rule.active_until_ms) {
+                rule.active_until_ms = until;
+            }
+        }
+    }
+}
+
+bool mitm_should_block_bridged_frame(uint32_t can_id, uint8_t rx_bus, uint8_t dst_bus, const uint8_t* data, uint8_t dlc) {
+    if (!g_has_mitm_rules.load(std::memory_order_acquire)) return false;
+    std::lock_guard<std::mutex> mlock(s_mitm_mutex);
+    auto it = s_mitm_rules_by_can_id.find(can_id);
+    if (it == s_mitm_rules_by_can_id.end()) return false;
+
+    int64_t now_ms = esp_timer_get_time() / 1000LL;
+    for (size_t idx : it->second) {
+        if (idx >= s_mitm_rules.size()) continue;
+        const auto& rule = s_mitm_rules[idx];
+        if (rule.cfg.mode == MitmMode::NONE) continue;
+        if (rule.cfg.mode == MitmMode::ON_DEMAND && rule.active_until_ms <= now_ms) continue;
+
+        bool dir_match = false;
+        if (rx_bus == rule.cfg.source_bus && dst_bus == rule.cfg.target_bus) {
+            dir_match = std::find(rule.cfg.block_can_ids.begin(), rule.cfg.block_can_ids.end(), can_id) != rule.cfg.block_can_ids.end();
+        } else if (rx_bus == rule.cfg.target_bus && dst_bus == rule.cfg.source_bus) {
+            dir_match = std::find(rule.cfg.reverse_block_can_ids.begin(), rule.cfg.reverse_block_can_ids.end(), can_id) != rule.cfg.reverse_block_can_ids.end();
+        }
+        if (!dir_match) continue;
+
+        if (rule.cfg.has_match && rule.cfg.match_mask != 0) {
+            bool payload_ok = true;
+            for (int b = 0; b < 8; ++b) {
+                if (rule.cfg.match_mask & (1 << b)) {
+                    if (!data || b >= dlc) {
+                        payload_ok = false;
+                        break;
+                    }
+                    bool eq = ((data[b] & rule.cfg.byte_masks[b]) == (rule.cfg.match_payload[b] & rule.cfg.byte_masks[b]));
+                    if (rule.cfg.invert_mask & (1 << b)) {
+                        eq = !eq;
+                    }
+                    if (!eq) {
+                        payload_ok = false;
+                        break;
+                    }
+                }
+            }
+            if (!payload_ok) continue;
+        }
+        return true;
+    }
+    return false;
 }
 
 
@@ -899,6 +1052,7 @@ static void parse_steps(cJSON* steps_array, std::vector<ActionStep>& out_steps) 
 static void synthesize_step_from_payload(cJSON* payload_json, const CanEntity& entity, ActionStep& step) {
     step.type = ActionType::TRANSMIT_FRAME;
     step.can_id = entity.action_can_id ? entity.action_can_id : entity.state_can_id;
+    step.bus = entity.action_bus;
     step.delay_ms = entity.delay_ms;
     if (cJSON_IsString(payload_json) && payload_json->valuestring) {
         std::string clean_hex;
@@ -946,12 +1100,68 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity) {
     // Network configuration
     cJSON* network = cJSON_GetObjectItem(entity_json, "network");
     if (network) {
+        cJSON* bus_item = cJSON_GetObjectItem(network, "bus");
+        if (cJSON_IsNumber(bus_item) && bus_item->valueint >= 0 && bus_item->valueint <= 4) {
+            out_entity.bus = static_cast<uint8_t>(bus_item->valueint);
+        }
+        out_entity.action_bus = out_entity.bus;
+        cJSON* action_bus_item = cJSON_GetObjectItem(network, "action_bus");
+        if (cJSON_IsNumber(action_bus_item) && action_bus_item->valueint >= 0 && action_bus_item->valueint <= 4) {
+            out_entity.action_bus = static_cast<uint8_t>(action_bus_item->valueint);
+        }
         cJSON* state_can_id = cJSON_GetObjectItem(network, "state_can_id");
         cJSON* action_can_id = cJSON_GetObjectItem(network, "action_can_id");
         cJSON* delay = cJSON_GetObjectItem(network, "delay_ms");
         if (cJSON_IsString(state_can_id)) out_entity.state_can_id = strtol(state_can_id->valuestring, nullptr, 16);
         if (cJSON_IsString(action_can_id)) out_entity.action_can_id = strtol(action_can_id->valuestring, nullptr, 16);
         if (cJSON_IsNumber(delay)) out_entity.delay_ms = delay->valueint;
+
+        cJSON* mitm_obj = cJSON_GetObjectItem(network, "mitm");
+        if (cJSON_IsObject(mitm_obj)) {
+            cJSON* mode_item = cJSON_GetObjectItem(mitm_obj, "mode");
+            if (cJSON_IsString(mode_item) && mode_item->valuestring) {
+                if (strcasecmp(mode_item->valuestring, "always") == 0) {
+                    out_entity.mitm.mode = MitmMode::ALWAYS;
+                } else if (strcasecmp(mode_item->valuestring, "on_demand") == 0) {
+                    out_entity.mitm.mode = MitmMode::ON_DEMAND;
+                } else {
+                    out_entity.mitm.mode = MitmMode::NONE;
+                }
+            }
+            cJSON* src_bus = cJSON_GetObjectItem(mitm_obj, "source_bus");
+            if (cJSON_IsNumber(src_bus) && src_bus->valueint >= 0 && src_bus->valueint <= 4) {
+                out_entity.mitm.source_bus = static_cast<uint8_t>(src_bus->valueint);
+            }
+            cJSON* dst_bus = cJSON_GetObjectItem(mitm_obj, "target_bus");
+            if (cJSON_IsNumber(dst_bus) && dst_bus->valueint >= 0 && dst_bus->valueint <= 4) {
+                out_entity.mitm.target_bus = static_cast<uint8_t>(dst_bus->valueint);
+            }
+            auto parse_id_array = [](cJSON* arr, std::vector<uint32_t>& out_ids) {
+                if (!cJSON_IsArray(arr)) return;
+                cJSON* item = nullptr;
+                cJSON_ArrayForEach(item, arr) {
+                    if (cJSON_IsString(item) && item->valuestring && item->valuestring[0] != '\0') {
+                        uint32_t cid = static_cast<uint32_t>(strtoul(item->valuestring, nullptr, 16));
+                        if (cid != 0 && std::find(out_ids.begin(), out_ids.end(), cid) == out_ids.end()) {
+                            out_ids.push_back(cid);
+                        }
+                    }
+                }
+            };
+            parse_id_array(cJSON_GetObjectItem(mitm_obj, "block_can_ids"), out_entity.mitm.block_can_ids);
+            parse_id_array(cJSON_GetObjectItem(mitm_obj, "reverse_block_can_ids"), out_entity.mitm.reverse_block_can_ids);
+            cJSON* mitm_match = cJSON_GetObjectItem(mitm_obj, "match");
+            if (cJSON_IsObject(mitm_match)) {
+                parse_byte_match(mitm_match, out_entity.mitm.match_payload, out_entity.mitm.match_mask,
+                                 out_entity.mitm.invert_mask, out_entity.mitm.byte_masks,
+                                 cJSON_GetObjectItem(mitm_obj, "mask"));
+                out_entity.mitm.has_match = (out_entity.mitm.match_mask != 0);
+            }
+            cJSON* hold_item = cJSON_GetObjectItem(mitm_obj, "hold_ms");
+            if (cJSON_IsNumber(hold_item) && hold_item->valueint >= 0) {
+                out_entity.mitm.hold_ms = static_cast<uint32_t>(hold_item->valueint);
+            }
+        }
     }
 
     cJSON* entity_type_item = cJSON_GetObjectItem(entity_json, "type");
@@ -1654,6 +1864,9 @@ bool find_entity_in_catalog(const std::string& entity_id, CanEntity& out_entity)
                 CanEntity* ptr = &s_dynamic_entities.back();
                 if (ptr->state_can_id > 0) {
                     catalog_by_can_id[ptr->state_can_id].push_back(ptr);
+                }
+                if (ptr->mitm.mode != MitmMode::NONE) {
+                    rebuild_mitm_rules_locked();
                 }
             }
         }

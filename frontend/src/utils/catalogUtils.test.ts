@@ -11,6 +11,7 @@ import {
   physicalToRawByte,
   buildRangeActionPayload,
   resolveRangeSteps,
+  cleanMitmConfig,
 } from './catalogUtils.js';
 import type { Command, CommandOption, Vehicle } from '../types/catalog.js';
 
@@ -432,4 +433,60 @@ test('resolveRangeSteps leads with base_payload command frame when steps are fol
   assert.strictEqual((steps[0].payload as any).D5, '0x05');
   assert.strictEqual(steps[0].repeat, 3);
   assert.strictEqual((steps[1].payload as any).D4, '0x20');
+});
+
+test('formatCommandForCatalog preserves action_bus, transport IDs, and normalizes network.mitm', () => {
+  const formatted = formatCommandForCatalog({
+    id: 'hud_tbt_test',
+    name: 'HUD Test',
+    category: 'Cockpit & Controls',
+    roles: ['action'],
+    network: {
+      bus: 0,
+      action_bus: 1,
+      type: 'hud_nav',
+      action_can_id: '0x29B',
+      street_isotp_can_id: '0x6E2',
+      street_fc_can_id: '0x6C0',
+      mitm: {
+        mode: 'on_demand',
+        source_bus: 1,
+        target_bus: 0,
+        block_can_ids: ['29b', '0x29c'],
+        reverse_block_can_ids: ['0x6c0'],
+        match: { D1: '10' },
+        mask: 'ff',
+        hold_ms: 5000,
+      },
+    },
+  });
+
+  assert.strictEqual(formatted.network?.action_bus, 1);
+  assert.strictEqual(formatted.network?.street_isotp_can_id, '0x6E2');
+  assert.strictEqual(formatted.network?.street_fc_can_id, '0x6C0');
+  assert.deepStrictEqual(formatted.network?.mitm, {
+    mode: 'on_demand',
+    source_bus: 1,
+    target_bus: 0,
+    block_can_ids: ['0x29B', '0x29C'],
+    reverse_block_can_ids: ['0x6C0'],
+    match: { D1: '0x10' },
+    mask: '0xFF',
+    hold_ms: 5000,
+  });
+
+  assert.strictEqual(cleanMitmConfig({ mode: 'none', block_can_ids: ['0x6E0'] }), undefined);
+  const pruned = formatCommandForCatalog({
+    id: 'no_mitm_cmd',
+    name: 'No MITM',
+    category: 'Cockpit & Controls',
+    roles: ['action'],
+    network: {
+      bus: 0,
+      type: 'can_tx',
+      action_can_id: '0x4E8',
+      mitm: { mode: 'none', source_bus: 1, target_bus: 0 },
+    },
+  });
+  assert.strictEqual(pruned.network?.mitm, undefined);
 });

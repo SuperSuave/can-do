@@ -1521,6 +1521,7 @@ static esp_err_t api_post_preferences_handler(httpd_req_t *req) {
 
     ESP_LOGI(TAG, "User preferences saved to device (%d bytes)", req->content_len);
     uds_engine_load_preferences();
+    can_engine_load_preferences();
     timezone_mgr_load_from_fs();
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"Preferences saved to device.\"}");
@@ -1547,6 +1548,7 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
     cJSON_AddBoolToObject(root, "automations_enabled", g_automations_enabled.load());
     cJSON_AddBoolToObject(root, "sniffer_mode", g_sniffer_mode.load());
     cJSON_AddBoolToObject(root, "hardware_listen_only", g_hardware_listen_only.load());
+    cJSON_AddBoolToObject(root, "mitm_bridge_enabled", g_mitm_bridge_enabled.load());
     cJSON_AddNumberToObject(root, "gvret_clients", gvret_get_client_count());
     const esp_app_desc_t *app_desc = esp_app_get_description();
     const char* fw_ver = (app_desc && app_desc->version[0] != '\0') ? app_desc->version : "unknown";
@@ -1898,6 +1900,10 @@ static esp_err_t api_system_control_handler(httpd_req_t *req) {
             cJSON *en = cJSON_GetObjectItem(root, "enabled");
             bool val = cJSON_IsBool(en) ? cJSON_IsTrue(en) : !g_hardware_listen_only.load();
             set_sniffer_mode(g_sniffer_mode.load(), val);
+        } else if (strcmp(act, "toggle_mitm_bridge") == 0) {
+            cJSON *mb = cJSON_GetObjectItem(root, "mitm_bridge_enabled");
+            bool val = cJSON_IsBool(mb) ? cJSON_IsTrue(mb) : !g_mitm_bridge_enabled.load();
+            set_mitm_bridge_enabled(val);
         } else if (strcmp(act, "disconnect_gvret") == 0 || strcmp(act, "reset_gvret") == 0) {
             gvret_disconnect_client();
         }
@@ -1906,6 +1912,11 @@ static esp_err_t api_system_control_handler(httpd_req_t *req) {
     cJSON *auto_item = cJSON_GetObjectItem(root, "automations_enabled");
     if (cJSON_IsBool(auto_item)) {
         set_automations_enabled(cJSON_IsTrue(auto_item));
+    }
+
+    cJSON *mitm_item = cJSON_GetObjectItem(root, "mitm_bridge_enabled");
+    if (cJSON_IsBool(mitm_item) && (!act_item || !cJSON_IsString(act_item) || strcmp(act_item->valuestring, "toggle_mitm_bridge") != 0)) {
+        set_mitm_bridge_enabled(cJSON_IsTrue(mitm_item));
     }
 
     cJSON *sniff_item = cJSON_GetObjectItem(root, "sniffer_mode");

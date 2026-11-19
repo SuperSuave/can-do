@@ -14,8 +14,12 @@ extern std::vector<AutomationRule> global_automations;
 extern std::mutex g_catalog_mutex;
 extern std::mutex g_automations_mutex;
 extern std::atomic<uint32_t> g_automations_gen;
+extern std::atomic<bool> g_has_mitm_rules;
 
 void rebuild_catalog_can_id_index(void);
+void mitm_arm_entity(const std::string& entity_id, uint32_t hold_ms_override = 0);
+void mitm_arm_can_id(uint32_t can_id, uint32_t hold_ms_override = 0);
+bool mitm_should_block_bridged_frame(uint32_t can_id, uint8_t rx_bus, uint8_t dst_bus, const uint8_t* data, uint8_t dlc);
 
 int get_d_index(const char* key);
 uint8_t parse_hex_string(const char* hex_str, bool* is_inverted = nullptr);

@@ -8,5 +8,6 @@
   "min_12v_gate_voltage": 12.2,
   "quiet_hours_enabled": false,
   "quiet_hours_start": "22:00",
-  "quiet_hours_end": "07:00"
+  "quiet_hours_end": "07:00",
+  "mitm_bridge_enabled": false
 }

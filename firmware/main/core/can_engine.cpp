@@ -428,12 +428,53 @@ extern esp_mqtt_client_handle_t global_mqtt_client;
 std::atomic<bool> g_automations_enabled{true};
 std::atomic<bool> g_sniffer_mode{false};
 std::atomic<bool> g_hardware_listen_only{false};
+std::atomic<bool> g_mitm_bridge_enabled{false};
 std::atomic<bool> g_twai_reconfig_pending{false};
 std::atomic<twai_mode_t> g_twai_requested_mode{TWAI_MODE_NORMAL};
 
 void set_automations_enabled(bool enabled) {
     g_automations_enabled.store(enabled);
     ESP_LOGI(TAG, "Automations execution: %s", enabled ? "ENABLED" : "DISABLED");
+}
+
+void set_mitm_bridge_enabled(bool enabled) {
+    g_mitm_bridge_enabled.store(enabled, std::memory_order_release);
+    ESP_LOGI(TAG, "Dual-CAN MITM bridge: %s", enabled ? "ENABLED (CAN0 <-> CAN1 filtering)" : "DISABLED (Bypass)");
+}
+
+void can_engine_load_preferences(void) {
+    FILE* f = fopen("/spiffs/preferences.json", "r");
+    if (!f) {
+        g_mitm_bridge_enabled.store(false, std::memory_order_release);
+        return;
+    }
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (sz <= 0 || sz > 32768) {
+        fclose(f);
+        return;
+    }
+    char* buf = static_cast<char*>(malloc(sz + 1));
+    if (!buf) {
+        fclose(f);
+        return;
+    }
+    size_t nread = fread(buf, 1, sz, f);
+    buf[nread] = '\0';
+    fclose(f);
+
+    cJSON* root = cJSON_Parse(buf);
+    free(buf);
+    if (!root) return;
+
+    bool mitm_en = false;
+    cJSON* mitm_item = cJSON_GetObjectItem(root, "mitm_bridge_enabled");
+    if (cJSON_IsBool(mitm_item)) {
+        mitm_en = cJSON_IsTrue(mitm_item);
+    }
+    cJSON_Delete(root);
+    set_mitm_bridge_enabled(mitm_en);
 }
 
 void set_sniffer_mode(bool enabled, bool hardware_listen_only) {
@@ -1498,6 +1539,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                 }
             }
             if (executed_inline) {
+                mitm_arm_entity(step.entity_id);
                 execute_can_burst(tx_can_id, tx_steps, tx_delay_ms);
             } else {
                 ESP_LOGW(TAG, "Entity '%s' command '%s' not found for inline execution",
@@ -1507,6 +1549,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
         }
 
         if (step.type == ActionType::TRACK_POPUP) {
+            mitm_arm_entity("cluster_track_popup_message");
             const std::string& txt = !step.popup_text.empty() ? step.popup_text : step.popup_message;
             if (!txt.empty()) {
                 if (step.popup_level == "warning") {
@@ -1522,6 +1565,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
 
 
         if (step.type == ActionType::PRECONDITION) {
+            mitm_arm_entity("battery_preconditioning");
             precondition_execute_action(step.precon_mode.c_str(), step.precon_action.c_str());
             continue;
         }
@@ -1537,6 +1581,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             if (step.nav_action == "clear") {
                 hud_nav_clear();
             } else {
+                mitm_arm_entity("hud_turn_by_turn_maneuver");
                 hud_nav_instruction_t instr = {};
                 instr.icon = (hud_maneuver_icon_t)step.nav_icon;
                 instr.direction_deg = step.nav_direction_deg;
@@ -1714,6 +1759,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             }
 
             uint32_t tx_can_id = entity.action_can_id ? entity.action_can_id : entity.state_can_id;
+            mitm_arm_entity(entity.id);
             execute_can_burst(tx_can_id, target_opt->steps, entity.delay_ms);
 
             // Sync live entity state cache and broadcast outside g_catalog_mutex
@@ -1816,6 +1862,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
 
         can_bus_t target_bus = (step.bus == 1) ? CAN_BUS_1 : CAN_BUS_0;
         uint32_t frame_delay_ms = (step.delay_ms > 0) ? step.delay_ms : delay_ms;
+        mitm_arm_can_id(tx_msg.identifier);
         for (int r = 0; r < step.repeat; r++) {
             twai_message_t msg_to_send = tx_msg;
             fwd_result_t fwd_res = precondition_fwd_hook(&msg_to_send, target_bus);
@@ -1955,6 +2002,7 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
                 mode = "persistent";
             }
         }
+        mitm_arm_entity("battery_preconditioning");
         precondition_execute_action(mode.c_str(), act.c_str());
         return true;
     }
@@ -2359,6 +2407,7 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
     }
 
     uint32_t cid = entity.action_can_id ? entity.action_can_id : entity.state_can_id;
+    mitm_arm_entity(entity.id);
     bool ok = queue_action_steps(cid, entity.delay_ms, matched_opt->steps, entity.id);
     if (ok) {
         {
@@ -3499,6 +3548,7 @@ void can_rx_task(void* arg) {
         } // end !use_dual_can
 
         bool has_frame = false;
+        bool from_physical_bus = false;
         can_bus_t frame_bus = CAN_BUS_0;
         can_fd_frame_t rx_fd_msg = {};
 
@@ -3510,6 +3560,7 @@ void can_rx_task(void* arg) {
                 can_bus_t b = order[i];
                 if (dual_can_is_available(b) && dual_can_poll_receive(b, &rx_fd_msg) == ESP_OK) {
                     has_frame = true;
+                    from_physical_bus = true;
                     frame_bus = b;
                     can_fd_to_twai(&rx_fd_msg, &rx_msg);
                     break;
@@ -3517,6 +3568,7 @@ void can_rx_task(void* arg) {
             }
             if (!has_frame && s_can_inject_queue && xQueueReceive(s_can_inject_queue, &rx_msg, 0) == pdTRUE) {
                 has_frame = true;
+                from_physical_bus = false;
                 frame_bus = CAN_BUS_0;
                 can_twai_to_fd(&rx_msg, CAN_BUS_0, &rx_fd_msg);
             }
@@ -3527,10 +3579,12 @@ void can_rx_task(void* arg) {
             // On-chip TWAI or inject queue
             if (twai_receive(&rx_msg, pdMS_TO_TICKS(2)) == ESP_OK) {
                 has_frame = true;
+                from_physical_bus = true;
                 frame_bus = CAN_BUS_0;
                 can_twai_to_fd(&rx_msg, CAN_BUS_0, &rx_fd_msg);
             } else if (s_can_inject_queue && xQueueReceive(s_can_inject_queue, &rx_msg, 0) == pdTRUE) {
                 has_frame = true;
+                from_physical_bus = false;
                 frame_bus = CAN_BUS_0;
                 can_twai_to_fd(&rx_msg, CAN_BUS_0, &rx_fd_msg);
             }
@@ -3554,6 +3608,37 @@ void can_rx_task(void* arg) {
 
             s_rtc_crash.step_marker = 3;
             hud_nav_rx(&rx_msg, frame_bus);
+
+            // Dual-CAN MITM bridge: forward physical bus frames across CAN_BUS_0 <-> CAN_BUS_1
+            // unless blocked or modified by subsystem hooks or catalog network.mitm rules.
+            if (from_physical_bus && use_dual_can &&
+                g_mitm_bridge_enabled.load(std::memory_order_relaxed) &&
+                !g_sniffer_mode.load(std::memory_order_relaxed) &&
+                !g_hardware_listen_only.load(std::memory_order_relaxed) &&
+                dual_can_is_available(CAN_BUS_0) &&
+                dual_can_is_available(CAN_BUS_1)) {
+                can_bus_t dst_bus = (frame_bus == CAN_BUS_0) ? CAN_BUS_1 : CAN_BUS_0;
+                twai_message_t fwd_msg = rx_msg;
+                fwd_result_t pre_res = precondition_fwd_hook(&fwd_msg, dst_bus);
+                fwd_result_t hud_res = (pre_res != FWD_BLOCK) ? hud_nav_fwd(&fwd_msg, dst_bus) : FWD_BLOCK;
+                bool blocked_by_hsm = (pre_res == FWD_BLOCK || hud_res == FWD_BLOCK);
+                bool blocked_by_catalog = !blocked_by_hsm &&
+                    g_has_mitm_rules.load(std::memory_order_acquire) &&
+                    mitm_should_block_bridged_frame(rx_msg.identifier, static_cast<uint8_t>(frame_bus),
+                                                    static_cast<uint8_t>(dst_bus), fwd_msg.data,
+                                                    fwd_msg.data_length_code);
+                if (!blocked_by_hsm && !blocked_by_catalog) {
+                    can_fd_frame_t fwd_fd = rx_fd_msg;
+                    fwd_fd.bus = static_cast<uint8_t>(dst_bus);
+                    if (pre_res == FWD_MODIFIED || hud_res == FWD_MODIFIED) {
+                        uint8_t copy_len = fwd_msg.data_length_code > 8 ? 8 : fwd_msg.data_length_code;
+                        if (copy_len > 0) {
+                            memcpy(fwd_fd.data, fwd_msg.data, copy_len);
+                        }
+                    }
+                    can_send_fd(dst_bus, &fwd_fd, pdMS_TO_TICKS(1));
+                }
+            }
 
             s_rtc_crash.step_marker = 4;
             uds_engine_on_can_rx(&rx_msg);
