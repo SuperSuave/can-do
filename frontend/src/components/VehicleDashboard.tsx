@@ -1300,13 +1300,23 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
     };
     fetchCurrentStatesRef.current = fetchCurrentStates;
     fetchCurrentStates();
-    // 3-second synchronization keeps state aligned across reconnects and late-mounting views
-    const syncInterval = setInterval(fetchCurrentStates, 3000);
     return () => {
       cancelled = true;
-      clearInterval(syncInterval);
     };
   }, []);
+
+  // Fallback 3-second REST poll only while WebSocket is disconnected/reconnecting
+  useEffect(() => {
+    if (connectedDevice) return;
+    const syncInterval = setInterval(() => {
+      if (!deviceWs.getConnected()) {
+        fetchCurrentStatesRef.current();
+      }
+    }, 3000);
+    return () => {
+      clearInterval(syncInterval);
+    };
+  }, [connectedDevice]);
 
   // 2. Real-time WebSocket connection to physical CAN Do device via singleton
   useEffect(() => {
