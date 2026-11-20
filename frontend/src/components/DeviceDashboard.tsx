@@ -112,7 +112,7 @@ export interface WifiStatus {
   ap_ssid: string;
   ap_ip: string;
   ap_clients: number;
-  ap_mode: number;
+  ap_mode: 'auto' | 'always_on' | 'disabled';
 }
 
 export interface KnownNetwork {

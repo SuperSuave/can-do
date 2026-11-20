@@ -106,6 +106,16 @@ typedef struct {
     bool last_rx_empty;
 } mcp2518fd_t;
 
+typedef struct {
+    bool initialized;
+    bool listen_only;
+    uint8_t tec;
+    uint8_t rec;
+    bool bus_off;
+    uint32_t tx_fail_count;
+    uint32_t rx_overflow_count;
+} mcp2518fd_status_snapshot_t;
+
 // Controller initialization and control API
 esp_err_t mcp2518fd_init(mcp2518fd_t *dev, const mcp2518fd_config_t *config);
 esp_err_t mcp2518fd_set_mode(mcp2518fd_t *dev, mcp2518fd_mode_t mode);
@@ -113,6 +123,7 @@ esp_err_t mcp2518fd_transmit(mcp2518fd_t *dev, const can_fd_frame_t *frame, Tick
 esp_err_t mcp2518fd_receive(mcp2518fd_t *dev, can_fd_frame_t *frame, TickType_t wait_ticks);
 bool mcp2518fd_rx_available(mcp2518fd_t *dev);
 esp_err_t mcp2518fd_get_error_counts(mcp2518fd_t *dev, uint8_t *tec, uint8_t *rec, bool *bus_off);
+esp_err_t mcp2518fd_get_status_snapshot(mcp2518fd_t *dev, mcp2518fd_status_snapshot_t *out);
 esp_err_t mcp2518fd_recover(mcp2518fd_t *dev);
 
 // Dual-CAN Manager: Handles Channel 0 (Standard CAN) and Channel 1 (CAN FD)
@@ -123,6 +134,7 @@ esp_err_t dual_can_receive(can_bus_t bus, can_fd_frame_t *frame, TickType_t wait
 esp_err_t dual_can_poll_receive(can_bus_t bus, can_fd_frame_t *frame);
 bool dual_can_is_available(can_bus_t bus);
 mcp2518fd_t* dual_can_get_device(can_bus_t bus);
+esp_err_t dual_can_get_status_snapshot(can_bus_t bus, mcp2518fd_status_snapshot_t *out);
 esp_err_t dual_can_set_listen_only(bool listen_only);
 void dual_can_clear_boot_overflows(void);
 void dual_can_shutdown(void);

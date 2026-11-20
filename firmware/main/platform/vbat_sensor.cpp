@@ -13,6 +13,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <cmath>
+#include <cstdio>
+#include <mutex>
 
 static const char* TAG = "VBAT_ADC";
 
@@ -22,10 +24,12 @@ static adc_channel_t s_adc_channel = ADC_CHANNEL_0;
 static bool s_adc_calibrated = false;
 static bool s_has_adc_divider = true;
 
+static std::mutex s_vbat_mutex;
 static float s_last_vbat_val = 0.0f;
 static char s_last_vbat_str[16] = "Unknown";
 
 float vbat_sensor_get_last(void) {
+    std::lock_guard<std::mutex> lock(s_vbat_mutex);
     return s_last_vbat_val;
 }
 
@@ -33,9 +37,21 @@ const char* vbat_sensor_get_last_str(void) {
     return s_last_vbat_str;
 }
 
+size_t vbat_sensor_get_last_str_copy(char *out, size_t len) {
+    if (!out || len == 0) return 0;
+    std::lock_guard<std::mutex> lock(s_vbat_mutex);
+    int n = snprintf(out, len, "%s", s_last_vbat_str);
+    if (n < 0) {
+        out[0] = '\0';
+        return 0;
+    }
+    return (static_cast<size_t>(n) < len) ? static_cast<size_t>(n) : (len - 1);
+}
+
 void vbat_sensor_set_from_can(float voltage) {
     if (s_has_adc_divider) return;
     if (voltage >= 5.0f && voltage <= 18.0f) {
+        std::lock_guard<std::mutex> lock(s_vbat_mutex);
         s_last_vbat_val = voltage;
         snprintf(s_last_vbat_str, sizeof(s_last_vbat_str), "%.1f V", voltage);
     }
@@ -53,22 +69,27 @@ static void vbat_monitor_task(void* arg) {
             continue;
         }
 
-        s_last_vbat_val = v;
-        snprintf(s_last_vbat_str, sizeof(s_last_vbat_str), "%.1f V", v);
+        char vbat_str[16];
+        snprintf(vbat_str, sizeof(vbat_str), "%.1f V", v);
+        {
+            std::lock_guard<std::mutex> lock(s_vbat_mutex);
+            s_last_vbat_val = v;
+            snprintf(s_last_vbat_str, sizeof(s_last_vbat_str), "%s", vbat_str);
+        }
 
         // Update catalog entity current_state
         {
             std::lock_guard<std::mutex> lock(g_catalog_mutex);
             for (auto& entity : global_catalog) {
                 if (entity.id == "cond_aux_12v_battery") {
-                    entity.current_state = s_last_vbat_str;
+                    entity.current_state = vbat_str;
                     break;
                 }
             }
         }
 
         // Broadcast to Web Dashboard WebSocket
-        broadcast_ws_state("cond_aux_12v_battery", s_last_vbat_str);
+        broadcast_ws_state("cond_aux_12v_battery", vbat_str);
 
         // Publish to MQTT
         mqtt_mgr_publish_vbat(v);

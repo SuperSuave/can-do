@@ -368,8 +368,8 @@ esp_err_t mcp2518fd_transmit(mcp2518fd_t *dev, const can_fd_frame_t *frame, Tick
     uint32_t fifosta = 0;
     esp_err_t ret = mcp2518fd_read_32(dev, MCP2518FD_REG_CiFIFOSTA(1), &fifosta);
     if (ret != ESP_OK || !(fifosta & 0x01)) {
-        xSemaphoreGive(dev->mutex);
         dev->tx_fail_count++;
+        xSemaphoreGive(dev->mutex);
         return ESP_ERR_NO_MEM; // TX FIFO full
     }
 
@@ -553,6 +553,38 @@ esp_err_t mcp2518fd_get_error_counts(mcp2518fd_t *dev, uint8_t *tec, uint8_t *re
     return ret;
 }
 
+esp_err_t mcp2518fd_get_status_snapshot(mcp2518fd_t *dev, mcp2518fd_status_snapshot_t *out) {
+    if (!out) return ESP_ERR_INVALID_ARG;
+    memset(out, 0, sizeof(*out));
+    if (!dev) return ESP_ERR_INVALID_ARG;
+
+    SemaphoreHandle_t mtx = dev->mutex;
+    if (mtx && xSemaphoreTake(mtx, pdMS_TO_TICKS(20)) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    out->initialized = dev->initialized;
+    out->listen_only = dev->initialized ? dev->config.listen_only : false;
+    out->tx_fail_count = dev->initialized ? dev->tx_fail_count : 0;
+    out->rx_overflow_count = dev->initialized ? dev->rx_overflow_count : 0;
+
+    esp_err_t ret = ESP_OK;
+    if (dev->initialized && dev->spi) {
+        uint32_t trec = 0;
+        ret = mcp2518fd_read_32(dev, MCP2518FD_REG_CiTREC, &trec);
+        if (ret == ESP_OK) {
+            out->rec = trec & 0xFF;
+            out->tec = (trec >> 8) & 0xFF;
+            out->bus_off = (trec & (1 << 21)) != 0;
+        }
+    }
+
+    if (mtx) {
+        xSemaphoreGive(mtx);
+    }
+    return ret;
+}
+
 esp_err_t mcp2518fd_recover(mcp2518fd_t *dev) {
     if (!dev || !dev->initialized) return ESP_ERR_INVALID_ARG;
     ESP_LOGW(TAG, "CS=%d: Re-initializing MCP2518FD controller after fault...", dev->config.cs_pin);
@@ -669,6 +701,13 @@ mcp2518fd_t* dual_can_get_device(can_bus_t bus) {
     return &s_can_bus[bus];
 }
 
+esp_err_t dual_can_get_status_snapshot(can_bus_t bus, mcp2518fd_status_snapshot_t *out) {
+    if (!out) return ESP_ERR_INVALID_ARG;
+    memset(out, 0, sizeof(*out));
+    if (bus >= CAN_BUS_COUNT) return ESP_ERR_INVALID_ARG;
+    return mcp2518fd_get_status_snapshot(&s_can_bus[bus], out);
+}
+
 esp_err_t dual_can_send(can_bus_t bus, const can_fd_frame_t *frame, TickType_t wait_ticks) {
     if (bus >= CAN_BUS_COUNT || !s_can_bus[bus].initialized) return ESP_ERR_INVALID_STATE;
     return mcp2518fd_transmit(&s_can_bus[bus], frame, wait_ticks);
@@ -721,11 +760,26 @@ esp_err_t dual_can_set_listen_only(bool listen_only) {
     esp_err_t overall = ESP_OK;
     for (int i = 0; i < CAN_BUS_COUNT; i++) {
         mcp2518fd_t *dev = &s_can_bus[i];
-        if (!dev->initialized) continue;
-        dev->config.listen_only = listen_only;
+        bool is_init = false;
+        bool is_fd = false;
+        if (dev->mutex && xSemaphoreTake(dev->mutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+            is_init = dev->initialized;
+            if (is_init) {
+                dev->config.listen_only = listen_only;
+                is_fd = dev->config.can_fd_enabled;
+            }
+            xSemaphoreGive(dev->mutex);
+        } else if (!dev->mutex) {
+            is_init = dev->initialized;
+            if (is_init) {
+                dev->config.listen_only = listen_only;
+                is_fd = dev->config.can_fd_enabled;
+            }
+        }
+        if (!is_init) continue;
         mcp2518fd_mode_t mode = listen_only
             ? MCP2518FD_MODE_LISTEN_ONLY
-            : (dev->config.can_fd_enabled ? MCP2518FD_MODE_NORMAL : MCP2518FD_MODE_CLASSIC);
+            : (is_fd ? MCP2518FD_MODE_NORMAL : MCP2518FD_MODE_CLASSIC);
         esp_err_t ret = mcp2518fd_set_mode(dev, mode);
         if (ret != ESP_OK) {
             overall = ret;

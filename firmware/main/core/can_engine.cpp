@@ -448,6 +448,7 @@ void init_crash_diagnostics(void) {
 struct EvalContext {
     const char* firing_trigger_id = "";
     uint32_t wait_for_start_ms = 0;
+    bool mutate_sustained = true;
 };
 
 static std::mutex s_ble_mutex;
@@ -1122,6 +1123,12 @@ static bool evaluate_condition_ctx(const AutomationCondition& cond, const EvalCo
 
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
     std::lock_guard<std::mutex> lk(cond.sustained->mtx);
+    if (!ctx.mutate_sustained) {
+        if (!raw) {
+            return false;
+        }
+        return cond.sustained->active && (now_ms - cond.sustained->since_ms) >= cond.for_ms;
+    }
     if (raw) {
         if (!cond.sustained->active) {
             cond.sustained->active = true;
@@ -1135,8 +1142,14 @@ static bool evaluate_condition_ctx(const AutomationCondition& cond, const EvalCo
     return false;
 }
 
-bool evaluate_condition(const AutomationCondition& cond) {
-    return evaluate_condition_ctx(cond, EvalContext{});
+bool evaluate_condition(const AutomationCondition& cond, bool mutate_sustained) {
+    EvalContext ctx;
+    ctx.mutate_sustained = mutate_sustained;
+    return evaluate_condition_ctx(cond, ctx);
+}
+
+bool evaluate_condition_readonly(const AutomationCondition& cond) {
+    return evaluate_condition(cond, false);
 }
 
 static bool condition_uses_can_id(const AutomationCondition& cond, uint32_t can_id) {

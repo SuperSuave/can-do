@@ -27,10 +27,13 @@
 #include "esp_sntp.h"
 #include "timezone_mgr.h"
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <cctype>
+#include <cmath>
 #include <algorithm>
-#include <unordered_set>
+#include <new>
+#include <utility>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -39,6 +42,7 @@
 #include <mutex>
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "psram_alloc.h"
 
 static const char* TAG = "WEB_API";
 extern std::string g_device_id;
@@ -70,6 +74,33 @@ struct CatalogReloadGuard {
     CatalogReloadGuard& operator=(const CatalogReloadGuard&) = delete;
 };
 
+struct PsramBuf {
+    char *ptr = nullptr;
+    size_t len = 0;
+
+    explicit PsramBuf(size_t size) : len(size) {
+        if (size > 0) {
+#if CONFIG_SPIRAM
+            ptr = static_cast<char *>(heap_caps_malloc_prefer(
+                size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT));
+#else
+            ptr = static_cast<char *>(std::malloc(size));
+#endif
+        }
+    }
+    ~PsramBuf() {
+        if (ptr) {
+            std::free(ptr);
+        }
+    }
+    PsramBuf(const PsramBuf&) = delete;
+    PsramBuf& operator=(const PsramBuf&) = delete;
+    explicit operator bool() const { return ptr != nullptr; }
+    char *data() { return ptr; }
+    const char *data() const { return ptr; }
+    size_t size() const { return len; }
+};
+
 static constexpr size_t kMaxAutomationsBytes = 128 * 1024;
 static constexpr size_t kMaxPreferencesBytes = 8 * 1024;
 static constexpr int kMaxStreamTimeoutRetries = 5;
@@ -85,11 +116,16 @@ static void load_crash_diag_cache_once(void) {
     s_crash_diag_loaded = true;
     FILE *diag_f = fopen("/spiffs/crash_diag.json", "r");
     if (!diag_f) return;
-    char diag_buf[1024] = {0};
-    size_t n = fread(diag_buf, 1, sizeof(diag_buf) - 1, diag_f);
+    PsramBuf diag_buf(1024);
+    if (!diag_buf) {
+        fclose(diag_f);
+        return;
+    }
+    size_t n = fread(diag_buf.data(), 1, diag_buf.size() - 1, diag_f);
     fclose(diag_f);
+    diag_buf.data()[n] = '\0';
     if (n > 0) {
-        cJSON *cj_persisted = cJSON_Parse(diag_buf);
+        cJSON *cj_persisted = cJSON_Parse(diag_buf.data());
         if (cj_persisted) {
             char *normalized = cJSON_PrintUnformatted(cj_persisted);
             cJSON_Delete(cj_persisted);
@@ -178,17 +214,18 @@ void broadcast_ws_raw(const std::string& json_str) {
     }
 }
 
-static std::unordered_map<std::string, std::string> s_live_state_cache;
+static PsramUnorderedMap<std::string, std::string> s_live_state_cache;
 static std::mutex s_state_cache_mutex;
 static std::atomic<bool> s_has_ws_clients_cached{false};
 
-std::unordered_map<std::string, std::string> get_live_state_cache(void) {
+PsramUnorderedMap<std::string, std::string> get_live_state_cache(void) {
     std::lock_guard<std::mutex> lock(s_state_cache_mutex);
     return s_live_state_cache;
 }
 
-static void append_json_escaped(std::string& out, const std::string& val) {
-    for (char ch : val) {
+static void append_json_escaped(std::string& out, const char* data, size_t len) {
+    for (size_t i = 0; i < len; ++i) {
+        char ch = data[i];
         if (ch == '"') out += "\\\"";
         else if (ch == '\\') out += "\\\\";
         else if (ch == '\n') out += "\\n";
@@ -196,6 +233,10 @@ static void append_json_escaped(std::string& out, const std::string& val) {
         else if (ch == '\t') out += "\\t";
         else if (static_cast<uint8_t>(ch) >= 0x20) out += ch;
     }
+}
+
+static void append_json_escaped(std::string& out, const std::string& val) {
+    append_json_escaped(out, val.data(), val.size());
 }
 
 static std::string build_ws_state_json(const std::string& entity_id, const std::string& state) {
@@ -238,7 +279,12 @@ void broadcast_ws_automation_event(const std::string& id, const std::string& nam
 struct ws_log_item_t {
     char text[192];
 };
+static constexpr UBaseType_t kWsLogQueueLen = 16;
 static QueueHandle_t s_ws_log_queue = nullptr;
+#if CONFIG_SPIRAM
+static StaticQueue_t s_ws_log_queue_struct;
+static uint8_t *s_ws_log_queue_storage = nullptr;
+#endif
 
 static void ws_log_worker_task(void *arg) {
     ws_log_item_t item;
@@ -258,16 +304,14 @@ static void ws_log_worker_task(void *arg) {
                 continue;
             }
             size_t len = strnlen(item.text, sizeof(item.text));
+            while (len > 0 && (item.text[len - 1] == '\n' || item.text[len - 1] == '\r')) {
+                --len;
+            }
             if (len == 0) continue;
 
             std::string json = "{\"type\":\"log\",\"msg\":\"";
             json.reserve(len + 32);
-            for (size_t i = 0; i < len && item.text[i] != '\0'; i++) {
-                if (item.text[i] == '\n' || item.text[i] == '\r') continue;
-                else if (item.text[i] == '"') json += "\\\"";
-                else if (item.text[i] == '\\') json += "\\\\";
-                else if ((uint8_t)item.text[i] >= 0x20) json += item.text[i];
-            }
+            append_json_escaped(json, item.text, len);
             json += "\"}";
             broadcast_ws_raw(json);
         }
@@ -324,33 +368,40 @@ static esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filepa
 static void set_cors_headers(httpd_req_t *req);
 
 static esp_err_t static_file_handler(httpd_req_t *req) {
-    static char filepath[600];
+    PsramBuf filepath_buf(600);
+    PsramBuf gz_filepath_buf(610);
+    if (!filepath_buf || !gz_filepath_buf) {
+        set_cors_headers(req);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+        return ESP_OK;
+    }
+    char *filepath = filepath_buf.data();
+    char *gz_filepath = gz_filepath_buf.data();
 
     // Determine candidate file path
     if (strcmp(req->uri, "/") == 0) {
-        snprintf(filepath, sizeof(filepath), "/spiffs/www/index.html");
+        snprintf(filepath, filepath_buf.size(), "/spiffs/www/index.html");
     } else if (strncmp(req->uri, "/catalog.json", 13) == 0 || strstr(req->uri, "can_do_catalog.json")) {
         // Look for catalog in root first (/spiffs/catalog.json), then under /spiffs/www/
         struct stat st_test;
         if (stat("/spiffs/catalog.json", &st_test) == 0 || stat("/spiffs/catalog.json.gz", &st_test) == 0) {
-            snprintf(filepath, sizeof(filepath), "/spiffs/catalog.json");
+            snprintf(filepath, filepath_buf.size(), "/spiffs/catalog.json");
         } else if (stat("/spiffs/can_do_catalog.json", &st_test) == 0) {
-            snprintf(filepath, sizeof(filepath), "/spiffs/can_do_catalog.json");
+            snprintf(filepath, filepath_buf.size(), "/spiffs/can_do_catalog.json");
         } else {
-            snprintf(filepath, sizeof(filepath), "/spiffs/www%s", req->uri);
+            snprintf(filepath, filepath_buf.size(), "/spiffs/www%s", req->uri);
         }
     } else if (strncmp(req->uri, "/automations.json", 17) == 0) {
-        snprintf(filepath, sizeof(filepath), "/spiffs/automations.json");
+        snprintf(filepath, filepath_buf.size(), "/spiffs/automations.json");
     } else {
-        snprintf(filepath, sizeof(filepath), "/spiffs/www%s", req->uri);
+        snprintf(filepath, filepath_buf.size(), "/spiffs/www%s", req->uri);
     }
 
     // Strip any query parameters
     char *query = strchr(filepath, '?');
     if (query) *query = '\0';
 
-    static char gz_filepath[610];
-    snprintf(gz_filepath, sizeof(gz_filepath), "%s.gz", filepath);
+    snprintf(gz_filepath, gz_filepath_buf.size(), "%s.gz", filepath);
 
     struct stat file_stat;
     bool is_gz = false;
@@ -366,14 +417,14 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
         // 2. SPA Fallback: serve index.html or index.html.gz for client-side routing (never for /api/)
         const char *dot = strrchr(req->uri, '.');
         if (strncmp(req->uri, "/api/", 5) != 0 && (!dot || strcmp(dot, ".html") == 0)) {
-            snprintf(gz_filepath, sizeof(gz_filepath), "/spiffs/www/index.html.gz");
+            snprintf(gz_filepath, gz_filepath_buf.size(), "/spiffs/www/index.html.gz");
             if (stat(gz_filepath, &file_stat) == 0) {
                 fd = open(gz_filepath, O_RDONLY, 0);
                 is_gz = true;
-                strcpy(filepath, "/spiffs/www/index.html");
+                snprintf(filepath, filepath_buf.size(), "/spiffs/www/index.html");
             } else if (stat("/spiffs/www/index.html", &file_stat) == 0) {
                 fd = open("/spiffs/www/index.html", O_RDONLY, 0);
-                strcpy(filepath, "/spiffs/www/index.html");
+                snprintf(filepath, filepath_buf.size(), "/spiffs/www/index.html");
             }
         }
     }
@@ -434,14 +485,20 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
         httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
     }
 
-    // 4. Stream file out in 2KB chunks without dynamic heap allocation
+    // 4. Stream file out in 2KB chunks using PSRAM-preferring buffer to keep httpd stack lean
     // Mark transfer as active to prevent WebSocket streaming from overloading Wi-Fi/LwIP during page load
     StaticTransferGuard transfer_guard;
 
-    char s_file_chunk[2048];
+    PsramBuf file_chunk(2048);
+    if (!file_chunk) {
+        close(fd);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+        return ESP_OK;
+    }
+
     ssize_t read_bytes;
-    while ((read_bytes = read(fd, s_file_chunk, sizeof(s_file_chunk))) > 0) {
-        if (httpd_resp_send_chunk(req, s_file_chunk, read_bytes) != ESP_OK) {
+    while ((read_bytes = read(fd, file_chunk.data(), file_chunk.size())) > 0) {
+        if (httpd_resp_send_chunk(req, file_chunk.data(), read_bytes) != ESP_OK) {
             ESP_LOGW(TAG, "Chunk send failed for %s", filepath);
             close(fd);
             return ESP_FAIL;
@@ -545,25 +602,34 @@ static bool read_req_body(httpd_req_t *req, size_t max_len, std::string &out, es
 
 static esp_err_t api_states_handler(httpd_req_t *req) {
     set_cors_headers(req);
-    cJSON *root = cJSON_CreateArray();
-    std::unordered_set<std::string> included;
-
-    std::unordered_map<std::string, std::string> cache_snapshot = get_live_state_cache();
+    PsramUnorderedMap<std::string, std::string> cache_snapshot = get_live_state_cache();
+    PsramVector<std::pair<std::string, std::string>> catalog_snapshot;
 
     {
         std::lock_guard<std::mutex> lock(g_catalog_mutex);
+        catalog_snapshot.reserve(global_catalog.size());
         for (const auto& entity : global_catalog) {
-            cJSON *item = cJSON_CreateObject();
-            cJSON_AddStringToObject(item, "entity", entity.id.c_str());
-            std::string st = entity.current_state;
-            auto it = cache_snapshot.find(entity.id);
-            if (it != cache_snapshot.end()) {
-                st = it->second;
-            }
-            cJSON_AddStringToObject(item, "state", st.empty() ? "Unknown" : st.c_str());
-            cJSON_AddItemToArray(root, item);
-            included.insert(entity.id);
+            catalog_snapshot.emplace_back(entity.id, entity.current_state);
         }
+    }
+
+    cJSON *root = cJSON_CreateArray();
+    if (!root) {
+        return send_cjson_response(req, nullptr);
+    }
+    PsramUnorderedSet<std::string> included;
+
+    for (const auto& entry : catalog_snapshot) {
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "entity", entry.first.c_str());
+        std::string st = entry.second;
+        auto it = cache_snapshot.find(entry.first);
+        if (it != cache_snapshot.end()) {
+            st = it->second;
+        }
+        cJSON_AddStringToObject(item, "state", st.empty() ? "Unknown" : st.c_str());
+        cJSON_AddItemToArray(root, item);
+        included.insert(entry.first);
     }
 
     for (const auto& pair : cache_snapshot) {
@@ -578,9 +644,11 @@ static esp_err_t api_states_handler(httpd_req_t *req) {
 
     // Always include live hardware ADC 12V battery reading
     if (included.find("cond_aux_12v_battery") == included.end()) {
+        char vbat_buf[16];
+        vbat_sensor_get_last_str_copy(vbat_buf, sizeof(vbat_buf));
         cJSON *item = cJSON_CreateObject();
         cJSON_AddStringToObject(item, "entity", "cond_aux_12v_battery");
-        cJSON_AddStringToObject(item, "state", vbat_sensor_get_last_str());
+        cJSON_AddStringToObject(item, "state", vbat_buf);
         cJSON_AddItemToArray(root, item);
     }
 
@@ -606,7 +674,28 @@ static esp_err_t api_command_handler(httpd_req_t *req) {
     cJSON *target_can_id = cJSON_GetObjectItem(root, "can_id");
 
     if (cJSON_IsString(target_entity)) {
-        const char* cmd_str = cJSON_IsString(target_cmd) ? target_cmd->valuestring : "";
+        std::string cmd_str = cJSON_IsString(target_cmd) ? target_cmd->valuestring : "";
+        cJSON *mode_item = cJSON_GetObjectItem(root, "mode");
+        cJSON *action_item = cJSON_GetObjectItem(root, "action");
+        const bool has_mode = cJSON_IsString(mode_item) && mode_item->valuestring[0] != '\0';
+        const bool has_action = cJSON_IsString(action_item) && action_item->valuestring[0] != '\0';
+        const bool is_precon_entity =
+            (strcmp(target_entity->valuestring, "battery_preconditioning") == 0 ||
+             strcmp(target_entity->valuestring, "precondition") == 0);
+        if ((has_mode || has_action) && (is_precon_entity || cmd_str.empty()) &&
+            (cmd_str.empty() || cmd_str[0] != '{')) {
+            cJSON *fwd = cJSON_CreateObject();
+            if (fwd) {
+                if (has_mode) cJSON_AddStringToObject(fwd, "mode", mode_item->valuestring);
+                if (has_action) cJSON_AddStringToObject(fwd, "action", action_item->valuestring);
+                char *fwd_str = cJSON_PrintUnformatted(fwd);
+                cJSON_Delete(fwd);
+                if (fwd_str) {
+                    cmd_str = fwd_str;
+                    free(fwd_str);
+                }
+            }
+        }
         if (queue_entity_command(target_entity->valuestring, cmd_str)) {
             cJSON_Delete(root);
             httpd_resp_set_type(req, "application/json");
@@ -703,6 +792,11 @@ static esp_err_t api_command_handler(httpd_req_t *req) {
                 cJSON *b = cJSON_GetObjectItem(payload_item, k);
                 if (b && cJSON_IsString(b)) {
                     step.payload[i] = (uint8_t)strtoul(b->valuestring, nullptr, 0);
+                } else if (b && cJSON_IsNumber(b) && std::isfinite(b->valuedouble)) {
+                    double v = b->valuedouble;
+                    if (v < 0.0) v = 0.0;
+                    else if (v > 255.0) v = 255.0;
+                    step.payload[i] = static_cast<uint8_t>(v);
                 }
             }
         }
@@ -719,6 +813,195 @@ static esp_err_t api_command_handler(httpd_req_t *req) {
     cJSON_Delete(root);
     httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Entity/Command not found");
     return ESP_OK;
+}
+
+static const char* condition_op_to_str(ConditionOperator op) {
+    switch (op) {
+        case ConditionOperator::NOT_EQUAL:             return "!=";
+        case ConditionOperator::LESS_THAN:             return "<";
+        case ConditionOperator::LESS_THAN_OR_EQUAL:    return "<=";
+        case ConditionOperator::GREATER_THAN:          return ">";
+        case ConditionOperator::GREATER_THAN_OR_EQUAL: return ">=";
+        case ConditionOperator::EQUAL:
+        default:                                       return "==";
+    }
+}
+
+static bool eval_byte_operator(uint8_t actual, uint8_t target, ConditionOperator op) {
+    switch (op) {
+        case ConditionOperator::NOT_EQUAL:             return actual != target;
+        case ConditionOperator::LESS_THAN:             return actual < target;
+        case ConditionOperator::LESS_THAN_OR_EQUAL:    return actual <= target;
+        case ConditionOperator::GREATER_THAN:          return actual > target;
+        case ConditionOperator::GREATER_THAN_OR_EQUAL: return actual >= target;
+        case ConditionOperator::EQUAL:
+        default:                                       return actual == target;
+    }
+}
+
+static std::string format_failed_condition_msg(const AutomationCondition& cond) {
+    char tmp[128];
+    if (cond.logic == ConditionLogic::AND_GROUP) {
+        return "Condition failed on AND group";
+    } else if (cond.logic == ConditionLogic::OR_GROUP) {
+        return "Condition failed on OR group";
+    } else if (cond.logic == ConditionLogic::NOT_GROUP) {
+        return "Condition failed on NOT group";
+    } else if (cond.type == "time_condition") {
+        snprintf(tmp, sizeof(tmp), "Condition failed on time window %02d:%02d-%02d:%02d",
+                 cond.start_time_min / 60, cond.start_time_min % 60,
+                 cond.end_time_min / 60, cond.end_time_min % 60);
+    } else if (cond.type == "triggered_by") {
+        snprintf(tmp, sizeof(tmp), "Condition failed on triggered_by '%s'", cond.trigger_id.c_str());
+    } else if (cond.type == "device_state" || cond.type == "wifi_condition" || cond.type == "wifi") {
+        snprintf(tmp, sizeof(tmp), "Condition failed on device/wifi property '%s'",
+                 cond.device_property.empty() ? "unknown" : cond.device_property.c_str());
+    } else if (cond.type == "ble_button" || cond.type == "ble" || cond.type == "bluetooth") {
+        const std::string& btn = !cond.ble_button.empty() ? cond.ble_button : cond.target_string;
+        snprintf(tmp, sizeof(tmp), "Condition failed on BLE button '%s'",
+                 btn.empty() ? "any" : btn.c_str());
+    } else if (cond.type == "ble_beacon" || cond.type == "beacon") {
+        const std::string& id = !cond.beacon_uuid.empty() ? cond.beacon_uuid
+                                : (!cond.ble_device.empty() ? cond.ble_device : cond.target_string);
+        snprintf(tmp, sizeof(tmp), "Condition failed on BLE beacon '%s'",
+                 id.empty() ? "any" : id.c_str());
+    } else if (cond.type == "ble_device" || cond.type == "ble_presence") {
+        const std::string& dev = !cond.ble_device.empty() ? cond.ble_device
+                                 : (!cond.beacon_uuid.empty() ? cond.beacon_uuid : cond.target_string);
+        snprintf(tmp, sizeof(tmp), "Condition failed on BLE device '%s'",
+                 dev.empty() ? "any" : dev.c_str());
+    } else if (cond.type == "voltage" || cond.type == "vbat") {
+        snprintf(tmp, sizeof(tmp), "Condition failed on battery voltage (%s %.2fV)",
+                 condition_op_to_str(cond.op), cond.target_float);
+    } else {
+        snprintf(tmp, sizeof(tmp), "Condition failed on CAN ID 0x%03lX", (unsigned long)cond.can_id);
+    }
+    return std::string(tmp);
+}
+
+static cJSON* serialize_condition_diag(const AutomationCondition& cond, bool *out_passed = nullptr, int depth = 0) {
+    bool passed = evaluate_condition_readonly(cond);
+    if (out_passed) *out_passed = passed;
+
+    cJSON *c_obj = cJSON_CreateObject();
+    if (!c_obj) return nullptr;
+
+    if (cond.logic != ConditionLogic::LEAF) {
+        const char* logic_str = (cond.logic == ConditionLogic::AND_GROUP) ? "AND"
+                                : (cond.logic == ConditionLogic::OR_GROUP) ? "OR"
+                                : "NOT";
+        cJSON_AddStringToObject(c_obj, "type", logic_str);
+        cJSON_AddStringToObject(c_obj, "logic", logic_str);
+        cJSON_AddBoolToObject(c_obj, "passed", passed);
+        cJSON *subs_arr = cJSON_CreateArray();
+        if (depth < 8) {
+            for (const auto& sub : cond.sub_conditions) {
+                cJSON *sub_obj = serialize_condition_diag(sub, nullptr, depth + 1);
+                if (sub_obj) cJSON_AddItemToArray(subs_arr, sub_obj);
+            }
+        }
+        cJSON_AddItemToObject(c_obj, "conditions", subs_arr);
+        return c_obj;
+    }
+
+    cJSON_AddStringToObject(c_obj, "type", cond.type.c_str());
+    cJSON_AddBoolToObject(c_obj, "passed", passed);
+
+    if (cond.type == "time_condition") {
+        char t_window[32];
+        snprintf(t_window, sizeof(t_window), "%02d:%02d-%02d:%02d",
+                 cond.start_time_min / 60, cond.start_time_min % 60,
+                 cond.end_time_min / 60, cond.end_time_min % 60);
+        cJSON_AddStringToObject(c_obj, "time_window", t_window);
+        cJSON_AddNumberToObject(c_obj, "weekdays_mask", cond.weekdays_mask);
+    } else if (cond.type == "triggered_by") {
+        cJSON_AddStringToObject(c_obj, "trigger_id", cond.trigger_id.c_str());
+    } else if (cond.type == "device_state" || cond.type == "wifi_condition" || cond.type == "wifi") {
+        cJSON_AddStringToObject(c_obj, "device_property", cond.device_property.c_str());
+        if (!cond.target_string.empty()) {
+            cJSON_AddStringToObject(c_obj, "target_string", cond.target_string.c_str());
+        }
+        cJSON_AddBoolToObject(c_obj, "target_bool", cond.target_bool);
+        cJSON_AddStringToObject(c_obj, "op", condition_op_to_str(cond.op));
+        if (cond.target_rssi != 0 ||
+            cond.device_property == "wifi_rssi" ||
+            cond.device_property == "wifi_station_rssi" ||
+            cond.device_property == "sta_rssi" ||
+            cond.device_property == "ap_client_rssi") {
+            cJSON_AddNumberToObject(c_obj, "target_rssi", cond.target_rssi);
+        }
+    } else if (cond.type == "ble_button" || cond.type == "ble" || cond.type == "bluetooth") {
+        const std::string& btn = !cond.ble_button.empty() ? cond.ble_button : cond.target_string;
+        cJSON_AddStringToObject(c_obj, "ble_button", btn.c_str());
+        cJSON_AddStringToObject(c_obj, "ble_action", cond.ble_action.c_str());
+        if (!cond.ble_device.empty()) {
+            cJSON_AddStringToObject(c_obj, "ble_device", cond.ble_device.c_str());
+        }
+    } else if (cond.type == "ble_beacon" || cond.type == "beacon" ||
+               (cond.type == "ble_presence" && (!cond.beacon_uuid.empty() ||
+                                                cond.device_property == "beacon_present" ||
+                                                cond.device_property == "present" ||
+                                                cond.device_property == "away"))) {
+        const std::string& uuid = !cond.beacon_uuid.empty() ? cond.beacon_uuid
+                                  : (!cond.ble_device.empty() ? cond.ble_device : cond.target_string);
+        cJSON_AddStringToObject(c_obj, "beacon_uuid", uuid.c_str());
+        if (!cond.device_property.empty()) {
+            cJSON_AddStringToObject(c_obj, "device_property", cond.device_property.c_str());
+        }
+        cJSON_AddBoolToObject(c_obj, "target_bool", cond.target_bool);
+        cJSON_AddNumberToObject(c_obj, "target_rssi", cond.target_rssi);
+        cJSON_AddStringToObject(c_obj, "op", condition_op_to_str(cond.op));
+    } else if (cond.type == "ble_device" || cond.type == "ble_presence") {
+        const std::string& dev = !cond.ble_device.empty() ? cond.ble_device : cond.target_string;
+        cJSON_AddStringToObject(c_obj, "ble_device", dev.c_str());
+        if (!cond.device_property.empty()) {
+            cJSON_AddStringToObject(c_obj, "device_property", cond.device_property.c_str());
+        }
+        cJSON_AddBoolToObject(c_obj, "target_bool", cond.target_bool);
+        cJSON_AddNumberToObject(c_obj, "target_rssi", cond.target_rssi);
+        cJSON_AddStringToObject(c_obj, "op", condition_op_to_str(cond.op));
+    } else if (cond.type == "voltage" || cond.type == "vbat") {
+        cJSON_AddStringToObject(c_obj, "op", condition_op_to_str(cond.op));
+        cJSON_AddNumberToObject(c_obj, "target_voltage", cond.target_float);
+        cJSON_AddNumberToObject(c_obj, "current_voltage", vbat_sensor_get_last());
+    } else {
+        char hex_id[16];
+        snprintf(hex_id, sizeof(hex_id), "0x%03lX", (unsigned long)cond.can_id);
+        cJSON_AddStringToObject(c_obj, "can_id", hex_id);
+        cJSON_AddNumberToObject(c_obj, "bus", cond.bus);
+        cJSON_AddNumberToObject(c_obj, "byte_index", cond.byte_index);
+        if (cond.byte_index < 8) {
+            char bname[8];
+            snprintf(bname, sizeof(bname), "D%d", cond.byte_index + 1);
+            cJSON_AddStringToObject(c_obj, "byte_name", bname);
+        }
+
+        char hex_mask[8];
+        snprintf(hex_mask, sizeof(hex_mask), "0x%02X", cond.byte_mask);
+        cJSON_AddStringToObject(c_obj, "byte_mask", hex_mask);
+
+        cJSON_AddStringToObject(c_obj, "op", condition_op_to_str(cond.op));
+
+        char hex_target[8];
+        snprintf(hex_target, sizeof(hex_target), "0x%02X", cond.target_value);
+        cJSON_AddStringToObject(c_obj, "target_val", hex_target);
+
+        uint8_t cached_bytes[8] = {0};
+        bool frame_seen = (cond.can_id != 0) && get_cached_can_frame(cond.can_id, cached_bytes);
+        cJSON_AddBoolToObject(c_obj, "frame_seen", frame_seen);
+
+        if (frame_seen && cond.byte_index < 8) {
+            uint8_t cur_val = cached_bytes[cond.byte_index];
+            char hex_byte[8];
+            snprintf(hex_byte, sizeof(hex_byte), "0x%02X", cur_val);
+            cJSON_AddStringToObject(c_obj, "current_byte", hex_byte);
+
+            char hex_masked[8];
+            snprintf(hex_masked, sizeof(hex_masked), "0x%02X", cur_val & cond.byte_mask);
+            cJSON_AddStringToObject(c_obj, "current_masked", hex_masked);
+        }
+    }
+    return c_obj;
 }
 
 static esp_err_t api_test_automation_handler(httpd_req_t *req) {
@@ -764,6 +1047,7 @@ static esp_err_t api_test_automation_handler(httpd_req_t *req) {
     if (is_dry_run || is_live_fire) {
         PsramVector<ActionStep> matched_steps;
         std::shared_ptr<std::atomic<bool>> matched_running;
+        PsramVector<AutomationCondition> dry_conditions;
         if (has_inline_steps) {
             found = true;
         }
@@ -774,20 +1058,22 @@ static esp_err_t api_test_automation_handler(httpd_req_t *req) {
                     found = true;
                     fired_name = rule.name.empty() ? rule.id : rule.name;
                     if (is_dry_run) {
-                        for (const auto& cond : rule.conditions) {
-                            if (!evaluate_condition(cond)) {
-                                dry_passed = false;
-                                char tmp[64];
-                                snprintf(tmp, sizeof(tmp), "Condition failed on CAN ID 0x%03lX", (unsigned long)cond.can_id);
-                                debug_msg = tmp;
-                                break;
-                            }
-                        }
+                        dry_conditions = rule.conditions;
                     } else if (!has_inline_steps) {
                         // Bypass rule.enabled and rule.cooldown_ms for manual test execution
                         matched_steps = rule.actions;
                         matched_running = rule.is_running;
                     }
+                    break;
+                }
+            }
+        }
+
+        if (is_dry_run && found) {
+            for (const auto& cond : dry_conditions) {
+                if (!evaluate_condition_readonly(cond)) {
+                    dry_passed = false;
+                    debug_msg = format_failed_condition_msg(cond);
                     break;
                 }
             }
@@ -834,16 +1120,142 @@ static esp_err_t api_test_automation_handler(httpd_req_t *req) {
 static esp_err_t api_automations_diagnostics_handler(httpd_req_t *req) {
     set_cors_headers(req);
 
+    struct DiagTriggerSnapshot {
+        std::string type;
+        uint32_t can_id = 0;
+        uint8_t bus = 0;
+        int byte_index = -1;
+        uint8_t byte_mask = 0xFF;
+        bool has_from_value = false;
+        uint8_t from_value = 0;
+        uint8_t to_value = 0;
+        ConditionOperator op = ConditionOperator::EQUAL;
+        uint16_t schedule_time_min = 0;
+        uint8_t weekdays_mask = 0x7F;
+        std::string beacon_uuid;
+        std::string ble_event;
+        int8_t target_rssi = 0;
+    };
+
+    struct DiagActionSnapshot {
+        ActionType type = ActionType::TRANSMIT_FRAME;
+        uint32_t can_id = 0;
+        uint8_t repeat = 1;
+        uint32_t delay_ms = 0;
+        uint8_t payload[8] = {0};
+        std::string popup_level;
+        std::string popup_message;
+        float target_temp_c = 21.0f;
+        std::string zone;
+        std::string entity_id;
+        std::string command;
+        std::string precon_mode;
+        std::string precon_action;
+        std::string cycle_direction;
+        bool cycle_wrap = true;
+        size_t cycle_state_count = 0;
+        std::string nav_action;
+        uint8_t nav_icon = 0;
+        uint16_t nav_distance_meters = 0xFFFF;
+    };
+
+    struct DiagRuleSnapshot {
+        std::string id;
+        std::string name;
+        bool enabled = true;
+        bool ha_expose = true;
+        std::string ha_icon;
+        std::string exec_mode;
+        std::string trigger_mode;
+        uint32_t trigger_window_ms = 0;
+        uint32_t cooldown_ms = 0;
+        uint32_t last_exec_time_ms = 0;
+        PsramVector<DiagTriggerSnapshot> triggers;
+        PsramVector<AutomationCondition> conditions;
+        PsramVector<DiagActionSnapshot> actions;
+    };
+
+    PsramVector<DiagRuleSnapshot> rules_snapshot;
+    {
+        std::lock_guard<std::mutex> lock(g_automations_mutex);
+        rules_snapshot.reserve(global_automations.size());
+        for (const auto& rule : global_automations) {
+            DiagRuleSnapshot rs;
+            rs.id = rule.id;
+            rs.name = rule.name;
+            rs.enabled = rule.enabled;
+            rs.ha_expose = rule.ha_expose;
+            rs.ha_icon = rule.ha_icon;
+            rs.exec_mode = rule.exec_mode;
+            rs.trigger_mode = rule.trigger_mode;
+            rs.trigger_window_ms = rule.trigger_window_ms;
+            rs.cooldown_ms = rule.cooldown_ms;
+            rs.last_exec_time_ms = rule.last_exec_time_ms;
+
+            rs.triggers.reserve(rule.triggers.size());
+            for (const auto& trig : rule.triggers) {
+                DiagTriggerSnapshot ts;
+                ts.type = trig.type;
+                ts.can_id = trig.can_id;
+                ts.bus = trig.bus;
+                ts.byte_index = trig.byte_index;
+                ts.byte_mask = trig.byte_mask;
+                ts.has_from_value = trig.has_from_value;
+                ts.from_value = trig.from_value;
+                ts.to_value = trig.to_value;
+                ts.op = trig.op;
+                ts.schedule_time_min = trig.schedule_time_min;
+                ts.weekdays_mask = trig.weekdays_mask;
+                ts.beacon_uuid = trig.beacon_uuid;
+                ts.ble_event = trig.ble_event;
+                ts.target_rssi = trig.target_rssi;
+                rs.triggers.push_back(std::move(ts));
+            }
+
+            rs.conditions = rule.conditions;
+
+            rs.actions.reserve(rule.actions.size());
+            for (const auto& act : rule.actions) {
+                DiagActionSnapshot as;
+                as.type = act.type;
+                as.can_id = act.can_id;
+                as.repeat = act.repeat;
+                as.delay_ms = act.delay_ms;
+                memcpy(as.payload, act.payload, sizeof(as.payload));
+                as.popup_level = act.popup_level;
+                as.popup_message = act.popup_message;
+                as.target_temp_c = act.target_temp_c;
+                as.zone = act.zone;
+                as.entity_id = act.entity_id;
+                as.command = act.command;
+                as.precon_mode = act.precon_mode;
+                as.precon_action = act.precon_action;
+                as.cycle_direction = act.cycle_direction;
+                as.cycle_wrap = act.cycle_wrap;
+                as.cycle_state_count = act.cycle_states.size();
+                as.nav_action = act.nav_action;
+                as.nav_icon = act.nav_icon;
+                as.nav_distance_meters = act.nav_distance_meters;
+                rs.actions.push_back(std::move(as));
+            }
+
+            rules_snapshot.push_back(std::move(rs));
+        }
+    }
+
     cJSON *root = cJSON_CreateObject();
+    if (!root) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"automations_enabled\":true,\"rules\":[]}");
+        return ESP_OK;
+    }
     cJSON_AddBoolToObject(root, "automations_enabled", g_automations_enabled.load());
     cJSON *rules_arr = cJSON_CreateArray();
     cJSON_AddItemToObject(root, "rules", rules_arr);
 
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
 
-    {
-        std::lock_guard<std::mutex> lock(g_automations_mutex);
-        for (const auto& rule : global_automations) {
+    for (const auto& rule : rules_snapshot) {
         cJSON *rule_obj = cJSON_CreateObject();
         cJSON_AddStringToObject(rule_obj, "id", rule.id.c_str());
         cJSON_AddStringToObject(rule_obj, "name", rule.name.c_str());
@@ -892,6 +1304,7 @@ static esp_err_t api_automations_diagnostics_handler(httpd_req_t *req) {
             char hex_to[8];
             snprintf(hex_to, sizeof(hex_to), "0x%02X", trig.to_value);
             cJSON_AddStringToObject(t_obj, "to_val", hex_to);
+            cJSON_AddStringToObject(t_obj, "op", condition_op_to_str(trig.op));
 
             if (trig.type == "time_schedule") {
                 char sched_buf[16];
@@ -921,78 +1334,25 @@ static esp_err_t api_automations_diagnostics_handler(httpd_req_t *req) {
 
                     uint8_t masked_cur = cur_val & trig.byte_mask;
                     uint8_t masked_target = trig.to_value & trig.byte_mask;
-                    cJSON_AddBoolToObject(t_obj, "matches_target", masked_cur == masked_target);
+                    cJSON_AddBoolToObject(t_obj, "matches_target",
+                                          eval_byte_operator(masked_cur, masked_target, trig.op));
                 }
             }
             cJSON_AddItemToArray(trigs_arr, t_obj);
         }
 
-        // Conditions
+        // Conditions (read-only evaluation outside g_automations_mutex)
         cJSON *conds_arr = cJSON_CreateArray();
         cJSON_AddItemToObject(rule_obj, "conditions", conds_arr);
         bool all_conds_pass = true;
 
         for (const auto& cond : rule.conditions) {
-            bool passed = evaluate_condition(cond);
+            bool passed = false;
+            cJSON *c_obj = serialize_condition_diag(cond, &passed);
             if (!passed) all_conds_pass = false;
-
-            cJSON *c_obj = cJSON_CreateObject();
-            cJSON_AddStringToObject(c_obj, "type", cond.type.c_str());
-            cJSON_AddBoolToObject(c_obj, "passed", passed);
-
-            if (cond.type == "time_condition") {
-                char t_window[32];
-                snprintf(t_window, sizeof(t_window), "%02d:%02d-%02d:%02d",
-                         cond.start_time_min / 60, cond.start_time_min % 60,
-                         cond.end_time_min / 60, cond.end_time_min % 60);
-                cJSON_AddStringToObject(c_obj, "time_window", t_window);
-                cJSON_AddNumberToObject(c_obj, "weekdays_mask", cond.weekdays_mask);
-            } else if (cond.type == "ble_beacon" || cond.type == "beacon") {
-                cJSON_AddStringToObject(c_obj, "beacon_uuid", cond.beacon_uuid.c_str());
-                cJSON_AddBoolToObject(c_obj, "target_bool", cond.target_bool);
-                cJSON_AddNumberToObject(c_obj, "target_rssi", cond.target_rssi);
-            } else {
-                char hex_id[16];
-                snprintf(hex_id, sizeof(hex_id), "0x%03lX", (unsigned long)cond.can_id);
-                cJSON_AddStringToObject(c_obj, "can_id", hex_id);
-                cJSON_AddNumberToObject(c_obj, "bus", cond.bus);
-                cJSON_AddNumberToObject(c_obj, "byte_index", cond.byte_index);
-                if (cond.byte_index < 8) {
-                    char bname[8];
-                    snprintf(bname, sizeof(bname), "D%d", cond.byte_index + 1);
-                    cJSON_AddStringToObject(c_obj, "byte_name", bname);
-                }
-
-                char hex_mask[8];
-                snprintf(hex_mask, sizeof(hex_mask), "0x%02X", cond.byte_mask);
-                cJSON_AddStringToObject(c_obj, "byte_mask", hex_mask);
-
-                const char* op_str = "==";
-                if (cond.op == ConditionOperator::NOT_EQUAL) op_str = "!=";
-                else if (cond.op == ConditionOperator::LESS_THAN) op_str = "<";
-                else if (cond.op == ConditionOperator::GREATER_THAN) op_str = ">";
-                cJSON_AddStringToObject(c_obj, "op", op_str);
-
-                char hex_target[8];
-                snprintf(hex_target, sizeof(hex_target), "0x%02X", cond.target_value);
-                cJSON_AddStringToObject(c_obj, "target_val", hex_target);
-
-                uint8_t cached_bytes[8] = {0};
-                bool frame_seen = (cond.can_id != 0) && get_cached_can_frame(cond.can_id, cached_bytes);
-                cJSON_AddBoolToObject(c_obj, "frame_seen", frame_seen);
-
-                if (frame_seen && cond.byte_index < 8) {
-                    uint8_t cur_val = cached_bytes[cond.byte_index];
-                    char hex_byte[8];
-                    snprintf(hex_byte, sizeof(hex_byte), "0x%02X", cur_val);
-                    cJSON_AddStringToObject(c_obj, "current_byte", hex_byte);
-
-                    char hex_masked[8];
-                    snprintf(hex_masked, sizeof(hex_masked), "0x%02X", cur_val & cond.byte_mask);
-                    cJSON_AddStringToObject(c_obj, "current_masked", hex_masked);
-                }
+            if (c_obj) {
+                cJSON_AddItemToArray(conds_arr, c_obj);
             }
-            cJSON_AddItemToArray(conds_arr, c_obj);
         }
         cJSON_AddBoolToObject(rule_obj, "all_conditions_passed", all_conds_pass);
 
@@ -1024,7 +1384,7 @@ static esp_err_t api_automations_diagnostics_handler(httpd_req_t *req) {
                 cJSON_AddStringToObject(a_obj, "zone", act.zone.c_str());
             } else if (act.type == ActionType::ENTITY_COMMAND) {
                 cJSON_AddStringToObject(a_obj, "type", "entity_command");
-                cJSON_AddStringToObject(a_obj, "entity", act.entity_id.c_str());
+                cJSON_AddStringToObject(a_obj, "entity_id", act.entity_id.c_str());
                 cJSON_AddStringToObject(a_obj, "command", act.command.c_str());
             } else if (act.type == ActionType::DELAY) {
                 cJSON_AddStringToObject(a_obj, "type", "delay");
@@ -1038,7 +1398,7 @@ static esp_err_t api_automations_diagnostics_handler(httpd_req_t *req) {
                 cJSON_AddStringToObject(a_obj, "entity_id", act.entity_id.c_str());
                 cJSON_AddStringToObject(a_obj, "direction", act.cycle_direction.c_str());
                 cJSON_AddBoolToObject(a_obj, "wrap", act.cycle_wrap);
-                cJSON_AddNumberToObject(a_obj, "state_count", (double)act.cycle_states.size());
+                cJSON_AddNumberToObject(a_obj, "state_count", (double)act.cycle_state_count);
             } else if (act.type == ActionType::HUD_NAV) {
                 cJSON_AddStringToObject(a_obj, "type", "hud_nav");
                 cJSON_AddStringToObject(a_obj, "action", act.nav_action.empty() ? "update" : act.nav_action.c_str());
@@ -1051,7 +1411,6 @@ static esp_err_t api_automations_diagnostics_handler(httpd_req_t *req) {
         }
 
         cJSON_AddItemToArray(rules_arr, rule_obj);
-        }
     }
 
     char *json_str = cJSON_PrintUnformatted(root);
@@ -1094,13 +1453,13 @@ static bool validate_json_file_streaming(const char *filepath, bool allow_array)
 
     struct BufferedByteReader {
         FILE *fp;
-        char buf[1024];
+        PsramBuf buf;
         size_t pos = 0;
         size_t len = 0;
         int pushed = -2;
         size_t bytes_since_yield = 0;
 
-        explicit BufferedByteReader(FILE *f_in) : fp(f_in) {}
+        explicit BufferedByteReader(FILE *f_in) : fp(f_in), buf(1024) {}
 
         int next() {
             if (pushed != -2) {
@@ -1109,7 +1468,7 @@ static bool validate_json_file_streaming(const char *filepath, bool allow_array)
                 return c;
             }
             if (pos >= len) {
-                len = fread(buf, 1, sizeof(buf), fp);
+                len = fread(buf.data(), 1, buf.size(), fp);
                 pos = 0;
                 if (len == 0) return EOF;
                 bytes_since_yield += len;
@@ -1118,13 +1477,18 @@ static bool validate_json_file_streaming(const char *filepath, bool allow_array)
                     vTaskDelay(pdMS_TO_TICKS(1));
                 }
             }
-            return static_cast<unsigned char>(buf[pos++]);
+            return static_cast<unsigned char>(buf.data()[pos++]);
         }
 
         void unget(int c) {
             pushed = c;
         }
     } reader(f);
+
+    if (!reader.buf) {
+        fclose(f);
+        return false;
+    }
 
     auto skip_ws = [&]() -> int {
         int c;
@@ -1419,12 +1783,17 @@ static esp_err_t api_file_upload_handler(httpd_req_t *req) {
         return send_err_with_body_check(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open temp file for write", false);
     }
 
-    char buf[1024];
+    PsramBuf buf(1024);
+    if (!buf) {
+        fclose(fd);
+        unlink(tmp_filepath);
+        return send_err_with_body_check(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory", false);
+    }
     size_t remaining = req->content_len;
     int timeout_retries = 0;
     while (remaining > 0) {
-        size_t to_read = std::min(remaining, sizeof(buf));
-        int recv_len = httpd_req_recv(req, buf, to_read);
+        size_t to_read = std::min(remaining, buf.size());
+        int recv_len = httpd_req_recv(req, buf.data(), to_read);
         if (recv_len == HTTPD_SOCK_ERR_TIMEOUT) {
             if (++timeout_retries > kMaxStreamTimeoutRetries) {
                 fclose(fd);
@@ -1440,7 +1809,7 @@ static esp_err_t api_file_upload_handler(httpd_req_t *req) {
         }
         timeout_retries = 0;
         size_t chunk_len = static_cast<size_t>(recv_len);
-        size_t written = fwrite(buf, 1, chunk_len, fd);
+        size_t written = fwrite(buf.data(), 1, chunk_len, fd);
         if (written != chunk_len) {
             fclose(fd);
             unlink(tmp_filepath);
@@ -1587,7 +1956,7 @@ static esp_err_t api_ota_handler(httpd_req_t *req) {
         }
 
         const size_t kChunkSize = 4096;
-        char *buf = static_cast<char *>(malloc(kChunkSize));
+        PsramBuf buf(kChunkSize);
         if (!buf) {
             esp_ota_abort(update_handle);
             g_ota_state.set_error("Out of memory for OTA buffer");
@@ -1600,10 +1969,9 @@ static esp_err_t api_ota_handler(httpd_req_t *req) {
         int timeout_retries = 0;
         while (remaining > 0) {
             size_t to_read = std::min(remaining, kChunkSize);
-            int recv_len = httpd_req_recv(req, buf, to_read);
+            int recv_len = httpd_req_recv(req, buf.data(), to_read);
             if (recv_len == HTTPD_SOCK_ERR_TIMEOUT) {
                 if (++timeout_retries > kMaxOtaTimeoutRetries) {
-                    free(buf);
                     esp_ota_abort(update_handle);
                     g_ota_state.set_error("OTA socket receive timed out");
                     ESP_LOGE(TAG, "OTA socket receive timed out (remaining=%zu)", remaining);
@@ -1612,7 +1980,6 @@ static esp_err_t api_ota_handler(httpd_req_t *req) {
                 continue;
             }
             if (recv_len <= 0) {
-                free(buf);
                 esp_ota_abort(update_handle);
                 g_ota_state.set_error("OTA socket receive failed");
                 ESP_LOGE(TAG, "OTA socket receive failed (remaining=%zu)", remaining);
@@ -1620,9 +1987,8 @@ static esp_err_t api_ota_handler(httpd_req_t *req) {
             }
             timeout_retries = 0;
             size_t chunk_len = static_cast<size_t>(recv_len);
-            err = esp_ota_write(update_handle, buf, chunk_len);
+            err = esp_ota_write(update_handle, buf.data(), chunk_len);
             if (err != ESP_OK) {
-                free(buf);
                 esp_ota_abort(update_handle);
                 g_ota_state.set_error("OTA write failed");
                 ESP_LOGE(TAG, "esp_ota_write failed: %s", esp_err_to_name(err));
@@ -1635,7 +2001,6 @@ static esp_err_t api_ota_handler(httpd_req_t *req) {
                 g_ota_state.progress_pct = static_cast<int>((static_cast<uint64_t>(written_total) * 100ULL) / total_len);
             }
         }
-        free(buf);
 
         if (esp_ota_end(update_handle) == ESP_OK && esp_ota_set_boot_partition(update_partition) == ESP_OK) {
             g_ota_state.progress_pct = 100;
@@ -1760,7 +2125,7 @@ static void run_cloud_ota(const std::string &download_url) {
             esp_http_client_close(client);
             esp_http_client_cleanup(client);
         } else {
-            char *upgrade_data_buf = (char *)malloc(2048);
+            PsramBuf upgrade_data_buf(2048);
             if (!upgrade_data_buf) {
                 esp_ota_abort(update_handle);
                 g_ota_state.set_error("Out of memory");
@@ -1771,14 +2136,14 @@ static void run_cloud_ota(const std::string &download_url) {
                 int data_read = 0;
 
                 while (true) {
-                    data_read = esp_http_client_read(client, upgrade_data_buf, 2048);
+                    data_read = esp_http_client_read(client, upgrade_data_buf.data(), upgrade_data_buf.size());
                     if (data_read < 0) {
                         ESP_LOGE(TAG, "Error: SSL/HTTP data read error");
                         g_ota_state.set_error("Read error during binary download");
                         err = ESP_FAIL;
                         break;
                     } else if (data_read > 0) {
-                        err = esp_ota_write(update_handle, (const void *)upgrade_data_buf, data_read);
+                        err = esp_ota_write(update_handle, (const void *)upgrade_data_buf.data(), data_read);
                         if (err != ESP_OK) {
                             ESP_LOGE(TAG, "esp_ota_write failed (%s)", esp_err_to_name(err));
                             char err_buf[128];
@@ -1799,7 +2164,6 @@ static void run_cloud_ota(const std::string &download_url) {
                     }
                 }
 
-                free(upgrade_data_buf);
                 esp_http_client_close(client);
                 esp_http_client_cleanup(client);
 
@@ -1875,6 +2239,14 @@ static esp_err_t api_ota_cloud_pull_handler(httpd_req_t *req) {
     std::string ota_url = url_item->valuestring;
     cJSON_Delete(root);
 
+    const bool valid_scheme =
+        (ota_url.rfind("https://", 0) == 0 && ota_url.size() > 8) ||
+        (ota_url.rfind("http://", 0) == 0 && ota_url.size() > 7);
+    if (!valid_scheme) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid 'url': must start with https:// or http://");
+        return ESP_OK;
+    }
+
     if (g_ota_state.in_progress.exchange(true)) {
         httpd_resp_set_status(req, "409 Conflict");
         httpd_resp_set_type(req, "application/json");
@@ -1888,7 +2260,17 @@ static esp_err_t api_ota_cloud_pull_handler(httpd_req_t *req) {
     g_ota_state.set_error("");
 
     CloudOtaTaskArgs *args = new (std::nothrow) CloudOtaTaskArgs{ota_url};
-    if (!args || xTaskCreate(cloud_ota_task, "cloud_ota_task", 10240, args, 5, nullptr) != pdPASS) {
+    if (!args) {
+        ESP_LOGE(TAG, "Failed to allocate CloudOtaTaskArgs (internal_free_heap=%zu)",
+                 heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+        g_ota_state.set_error("Failed to spawn cloud OTA task");
+        g_ota_state.in_progress.store(false);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to spawn cloud OTA task");
+        return ESP_OK;
+    }
+    if (xTaskCreate(cloud_ota_task, "cloud_ota_task", 10240, args, 5, nullptr) != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create cloud_ota_task (internal_free_heap=%zu)",
+                 heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
         delete args;
         g_ota_state.set_error("Failed to spawn cloud OTA task");
         g_ota_state.in_progress.store(false);
@@ -1930,12 +2312,17 @@ static esp_err_t api_get_automations_handler(httpd_req_t *req) {
 
     httpd_resp_set_type(req, "application/json");
 
-    char chunk[1024];
+    PsramBuf chunk(1024);
+    if (!chunk) {
+        fclose(fd);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+        return ESP_OK;
+    }
     size_t chunksize;
     do {
-        chunksize = fread(chunk, 1, sizeof(chunk), fd);
+        chunksize = fread(chunk.data(), 1, chunk.size(), fd);
         if (chunksize > 0) {
-            if (httpd_resp_send_chunk(req, chunk, chunksize) != ESP_OK) {
+            if (httpd_resp_send_chunk(req, chunk.data(), chunksize) != ESP_OK) {
                 fclose(fd);
                 return ESP_FAIL;
             }
@@ -1967,12 +2354,17 @@ static esp_err_t api_post_automations_handler(httpd_req_t *req) {
         return send_err_with_body_check(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open automations temp file for write", false);
     }
 
-    char buf[1024];
+    PsramBuf buf(1024);
+    if (!buf) {
+        fclose(fd);
+        remove(temp_filepath);
+        return send_err_with_body_check(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory", false);
+    }
     size_t remaining = req->content_len;
     int timeout_retries = 0;
     while (remaining > 0) {
-        size_t to_read = std::min(remaining, sizeof(buf));
-        int recv_len = httpd_req_recv(req, buf, to_read);
+        size_t to_read = std::min(remaining, buf.size());
+        int recv_len = httpd_req_recv(req, buf.data(), to_read);
         if (recv_len == HTTPD_SOCK_ERR_TIMEOUT) {
             if (++timeout_retries > kMaxStreamTimeoutRetries) {
                 fclose(fd);
@@ -1988,7 +2380,7 @@ static esp_err_t api_post_automations_handler(httpd_req_t *req) {
         }
         timeout_retries = 0;
         size_t chunk_len = static_cast<size_t>(recv_len);
-        size_t written = fwrite(buf, 1, chunk_len, fd);
+        size_t written = fwrite(buf.data(), 1, chunk_len, fd);
         if (written != chunk_len) {
             fclose(fd);
             remove(temp_filepath);
@@ -2057,12 +2449,17 @@ static esp_err_t api_get_preferences_handler(httpd_req_t *req) {
     }
 
     httpd_resp_set_type(req, "application/json");
-    char chunk[1024];
+    PsramBuf chunk(1024);
+    if (!chunk) {
+        fclose(fd);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+        return ESP_OK;
+    }
     size_t chunksize;
     do {
-        chunksize = fread(chunk, 1, sizeof(chunk), fd);
+        chunksize = fread(chunk.data(), 1, chunk.size(), fd);
         if (chunksize > 0) {
-            if (httpd_resp_send_chunk(req, chunk, chunksize) != ESP_OK) {
+            if (httpd_resp_send_chunk(req, chunk.data(), chunksize) != ESP_OK) {
                 fclose(fd);
                 return ESP_FAIL;
             }
@@ -2086,12 +2483,15 @@ static esp_err_t api_post_preferences_handler(httpd_req_t *req) {
 
     std::string incoming_body;
     incoming_body.reserve(req->content_len);
-    char buf[1024];
+    PsramBuf buf(1024);
+    if (!buf) {
+        return send_err_with_body_check(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory", false);
+    }
     size_t remaining = req->content_len;
     int timeout_retries = 0;
     while (remaining > 0) {
-        size_t to_read = std::min(remaining, sizeof(buf));
-        int recv_len = httpd_req_recv(req, buf, to_read);
+        size_t to_read = std::min(remaining, buf.size());
+        int recv_len = httpd_req_recv(req, buf.data(), to_read);
         if (recv_len == HTTPD_SOCK_ERR_TIMEOUT) {
             if (++timeout_retries > kMaxStreamTimeoutRetries) {
                 return send_err_with_body_check(req, HTTPD_408_REQ_TIMEOUT, "Timed out receiving preferences payload", false);
@@ -2103,7 +2503,7 @@ static esp_err_t api_post_preferences_handler(httpd_req_t *req) {
         }
         timeout_retries = 0;
         size_t chunk_len = static_cast<size_t>(recv_len);
-        incoming_body.append(buf, chunk_len);
+        incoming_body.append(buf.data(), chunk_len);
         remaining -= chunk_len;
     }
 
@@ -2233,7 +2633,6 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
     cJSON_AddStringToObject(root, "target", "esp32s3");
     cJSON_AddBoolToObject(root, "dual_can", any_dual_can);
 #else
-    bool any_dual_can = false;
     cJSON_AddStringToObject(root, "device", "WiCAN ESP32-C3");
     cJSON_AddStringToObject(root, "target", "esp32c3");
     cJSON_AddBoolToObject(root, "dual_can", false);
@@ -2273,28 +2672,29 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
     uint32_t max_tec = 0, max_rec = 0, total_tx_fail = 0, total_rx_ovf = 0;
     bool any_bus_off = false;
     auto add_mcp_bus = [&](const char* key, can_bus_t bus, bool is_fd) {
-        mcp2518fd_t* dev = dual_can_get_device(bus);
-        bool online = dev && dev->initialized;
-        uint8_t tec = 0, rec = 0;
-        bool bo = false;
+        mcp2518fd_status_snapshot_t snap = {};
+        dual_can_get_status_snapshot(bus, &snap);
+        bool online = snap.initialized;
+        uint8_t tec = snap.tec;
+        uint8_t rec = snap.rec;
+        bool bo = snap.bus_off;
         if (online) {
-            mcp2518fd_get_error_counts(dev, &tec, &rec, &bo);
             if (tec > max_tec) max_tec = tec;
             if (rec > max_rec) max_rec = rec;
             if (bo) any_bus_off = true;
-            total_tx_fail += dev->tx_fail_count;
-            total_rx_ovf += dev->rx_overflow_count;
+            total_tx_fail += snap.tx_fail_count;
+            total_rx_ovf += snap.rx_overflow_count;
         }
         cJSON *bobj = cJSON_CreateObject();
         cJSON_AddBoolToObject(bobj, "online", online);
         cJSON_AddStringToObject(bobj, "driver", online ? "mcp2518fd" : "offline");
         cJSON_AddStringToObject(bobj, "mode", is_fd ? "can_fd_500k_2m" : "classic_500k");
-        cJSON_AddBoolToObject(bobj, "listen_only", online ? dev->config.listen_only : false);
+        cJSON_AddBoolToObject(bobj, "listen_only", online ? snap.listen_only : false);
         cJSON_AddNumberToObject(bobj, "tec", tec);
         cJSON_AddNumberToObject(bobj, "rec", rec);
         cJSON_AddBoolToObject(bobj, "bus_off", bo);
-        cJSON_AddNumberToObject(bobj, "tx_fail", online ? dev->tx_fail_count : 0);
-        cJSON_AddNumberToObject(bobj, "rx_overflow", online ? dev->rx_overflow_count : 0);
+        cJSON_AddNumberToObject(bobj, "tx_fail", online ? snap.tx_fail_count : 0);
+        cJSON_AddNumberToObject(bobj, "rx_overflow", online ? snap.rx_overflow_count : 0);
         cJSON_AddItemToObject(root, key, bobj);
     };
     add_mcp_bus("can0", CAN_BUS_0, false);
@@ -2325,7 +2725,7 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
             cJSON_AddNumberToObject(root, "rx_missed_count", twai_st.rx_missed_count);
             cJSON_AddNumberToObject(root, "rx_overrun_count", twai_st.rx_overrun_count);
             cJSON_AddNumberToObject(root, "bus_error_count", twai_st.bus_error_count);
-        } else if (!any_dual_can) {
+        } else {
             cJSON_AddStringToObject(root, "twai_state", "offline");
         }
     }
@@ -2429,14 +2829,23 @@ static esp_err_t api_system_set_time_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-static void collect_spiffs_files_recursive(const char *dir_path, cJSON *arr) {
+static void collect_spiffs_files_recursive(const char *dir_path, cJSON *arr, int depth = 0) {
+    if (depth >= 6) {
+        ESP_LOGW(TAG, "Skipping directory recursion beyond depth %d at %s", depth, dir_path);
+        return;
+    }
     DIR *d = opendir(dir_path);
     if (!d) return;
+    PsramBuf subpath_buf(320);
+    if (!subpath_buf) {
+        closedir(d);
+        return;
+    }
+    char *subpath = subpath_buf.data();
     struct dirent *de;
     while ((de = readdir(d)) != nullptr) {
         if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) continue;
-        char subpath[320];
-        snprintf(subpath, sizeof(subpath), "%s/%s", dir_path, de->d_name);
+        snprintf(subpath, subpath_buf.size(), "%s/%s", dir_path, de->d_name);
         struct stat s;
         if (stat(subpath, &s) == 0) {
             cJSON *f_obj = cJSON_CreateObject();
@@ -2446,7 +2855,7 @@ static void collect_spiffs_files_recursive(const char *dir_path, cJSON *arr) {
             cJSON_AddBoolToObject(f_obj, "is_dir", S_ISDIR(s.st_mode));
             cJSON_AddItemToArray(arr, f_obj);
             if (S_ISDIR(s.st_mode)) {
-                collect_spiffs_files_recursive(subpath, arr);
+                collect_spiffs_files_recursive(subpath, arr, depth + 1);
             }
         }
     }
@@ -2796,40 +3205,6 @@ static esp_err_t api_wifi_scan_handler(httpd_req_t *req) {
     return send_cjson_response(req, root);
 }
 
-static esp_err_t api_wifi_settings_handler(httpd_req_t *req) {
-    set_cors_headers(req);
-    std::string body;
-    esp_err_t body_err = ESP_OK;
-    if (!read_req_body(req, 512, body, &body_err)) {
-        return body_err;
-    }
-
-    cJSON *root = cJSON_Parse(body.c_str());
-    if (!root) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-        return ESP_OK;
-    }
-
-    cJSON *ap_mode_item = cJSON_GetObjectItem(root, "ap_mode");
-    if (cJSON_IsString(ap_mode_item)) {
-        if (strcmp(ap_mode_item->valuestring, "always_on") == 0) network_mgr_set_ap_mode(AP_MODE_ALWAYS_ON);
-        else if (strcmp(ap_mode_item->valuestring, "disabled") == 0) network_mgr_set_ap_mode(AP_MODE_DISABLED);
-        else network_mgr_set_ap_mode(AP_MODE_AUTO);
-    }
-
-    cJSON *ap_ssid_item = cJSON_GetObjectItem(root, "ap_ssid");
-    cJSON *ap_pass_item = cJSON_GetObjectItem(root, "ap_password");
-    if (cJSON_IsString(ap_ssid_item)) {
-        std::string pass = cJSON_IsString(ap_pass_item) ? ap_pass_item->valuestring : "";
-        network_mgr_set_ap_credentials(ap_ssid_item->valuestring, pass);
-    }
-
-    cJSON_Delete(root);
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
-    return ESP_OK;
-}
-
 static esp_err_t api_mqtt_get_handler(httpd_req_t *req) {
     set_cors_headers(req);
     MqttConfig cfg = mqtt_mgr_get_config();
@@ -3001,17 +3376,6 @@ static esp_err_t api_notify_handler(httpd_req_t *req) {
     cJSON *lvl_item = cJSON_GetObjectItem(root, "level");
     std::string lvl = (lvl_item && cJSON_IsString(lvl_item)) ? lvl_item->valuestring : "info";
 
-    cJSON *caller_item = cJSON_GetObjectItem(root, "caller");
-    if (!caller_item) caller_item = cJSON_GetObjectItem(root, "title");
-    std::string caller = (caller_item && cJSON_IsString(caller_item)) ? caller_item->valuestring : "";
-
-    cJSON *type_item = cJSON_GetObjectItem(root, "type");
-    std::string type = (type_item && cJSON_IsString(type_item)) ? type_item->valuestring : "";
-
-    cJSON *hold_item = cJSON_GetObjectItem(root, "hold_ms");
-    uint32_t hold_ms = (hold_item && cJSON_IsNumber(hold_item)) ? (uint32_t)hold_item->valueint : 5000;
-    (void)hold_ms;
-
     cJSON_Delete(root);
 
     if (msg.empty()) {
@@ -3062,9 +3426,17 @@ static esp_err_t api_nav_handler(httpd_req_t *req) {
 
     hud_nav_instruction_t instr = {};
     instr.distance_meters = 0xFFFF; // Inactive default
+    auto clamp_u16 = [](cJSON *item, uint16_t max_val, uint16_t fallback) -> uint16_t {
+        if (!item || !cJSON_IsNumber(item) || !std::isfinite(item->valuedouble)) return fallback;
+        double v = item->valuedouble;
+        if (v < 0.0) return 0;
+        if (v > static_cast<double>(max_val)) return max_val;
+        return static_cast<uint16_t>(v);
+    };
+
     cJSON *icon_item = cJSON_GetObjectItem(root, "icon");
-    if (icon_item && cJSON_IsNumber(icon_item)) {
-        instr.icon = (hud_maneuver_icon_t)icon_item->valueint;
+    if (icon_item && cJSON_IsNumber(icon_item) && std::isfinite(icon_item->valuedouble)) {
+        instr.icon = static_cast<hud_maneuver_icon_t>(clamp_u16(icon_item, 255, HUD_MANEUVER_STRAIGHT));
     } else {
         instr.icon = HUD_MANEUVER_STRAIGHT;
     }
@@ -3072,17 +3444,25 @@ static esp_err_t api_nav_handler(httpd_req_t *req) {
     cJSON *dir_item = cJSON_GetObjectItem(root, "direction");
     if (!dir_item) dir_item = cJSON_GetObjectItem(root, "direction_deg");
     if (!dir_item) dir_item = cJSON_GetObjectItem(root, "heading");
-    if (dir_item && cJSON_IsNumber(dir_item)) instr.direction_deg = (uint16_t)dir_item->valueint;
+    if (dir_item && cJSON_IsNumber(dir_item) && std::isfinite(dir_item->valuedouble)) {
+        instr.direction_deg = clamp_u16(dir_item, 65535, 0);
+    }
 
     cJSON *dist_item = cJSON_GetObjectItem(root, "distance");
     if (!dist_item) dist_item = cJSON_GetObjectItem(root, "distance_meters");
-    if (dist_item && cJSON_IsNumber(dist_item)) instr.distance_meters = (uint16_t)dist_item->valueint;
+    if (dist_item && cJSON_IsNumber(dist_item) && std::isfinite(dist_item->valuedouble)) {
+        instr.distance_meters = clamp_u16(dist_item, 65535, 0xFFFF);
+    }
 
     cJSON *bars_item = cJSON_GetObjectItem(root, "bars");
-    if (bars_item && cJSON_IsNumber(bars_item)) instr.bar_graph = (uint8_t)bars_item->valueint;
+    if (bars_item && cJSON_IsNumber(bars_item) && std::isfinite(bars_item->valuedouble)) {
+        instr.bar_graph = static_cast<uint8_t>(clamp_u16(bars_item, 255, 0));
+    }
 
     cJSON *spd_item = cJSON_GetObjectItem(root, "speed_limit");
-    if (spd_item && cJSON_IsNumber(spd_item)) instr.speed_limit_kph = (uint8_t)spd_item->valueint;
+    if (spd_item && cJSON_IsNumber(spd_item) && std::isfinite(spd_item->valuedouble)) {
+        instr.speed_limit_kph = static_cast<uint8_t>(clamp_u16(spd_item, 255, 0));
+    }
 
     cJSON *cam_item = cJSON_GetObjectItem(root, "camera_alert");
     if (cam_item && cJSON_IsBool(cam_item)) instr.speed_camera_alert = cJSON_IsTrue(cam_item);
@@ -3092,23 +3472,23 @@ static esp_err_t api_nav_handler(httpd_req_t *req) {
 
     cJSON *lanes_item = cJSON_GetObjectItem(root, "lanes");
     if (!lanes_item) lanes_item = cJSON_GetObjectItem(root, "num_lanes");
-    if (lanes_item && cJSON_IsNumber(lanes_item)) {
-        instr.num_lanes = (uint8_t)lanes_item->valueint;
-        if (instr.num_lanes > 8) instr.num_lanes = 8;
-        instr.has_lane_guidance = true;
+    if (lanes_item && cJSON_IsNumber(lanes_item) && std::isfinite(lanes_item->valuedouble)) {
+        int lanes_val = static_cast<int>(lanes_item->valuedouble);
+        if (lanes_val < 0) lanes_val = 0;
+        else if (lanes_val > 8) lanes_val = 8;
+        instr.num_lanes = static_cast<uint8_t>(lanes_val);
     }
 
     cJSON *lane_dirs = cJSON_GetObjectItem(root, "lane_directions");
     if (lane_dirs && cJSON_IsArray(lane_dirs)) {
-        instr.has_lane_guidance = true;
         int n = cJSON_GetArraySize(lane_dirs);
         if (instr.num_lanes == 0 && n > 0) {
-            instr.num_lanes = (n > 8) ? 8 : (uint8_t)n;
+            instr.num_lanes = static_cast<uint8_t>(std::min(n, 8));
         }
         for (int i = 0; i < n && i < 8; i++) {
             cJSON *elem = cJSON_GetArrayItem(lane_dirs, i);
-            if (elem && cJSON_IsNumber(elem)) {
-                instr.lane_directions[i] = (uint8_t)elem->valueint;
+            if (elem && cJSON_IsNumber(elem) && std::isfinite(elem->valuedouble)) {
+                instr.lane_directions[i] = static_cast<uint8_t>(clamp_u16(elem, 255, 0));
             }
         }
     }
@@ -3116,19 +3496,23 @@ static esp_err_t api_nav_handler(httpd_req_t *req) {
     cJSON *lane_recs = cJSON_GetObjectItem(root, "lane_recommended");
     if (!lane_recs) lane_recs = cJSON_GetObjectItem(root, "lane_highlights");
     if (lane_recs && cJSON_IsArray(lane_recs)) {
-        instr.has_lane_guidance = true;
         int n = cJSON_GetArraySize(lane_recs);
+        if (instr.num_lanes == 0 && n > 0) {
+            instr.num_lanes = static_cast<uint8_t>(std::min(n, 8));
+        }
         for (int i = 0; i < n && i < 8; i++) {
             cJSON *elem = cJSON_GetArrayItem(lane_recs, i);
             if (elem) {
                 if (cJSON_IsBool(elem)) {
                     instr.lane_recommended[i] = cJSON_IsTrue(elem) ? 1 : 0;
-                } else if (cJSON_IsNumber(elem)) {
-                    instr.lane_recommended[i] = (uint8_t)elem->valueint;
+                } else if (cJSON_IsNumber(elem) && std::isfinite(elem->valuedouble)) {
+                    instr.lane_recommended[i] = static_cast<uint8_t>(clamp_u16(elem, 255, 0));
                 }
             }
         }
     }
+
+    instr.has_lane_guidance = (instr.num_lanes > 0);
 
     cJSON *platform_item = cJSON_GetObjectItem(root, "platform");
     if (platform_item && cJSON_IsString(platform_item)) {
@@ -3162,7 +3546,7 @@ static void ws_send_initial_snapshot(void *arg) {
         return;
     }
 
-    std::unordered_map<std::string, std::string> merged = get_live_state_cache();
+    PsramUnorderedMap<std::string, std::string> merged = get_live_state_cache();
     {
         std::lock_guard<std::mutex> lock(g_catalog_mutex);
         for (const auto& entity : global_catalog) {
@@ -3174,7 +3558,9 @@ static void ws_send_initial_snapshot(void *arg) {
         }
     }
     if (merged.find("cond_aux_12v_battery") == merged.end()) {
-        std::string vbat = vbat_sensor_get_last_str();
+        char vbat_buf[16];
+        vbat_sensor_get_last_str_copy(vbat_buf, sizeof(vbat_buf));
+        std::string vbat(vbat_buf);
         if (!vbat.empty() && vbat != "Unknown") {
             merged["cond_aux_12v_battery"] = vbat;
         }
@@ -3256,16 +3642,16 @@ static esp_err_t ws_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_ble_status_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     std::string status_json = ble_mgr_get_status_json();
     httpd_resp_sendstr(req, status_json.c_str());
     return ESP_OK;
 }
 
 static esp_err_t api_ble_scan_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     int dur = 10;
     char query[32] = {0};
     if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
@@ -3281,8 +3667,8 @@ static esp_err_t api_ble_scan_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_ble_pair_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     std::string body;
     esp_err_t body_err = ESP_OK;
     if (!read_req_body(req, 512, body, &body_err)) {
@@ -3293,7 +3679,7 @@ static esp_err_t api_ble_pair_handler(httpd_req_t *req) {
         cJSON *addr = cJSON_GetObjectItem(root, "mac");
         if (!addr) addr = cJSON_GetObjectItem(root, "address");
         cJSON *name = cJSON_GetObjectItem(root, "name");
-        if (addr && cJSON_IsString(addr)) {
+        if (addr && cJSON_IsString(addr) && addr->valuestring[0] != '\0') {
             std::string addr_str = addr->valuestring;
             std::string name_str = (name && cJSON_IsString(name)) ? name->valuestring : "";
             ble_mgr_pair_device(addr_str, name_str);
@@ -3303,13 +3689,14 @@ static esp_err_t api_ble_pair_handler(httpd_req_t *req) {
         }
         cJSON_Delete(root);
     }
+    httpd_resp_set_status(req, "400 Bad Request");
     httpd_resp_sendstr(req, "{\"status\":\"error\",\"message\":\"missing_address\"}");
     return ESP_OK;
 }
 
 static esp_err_t api_ble_unpair_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     std::string addr_str = "";
     if (req->content_len > 0) {
         std::string body;
@@ -3333,8 +3720,8 @@ static esp_err_t api_ble_unpair_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_ble_test_event_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     std::string btn_str = "volume_up";
     std::string act_str = "press";
     if (req->content_len > 0) {
@@ -3358,24 +3745,16 @@ static esp_err_t api_ble_test_event_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_ble_clear_events_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     ble_mgr_clear_events();
     httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
     return ESP_OK;
 }
 
-static esp_err_t api_ble_beacons_get_handler(httpd_req_t *req) {
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    std::string resp = ble_mgr_get_beacons_json();
-    httpd_resp_sendstr(req, resp.c_str());
-    return ESP_OK;
-}
-
 static esp_err_t api_ble_beacons_post_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     std::string body;
     esp_err_t body_err = ESP_OK;
     if (!read_req_body(req, 1024, body, &body_err)) {
@@ -3409,8 +3788,8 @@ static esp_err_t api_ble_beacons_post_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_ble_beacons_delete_handler(httpd_req_t *req) {
+    set_cors_headers(req);
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     std::string body;
     esp_err_t body_err = ESP_OK;
     if (!read_req_body(req, 512, body, &body_err)) {
@@ -3483,14 +3862,12 @@ httpd_handle_t start_webserver(void) {
         reg_uri("/api/wifi/networks", HTTP_POST, api_wifi_post_networks_handler);
         reg_uri("/api/wifi/networks", HTTP_DELETE, api_wifi_delete_networks_handler);
         reg_uri("/api/wifi/scan", HTTP_GET, api_wifi_scan_handler);
-        reg_uri("/api/wifi/settings", HTTP_POST, api_wifi_settings_handler);
         reg_uri("/api/ble/status", HTTP_GET, api_ble_status_handler);
         reg_uri("/api/ble/scan", HTTP_POST, api_ble_scan_handler);
         reg_uri("/api/ble/pair", HTTP_POST, api_ble_pair_handler);
         reg_uri("/api/ble/unpair", HTTP_POST, api_ble_unpair_handler);
         reg_uri("/api/ble/test_event", HTTP_POST, api_ble_test_event_handler);
         reg_uri("/api/ble/clear_events", HTTP_POST, api_ble_clear_events_handler);
-        reg_uri("/api/ble/beacons", HTTP_GET, api_ble_beacons_get_handler);
         reg_uri("/api/ble/beacons", HTTP_POST, api_ble_beacons_post_handler);
         reg_uri("/api/ble/beacons", HTTP_DELETE, api_ble_beacons_delete_handler);
         reg_uri("/api/mqtt", HTTP_GET, api_mqtt_get_handler);
@@ -3509,7 +3886,20 @@ httpd_handle_t start_webserver(void) {
 
         global_web_server = server;
         if (!s_ws_log_queue) {
-            s_ws_log_queue = xQueueCreate(16, sizeof(ws_log_item_t));
+#if CONFIG_SPIRAM
+            if (!s_ws_log_queue_storage) {
+                s_ws_log_queue_storage = static_cast<uint8_t*>(
+                    heap_caps_malloc_prefer(kWsLogQueueLen * sizeof(ws_log_item_t), 2,
+                                            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT));
+            }
+            if (s_ws_log_queue_storage) {
+                s_ws_log_queue = xQueueCreateStatic(kWsLogQueueLen, sizeof(ws_log_item_t),
+                                                    s_ws_log_queue_storage, &s_ws_log_queue_struct);
+            }
+#endif
+            if (!s_ws_log_queue) {
+                s_ws_log_queue = xQueueCreate(kWsLogQueueLen, sizeof(ws_log_item_t));
+            }
             if (s_ws_log_queue) {
                 xTaskCreate(ws_log_worker_task, "ws_log_wkr", 3584, nullptr, 2, nullptr);
             }

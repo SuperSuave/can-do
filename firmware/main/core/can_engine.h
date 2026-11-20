@@ -35,7 +35,8 @@ void init_can_engine(void);
 esp_err_t can_engine_get_status_info(twai_status_info_t* status_info);
 extern "C" bool can_engine_is_bus_awake(uint32_t max_silence_ms);
 bool can_engine_inject_frame(const twai_message_t* msg);
-bool evaluate_condition(const AutomationCondition& cond);
+bool evaluate_condition(const AutomationCondition& cond, bool mutate_sustained = true);
+bool evaluate_condition_readonly(const AutomationCondition& cond);
 bool is_match(const uint8_t* incoming_data, const EntityOption& option, uint8_t dlc = 8);
 
 void execute_can_burst(uint32_t can_id, const PsramVector<ActionStep>& steps, uint32_t delay_ms);
