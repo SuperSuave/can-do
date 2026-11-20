@@ -254,15 +254,23 @@ static void uds_worker_task(void* arg) {
             // E-GMP gateway isolates OBD-II UDS while driving, and passive broadcast frames (0x152, 0x2FC, 0x30E) stream live telemetry
             uint8_t speed_frame[8];
             if (get_cached_can_frame(0x1AC, speed_frame)) {
-                int raw_speed = (speed_frame[1] | ((speed_frame[2] & 0x01) << 8));
-                if (raw_speed > 2) {
+                // 0x1AC (CLU_01_20ms_2 / cluster_vehicle_speed): D1 (data[0]) = road speed in km/h (0..255, factor 1)
+                if (speed_frame[0] > 0) {
                     continue;
                 }
             }
+            // Active gear check (0x045 D6 / 0x070 D8, mask 0x70: 0x00=P, 0x50=D, 0x60=N, 0x70=R).
+            // Note: 0x038 D1 low nibble 0x04 is VCU car_ready_state (READY), not a gear selector.
             uint8_t gear_frame[8];
-            if (get_cached_can_frame(0x226, gear_frame) || get_cached_can_frame(0x038, gear_frame)) {
-                uint8_t g = gear_frame[0] & 0x0F;
-                if (g == 0x05 || g == 0x07 || g == 0x04) { // D or R
+            if (get_cached_can_frame(0x045, gear_frame)) {
+                uint8_t gear = gear_frame[5] & 0x70;
+                if (gear == 0x50 || gear == 0x70) { // Drive (0x50) or Reverse (0x70)
+                    continue;
+                }
+            }
+            if (get_cached_can_frame(0x070, gear_frame)) {
+                uint8_t gear = gear_frame[7] & 0x70;
+                if (gear == 0x50 || gear == 0x70) { // Drive (0x50) or Reverse (0x70)
                     continue;
                 }
             }

@@ -92,7 +92,14 @@ void serial_cli_process_line(const char* raw_line, size_t len) {
 
             const char* type_str = (type && cJSON_IsString(type)) ? type->valuestring : "";
 
-            if (strcmp(type_str, "wifi_save") == 0 || (ssid && cJSON_IsString(ssid))) {
+            if (strcmp(type_str, "wifi_delete") == 0) {
+                if (ssid && cJSON_IsString(ssid) && ssid->valuestring[0] != '\0') {
+                    bool ok = network_mgr_remove_known_network(ssid->valuestring);
+                    printf("{\"type\":\"ack\",\"status\":\"wifi_deleted\",\"result\":%s}\r\n", ok ? "true" : "false");
+                } else {
+                    printf("{\"type\":\"nack\",\"error\":\"empty_ssid\"}\r\n");
+                }
+            } else if (strcmp(type_str, "wifi_save") == 0 || (type_str[0] == '\0' && ssid && cJSON_IsString(ssid))) {
                 std::string s = (ssid && cJSON_IsString(ssid)) ? ssid->valuestring : "";
                 std::string p = (pass && cJSON_IsString(pass)) ? pass->valuestring : "";
                 int pr = (prio && cJSON_IsNumber(prio)) ? prio->valueint : 100;
@@ -101,11 +108,6 @@ void serial_cli_process_line(const char* raw_line, size_t len) {
                     printf("{\"type\":\"ack\",\"status\":\"wifi_saved\",\"ssid\":\"%s\",\"priority\":%d}\r\n", s.c_str(), pr);
                 } else {
                     printf("{\"type\":\"nack\",\"error\":\"empty_ssid\"}\r\n");
-                }
-            } else if (strcmp(type_str, "wifi_delete") == 0) {
-                if (ssid && cJSON_IsString(ssid)) {
-                    bool ok = network_mgr_remove_known_network(ssid->valuestring);
-                    printf("{\"type\":\"ack\",\"status\":\"wifi_deleted\",\"result\":%s}\r\n", ok ? "true" : "false");
                 }
             } else if (strcmp(type_str, "ping") == 0) {
                 printf("{\"type\":\"pong\"}\r\n");

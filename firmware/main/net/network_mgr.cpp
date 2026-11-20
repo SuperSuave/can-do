@@ -31,6 +31,9 @@ static std::mutex s_net_mutex;
 static std::vector<KnownNetwork> s_known_networks;
 static std::vector<WifiScanResult> s_scan_results;
 static std::atomic<bool> s_is_scanning{false};
+static std::atomic<uint32_t> s_scan_start_tick{0};
+static std::atomic<bool> s_last_scan_ok{false};
+static std::atomic<bool> s_is_connecting{false};
 static std::atomic<bool> s_sta_connected{false};
 static std::atomic<bool> s_ap_active{false};
 
@@ -64,6 +67,8 @@ static void load_settings_from_fs(void);
 static void save_settings_to_fs(void);
 static void start_softap(void);
 static void stop_softap(void);
+static void harvest_scan_results(void);
+static void ensure_sta_scan_mode(void);
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
 static void network_roam_task(void* pvParameters);
 
@@ -227,6 +232,70 @@ static void stop_softap(void) {
     ESP_LOGI(TAG, "SoftAP disabled to save power and eliminate 2.4GHz RF contention");
 }
 
+static void ensure_sta_scan_mode(void) {
+    wifi_mode_t mode = WIFI_MODE_NULL;
+    if (esp_wifi_get_mode(&mode) != ESP_OK) return;
+    if (mode == WIFI_MODE_AP) {
+        esp_wifi_set_mode(WIFI_MODE_APSTA);
+    } else if (mode == WIFI_MODE_NULL) {
+        esp_wifi_set_mode(WIFI_MODE_STA);
+    }
+}
+
+static void harvest_scan_results(void) {
+    uint16_t ap_count = 0;
+    if (esp_wifi_scan_get_ap_num(&ap_count) != ESP_OK) {
+        esp_wifi_clear_ap_list();
+        return;
+    }
+
+    if (ap_count == 0) {
+        esp_wifi_clear_ap_list();
+        std::lock_guard<std::mutex> lock(s_net_mutex);
+        s_scan_results.clear();
+        return;
+    }
+
+    if (ap_count > 32) ap_count = 32;
+    std::vector<wifi_ap_record_t> ap_records(ap_count);
+    if (esp_wifi_scan_get_ap_records(&ap_count, ap_records.data()) != ESP_OK) {
+        esp_wifi_clear_ap_list();
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(s_net_mutex);
+    s_scan_results.clear();
+    for (uint16_t i = 0; i < ap_count; i++) {
+        char clean_ssid[33] = {0};
+        memcpy(clean_ssid, ap_records[i].ssid, 32);
+        clean_ssid[32] = '\0';
+        if (clean_ssid[0] == '\0') continue;
+
+        std::string ssid(clean_ssid);
+        // Deduplicate multiple BSSIDs for the same SSID (keep strongest RSSI)
+        bool updated_existing = false;
+        for (auto& existing : s_scan_results) {
+            if (existing.ssid == ssid) {
+                if (ap_records[i].rssi > existing.rssi) {
+                    existing.rssi = ap_records[i].rssi;
+                }
+                updated_existing = true;
+                break;
+            }
+        }
+        if (updated_existing) continue;
+
+        bool in_known = false;
+        for (const auto& kn : s_known_networks) {
+            if (kn.ssid == ssid) {
+                in_known = true;
+                break;
+            }
+        }
+        s_scan_results.push_back({ssid, ap_records[i].rssi, static_cast<uint8_t>(ap_records[i].authmode), in_known});
+    }
+}
+
 // Lightweight, non-blocking event handler: NEVER call MQTT, LittleFS, or CAN engine directly on sys_evt stack!
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     if (event_base == WIFI_EVENT) {
@@ -267,8 +336,20 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
             }
             xEventGroupSetBits(s_wifi_event_group, DEFER_AP_STADISC_BIT);
         } else if (event_id == WIFI_EVENT_SCAN_DONE) {
-            s_is_scanning = false;
-            xEventGroupSetBits(s_wifi_event_group, WIFI_SCAN_DONE_BIT);
+            // Only harvest scans initiated by network_mgr (do not steal records from blocking serial_cli scans)
+            if (s_is_scanning.load()) {
+                auto* scan_done = static_cast<wifi_event_sta_scan_done_t*>(event_data);
+                bool ok = (!scan_done || scan_done->status == 0);
+                if (ok) {
+                    harvest_scan_results();
+                } else {
+                    esp_wifi_clear_ap_list();
+                    ESP_LOGW(TAG, "Wi-Fi scan completed with error status %lu", (unsigned long)scan_done->status);
+                }
+                s_last_scan_ok.store(ok);
+                s_is_scanning = false;
+                xEventGroupSetBits(s_wifi_event_group, WIFI_SCAN_DONE_BIT);
+            }
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         esp_wifi_set_ps(WIFI_PS_NONE);
@@ -381,62 +462,27 @@ static void network_roam_task(void* pvParameters) {
             wifi_sta_list_t ap_stas = {};
             bool has_ap_client = (s_ap_active && esp_wifi_ap_get_sta_list(&ap_stas) == ESP_OK && ap_stas.num > 0);
 
-            if (!targets.empty() && !s_is_scanning && !has_ap_client) {
+            if (!targets.empty() && !has_ap_client && !s_is_scanning.exchange(true)) {
                 // Ensure STA is cleanly idle before starting an active scan
+                s_scan_start_tick.store((uint32_t)xTaskGetTickCount());
+                ensure_sta_scan_mode();
                 esp_wifi_disconnect();
                 vTaskDelay(pdMS_TO_TICKS(100));
 
-                s_is_scanning = true;
                 xEventGroupClearBits(s_wifi_event_group, WIFI_SCAN_DONE_BIT);
 
-                // Active probe scan (default dwell parameters for Bluetooth coexistence)
+                // Active probe scan (home_chan_dwell_time keeps SoftAP & BT coexistence stable)
                 wifi_scan_config_t scan_cfg = {};
                 scan_cfg.show_hidden = false;
                 scan_cfg.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+                scan_cfg.scan_time.active.min = 0;
+                scan_cfg.scan_time.active.max = 120;
+                scan_cfg.home_chan_dwell_time = 50;
 
                 if (esp_wifi_scan_start(&scan_cfg, false) == ESP_OK) {
                     EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group, WIFI_SCAN_DONE_BIT, pdTRUE, pdFALSE, pdMS_TO_TICKS(6000));
-                    if (bits & WIFI_SCAN_DONE_BIT) {
-                        uint16_t ap_count = 0;
-                        esp_wifi_scan_get_ap_num(&ap_count);
-                        if (ap_count > 32) ap_count = 32;
-                        std::vector<wifi_ap_record_t> ap_records(ap_count);
-
-                        if (ap_count > 0 && esp_wifi_scan_get_ap_records(&ap_count, ap_records.data()) == ESP_OK) {
-                            std::lock_guard<std::mutex> lock(s_net_mutex);
-                            s_scan_results.clear();
-                            for (uint16_t i = 0; i < ap_count; i++) {
-                                char clean_ssid[33] = {0};
-                                memcpy(clean_ssid, ap_records[i].ssid, 32);
-                                clean_ssid[32] = '\0';
-                                if (clean_ssid[0] == '\0') continue;
-
-                                std::string ssid(clean_ssid);
-                                // Deduplicate multiple BSSIDs for the same SSID (keep strongest RSSI)
-                                bool updated_existing = false;
-                                for (auto& existing : s_scan_results) {
-                                    if (existing.ssid == ssid) {
-                                        if (ap_records[i].rssi > existing.rssi) {
-                                            existing.rssi = ap_records[i].rssi;
-                                        }
-                                        updated_existing = true;
-                                        break;
-                                    }
-                                }
-                                if (updated_existing) continue;
-
-                                bool in_known = false;
-                                for (const auto& kn : targets) {
-                                    if (kn.ssid == ssid) {
-                                        in_known = true;
-                                        break;
-                                    }
-                                }
-                                s_scan_results.push_back({ssid, ap_records[i].rssi, static_cast<uint8_t>(ap_records[i].authmode), in_known});
-                            }
-                        }
-
-                        // 2. Rank candidate networks
+                    if ((bits & WIFI_SCAN_DONE_BIT) && s_last_scan_ok.load()) {
+                        // 2. Rank candidate networks (results harvested in WIFI_EVENT_SCAN_DONE)
                         std::vector<std::pair<KnownNetwork, int8_t>> candidates;
                         {
                             std::lock_guard<std::mutex> lock(s_net_mutex);
@@ -517,6 +563,7 @@ static void network_roam_task(void* pvParameters) {
                                 s_cur_sta_ssid = cand.first.ssid;
                             }
 
+                            s_is_connecting = true;
                             esp_wifi_disconnect();
                             vTaskDelay(pdMS_TO_TICKS(150));
                             xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
@@ -531,18 +578,22 @@ static void network_roam_task(void* pvParameters) {
                             if (conn_bits & WIFI_CONNECTED_BIT) {
                                 connected = true;
                                 high_prio_hold_retries = 0;
+                                s_is_connecting = false;
                                 break;
                             } else {
                                 // Cleanly abort in-flight association before moving on
                                 esp_wifi_disconnect();
                                 vTaskDelay(pdMS_TO_TICKS(100));
+                                s_is_connecting = false;
                             }
                         }
 
                         if (!connected && high_prio_hold_retries >= 2) {
                             high_prio_hold_retries = 0; // Release hold so next cycle allows low-priority fallback
                         }
-                    } else {
+                    } else if (!(bits & WIFI_SCAN_DONE_BIT)) {
+                        esp_wifi_scan_stop();
+                        esp_wifi_clear_ap_list();
                         s_is_scanning = false;
                     }
                 } else {
@@ -769,13 +820,35 @@ void network_mgr_set_ap_credentials(const std::string& ssid, const std::string& 
 }
 
 bool network_mgr_start_scan(void) {
+    network_mgr_is_scanning();
+    if (s_is_connecting.load()) {
+        ESP_LOGW(TAG, "Skipping Wi-Fi scan while STA association is in progress");
+        return false;
+    }
     if (s_is_scanning.exchange(true)) return false;
+
+    s_scan_start_tick.store((uint32_t)xTaskGetTickCount());
+    ensure_sta_scan_mode();
     esp_wifi_set_ps(WIFI_PS_NONE);
+    if (s_wifi_event_group) {
+        xEventGroupClearBits(s_wifi_event_group, WIFI_SCAN_DONE_BIT);
+    }
+
     wifi_scan_config_t scan_cfg = {};
     scan_cfg.show_hidden = false;
     scan_cfg.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+    scan_cfg.scan_time.active.min = 0;
+    scan_cfg.scan_time.active.max = 120;
+    scan_cfg.home_chan_dwell_time = 50;
+
     esp_err_t err = esp_wifi_scan_start(&scan_cfg, false);
+    if (err == ESP_ERR_WIFI_STATE && !s_sta_connected.load() && !s_is_connecting.load()) {
+        esp_wifi_disconnect();
+        vTaskDelay(pdMS_TO_TICKS(50));
+        err = esp_wifi_scan_start(&scan_cfg, false);
+    }
     if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Wi-Fi scan start failed: %s (0x%x)", esp_err_to_name(err), (unsigned)err);
         s_is_scanning = false;
         return false;
     }
@@ -783,6 +856,13 @@ bool network_mgr_start_scan(void) {
 }
 
 bool network_mgr_is_scanning(void) {
+    if (s_is_scanning.load() &&
+        ((uint32_t)xTaskGetTickCount() - s_scan_start_tick.load()) > pdMS_TO_TICKS(10000)) {
+        ESP_LOGW(TAG, "Wi-Fi scan timed out (>10s); resetting scan state");
+        esp_wifi_scan_stop();
+        esp_wifi_clear_ap_list();
+        s_is_scanning = false;
+    }
     return s_is_scanning.load();
 }
 

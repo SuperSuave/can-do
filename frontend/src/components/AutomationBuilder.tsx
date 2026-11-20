@@ -573,9 +573,11 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         const res = await fetch(`${base}/api/states`);
         if (res.ok) {
           const data = await res.json();
-          if (data && typeof data === 'object') {
-            for (const [k, v] of Object.entries(data)) {
-              entityStatesRef.current.set(k.toLowerCase(), String(v));
+          if (Array.isArray(data)) {
+            for (const item of data) {
+              if (item && typeof item.entity === 'string' && item.state !== undefined) {
+                entityStatesRef.current.set(item.entity.toLowerCase(), String(item.state));
+              }
             }
             setEntityStates(new Map(entityStatesRef.current));
           }
@@ -608,14 +610,14 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         if (bleRes.ok) {
           const bData = await bleRes.json();
           if (bData && typeof bData === 'object') {
-            if (Array.isArray(bData.beacons)) {
-              for (const b of bData.beacons) {
+            if (Array.isArray(bData.beacon_targets)) {
+              for (const b of bData.beacon_targets) {
                 const item: LiveBleItem = {
                   name: b.name,
                   uuid: b.uuid,
                   mac: b.mac,
                   rssi: b.rssi,
-                  is_present: b.is_present,
+                  is_present: Boolean(b.is_present),
                   connected: false
                 };
                 if (b.uuid) bleMapRef.current.set(b.uuid.toLowerCase(), item);
@@ -693,12 +695,21 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           ap_clients: typeof wData.ap_clients === 'number' ? wData.ap_clients : 0
         });
       } else if (msg.type === 'ble_beacon' || msg.type === 'ble_proximity') {
+        const raw = msg as any;
+        const evt = typeof raw.event === 'string' ? raw.event.toLowerCase() : '';
+        const isPresent = typeof raw.is_present === 'boolean'
+          ? raw.is_present
+          : evt === 'enter' || evt === 'proximity' || evt === 'present'
+            ? true
+            : evt === 'exit' || evt === 'away'
+              ? false
+              : msg.type === 'ble_proximity';
         const item: LiveBleItem = {
-          name: (msg as any).name,
-          uuid: (msg as any).uuid,
-          mac: (msg as any).mac || (msg as any).address,
-          rssi: (msg as any).rssi,
-          is_present: (msg as any).is_present ?? true,
+          name: raw.name,
+          uuid: raw.uuid,
+          mac: raw.mac || raw.address,
+          rssi: raw.rssi,
+          is_present: isPresent,
           connected: false
         };
         if (item.uuid) bleMapRef.current.set(item.uuid.toLowerCase(), item);

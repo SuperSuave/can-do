@@ -142,7 +142,25 @@ export default defineConfig(() => {
               res.setHeader('Content-Type', 'application/json');
               res.setHeader('Access-Control-Allow-Origin', '*');
               res.statusCode = 200;
-              return res.end(JSON.stringify({}));
+              return res.end(JSON.stringify([]));
+            }
+
+            // Local development mock for /api/ble/status
+            if (cleanUrl === '/api/ble/status') {
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.statusCode = 200;
+              return res.end(JSON.stringify({
+                enabled: true,
+                scanning: false,
+                connected_device: null,
+                paired_devices: [],
+                discovered_devices: [],
+                last_event: null,
+                recent_events: [],
+                beacon_targets: [],
+                discovered_beacons: []
+              }));
             }
 
             // Local development mock for /api/notify

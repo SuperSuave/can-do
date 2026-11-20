@@ -776,11 +776,13 @@ static bool evaluate_condition_raw(const AutomationCondition& cond) {
                     if (strcasecmp(net_status.sta_ssid.c_str(), cond.target_string.c_str()) != 0) return false;
                     if (cond.target_rssi != 0) {
                         switch (cond.op) {
-                            case ConditionOperator::GREATER_THAN: return net_status.sta_rssi > cond.target_rssi;
-                            case ConditionOperator::LESS_THAN:    return net_status.sta_rssi < cond.target_rssi;
-                            case ConditionOperator::EQUAL:        return net_status.sta_rssi == cond.target_rssi;
-                            case ConditionOperator::NOT_EQUAL:    return net_status.sta_rssi != cond.target_rssi;
-                            default: return net_status.sta_rssi >= cond.target_rssi;
+                            case ConditionOperator::GREATER_THAN:          return net_status.sta_rssi > cond.target_rssi;
+                            case ConditionOperator::GREATER_THAN_OR_EQUAL: return net_status.sta_rssi >= cond.target_rssi;
+                            case ConditionOperator::LESS_THAN:             return net_status.sta_rssi < cond.target_rssi;
+                            case ConditionOperator::LESS_THAN_OR_EQUAL:    return net_status.sta_rssi <= cond.target_rssi;
+                            case ConditionOperator::EQUAL:                 return net_status.sta_rssi == cond.target_rssi;
+                            case ConditionOperator::NOT_EQUAL:             return net_status.sta_rssi != cond.target_rssi;
+                            default: return false;
                         }
                     }
                     return true;
@@ -788,11 +790,13 @@ static bool evaluate_condition_raw(const AutomationCondition& cond) {
                     if (net_status.sta_connected != cond.target_bool) return false;
                     if (cond.target_bool && cond.target_rssi != 0) {
                         switch (cond.op) {
-                            case ConditionOperator::GREATER_THAN: return net_status.sta_rssi > cond.target_rssi;
-                            case ConditionOperator::LESS_THAN:    return net_status.sta_rssi < cond.target_rssi;
-                            case ConditionOperator::EQUAL:        return net_status.sta_rssi == cond.target_rssi;
-                            case ConditionOperator::NOT_EQUAL:    return net_status.sta_rssi != cond.target_rssi;
-                            default: return net_status.sta_rssi >= cond.target_rssi;
+                            case ConditionOperator::GREATER_THAN:          return net_status.sta_rssi > cond.target_rssi;
+                            case ConditionOperator::GREATER_THAN_OR_EQUAL: return net_status.sta_rssi >= cond.target_rssi;
+                            case ConditionOperator::LESS_THAN:             return net_status.sta_rssi < cond.target_rssi;
+                            case ConditionOperator::LESS_THAN_OR_EQUAL:    return net_status.sta_rssi <= cond.target_rssi;
+                            case ConditionOperator::EQUAL:                 return net_status.sta_rssi == cond.target_rssi;
+                            case ConditionOperator::NOT_EQUAL:             return net_status.sta_rssi != cond.target_rssi;
+                            default: return false;
                         }
                     }
                     return true;
@@ -802,11 +806,13 @@ static bool evaluate_condition_raw(const AutomationCondition& cond) {
                         return false;
                     }
                     switch (cond.op) {
-                        case ConditionOperator::GREATER_THAN: return net_status.sta_rssi > cond.target_rssi;
-                        case ConditionOperator::LESS_THAN:    return net_status.sta_rssi < cond.target_rssi;
-                        case ConditionOperator::EQUAL:        return net_status.sta_rssi == cond.target_rssi;
-                        case ConditionOperator::NOT_EQUAL:    return net_status.sta_rssi != cond.target_rssi;
-                        default: return net_status.sta_rssi >= cond.target_rssi;
+                        case ConditionOperator::GREATER_THAN:          return net_status.sta_rssi > cond.target_rssi;
+                        case ConditionOperator::GREATER_THAN_OR_EQUAL: return net_status.sta_rssi >= cond.target_rssi;
+                        case ConditionOperator::LESS_THAN:             return net_status.sta_rssi < cond.target_rssi;
+                        case ConditionOperator::LESS_THAN_OR_EQUAL:    return net_status.sta_rssi <= cond.target_rssi;
+                        case ConditionOperator::EQUAL:                 return net_status.sta_rssi == cond.target_rssi;
+                        case ConditionOperator::NOT_EQUAL:             return net_status.sta_rssi != cond.target_rssi;
+                        default: return false;
                     }
                 } else if (cond.device_property == "wifi_mode" || cond.device_property == "ap_mode") {
                     if (cond.target_string == "ap") return net_status.ap_active && !net_status.sta_connected;
@@ -831,11 +837,13 @@ static bool evaluate_condition_raw(const AutomationCondition& cond) {
                     for (const auto& sta : stations) {
                         if (cond.target_string.empty() || mac_matches(sta.mac, cond.target_string)) {
                             switch (cond.op) {
-                                case ConditionOperator::GREATER_THAN: return sta.rssi > cond.target_rssi;
-                                case ConditionOperator::LESS_THAN:    return sta.rssi < cond.target_rssi;
-                                case ConditionOperator::EQUAL:        return sta.rssi == cond.target_rssi;
-                                case ConditionOperator::NOT_EQUAL:    return sta.rssi != cond.target_rssi;
-                                default: return sta.rssi >= cond.target_rssi;
+                                case ConditionOperator::GREATER_THAN:          return sta.rssi > cond.target_rssi;
+                                case ConditionOperator::GREATER_THAN_OR_EQUAL: return sta.rssi >= cond.target_rssi;
+                                case ConditionOperator::LESS_THAN:             return sta.rssi < cond.target_rssi;
+                                case ConditionOperator::LESS_THAN_OR_EQUAL:    return sta.rssi <= cond.target_rssi;
+                                case ConditionOperator::EQUAL:                 return sta.rssi == cond.target_rssi;
+                                case ConditionOperator::NOT_EQUAL:             return sta.rssi != cond.target_rssi;
+                                default: return false;
                             }
                         }
                     }
@@ -909,11 +917,13 @@ static bool evaluate_condition_raw(const AutomationCondition& cond) {
                         // Target is present; if RSSI evaluation requested, check threshold
                         if (cond.device_property == "rssi" || cond.device_property == "proximity" || cond.target_rssi != 0) {
                             switch (cond.op) {
-                                case ConditionOperator::GREATER_THAN: return kv.second.rssi > cond.target_rssi;
-                                case ConditionOperator::LESS_THAN:    return kv.second.rssi < cond.target_rssi;
-                                case ConditionOperator::EQUAL:        return kv.second.rssi == cond.target_rssi;
-                                case ConditionOperator::NOT_EQUAL:    return kv.second.rssi != cond.target_rssi;
-                                default: return kv.second.rssi >= cond.target_rssi;
+                                case ConditionOperator::GREATER_THAN:          return kv.second.rssi > cond.target_rssi;
+                                case ConditionOperator::GREATER_THAN_OR_EQUAL: return kv.second.rssi >= cond.target_rssi;
+                                case ConditionOperator::LESS_THAN:             return kv.second.rssi < cond.target_rssi;
+                                case ConditionOperator::LESS_THAN_OR_EQUAL:    return kv.second.rssi <= cond.target_rssi;
+                                case ConditionOperator::EQUAL:                 return kv.second.rssi == cond.target_rssi;
+                                case ConditionOperator::NOT_EQUAL:             return kv.second.rssi != cond.target_rssi;
+                                default: return false;
                             }
                         }
                         return true;
@@ -950,11 +960,13 @@ static bool evaluate_condition_raw(const AutomationCondition& cond) {
 
                         if (cond.device_property == "rssi" || cond.device_property == "proximity" || cond.target_rssi != 0) {
                             switch (cond.op) {
-                                case ConditionOperator::GREATER_THAN: return kv.second.rssi > cond.target_rssi;
-                                case ConditionOperator::LESS_THAN:    return kv.second.rssi < cond.target_rssi;
-                                case ConditionOperator::EQUAL:        return kv.second.rssi == cond.target_rssi;
-                                case ConditionOperator::NOT_EQUAL:    return kv.second.rssi != cond.target_rssi;
-                                default: return kv.second.rssi >= cond.target_rssi;
+                                case ConditionOperator::GREATER_THAN:          return kv.second.rssi > cond.target_rssi;
+                                case ConditionOperator::GREATER_THAN_OR_EQUAL: return kv.second.rssi >= cond.target_rssi;
+                                case ConditionOperator::LESS_THAN:             return kv.second.rssi < cond.target_rssi;
+                                case ConditionOperator::LESS_THAN_OR_EQUAL:    return kv.second.rssi <= cond.target_rssi;
+                                case ConditionOperator::EQUAL:                 return kv.second.rssi == cond.target_rssi;
+                                case ConditionOperator::NOT_EQUAL:             return kv.second.rssi != cond.target_rssi;
+                                default: return false;
                             }
                         }
                         return true;
@@ -966,11 +978,13 @@ static bool evaluate_condition_raw(const AutomationCondition& cond) {
             if (cond.type == "voltage" || cond.type == "vbat") {
                 float vbat = vbat_sensor_get_last();
                 switch (cond.op) {
-                    case ConditionOperator::GREATER_THAN: return vbat > cond.target_float;
-                    case ConditionOperator::LESS_THAN:    return vbat < cond.target_float;
-                    case ConditionOperator::EQUAL:        return std::abs(vbat - cond.target_float) < 0.1f;
-                    case ConditionOperator::NOT_EQUAL:    return std::abs(vbat - cond.target_float) >= 0.1f;
-                    default: return vbat >= cond.target_float;
+                    case ConditionOperator::GREATER_THAN:          return vbat > cond.target_float;
+                    case ConditionOperator::GREATER_THAN_OR_EQUAL: return vbat >= cond.target_float;
+                    case ConditionOperator::LESS_THAN:             return vbat < cond.target_float;
+                    case ConditionOperator::LESS_THAN_OR_EQUAL:    return vbat <= cond.target_float;
+                    case ConditionOperator::EQUAL:                 return std::abs(vbat - cond.target_float) < 0.1f;
+                    case ConditionOperator::NOT_EQUAL:             return std::abs(vbat - cond.target_float) >= 0.1f;
+                    default: return false;
                 }
             }
 

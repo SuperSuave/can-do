@@ -720,12 +720,12 @@ class CanDoDataCoordinator:
         """Send DSP external amplifier audio control command on CAN 0x520 / 0x60C."""
         target_can_id = can_id
         if not target_can_id:
+            vid = self.vehicle_id.lower()
             target_can_id = (
                 "0x60C"
-                if "egmp" in self.vehicle_id
-                or self.vehicle_id.startswith("hi5")
-                or self.vehicle_id.startswith("ev6")
-                or self.vehicle_id.startswith("gv60")
+                if "egmp" in vid
+                or vid.startswith(("hi5", "hi6", "ev6", "gv60"))
+                or vid in ("hyundai_ioniq5", "hyundai_ioniq6", "kia_ev6", "genesis_gv60")
                 else "0x520"
             )
 

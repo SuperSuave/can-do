@@ -42,7 +42,8 @@ class CanDoNumberEntity(CanDoEntity, NumberEntity):
         self._attr_native_max_value = float(net.get("max", 100))
         self._attr_native_step = float(net.get("step", 1))
 
-        self.byte_str = net.get("byte", "D1")
+        self.state_byte_str = net.get("state_byte") or net.get("byte") or "D1"
+        self.action_byte_str = net.get("action_byte") or net.get("byte") or self.state_byte_str
         self.offset = net.get("offset", 0)
         self.action_can_id = net.get("action_can_id", self.state_can_id or "0x000")
         self._value: float = self._attr_native_min_value
@@ -72,7 +73,7 @@ class CanDoNumberEntity(CanDoEntity, NumberEntity):
         if not payload or not isinstance(payload, list):
             return self._value
 
-        idx = get_d_index(self.byte_str)
+        idx = get_d_index(self.state_byte_str)
         if 0 <= idx < len(payload):
             raw = payload[idx]
             val = float(raw - self.offset)
@@ -83,7 +84,7 @@ class CanDoNumberEntity(CanDoEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Set new numeric value on CAN bus."""
         raw_val = round(value + self.offset) & 0xFF
-        idx = get_d_index(self.byte_str)
+        idx = get_d_index(self.action_byte_str)
 
         # Preserve latest known CAN frame (only when state/action IDs match) or fall back to neutral base payload
         data = (

@@ -231,10 +231,11 @@ class CanDoBinarySensorEntity(CanDoEntity, BinarySensorEntity):
         if isinstance(direct_str, (int, float)):
             return bool(direct_str != 0)
         if isinstance(direct_str, str):
-            if _is_bs_off_label(direct_str):
-                return False
-            if _is_bs_on_label(direct_str):
+            parts = [p.strip() for p in re.split(r"[,;|]", direct_str) if p.strip()]
+            if any(_is_bs_on_label(part) for part in parts):
                 return True
+            if any(_is_bs_off_label(part) for part in parts):
+                return False
 
         if not self.state_can_id:
             return None

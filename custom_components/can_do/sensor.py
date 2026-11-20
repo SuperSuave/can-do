@@ -269,7 +269,11 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
         elif "odometer" in cid or unit in ("km", "mi"):
             self._attr_device_class = SensorDeviceClass.DISTANCE
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
-            self._attr_native_unit_of_measurement = UnitOfLength.KILOMETERS if "km" in unit.lower() else UnitOfLength.MILES
+            self._attr_native_unit_of_measurement = (
+                UnitOfLength.KILOMETERS
+                if ("odometer" in cid or "km" in unit.lower())
+                else UnitOfLength.MILES
+            )
         elif "power" in cid or unit.lower() in ("kw", "w"):
             self._attr_device_class = SensorDeviceClass.POWER
             self._attr_state_class = SensorStateClass.MEASUREMENT
