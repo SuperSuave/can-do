@@ -30,21 +30,62 @@ const std::string MQTT_BASE_TOPIC = "cando";
 esp_mqtt_client_handle_t global_mqtt_client = nullptr;
 std::mutex g_automations_file_mutex;
 
-static constexpr const char* MQTT_AUTOMATIONS_TMP_FILE = "/spiffs/automations.json.mqtt.tmp";
+static constexpr const char* MQTT_CONFIG_TMP_FILE = "/spiffs/mqtt.json.tmp";
+static constexpr const char* MQTT_AUTOMATIONS_STAGE_FILE = "/spiffs/automations.json.mqtt.stage";
+static constexpr const char* MQTT_AUTOMATIONS_PENDING_FILE = "/spiffs/automations.json.mqtt.pending";
+static constexpr const char* MQTT_AUTOMATIONS_WORK_FILE = "/spiffs/automations.json.mqtt.work";
 static constexpr size_t kMaxMqttAutomationsBytes = 128 * 1024;
 
 static std::mutex s_mqtt_mutex;
 static MqttConfig s_mqtt_cfg;
+static char* s_active_broker_url = nullptr;
 static std::atomic<bool> s_mqtt_connected{false};
 static std::atomic<bool> s_sync_task_running{false};
 static std::atomic<bool> s_need_clear_discovery{false};
-static std::atomic<bool> s_auto_reload_task_running{false};
-static std::atomic<bool> s_auto_reload_pending{false};
+static std::mutex s_auto_reload_mutex;
+static bool s_auto_reload_task_running = false;
+static bool s_auto_reload_pending = false;
 static std::atomic<bool> s_auto_parse_tmp_pending{false};
+static std::atomic<bool> s_monitored_ids_persist_pending{false};
 static std::unordered_set<std::string> s_exposed_auto_ids;
 static std::string s_lwt_topic;
 
+static bool save_monitored_ids_to_fs(void);
+
+static bool atomic_write_text_file(const char* target_path, const char* tmp_path, const char* data, size_t len) {
+    if (!target_path || !tmp_path || !data) {
+        return false;
+    }
+    FILE* f = fopen(tmp_path, "w");
+    if (!f) {
+        ESP_LOGE(TAG, "Failed to open %s for atomic write", tmp_path);
+        return false;
+    }
+    size_t written = (len > 0) ? fwrite(data, 1, len, f) : 0;
+    bool write_ok = (written == len) && (ferror(f) == 0);
+    bool flush_ok = write_ok && (fflush(f) == 0);
+    bool close_ok = (fclose(f) == 0);
+    if (!write_ok || !flush_ok || !close_ok) {
+        ESP_LOGE(TAG, "Failed writing %s (written=%zu/%zu, write_ok=%d, flush_ok=%d, close_ok=%d)",
+                 tmp_path, written, len, (int)write_ok, (int)flush_ok, (int)close_ok);
+        unlink(tmp_path);
+        return false;
+    }
+    if (rename(tmp_path, target_path) != 0) {
+        ESP_LOGE(TAG, "Failed to atomically rename %s -> %s", tmp_path, target_path);
+        unlink(tmp_path);
+        return false;
+    }
+    return true;
+}
+
+enum class MqttCmdKind : uint8_t {
+    ENTITY_CMD = 0,
+    PERSIST_MONITORED_IDS = 1,
+};
+
 struct MqttSetCmd {
+    MqttCmdKind kind;
     char entity_id[64];
     char payload[384];
 };
@@ -52,13 +93,36 @@ static QueueHandle_t s_mqtt_cmd_queue = nullptr;
 static StaticQueue_t s_mqtt_cmd_queue_struct;
 static uint8_t* s_mqtt_cmd_queue_storage = nullptr;
 
+static void mqtt_enqueue_entity_cmd(const char* entity_id, const char* payload, const char* source_label) {
+    if (!entity_id || !payload) return;
+    if (s_mqtt_cmd_queue) {
+        MqttSetCmd cmd = {};
+        cmd.kind = MqttCmdKind::ENTITY_CMD;
+        strncpy(cmd.entity_id, entity_id, sizeof(cmd.entity_id) - 1);
+        strncpy(cmd.payload, payload, sizeof(cmd.payload) - 1);
+        if (xQueueSend(s_mqtt_cmd_queue, &cmd, 0) != pdTRUE) {
+            ESP_LOGW(TAG, "MQTT cmd queue full, dropping %s/%s", source_label ? source_label : "cmd", cmd.entity_id);
+        }
+    } else {
+        ESP_LOGW(TAG, "MQTT cmd queue not initialized");
+    }
+}
+
 static void mqtt_cmd_worker_task(void* arg) {
     (void)arg;
     MqttSetCmd cmd;
     while (true) {
-        if (xQueueReceive(s_mqtt_cmd_queue, &cmd, portMAX_DELAY) == pdTRUE) {
-            rtc_crash_record_event("mqtt_set_cmd");
-            queue_entity_command(cmd.entity_id, cmd.payload);
+        TickType_t wait_ticks = s_monitored_ids_persist_pending.load(std::memory_order_acquire)
+            ? pdMS_TO_TICKS(50)
+            : portMAX_DELAY;
+        if (xQueueReceive(s_mqtt_cmd_queue, &cmd, wait_ticks) == pdTRUE) {
+            if (cmd.kind == MqttCmdKind::ENTITY_CMD) {
+                rtc_crash_record_event("mqtt_set_cmd");
+                queue_entity_command(cmd.entity_id, cmd.payload);
+            }
+        }
+        if (s_monitored_ids_persist_pending.exchange(false, std::memory_order_acq_rel)) {
+            save_monitored_ids_to_fs();
         }
     }
 }
@@ -68,12 +132,14 @@ static bool s_receiving_automations = false;
 static bool s_automations_write_failed = false;
 
 static void abort_mqtt_automations_rx(void) {
+    bool had_rx = s_receiving_automations || (s_automations_tmp_file != nullptr);
     if (s_automations_tmp_file) {
         fclose(s_automations_tmp_file);
         s_automations_tmp_file = nullptr;
     }
-    if (s_receiving_automations) {
-        unlink(MQTT_AUTOMATIONS_TMP_FILE);
+    if (had_rx) {
+        std::lock_guard<std::mutex> file_lock(g_automations_file_mutex);
+        unlink(MQTT_AUTOMATIONS_STAGE_FILE);
     }
     s_receiving_automations = false;
     s_automations_write_failed = false;
@@ -163,7 +229,9 @@ static const std::unordered_set<uint32_t> s_default_monitored_ids = {
 };
 static std::unordered_set<uint32_t> s_monitored_ids = s_default_monitored_ids;
 static std::mutex s_monitored_mutex;
+static std::mutex s_monitored_file_mutex;
 static const char* MONITORED_IDS_FILE = "/spiffs/monitored_ids.json";
+static const char* MONITORED_IDS_TMP_FILE = "/spiffs/monitored_ids.json.tmp";
 
 static void load_monitored_ids_from_fs(void) {
     FILE* f = fopen(MONITORED_IDS_FILE, "r");
@@ -203,7 +271,9 @@ static void load_monitored_ids_from_fs(void) {
 }
 
 static bool save_monitored_ids_to_fs(void) {
+    std::lock_guard<std::mutex> file_lock(s_monitored_file_mutex);
     cJSON* root = cJSON_CreateArray();
+    if (!root) return false;
     {
         std::lock_guard<std::mutex> lock(s_monitored_mutex);
         std::vector<uint32_t> sorted(s_monitored_ids.begin(), s_monitored_ids.end());
@@ -219,19 +289,12 @@ static bool save_monitored_ids_to_fs(void) {
     cJSON_Delete(root);
     if (!rendered) return false;
 
-    FILE* f = fopen("/spiffs/monitored_ids.json.tmp", "w");
-    if (!f) {
-        free(rendered);
-        return false;
-    }
-    fputs(rendered, f);
-    fclose(f);
+    bool ok = atomic_write_text_file(MONITORED_IDS_FILE, MONITORED_IDS_TMP_FILE, rendered, strlen(rendered));
     free(rendered);
-
-    unlink(MONITORED_IDS_FILE);
-    rename("/spiffs/monitored_ids.json.tmp", MONITORED_IDS_FILE);
-    ESP_LOGI(TAG, "Persisted %s", MONITORED_IDS_FILE);
-    return true;
+    if (ok) {
+        ESP_LOGI(TAG, "Persisted %s", MONITORED_IDS_FILE);
+    }
+    return ok;
 }
 
 void mqtt_mgr_publish_can_state(uint32_t can_id, const uint8_t* data, size_t len) {
@@ -254,9 +317,10 @@ void mqtt_mgr_publish_entity_state(const std::string& entity_id, const std::stri
 
 void mqtt_mgr_publish_active_ids(bool force) {
     if (!global_mqtt_client || !s_mqtt_connected.load(std::memory_order_relaxed)) return;
-    static uint32_t s_last_active_pub_ms = 0;
+    static std::atomic<uint32_t> s_last_active_pub_ms{0};
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-    if (!force && (now_ms - s_last_active_pub_ms < 10000)) {
+    uint32_t last_ms = s_last_active_pub_ms.load(std::memory_order_relaxed);
+    if (!force && (now_ms - last_ms < 10000)) {
         return; // Throttle to at most once per 10s
     }
 
@@ -278,19 +342,31 @@ void mqtt_mgr_publish_active_ids(bool force) {
     mqtt_enqueue_nonblocking(topic, rendered, (int)strlen(rendered), 0, 1);
     free(rendered);
 
-    s_last_active_pub_ms = now_ms;
+    s_last_active_pub_ms.store(now_ms, std::memory_order_relaxed);
     can_engine_clear_active_ids_changed();
 }
 
 void mqtt_mgr_set_monitored_ids(const std::vector<uint32_t>& ids, bool persist) {
+    std::unordered_set<uint32_t> next_ids(ids.begin(), ids.end());
+    bool changed = false;
     {
         std::lock_guard<std::mutex> lock(s_monitored_mutex);
-        s_monitored_ids.clear();
-        for (uint32_t id : ids) {
-            s_monitored_ids.insert(id);
+        if (next_ids != s_monitored_ids) {
+            s_monitored_ids.swap(next_ids);
+            changed = true;
         }
     }
-    if (persist) {
+    if (!persist || !changed) {
+        return;
+    }
+    s_monitored_ids_persist_pending.store(true, std::memory_order_release);
+    if (s_mqtt_cmd_queue) {
+        MqttSetCmd cmd = {};
+        cmd.kind = MqttCmdKind::PERSIST_MONITORED_IDS;
+        if (xQueueSend(s_mqtt_cmd_queue, &cmd, 0) != pdTRUE) {
+            ESP_LOGW(TAG, "MQTT cmd queue full; deferring monitored_ids persistence");
+        }
+    } else if (s_monitored_ids_persist_pending.exchange(false, std::memory_order_acq_rel)) {
         save_monitored_ids_to_fs();
     }
 }
@@ -303,11 +379,14 @@ std::vector<uint32_t> mqtt_mgr_get_monitored_ids(void) {
 }
 
 void mqtt_mgr_reset_monitored_ids(void) {
+    std::lock_guard<std::mutex> file_lock(s_monitored_file_mutex);
     {
         std::lock_guard<std::mutex> lock(s_monitored_mutex);
         s_monitored_ids = s_default_monitored_ids;
     }
+    s_monitored_ids_persist_pending.store(false, std::memory_order_release);
     unlink(MONITORED_IDS_FILE);
+    unlink(MONITORED_IDS_TMP_FILE);
     ESP_LOGI(TAG, "Reset monitored CAN IDs to default");
 }
 
@@ -508,8 +587,17 @@ static void mqtt_post_connect_sync_task(void* arg) {
     if (!g_state_restored_from_rtc.load()) {
         vTaskDelay(pdMS_TO_TICKS(5000));
         std::string state_sub = MQTT_BASE_TOPIC + "/state/+";
-        esp_mqtt_client_unsubscribe(global_mqtt_client, state_sub.c_str());
-        ESP_LOGI(TAG, "Completed cold-boot state hydration from MQTT; unsubscribed from %s", state_sub.c_str());
+        bool unsubscribed = false;
+        {
+            std::lock_guard<std::mutex> pub_lock(s_mqtt_pub_mutex);
+            if (global_mqtt_client) {
+                esp_mqtt_client_unsubscribe(global_mqtt_client, state_sub.c_str());
+                unsubscribed = true;
+            }
+        }
+        if (unsubscribed) {
+            ESP_LOGI(TAG, "Completed cold-boot state hydration from MQTT; unsubscribed from %s", state_sub.c_str());
+        }
     }
 
     s_sync_task_running.store(false);
@@ -520,7 +608,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     auto event = static_cast<esp_mqtt_event_handle_t>(event_data);
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED: {
-            ESP_LOGI(TAG, "MQTT connected to broker (%s)", s_mqtt_cfg.broker_url.c_str());
+            const char* broker_url = handler_args ? static_cast<const char*>(handler_args) : "";
+            ESP_LOGI(TAG, "MQTT connected to broker (%s)", broker_url);
 
             // 1. Pack all 14 control topics into a SINGLE MQTT SUBSCRIBE packet (QoS 0)
             // Avoids 14 separate WebSocket frames AND avoids # wildcard broker echo on /state/*
@@ -557,7 +646,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             };
 
             esp_mqtt_client_subscribe_multiple(
-                global_mqtt_client,
+                event->client,
                 sub_list,
                 sizeof(sub_list) / sizeof(sub_list[0])
             );
@@ -566,7 +655,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             static std::atomic<bool> s_hydrated_from_mqtt{false};
             if (!g_state_restored_from_rtc.load() && !s_hydrated_from_mqtt.load()) {
                 std::string state_sub = MQTT_BASE_TOPIC + "/state/+";
-                esp_mqtt_client_subscribe(global_mqtt_client, state_sub.c_str(), 0);
+                esp_mqtt_client_subscribe(event->client, state_sub.c_str(), 0);
                 ESP_LOGI(TAG, "Cold boot detected without RTC cache: Subscribed to retained states (%s)", state_sub.c_str());
             }
 
@@ -627,11 +716,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                         ESP_LOGE(TAG, "Rejecting MQTT automations payload with invalid size (%d bytes)", event->total_data_len);
                         s_automations_write_failed = true;
                     } else {
-                        std::lock_guard<std::mutex> file_lock(g_automations_file_mutex);
-                        s_auto_parse_tmp_pending.store(false);
-                        s_automations_tmp_file = fopen(MQTT_AUTOMATIONS_TMP_FILE, "w");
+                        s_automations_tmp_file = fopen(MQTT_AUTOMATIONS_STAGE_FILE, "w");
                         if (!s_automations_tmp_file) {
-                            ESP_LOGE(TAG, "Failed to open %s for writing", MQTT_AUTOMATIONS_TMP_FILE);
+                            ESP_LOGE(TAG, "Failed to open %s for writing", MQTT_AUTOMATIONS_STAGE_FILE);
                             s_automations_write_failed = true;
                         }
                     }
@@ -644,13 +731,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 if (!s_automations_write_failed && s_automations_tmp_file && event->data_len > 0) {
                     size_t written = fwrite(event->data, 1, static_cast<size_t>(event->data_len), s_automations_tmp_file);
                     if (written != static_cast<size_t>(event->data_len)) {
-                        ESP_LOGE(TAG, "Short fwrite on %s (%zu / %d)", MQTT_AUTOMATIONS_TMP_FILE, written, event->data_len);
+                        ESP_LOGE(TAG, "Short fwrite on %s (%zu / %d)", MQTT_AUTOMATIONS_STAGE_FILE, written, event->data_len);
                         s_automations_write_failed = true;
                     }
                 }
 
                 bool is_final_chunk = (event->current_data_offset + event->data_len >= event->total_data_len);
                 if (is_final_chunk) {
+                    bool had_file = (s_automations_tmp_file != nullptr);
                     bool flush_ok = true;
                     bool close_ok = true;
                     if (s_automations_tmp_file) {
@@ -658,17 +746,37 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                         close_ok = (fclose(s_automations_tmp_file) == 0);
                         s_automations_tmp_file = nullptr;
                     }
-                    bool write_ok = !s_automations_write_failed && flush_ok && close_ok;
+                    bool write_ok = had_file && !s_automations_write_failed && flush_ok && close_ok;
                     s_receiving_automations = false;
                     s_automations_write_failed = false;
 
                     if (write_ok) {
-                        s_auto_parse_tmp_pending.store(true);
-                        mqtt_mgr_on_automations_reloaded();
+                        bool stage_ok = false;
+                        {
+                            std::lock_guard<std::mutex> file_lock(g_automations_file_mutex);
+                            stage_ok = (rename(MQTT_AUTOMATIONS_STAGE_FILE, MQTT_AUTOMATIONS_PENDING_FILE) == 0);
+                            if (stage_ok) {
+                                s_auto_parse_tmp_pending.store(true, std::memory_order_release);
+                            } else {
+                                ESP_LOGE(TAG, "Failed to atomically stage %s -> %s", MQTT_AUTOMATIONS_STAGE_FILE, MQTT_AUTOMATIONS_PENDING_FILE);
+                                unlink(MQTT_AUTOMATIONS_STAGE_FILE);
+                            }
+                        }
+                        if (stage_ok) {
+                            mqtt_mgr_on_automations_reloaded();
+                        } else {
+                            std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/status";
+                            static const char kErrMsg[] = "{\"status\":\"error\",\"message\":\"Failed staging automations\"}";
+                            mqtt_enqueue_nonblocking(status_topic.c_str(), kErrMsg, (int)(sizeof(kErrMsg) - 1), 0, 0);
+                        }
                     } else {
-                        unlink(MQTT_AUTOMATIONS_TMP_FILE);
+                        {
+                            std::lock_guard<std::mutex> file_lock(g_automations_file_mutex);
+                            unlink(MQTT_AUTOMATIONS_STAGE_FILE);
+                        }
                         std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/status";
-                        mqtt_enqueue_nonblocking(status_topic.c_str(), "{\"status\":\"error\",\"message\":\"Failed writing automations\"}", 57, 0, 0);
+                        static const char kErrMsg[] = "{\"status\":\"error\",\"message\":\"Failed writing automations\"}";
+                        mqtt_enqueue_nonblocking(status_topic.c_str(), kErrMsg, (int)(sizeof(kErrMsg) - 1), 0, 0);
                     }
                 }
                 return;
@@ -691,7 +799,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             }
 
             if (suffix == "config/automations/get") {
-                s_auto_reload_pending.store(true);
                 mqtt_mgr_on_automations_reloaded();
                 return;
             }
@@ -822,11 +929,10 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     bool handled = false;
                     cJSON* target_entity = cJSON_GetObjectItem(root, "entity");
                     cJSON* target_cmd = cJSON_GetObjectItem(root, "command");
-                    if (cJSON_IsString(target_entity)) {
-                        const char* cmd_str = cJSON_IsString(target_cmd) ? target_cmd->valuestring : "";
-                        if (queue_entity_command(target_entity->valuestring, cmd_str)) {
-                            handled = true;
-                        }
+                    if (cJSON_IsString(target_entity) && target_entity->valuestring && target_entity->valuestring[0] != '\0') {
+                        const char* cmd_str = (cJSON_IsString(target_cmd) && target_cmd->valuestring) ? target_cmd->valuestring : "";
+                        mqtt_enqueue_entity_cmd(target_entity->valuestring, cmd_str, "/tx");
+                        handled = true;
                     }
 
                     if (!handled) {
@@ -916,16 +1022,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 if (root) cJSON_Delete(root);
             } else if (is_set_cmd) {
                 std::string entity_id = suffix.substr(4);
-                if (s_mqtt_cmd_queue) {
-                    MqttSetCmd cmd = {};
-                    strncpy(cmd.entity_id, entity_id.c_str(), sizeof(cmd.entity_id) - 1);
-                    strncpy(cmd.payload, payload.c_str(), sizeof(cmd.payload) - 1);
-                    if (xQueueSend(s_mqtt_cmd_queue, &cmd, 0) != pdTRUE) {
-                        ESP_LOGW(TAG, "MQTT cmd queue full, dropping /set/%s", cmd.entity_id);
-                    }
-                } else {
-                    ESP_LOGW(TAG, "MQTT cmd queue not initialized");
-                }
+                mqtt_enqueue_entity_cmd(entity_id.c_str(), payload.c_str(), "/set");
             }
             break;
         }
@@ -939,9 +1036,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
 static bool s_mqtt_initialized = false;
 
-static void load_settings_from_fs(void) {
-    std::lock_guard<std::mutex> lock(s_mqtt_mutex);
-
+static void load_settings_from_fs_locked(void) {
 #if defined(CONFIG_CAN_DO_MQTT_BROKER_URL)
     s_mqtt_cfg.broker_url = CONFIG_CAN_DO_MQTT_BROKER_URL;
 #else
@@ -1000,6 +1095,11 @@ static void load_settings_from_fs(void) {
     s_mqtt_initialized = true;
 }
 
+static void load_settings_from_fs(void) {
+    std::lock_guard<std::mutex> lock(s_mqtt_mutex);
+    load_settings_from_fs_locked();
+}
+
 void mqtt_mgr_init(void) {
     load_settings_from_fs();
     load_monitored_ids_from_fs();
@@ -1034,73 +1134,108 @@ void mqtt_mgr_init(void) {
 }
 
 void mqtt_mgr_start(void) {
-    if (!s_mqtt_initialized) {
-        load_settings_from_fs();
-    }
-    std::lock_guard<std::mutex> lock(s_mqtt_mutex);
-    if (!s_mqtt_cfg.enabled || s_mqtt_cfg.broker_url.empty()) return;
+    esp_mqtt_client_handle_t failed_client = nullptr;
+    char* failed_broker_url = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(s_mqtt_mutex);
+        if (!s_mqtt_initialized) {
+            load_settings_from_fs_locked();
+        }
+        if (!s_mqtt_cfg.enabled || s_mqtt_cfg.broker_url.empty()) return;
 
-    if (global_mqtt_client) {
-        esp_mqtt_client_reconnect(global_mqtt_client);
-        return;
-    }
+        {
+            std::lock_guard<std::mutex> pub_lock(s_mqtt_pub_mutex);
+            if (global_mqtt_client) {
+                esp_mqtt_client_reconnect(global_mqtt_client);
+                return;
+            }
+        }
 
-    esp_mqtt_client_config_t mqtt_cfg = {};
-    mqtt_cfg.broker.address.uri = s_mqtt_cfg.broker_url.c_str();
-    mqtt_cfg.credentials.client_id = DEVICE_ID.c_str();
-    if (!s_mqtt_cfg.username.empty()) {
-        mqtt_cfg.credentials.username = s_mqtt_cfg.username.c_str();
-    }
-    if (!s_mqtt_cfg.password.empty()) {
-        mqtt_cfg.credentials.authentication.password = s_mqtt_cfg.password.c_str();
-    }
+        esp_mqtt_client_config_t mqtt_cfg = {};
+        mqtt_cfg.broker.address.uri = s_mqtt_cfg.broker_url.c_str();
+        mqtt_cfg.credentials.client_id = DEVICE_ID.c_str();
+        if (!s_mqtt_cfg.username.empty()) {
+            mqtt_cfg.credentials.username = s_mqtt_cfg.username.c_str();
+        }
+        if (!s_mqtt_cfg.password.empty()) {
+            mqtt_cfg.credentials.authentication.password = s_mqtt_cfg.password.c_str();
+        }
 
-    s_lwt_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/status";
-    mqtt_cfg.session.last_will.topic = s_lwt_topic.c_str();
-    mqtt_cfg.session.last_will.msg = "offline";
-    mqtt_cfg.session.last_will.msg_len = 7;
-    mqtt_cfg.session.last_will.qos = 0; // QoS 0 avoids broker session state buildup on network drops
-    mqtt_cfg.session.last_will.retain = 1;
+        s_lwt_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/status";
+        mqtt_cfg.session.last_will.topic = s_lwt_topic.c_str();
+        mqtt_cfg.session.last_will.msg = "offline";
+        mqtt_cfg.session.last_will.msg_len = 7;
+        mqtt_cfg.session.last_will.qos = 0; // QoS 0 avoids broker session state buildup on network drops
+        mqtt_cfg.session.last_will.retain = 1;
 
-    // Hardened timeouts & bounded outbox for ws:// & cellular roaming (timeout < 3s TWDT)
-    mqtt_cfg.session.keepalive = 30;
-    mqtt_cfg.network.reconnect_timeout_ms = 5000;
-    mqtt_cfg.network.timeout_ms = 2000;
-    mqtt_cfg.buffer.size = 2048;
-    mqtt_cfg.buffer.out_size = 2048;
-    mqtt_cfg.outbox.limit = 4096;
-    mqtt_cfg.task.stack_size = 6144;
+        // Hardened timeouts & bounded outbox for ws:// & cellular roaming (timeout < 3s TWDT)
+        mqtt_cfg.session.keepalive = 30;
+        mqtt_cfg.network.reconnect_timeout_ms = 5000;
+        mqtt_cfg.network.timeout_ms = 2000;
+        mqtt_cfg.buffer.size = 2048;
+        mqtt_cfg.buffer.out_size = 2048;
+        mqtt_cfg.outbox.limit = 4096;
+        mqtt_cfg.task.stack_size = 6144;
 
-    global_mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
-    if (!global_mqtt_client) {
-        ESP_LOGE(TAG, "esp_mqtt_client_init failed (free=%lu, internal=%lu)",
-                 (unsigned long)esp_get_free_heap_size(),
-                 (unsigned long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
-        return;
+        esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
+        if (!client) {
+            ESP_LOGE(TAG, "esp_mqtt_client_init failed (free=%lu, internal=%lu)",
+                     (unsigned long)esp_get_free_heap_size(),
+                     (unsigned long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+            return;
+        }
+
+        size_t url_len = s_mqtt_cfg.broker_url.size();
+        char* broker_url_copy = static_cast<char*>(malloc(url_len + 1));
+        if (broker_url_copy) {
+            memcpy(broker_url_copy, s_mqtt_cfg.broker_url.c_str(), url_len + 1);
+        }
+
+        esp_err_t err = esp_mqtt_client_register_event(client, MQTT_EVENT_ANY, mqtt_event_handler, broker_url_copy);
+        if (err == ESP_OK) {
+            {
+                std::lock_guard<std::mutex> pub_lock(s_mqtt_pub_mutex);
+                global_mqtt_client = client;
+                s_active_broker_url = broker_url_copy;
+            }
+            err = esp_mqtt_client_start(client);
+            if (err != ESP_OK) {
+                std::lock_guard<std::mutex> pub_lock(s_mqtt_pub_mutex);
+                if (global_mqtt_client == client) {
+                    global_mqtt_client = nullptr;
+                    s_active_broker_url = nullptr;
+                }
+            }
+        }
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "MQTT client start failed (%s; free=%lu, internal=%lu)",
+                     esp_err_to_name(err),
+                     (unsigned long)esp_get_free_heap_size(),
+                     (unsigned long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+            failed_client = client;
+            failed_broker_url = broker_url_copy;
+        }
     }
-    esp_err_t err = esp_mqtt_client_register_event(global_mqtt_client, MQTT_EVENT_ANY, mqtt_event_handler, nullptr);
-    if (err == ESP_OK) {
-        err = esp_mqtt_client_start(global_mqtt_client);
+    if (failed_client) {
+        esp_mqtt_client_destroy(failed_client);
     }
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "MQTT client start failed (%s; free=%lu, internal=%lu)",
-                 esp_err_to_name(err),
-                 (unsigned long)esp_get_free_heap_size(),
-                 (unsigned long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
-        esp_mqtt_client_destroy(global_mqtt_client);
-        global_mqtt_client = nullptr;
+    if (failed_broker_url) {
+        free(failed_broker_url);
     }
 }
 
 void mqtt_mgr_stop(void) {
-    std::lock_guard<std::mutex> lock(s_mqtt_mutex);
-    if (global_mqtt_client) {
-        s_mqtt_connected.store(false, std::memory_order_relaxed);
-        esp_mqtt_client_handle_t client = global_mqtt_client;
-        esp_mqtt_client_stop(client);
-        {
-            std::lock_guard<std::mutex> pub_lock(s_mqtt_pub_mutex);
+    esp_mqtt_client_handle_t client = nullptr;
+    char* broker_url_copy = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(s_mqtt_mutex);
+        std::lock_guard<std::mutex> pub_lock(s_mqtt_pub_mutex);
+        if (global_mqtt_client) {
+            s_mqtt_connected.store(false, std::memory_order_relaxed);
+            client = global_mqtt_client;
             global_mqtt_client = nullptr;
+            broker_url_copy = s_active_broker_url;
+            s_active_broker_url = nullptr;
             if (s_mqtt_pub_queue) {
                 MqttPubItem item;
                 while (xQueueReceive(s_mqtt_pub_queue, &item, 0) == pdTRUE) {
@@ -1110,7 +1245,13 @@ void mqtt_mgr_stop(void) {
                 }
             }
         }
+    }
+    if (client) {
+        esp_mqtt_client_stop(client);
         esp_mqtt_client_destroy(client);
+    }
+    if (broker_url_copy) {
+        free(broker_url_copy);
     }
 }
 
@@ -1119,15 +1260,27 @@ void mqtt_mgr_on_wifi_disconnect(void) {
 }
 
 void mqtt_mgr_on_wifi_connect(void) {
-    if (!global_mqtt_client) {
+    bool need_start = false;
+    {
+        std::lock_guard<std::mutex> pub_lock(s_mqtt_pub_mutex);
+        if (!global_mqtt_client) {
+            need_start = true;
+        } else if (!s_mqtt_connected.load(std::memory_order_relaxed)) {
+            esp_mqtt_client_reconnect(global_mqtt_client);
+        }
+    }
+    if (need_start) {
         mqtt_mgr_start();
-    } else if (!s_mqtt_connected.load(std::memory_order_relaxed)) {
-        esp_mqtt_client_reconnect(global_mqtt_client);
     }
 }
 
 void mqtt_mgr_watchdog(void) {
-    if (!global_mqtt_client) {
+    bool has_client = false;
+    {
+        std::lock_guard<std::mutex> pub_lock(s_mqtt_pub_mutex);
+        has_client = (global_mqtt_client != nullptr);
+    }
+    if (!has_client) {
         mqtt_mgr_start();
     } else {
         mqtt_mgr_publish_active_ids(false);
@@ -1144,38 +1297,45 @@ MqttConfig mqtt_mgr_get_config(void) {
 }
 
 bool mqtt_mgr_save_config(const MqttConfig& cfg) {
+    bool persisted = false;
     {
         std::lock_guard<std::mutex> lock(s_mqtt_mutex);
+        cJSON* root = cJSON_CreateObject();
+        if (!root) {
+            ESP_LOGE(TAG, "Failed to allocate JSON object for %s", MQTT_CONFIG_FILE);
+            return false;
+        }
+        cJSON_AddBoolToObject(root, "enabled", cfg.enabled);
+        cJSON_AddBoolToObject(root, "ha_discovery", cfg.ha_discovery_enabled);
+        cJSON_AddStringToObject(root, "broker_url", cfg.broker_url.c_str());
+        cJSON_AddStringToObject(root, "username", cfg.username.c_str());
+        cJSON_AddStringToObject(root, "password", cfg.password.c_str());
+
+        char* rendered = cJSON_Print(root);
+        cJSON_Delete(root);
+        if (!rendered) {
+            ESP_LOGE(TAG, "Failed to serialize %s", MQTT_CONFIG_FILE);
+            return false;
+        }
+
+        persisted = atomic_write_text_file(MQTT_CONFIG_FILE, MQTT_CONFIG_TMP_FILE, rendered, strlen(rendered));
+        free(rendered);
+        if (!persisted) {
+            return false;
+        }
+
         if (s_mqtt_cfg.ha_discovery_enabled && !cfg.ha_discovery_enabled) {
             s_need_clear_discovery.store(true);
         }
         s_mqtt_cfg = cfg;
-
-        cJSON* root = cJSON_CreateObject();
-        cJSON_AddBoolToObject(root, "enabled", s_mqtt_cfg.enabled);
-        cJSON_AddBoolToObject(root, "ha_discovery", s_mqtt_cfg.ha_discovery_enabled);
-        cJSON_AddStringToObject(root, "broker_url", s_mqtt_cfg.broker_url.c_str());
-        cJSON_AddStringToObject(root, "username", s_mqtt_cfg.username.c_str());
-        cJSON_AddStringToObject(root, "password", s_mqtt_cfg.password.c_str());
-
-        char* rendered = cJSON_Print(root);
-        cJSON_Delete(root);
-
-        if (rendered) {
-            FILE* f = fopen(MQTT_CONFIG_FILE, "w");
-            if (f) {
-                fputs(rendered, f);
-                fclose(f);
-            }
-            free(rendered);
-        }
+        s_mqtt_initialized = true;
     }
 
     mqtt_mgr_stop();
     if (cfg.enabled) {
         mqtt_mgr_start();
     }
-    return true;
+    return persisted;
 }
 
 static PsramVector<AutomationRule> snapshot_automations_for_mqtt(void) {
@@ -1223,65 +1383,184 @@ static void refresh_automation_discovery_locked_check(void) {
     }
 }
 
-static void mqtt_auto_reload_task(void* arg) {
-    while (s_auto_reload_pending.exchange(false)) {
-        rtc_crash_record_event("auto_reload");
-        if (s_auto_parse_tmp_pending.exchange(false)) {
-            std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/status";
-            bool valid = false;
-            {
-                std::lock_guard<std::mutex> file_lock(g_automations_file_mutex);
-                struct stat st;
-                if (stat(MQTT_AUTOMATIONS_TMP_FILE, &st) == 0 && st.st_size > 0 &&
-                    static_cast<size_t>(st.st_size) <= kMaxMqttAutomationsBytes) {
-                    bool looks_like_json_container = false;
-                    FILE* check_f = fopen(MQTT_AUTOMATIONS_TMP_FILE, "r");
-                    if (check_f) {
-                        int ch;
-                        while ((ch = fgetc(check_f)) != EOF) {
-                            if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n') {
-                                looks_like_json_container = (ch == '{' || ch == '[');
-                                break;
-                            }
-                        }
-                        fclose(check_f);
-                    }
-                    if (looks_like_json_container) {
-                        valid = load_automations_from_fs(MQTT_AUTOMATIONS_TMP_FILE);
-                    }
+static bool validate_automations_json_file(const char* filepath) {
+    struct stat st;
+    if (!filepath || stat(filepath, &st) != 0 || st.st_size <= 0 ||
+        static_cast<size_t>(st.st_size) > kMaxMqttAutomationsBytes) {
+        return false;
+    }
+
+    const size_t file_size = static_cast<size_t>(st.st_size);
+    FILE* f = fopen(filepath, "r");
+    if (!f) {
+        return false;
+    }
+
+#if CONFIG_SPIRAM
+    char* buf = static_cast<char*>(heap_caps_malloc_prefer(file_size + 1, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT));
+#else
+    char* buf = static_cast<char*>(malloc(file_size + 1));
+#endif
+    if (!buf) {
+        fclose(f);
+        return false;
+    }
+
+    size_t nread = fread(buf, 1, file_size, f);
+    bool read_err = (ferror(f) != 0);
+    fclose(f);
+    if (read_err || nread != file_size) {
+        free(buf);
+        return false;
+    }
+    buf[file_size] = '\0';
+
+    // Reject embedded NUL bytes that could conceal trailing garbage
+    if (strlen(buf) != file_size) {
+        free(buf);
+        return false;
+    }
+
+    const char* parse_end = nullptr;
+    cJSON* root = cJSON_ParseWithOpts(buf, &parse_end, false);
+    bool valid = false;
+    if (root && parse_end) {
+        bool trailing_ok = true;
+        while (*parse_end != '\0') {
+            if (*parse_end != ' ' && *parse_end != '\t' && *parse_end != '\r' && *parse_end != '\n') {
+                trailing_ok = false;
+                break;
+            }
+            ++parse_end;
+        }
+        if (trailing_ok) {
+            if (cJSON_IsArray(root)) {
+                valid = true;
+            } else if (cJSON_IsObject(root)) {
+                cJSON* rules_item = cJSON_GetObjectItemCaseSensitive(root, "rules");
+                if (!rules_item) {
+                    rules_item = cJSON_GetObjectItemCaseSensitive(root, "automations");
                 }
-                if (valid) {
-                    if (rename(MQTT_AUTOMATIONS_TMP_FILE, "/spiffs/automations.json") != 0) {
-                        ESP_LOGE(TAG, "Failed to atomically commit %s to /spiffs/automations.json", MQTT_AUTOMATIONS_TMP_FILE);
-                        unlink(MQTT_AUTOMATIONS_TMP_FILE);
-                        valid = false;
+                valid = (rules_item != nullptr && cJSON_IsArray(rules_item));
+            }
+        }
+    }
+
+    if (root) {
+        cJSON_Delete(root);
+    }
+    free(buf);
+    return valid;
+}
+
+static void mqtt_auto_reload_task(void* arg) {
+    (void)arg;
+    while (true) {
+        {
+            std::lock_guard<std::mutex> lock(s_auto_reload_mutex);
+            if (!s_auto_reload_pending) {
+                s_auto_reload_task_running = false;
+                break;
+            }
+            s_auto_reload_pending = false;
+        }
+
+        rtc_crash_record_event("auto_reload");
+
+        bool claimed_pending = false;
+        bool claim_error = false;
+        {
+            std::lock_guard<std::mutex> file_lock(g_automations_file_mutex);
+            if (s_auto_parse_tmp_pending.exchange(false, std::memory_order_acq_rel)) {
+                struct stat st;
+                if (stat(MQTT_AUTOMATIONS_PENDING_FILE, &st) == 0) {
+                    if (rename(MQTT_AUTOMATIONS_PENDING_FILE, MQTT_AUTOMATIONS_WORK_FILE) == 0) {
+                        claimed_pending = true;
+                    } else {
+                        ESP_LOGE(TAG, "Failed to claim %s -> %s", MQTT_AUTOMATIONS_PENDING_FILE, MQTT_AUTOMATIONS_WORK_FILE);
+                        unlink(MQTT_AUTOMATIONS_PENDING_FILE);
+                        claim_error = true;
                     }
                 } else {
-                    unlink(MQTT_AUTOMATIONS_TMP_FILE);
+                    claim_error = true;
                 }
             }
+        }
+
+        if (claimed_pending || claim_error) {
+            std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/status";
+            if (claim_error) {
+                static const char kErrMsg[] = "{\"status\":\"error\",\"message\":\"Failed staging automations\"}";
+                mqtt_enqueue_nonblocking(status_topic.c_str(), kErrMsg, (int)(sizeof(kErrMsg) - 1), 0, 0);
+                continue;
+            }
+
+            bool valid = validate_automations_json_file(MQTT_AUTOMATIONS_WORK_FILE);
             if (valid) {
-                mqtt_enqueue_nonblocking(status_topic.c_str(), "{\"status\":\"ok\"}", 15, 0, 0);
+                valid = load_automations_from_fs(MQTT_AUTOMATIONS_WORK_FILE);
+            }
+
+            bool commit_ok = false;
+            if (valid) {
+                {
+                    std::lock_guard<std::mutex> file_lock(g_automations_file_mutex);
+                    commit_ok = (rename(MQTT_AUTOMATIONS_WORK_FILE, "/spiffs/automations.json") == 0);
+                    if (!commit_ok) {
+                        ESP_LOGE(TAG, "Failed to atomically commit %s to /spiffs/automations.json", MQTT_AUTOMATIONS_WORK_FILE);
+                        unlink(MQTT_AUTOMATIONS_WORK_FILE);
+                    }
+                }
+                if (!commit_ok) {
+                    // Reload on-disk automations.json so RAM and flash never diverge
+                    load_automations_from_fs("/spiffs/automations.json");
+                }
             } else {
-                mqtt_enqueue_nonblocking(status_topic.c_str(), "{\"status\":\"error\",\"message\":\"Invalid JSON syntax\"}", 50, 0, 0);
+                unlink(MQTT_AUTOMATIONS_WORK_FILE);
+            }
+
+            if (valid && commit_ok) {
+                static const char kOkMsg[] = "{\"status\":\"ok\"}";
+                mqtt_enqueue_nonblocking(status_topic.c_str(), kOkMsg, (int)(sizeof(kOkMsg) - 1), 0, 0);
+            } else if (!valid) {
+                static const char kErrMsg[] = "{\"status\":\"error\",\"message\":\"Invalid JSON syntax\"}";
+                mqtt_enqueue_nonblocking(status_topic.c_str(), kErrMsg, (int)(sizeof(kErrMsg) - 1), 0, 0);
+                continue;
+            } else {
+                static const char kErrMsg[] = "{\"status\":\"error\",\"message\":\"Failed committing automations\"}";
+                mqtt_enqueue_nonblocking(status_topic.c_str(), kErrMsg, (int)(sizeof(kErrMsg) - 1), 0, 0);
                 continue;
             }
         }
-        if (!global_mqtt_client || !s_mqtt_connected.load()) break;
-        publish_automations_json_state();
-        refresh_automation_discovery_locked_check();
+
+        if (s_mqtt_connected.load(std::memory_order_relaxed)) {
+            publish_automations_json_state();
+            refresh_automation_discovery_locked_check();
+        }
     }
-    s_auto_reload_task_running.store(false);
     vTaskDelete(NULL);
 }
 
 void mqtt_mgr_on_automations_reloaded(void) {
-    if (!s_auto_parse_tmp_pending.load(std::memory_order_relaxed) &&
-        (!global_mqtt_client || !s_mqtt_connected.load(std::memory_order_relaxed))) return;
-    s_auto_reload_pending.store(true);
-    if (!s_auto_reload_task_running.exchange(true)) {
+    if (!s_auto_parse_tmp_pending.load(std::memory_order_acquire) &&
+        !s_mqtt_connected.load(std::memory_order_relaxed)) {
+        return;
+    }
+    bool should_spawn = false;
+    {
+        std::lock_guard<std::mutex> lock(s_auto_reload_mutex);
+        s_auto_reload_pending = true;
+        if (!s_auto_reload_task_running) {
+            s_auto_reload_task_running = true;
+            should_spawn = true;
+        }
+    }
+    if (should_spawn) {
         if (xTaskCreate(mqtt_auto_reload_task, "mqtt_auto", 6144, nullptr, 2, nullptr) != pdPASS) {
-            s_auto_reload_task_running.store(false);
+            ESP_LOGE(TAG, "Failed to create mqtt_auto task (free=%lu, internal=%lu)",
+                     (unsigned long)esp_get_free_heap_size(),
+                     (unsigned long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+            std::lock_guard<std::mutex> lock(s_auto_reload_mutex);
+            s_auto_reload_task_running = false;
         }
     }
 }
