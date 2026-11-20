@@ -325,7 +325,6 @@ struct CanBurstCmd {
     uint32_t can_id = 0;
     uint32_t delay_ms = 20;
     std::string trigger_id;
-    const std::vector<ActionStep>* steps = nullptr;
     std::vector<ActionStep> inline_steps;
     bool async = false;
     std::shared_ptr<std::atomic<bool>> rule_is_running = nullptr;

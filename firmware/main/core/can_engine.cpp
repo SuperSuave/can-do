@@ -14,7 +14,6 @@
 #include <unordered_set>
 #include <sys/time.h>
 #include "esp_log.h"
-#include "mqtt_client.h"
 #include "esp_timer.h"
 #include "track_popup.h"
 #include "beep.h"
@@ -262,10 +261,6 @@ extern "C" esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t
     return ret;
 }
 
-extern "C" esp_err_t can_engine_transmit_safe(twai_message_t *message, TickType_t ticks_to_wait) {
-    return can_send(CAN_BUS_0, message, ticks_to_wait);
-}
-
 static const char* TAG = "CAN_ENGINE";
 
 #include "esp_attr.h"
@@ -510,7 +505,6 @@ static std::unordered_map<std::string, BleBeaconState> s_ble_beacons;
 
 static PsramUnorderedMap<uint32_t, CachedCanFrame> can_state_cache;
 QueueHandle_t tx_command_queue = nullptr;
-extern esp_mqtt_client_handle_t global_mqtt_client;
 
 std::atomic<bool> g_automations_enabled{true};
 std::atomic<bool> g_sniffer_mode{false};
@@ -595,16 +589,6 @@ bool get_cached_can_frame(uint32_t can_id, uint8_t out_data[8], uint8_t* out_dlc
     return found;
 }
 
-bool can_state_cache_get(uint32_t can_id, uint8_t byte_index, uint32_t* out_val) {
-    uint8_t data[8] = {0};
-    uint8_t dlc = 0;
-    if (get_cached_can_frame(can_id, data, &dlc) && byte_index < dlc && byte_index < 8) {
-        if (out_val) *out_val = data[byte_index];
-        return true;
-    }
-    return false;
-}
-
 static QueueHandle_t s_can_inject_queue = nullptr;
 #if CONFIG_SPIRAM
 static StaticQueue_t s_can_inject_queue_struct;
@@ -634,17 +618,6 @@ void init_can_engine(void) {
         }
     }
     hud_nav_init(HUD_PLATFORM_EGMP_CANFD);
-}
-
-void update_state_cache(uint32_t can_id, const uint8_t* data, uint8_t dlc) {
-    CachedCanFrame entry = {};
-    uint8_t copy_len = dlc > 8 ? 8 : dlc;
-    entry.dlc = copy_len;
-    if (data && copy_len > 0) {
-        memcpy(entry.data, data, copy_len);
-    }
-    std::lock_guard<std::mutex> lock(s_cache_mutex);
-    can_state_cache[can_id] = entry;
 }
 
 static bool exchange_cached_can_frame(uint32_t can_id, const uint8_t* new_data, uint8_t new_dlc,
@@ -1988,7 +1961,7 @@ static void execute_can_burst_ctx(uint32_t can_id, const std::vector<ActionStep>
             if (!txt.empty()) {
                 if (step.popup_level == "warning") {
                     track_popup_show_warning(txt.c_str());
-                } else if (step.popup_level == "error") {
+                } else if (step.popup_level == "error" || step.popup_level == "critical") {
                     track_popup_show_error(txt.c_str());
                 } else {
                     track_popup_show_info(txt.c_str());
@@ -2136,6 +2109,10 @@ static void execute_can_burst_ctx(uint32_t can_id, const std::vector<ActionStep>
         }
 
         tx_msg.identifier = step.can_id ? step.can_id : can_id;
+        if (tx_msg.identifier == 0 && step.mask == 0) {
+            ESP_LOGW(TAG, "Refusing to transmit empty CAN frame (ID 0x000, mask 0x00)");
+            continue;
+        }
         memset(tx_msg.data, 0, 8);
 
         for (int i = 0; i < 8; i++) {
@@ -2735,7 +2712,7 @@ static uint32_t estimate_steps_duration_ms(const std::vector<ActionStep>& steps,
     return static_cast<uint32_t>(total_ms);
 }
 
-bool steps_contain_async(const std::vector<ActionStep>& steps, uint32_t default_delay_ms = 20) {
+static bool steps_contain_async(const std::vector<ActionStep>& steps, uint32_t default_delay_ms = 20) {
     bool force_async = false;
     uint32_t est_ms = estimate_steps_duration_ms(steps, default_delay_ms, &force_async, 0);
     return force_async || (est_ms >= ASYNC_DURATION_THRESHOLD_MS);
@@ -2765,8 +2742,6 @@ static void execute_can_burst_async_task(void* arg) {
         ctx.firing_trigger_id = cmd->trigger_id.c_str();
         if (!cmd->inline_steps.empty()) {
             execute_can_burst_ctx(cmd->can_id, cmd->inline_steps, cmd->delay_ms, ctx, 0);
-        } else if (cmd->steps && !cmd->steps->empty()) {
-            execute_can_burst_ctx(cmd->can_id, *cmd->steps, cmd->delay_ms, ctx, 0);
         }
     }
     vTaskDelete(NULL);
@@ -2813,13 +2788,6 @@ bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<Ac
         return false;
     }
     return submit_action_burst(cmd, pdMS_TO_TICKS(10));
-}
-
-bool queue_action_steps_ptr(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>* steps, const std::string& trigger_id, std::shared_ptr<std::atomic<bool>> rule_is_running) {
-    if (!steps) {
-        return false;
-    }
-    return queue_action_steps(can_id, delay_ms, *steps, trigger_id, rule_is_running);
 }
 
 static void emit_live_entity_state_split(const char* entity_id, const char* mqtt_state, const char* ws_state) {
@@ -2891,15 +2859,13 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
         broadcast_ws_state(u.id, u.ws_label);
     }
 
-    // 4. Real-time Live Cockpit Telemetry Decoders
-    // Stream continuous sensor values and discrete vehicle cockpit states directly to the front end
+    // 4. Real-time Live Cockpit Telemetry Decoders (continuous numeric formulas & non-catalog bitfields)
 
     // Road Speed (0x1AC Byte 0 = kph, or 0x0A2 Wheel Speed 16-bit LE * 0.03125, or 0x1A0 ESC Speed)
     if (identifier == 0x1AC && data_length_code >= 1) {
         uint8_t kph = data[0];
         static uint8_t s_last_kph = 255;
         static uint32_t s_last_spd_ms = 0;
-        uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
         if (kph != s_last_kph && (now_ms - s_last_spd_ms >= 100)) {
             s_last_kph = kph;
             s_last_spd_ms = now_ms;
@@ -2907,12 +2873,11 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
             snprintf(spd_buf, sizeof(spd_buf), "%u km/h", kph);
             emit_live_entity_state("cluster_vehicle_speed", spd_buf);
         }
-    } else if ((identifier == 0x0A2 || identifier == 0xA2) && data_length_code >= 2) {
+    } else if (identifier == 0x0A2 && data_length_code >= 2) {
         uint16_t rawW1 = data[0] | (data[1] << 8);
         uint8_t kph = (uint8_t)(rawW1 * 0.03125f);
         static uint8_t s_last_wheel_kph = 255;
         static uint32_t s_last_wheel_spd_ms = 0;
-        uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
         if (kph != s_last_wheel_kph && (now_ms - s_last_wheel_spd_ms >= 100)) {
             s_last_wheel_kph = kph;
             s_last_wheel_spd_ms = now_ms;
@@ -2925,7 +2890,6 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
         uint8_t kph = (uint8_t)(raw_esc * 0.03125f);
         static uint8_t s_last_esc_kph = 255;
         static uint32_t s_last_esc_spd_ms = 0;
-        uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
         if (kph != s_last_esc_kph && (now_ms - s_last_esc_spd_ms >= 100)) {
             s_last_esc_kph = kph;
             s_last_esc_spd_ms = now_ms;
@@ -2993,10 +2957,9 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
         }
     }
 
-    // 12V Aux Battery Voltage (0x1CF Byte 5 or 0x594 Byte 4 = factor 0.1V)
-    if ((identifier == 0x1CF && data_length_code >= 6) ||
-        (identifier == 0x594 && data_length_code >= 5)) {
-        uint8_t vByte = (identifier == 0x1CF) ? data[5] : data[4];
+    // 12V Aux Battery Voltage (0x1CF Byte 5 = factor 0.1V)
+    if (identifier == 0x1CF && data_length_code >= 6) {
+        uint8_t vByte = data[5];
         float v = (float)(vByte * 0.1f);
         if (v >= 8.0f && v <= 16.5f) {
             static float s_last_aux_v = 0.0f;
@@ -3007,200 +2970,6 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
                 snprintf(vbuf, sizeof(vbuf), "%.1f V", v);
                 emit_live_entity_state("cond_aux_12v_battery", vbuf);
             }
-        }
-    }
-
-    // BMS Module Min/Max Temperatures (0x152 Byte 0, Byte 1)
-    if (identifier == 0x152 && data_length_code >= 2) {
-        int minT = (int8_t)data[0];
-        int maxT = (int8_t)data[1];
-        static int s_last_minT = 999, s_last_maxT = 999;
-        static uint32_t s_last_bms_t_ms = 0;
-        if ((minT != s_last_minT || maxT != s_last_maxT) && (now_ms - s_last_bms_t_ms >= 100)) {
-            s_last_minT = minT;
-            s_last_maxT = maxT;
-            s_last_bms_t_ms = now_ms;
-            char tbuf[64];
-            snprintf(tbuf, sizeof(tbuf), "Min: %d°C / Max: %d°C", minT, maxT);
-            emit_live_entity_state("hv_battery_temperatures", tbuf);
-        }
-    }
-
-    // Transmission Gear Selection (0x045, 0x070, 0x130, 0x035)
-    if ((identifier == 0x045 || identifier == 0x070 || identifier == 0x130 || identifier == 0x035) && data_length_code >= 6) {
-        const char* detected_gear = nullptr;
-        if (identifier == 0x130) {
-            if ((data[4] & 0xF0) == 0x10) detected_gear = "P";
-            else if ((data[5] & 0xF0) == 0x50) detected_gear = "D";
-            else if ((data[5] & 0xF0) == 0x10) detected_gear = "R";
-        } else if (identifier == 0x045) {
-            uint8_t d6 = data[5] & 0x70;
-            if (d6 == 0x00) detected_gear = "P";
-            else if (d6 == 0x50) detected_gear = "D";
-            else if (d6 == 0x60) detected_gear = "N";
-            else if (d6 == 0x70) detected_gear = "R";
-        } else if (identifier == 0x070 && data_length_code >= 8) {
-            uint8_t d8 = data[7] & 0x70;
-            if (d8 == 0x00) detected_gear = "P";
-            else if (d8 == 0x50) detected_gear = "D";
-            else if (d8 == 0x60) detected_gear = "N";
-            else if (d8 == 0x70) detected_gear = "R";
-        } else if (identifier == 0x035) {
-            for (int idx : {5, 6, 7, 2}) {
-                if (data_length_code > idx) {
-                    uint8_t val = data[idx] & 0x70;
-                    if (val == 0x00) { detected_gear = "P"; break; }
-                    if (val == 0x50) { detected_gear = "D"; break; }
-                    if (val == 0x60) { detected_gear = "N"; break; }
-                    if (val == 0x70) { detected_gear = "R"; break; }
-                }
-            }
-        }
-        if (detected_gear) {
-            static const char* s_last_gear = nullptr;
-            if (!s_last_gear || strcmp(detected_gear, s_last_gear) != 0) {
-                s_last_gear = detected_gear;
-                emit_live_entity_state("vehicle_gear_state", detected_gear);
-            }
-        }
-    }
-
-    // Body Closures, Locks & Hood/Frunk (0x411)
-    if (identifier == 0x411 && data_length_code >= 8) {
-        bool fl = (data[3] & 0x01); // Driver Door
-        bool fr = (data[4] & 0x04); // Passenger Door
-        bool hood = (data[5] & 0x10); // Hood / Frunk
-        bool rl = (data[6] & 0x10); // Rear Left Door
-        bool rr = (data[7] & 0x01); // Rear Right Door
-        bool is_locked = (data_length_code >= 3) ? (data[2] == 0x00 || (data[2] & 0x40) == 0) : true;
-
-        uint8_t door_mask = static_cast<uint8_t>((fl ? 1u : 0u) | (fr ? 2u : 0u) | (rl ? 4u : 0u) | (rr ? 8u : 0u));
-        static uint8_t s_last_door_mask = 0xFF;
-        if (door_mask != s_last_door_mask) {
-            s_last_door_mask = door_mask;
-            char door_buf[128];
-            const char* door_state = nullptr;
-            if (door_mask == 0x00) {
-                door_state = "All Doors Closed";
-            } else if (door_mask == 0x0F) {
-                door_state = "All Doors Opened";
-            } else {
-                snprintf(door_buf, sizeof(door_buf), "%s, %s, %s, %s",
-                         fl ? "Driver Door Opened" : "Driver Door Closed",
-                         fr ? "Passenger Door Opened" : "Passenger Door Closed",
-                         rl ? "Rear Left Door Opened" : "Rear Left Door Closed",
-                         rr ? "Rear Right Door Opened" : "Rear Right Door Closed");
-                door_state = door_buf;
-            }
-            emit_live_entity_state("doors_status", door_state);
-        }
-
-        static int s_last_locked = -1;
-        int locked_int = is_locked ? 1 : 0;
-        if (locked_int != s_last_locked) {
-            s_last_locked = locked_int;
-            emit_live_entity_state("door_locks", is_locked ? "Locked" : "Unlocked");
-        }
-
-        static int s_last_hood = -1;
-        int hood_int = hood ? 1 : 0;
-        if (hood_int != s_last_hood) {
-            s_last_hood = hood_int;
-            emit_live_entity_state("hood", hood ? "Open" : "Closed");
-        }
-    }
-
-    // Power Tailgate / Trunk (0x414)
-    if (identifier == 0x414 && data_length_code >= 4) {
-        bool tr = (data[3] & 0x01);
-        static int s_last_trunk = -1;
-        int tr_int = tr ? 1 : 0;
-        if (tr_int != s_last_trunk) {
-            s_last_trunk = tr_int;
-            emit_live_entity_state("trunk", tr ? "Open" : "Closed");
-        }
-    }
-
-    // Charge Port Door (0x3AA Byte 3 / D4: 0x01 = Open, 0x02 = Closed)
-    if (identifier == 0x3AA && data_length_code >= 4) {
-        int cp_int = -1;
-        if (data[3] == 0x01) cp_int = 1;
-        else if (data[3] == 0x02) cp_int = 0;
-        if (cp_int >= 0) {
-            static int s_last_cp = -1;
-            if (cp_int != s_last_cp) {
-                s_last_cp = cp_int;
-                emit_live_entity_state("charge_port", cp_int ? "Open" : "Closed");
-            }
-        }
-    }
-
-    // Power Tailgate Module Status (0x3A6 Byte 0 / D1 low nibble)
-    if (identifier == 0x3A6 && data_length_code >= 1) {
-        uint8_t ptgm = data[0] & 0x0F;
-        const char* ptgm_state = nullptr;
-        if (ptgm == 0x01) ptgm_state = "Fully Opened";
-        else if (ptgm == 0x02) ptgm_state = "Fully Closed & Latched";
-        else if (ptgm == 0x03) ptgm_state = "Opening in Motion";
-        else if (ptgm == 0x04) ptgm_state = "Closing in Motion";
-        else if (ptgm == 0x05) ptgm_state = "Stopped at Intermediate Position";
-        else if (ptgm == 0x08) ptgm_state = "Obstacle / Pinch Detected";
-        if (ptgm_state) {
-            static const char* s_last_ptgm = nullptr;
-            if (ptgm_state != s_last_ptgm) {
-                s_last_ptgm = ptgm_state;
-                emit_live_entity_state("ptgm_tailgate_status", ptgm_state);
-            }
-        }
-    }
-
-    // EV Charging Status (Native E-GMP 0x326 Byte 5 [D5], Legacy Gen 2 0x594 Byte 2 [D2])
-    if (identifier == 0x326 && data_length_code >= 5) {
-        bool chg = ((data[4] & 0x03) == 1);
-        static int s_last_chg = -1;
-        int chg_int = chg ? 1 : 0;
-        if (chg_int != s_last_chg) {
-            s_last_chg = chg_int;
-            emit_live_entity_state("cond_charging", chg ? "Charging" : "Inactive");
-        }
-    } else if (identifier == 0x594 && data_length_code >= 2) {
-        bool chg = ((data[1] & 0x02) != 0);
-        static int s_last_chg = -1;
-        int chg_int = chg ? 1 : 0;
-        if (chg_int != s_last_chg) {
-            s_last_chg = chg_int;
-            emit_live_entity_state("cond_charging", chg ? "Charging" : "Inactive");
-        }
-    }
-
-    // Active EV Charge Type (Native E-GMP 0x30B Byte 7 [D7], Legacy Gen 2 0x595 Byte 1 [D1])
-    if (identifier == 0x30B && data_length_code >= 7) {
-        uint8_t d7 = data[6];
-        const char* ctype = "Not Charging / Disconnected";
-        if ((d7 & 0x30) == 0x10) {
-            ctype = "Standard AC Charging (Level 2)";
-        } else if ((d7 & 0x0C) == 0x04) {
-            ctype = "DC Fast Charging (CCS / 800V)";
-        }
-        static const char* s_last_ctype = nullptr;
-        if (!s_last_ctype || strcmp(ctype, s_last_ctype) != 0) {
-            s_last_ctype = ctype;
-            emit_live_entity_state("ev_charge_type_active", ctype);
-        }
-    } else if (identifier == 0x595 && data_length_code >= 1) {
-        uint8_t d0 = data[0];
-        const char* ctype = "Not Charging / Disconnected";
-        if (d0 & 0x02) {
-            ctype = "Standard AC Charging (Level 2)";
-        } else if (d0 & 0x04) {
-            ctype = "DC Fast Charging (CCS / 800V)";
-        } else if (d0 & 0x08) {
-            ctype = "120V Trickle Charging (Level 1)";
-        }
-        static const char* s_last_ctype = nullptr;
-        if (!s_last_ctype || strcmp(ctype, s_last_ctype) != 0) {
-            s_last_ctype = ctype;
-            emit_live_entity_state("ev_charge_type_active", ctype);
         }
     }
 
@@ -3218,7 +2987,7 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
         }
     }
 
-    // AC Level 2 Remaining Charge Time (0x327: Bytes 0-1 LE minutes, Legacy Gen 2 0x597: Bytes 1-2 LE, 0xFFFF = inactive)
+    // AC Level 2 Remaining Charge Time (0x327: Bytes 0-1 LE minutes, 0xFFFF = inactive)
     if (identifier == 0x327 && data_length_code >= 2) {
         uint16_t rem = data[0] | (data[1] << 8);
         static int s_last_ac_rem = -1;
@@ -3231,21 +3000,9 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
             snprintf(rem_buf, sizeof(rem_buf), "%d", val);
             emit_live_entity_state("remaining_charge_time_ac", rem_buf);
         }
-    } else if (identifier == 0x597 && data_length_code >= 3) {
-        uint16_t rem = data[1] | (data[2] << 8);
-        static int s_last_ac_rem = -1;
-        static uint32_t s_last_ac_rem_ms = 0;
-        int val = (rem == 0xFFFF) ? 0 : (int)rem;
-        if (val != s_last_ac_rem && (now_ms - s_last_ac_rem_ms >= 100)) {
-            s_last_ac_rem = val;
-            s_last_ac_rem_ms = now_ms;
-            char rem_buf[16];
-            snprintf(rem_buf, sizeof(rem_buf), "%d", val);
-            emit_live_entity_state("remaining_charge_time_ac", rem_buf);
-        }
     }
 
-    // DC Fast Charge Remaining Time (0x25C: Bytes 2-3 LE minutes, Legacy Gen 2 0x597: Bytes 3-4 LE, 0xFFFF = inactive)
+    // DC Fast Charge Remaining Time (0x25C: Bytes 2-3 LE minutes, 0xFFFF = inactive)
     if (identifier == 0x25C && data_length_code >= 4) {
         uint16_t rem = data[2] | (data[3] << 8);
         static int s_last_dc_rem = -1;
@@ -3258,35 +3015,11 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
             snprintf(rem_buf, sizeof(rem_buf), "%d", val);
             emit_live_entity_state("remaining_charge_time_dc", rem_buf);
         }
-    } else if (identifier == 0x597 && data_length_code >= 5) {
-        uint16_t rem = data[3] | (data[4] << 8);
-        static int s_last_dc_rem = -1;
-        static uint32_t s_last_dc_rem_ms = 0;
-        int val = (rem == 0xFFFF) ? 0 : (int)rem;
-        if (val != s_last_dc_rem && (now_ms - s_last_dc_rem_ms >= 100)) {
-            s_last_dc_rem = val;
-            s_last_dc_rem_ms = now_ms;
-            char rem_buf[16];
-            snprintf(rem_buf, sizeof(rem_buf), "%d", val);
-            emit_live_entity_state("remaining_charge_time_dc", rem_buf);
-        }
     }
 
-    // Level 1 120V Trickle Charge Remaining Time (0x328: Bytes 0-1 LE minutes, Legacy Gen 2 0x4E2: Bytes 2-3 LE, 0xFFFF = inactive)
+    // Level 1 120V Trickle Charge Remaining Time (0x328: Bytes 0-1 LE minutes, 0xFFFF = inactive)
     if (identifier == 0x328 && data_length_code >= 2) {
         uint16_t rem = data[0] | (data[1] << 8);
-        static int s_last_120v_rem = -1;
-        static uint32_t s_last_120v_rem_ms = 0;
-        int val = (rem == 0xFFFF) ? 0 : (int)rem;
-        if (val != s_last_120v_rem && (now_ms - s_last_120v_rem_ms >= 100)) {
-            s_last_120v_rem = val;
-            s_last_120v_rem_ms = now_ms;
-            char rem_buf[16];
-            snprintf(rem_buf, sizeof(rem_buf), "%d", val);
-            emit_live_entity_state("remaining_charge_time_120v", rem_buf);
-        }
-    } else if (identifier == 0x4E2 && data_length_code >= 4) {
-        uint16_t rem = data[2] | (data[3] << 8);
         static int s_last_120v_rem = -1;
         static uint32_t s_last_120v_rem_ms = 0;
         int val = (rem == 0xFFFF) ? 0 : (int)rem;
@@ -3370,244 +3103,13 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
         }
     }
 
-    // HVAC Blower Fan Speed, Airflow Direction & Recirculation (0x31B)
-    if (identifier == 0x31B && data_length_code >= 4) {
-        uint8_t fan_raw = data[3] & 0x0F;
-        int speed = (fan_raw >= 2 && fan_raw <= 9) ? (fan_raw - 1) : 0;
-        static int s_last_fan = -1;
-        static uint32_t s_last_fan_ms = 0;
-        if (speed != s_last_fan && (now_ms - s_last_fan_ms >= 100)) {
-            s_last_fan = speed;
-            s_last_fan_ms = now_ms;
-            char fan_buf[16];
-            snprintf(fan_buf, sizeof(fan_buf), "Fan %d", speed);
-            emit_live_entity_state("climate_fan_speed_level", fan_buf);
-        }
-
-        uint8_t af_raw = data[3] & 0xF0;
-        const char* af_str = nullptr;
-        if (af_raw == 0x00) af_str = "Auto";
-        else if (af_raw == 0x10) af_str = "Body / Face Vents";
-        else if (af_raw == 0x20) af_str = "Body & Legs";
-        else if (af_raw == 0x30) af_str = "Legs / Floor Vents";
-        else if (af_raw == 0x40) af_str = "Legs & Windshield Defrost";
-        if (af_str) {
-            static const char* s_last_af = nullptr;
-            if (af_str != s_last_af) {
-                s_last_af = af_str;
-                emit_live_entity_state("climate_airflow_direction", af_str);
-            }
-        }
-
-        if (data_length_code >= 5) {
-            int recirc_int = (data[4] & 0x40) ? 1 : 0;
-            static int s_last_recirc = -1;
-            if (recirc_int != s_last_recirc) {
-                s_last_recirc = recirc_int;
-                emit_live_entity_state("climate_recirc_on", recirc_int ? "ON" : "OFF");
-            }
-        }
-    }
-
-    // Remote Climate Execution State (0x384 Byte 3 / D4 == 0x0A)
-    if (identifier == 0x384 && data_length_code >= 4) {
-        int rclim_int = (data[3] == 0x0A) ? 1 : 0;
-        static int s_last_rclim = -1;
-        if (rclim_int != s_last_rclim) {
-            s_last_rclim = rclim_int;
-            emit_live_entity_state("remote_climate_state", rclim_int ? "Remote Climate Active" : "Remote Climate Off");
-        }
-    }
-
-    // Welcome Mirror / Auto-Fold Setting (0x410 Byte 2 / D3 bits 0:1: CF_Gway_WlightRValue)
-    if (identifier == 0x410 && data_length_code >= 3) {
-        uint8_t wlight = data[2] & 0x03;
-        static int s_last_wlight = -1;
-        if ((int)wlight != s_last_wlight) {
-            s_last_wlight = (int)wlight;
-            emit_live_entity_state("cgw_welcome_mirror_light", (wlight == 0x02) ? "Welcome Unfold On Approach" : "Disabled / Off");
-        }
-    }
-
-    // Rear Defroster (0x541 Byte 4 [D5] Bit 4: mask 0x10)
-    if (identifier == 0x541 && data_length_code >= 5) {
-        bool def = ((data[4] & 0x10) != 0);
-        static int s_last_def = -1;
-        int def_int = def ? 1 : 0;
-        if (def_int != s_last_def) {
-            s_last_def = def_int;
-            emit_live_entity_state_split("climate_rear_defrost", def ? "ON" : "OFF", def ? "Defroster & Mirrors On" : "Defroster & Mirrors Off");
-            emit_live_entity_state_split("climate_rear_defog", def ? "ON" : "OFF", def ? "Defroster & Mirrors On" : "Defroster & Mirrors Off");
-        }
-    }
-
-    // Heated Steering Wheel (0x418 Byte 2 [D3] Bit 0: 0x01 = On, 0x00 = Off)
-    if (identifier == 0x418 && data_length_code >= 3) {
-        bool st_heat = ((data[2] & 0x01) != 0);
-        static int s_last_st_heat = -1;
-        int heat_int = st_heat ? 1 : 0;
-        if (heat_int != s_last_st_heat) {
-            s_last_st_heat = heat_int;
-            emit_live_entity_state_split("heated_steering_wheel_toggle", st_heat ? "ON" : "OFF", st_heat ? "Heated Steering Wheel On" : "Heated Steering Wheel Off");
-        }
-    }
-
-    // Driver & Passenger Seat Heating / Ventilation (0x496 Driver, 0x475/0x49C Passenger Byte 0)
-    auto decode_seat_comfort = [](uint8_t b) -> const char* {
-        if (b == 0x46 || b == 0x02) return "High Heat";
-        if (b == 0x4E || b == 0x0A) return "Medium Heat";
-        if (b == 0x36 || b == 0x0E) return "Low Heat";
-        if (b == 0x2E || b == 0x10) return "High Cool";
-        if (b == 0x26 || b == 0x12) return "Medium Cool";
-        if (b == 0x1E || b == 0x14) return "Low Cool";
-        return "Off";
-    };
-    if (identifier == 0x496 && data_length_code >= 1) {
-        const char* lvl = decode_seat_comfort(data[0]);
-        static const char* s_last_drv = nullptr;
-        if (lvl != s_last_drv) {
-            s_last_drv = lvl;
-            emit_live_entity_state("drivers_seat_comfort", lvl);
-        }
-    }
-    if ((identifier == 0x475 || identifier == 0x49C) && data_length_code >= 1) {
-        const char* lvl = decode_seat_comfort(data[0]);
-        static const char* s_last_pass = nullptr;
-        if (lvl != s_last_pass) {
-            s_last_pass = lvl;
-            emit_live_entity_state("passengers_seat_comfort", lvl);
-        }
-    }
-
-    // Rear Heated Seats (0x438 Left, 0x453 Right -> separate catalog entities)
-    if (identifier == 0x438 && data_length_code >= 1) {
-        uint8_t b = data[0];
-        const char* lvl = (b == 0x41) ? "High Heat" : (b == 0x31) ? "Low Heat" : "Off";
-        static const char* s_last_rl = nullptr;
-        if (lvl != s_last_rl) {
-            s_last_rl = lvl;
-            emit_live_entity_state("rear_left_seat_comfort", lvl);
-        }
-    }
-    if (identifier == 0x453 && data_length_code >= 1) {
-        uint8_t b = data[0];
-        const char* lvl = (b == 0x41) ? "High Heat" : (b == 0x31) ? "Low Heat" : "Off";
-        static const char* s_last_rr = nullptr;
-        if (lvl != s_last_rr) {
-            s_last_rr = lvl;
-            emit_live_entity_state("rear_right_seat_comfort", lvl);
-        }
-    }
-
-    // Hazard Lights & Turn Signals (0x413)
-    if (identifier == 0x413 && data_length_code >= 4) {
-        bool is_haz = ((data[3] & 0x04) != 0);
-        static int s_last_haz = -1;
-        int haz_int = is_haz ? 1 : 0;
-        if (haz_int != s_last_haz) {
-            s_last_haz = haz_int;
-            emit_live_entity_state("hazard_lights", is_haz ? "Active" : "Off");
-        }
-
-        uint8_t d3 = data[2];
-        const char* dir = (d3 & 0x10) ? "left" : (d3 & 0x40) ? "right" : "off";
-        static const char* s_last_dir = nullptr;
-        if (dir != s_last_dir) {
-            s_last_dir = dir;
-            emit_live_entity_state("turn_signal", dir);
-        }
-    }
-
-    // AC / DC Charging Limits (0x1F9: AC limit Byte 2 [D3], DC limit Byte 3 [D4])
-    if (identifier == 0x1F9 && data_length_code >= 4) {
-        int ac = -1;
-        for (int idx : {2, 6, 7}) {
-            if (data_length_code > idx) {
-                uint8_t b = data[idx];
-                if (b == 0x64) { ac = 50; break; }
-                else if (b == 0x78) { ac = 60; break; }
-                else if (b == 0x8C) { ac = 70; break; }
-                else if (b == 0xA0) { ac = 80; break; }
-                else if (b == 0xB4) { ac = 90; break; }
-                else if (b == 0xC8 || b == 0x4A) { ac = 100; break; }
-            }
-        }
-        if (ac > 0) {
-            static int s_last_ac = -1;
-            static uint32_t s_last_ac_limit_ms = 0;
-            if (ac != s_last_ac && (now_ms - s_last_ac_limit_ms >= 100)) {
-                s_last_ac = ac;
-                s_last_ac_limit_ms = now_ms;
-                char ac_buf[16];
-                snprintf(ac_buf, sizeof(ac_buf), "%d%%", ac);
-                emit_live_entity_state("ac_charging_limit", ac_buf);
-            }
-        }
-
-        int dc = -1;
-        for (int idx : {3, 4}) {
-            if (data_length_code > idx) {
-                uint8_t b = data[idx];
-                if (b == 0x64) { dc = 50; break; }
-                else if (b == 0x78) { dc = 60; break; }
-                else if (b == 0x8C) { dc = 70; break; }
-                else if (b == 0xA0) { dc = 80; break; }
-                else if (b == 0xB4) { dc = 90; break; }
-                else if (b == 0xC8) { dc = 100; break; }
-            }
-        }
-        if (dc > 0) {
-            static int s_last_dc = -1;
-            static uint32_t s_last_dc_limit_ms = 0;
-            if (dc != s_last_dc && (now_ms - s_last_dc_limit_ms >= 100)) {
-                s_last_dc = dc;
-                s_last_dc_limit_ms = now_ms;
-                char dc_buf[16];
-                snprintf(dc_buf, sizeof(dc_buf), "%d%%", dc);
-                emit_live_entity_state("dc_charging_limit", dc_buf);
-            }
-        }
-    }
-
-    // TPMS Tire Pressures (0x593 or 0x368)
-    if ((identifier == 0x593 || identifier == 0x368) && data_length_code >= 4) {
-        int fl = (int)(data[0] * 0.2f * 14.5038f + 0.5f);
-        int fr = (int)(data[1] * 0.2f * 14.5038f + 0.5f);
-        int rl = (int)(data[2] * 0.2f * 14.5038f + 0.5f);
-        int rr = (int)(data[3] * 0.2f * 14.5038f + 0.5f);
-        if (fl > 20 && fl < 55) {
-            static int s_last_fl = 0, s_last_fr = 0, s_last_rl = 0, s_last_rr = 0;
-            if (fl != s_last_fl || fr != s_last_fr || rl != s_last_rl || rr != s_last_rr) {
-                s_last_fl = fl; s_last_fr = fr; s_last_rl = rl; s_last_rr = rr;
-                char tpms_buf[64];
-                snprintf(tpms_buf, sizeof(tpms_buf), "FL: %d FR: %d RL: %d RR: %d PSI", fl, fr, rl, rr);
-                emit_live_entity_state("tpms_tire_pressures", tpms_buf);
-            }
-        }
-    }
-
-    // Sunroof Glass (0x442 Byte 6)
-    if (identifier == 0x442 && data_length_code >= 7) {
-        uint8_t d7 = data[6];
-        const char* s_state = (d7 == 0x60 || d7 == 0x20) ? "open" : (d7 == 0x00) ? "vent" : "closed";
-        static const char* s_last_roof = nullptr;
-        if (s_state != s_last_roof) {
-            s_last_roof = s_state;
-            emit_live_entity_state("sunroof_extended", s_state);
-        }
-    }
-
-    // Driver-Only Climate Zone (0x465 Byte 6 [D7]: 0x04 = Driver Only On, 0x0C = Off)
-    if (identifier == 0x465 && data_length_code >= 7) {
-        uint8_t d7 = data[6];
-        if (d7 == 0x04 || d7 == 0x0C) {
-            bool dr_only = (d7 == 0x04);
-            static int s_last_dr_only = -1;
-            int dr_int = dr_only ? 1 : 0;
-            if (dr_int != s_last_dr_only) {
-                s_last_dr_only = dr_int;
-                emit_live_entity_state_split("climate_driver_only_toggle", dr_only ? "ON" : "OFF", dr_only ? "Driver Only On" : "Driver Only Off");
-            }
+    // HVAC Air Recirculation (0x31B Byte 4 [D5] Bit 6: mask 0x40)
+    if (identifier == 0x31B && data_length_code >= 5) {
+        int recirc_int = (data[4] & 0x40) ? 1 : 0;
+        static int s_last_recirc = -1;
+        if (recirc_int != s_last_recirc) {
+            s_last_recirc = recirc_int;
+            emit_live_entity_state("climate_recirc_on", recirc_int ? "ON" : "OFF");
         }
     }
 }
@@ -4046,7 +3548,6 @@ void can_rx_task(void* arg) {
             // Publish state change to MQTT if this CAN ID is monitored and actual payload data changed
             if (mqtt_mgr_is_monitored_id(rx_msg.identifier)) {
                 if (!has_prev || has_masked_can_data_changed(rx_msg.identifier, prev_data, rx_msg.data, rx_msg.data_length_code)) {
-                    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
                     static PsramUnorderedMap<uint32_t, uint32_t> s_last_mqtt_pub_ms;
                     auto pit = s_last_mqtt_pub_ms.find(rx_msg.identifier);
                     bool throttle = false;
@@ -4079,7 +3580,6 @@ void can_rx_task(void* arg) {
                     std::vector<FiredRuleEvent> fired_events;
                     {
                         std::lock_guard<std::mutex> lock(g_automations_mutex);
-                        uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
                         for (auto& rule : global_automations) {
                             if (!rule.enabled) continue;
 
@@ -4180,8 +3680,6 @@ void can_tx_task(void* arg) {
                 ctx.firing_trigger_id = cmd->trigger_id.c_str();
                 if (!cmd->inline_steps.empty()) {
                     execute_can_burst_ctx(cmd->can_id, cmd->inline_steps, cmd->delay_ms, ctx, 0);
-                } else if (cmd->steps && !cmd->steps->empty()) {
-                    execute_can_burst_ctx(cmd->can_id, *cmd->steps, cmd->delay_ms, ctx, 0);
                 }
                 if (cmd->rule_is_running) {
                     cmd->rule_is_running->store(false, std::memory_order_release);

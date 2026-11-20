@@ -30,8 +30,8 @@ uint8_t parse_hex_string(const char* hex_str, bool* is_inverted = nullptr);
 uint8_t parse_weekdays_mask(cJSON* days_arr);
 uint16_t parse_time_to_minutes(const char* time_str);
 ConditionOperator parse_operator(const char* op_str);
-bool parse_single_condition(cJSON* c_item, AutomationCondition& cond);
-bool parse_action_step(cJSON* a_item, ActionStep& step);
+bool parse_single_condition(cJSON* c_item, AutomationCondition& cond, int depth = 0);
+bool parse_action_step(cJSON* a_item, ActionStep& step, int depth = 0);
 
 bool parse_entity(cJSON* entity_json, CanEntity& out_entity, bool include_discovery_meta = true);
 bool parse_automation(cJSON* auto_json, AutomationRule& out_rule);

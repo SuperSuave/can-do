@@ -5,6 +5,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
+#include <cctype>
 #include <list>
 #include <unordered_set>
 #include <algorithm>
@@ -348,22 +350,76 @@ static void parse_byte_match(cJSON* match_obj, uint8_t match_payload[8], uint8_t
     }
 }
 
-static uint32_t parse_sustained_for_ms(cJSON* item) {
-    if (!item) return 0;
-    uint32_t total_ms = 0;
-    cJSON* f_sec = cJSON_GetObjectItem(item, "for_sec");
-    if (cJSON_IsNumber(f_sec) && f_sec->valuedouble > 0) {
-        total_ms += static_cast<uint32_t>(f_sec->valuedouble * 1000.0);
-    }
-    cJSON* f_ms = cJSON_GetObjectItem(item, "for_ms");
-    if (cJSON_IsNumber(f_ms) && f_ms->valueint > 0) {
-        total_ms += static_cast<uint32_t>(f_ms->valueint);
-    }
-    return total_ms;
+constexpr int MAX_PARSE_DEPTH = 8;
+constexpr uint32_t MAX_STEP_REPEAT = 50U;
+constexpr uint32_t MAX_DELAY_MS = 3600000U;      // 1 hour
+constexpr uint32_t MAX_COOLDOWN_MS = 86400000U;  // 24 hours
+constexpr uint32_t MAX_SUSTAINED_MS = 86400000U; // 24 hours
+
+static uint32_t clamp_u32(cJSON* item, uint32_t min_val, uint32_t max_val, uint32_t fallback) {
+    if (!item || !cJSON_IsNumber(item)) return fallback;
+    double v = item->valuedouble;
+    if (!std::isfinite(v)) return fallback;
+    if (v < 0.0 || v < static_cast<double>(min_val)) return min_val;
+    if (v > static_cast<double>(max_val)) return max_val;
+    return static_cast<uint32_t>(v);
 }
 
-bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
+static void parse_hex_payload_string(const char* hex_str, uint8_t payload[8], uint8_t& mask) {
+    if (!hex_str) return;
+    char clean_hex[17] = {0};
+    size_t clean_len = 0;
+    size_t total_nibbles = 0;
+    const char* ch = hex_str;
+    while (*ch) {
+        if (ch[0] == '0' && (ch[1] == 'x' || ch[1] == 'X')) {
+            ch += 2;
+            continue;
+        }
+        if (isxdigit(static_cast<unsigned char>(*ch))) {
+            if (clean_len < 16) {
+                clean_hex[clean_len++] = *ch;
+            }
+            total_nibbles++;
+        }
+        ++ch;
+    }
+    if ((total_nibbles & 1U) != 0U) {
+        ESP_LOGW(TAG, "Odd-length hex payload '%s' (%zu nibbles); trailing nibble ignored", hex_str, total_nibbles);
+    }
+    for (size_t i = 0; i + 1 < clean_len && (i / 2) < 8; i += 2) {
+        uint8_t byte_idx = static_cast<uint8_t>(i / 2);
+        char hex_byte[3] = { clean_hex[i], clean_hex[i + 1], '\0' };
+        payload[byte_idx] = static_cast<uint8_t>(strtoul(hex_byte, nullptr, 16));
+        mask |= (1 << byte_idx);
+    }
+}
+
+static uint32_t parse_sustained_for_ms(cJSON* item) {
+    if (!item) return 0;
+    uint64_t total_ms = 0;
+    cJSON* f_sec = cJSON_GetObjectItem(item, "for_sec");
+    if (!f_sec) f_sec = cJSON_GetObjectItem(item, "for_s");
+    if (cJSON_IsNumber(f_sec)) {
+        double sec = f_sec->valuedouble;
+        if (std::isfinite(sec) && sec > 0.0) {
+            double ms = sec * 1000.0;
+            total_ms += (ms >= static_cast<double>(MAX_SUSTAINED_MS))
+                            ? MAX_SUSTAINED_MS
+                            : static_cast<uint32_t>(ms);
+        }
+    }
+    cJSON* f_ms = cJSON_GetObjectItem(item, "for_ms");
+    total_ms += clamp_u32(f_ms, 0, MAX_SUSTAINED_MS, 0);
+    return total_ms > MAX_SUSTAINED_MS ? MAX_SUSTAINED_MS : static_cast<uint32_t>(total_ms);
+}
+
+bool parse_single_condition(cJSON* c_item, AutomationCondition& cond, int depth) {
     if (!c_item) return false;
+    if (depth > MAX_PARSE_DEPTH) {
+        ESP_LOGW(TAG, "Max condition nesting depth (%d) exceeded; skipping subtree", MAX_PARSE_DEPTH);
+        return false;
+    }
 
     cond.for_ms = parse_sustained_for_ms(c_item);
     if (cond.for_ms > 0) {
@@ -386,9 +442,9 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
         if (cJSON_IsArray(sub_array)) {
             cJSON* sub = nullptr;
             cJSON_ArrayForEach(sub, sub_array) {
-                AutomationCondition sub_cond;
-                if (parse_single_condition(sub, sub_cond)) {
-                    cond.sub_conditions.push_back(sub_cond);
+                cond.sub_conditions.emplace_back();
+                if (!parse_single_condition(sub, cond.sub_conditions.back(), depth + 1)) {
+                    cond.sub_conditions.pop_back();
                 }
             }
         }
@@ -399,9 +455,9 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
         if (cJSON_IsArray(sub_array)) {
             cJSON* sub = nullptr;
             cJSON_ArrayForEach(sub, sub_array) {
-                AutomationCondition sub_cond;
-                if (parse_single_condition(sub, sub_cond)) {
-                    cond.sub_conditions.push_back(sub_cond);
+                cond.sub_conditions.emplace_back();
+                if (!parse_single_condition(sub, cond.sub_conditions.back(), depth + 1)) {
+                    cond.sub_conditions.pop_back();
                 }
             }
         }
@@ -413,9 +469,9 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
             if (cJSON_IsArray(not_item)) {
                 sub_array = not_item;
             } else if (cJSON_IsObject(not_item)) {
-                AutomationCondition sub_cond;
-                if (parse_single_condition(not_item, sub_cond)) {
-                    cond.sub_conditions.push_back(sub_cond);
+                cond.sub_conditions.emplace_back();
+                if (!parse_single_condition(not_item, cond.sub_conditions.back(), depth + 1)) {
+                    cond.sub_conditions.pop_back();
                 }
                 return true;
             }
@@ -423,9 +479,9 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
         if (cJSON_IsArray(sub_array)) {
             cJSON* sub = nullptr;
             cJSON_ArrayForEach(sub, sub_array) {
-                AutomationCondition sub_cond;
-                if (parse_single_condition(sub, sub_cond)) {
-                    cond.sub_conditions.push_back(sub_cond);
+                cond.sub_conditions.emplace_back();
+                if (!parse_single_condition(sub, cond.sub_conditions.back(), depth + 1)) {
+                    cond.sub_conditions.pop_back();
                 }
             }
         }
@@ -512,15 +568,16 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
     }
 
     // Check if this condition is a BLE beacon presence condition
+    cJSON* dp = cJSON_GetObjectItem(c_item, "device_property");
     if (cJSON_IsString(type_prop) && (strcmp(type_prop->valuestring, "ble_beacon") == 0 ||
                                       strcmp(type_prop->valuestring, "beacon") == 0 ||
                                       (strcmp(type_prop->valuestring, "ble_presence") == 0 &&
                                        (cJSON_GetObjectItem(c_item, "beacon_uuid") != nullptr ||
                                         cJSON_GetObjectItem(c_item, "uuid") != nullptr ||
-                                        (cJSON_GetObjectItem(c_item, "device_property") &&
-                                         strcmp(cJSON_GetObjectItem(c_item, "device_property")->valuestring, "beacon_present") == 0))))) {
+                                        (cJSON_IsString(dp) && dp->valuestring &&
+                                         strcmp(dp->valuestring, "beacon_present") == 0))))) {
         cond.type = "ble_beacon";
-        cJSON* prop = cJSON_GetObjectItem(c_item, "device_property");
+        cJSON* prop = dp;
         if (!prop) prop = cJSON_GetObjectItem(c_item, "property");
         if (cJSON_IsString(prop)) cond.device_property = prop->valuestring;
         else cond.device_property = "beacon_present";
@@ -685,8 +742,12 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond) {
     return true;
 }
 
-bool parse_action_step(cJSON* a_item, ActionStep& step) {
+bool parse_action_step(cJSON* a_item, ActionStep& step, int depth) {
     if (!a_item) return false;
+    if (depth > MAX_PARSE_DEPTH) {
+        ESP_LOGW(TAG, "Max action nesting depth (%d) exceeded; skipping subtree", MAX_PARSE_DEPTH);
+        return false;
+    }
     cJSON* type = cJSON_GetObjectItem(a_item, "type");
     const char* type_str = cJSON_IsString(type) ? type->valuestring : "";
 
@@ -731,11 +792,7 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         cJSON* dur = cJSON_GetObjectItem(a_item, "duration_minutes");
         if (!dur) dur = cJSON_GetObjectItem(a_item, "duration_min");
         if (!dur) dur = cJSON_GetObjectItem(a_item, "duration");
-        if (cJSON_IsNumber(dur)) {
-            step.duration_minutes = static_cast<uint32_t>(dur->valueint);
-        } else {
-            step.duration_minutes = 10;
-        }
+        step.duration_minutes = clamp_u32(dur, 0, 1440U, 10U);
 
         cJSON* zn = cJSON_GetObjectItem(a_item, "zone");
         if (!zn) zn = cJSON_GetObjectItem(a_item, "climate_zone");
@@ -848,7 +905,7 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         if (!ms) ms = cJSON_GetObjectItem(a_item, "delay_ms");
         if (!ms) ms = cJSON_GetObjectItem(a_item, "delay");
         if (!ms) ms = cJSON_GetObjectItem(a_item, "dwell_ms");
-        if (cJSON_IsNumber(ms)) step.delay_ms = ms->valueint;
+        step.delay_ms = clamp_u32(ms, 0, MAX_DELAY_MS, 0U);
         return true;
     } else if (strcmp(type_str, "if_then") == 0 || strcmp(type_str, "if") == 0) {
         step.type = ActionType::IF_THEN;
@@ -856,9 +913,9 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         if (cJSON_IsArray(conds)) {
             cJSON* c_sub = nullptr;
             cJSON_ArrayForEach(c_sub, conds) {
-                AutomationCondition cond;
-                if (parse_single_condition(c_sub, cond)) {
-                    step.if_conditions.push_back(cond);
+                step.if_conditions.emplace_back();
+                if (!parse_single_condition(c_sub, step.if_conditions.back(), depth + 1)) {
+                    step.if_conditions.pop_back();
                 }
             }
         }
@@ -866,9 +923,9 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         if (cJSON_IsArray(then_arr)) {
             cJSON* s_sub = nullptr;
             cJSON_ArrayForEach(s_sub, then_arr) {
-                ActionStep s;
-                if (parse_action_step(s_sub, s)) {
-                    step.then_steps.push_back(s);
+                step.then_steps.emplace_back();
+                if (!parse_action_step(s_sub, step.then_steps.back(), depth + 1)) {
+                    step.then_steps.pop_back();
                 }
             }
         }
@@ -876,9 +933,9 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         if (cJSON_IsArray(else_arr)) {
             cJSON* s_sub = nullptr;
             cJSON_ArrayForEach(s_sub, else_arr) {
-                ActionStep s;
-                if (parse_action_step(s_sub, s)) {
-                    step.else_steps.push_back(s);
+                step.else_steps.emplace_back();
+                if (!parse_action_step(s_sub, step.else_steps.back(), depth + 1)) {
+                    step.else_steps.pop_back();
                 }
             }
         }
@@ -889,14 +946,15 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         if (cJSON_IsArray(choices_arr)) {
             cJSON* choice_elem = nullptr;
             cJSON_ArrayForEach(choice_elem, choices_arr) {
-                ChoiceBranch branch;
+                step.choices.emplace_back();
+                ChoiceBranch& branch = step.choices.back();
                 cJSON* c_conds = cJSON_GetObjectItem(choice_elem, "conditions");
                 if (cJSON_IsArray(c_conds)) {
                     cJSON* c_sub = nullptr;
                     cJSON_ArrayForEach(c_sub, c_conds) {
-                        AutomationCondition cond;
-                        if (parse_single_condition(c_sub, cond)) {
-                            branch.conditions.push_back(cond);
+                        branch.conditions.emplace_back();
+                        if (!parse_single_condition(c_sub, branch.conditions.back(), depth + 1)) {
+                            branch.conditions.pop_back();
                         }
                     }
                 }
@@ -904,22 +962,21 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
                 if (cJSON_IsArray(seq_arr)) {
                     cJSON* s_sub = nullptr;
                     cJSON_ArrayForEach(s_sub, seq_arr) {
-                        ActionStep s;
-                        if (parse_action_step(s_sub, s)) {
-                            branch.sequence.push_back(s);
+                        branch.sequence.emplace_back();
+                        if (!parse_action_step(s_sub, branch.sequence.back(), depth + 1)) {
+                            branch.sequence.pop_back();
                         }
                     }
                 }
-                step.choices.push_back(branch);
             }
         }
         cJSON* def_arr = cJSON_GetObjectItem(a_item, "default");
         if (cJSON_IsArray(def_arr)) {
             cJSON* s_sub = nullptr;
             cJSON_ArrayForEach(s_sub, def_arr) {
-                ActionStep s;
-                if (parse_action_step(s_sub, s)) {
-                    step.default_steps.push_back(s);
+                step.default_steps.emplace_back();
+                if (!parse_action_step(s_sub, step.default_steps.back(), depth + 1)) {
+                    step.default_steps.pop_back();
                 }
             }
         }
@@ -983,23 +1040,25 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         step.type = (strcmp(type_str, "wait_for") == 0) ? ActionType::WAIT_FOR : ActionType::REPEAT_UNTIL;
 
         cJSON* interval = cJSON_GetObjectItem(a_item, "interval_ms");
-        if (cJSON_IsNumber(interval)) step.interval_ms = static_cast<uint32_t>(interval->valueint);
+        step.interval_ms = clamp_u32(interval, 0, MAX_DELAY_MS, step.interval_ms);
 
         cJSON* timeout = cJSON_GetObjectItem(a_item, "timeout_ms");
         if (!timeout) timeout = cJSON_GetObjectItem(a_item, "timeout");
-        if (timeout && cJSON_IsNumber(timeout)) {
-            // If <= 300, it's likely specified in seconds, so convert to ms; if > 300, already in ms
-            step.timeout_ms = timeout->valueint <= 300 ? static_cast<uint32_t>(timeout->valueint * 1000) : static_cast<uint32_t>(timeout->valueint);
+        if (cJSON_IsNumber(timeout)) {
+            uint32_t raw_t = clamp_u32(timeout, 0, MAX_DELAY_MS, step.timeout_ms);
+            // If > 0 and <= 300, it's likely specified in seconds, so convert to ms; if > 300, already in ms
+            step.timeout_ms = (raw_t > 0 && raw_t <= 300) ? (raw_t * 1000U) : raw_t;
         }
         cJSON* timeout_s = cJSON_GetObjectItem(a_item, "timeout_s");
-        if (timeout_s && cJSON_IsNumber(timeout_s)) {
-            step.timeout_ms = static_cast<uint32_t>(timeout_s->valueint * 1000);
+        if (cJSON_IsNumber(timeout_s)) {
+            uint32_t raw_s = clamp_u32(timeout_s, 0, MAX_DELAY_MS / 1000U, step.timeout_ms / 1000U);
+            step.timeout_ms = raw_s * 1000U;
         }
 
         cJSON* cond_obj = cJSON_GetObjectItem(a_item, "condition");
         cJSON* conds_arr = cJSON_GetObjectItem(a_item, "conditions");
         if (cond_obj && cJSON_IsObject(cond_obj)) {
-            parse_single_condition(cond_obj, step.condition);
+            parse_single_condition(cond_obj, step.condition, depth + 1);
             // If condition was a leaf but conditions array contains multiple items, treat as OR group
             if (step.condition.logic == ConditionLogic::LEAF && cJSON_IsArray(conds_arr) && cJSON_GetArraySize(conds_arr) > 1) {
                 step.condition.logic = ConditionLogic::OR_GROUP;
@@ -1007,23 +1066,23 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
                 step.condition.sub_conditions.clear();
                 cJSON* sub = nullptr;
                 cJSON_ArrayForEach(sub, conds_arr) {
-                    AutomationCondition sub_cond;
-                    if (parse_single_condition(sub, sub_cond)) {
-                        step.condition.sub_conditions.push_back(sub_cond);
+                    step.condition.sub_conditions.emplace_back();
+                    if (!parse_single_condition(sub, step.condition.sub_conditions.back(), depth + 1)) {
+                        step.condition.sub_conditions.pop_back();
                     }
                 }
             }
         } else if (cJSON_IsArray(conds_arr)) {
             if (cJSON_GetArraySize(conds_arr) == 1) {
-                parse_single_condition(cJSON_GetArrayItem(conds_arr, 0), step.condition);
+                parse_single_condition(cJSON_GetArrayItem(conds_arr, 0), step.condition, depth + 1);
             } else if (cJSON_GetArraySize(conds_arr) > 1) {
                 step.condition.logic = ConditionLogic::OR_GROUP;
                 step.condition.type = "or_group";
                 cJSON* sub = nullptr;
                 cJSON_ArrayForEach(sub, conds_arr) {
-                    AutomationCondition sub_cond;
-                    if (parse_single_condition(sub, sub_cond)) {
-                        step.condition.sub_conditions.push_back(sub_cond);
+                    step.condition.sub_conditions.emplace_back();
+                    if (!parse_single_condition(sub, step.condition.sub_conditions.back(), depth + 1)) {
+                        step.condition.sub_conditions.pop_back();
                     }
                 }
             }
@@ -1033,14 +1092,17 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         if (cJSON_IsArray(seq_arr)) {
             cJSON* s_sub = nullptr;
             cJSON_ArrayForEach(s_sub, seq_arr) {
-                ActionStep s;
-                if (parse_action_step(s_sub, s)) {
-                    step.sequence.push_back(s);
+                step.sequence.emplace_back();
+                if (!parse_action_step(s_sub, step.sequence.back(), depth + 1)) {
+                    step.sequence.pop_back();
                 }
             }
         }
         return true;
-    } else {
+    } else if (type_str[0] == '\0' ||
+               strcmp(type_str, "transmit") == 0 ||
+               strcmp(type_str, "transmit_frame") == 0 ||
+               strcmp(type_str, "can_tx") == 0) {
         step.type = ActionType::TRANSMIT_FRAME;
         cJSON* cid = cJSON_GetObjectItem(a_item, "can_id");
         if (!cid) cid = cJSON_GetObjectItem(a_item, "action_can_id");
@@ -1051,26 +1113,24 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
         if (cJSON_IsNumber(bus)) step.bus = static_cast<uint8_t>(bus->valueint);
 
         cJSON* rep = cJSON_GetObjectItem(a_item, "repeat");
-        if (cJSON_IsNumber(rep)) step.repeat = static_cast<uint8_t>(rep->valueint);
+        if (cJSON_IsNumber(rep)) {
+            uint32_t clamped = clamp_u32(rep, 1, MAX_STEP_REPEAT, 1);
+            if (!std::isfinite(rep->valuedouble) || rep->valuedouble < 1.0 || rep->valuedouble > static_cast<double>(MAX_STEP_REPEAT)) {
+                ESP_LOGW(TAG, "Clamped out-of-range action repeat %.0f to %lu", rep->valuedouble, (unsigned long)clamped);
+            }
+            step.repeat = static_cast<uint8_t>(clamped);
+        }
 
         cJSON* del = cJSON_GetObjectItem(a_item, "delay_ms");
         if (!del) del = cJSON_GetObjectItem(a_item, "dwell_ms");
         if (!del) del = cJSON_GetObjectItem(a_item, "delay");
         if (!del) del = cJSON_GetObjectItem(a_item, "dwell");
-        if (cJSON_IsNumber(del)) step.delay_ms = static_cast<uint32_t>(del->valueint);
+        step.delay_ms = clamp_u32(del, 0, MAX_DELAY_MS, step.delay_ms);
 
         cJSON* p = cJSON_GetObjectItem(a_item, "payload");
         if (p) {
             if (cJSON_IsString(p) && p->valuestring) {
-                std::string clean_hex;
-                for (const char* ch = p->valuestring; *ch; ++ch) {
-                    if (isxdigit((unsigned char)*ch)) clean_hex += *ch;
-                }
-                for (size_t i = 0; i + 1 < clean_hex.length() && (i / 2) < 8; i += 2) {
-                    uint8_t byte_idx = (uint8_t)(i / 2);
-                    step.payload[byte_idx] = (uint8_t)strtoul(clean_hex.substr(i, 2).c_str(), nullptr, 16);
-                    step.mask |= (1 << byte_idx);
-                }
+                parse_hex_payload_string(p->valuestring, step.payload, step.mask);
             } else {
                 cJSON* p_item = nullptr;
                 cJSON_ArrayForEach(p_item, p) {
@@ -1083,6 +1143,8 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
             }
         }
         return true;
+    } else {
+        ESP_LOGW(TAG, "Ignoring unsupported action step type '%s'", type_str);
     }
     return false;
 }
@@ -1090,19 +1152,7 @@ bool parse_action_step(cJSON* a_item, ActionStep& step) {
 static void parse_catalog_payload(cJSON* payload_json, CatalogStep& step) {
     if (!payload_json) return;
     if (cJSON_IsString(payload_json) && payload_json->valuestring) {
-        char clean_hex[17] = {0};
-        size_t clean_len = 0;
-        for (const char* ch = payload_json->valuestring; *ch && clean_len < 16; ++ch) {
-            if (isxdigit((unsigned char)*ch)) {
-                clean_hex[clean_len++] = *ch;
-            }
-        }
-        for (size_t i = 0; i + 1 < clean_len && (i / 2) < 8; i += 2) {
-            uint8_t byte_idx = static_cast<uint8_t>(i / 2);
-            char hex_byte[3] = { clean_hex[i], clean_hex[i + 1], '\0' };
-            step.payload[byte_idx] = static_cast<uint8_t>(strtoul(hex_byte, nullptr, 16));
-            step.mask |= (1 << byte_idx);
-        }
+        parse_hex_payload_string(payload_json->valuestring, step.payload, step.mask);
     } else {
         cJSON* p_item = nullptr;
         cJSON_ArrayForEach(p_item, payload_json) {
@@ -1131,7 +1181,7 @@ static bool parse_catalog_step(cJSON* a_item, CatalogStep& step) {
         if (!ms) ms = cJSON_GetObjectItem(a_item, "delay_ms");
         if (!ms) ms = cJSON_GetObjectItem(a_item, "delay");
         if (!ms) ms = cJSON_GetObjectItem(a_item, "dwell_ms");
-        if (cJSON_IsNumber(ms)) step.delay_ms = static_cast<uint32_t>(ms->valueint);
+        step.delay_ms = clamp_u32(ms, 0, MAX_DELAY_MS, 0U);
         return true;
     }
     if (strcmp(type_str, "hud_nav") == 0 || strcmp(type_str, "nav") == 0) {
@@ -1152,13 +1202,19 @@ static bool parse_catalog_step(cJSON* a_item, CatalogStep& step) {
     if (cJSON_IsNumber(bus)) step.bus = static_cast<uint8_t>(bus->valueint);
 
     cJSON* rep = cJSON_GetObjectItem(a_item, "repeat");
-    if (cJSON_IsNumber(rep)) step.repeat = static_cast<uint8_t>(rep->valueint);
+    if (cJSON_IsNumber(rep)) {
+        uint32_t clamped = clamp_u32(rep, 1, MAX_STEP_REPEAT, 1);
+        if (!std::isfinite(rep->valuedouble) || rep->valuedouble < 1.0 || rep->valuedouble > static_cast<double>(MAX_STEP_REPEAT)) {
+            ESP_LOGW(TAG, "Clamped out-of-range catalog repeat %.0f to %lu", rep->valuedouble, (unsigned long)clamped);
+        }
+        step.repeat = static_cast<uint8_t>(clamped);
+    }
 
     cJSON* del = cJSON_GetObjectItem(a_item, "delay_ms");
     if (!del) del = cJSON_GetObjectItem(a_item, "dwell_ms");
     if (!del) del = cJSON_GetObjectItem(a_item, "delay");
     if (!del) del = cJSON_GetObjectItem(a_item, "dwell");
-    if (cJSON_IsNumber(del)) step.delay_ms = static_cast<uint32_t>(del->valueint);
+    step.delay_ms = clamp_u32(del, 0, MAX_DELAY_MS, step.delay_ms);
 
     parse_catalog_payload(cJSON_GetObjectItem(a_item, "payload"), step);
     return true;
@@ -1220,7 +1276,7 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity, bool include_discov
         cJSON* delay = cJSON_GetObjectItem(network, "delay_ms");
         if (cJSON_IsString(state_can_id)) out_entity.state_can_id = strtol(state_can_id->valuestring, nullptr, 16);
         if (cJSON_IsString(action_can_id)) out_entity.action_can_id = strtol(action_can_id->valuestring, nullptr, 16);
-        if (cJSON_IsNumber(delay)) out_entity.delay_ms = delay->valueint;
+        out_entity.delay_ms = clamp_u32(delay, 0, MAX_DELAY_MS, out_entity.delay_ms);
 
         cJSON* state_byte_item = cJSON_GetObjectItem(network, "state_byte");
         if (cJSON_IsString(state_byte_item)) {
@@ -1397,7 +1453,7 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
     if (cJSON_IsBool(en)) out_rule.enabled = cJSON_IsTrue(en);
 
     cJSON* cd = cJSON_GetObjectItem(auto_json, "cooldown_ms");
-    if (cJSON_IsNumber(cd)) out_rule.cooldown_ms = static_cast<uint32_t>(cd->valueint);
+    out_rule.cooldown_ms = clamp_u32(cd, 0, MAX_COOLDOWN_MS, out_rule.cooldown_ms);
 
     cJSON* mode = cJSON_GetObjectItem(auto_json, "exec_mode");
     if (cJSON_IsString(mode)) out_rule.exec_mode = mode->valuestring;
@@ -1444,6 +1500,14 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
 
             cJSON* src_item = cJSON_GetObjectItem(t_item, "source");
             if (cJSON_IsString(src_item)) tr.source = src_item->valuestring;
+
+            cJSON* be = cJSON_GetObjectItem(t_item, "ble_event");
+            const bool is_beacon_ble_event =
+                cJSON_IsString(be) && be->valuestring &&
+                (strcmp(be->valuestring, "enter") == 0 ||
+                 strcmp(be->valuestring, "exit") == 0 ||
+                 strcmp(be->valuestring, "present") == 0 ||
+                 strcmp(be->valuestring, "away") == 0);
 
             if (tr.type == "time_schedule" || tr.type == "time") {
                 tr.type = "time_schedule";
@@ -1492,13 +1556,9 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
                        ((tr.type == "ble_presence" || tr.source == "ble") &&
                         (cJSON_GetObjectItem(t_item, "beacon_uuid") != nullptr ||
                          cJSON_GetObjectItem(t_item, "uuid") != nullptr ||
-                         (cJSON_GetObjectItem(t_item, "ble_event") &&
-                          (strcmp(cJSON_GetObjectItem(t_item, "ble_event")->valuestring, "enter") == 0 ||
-                           strcmp(cJSON_GetObjectItem(t_item, "ble_event")->valuestring, "exit") == 0 ||
-                           strcmp(cJSON_GetObjectItem(t_item, "ble_event")->valuestring, "present") == 0 ||
-                           strcmp(cJSON_GetObjectItem(t_item, "ble_event")->valuestring, "away") == 0))))) {
+                         is_beacon_ble_event))) {
                 tr.type = "ble_beacon";
-                cJSON* evt = cJSON_GetObjectItem(t_item, "ble_event");
+                cJSON* evt = be;
                 if (!evt) evt = cJSON_GetObjectItem(t_item, "event");
                 if (cJSON_IsString(evt)) tr.ble_event = evt->valuestring;
                 else tr.ble_event = "present";
@@ -1597,9 +1657,9 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
     if (cJSON_IsArray(conds)) {
         cJSON* c_item = nullptr;
         cJSON_ArrayForEach(c_item, conds) {
-            AutomationCondition cond;
-            if (parse_single_condition(c_item, cond)) {
-                out_rule.conditions.push_back(cond);
+            out_rule.conditions.emplace_back();
+            if (!parse_single_condition(c_item, out_rule.conditions.back(), 0)) {
+                out_rule.conditions.pop_back();
             }
         }
     }
@@ -1609,9 +1669,9 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
     if (cJSON_IsArray(acts)) {
         cJSON* a_item = nullptr;
         cJSON_ArrayForEach(a_item, acts) {
-            ActionStep step;
-            if (parse_action_step(a_item, step)) {
-                out_rule.actions.push_back(step);
+            out_rule.actions.emplace_back();
+            if (!parse_action_step(a_item, out_rule.actions.back(), 0)) {
+                out_rule.actions.pop_back();
             }
         }
     }
@@ -2108,21 +2168,26 @@ bool load_automations_from_fs(const char* filepath) {
 
     // Preload entities referenced in automations (triggers, actions) before acquiring g_automations_mutex
     std::unordered_set<std::string> referenced_entities;
-    std::function<void(const std::vector<ActionStep>&)> collect_from_steps;
-    collect_from_steps = [&](const std::vector<ActionStep>& steps) {
+    std::function<void(const std::vector<ActionStep>&, int)> collect_from_steps;
+    collect_from_steps = [&](const std::vector<ActionStep>& steps, int depth) {
+        if (depth > MAX_PARSE_DEPTH) {
+            ESP_LOGW(TAG, "Max action nesting depth (%d) exceeded while collecting entities; skipping subtree", MAX_PARSE_DEPTH);
+            return;
+        }
         for (const auto& s : steps) {
             if (!s.entity_id.empty()) referenced_entities.insert(s.entity_id);
-            collect_from_steps(s.then_steps);
-            collect_from_steps(s.else_steps);
+            collect_from_steps(s.then_steps, depth + 1);
+            collect_from_steps(s.else_steps, depth + 1);
             for (const auto& ch : s.choices) {
-                collect_from_steps(ch.sequence);
+                collect_from_steps(ch.sequence, depth + 1);
             }
-            collect_from_steps(s.default_steps);
+            collect_from_steps(s.default_steps, depth + 1);
+            collect_from_steps(s.sequence, depth + 1);
         }
     };
 
     for (const auto& rule : new_rules) {
-        collect_from_steps(rule.actions);
+        collect_from_steps(rule.actions, 0);
     }
 
     if (!referenced_entities.empty()) {

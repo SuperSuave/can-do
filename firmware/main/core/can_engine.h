@@ -33,17 +33,13 @@ void can_engine_load_preferences(void);
 void init_can_engine(void);
 esp_err_t can_engine_get_status_info(twai_status_info_t* status_info);
 extern "C" bool can_engine_is_bus_awake(uint32_t max_silence_ms);
-esp_err_t can_engine_transmit_safe(twai_message_t* message, TickType_t ticks_to_wait);
 bool can_engine_inject_frame(const twai_message_t* msg);
-void update_state_cache(uint32_t can_id, const uint8_t* data, uint8_t dlc = 8);
 bool evaluate_condition(const AutomationCondition& cond);
 bool is_match(const uint8_t* incoming_data, const EntityOption& option, uint8_t dlc = 8);
 
 void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, uint32_t delay_ms);
 bool queue_entity_command(const std::string& entity_id, const std::string& command_label);
 bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>& steps, const std::string& trigger_id = "", std::shared_ptr<std::atomic<bool>> rule_is_running = nullptr);
-bool queue_action_steps_ptr(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>* steps, const std::string& trigger_id = "", std::shared_ptr<std::atomic<bool>> rule_is_running = nullptr);
-bool can_state_cache_get(uint32_t can_id, uint8_t byte_index, uint32_t* out_val);
 bool get_cached_can_frame(uint32_t can_id, uint8_t out_data[8], uint8_t* out_dlc = nullptr);
 
 struct BleButtonEvent;

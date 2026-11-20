@@ -71,7 +71,6 @@ static inline void can_fd_to_twai(const can_fd_frame_t* fd_frame, twai_message_t
 
 esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t ticks_to_wait);
 esp_err_t can_send_fd(can_bus_t bus, const can_fd_frame_t *frame, TickType_t ticks_to_wait);
-esp_err_t can_engine_transmit_safe(twai_message_t *message, TickType_t ticks_to_wait);
 bool can_bus_is_available(can_bus_t bus);
 
 #ifdef __cplusplus
