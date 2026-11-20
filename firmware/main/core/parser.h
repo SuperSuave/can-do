@@ -21,7 +21,11 @@ void mitm_arm_entity(const std::string& entity_id, uint32_t hold_ms_override = 0
 void mitm_arm_can_id(uint32_t can_id, uint32_t hold_ms_override = 0);
 bool mitm_should_block_bridged_frame(uint32_t can_id, uint8_t rx_bus, uint8_t dst_bus, const uint8_t* data, uint8_t dlc);
 
+constexpr bool DEFAULT_STATE_BIG_ENDIAN = false; // Default "little" endianness for E-GMP CAN frames
+
 int get_d_index(const char* key);
+bool decode_can_uint(const uint8_t* data, size_t payload_len, int start_idx, uint8_t byte_length, bool big_endian, uint16_t* out_value);
+bool decode_entity_state_uint(const CanEntity& entity, const uint8_t* data, size_t payload_len, uint16_t* out_value);
 uint8_t parse_hex_string(const char* hex_str, bool* is_inverted = nullptr);
 uint8_t parse_weekdays_mask(cJSON* days_arr);
 uint16_t parse_time_to_minutes(const char* time_str);

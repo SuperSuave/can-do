@@ -253,6 +253,55 @@ class TestRemainingChargeTimePipeline(unittest.TestCase):
         self.coordinator.can_states["0x4e2"] = [0x00, 0x00, 0x58, 0x02, 0x00, 0x00, 0x00, 0x00]
         self.assertEqual(l1_sensor.native_value, 600)
 
+    def test_explicit_byte_length_and_endianness_in_sensor(self):
+        """Verify 2-byte state_byte + byte_length + endianness schema and bounds checking."""
+        # 1. Remaining-time entity using explicit Pass 2 schema (default little-endian)
+        ac_v2_cmd = {
+            "id": "remaining_charge_time_ac",
+            "ha_metadata": {"name": "AC Remaining", "domain": "sensor", "device_class": "duration", "unit_of_measurement": "min"},
+            "network": {"state_can_id": "0x327", "state_byte": "D1", "byte_length": 2, "unit": "min"},
+        }
+        ac_v2_sensor = CanDoSensorEntity(self.coordinator, ac_v2_cmd)
+        self.coordinator.can_states["0x327"] = [0x4B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        self.assertEqual(ac_v2_sensor.native_value, 75)
+        self.coordinator.can_states["0x327"] = [0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        self.assertEqual(ac_v2_sensor.native_value, 0)
+        # Truncated 1-byte payload must not crash (bounds-checked)
+        self.coordinator.can_states["0x327"] = [0x4B]
+        self.assertIsNone(ac_v2_sensor.native_value)
+
+        # 2. Generic 2-byte numeric sensor (little-endian default)
+        range_cmd = {
+            "id": "ev_estimated_range",
+            "ha_metadata": {"name": "EV Range", "domain": "sensor", "device_class": "distance", "unit_of_measurement": "km"},
+            "network": {"state_can_id": "0x200", "state_byte": "D5", "byte_length": 2, "unit": "km"},
+        }
+        range_sensor = CanDoSensorEntity(self.coordinator, range_cmd)
+        # 420 km = 0x01A4 -> D5=0xA4, D6=0x01
+        self.coordinator.can_states["0x200"] = [0, 0, 0, 0, 0xA4, 0x01, 0, 0]
+        self.assertEqual(range_sensor.native_value, 420)
+
+        # 3. Generic 2-byte numeric sensor (explicit big-endian + factor)
+        be_cmd = {
+            "id": "custom_be_sensor",
+            "ha_metadata": {"name": "Custom BE", "domain": "sensor", "unit_of_measurement": "km"},
+            "network": {"state_can_id": "0x201", "state_byte": "D3", "byte_length": 2, "endianness": "big", "factor": 0.1},
+        }
+        be_sensor = CanDoSensorEntity(self.coordinator, be_cmd)
+        # 0x01F4 = 500 -> * 0.1 = 50.0
+        self.coordinator.can_states["0x201"] = [0, 0, 0x01, 0xF4, 0, 0, 0, 0]
+        self.assertEqual(be_sensor.native_value, 50.0)
+
+        # 4. Out-of-bounds D8 + byte_length=2 on 8-byte frame must not raise IndexError
+        oob_cmd = {
+            "id": "oob_16bit_sensor",
+            "ha_metadata": {"name": "OOB", "domain": "sensor", "unit_of_measurement": "min"},
+            "network": {"state_can_id": "0x202", "state_byte": "D8", "byte_length": 2},
+        }
+        oob_sensor = CanDoSensorEntity(self.coordinator, oob_cmd)
+        self.coordinator.can_states["0x202"] = [1, 2, 3, 4, 5, 6, 7, 8]
+        self.assertIsNone(oob_sensor.native_value)
+
 
 if __name__ == "__main__":
     unittest.main()

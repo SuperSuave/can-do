@@ -16,7 +16,15 @@ if "custom_components.can_do" not in sys.modules:
     pkg.__file__ = str(can_do_dir / "__init__.py")
     sys.modules["custom_components.can_do"] = pkg
 
-from custom_components.can_do.catalog_loader import check_match, get_d_index, parse_hex_val
+from custom_components.can_do.catalog_loader import (
+    DEFAULT_ENDIANNESS,
+    check_match,
+    decode_can_uint,
+    decode_network_state_value,
+    get_d_index,
+    parse_hex_val,
+    parse_state_byte_spec,
+)
 
 
 class TestCheckMatch(unittest.TestCase):
@@ -175,6 +183,56 @@ class TestVehicleCommandFiltering(unittest.TestCase):
         doors_ids = get_monitored_can_ids("ev6_gtline", enabled_categories=["Doors, Access & Security"])
         self.assertGreater(len(all_ids), len(doors_ids))
         self.assertTrue(set(doors_ids).issubset(set(all_ids)))
+
+
+class TestMultiByteStateDecoding(unittest.TestCase):
+    """Test suite for 1-byte and 2-byte (16-bit) state_byte decoding and bounds checking."""
+
+    def test_default_endianness_is_little(self) -> None:
+        self.assertEqual(DEFAULT_ENDIANNESS, "little")
+
+    def test_parse_state_byte_spec(self) -> None:
+        self.assertEqual(parse_state_byte_spec({"state_byte": "D1"}), (0, 1, "little"))
+        self.assertEqual(
+            parse_state_byte_spec({"state_byte": "D3", "byte_length": 2}),
+            (2, 2, "little"),
+        )
+        self.assertEqual(
+            parse_state_byte_spec({"state_byte": "D7", "byte_length": 2, "endianness": "big"}),
+            (6, 2, "big"),
+        )
+        # Legacy range strings must fail cleanly with start_idx == -1
+        self.assertEqual(parse_state_byte_spec({"state_byte": "D1-D2"})[0], -1)
+        # Unsupported byte_length must fail cleanly
+        self.assertEqual(parse_state_byte_spec({"state_byte": "D1", "byte_length": 3})[0], -1)
+        self.assertEqual(parse_state_byte_spec({"state_byte": "D1", "byte_length": 0})[0], -1)
+        self.assertEqual(parse_state_byte_spec({"state_byte": "D1", "byte_length": True})[0], -1)
+
+    def test_decode_can_uint_endianness_and_mask(self) -> None:
+        payload = [0x48, 0x03, 0x14, 0x00, 0x12, 0x34, 0x2C, 0x01]
+        # 1-byte default
+        self.assertEqual(decode_can_uint(payload, 0, 1), 0x48)
+        # 2-byte little-endian (default): D1=0x48, D2=0x03 -> 0x0348 = 840
+        self.assertEqual(decode_can_uint(payload, 0, 2), 840)
+        self.assertEqual(decode_can_uint(payload, 6, 2, "little"), 300)
+        # 2-byte big-endian: D5=0x12, D6=0x34 -> 0x1234
+        self.assertEqual(decode_can_uint(payload, 4, 2, "big"), 0x1234)
+        # Optional bitmask on 16-bit value
+        self.assertEqual(decode_can_uint(payload, 4, 2, "big", mask="0x0FFF"), 0x0234)
+
+    def test_decode_can_uint_bounds_checking(self) -> None:
+        payload_8 = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
+        # D8 (idx 7) + 2 bytes exceeds 8-byte payload
+        self.assertIsNone(decode_can_uint(payload_8, 7, 2))
+        self.assertIsNone(
+            decode_network_state_value(payload_8, {"state_byte": "D8", "byte_length": 2})
+        )
+        # Short payload (DLC=1) for 2-byte read starting at D1
+        self.assertIsNone(decode_can_uint([0x48], 0, 2))
+        # Short payload (DLC=3) for 2-byte read starting at D3 (idx 2)
+        self.assertIsNone(decode_can_uint([0x00, 0x00, 0x14], 2, 2))
+        # Negative start index
+        self.assertIsNone(decode_can_uint(payload_8, -1, 2))
 
 
 if __name__ == "__main__":

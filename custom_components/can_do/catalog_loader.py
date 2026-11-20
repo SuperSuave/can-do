@@ -271,8 +271,13 @@ def get_monitored_can_ids(
     return sorted(ids)
 
 
+DEFAULT_ENDIANNESS = "little"
+
+
 def get_d_index(key: str) -> int:
     """Convert 'D1'..'D8' (1-based) to 0..7 index."""
+    if not isinstance(key, str):
+        return -1
     k = key.strip().upper()
     if k.startswith("D") and len(k) >= 2:
         try:
@@ -299,6 +304,99 @@ def parse_hex_val(val: Any) -> tuple[int, bool]:
         return int(s, 16), inverted
     except ValueError:
         return 0, inverted
+
+
+def normalize_endianness(endianness: Any) -> str:
+    """Normalize endianness string to 'little' (default) or 'big'."""
+    if isinstance(endianness, str):
+        e = endianness.strip().lower()
+        if e in ("big", "be", "motorola"):
+            return "big"
+        if e in ("little", "le", "intel"):
+            return "little"
+    return DEFAULT_ENDIANNESS
+
+
+def parse_state_byte_spec(
+    net: dict[str, Any] | None,
+    default_byte: str = "D1",
+) -> tuple[int, int, str]:
+    """Parse (start_idx, byte_length, endianness) from a catalog network dict.
+
+    Supports single starting 1-based state_byte ('D1'..'D8'), explicit byte_length
+    (1 or 2, default 1), and endianness ('little' default, or 'big').
+    Returns start_idx == -1 if state_byte or byte_length is invalid.
+    """
+    net_dict = net if isinstance(net, dict) else {}
+    raw_byte = net_dict.get("state_byte")
+    byte_str = default_byte if raw_byte is None else raw_byte
+    start_idx = get_d_index(byte_str) if isinstance(byte_str, str) else -1
+
+    endianness = normalize_endianness(net_dict.get("endianness"))
+
+    raw_len = net_dict.get("byte_length")
+    if raw_len is None:
+        byte_length = 1
+    elif isinstance(raw_len, bool):
+        return -1, 0, endianness
+    else:
+        try:
+            byte_length = int(raw_len)
+        except (TypeError, ValueError):
+            return -1, 0, endianness
+        if byte_length not in (1, 2):
+            return -1, 0, endianness
+
+    return start_idx, byte_length, endianness
+
+
+def decode_can_uint(
+    payload: list[int] | tuple[int, ...],
+    start_idx: int,
+    byte_length: int = 1,
+    endianness: str = DEFAULT_ENDIANNESS,
+    mask: Any = None,
+) -> int | None:
+    """Decode a 1-byte or 2-byte unsigned integer from CAN payload with bounds checking.
+
+    Returns None if payload is invalid or start_idx + byte_length exceeds len(payload).
+    """
+    if not isinstance(payload, (list, tuple)):
+        return None
+    if isinstance(byte_length, bool) or byte_length not in (1, 2):
+        return None
+    if start_idx < 0 or start_idx + byte_length > len(payload):
+        return None
+
+    if byte_length == 1:
+        raw = int(payload[start_idx]) & 0xFF
+    else:
+        b0 = int(payload[start_idx]) & 0xFF
+        b1 = int(payload[start_idx + 1]) & 0xFF
+        if normalize_endianness(endianness) == "big":
+            raw = (b0 << 8) | b1
+        else:
+            raw = b0 | (b1 << 8)
+
+    if mask is not None and not isinstance(mask, bool):
+        if isinstance(mask, (int, str)) and (not isinstance(mask, str) or mask.strip()):
+            mask_val, _ = parse_hex_val(mask)
+            raw &= mask_val
+
+    return raw
+
+
+def decode_network_state_value(
+    payload: list[int] | tuple[int, ...],
+    net: dict[str, Any] | None,
+    default_byte: str = "D1",
+) -> int | None:
+    """Decode unsigned 1- or 2-byte state value using catalog network metadata."""
+    start_idx, byte_length, endianness = parse_state_byte_spec(net, default_byte=default_byte)
+    if start_idx < 0:
+        return None
+    mask = net.get("state_mask") if isinstance(net, dict) else None
+    return decode_can_uint(payload, start_idx, byte_length, endianness, mask=mask)
 
 
 def check_match(data: list[int], match_dict: dict[str, Any], mask_spec: Any = None) -> bool:

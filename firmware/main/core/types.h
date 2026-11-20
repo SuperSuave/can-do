@@ -236,6 +236,9 @@ struct CanEntity {
     uint32_t delay_ms = 20;
     uint8_t bus = 0;
     uint8_t action_bus = 0;
+    int8_t state_byte = -1;        // 0..7 (from D1..D8), -1 if unset or invalid
+    uint8_t state_byte_length = 1; // 1 (default) or 2 (16-bit unsigned)
+    bool state_big_endian = false; // false = "little" (default), true = "big"
     EntityMitmConfig mitm;
 
     PsramVector<EntityOption> options;

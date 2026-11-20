@@ -34,7 +34,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .can_utils import decode_outdoor_temperature_c, option_matches, resolve_effective_mask
-from .catalog_loader import check_match, get_d_index, parse_hex_val
+from .catalog_loader import (
+    DEFAULT_ENDIANNESS,
+    check_match,
+    decode_can_uint,
+    get_d_index,
+    parse_hex_val,
+    parse_state_byte_spec,
+)
 from .const import DOMAIN
 from .coordinator import CanDoDataCoordinator
 from .entity import CanDoEntity
@@ -441,9 +448,17 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                 byte_str = evaluate.get("byte", "")
                 op = str(evaluate.get("operator", "")).strip().lower()
                 val, _ = parse_hex_val(evaluate.get("value", 0))
+                eval_len = evaluate.get("byte_length", 1)
+                eval_endian = evaluate.get("endianness", DEFAULT_ENDIANNESS)
                 idx = get_d_index(byte_str)
-                if 0 <= idx < len(payload):
-                    actual = payload[idx]
+                actual = decode_can_uint(
+                    payload,
+                    idx,
+                    eval_len,
+                    eval_endian,
+                    mask=evaluate.get("mask"),
+                )
+                if actual is not None:
                     if (
                         (op in ("greater_than", ">") and actual > val)
                         or (op in ("less_than", "<") and actual < val)
@@ -672,69 +687,91 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
             if isinstance(payload, list) and 0 <= idx < len(payload):
                 return int(payload[idx])
 
-        # 1J. Charge & Discharge Remaining Times (Minutes)
-        # AC Normal (Level 2): 0x327 Bytes D1-D2 or legacy 0x597 Bytes D2-D3 (16-bit LE unsigned, 0xFFFF = inactive)
-        if "remaining_charge_time_ac" in cid or (self.state_can_id and self.state_can_id.lower() == "0x327"):
+        # 1J. Charge & Discharge Remaining Times (Minutes, 16-bit unsigned, 0xFFFF = inactive)
+        is_remaining_time_ac = "remaining_charge_time_ac" in cid or (
+            self.state_can_id and self.state_can_id.lower() == "0x327"
+        )
+        is_remaining_time_dc = "remaining_charge_time_dc" in cid or (
+            self.state_can_id and self.state_can_id.lower() == "0x25c"
+        )
+        is_remaining_time_120v = "remaining_charge_time_120v" in cid or (
+            self.state_can_id and self.state_can_id.lower() in ("0x328", "0x4e2")
+        )
+        is_v2l_remaining_time = "v2l_discharge_remaining_time" in cid or (
+            self.state_can_id and self.state_can_id.lower() == "0x324"
+        )
+        if (
+            is_remaining_time_ac
+            or is_remaining_time_dc
+            or is_remaining_time_120v
+            or is_v2l_remaining_time
+        ):
             if isinstance(payload, list):
-                if self.state_can_id and self.state_can_id.lower() == "0x597":
-                    if len(payload) >= 3:
-                        raw = payload[1] | (payload[2] << 8)
+                start_idx, byte_len, endianness = parse_state_byte_spec(net)
+                if start_idx >= 0 and byte_len == 2:
+                    raw = decode_can_uint(payload, start_idx, byte_len, endianness)
+                    if raw is not None:
                         return 0 if raw == 0xFFFF else raw
-                elif len(payload) >= 2:
-                    raw = payload[0] | (payload[1] << 8)
+                    return self._last_native_val
+
+                # Legacy fallback when catalog still uses "D1-D2" range syntax
+                scid_l = self.state_can_id.lower() if self.state_can_id else ""
+                fallback_idx = -1
+                if is_remaining_time_ac:
+                    fallback_idx = 1 if scid_l == "0x597" else 0
+                elif is_remaining_time_dc:
+                    fallback_idx = 3 if scid_l == "0x597" else 2
+                elif is_remaining_time_120v:
+                    fallback_idx = 2 if scid_l == "0x4e2" else 0
+                elif is_v2l_remaining_time:
+                    fallback_idx = 6
+                raw = decode_can_uint(payload, fallback_idx, 2, DEFAULT_ENDIANNESS)
+                if raw is not None:
                     return 0 if raw == 0xFFFF else raw
+                return self._last_native_val
 
-        # DC Fast Charge (QC): 0x25C Bytes D3-D4 or legacy 0x597 Bytes D4-D5 (16-bit LE unsigned, 0xFFFF = inactive)
-        if "remaining_charge_time_dc" in cid or (self.state_can_id and self.state_can_id.lower() == "0x25c"):
-            if isinstance(payload, list):
-                if self.state_can_id and self.state_can_id.lower() == "0x597":
-                    if len(payload) >= 5:
-                        raw = payload[3] | (payload[4] << 8)
-                        return 0 if raw == 0xFFFF else raw
-                elif len(payload) >= 4:
-                    raw = payload[2] | (payload[3] << 8)
-                    return 0 if raw == 0xFFFF else raw
-
-        # Level 1 (120V Trickle): 0x328 Bytes D1-D2 or legacy 0x4E2 Bytes D3-D4 (16-bit LE unsigned, 0xFFFF = inactive)
-        if "remaining_charge_time_120v" in cid or (self.state_can_id and self.state_can_id.lower() in ("0x328", "0x4e2")):
-            if isinstance(payload, list):
-                if self.state_can_id and self.state_can_id.lower() == "0x4e2":
-                    if len(payload) >= 4:
-                        raw = payload[2] | (payload[3] << 8)
-                        return 0 if raw == 0xFFFF else raw
-                elif len(payload) >= 2:
-                    raw = payload[0] | (payload[1] << 8)
-                    return 0 if raw == 0xFFFF else raw
-
-        # V2L Discharge Runtime: 0x324 Bytes D7-D8 (16-bit LE unsigned, 0xFFFF = inactive)
-        if "v2l_discharge_remaining_time" in cid or (self.state_can_id and self.state_can_id.lower() == "0x324"):
-            if isinstance(payload, list) and len(payload) >= 8:
-                raw = payload[6] | (payload[7] << 8)
-                return 0 if raw == 0xFFFF else raw
-
-        # 1K. Discrete Options (prioritized when unit is absent) vs Generic Linear Scale
-        if self.command.get("options") and not net.get("unit"):
+        # 1K. Discrete Options (prioritized when numeric unit/multi-byte spec is absent) vs Generic Numeric/Linear Scale
+        start_idx, byte_len, endianness = parse_state_byte_spec(net)
+        has_numeric_unit = bool(
+            net.get("unit") or (self.command.get("ha_metadata") or {}).get("unit_of_measurement")
+        )
+        if self.command.get("options") and not has_numeric_unit and byte_len < 2:
             opt_label = self._match_discrete_options(payload)
             if opt_label is not None:
                 return opt_label
 
-        if self.command.get("type") == "linear_scale" or "min" in net:
-            state_byte = net.get("state_byte", "D1")
-            idx = get_d_index(state_byte)
-            if 0 <= idx < len(payload):
-                raw = payload[idx]
-                state_mask = net.get("state_mask")
-                if state_mask is not None:
-                    mask_val, _ = parse_hex_val(state_mask)
-                    raw &= mask_val
-                min_val = net.get("min", 0)
-                max_val = net.get("max", 255)
-                raw_min = parse_hex_val(net.get("raw_min", 0))[0]
-                raw_max = parse_hex_val(net.get("raw_max", 255))[0]
-                if raw_max > raw_min:
-                    scaled = min_val + ((raw - raw_min) / (raw_max - raw_min)) * (max_val - min_val)
-                    return round(scaled, 1)
+        if (
+            self.command.get("type") == "linear_scale"
+            or "min" in net
+            or (byte_len == 2 and "state_byte" in net)
+        ):
+            raw = decode_can_uint(
+                payload,
+                start_idx,
+                byte_len,
+                endianness,
+                mask=net.get("state_mask"),
+            )
+            if raw is not None:
+                if "factor" in net or "offset" in net:
+                    factor = float(net.get("factor", 1))
+                    offset = float(net.get("offset", 0))
+                    val = raw * factor + offset
+                    if factor == 1.0 and offset == 0.0:
+                        return int(raw)
+                    return round(val, 2)
+                if self.command.get("type") == "linear_scale" or "min" in net:
+                    default_max = 65535 if byte_len == 2 else 255
+                    min_val = net.get("min", 0)
+                    max_val = net.get("max", default_max)
+                    raw_min = parse_hex_val(net.get("raw_min", 0))[0]
+                    raw_max = parse_hex_val(net.get("raw_max", default_max))[0]
+                    if raw_max > raw_min:
+                        scaled = min_val + ((raw - raw_min) / (raw_max - raw_min)) * (max_val - min_val)
+                        return round(scaled, 1)
                 return raw
+            if byte_len == 2:
+                return self._last_native_val
 
         # 2. Discrete Options Match
         opt_label = self._match_discrete_options(payload)

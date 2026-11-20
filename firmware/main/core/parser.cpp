@@ -197,13 +197,39 @@ bool mitm_should_block_bridged_frame(uint32_t can_id, uint8_t rx_bus, uint8_t ds
 
 
 int get_d_index(const char* key) {
-    if (key != nullptr && key[0] == 'D' && strlen(key) >= 2) {
-        int val = key[1] - '0';
-        if (val >= 1 && val <= 8) {
-            return val - 1;
+    if (key == nullptr) return -1;
+    while (*key == ' ' || *key == '\t') key++;
+    if ((key[0] == 'D' || key[0] == 'd') && key[1] >= '1' && key[1] <= '8') {
+        const char* tail = key + 2;
+        while (*tail == ' ' || *tail == '\t') tail++;
+        if (*tail == '\0') {
+            return (key[1] - '0') - 1;
         }
     }
     return -1;
+}
+
+bool decode_can_uint(const uint8_t* data, size_t payload_len, int start_idx, uint8_t byte_length, bool big_endian, uint16_t* out_value) {
+    if (!data || !out_value) return false;
+    if (start_idx < 0) return false;
+    if (byte_length != 1 && byte_length != 2) return false;
+    if (static_cast<size_t>(start_idx) + static_cast<size_t>(byte_length) > payload_len) return false;
+
+    if (byte_length == 1) {
+        *out_value = data[start_idx];
+        return true;
+    }
+
+    uint8_t b0 = data[start_idx];
+    uint8_t b1 = data[start_idx + 1];
+    *out_value = big_endian
+                     ? static_cast<uint16_t>((static_cast<uint16_t>(b0) << 8) | b1)
+                     : static_cast<uint16_t>(b0 | (static_cast<uint16_t>(b1) << 8));
+    return true;
+}
+
+bool decode_entity_state_uint(const CanEntity& entity, const uint8_t* data, size_t payload_len, uint16_t* out_value) {
+    return decode_can_uint(data, payload_len, entity.state_byte, entity.state_byte_length, entity.state_big_endian, out_value);
 }
 
 uint8_t parse_hex_string(const char* hex_str, bool* is_inverted) {
@@ -1195,6 +1221,43 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity, bool include_discov
         if (cJSON_IsString(state_can_id)) out_entity.state_can_id = strtol(state_can_id->valuestring, nullptr, 16);
         if (cJSON_IsString(action_can_id)) out_entity.action_can_id = strtol(action_can_id->valuestring, nullptr, 16);
         if (cJSON_IsNumber(delay)) out_entity.delay_ms = delay->valueint;
+
+        cJSON* state_byte_item = cJSON_GetObjectItem(network, "state_byte");
+        if (cJSON_IsString(state_byte_item)) {
+            int sb_idx = get_d_index(state_byte_item->valuestring);
+            if (sb_idx >= 0) {
+                out_entity.state_byte = static_cast<int8_t>(sb_idx);
+            }
+        }
+
+        cJSON* byte_len_item = cJSON_GetObjectItem(network, "byte_length");
+        if (cJSON_IsNumber(byte_len_item)) {
+            int bl = byte_len_item->valueint;
+            if (bl == 1 || bl == 2) {
+                out_entity.state_byte_length = static_cast<uint8_t>(bl);
+            } else {
+                ESP_LOGW(TAG, "Entity '%s': unsupported byte_length=%d (supported: 1 or 2)", out_entity.id.c_str(), bl);
+                out_entity.state_byte = -1;
+                out_entity.state_byte_length = 0;
+            }
+        }
+
+        cJSON* endian_item = cJSON_GetObjectItem(network, "endianness");
+        if (cJSON_IsString(endian_item) && endian_item->valuestring) {
+            const char* e = endian_item->valuestring;
+            if (strcasecmp(e, "big") == 0 || strcasecmp(e, "be") == 0 || strcasecmp(e, "motorola") == 0) {
+                out_entity.state_big_endian = true;
+            } else {
+                out_entity.state_big_endian = false;
+            }
+        }
+
+        if (out_entity.state_byte >= 0 && out_entity.state_byte_length > 0 &&
+            (out_entity.state_byte + out_entity.state_byte_length) > 8) {
+            ESP_LOGW(TAG, "Entity '%s': state_byte D%d with byte_length=%u exceeds 8-byte payload",
+                     out_entity.id.c_str(), out_entity.state_byte + 1, out_entity.state_byte_length);
+            out_entity.state_byte = -1;
+        }
 
         cJSON* mitm_obj = cJSON_GetObjectItem(network, "mitm");
         if (cJSON_IsObject(mitm_obj)) {
