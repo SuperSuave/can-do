@@ -58,10 +58,10 @@ class CanDoSwitchEntity(CanDoEntity, SwitchEntity):
             return bool(direct_str != 0)
         if isinstance(direct_str, str):
             ds = direct_str.strip().upper()
-            if ds in ("ON", "ACTIVE", "TRUE", "1", "HEAT"):
-                return True
-            if ds in ("OFF", "INACTIVE", "FALSE", "0"):
+            if is_off_option_label(direct_str) or ds in ("FALSE", "0"):
                 return False
+            if is_on_option_label(direct_str) or ds in ("TRUE", "1", "HEAT"):
+                return True
 
         if not self.state_can_id:
             return self._is_on

@@ -3,6 +3,7 @@
 import json
 import logging
 import math
+import re
 from typing import Any
 
 from homeassistant.components.light import (
@@ -196,7 +197,7 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
     async def async_added_to_hass(self) -> None:
         """Register CAN state listeners for 0x455 (infotainment), 0x2DB (MLU hardware), and direct ambient entity states."""
         await super().async_added_to_hass()
-        for can_id in ("0x455", "0x2db", "ambient_light_colors", "ambient_light_brightness", "ambient_mood_lighting"):
+        for can_id in ("0x455", "0x2db", "ambient_light_colors", "ambient_light_brightness"):
             if can_id != (self.state_can_id or "").lower():
                 unsub = self.coordinator.register_listener(can_id, self._handle_can_update)
                 self._unsub_listeners.append(unsub)
@@ -249,7 +250,7 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
                 return matched_label
 
         # Fallback to direct entity state published by ESP32 (e.g. animations or preset sync)
-        for state_key in (self.entity_id_str, "ambient_light_colors", "ambient_mood_lighting"):
+        for state_key in (self.entity_id_str, "ambient_light_colors"):
             direct = self.coordinator.get_can_state(state_key)
             if isinstance(direct, str) and direct and "off" not in direct.lower():
                 if (
@@ -285,7 +286,6 @@ class CanDoLightEntity(CanDoEntity, LightEntity):
             self._brightness = val
             return val
         if isinstance(bright_direct, str):
-            import re
             m = re.search(r"level\s*(\d+)", bright_direct, re.IGNORECASE)
             if m:
                 lvl = max(1, min(10, int(m.group(1))))

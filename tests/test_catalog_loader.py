@@ -20,8 +20,9 @@ from custom_components.can_do.catalog_loader import (
     DEFAULT_ENDIANNESS,
     check_match,
     decode_can_uint,
-    decode_network_state_value,
     get_d_index,
+    get_monitored_can_ids,
+    normalize_can_id,
     parse_hex_val,
     parse_state_byte_spec,
 )
@@ -177,12 +178,43 @@ class TestVehicleCommandFiltering(unittest.TestCase):
                 self.assertIn(norm, active_ids)
 
     def test_monitored_can_ids_filtered(self) -> None:
-        """get_monitored_can_ids should respect enabled categories."""
-        from custom_components.can_do.catalog_loader import get_monitored_can_ids
+        """get_monitored_can_ids should respect enabled categories and keep dependent auxiliary IDs."""
         all_ids = get_monitored_can_ids("ev6_gtline")
         doors_ids = get_monitored_can_ids("ev6_gtline", enabled_categories=["Doors, Access & Security"])
         self.assertGreater(len(all_ids), len(doors_ids))
         self.assertTrue(set(doors_ids).issubset(set(all_ids)))
+
+        climate_ids = get_monitored_can_ids("kia_ev6", enabled_categories=["Climate & Comfort"])
+        for aux_id in ("0x226", "0x227", "0x31c", "0x2ad", "0x2ae", "0x475"):
+            self.assertIn(aux_id, climate_ids)
+
+        cockpit_ids = get_monitored_can_ids("kia_ev6", enabled_categories=["Cockpit & Controls"])
+        for aux_id in ("0x455", "0x2db"):
+            self.assertIn(aux_id, cockpit_ids)
+
+        telematics_ids = get_monitored_can_ids("kia_ev6", enabled_categories=["Vehicle State & Telematics"])
+        for aux_id in ("0x31c", "0x227", "0x226"):
+            self.assertIn(aux_id, telematics_ids)
+
+        hv_ids = get_monitored_can_ids("kia_ev6", enabled_categories=["High Voltage & Charging"])
+        self.assertIn("0x1cf", hv_ids)
+
+    def test_normalize_can_id_and_top_level_fallback(self) -> None:
+        """normalize_can_id canonicalizes hex IDs and get_monitored_can_ids checks top-level state_can_id."""
+        from unittest.mock import patch
+        self.assertEqual(normalize_can_id("0x45"), "0x045")
+        self.assertEqual(normalize_can_id(" 0X1AC "), "0x1ac")
+        self.assertEqual(normalize_can_id("vbat"), "vbat")
+        self.assertEqual(normalize_can_id(None), "")
+
+        fake_cmd = {
+            "id": "custom_top_level_sensor",
+            "state_can_id": "0x45",
+            "network": {},
+            "ha_metadata": {"domain": "sensor"},
+        }
+        with patch("custom_components.can_do.catalog_loader.get_vehicle_commands", return_value=[fake_cmd]):
+            self.assertEqual(get_monitored_can_ids("kia_ev6"), ["0x045"])
 
 
 class TestMultiByteStateDecoding(unittest.TestCase):
@@ -224,9 +256,6 @@ class TestMultiByteStateDecoding(unittest.TestCase):
         payload_8 = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
         # D8 (idx 7) + 2 bytes exceeds 8-byte payload
         self.assertIsNone(decode_can_uint(payload_8, 7, 2))
-        self.assertIsNone(
-            decode_network_state_value(payload_8, {"state_byte": "D8", "byte_length": 2})
-        )
         # Short payload (DLC=1) for 2-byte read starting at D1
         self.assertIsNone(decode_can_uint([0x48], 0, 2))
         # Short payload (DLC=3) for 2-byte read starting at D3 (idx 2)

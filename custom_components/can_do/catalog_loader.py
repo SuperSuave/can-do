@@ -17,6 +17,19 @@ _CATALOG_DATA: dict[str, Any] | None = None
 _VEHICLE_CACHE: dict[str, dict[str, Any]] | None = None
 
 
+def normalize_can_id(cid: str | None) -> str:
+    """Normalize CAN ID to standard 3-digit lower-case hex format (e.g. '0x045', '0x1ac')."""
+    if not cid:
+        return ""
+    s = str(cid).strip().lower()
+    if s.startswith("0x"):
+        try:
+            return f"0x{int(s, 16):03x}"
+        except ValueError:
+            pass
+    return s
+
+
 def load_catalog() -> dict[str, Any]:
     """Load can_do_catalog.json from repository, fresh local cache, or GitHub."""
     global _CATALOG_DATA
@@ -208,17 +221,7 @@ def get_vehicle_commands(
     family = vehicle.get("family", "") if vehicle else ""
 
     cat_set = set(enabled_categories) if enabled_categories is not None else None
-    act_set = None
-    if active_can_ids is not None:
-        act_set = set()
-        for cid in active_can_ids:
-            s = str(cid).strip().lower()
-            if s.startswith("0x"):
-                try:
-                    s = f"0x{int(s, 16):03x}"
-                except ValueError:
-                    pass
-            act_set.add(s)
+    act_set = {normalize_can_id(cid) for cid in active_can_ids if cid} if active_can_ids is not None else None
 
     matched = []
     for c in catalog.get("commands", []):
@@ -237,13 +240,7 @@ def get_vehicle_commands(
                 acid = net.get("action_can_id") or resolved.get("action_can_id")
                 # If command has a state telemetry CAN ID and no action trigger, verify it is active
                 if scid:
-                    s = str(scid).strip().lower()
-                    if s.startswith("0x"):
-                        try:
-                            s = f"0x{int(s, 16):03x}"
-                        except ValueError:
-                            pass
-                    if s not in act_set and not acid:
+                    if normalize_can_id(scid) not in act_set and not acid:
                         continue
 
             matched.append(resolved)
@@ -257,17 +254,36 @@ def get_monitored_can_ids(
     """Get unique state CAN IDs (e.g. '0x448') used by the selected vehicle's commands."""
     commands = get_vehicle_commands(vehicle_id, enabled_categories=enabled_categories)
     ids: set[str] = set()
+    has_climate = False
+    has_light = False
+    has_outdoor_temp = False
+    has_12v = False
     for c in commands:
         net = c.get("network", {})
-        cid = net.get("state_can_id")
+        cid = net.get("state_can_id") or c.get("state_can_id")
         if cid:
-            s = str(cid).strip().lower()
-            if s.startswith("0x"):
-                try:
-                    s = f"0x{int(s, 16):03x}"
-                except ValueError:
-                    pass
-            ids.add(s)
+            ids.add(normalize_can_id(cid))
+
+        domain = c.get("ha_metadata", {}).get("domain")
+        cmd_id = str(c.get("id", "")).lower()
+        if domain == "climate":
+            has_climate = True
+        elif domain == "light":
+            has_light = True
+        if cmd_id in ("outdoor_temperature", "cond_ambient_temperature", "ambient_temperature") or "ambient_temp" in cmd_id:
+            has_outdoor_temp = True
+        if "12v" in cmd_id or "aux" in cmd_id:
+            has_12v = True
+
+    if has_climate:
+        ids.update(("0x226", "0x227", "0x31c", "0x2ad", "0x2ae", "0x475"))
+    if has_light:
+        ids.update(("0x455", "0x2db"))
+    if has_outdoor_temp:
+        ids.update(("0x31c", "0x227", "0x226"))
+    if has_12v:
+        ids.add("0x1cf")
+
     return sorted(ids)
 
 
@@ -384,19 +400,6 @@ def decode_can_uint(
             raw &= mask_val
 
     return raw
-
-
-def decode_network_state_value(
-    payload: list[int] | tuple[int, ...],
-    net: dict[str, Any] | None,
-    default_byte: str = "D1",
-) -> int | None:
-    """Decode unsigned 1- or 2-byte state value using catalog network metadata."""
-    start_idx, byte_length, endianness = parse_state_byte_spec(net, default_byte=default_byte)
-    if start_idx < 0:
-        return None
-    mask = net.get("state_mask") if isinstance(net, dict) else None
-    return decode_can_uint(payload, start_idx, byte_length, endianness, mask=mask)
 
 
 def check_match(data: list[int], match_dict: dict[str, Any], mask_spec: Any = None) -> bool:

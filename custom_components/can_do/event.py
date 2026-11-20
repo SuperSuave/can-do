@@ -6,11 +6,12 @@ from typing import Any
 from homeassistant.components.event import EventEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .can_utils import option_matches, resolve_effective_mask
 from .catalog_loader import check_match
-from .const import DOMAIN
+from .const import DOMAIN, VERSION
 from .coordinator import CanDoDataCoordinator
 from .entity import CanDoEntity
 
@@ -51,14 +52,12 @@ class CanDoBleButtonEventEntity(EventEntity):
 
     @property
     def available(self) -> bool:
-        """Return True so entity stays active."""
-        return True
+        """Return True when coordinator bridge is online."""
+        return self.coordinator.available
 
     @property
     def device_info(self):
         """Link to parent CAN Do Bridge device."""
-        from homeassistant.helpers.device_registry import DeviceInfo
-        from .const import VERSION
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.effective_device_id)},
             name=f"CAN Do Bridge ({self.coordinator.effective_device_id})",
@@ -85,7 +84,16 @@ class CanDoBleButtonEventEntity(EventEntity):
             return
         action = str(last.get("action", "press")).lower()
         combo = str(last.get("combo", ""))
-        event_type = "combo" if ("+" in combo or "combo" in action) else (action if action in self._attr_event_types else "press")
+        if action == "hold" or action.startswith("hold_"):
+            event_type = "hold"
+        elif action == "release":
+            event_type = "release"
+        elif "+" in combo or "combo" in action:
+            event_type = "combo"
+        elif action in self._attr_event_types:
+            event_type = action
+        else:
+            event_type = "press"
         self._trigger_event(
             event_type,
             {
@@ -93,6 +101,7 @@ class CanDoBleButtonEventEntity(EventEntity):
                 "combo": combo,
                 "address": last.get("address", ""),
                 "action": action,
+                "hold_seconds": last.get("hold_seconds", 0),
             },
         )
         self.async_write_ha_state()

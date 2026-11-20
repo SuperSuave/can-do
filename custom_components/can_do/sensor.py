@@ -1,6 +1,7 @@
 """Sensor platform for CAN Do integration with linear scaling & counter filtering."""
 
 import logging
+import math
 import re
 from typing import Any
 
@@ -31,6 +32,7 @@ except ImportError:  # pragma: no cover - minimal unit-test stubs
     UnitOfTime = None  # type: ignore[assignment]
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .can_utils import decode_outdoor_temperature_c, option_matches, resolve_effective_mask
@@ -42,7 +44,7 @@ from .catalog_loader import (
     parse_hex_val,
     parse_state_byte_spec,
 )
-from .const import DOMAIN
+from .const import DOMAIN, VERSION
 from .coordinator import CanDoDataCoordinator
 from .entity import CanDoEntity
 
@@ -157,14 +159,12 @@ class CanDoBleLastButtonSensor(SensorEntity):
 
     @property
     def available(self) -> bool:
-        """Return True so entity stays active."""
-        return True
+        """Return True when coordinator bridge is online."""
+        return self.coordinator.available
 
     @property
     def device_info(self):
         """Link to parent CAN Do Bridge device."""
-        from homeassistant.helpers.device_registry import DeviceInfo
-        from .const import VERSION
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.effective_device_id)},
             name=f"CAN Do Bridge ({self.coordinator.effective_device_id})",
@@ -192,6 +192,7 @@ class CanDoBleLastButtonSensor(SensorEntity):
             "combo": last.get("combo", ""),
             "action": last.get("action", ""),
             "address": last.get("address", ""),
+            "hold_seconds": last.get("hold_seconds", 0),
         }
 
     async def async_added_to_hass(self) -> None:
@@ -225,14 +226,12 @@ class CanDoBleBeaconRssiSensor(SensorEntity):
 
     @property
     def available(self) -> bool:
-        """Return True so entity stays active."""
-        return True
+        """Return True when coordinator bridge is online."""
+        return self.coordinator.available
 
     @property
     def device_info(self):
         """Link to parent CAN Do Bridge device."""
-        from homeassistant.helpers.device_registry import DeviceInfo
-        from .const import VERSION
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.effective_device_id)},
             name=f"CAN Do Bridge ({self.coordinator.effective_device_id})",
@@ -245,9 +244,13 @@ class CanDoBleBeaconRssiSensor(SensorEntity):
     def native_value(self) -> int | None:
         """Return RSSI integer value."""
         last = self.coordinator.last_ble_beacon
-        if not last or "rssi" not in last or last["rssi"] == 0:
+        if not last or not last.get("present", True) or "rssi" not in last:
             return None
-        return int(last["rssi"])
+        try:
+            rssi = int(last["rssi"])
+        except (ValueError, TypeError):
+            return None
+        return None if rssi == 0 else rssi
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -257,6 +260,10 @@ class CanDoBleBeaconRssiSensor(SensorEntity):
             "uuid": last.get("uuid", ""),
             "mac": last.get("mac", ""),
             "name": last.get("name", ""),
+            "major": last.get("major", 0),
+            "minor": last.get("minor", 0),
+            "event": last.get("event", ""),
+            "present": bool(last.get("present", False)),
         }
 
     async def async_added_to_hass(self) -> None:
@@ -290,14 +297,12 @@ class CanDoBleDeviceRssiSensor(SensorEntity):
 
     @property
     def available(self) -> bool:
-        """Return True so entity stays active."""
-        return True
+        """Return True when coordinator bridge is online."""
+        return self.coordinator.available
 
     @property
     def device_info(self):
         """Link to parent CAN Do Bridge device."""
-        from homeassistant.helpers.device_registry import DeviceInfo
-        from .const import VERSION
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.effective_device_id)},
             name=f"CAN Do Bridge ({self.coordinator.effective_device_id})",
@@ -310,9 +315,13 @@ class CanDoBleDeviceRssiSensor(SensorEntity):
     def native_value(self) -> int | None:
         """Return RSSI integer value."""
         last = self.coordinator.last_ble_device
-        if not last or "rssi" not in last or last["rssi"] == 0:
+        if not last or "rssi" not in last:
             return None
-        return int(last["rssi"])
+        try:
+            rssi = int(last["rssi"])
+        except (ValueError, TypeError):
+            return None
+        return None if rssi == 0 else rssi
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -373,6 +382,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
         is_discrete_text_sensor = meta_dc == "enum" or (
             has_text_options and not has_declared_numeric_meta
         )
+        self._is_discrete_text_sensor: bool = is_discrete_text_sensor
 
         if meta_dc == "enum":
             self._attr_device_class = _DEVICE_CLASS_MAP["enum"]
@@ -507,7 +517,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                 return round(temp_c, 1)
             return self._last_native_val
 
-        if isinstance(direct_entity_val, (int, float)) and not isinstance(direct_entity_val, bool):
+        if isinstance(direct_entity_val, (int, float)) and not isinstance(direct_entity_val, bool) and math.isfinite(direct_entity_val):
             return round(float(direct_entity_val), 2)
 
         if "bms" in cid:
@@ -551,34 +561,47 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
             return self._last_native_val
 
         net = self.command.get("network", {})
+        is_numeric_sensor = (
+            getattr(self, "_attr_state_class", None) is not None
+            or getattr(self, "_attr_native_unit_of_measurement", None) is not None
+        )
 
         # 0. Direct numeric float or int payload (UDS telemetry or hardware ADC)
-        if isinstance(payload, (int, float)):
+        if isinstance(payload, (int, float)) and not isinstance(payload, bool) and math.isfinite(payload):
             return round(float(payload), 2)
 
         # 0A. Direct decoded string telemetry from WiCAN (e.g. "13.4 V", "50%", "88735", "0 km/h")
         if isinstance(payload, str):
             p_lower = payload.strip().lower()
-            if cid == "cond_charging":
-                if p_lower in ("charging", "active"):
-                    return "Charging In Progress"
-                if p_lower in ("inactive", "not charging", "disconnected"):
-                    return "Not Charging / Disconnected"
+            if not is_numeric_sensor:
+                if cid == "cond_charging":
+                    if p_lower in ("charging", "active"):
+                        return "Charging In Progress"
+                    if p_lower in ("inactive", "not charging", "disconnected"):
+                        return "Not Charging / Disconnected"
 
-            for opt in self.command.get("options", []):
-                opt_label = opt.get("label", "")
-                ol_lower = opt_label.lower()
-                if ol_lower == p_lower or (p_lower in ol_lower and len(p_lower) >= 4):
-                    return opt_label
-            import re
-            m = re.search(r"[-+]?\d*\.?\d+", payload)
-            if m:
-                try:
-                    num_val = float(m.group(0))
-                    return int(num_val) if num_val.is_integer() else round(num_val, 2)
-                except ValueError:
-                    pass
+                for opt in self.command.get("options", []):
+                    opt_label = opt.get("label", "")
+                    ol_lower = opt_label.lower()
+                    if ol_lower == p_lower or (p_lower in ol_lower and len(p_lower) >= 4):
+                        return opt_label
+
+            if not self._is_discrete_text_sensor:
+                m = re.search(r"[-+]?\d*\.?\d+", payload)
+                if m:
+                    try:
+                        num_val = float(m.group(0))
+                        if math.isfinite(num_val):
+                            return int(num_val) if num_val.is_integer() else round(num_val, 2)
+                    except ValueError:
+                        pass
+
+            if is_numeric_sensor:
+                return self._last_native_val
             return payload
+
+        if not isinstance(payload, list):
+            return self._last_native_val
 
         # 1. Specialized Numeric Decoders
         # 1A. V2L Minimum Discharge Limit (0x151 Byte D7: factor 0.5 %)
@@ -591,12 +614,12 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                             return round(raw * 0.5)
 
         # 1B. Cluster Vehicle Road Speed (0x1AC Byte D1 = kph)
-        if "cluster_vehicle_speed" in cid or (self.state_can_id.lower() == "0x1ac" and "speed" in cid):
+        if "cluster_vehicle_speed" in cid or (self.state_can_id and self.state_can_id.lower() == "0x1ac" and "speed" in cid):
             if len(payload) >= 1:
                 return int(payload[0])
 
         # 1C. Climate Target Temperatures (0x380 Byte D2=Driver, D3=Passenger)
-        if "temp" in cid and self.state_can_id.lower() == "0x380":
+        if "temp" in cid and self.state_can_id and self.state_can_id.lower() == "0x380":
             state_byte = net.get("state_byte", "D2")
             idx = get_d_index(state_byte)
             if 0 <= idx < len(payload):
@@ -608,7 +631,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                     return round(17.0 + (raw - 0x06) * 0.5, 1)
 
         # 1E. HV Battery Module Temperatures (0x152: Byte D1=Min, D2=Max signed deg C)
-        if "battery_temp" in cid or cid == "hv_battery_temperatures" or (self.state_can_id.lower() == "0x152" and "temp" in cid):
+        if "battery_temp" in cid or cid == "hv_battery_temperatures" or (self.state_can_id and self.state_can_id.lower() == "0x152" and "temp" in cid):
             if len(payload) >= 1:
                 raw = payload[0]
                 temp_c = float(raw if raw < 128 else raw - 256)
@@ -630,13 +653,13 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                 return temp_c
 
         # 1F. High Voltage Battery SOC (0x2FC: Byte D8 = factor 0.5 %, [B7])
-        if "soc" in cid or cid == "cond_hv_battery_soc" or (self.state_can_id.lower() == "0x2fc" and "soc" in cid):
+        if "soc" in cid or cid == "cond_hv_battery_soc" or (self.state_can_id and self.state_can_id.lower() == "0x2fc" and "soc" in cid):
             if len(payload) >= 8:
                 raw = payload[7]
                 return round(raw * 0.5, 1)
 
         # 1G. Vehicle Odometer (0x227: 24-bit Little Endian across D2-D4 in 0.1 km units)
-        if "odometer" in cid or cid == "vehicle_odometer" or self.state_can_id.lower() == "0x227":
+        if "odometer" in cid or cid == "vehicle_odometer" or (self.state_can_id and self.state_can_id.lower() == "0x227"):
             # In E-GMP 0x227: D1 is counter/sub-status (0x9F).
             # Cumulative odometer is 24-bit Little Endian across D2-D4 (payload[1..3]) in tenths of a kilometer (0.1 km).
             # Example: raw 871417 = 87,141.7 km = 54,147.3 miles.
@@ -766,15 +789,16 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                 return self._last_native_val
 
         # 2. Discrete Options Match
-        opt_label = self._match_discrete_options(payload)
-        if opt_label is not None:
-            return opt_label
+        if not is_numeric_sensor:
+            opt_label = self._match_discrete_options(payload)
+            if opt_label is not None:
+                return opt_label
 
-        # 3. Command-Level Binary Match
-        if "match" in self.command:
-            if check_match(payload, self.command["match"], resolve_effective_mask(self.command)):
-                return "Active"
-            return "Inactive"
+            # 3. Command-Level Binary Match
+            if "match" in self.command:
+                if check_match(payload, self.command["match"], resolve_effective_mask(self.command)):
+                    return "Active"
+                return "Inactive"
 
         # 4. Fallback: Return last known value or None (NEVER raw hex string)
         return self._last_native_val

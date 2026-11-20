@@ -6,8 +6,10 @@ from typing import Any
 from homeassistant.components.notify import NotifyEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .catalog_loader import get_vehicle_definition
 from .const import DOMAIN, VERSION
 from .coordinator import CanDoDataCoordinator
 from .entity import CanDoEntity
@@ -28,27 +30,11 @@ async def async_setup_entry(
         if cmd.get("ha_metadata", {}).get("domain") == "notify":
             entities.append(CanDoNotifyEntity(coordinator, cmd))
 
-    # 2. Always ensure the master cluster notification entity (notify.can_do) exists
+    # 2. Always ensure the master cluster notification entity exists
     if not any(isinstance(e, CanDoClusterMasterNotifyEntity) for e in entities):
         entities.append(CanDoClusterMasterNotifyEntity(coordinator))
 
     async_add_entities(entities)
-
-    # 3. Register direct notify.can_do and can_do.notify services for convenient automation calls
-    async def async_send_cluster_notification(call: Any) -> None:
-        """Handle notify.can_do service call."""
-        message = call.data.get("message", "")
-        title = call.data.get("title")
-        data = call.data.get("data") or {}
-        level = data.get("level", call.data.get("level", "info"))
-        hold_ms = data.get("hold_ms", call.data.get("hold_ms"))
-
-        full_msg = f"{title}: {message}" if title else message
-        _LOGGER.info("Cluster notify service called: '%s' (level=%s)", full_msg, level)
-        await coordinator.async_send_notification(full_msg, level=level, hold_ms=hold_ms)
-
-    hass.services.async_register("notify", "can_do", async_send_cluster_notification)
-    hass.services.async_register(DOMAIN, "notify", async_send_cluster_notification)
 
 
 class CanDoNotifyEntity(CanDoEntity, NotifyEntity):
@@ -86,15 +72,10 @@ class CanDoClusterMasterNotifyEntity(NotifyEntity):
         self.coordinator = coordinator
         self._attr_name = "Cluster Notification"
         self._attr_unique_id = f"{coordinator.device_id}_cluster_notify"
-        self.entity_id = "notify.can_do"
 
     @property
     def device_info(self) -> Any:
         """Return device information."""
-        from homeassistant.helpers.device_registry import DeviceInfo
-
-        from .catalog_loader import get_vehicle_definition
-
         parent_id = self.coordinator.effective_device_id
         v_def = get_vehicle_definition(self.coordinator.vehicle_id)
         if v_def:

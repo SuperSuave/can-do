@@ -11,11 +11,12 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .can_utils import option_matches, resolve_effective_mask
 from .catalog_loader import check_match
-from .const import DOMAIN
+from .const import DOMAIN, VERSION
 from .coordinator import CanDoDataCoordinator
 from .entity import CanDoEntity
 
@@ -78,14 +79,12 @@ class CanDoBleBeaconPresenceSensor(BinarySensorEntity):
 
     @property
     def available(self) -> bool:
-        """Return True so entity stays active."""
-        return True
+        """Return True when coordinator bridge is online."""
+        return self.coordinator.available
 
     @property
     def device_info(self):
         """Link to parent CAN Do Bridge device."""
-        from homeassistant.helpers.device_registry import DeviceInfo
-        from .const import VERSION
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.effective_device_id)},
             name=f"CAN Do Bridge ({self.coordinator.effective_device_id})",
@@ -96,13 +95,8 @@ class CanDoBleBeaconPresenceSensor(BinarySensorEntity):
 
     @property
     def is_on(self) -> bool | None:
-        """Return True if beacon is currently present."""
-        last = self.coordinator.last_ble_beacon
-        if not last:
-            return False
-        if "present" in last:
-            return bool(last["present"])
-        return last.get("event") in ("enter", "proximity", "present")
+        """Return True if any tracked beacon is currently present."""
+        return any(b.get("present") for b in self.coordinator.ble_beacons.values())
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -147,14 +141,12 @@ class CanDoBleDeviceConnectedSensor(BinarySensorEntity):
 
     @property
     def available(self) -> bool:
-        """Return True so entity stays active."""
-        return True
+        """Return True when coordinator bridge is online."""
+        return self.coordinator.available
 
     @property
     def device_info(self):
         """Link to parent CAN Do Bridge device."""
-        from homeassistant.helpers.device_registry import DeviceInfo
-        from .const import VERSION
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.effective_device_id)},
             name=f"CAN Do Bridge ({self.coordinator.effective_device_id})",
@@ -165,13 +157,11 @@ class CanDoBleDeviceConnectedSensor(BinarySensorEntity):
 
     @property
     def is_on(self) -> bool | None:
-        """Return True if device is connected."""
-        last = self.coordinator.last_ble_device
-        if not last:
-            return False
-        if "connected" in last:
-            return bool(last["connected"])
-        return last.get("event") == "connected"
+        """Return True if any tracked device is connected."""
+        return any(
+            bool(d["connected"]) if "connected" in d else d.get("event") == "connected"
+            for d in self.coordinator.ble_devices.values()
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

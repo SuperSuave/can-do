@@ -1,15 +1,17 @@
 """Coordinator for CAN Do integration communicating purely over MQTT."""
 
+import asyncio
 import json
 import logging
 import math
+import re
 from collections.abc import Callable
 from typing import Any
 
 from homeassistant.components import mqtt
 from homeassistant.core import HomeAssistant, callback
 
-from .catalog_loader import get_monitored_can_ids, get_vehicle_commands
+from .catalog_loader import get_monitored_can_ids, get_vehicle_commands, normalize_can_id
 from .const import (
     CONF_BASE_TOPIC,
     CONF_DEVICE_ID,
@@ -24,32 +26,22 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 _BMS_ALIASES: dict[str, list[str]] = {
-    "bms_display_soc": ["cond_hv_battery_soc"],
     "bms_hv_v": ["bms_hv_voltage"],
     "bms_hv_voltage": ["bms_hv_v"],
     "bms_hv_a": ["bms_hv_current"],
     "bms_hv_current": ["bms_hv_a"],
     "bms_hv_kw": ["bms_hv_power_kw"],
     "bms_hv_power_kw": ["bms_hv_kw"],
-    "bms_cell_delta_mv": ["bms_cell_delta_mv"],
 }
 
 _CRC_CAN_IDS: set[str] = {
     "0x0a2", "0x130", "0x152", "0x1ac", "0x226", "0x2ad", "0x30e", "0x380", "0x31b", "0x39b", "0x476", "0x448", "0x4ce"
 }
 
-
-def normalize_can_id(cid: str | None) -> str:
-    """Normalize CAN ID to standard 3-digit lower-case hex format (e.g. '0x045', '0x1ac')."""
-    if not cid:
-        return ""
-    s = str(cid).strip().lower()
-    if s.startswith("0x"):
-        try:
-            return f"0x{int(s, 16):03x}"
-        except ValueError:
-            pass
-    return s
+_NUMERIC_SCALAR_RE = re.compile(
+    r"^\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*(?:%|km/h|kph|mph|°c|°f|kw|w|mv|v|a|km|mi|bar|psi|kpa|min)?\s*$",
+    re.IGNORECASE,
+)
 
 
 class CanDoDataCoordinator:
@@ -60,15 +52,19 @@ class CanDoDataCoordinator:
         self.hass = hass
         self.device_id: str = entry_data.get(CONF_DEVICE_ID, "auto")
         self.vehicle_id: str = entry_data.get(CONF_VEHICLE_ID, DEFAULT_VEHICLE_ID)
-        self.base_topic: str = entry_data.get(CONF_BASE_TOPIC, DEFAULT_BASE_TOPIC)
+        self.base_topic: str = (
+            str(entry_data.get(CONF_BASE_TOPIC) or DEFAULT_BASE_TOPIC).strip(" /")
+            or DEFAULT_BASE_TOPIC
+        )
         self.active_device_id: str | None = (
-            None if self.device_id in ("auto", "*", "", "can-do") else self.device_id
+            None if self.device_id in ("auto", "*", "") else self.device_id
         )
 
         self.available: bool = True
-        self.can_states: dict[str, list[int]] = {}
+        self.can_states: dict[str, list[int] | float | str] = {}
         self._listeners: dict[str, list[Callable[[], None]]] = {}
         self._unsub_list: list[Callable[[], None]] = []
+        self._pub_ids_task: asyncio.Task[Any] | Any | None = None
 
         # BLE remote buttons, combos, and beacon presence state
         self.ble_beacons: dict[str, dict[str, Any]] = {}
@@ -92,35 +88,48 @@ class CanDoDataCoordinator:
         """Return the active or configured device ID."""
         return self.active_device_id or (self.device_id if self.device_id not in ("auto", "*", "") else "can-do")
 
+    def _sub_topic(self, suffix: str) -> str:
+        """Return device-scoped subscription topic when bound, else '+' wildcard."""
+        dev = self.active_device_id or "+"
+        return f"{self.base_topic}/{dev}/{suffix}"
+
+    def _split_device_topic(self, topic: str) -> tuple[str, str] | None:
+        """Strip base_topic prefix and split into (device_id, suffix)."""
+        if not isinstance(topic, str):
+            return None
+        prefix = f"{self.base_topic}/"
+        if not topic.startswith(prefix):
+            return None
+        rel = topic[len(prefix):]
+        if "/" not in rel:
+            return None
+        dev_id, suffix = rel.split("/", 1)
+        return (dev_id, suffix) if dev_id and suffix else None
+
     @property
     def status_topic(self) -> str:
-        """Return MQTT LWT status topic wildcard."""
-        return f"{self.base_topic}/+/status"
+        """Return MQTT LWT status topic."""
+        return self._sub_topic("status")
 
     @property
     def state_wildcard_topic(self) -> str:
-        """Return wildcard topic for CAN state reception."""
-        return f"{self.base_topic}/+/state/+"
-
-    @property
-    def direct_state_topic(self) -> str:
-        """Return direct state topic for entity state reception."""
-        return f"{self.base_topic}/state/+"
+        """Return topic for CAN state reception."""
+        return self._sub_topic("state/+")
 
     @property
     def ble_button_topic(self) -> str:
-        """Return MQTT BLE button event wildcard."""
-        return f"{self.base_topic}/+/ble_button"
+        """Return MQTT BLE button event topic."""
+        return self._sub_topic("ble_button")
 
     @property
     def ble_beacon_topic(self) -> str:
-        """Return MQTT BLE beacon proximity event wildcard."""
-        return f"{self.base_topic}/+/ble_beacon"
+        """Return MQTT BLE beacon proximity event topic."""
+        return self._sub_topic("ble_beacon")
 
     @property
     def ble_device_topic(self) -> str:
-        """Return MQTT BLE device connection event wildcard."""
-        return f"{self.base_topic}/+/ble_device"
+        """Return MQTT BLE device connection event topic."""
+        return self._sub_topic("ble_device")
 
     def _device_topic(self, suffix: str) -> str:
         """Return device-scoped MQTT topic when bound, else base topic."""
@@ -145,8 +154,8 @@ class CanDoDataCoordinator:
 
     @property
     def active_ids_topic(self) -> str:
-        """Return MQTT active CAN IDs topic wildcard."""
-        return f"{self.base_topic}/+/active_ids"
+        """Return MQTT active CAN IDs topic."""
+        return self._sub_topic("active_ids")
 
     @property
     def climate_topic(self) -> str:
@@ -166,79 +175,58 @@ class CanDoDataCoordinator:
             self.vehicle_id,
         )
 
-        # 1. Subscribe to LWT status topic wildcard (e.g. cando/+/status)
-        unsub_status = await mqtt.async_subscribe(
-            self.hass, self.status_topic, self._handle_status_message, qos=1
+        subscriptions = (
+            (self.status_topic, self._handle_status_message),
+            (self.state_wildcard_topic, self._handle_can_state_message),
+            (self.ble_button_topic, self._handle_ble_button_message),
+            (self.ble_beacon_topic, self._handle_ble_beacon_message),
+            (self.ble_device_topic, self._handle_ble_device_message),
+            (self.active_ids_topic, self._handle_active_ids_message),
         )
-        self._unsub_list.append(unsub_status)
+        try:
+            for topic, handler in subscriptions:
+                unsub = await mqtt.async_subscribe(self.hass, topic, handler, qos=1)
+                self._unsub_list.append(unsub)
 
-        # 2. Subscribe to raw CAN state updates and entity state updates
-        unsub_states = await mqtt.async_subscribe(
-            self.hass, self.state_wildcard_topic, self._handle_can_state_message, qos=1
-        )
-        self._unsub_list.append(unsub_states)
-        unsub_direct = await mqtt.async_subscribe(
-            self.hass, self.direct_state_topic, self._handle_can_state_message, qos=1
-        )
-        self._unsub_list.append(unsub_direct)
-
-        # 3. Subscribe to BLE buttons, combo chords, beacons, and presence events
-        unsub_btn = await mqtt.async_subscribe(
-            self.hass, self.ble_button_topic, self._handle_ble_button_message, qos=1
-        )
-        self._unsub_list.append(unsub_btn)
-        unsub_btn_dir = await mqtt.async_subscribe(
-            self.hass, f"{self.base_topic}/ble_button", self._handle_ble_button_message, qos=1
-        )
-        self._unsub_list.append(unsub_btn_dir)
-
-        unsub_bcn = await mqtt.async_subscribe(
-            self.hass, self.ble_beacon_topic, self._handle_ble_beacon_message, qos=1
-        )
-        self._unsub_list.append(unsub_bcn)
-        unsub_bcn_dir = await mqtt.async_subscribe(
-            self.hass, f"{self.base_topic}/ble_beacon", self._handle_ble_beacon_message, qos=1
-        )
-        self._unsub_list.append(unsub_bcn_dir)
-
-        unsub_dev = await mqtt.async_subscribe(
-            self.hass, self.ble_device_topic, self._handle_ble_device_message, qos=1
-        )
-        self._unsub_list.append(unsub_dev)
-        unsub_dev_dir = await mqtt.async_subscribe(
-            self.hass, f"{self.base_topic}/ble_device", self._handle_ble_device_message, qos=1
-        )
-        self._unsub_list.append(unsub_dev_dir)
-
-        # 3b. Subscribe to active CAN IDs manifest from ESP32 edge device
-        unsub_act = await mqtt.async_subscribe(
-            self.hass, self.active_ids_topic, self._handle_active_ids_message, qos=1
-        )
-        self._unsub_list.append(unsub_act)
-        unsub_act_dir = await mqtt.async_subscribe(
-            self.hass, f"{self.base_topic}/active_ids", self._handle_active_ids_message, qos=1
-        )
-        self._unsub_list.append(unsub_act_dir)
-
-        # 4. Inform ESP32 edge device of the state CAN IDs we want it to publish
-        if self.monitored_can_ids:
-            await self.async_publish_monitored_ids()
+            # Inform ESP32 edge device of the state CAN IDs once device ID is known
+            if self.active_device_id and self.monitored_can_ids:
+                await self.async_publish_monitored_ids()
+        except Exception:
+            await self.async_stop()
+            raise
 
     async def async_stop(self) -> None:
-        """Unsubscribe all MQTT handlers."""
+        """Cancel pending background tasks and unsubscribe all MQTT handlers."""
+        if self._pub_ids_task is not None:
+            if not (hasattr(self._pub_ids_task, "done") and self._pub_ids_task.done() is True):
+                self._pub_ids_task.cancel()
+            self._pub_ids_task = None
         for unsub in self._unsub_list:
             unsub()
         self._unsub_list.clear()
 
-    def _bind_device_id(self, dev_id: str) -> bool:
+    def _schedule_publish_monitored_ids(self) -> None:
+        """Schedule background publish of monitored CAN IDs and track the task."""
+        if not self.monitored_can_ids or not self.active_device_id:
+            return
+        if self._pub_ids_task is not None and not (
+            hasattr(self._pub_ids_task, "done") and self._pub_ids_task.done() is True
+        ):
+            self._pub_ids_task.cancel()
+        self._pub_ids_task = self.hass.async_create_task(
+            self.async_publish_monitored_ids()
+        )
+
+    def _bind_device_id(self, dev_id: str | None) -> bool:
         """Bind coordinator to the first seen device ID; ignore messages from other devices."""
         if not dev_id or dev_id == "+":
-            return True
+            return False
         if self.active_device_id and dev_id != self.active_device_id:
             return False
         if not self.active_device_id:
             self.active_device_id = dev_id
             _LOGGER.info("CAN Do coordinator bound to active device ID '%s'", dev_id)
+            self._schedule_publish_monitored_ids()
         return True
 
     async def async_publish_monitored_ids(self) -> None:
@@ -255,27 +243,32 @@ class CanDoDataCoordinator:
     @callback
     def _handle_status_message(self, msg: mqtt.ReceiveMessage) -> None:
         """Handle LWT online/offline transition."""
-        parts = msg.topic.split("/")
-        if len(parts) >= 3 and not self._bind_device_id(parts[1]):
+        parsed = self._split_device_topic(msg.topic)
+        if not parsed or parsed[1] != "status":
             return
 
+        was_bound = self.active_device_id is not None
+        if not self._bind_device_id(parsed[0]):
+            return
+        just_bound = not was_bound and self.active_device_id is not None
+
         status = msg.payload.strip().lower()
+        was_avail = self.available
         new_avail = status == "online"
-        if new_avail != self.available:
+        if new_avail != was_avail:
             self.available = new_avail
             _LOGGER.info("CAN Do device '%s' status changed: %s", self.effective_device_id, status)
             self._notify_all_listeners()
 
-        if new_avail and self.monitored_can_ids:
-            self.hass.async_create_task(self.async_publish_monitored_ids())
+        if new_avail and not was_avail and not just_bound and self.monitored_can_ids:
+            self._schedule_publish_monitored_ids()
 
     @callback
     def _handle_active_ids_message(self, msg: mqtt.ReceiveMessage) -> None:
         """Handle incoming active bus manifest from ESP32."""
-        parts = msg.topic.split("/")
-        if len(parts) >= 3 and parts[-1] == "active_ids":
-            if not self._bind_device_id(parts[-2]):
-                return
+        parsed = self._split_device_topic(msg.topic)
+        if not parsed or parsed[1] != "active_ids" or not self._bind_device_id(parsed[0]):
+            return
 
         payload = msg.payload.strip()
         if not payload:
@@ -286,13 +279,13 @@ class CanDoDataCoordinator:
                 new_active = {normalize_can_id(cid) for cid in raw_ids if cid}
                 if new_active != self.active_can_ids:
                     self.active_can_ids = new_active
-                    _LOGGER.info(
+                    _LOGGER.debug(
                         "Updated active CAN IDs from %s: %d IDs detected",
                         msg.topic,
                         len(self.active_can_ids),
                     )
                     self._notify_all_listeners()
-        except Exception as ex:
+        except (json.JSONDecodeError, TypeError, ValueError) as ex:
             _LOGGER.debug("Failed parsing active_ids payload from %s: %s", msg.topic, ex)
 
     def is_can_id_active(self, can_id: str | None) -> bool:
@@ -305,22 +298,20 @@ class CanDoDataCoordinator:
     @callback
     def _handle_can_state_message(self, msg: mqtt.ReceiveMessage) -> None:
         """Handle incoming raw CAN state frame."""
-        # Topic format: cando/{device_id}/state/0x4CE
-        parts = msg.topic.split("/")
-        if len(parts) >= 4 and parts[2] == "state":
-            dev_id = parts[1]
-            can_id = parts[3].lower()
-        elif len(parts) >= 3 and parts[1] == "state":
-            dev_id = "+"
-            can_id = parts[2].lower()
-        else:
+        # Topic format: {base_topic}/{device_id}/state/0x4CE
+        parsed = self._split_device_topic(msg.topic)
+        if not parsed or not parsed[1].startswith("state/"):
             return
 
-        if not self._bind_device_id(dev_id):
+        dev_id = parsed[0]
+        can_id = normalize_can_id(parsed[1][len("state/"):])
+        if not can_id or not self._bind_device_id(dev_id):
             return
 
-        # Receiving live CAN states indicates the edge device is online
-        if not self.available:
+        # Receiving live (non-retained) CAN states indicates the edge device is online
+        raw_retain = getattr(msg, "retain", False)
+        is_retained = raw_retain is True or (isinstance(raw_retain, int) and bool(raw_retain))
+        if not self.available and not is_retained:
             self.available = True
             self._notify_all_listeners()
 
@@ -330,10 +321,9 @@ class CanDoDataCoordinator:
 
         # Handle direct decimal/numeric telemetry on non-0x entity topics (never overwrite raw 0x... CAN ID byte arrays!)
         if not can_id.startswith("0x"):
-            clean_num = hex_payload.split()[0]
-            num_check = clean_num[1:] if clean_num.startswith(("+", "-")) else clean_num
-            is_numeric_scalar = bool(num_check) and num_check.replace(".", "", 1).isdigit()
-            if can_id in ("vbat", "cond_aux_12v_battery") or can_id.startswith("bms_") or is_numeric_scalar:
+            num_match = _NUMERIC_SCALAR_RE.fullmatch(hex_payload)
+            if num_match:
+                clean_num = num_match.group(1)
                 try:
                     val = float(clean_num)
                     if math.isfinite(val):
@@ -352,10 +342,14 @@ class CanDoDataCoordinator:
                             self._notify_can_listeners(can_id)
                             if can_id in ("vbat", "cond_aux_12v_battery"):
                                 for k in ("vbat", "cond_aux_12v_battery"):
+                                    if k == can_id:
+                                        continue
                                     self.can_states[k] = val
                                     self._notify_can_listeners(k)
                             elif can_id.startswith("bms_"):
                                 for alias in _BMS_ALIASES.get(can_id, []):
+                                    if alias == can_id:
+                                        continue
                                     self.can_states[alias] = val
                                     self._notify_can_listeners(alias)
                         return
@@ -377,9 +371,6 @@ class CanDoDataCoordinator:
                 ]
                 prev_vals = self.can_states.get(can_id)
                 self.can_states[can_id] = byte_vals
-                norm_id = normalize_can_id(can_id)
-                if norm_id != can_id:
-                    self.can_states[norm_id] = byte_vals
 
                 # Skip duplicate identical frames
                 if isinstance(prev_vals, list) and prev_vals == byte_vals:
@@ -391,46 +382,55 @@ class CanDoDataCoordinator:
                         return
 
                 self._notify_can_listeners(can_id)
-                if norm_id != can_id:
-                    self._notify_can_listeners(norm_id)
             except ValueError:
                 self.can_states[can_id] = hex_payload
-                norm_id = normalize_can_id(can_id)
-                if norm_id != can_id:
-                    self.can_states[norm_id] = hex_payload
                 self._notify_can_listeners(can_id)
-                if norm_id != can_id:
-                    self._notify_can_listeners(norm_id)
         else:
             # String or label state (e.g. "Locked / Lock", "Unlocked / Unlock", "All Doors Closed")
             prev_val = self.can_states.get(can_id)
             self.can_states[can_id] = hex_payload
-            norm_id = normalize_can_id(can_id)
-            if norm_id != can_id:
-                self.can_states[norm_id] = hex_payload
             if prev_val != hex_payload:
                 self._notify_can_listeners(can_id)
-                if norm_id != can_id:
-                    self._notify_can_listeners(norm_id)
 
     def register_listener(self, can_id: str, callback_fn: Callable[[], None]) -> Callable[[], None]:
         """Register entity callback for a specific state CAN ID."""
-        can_id_raw = can_id.lower()
-        can_id_norm = normalize_can_id(can_id_raw)
-        target_keys = {can_id_raw, can_id_norm}
+        norm_id = normalize_can_id(can_id)
+        if not norm_id:
+            return lambda: None
 
-        for k in target_keys:
-            if k not in self._listeners:
-                self._listeners[k] = []
-            if callback_fn not in self._listeners[k]:
-                self._listeners[k].append(callback_fn)
+        if norm_id not in self._listeners:
+            self._listeners[norm_id] = []
+        if callback_fn not in self._listeners[norm_id]:
+            self._listeners[norm_id].append(callback_fn)
 
         def remove_listener() -> None:
-            for k in target_keys:
-                if k in self._listeners and callback_fn in self._listeners[k]:
-                    self._listeners[k].remove(callback_fn)
+            if norm_id in self._listeners and callback_fn in self._listeners[norm_id]:
+                self._listeners[norm_id].remove(callback_fn)
 
         return remove_listener
+
+    def _resolve_and_bind_ble_device(
+        self, msg: mqtt.ReceiveMessage, expected_suffix: str, payload: dict[str, Any]
+    ) -> bool:
+        """Extract device_id from BLE topic/payload and bind or filter against active_device_id."""
+        topic = getattr(msg, "topic", None)
+        topic_dev_id: str | None = None
+        if isinstance(topic, str):
+            parsed = self._split_device_topic(topic)
+            if parsed is not None:
+                if parsed[1] != expected_suffix:
+                    return False
+                topic_dev_id = parsed[0]
+            elif topic not in (f"{self.base_topic}/{expected_suffix}", expected_suffix):
+                return False
+
+        raw_payload_dev_id = payload.get("device_id") if isinstance(payload, dict) else None
+        payload_dev_id = str(raw_payload_dev_id).strip() if raw_payload_dev_id else None
+        if topic_dev_id and payload_dev_id and topic_dev_id != payload_dev_id:
+            return False
+
+        dev_id = topic_dev_id or payload_dev_id or ""
+        return self._bind_device_id(dev_id)
 
     @callback
     def _handle_ble_button_message(self, msg: mqtt.ReceiveMessage) -> None:
@@ -439,8 +439,29 @@ class CanDoDataCoordinator:
             payload = json.loads(msg.payload)
             if not isinstance(payload, dict):
                 return
-        except Exception:
-            payload = {"button": msg.payload.strip(), "action": "press"}
+        except (json.JSONDecodeError, TypeError, ValueError) as ex:
+            raw = msg.payload.strip() if isinstance(msg.payload, str) else ""
+            if not raw or raw.startswith(("{", "[")):
+                _LOGGER.debug("Failed parsing ble_button payload from %s: %s", getattr(msg, "topic", ""), ex)
+                return
+            payload = {"button": raw, "action": "press"}
+
+        if not self._resolve_and_bind_ble_device(msg, "ble_button", payload):
+            return
+
+        action_str = str(payload.get("action", "press"))
+        raw_hold = payload.get("hold_seconds")
+        hold_seconds = 0
+        if raw_hold is not None:
+            try:
+                hold_seconds = max(0, int(raw_hold))
+            except (TypeError, ValueError):
+                hold_seconds = 0
+        if not hold_seconds:
+            m = re.match(r"^hold_(\d+)s$", action_str, re.IGNORECASE)
+            if m:
+                hold_seconds = int(m.group(1))
+        payload["hold_seconds"] = hold_seconds
 
         self.last_ble_button = payload
         _LOGGER.debug("BLE button event received: %s", payload)
@@ -451,6 +472,7 @@ class CanDoDataCoordinator:
             "button": payload.get("button", ""),
             "action": payload.get("action", "press"),
             "combo": payload.get("combo", ""),
+            "hold_seconds": hold_seconds,
         }
         self.hass.bus.async_fire("cando_ble_button_event", event_data)
 
@@ -467,24 +489,28 @@ class CanDoDataCoordinator:
             payload = json.loads(msg.payload)
             if not isinstance(payload, dict):
                 return
-        except Exception:
+        except (json.JSONDecodeError, TypeError, ValueError) as ex:
+            _LOGGER.debug("Failed parsing ble_beacon payload from %s: %s", getattr(msg, "topic", ""), ex)
+            return
+
+        if not self._resolve_and_bind_ble_device(msg, "ble_beacon", payload):
             return
 
         key = payload.get("uuid") or payload.get("mac") or payload.get("name")
         if not key:
             return
 
-        self.ble_beacons[key] = payload
-        if payload.get("mac") and payload.get("mac") != key:
-            self.ble_beacons[payload["mac"]] = payload
+        evt = payload.get("event", "proximity")
+        is_pres = payload.get("present") if "present" in payload else payload.get("is_present")
+        if is_pres is None:
+            is_pres = evt in ("enter", "proximity", "present")
+        is_pres = bool(is_pres)
+        payload["present"] = is_pres
 
+        self.ble_beacons[key] = payload
         self.last_ble_beacon = payload
         _LOGGER.debug("BLE beacon event received: %s", payload)
 
-        evt = payload.get("event", "proximity")
-        is_pres = payload.get("present")
-        if is_pres is None:
-            is_pres = evt in ("enter", "proximity", "present")
         event_data = {
             "device_id": self.effective_device_id,
             "uuid": payload.get("uuid", ""),
@@ -511,12 +537,19 @@ class CanDoDataCoordinator:
             payload = json.loads(msg.payload)
             if not isinstance(payload, dict):
                 return
-        except Exception:
+        except (json.JSONDecodeError, TypeError, ValueError) as ex:
+            _LOGGER.debug("Failed parsing ble_device payload from %s: %s", getattr(msg, "topic", ""), ex)
+            return
+
+        if not self._resolve_and_bind_ble_device(msg, "ble_device", payload):
             return
 
         address = payload.get("address")
         if not address:
             return
+
+        is_conn = payload.get("connected") if "connected" in payload else (payload.get("event", "connected") == "connected")
+        payload["connected"] = bool(is_conn)
 
         self.ble_devices[address] = payload
         self.last_ble_device = payload
@@ -528,7 +561,7 @@ class CanDoDataCoordinator:
             "name": payload.get("name", ""),
             "event": payload.get("event", "connected"),
             "rssi": payload.get("rssi", 0),
-            "connected": payload.get("connected", True),
+            "connected": payload["connected"],
         }
         self.hass.bus.async_fire("cando_ble_device_event", event_data)
 
@@ -564,9 +597,9 @@ class CanDoDataCoordinator:
 
     def _notify_can_listeners(self, can_id: str) -> None:
         """Notify listeners subscribed to a specific CAN ID."""
-        can_id_norm = can_id.lower()
+        can_id_norm = normalize_can_id(can_id)
         listeners = self._listeners.get(can_id_norm, [])
-        for listener in listeners:
+        for listener in list(listeners):
             try:
                 listener()
             except Exception as err:
@@ -588,22 +621,24 @@ class CanDoDataCoordinator:
         """Retrieve current cached 8-byte payload for a CAN ID."""
         if not can_id:
             return None
-        val = self.can_states.get(can_id.lower())
+        norm = normalize_can_id(can_id)
+        val = self.can_states.get(norm)
         if val is None:
-            norm = normalize_can_id(can_id)
-            if norm != can_id.lower():
-                val = self.can_states.get(norm)
+            raw_lower = can_id.strip().lower()
+            if raw_lower != norm:
+                val = self.can_states.get(raw_lower)
         return val if isinstance(val, list) else None
 
     def get_can_state(self, key: str | None) -> Any:
         """Retrieve any cached state (list, float, str) for an entity or CAN ID."""
         if not key:
             return None
-        val = self.can_states.get(key.lower())
+        norm = normalize_can_id(key)
+        val = self.can_states.get(norm)
         if val is None:
-            norm = normalize_can_id(key)
-            if norm != key.lower():
-                val = self.can_states.get(norm)
+            raw_lower = key.strip().lower()
+            if raw_lower != norm:
+                val = self.can_states.get(raw_lower)
         return val
 
     async def async_send_action(
@@ -646,7 +681,7 @@ class CanDoDataCoordinator:
         }
         json_payload = json.dumps(payload_obj)
         topic = self.climate_topic
-        _LOGGER.info("Sending remote climate command to %s: %s", topic, json_payload)
+        _LOGGER.debug("Sending remote climate command to %s: %s", topic, json_payload)
         await mqtt.async_publish(self.hass, topic, json_payload, qos=1)
 
     async def async_send_notification(
@@ -656,6 +691,8 @@ class CanDoDataCoordinator:
         hold_ms: int | None = None,
     ) -> None:
         """Send cluster notification (OSD track popup) to ESP32 edge device over MQTT."""
+        if not message or not str(message).strip():
+            return
         payload_obj: dict[str, Any] = {
             "message": message,
             "level": level,
@@ -663,7 +700,7 @@ class CanDoDataCoordinator:
         if hold_ms is not None:
             payload_obj["hold_ms"] = hold_ms
         json_payload = json.dumps(payload_obj)
-        _LOGGER.info("Sending cluster notification to %s: %s", self.notify_topic, json_payload)
+        _LOGGER.debug("Sending cluster notification to %s: %s", self.notify_topic, json_payload)
         await mqtt.async_publish(self.hass, self.notify_topic, json_payload, qos=1)
 
     async def async_send_hud_nav(
@@ -674,6 +711,11 @@ class CanDoDataCoordinator:
         street: str | None = None,
         speed_limit_kph: int = 0,
         camera_alert: bool = False,
+        direction: int | None = None,
+        lanes: int | None = None,
+        lane_directions: list[int] | None = None,
+        lane_recommended: list[int | bool] | None = None,
+        platform: str | None = None,
     ) -> None:
         """Send HUD turn-by-turn navigation instruction to ESP32 edge device over MQTT."""
         payload_obj: dict[str, Any] = {
@@ -687,10 +729,20 @@ class CanDoDataCoordinator:
             payload_obj["speed_limit"] = speed_limit_kph
         if camera_alert:
             payload_obj["camera_alert"] = camera_alert
+        if direction is not None:
+            payload_obj["direction"] = direction
+        if lanes is not None:
+            payload_obj["lanes"] = lanes
+        if lane_directions is not None:
+            payload_obj["lane_directions"] = lane_directions
+        if lane_recommended is not None:
+            payload_obj["lane_recommended"] = lane_recommended
+        if platform:
+            payload_obj["platform"] = platform
 
         json_payload = json.dumps(payload_obj)
         nav_topic = self.nav_topic
-        _LOGGER.info("Sending HUD navigation instruction to %s: %s", nav_topic, json_payload)
+        _LOGGER.debug("Sending HUD navigation instruction to %s: %s", nav_topic, json_payload)
         await mqtt.async_publish(self.hass, nav_topic, json_payload, qos=1)
 
     async def async_clear_hud_nav(self) -> None:
@@ -698,7 +750,7 @@ class CanDoDataCoordinator:
         payload_obj = {"action": "clear"}
         json_payload = json.dumps(payload_obj)
         nav_topic = self.nav_topic
-        _LOGGER.info("Clearing HUD navigation on %s", nav_topic)
+        _LOGGER.debug("Clearing HUD navigation on %s", nav_topic)
         await mqtt.async_publish(self.hass, nav_topic, json_payload, qos=1)
 
     async def async_send_audio_dsp(
@@ -790,7 +842,7 @@ class CanDoDataCoordinator:
 
         hex_payload = "".join(f"{b:02X}" for b in data)
         steps = [{"payload": hex_payload, "repeat": 1, "delay_ms": 20}]
-        _LOGGER.info("Sending Audio DSP command to %s: %s", target_can_id, hex_payload)
+        _LOGGER.debug("Sending Audio DSP command to %s: %s", target_can_id, hex_payload)
         await self.async_send_action(target_can_id, 20, steps)
 
 

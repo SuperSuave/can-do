@@ -86,6 +86,7 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
             "rear_left_seat_comfort", "rear_right_seat_comfort",
             "climate_driver_only_toggle", "heated_steering_wheel_toggle",
             "climate_rear_defrost", "remote_climate_state",
+            "remote_climate", "remote_climate_tmu",
         )
         for aux_id in aux_ids:
             if not self.state_can_id or aux_id != self.state_can_id.lower():
@@ -102,17 +103,18 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
     def _is_hvac_active(self) -> bool:
         """Determine if the vehicle HVAC system or remote climate is actively running."""
         # 0. Check direct remote climate entity state if published by firmware
-        remote_state = self.coordinator.get_can_state("remote_climate_state")
-        if isinstance(remote_state, bool):
-            if remote_state:
-                return True
-        elif isinstance(remote_state, (int, float)) and remote_state != 0:
-            return True
-        elif isinstance(remote_state, str):
-            rs = remote_state.strip().lower()
-            if rs and not any(tok in rs for tok in ("off", "stop", "idle", "0", "false")):
-                if any(tok in rs for tok in ("on", "start", "active", "run", "heat", "cool", "1", "true")):
+        for remote_key in ("remote_climate_state", "remote_climate", "remote_climate_tmu"):
+            remote_state = self.coordinator.get_can_state(remote_key)
+            if isinstance(remote_state, bool):
+                if remote_state:
                     return True
+            elif isinstance(remote_state, (int, float)) and remote_state != 0:
+                return True
+            elif isinstance(remote_state, str):
+                rs = remote_state.strip().lower()
+                if rs and not any(tok in rs for tok in ("off", "stop", "idle", "0", "false")):
+                    if any(tok in rs for tok in ("on", "start", "active", "run", "heat", "cool", "1", "true")):
+                        return True
 
         # 1. Check Blower Fan Speed from 0x31B Byte D4 low nibble
         p_31b = self.coordinator.get_can_payload("0x31b")

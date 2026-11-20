@@ -30,6 +30,8 @@ notify:
               value: warning
             - label: Error (Red)
               value: error
+            - label: Critical (Red)
+              value: critical
     hold_ms:
       name: Hold Duration (ms)
       description: Duration to hold the notification popup on the cluster screen in milliseconds.
@@ -102,6 +104,46 @@ set_hud_nav:
       required: false
       selector:
         boolean:
+    direction:
+      name: Turn Direction (Degrees)
+      description: Optional compass/maneuver direction in degrees (0-359).
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 359
+          unit_of_measurement: "°"
+    lanes:
+      name: Number of Lanes
+      description: Number of lanes for multi-lane guidance (0 to 8).
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 8
+    lane_directions:
+      name: Lane Directions
+      description: List of up to 8 lane arrow direction codes (0-255).
+      required: false
+      selector:
+        object:
+    lane_recommended:
+      name: Recommended Lanes
+      description: List of up to 8 boolean or numeric flags indicating recommended lanes.
+      required: false
+      selector:
+        object:
+    platform:
+      name: Vehicle HUD Platform
+      description: Optional HUD protocol override (egmp/canfd or gen2/ccan).
+      required: false
+      selector:
+        select:
+          options:
+            - label: E-GMP (CAN FD)
+              value: egmp
+            - label: Gen 2 (C-CAN)
+              value: gen2
 
 clear_hud_nav:
   name: Clear HUD Navigation

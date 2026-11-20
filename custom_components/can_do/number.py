@@ -1,6 +1,8 @@
 """Number platform for CAN Do integration (Audio balance, fader, levels)."""
 
 import logging
+import math
+import re
 from typing import Any
 
 from homeassistant.components.number import NumberEntity
@@ -44,7 +46,7 @@ class CanDoNumberEntity(CanDoEntity, NumberEntity):
 
         self.state_byte_str = net.get("state_byte") or net.get("byte") or "D1"
         self.action_byte_str = net.get("action_byte") or net.get("byte") or self.state_byte_str
-        self.offset = net.get("offset", 0)
+        self.offset = float(net.get("offset") or 0)
         self.action_can_id = net.get("action_can_id", self.state_can_id or "0x000")
         self._value: float = self._attr_native_min_value
 
@@ -53,16 +55,17 @@ class CanDoNumberEntity(CanDoEntity, NumberEntity):
         """Return the current number value."""
         direct = self.coordinator.get_can_state(self.entity_id_str)
         if direct is not None:
-            if isinstance(direct, (int, float)):
+            if isinstance(direct, (int, float)) and not isinstance(direct, bool) and math.isfinite(direct):
                 self._value = max(self._attr_native_min_value, min(self._attr_native_max_value, float(direct)))
                 return self._value
             if isinstance(direct, str):
-                import re
                 m = re.search(r"[-+]?\d*\.?\d+", direct)
                 if m:
                     try:
-                        self._value = max(self._attr_native_min_value, min(self._attr_native_max_value, float(m.group(0))))
-                        return self._value
+                        parsed_val = float(m.group(0))
+                        if math.isfinite(parsed_val):
+                            self._value = max(self._attr_native_min_value, min(self._attr_native_max_value, parsed_val))
+                            return self._value
                     except ValueError:
                         pass
 
