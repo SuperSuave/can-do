@@ -1071,6 +1071,18 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
           try { localStorage.setItem('cando_last_aux12v', String(v)); } catch { }
         }
       }
+    } else if (entity === 'bms_temp_min_c') {
+      const match = stateStr.match(/(-?\d+(\.\d+)?)/);
+      if (match) {
+        const val = parseFloat(match[1]);
+        if (val >= -40 && val <= 100) setBatteryMinTempC(val);
+      }
+    } else if (entity === 'bms_temp_max_c') {
+      const match = stateStr.match(/(-?\d+(\.\d+)?)/);
+      if (match) {
+        const val = parseFloat(match[1]);
+        if (val >= -40 && val <= 100) setBatteryMaxTempC(val);
+      }
     } else if (entity === 'hv_battery_temperatures') {
       const match = stateStr.match(/min:\s*(-?\d+(\.\d+)?).*max:\s*(-?\d+(\.\d+)?)/i);
       if (match) {

@@ -7831,6 +7831,68 @@
       "state_can_id": "0x7EC"
     },
     {
+      "id": "bms_temp_min_c",
+      "ha_metadata": {
+        "name": "BMS Min Module Temp",
+        "domain": "sensor",
+        "icon": "mdi:thermometer-chevron-down",
+        "device_class": "temperature",
+        "state_class": "measurement",
+        "unit_of_measurement": "°C"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x7EC",
+        "unit": "°C"
+      },
+      "category": "High Voltage & Charging",
+      "roles": [
+        "condition"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Live BMS minimum HV battery module temperature via UDS PID 220101"
+      },
+      "subcategory": "BMS & Telemetry",
+      "state_can_id": "0x7EC"
+    },
+    {
+      "id": "bms_temp_max_c",
+      "ha_metadata": {
+        "name": "BMS Max Module Temp",
+        "domain": "sensor",
+        "icon": "mdi:thermometer-chevron-up",
+        "device_class": "temperature",
+        "state_class": "measurement",
+        "unit_of_measurement": "°C"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x7EC",
+        "unit": "°C"
+      },
+      "category": "High Voltage & Charging",
+      "roles": [
+        "condition"
+      ],
+      "contributor": {
+        "name": "SuaveEV",
+        "github": "supersuave",
+        "notes": "Live BMS maximum HV battery module temperature via UDS PID 220101"
+      },
+      "subcategory": "BMS & Telemetry",
+      "state_can_id": "0x7EC"
+    },
+    {
       "id": "hud_turn_by_turn_maneuver",
       "ha_metadata": {
         "name": "Windshield HUD Turn-by-Turn Navigation",

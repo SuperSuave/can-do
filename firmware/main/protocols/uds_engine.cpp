@@ -111,8 +111,8 @@ static uds_config_t get_config_snapshot(void) {
 }
 
 bool uds_engine_is_vehicle_awake(void) {
-    // 1. Physical 12V hardware rail fallback: If LDC is active (>= 13.2V), vehicle HV system is ON
-    if (vbat_sensor_get_last() >= 13.2f) {
+    // 1. Physical 12V hardware rail (or fresh <10s CAN 0x1CF) fallback: If LDC is active (>= 13.2V), vehicle HV system is ON
+    if (vbat_sensor_is_fresh() && vbat_sensor_get_last() >= 13.2f) {
         return true;
     }
 
@@ -161,10 +161,12 @@ static bool is_uds_tx_mode_allowed(const uds_config_t& cfg) {
 static bool uds_engine_is_gate_open(const uds_config_t& cfg) {
     if (!is_uds_tx_mode_allowed(cfg)) return false;
 
-    // Gate 1: 12V Battery Gate (Hardware ADC on GPIO 4)
-    float vbat = vbat_sensor_get_last();
-    if (vbat > 5.0f && vbat < cfg.min_12v_gate_voltage) {
-        return false;
+    // Gate 1: 12V Battery Gate (Hardware ADC or fresh <10s CAN 0x1CF telemetry)
+    if (vbat_sensor_is_fresh()) {
+        float vbat = vbat_sensor_get_last();
+        if (vbat > 5.0f && vbat < cfg.min_12v_gate_voltage) {
+            return false;
+        }
     }
 
     // Gate 2: Quiet / Offline Hours
@@ -293,6 +295,12 @@ static bool decode_bms_payload(const uint8_t* payload, size_t len) {
 
     snprintf(val_str, sizeof(val_str), "%d mV", delta_mv);
     broadcast_ws_state("bms_cell_delta_mv", val_str);
+
+    snprintf(val_str, sizeof(val_str), "%d °C", (int)temp_min);
+    broadcast_ws_state("bms_temp_min_c", val_str);
+
+    snprintf(val_str, sizeof(val_str), "%d °C", (int)temp_max);
+    broadcast_ws_state("bms_temp_max_c", val_str);
 
     // Publish to MQTT
     mqtt_mgr_publish_bms(power_kw, soc, voltage_v, current_a, cell_delta_mv, temp_min, temp_max);

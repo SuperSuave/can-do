@@ -4,6 +4,7 @@
 #include "api.h"
 #include "mqtt_mgr.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
@@ -17,6 +18,7 @@
 #include <mutex>
 
 static const char* TAG = "VBAT_ADC";
+static constexpr int64_t VBAT_CAN_STALE_MS = 10000LL;
 
 static adc_oneshot_unit_handle_t s_adc1_handle = nullptr;
 static adc_cali_handle_t s_adc1_cali_handle = nullptr;
@@ -27,9 +29,26 @@ static bool s_has_adc_divider = true;
 static std::mutex s_vbat_mutex;
 static float s_last_vbat_val = 0.0f;
 static char s_last_vbat_str[16] = "Unknown";
+static int64_t s_last_can_vbat_ms = 0;
+static bool s_has_can_vbat = false;
+
+static bool is_can_vbat_fresh_locked(void) {
+    if (!s_has_can_vbat) return false;
+    int64_t now_ms = esp_timer_get_time() / 1000LL;
+    return (now_ms - s_last_can_vbat_ms) <= VBAT_CAN_STALE_MS;
+}
+
+bool vbat_sensor_is_fresh(void) {
+    if (s_has_adc_divider) return true;
+    std::lock_guard<std::mutex> lock(s_vbat_mutex);
+    return is_can_vbat_fresh_locked();
+}
 
 float vbat_sensor_get_last(void) {
     std::lock_guard<std::mutex> lock(s_vbat_mutex);
+    if (!s_has_adc_divider && !is_can_vbat_fresh_locked()) {
+        return 0.0f;
+    }
     return s_last_vbat_val;
 }
 
@@ -53,6 +72,8 @@ void vbat_sensor_set_from_can(float voltage) {
     if (voltage >= 5.0f && voltage <= 18.0f) {
         std::lock_guard<std::mutex> lock(s_vbat_mutex);
         s_last_vbat_val = voltage;
+        s_last_can_vbat_ms = esp_timer_get_time() / 1000LL;
+        s_has_can_vbat = true;
         snprintf(s_last_vbat_str, sizeof(s_last_vbat_str), "%.1f V", voltage);
     }
 }

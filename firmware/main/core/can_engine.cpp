@@ -2979,9 +2979,14 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
         float v = (float)(vByte * 0.1f);
         if (v >= 8.0f && v <= 16.5f) {
             static float s_last_aux_v = 0.0f;
-            if (fabs(v - s_last_aux_v) >= 0.1f) {
-                s_last_aux_v = v;
+            static uint32_t s_last_vbat_refresh_ms = 0;
+            bool v_changed = (fabs(v - s_last_aux_v) >= 0.1f);
+            if (v_changed || (now_ms - s_last_vbat_refresh_ms) >= 1000) {
                 vbat_sensor_set_from_can(v);
+                s_last_vbat_refresh_ms = now_ms;
+            }
+            if (v_changed) {
+                s_last_aux_v = v;
                 char vbuf[16];
                 snprintf(vbuf, sizeof(vbuf), "%.1f V", v);
                 emit_live_entity_state("cond_aux_12v_battery", vbuf);
