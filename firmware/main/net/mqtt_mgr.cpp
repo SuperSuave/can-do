@@ -8,8 +8,11 @@
 #include "cJSON.h"
 #include "esp_log.h"
 #include <algorithm>
+#include <cctype>
+#include <cerrno>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iterator>
 #include <memory>
@@ -32,8 +35,8 @@ extern std::string g_device_id;
 #define DEVICE_ID g_device_id
 
 #define MQTT_BASE_TOPIC_LIT "cando"
-const std::string MQTT_BASE_TOPIC = MQTT_BASE_TOPIC_LIT;
-esp_mqtt_client_handle_t global_mqtt_client = nullptr;
+static constexpr const char* MQTT_BASE_TOPIC = "cando";
+static esp_mqtt_client_handle_t global_mqtt_client = nullptr;
 std::mutex g_automations_file_mutex;
 
 static constexpr const char* MQTT_CONFIG_TMP_FILE = "/spiffs/mqtt.json.tmp";
@@ -43,6 +46,8 @@ static constexpr const char* MQTT_AUTOMATIONS_WORK_FILE = "/spiffs/automations.j
 static constexpr size_t kMaxMqttAutomationsBytes = 128 * 1024;
 static constexpr size_t kMaxMonitoredIdsFileBytes = 16 * 1024;
 static constexpr size_t kMaxMqttConfigFileBytes = 4 * 1024;
+static constexpr uint32_t kMaxCanId = 0x1FFFFFFFUL;
+static constexpr uint32_t kMaxDelayMs = 3600000U;
 
 static std::mutex s_mqtt_mutex;
 static MqttConfig s_mqtt_cfg;
@@ -65,6 +70,37 @@ static std::string s_lwt_topic;
 
 static bool save_monitored_ids_to_fs(void);
 static void trigger_post_connect_sync(void);
+static void mqtt_mgr_start(void);
+static void mqtt_mgr_stop(void);
+static void mqtt_mgr_publish_discovery(void);
+static void mqtt_mgr_clear_discovery(void);
+
+static bool parse_valid_can_id(const cJSON* item, uint32_t& out_id) {
+    if (!item) return false;
+    if (cJSON_IsString(item) && item->valuestring) {
+        const char* p = item->valuestring;
+        while (*p && isspace(static_cast<unsigned char>(*p))) ++p;
+        if (*p == '\0' || *p == '-' || *p == '+') return false;
+        errno = 0;
+        char* endptr = nullptr;
+        unsigned long val = strtoul(p, &endptr, 0);
+        if (endptr == p || errno == ERANGE) return false;
+        while (*endptr && isspace(static_cast<unsigned char>(*endptr))) ++endptr;
+        if (*endptr != '\0') return false;
+        if (val > kMaxCanId) return false;
+        out_id = static_cast<uint32_t>(val);
+        return true;
+    }
+    if (cJSON_IsNumber(item)) {
+        double v = item->valuedouble;
+        if (!std::isfinite(v) || v < 0.0 || v > static_cast<double>(kMaxCanId) || std::floor(v) != v) {
+            return false;
+        }
+        out_id = static_cast<uint32_t>(v);
+        return true;
+    }
+    return false;
+}
 
 struct HeapFreeDeleter {
     void operator()(void* ptr) const noexcept {
@@ -123,6 +159,21 @@ static uint8_t* s_mqtt_cmd_queue_storage = nullptr;
 
 static void mqtt_enqueue_entity_cmd(const char* entity_id, const char* payload, const char* source_label) {
     if (!entity_id || !payload) return;
+    const size_t entity_len = strlen(entity_id);
+    const size_t payload_len = strlen(payload);
+    if (entity_len == 0 || entity_len >= sizeof(MqttSetCmd::entity_id)) {
+        ESP_LOGW(TAG, "Rejecting MQTT %s command with %s entity_id (len=%zu, max=%zu)",
+                 source_label ? source_label : "cmd",
+                 entity_len == 0 ? "empty" : "oversized",
+                 entity_len, sizeof(MqttSetCmd::entity_id) - 1);
+        return;
+    }
+    if (payload_len >= sizeof(MqttSetCmd::payload)) {
+        ESP_LOGW(TAG, "Rejecting oversized MQTT %s payload for '%s' (%zu bytes > %zu max)",
+                 source_label ? source_label : "cmd",
+                 entity_id, payload_len, sizeof(MqttSetCmd::payload) - 1);
+        return;
+    }
     if (s_mqtt_cmd_queue) {
         std::unique_ptr<MqttSetCmd, HeapFreeDeleter> cmd(
             static_cast<MqttSetCmd*>(static_cast<void*>(alloc_mqtt_pub_buf(sizeof(MqttSetCmd)))));
@@ -132,8 +183,8 @@ static void mqtt_enqueue_entity_cmd(const char* entity_id, const char* payload, 
         }
         memset(cmd.get(), 0, sizeof(MqttSetCmd));
         cmd->kind = MqttCmdKind::ENTITY_CMD;
-        strncpy(cmd->entity_id, entity_id, sizeof(cmd->entity_id) - 1);
-        strncpy(cmd->payload, payload, sizeof(cmd->payload) - 1);
+        memcpy(cmd->entity_id, entity_id, entity_len + 1);
+        memcpy(cmd->payload, payload, payload_len + 1);
         if (xQueueSend(s_mqtt_cmd_queue, cmd.get(), 0) != pdTRUE) {
             ESP_LOGW(TAG, "MQTT cmd queue full, dropping %s/%s", source_label ? source_label : "cmd", cmd->entity_id);
         }
@@ -288,12 +339,19 @@ static void mqtt_pub_worker_task(void* arg) {
 }
 
 // Non-blocking MQTT enqueue helper: queues to s_mqtt_pub_queue with 0-tick wait so can_rx_task never touches MQTT_API_LOCK
-static inline void mqtt_enqueue_nonblocking(const char* topic, const char* data, int len, int qos, int retain) {
+static void mqtt_enqueue_nonblocking(const char* topic, const char* data, int len, int qos, int retain) {
     if (!s_mqtt_pub_queue || !global_mqtt_client || !s_mqtt_connected.load(std::memory_order_relaxed) || !topic) return;
     if (len < 0) return;
+    const size_t topic_len = strlen(topic);
+    if (topic_len == 0 || topic_len >= sizeof(MqttPubItem::topic)) {
+        ESP_LOGW(TAG, "Rejecting MQTT publish with %s topic (len=%zu, max=%zu): %.64s",
+                 topic_len == 0 ? "empty" : "oversized",
+                 topic_len, sizeof(MqttPubItem::topic) - 1, topic);
+        return;
+    }
     int actual_len = (!data) ? 0 : ((len > 0) ? len : (int)strlen(data));
     MqttPubItem item = {};
-    strncpy(item.topic, topic, sizeof(item.topic) - 1);
+    memcpy(item.topic, topic, topic_len + 1);
     item.len = actual_len;
     item.qos = (uint8_t)qos;
     item.retain = (uint8_t)retain;
@@ -302,13 +360,28 @@ static inline void mqtt_enqueue_nonblocking(const char* topic, const char* data,
             memcpy(item.inline_data, data, actual_len);
         } else {
             item.heap_data = alloc_mqtt_pub_buf((size_t)actual_len);
-            if (!item.heap_data) return;
+            if (!item.heap_data) {
+                ESP_LOGW(TAG, "OOM allocating %d-byte MQTT publish payload for %s", actual_len, item.topic);
+                return;
+            }
             memcpy(item.heap_data, data, actual_len);
         }
     }
     if (xQueueSend(s_mqtt_pub_queue, &item, 0) != pdTRUE) {
         if (item.heap_data) {
             free(item.heap_data);
+        }
+        static std::atomic<uint32_t> s_last_full_log_ms{0};
+        static std::atomic<uint32_t> s_dropped_pub_count{0};
+        uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+        uint32_t last_ms = s_last_full_log_ms.load(std::memory_order_relaxed);
+        if ((last_ms == 0 || (now_ms - last_ms >= 5000)) &&
+            s_last_full_log_ms.compare_exchange_strong(last_ms, now_ms ? now_ms : 1, std::memory_order_acq_rel)) {
+            uint32_t suppressed = s_dropped_pub_count.exchange(0, std::memory_order_acq_rel);
+            ESP_LOGW(TAG, "MQTT pub queue full, dropping publish (topic=%s, len=%d, suppressed=%lu)",
+                     item.topic, item.len, (unsigned long)suppressed);
+        } else {
+            s_dropped_pub_count.fetch_add(1, std::memory_order_relaxed);
         }
     }
 }
@@ -391,10 +464,11 @@ static void load_monitored_ids_from_fs(void) {
     }
     for (int i = 0; i < count; i++) {
         cJSON* itm = cJSON_GetArrayItem(root, i);
-        if (itm && cJSON_IsString(itm) && itm->valuestring) {
-            s_monitored_ids.insert(strtoul(itm->valuestring, nullptr, 0));
-        } else if (itm && cJSON_IsNumber(itm)) {
-            s_monitored_ids.insert((uint32_t)itm->valueint);
+        uint32_t parsed_id = 0;
+        if (parse_valid_can_id(itm, parsed_id)) {
+            s_monitored_ids.insert(parsed_id);
+        } else {
+            ESP_LOGW(TAG, "Ignoring invalid monitored CAN ID at index %d in %s", i, MONITORED_IDS_FILE);
         }
     }
     s_monitored_ids_initialized = true;
@@ -438,7 +512,7 @@ static bool save_monitored_ids_to_fs(void) {
 void mqtt_mgr_publish_can_state(uint32_t can_id, const uint8_t* data, size_t len) {
     if (!global_mqtt_client || !s_mqtt_connected.load(std::memory_order_relaxed)) return;
     char topic[64];
-    snprintf(topic, sizeof(topic), "%s/%s/state/0x%03lX", MQTT_BASE_TOPIC.c_str(), DEVICE_ID.c_str(), (unsigned long)can_id);
+    snprintf(topic, sizeof(topic), "%s/%s/state/0x%03lX", MQTT_BASE_TOPIC, DEVICE_ID.c_str(), (unsigned long)can_id);
     char hex_payload[17] = {0};
     for (size_t i = 0; i < len && i < 8; i++) {
         snprintf(&hex_payload[i * 2], 3, "%02X", data[i]);
@@ -449,7 +523,7 @@ void mqtt_mgr_publish_can_state(uint32_t can_id, const uint8_t* data, size_t len
 
 void mqtt_mgr_publish_entity_state(const std::string& entity_id, const std::string& state) {
     if (!global_mqtt_client || !s_mqtt_connected.load(std::memory_order_relaxed)) return;
-    std::string topic = MQTT_BASE_TOPIC + "/state/" + entity_id;
+    std::string topic = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/state/" + entity_id;
     mqtt_enqueue_nonblocking(topic.c_str(), state.c_str(), (int)state.length(), 0, 1);
 }
 
@@ -485,7 +559,7 @@ void mqtt_mgr_publish_active_ids(bool force) {
     if (!rendered) return;
 
     char topic[64];
-    snprintf(topic, sizeof(topic), "%s/%s/active_ids", MQTT_BASE_TOPIC.c_str(), DEVICE_ID.c_str());
+    snprintf(topic, sizeof(topic), "%s/%s/active_ids", MQTT_BASE_TOPIC, DEVICE_ID.c_str());
     mqtt_enqueue_nonblocking(topic, rendered, (int)strlen(rendered), 0, 1);
     free(rendered);
 
@@ -574,7 +648,7 @@ static void publish_ha_discovery(esp_mqtt_client_handle_t client, const CanEntit
         cJSON_AddStringToObject(root, "icon", entity.ha_icon.c_str());
     }
 
-    if (!entity.options.empty()) {
+    if (entity.ha_domain == "select" && !entity.options.empty()) {
         cJSON *options_array = cJSON_AddArrayToObject(root, "options");
         if (!options_array) {
             cJSON_Delete(root);
@@ -590,10 +664,16 @@ static void publish_ha_discovery(esp_mqtt_client_handle_t client, const CanEntit
         }
     }
 
-    std::string cmd_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/set/" + entity.id;
-    std::string state_topic = MQTT_BASE_TOPIC + "/state/" + entity.id;
-    std::string availability_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/status";
-    cJSON_AddStringToObject(root, "command_topic", cmd_topic.c_str());
+    const bool is_controllable =
+        (entity.ha_domain != "sensor" &&
+         entity.ha_domain != "binary_sensor" &&
+         entity.ha_domain != "event");
+    if (is_controllable) {
+        std::string cmd_topic = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/set/" + entity.id;
+        cJSON_AddStringToObject(root, "command_topic", cmd_topic.c_str());
+    }
+    std::string state_topic = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/state/" + entity.id;
+    std::string availability_topic = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/status";
     cJSON_AddStringToObject(root, "state_topic", state_topic.c_str());
     cJSON_AddStringToObject(root, "availability_topic", availability_topic.c_str());
     cJSON_AddStringToObject(root, "payload_available", "online");
@@ -646,9 +726,9 @@ static void publish_ha_automation_discovery(esp_mqtt_client_handle_t client, con
         cJSON_AddStringToObject(root, "icon", rule.ha_icon.c_str());
     }
 
-    std::string cmd_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/set/" + rule.id;
-    std::string state_topic = MQTT_BASE_TOPIC + "/state/" + rule.id;
-    std::string availability_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/status";
+    std::string cmd_topic = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/set/" + rule.id;
+    std::string state_topic = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/state/" + rule.id;
+    std::string availability_topic = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/status";
     cJSON_AddStringToObject(root, "command_topic", cmd_topic.c_str());
     cJSON_AddStringToObject(root, "state_topic", state_topic.c_str());
     cJSON_AddStringToObject(root, "availability_topic", availability_topic.c_str());
@@ -686,13 +766,9 @@ static void clear_ha_automation_topic(esp_mqtt_client_handle_t client, const std
     mqtt_enqueue_nonblocking(topic.c_str(), "", 0, 0, 1);
 }
 
-static void clear_ha_automation_discovery(esp_mqtt_client_handle_t client, const AutomationRule& rule) {
-    clear_ha_automation_topic(client, rule.id);
-}
-
 static void publish_automations_json_state(void) {
     if (!global_mqtt_client || !s_mqtt_connected.load()) return;
-    std::string state_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/state";
+    std::string state_topic = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/config/automations/state";
     char* sbuf = nullptr;
     size_t slen = 0;
     {
@@ -799,7 +875,7 @@ static void mqtt_post_connect_sync_task(void* arg) {
                 vTaskDelay(pdMS_TO_TICKS(100));
             }
             if (s_mqtt_connected.load() && !is_superseded()) {
-                std::string state_sub = MQTT_BASE_TOPIC + "/state/+";
+                std::string state_sub = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/state/+";
                 bool unsubscribed = false;
                 {
                     std::lock_guard<std::mutex> pub_lock(s_mqtt_pub_mutex);
@@ -879,9 +955,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
             // Cold-boot fallback: If RTC state cache was empty, subscribe to retained entity states once
             if (!g_state_restored_from_rtc.load() && !s_hydrated_from_mqtt.load(std::memory_order_acquire)) {
-                static constexpr const char* kStateSub = MQTT_BASE_TOPIC_LIT "/state/+";
-                esp_mqtt_client_subscribe(event->client, kStateSub, 0);
-                ESP_LOGI(TAG, "Cold boot detected without RTC cache: Subscribed to retained states (%s)", kStateSub);
+                char state_sub[64];
+                int sub_len = snprintf(state_sub, sizeof(state_sub), "%s/%s/state/+", MQTT_BASE_TOPIC, DEVICE_ID.c_str());
+                if (sub_len > 0 && sub_len < static_cast<int>(sizeof(state_sub))) {
+                    esp_mqtt_client_subscribe(event->client, state_sub, 0);
+                    ESP_LOGI(TAG, "Cold boot detected without RTC cache: Subscribed to retained states (%s)", state_sub);
+                }
             }
 
             // 2. Mark connected after subscribe finishes and publish LWT online status
@@ -890,7 +969,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
             s_last_ha_birth_sync_ms.store(now_ms ? now_ms : 1, std::memory_order_relaxed);
             char status_topic[64];
-            snprintf(status_topic, sizeof(status_topic), "%s/%s/status", MQTT_BASE_TOPIC_LIT, DEVICE_ID.c_str());
+            snprintf(status_topic, sizeof(status_topic), "%s/%s/status", MQTT_BASE_TOPIC, DEVICE_ID.c_str());
             mqtt_enqueue_nonblocking(status_topic, "online", 6, 0, 1);
 
             // 3. Defer state dump & HA discovery to background worker (queues fresh pass if already running)
@@ -917,7 +996,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             }
 
             auto extract_target_topic_suffix = [](const std::string& t, std::string& out_suffix) -> bool {
-                const std::string base_prefix = MQTT_BASE_TOPIC + "/";
+                const std::string base_prefix = std::string(MQTT_BASE_TOPIC) + "/";
                 if (t.rfind(base_prefix, 0) != 0) return false;
                 std::string rest = t.substr(base_prefix.length());
 
@@ -1032,7 +1111,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                         if (stage_ok) {
                             mqtt_mgr_on_automations_reloaded();
                         } else {
-                            std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/status";
+                            std::string status_topic = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/config/automations/status";
                             static const char kErrMsg[] = "{\"status\":\"error\",\"message\":\"Failed staging automations\"}";
                             mqtt_enqueue_nonblocking(status_topic.c_str(), kErrMsg, (int)(sizeof(kErrMsg) - 1), 0, 0);
                         }
@@ -1041,7 +1120,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                             std::lock_guard<std::mutex> file_lock(g_automations_file_mutex);
                             unlink(MQTT_AUTOMATIONS_STAGE_FILE);
                         }
-                        std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/status";
+                        std::string status_topic = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/config/automations/status";
                         static const char kErrMsg[] = "{\"status\":\"error\",\"message\":\"Failed writing automations\"}";
                         mqtt_enqueue_nonblocking(status_topic.c_str(), kErrMsg, (int)(sizeof(kErrMsg) - 1), 0, 0);
                     }
@@ -1194,7 +1273,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                         if (last_ms == 0 || (now_ms - last_ms >= 5000)) {
                             s_last_ha_birth_sync_ms.store(now_ms ? now_ms : 1, std::memory_order_relaxed);
                             ESP_LOGI(TAG, "HA birth message received (homeassistant/status=online); triggering discovery/state refresh");
-                            std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/status";
+                            std::string status_topic = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/status";
                             mqtt_enqueue_nonblocking(status_topic.c_str(), "online", 6, 0, 1);
                             trigger_post_connect_sync();
                         }
@@ -1203,12 +1282,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 return;
             }
 
-            std::string state_prefix = MQTT_BASE_TOPIC + "/state/";
+            std::string state_prefix = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/state/";
             if (topic.rfind(state_prefix, 0) == 0 && topic.length() > state_prefix.length()) {
                 std::string entity_id = topic.substr(state_prefix.length());
-                can_engine_hydrate_from_mqtt(
-                    entity_id,
-                    (payload_cstr != nullptr && payload_len > 0) ? std::string(payload_cstr, payload_len) : std::string());
+                if (entity_id.rfind("0x", 0) != 0 && entity_id.rfind("0X", 0) != 0) {
+                    can_engine_hydrate_from_mqtt(
+                        entity_id,
+                        (payload_cstr != nullptr && payload_len > 0) ? std::string(payload_cstr, payload_len) : std::string());
+                }
                 return;
             }
 
@@ -1234,15 +1315,21 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
                 cJSON* root = (payload_cstr != nullptr && payload_len > 0) ? cJSON_ParseWithLength(payload_cstr, payload_len) : nullptr;
                 if (root) {
-                    cJSON* m = cJSON_GetObjectItem(root, "message");
-                    if (!m) m = cJSON_GetObjectItem(root, "text");
-                    if (!m) m = cJSON_GetObjectItem(root, "popup_message");
-                    if (m && cJSON_IsString(m)) msg = m->valuestring;
+                    if (cJSON_IsObject(root)) {
+                        msg.clear();
+                        cJSON* m = cJSON_GetObjectItem(root, "message");
+                        if (!cJSON_IsString(m)) m = cJSON_GetObjectItem(root, "text");
+                        if (!cJSON_IsString(m)) m = cJSON_GetObjectItem(root, "popup_message");
+                        if (cJSON_IsString(m) && m->valuestring) msg = m->valuestring;
 
-                    cJSON* l = cJSON_GetObjectItem(root, "level");
-                    if (l && cJSON_IsString(l)) level = l->valuestring;
-
+                        cJSON* l = cJSON_GetObjectItem(root, "level");
+                        if (cJSON_IsString(l) && l->valuestring) level = l->valuestring;
+                    }
                     cJSON_Delete(root);
+                }
+
+                if (msg.empty()) {
+                    return;
                 }
 
                 if (level == "warning") {
@@ -1261,9 +1348,17 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     } else {
                         hud_nav_instruction_t instr{};
                         instr.distance_meters = 0xFFFF; // Inactive default
+                        auto clamp_u16 = [](const cJSON* item, uint16_t max_val, uint16_t fallback) -> uint16_t {
+                            if (!item || !cJSON_IsNumber(item) || !std::isfinite(item->valuedouble)) return fallback;
+                            double v = item->valuedouble;
+                            if (v < 0.0) return 0;
+                            if (v > static_cast<double>(max_val)) return max_val;
+                            return static_cast<uint16_t>(v);
+                        };
+
                         cJSON* icon_item = cJSON_GetObjectItem(root, "icon");
-                        if (icon_item && cJSON_IsNumber(icon_item)) {
-                            instr.icon = (hud_maneuver_icon_t)icon_item->valueint;
+                        if (icon_item && cJSON_IsNumber(icon_item) && std::isfinite(icon_item->valuedouble)) {
+                            instr.icon = static_cast<hud_maneuver_icon_t>(clamp_u16(icon_item, 255, HUD_MANEUVER_STRAIGHT));
                         } else {
                             instr.icon = HUD_MANEUVER_STRAIGHT;
                         }
@@ -1271,17 +1366,25 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                         cJSON* dir_item = cJSON_GetObjectItem(root, "direction");
                         if (!dir_item) dir_item = cJSON_GetObjectItem(root, "direction_deg");
                         if (!dir_item) dir_item = cJSON_GetObjectItem(root, "heading");
-                        if (dir_item && cJSON_IsNumber(dir_item)) instr.direction_deg = (uint16_t)dir_item->valueint;
+                        if (dir_item && cJSON_IsNumber(dir_item) && std::isfinite(dir_item->valuedouble)) {
+                            instr.direction_deg = clamp_u16(dir_item, 65535, 0);
+                        }
 
                         cJSON* dist_item = cJSON_GetObjectItem(root, "distance");
                         if (!dist_item) dist_item = cJSON_GetObjectItem(root, "distance_meters");
-                        if (dist_item && cJSON_IsNumber(dist_item)) instr.distance_meters = (uint16_t)dist_item->valueint;
+                        if (dist_item && cJSON_IsNumber(dist_item) && std::isfinite(dist_item->valuedouble)) {
+                            instr.distance_meters = clamp_u16(dist_item, 65535, 0xFFFF);
+                        }
 
                         cJSON* bars_item = cJSON_GetObjectItem(root, "bars");
-                        if (bars_item && cJSON_IsNumber(bars_item)) instr.bar_graph = (uint8_t)bars_item->valueint;
+                        if (bars_item && cJSON_IsNumber(bars_item) && std::isfinite(bars_item->valuedouble)) {
+                            instr.bar_graph = static_cast<uint8_t>(clamp_u16(bars_item, 255, 0));
+                        }
 
                         cJSON* spd_item = cJSON_GetObjectItem(root, "speed_limit");
-                        if (spd_item && cJSON_IsNumber(spd_item)) instr.speed_limit_kph = (uint8_t)spd_item->valueint;
+                        if (spd_item && cJSON_IsNumber(spd_item) && std::isfinite(spd_item->valuedouble)) {
+                            instr.speed_limit_kph = static_cast<uint8_t>(clamp_u16(spd_item, 255, 0));
+                        }
 
                         cJSON* cam_item = cJSON_GetObjectItem(root, "camera_alert");
                         if (cam_item && cJSON_IsBool(cam_item)) instr.speed_camera_alert = cJSON_IsTrue(cam_item);
@@ -1291,23 +1394,22 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
                         cJSON* lanes_item = cJSON_GetObjectItem(root, "lanes");
                         if (!lanes_item) lanes_item = cJSON_GetObjectItem(root, "num_lanes");
-                        if (lanes_item && cJSON_IsNumber(lanes_item)) {
-                            instr.num_lanes = (uint8_t)lanes_item->valueint;
-                            if (instr.num_lanes > 8) instr.num_lanes = 8;
-                            instr.has_lane_guidance = true;
+                        if (lanes_item && cJSON_IsNumber(lanes_item) && std::isfinite(lanes_item->valuedouble)) {
+                            double raw_lanes = lanes_item->valuedouble;
+                            int lanes_val = (raw_lanes < 0.0) ? 0 : (raw_lanes > 8.0 ? 8 : static_cast<int>(raw_lanes));
+                            instr.num_lanes = static_cast<uint8_t>(lanes_val);
                         }
 
                         cJSON* lane_dirs = cJSON_GetObjectItem(root, "lane_directions");
                         if (lane_dirs && cJSON_IsArray(lane_dirs)) {
-                            instr.has_lane_guidance = true;
                             int n = cJSON_GetArraySize(lane_dirs);
                             if (instr.num_lanes == 0 && n > 0) {
-                                instr.num_lanes = (n > 8) ? 8 : (uint8_t)n;
+                                instr.num_lanes = static_cast<uint8_t>(std::min(n, 8));
                             }
                             for (int i = 0; i < n && i < 8; i++) {
                                 cJSON* elem = cJSON_GetArrayItem(lane_dirs, i);
-                                if (elem && cJSON_IsNumber(elem)) {
-                                    instr.lane_directions[i] = (uint8_t)elem->valueint;
+                                if (elem && cJSON_IsNumber(elem) && std::isfinite(elem->valuedouble)) {
+                                    instr.lane_directions[i] = static_cast<uint8_t>(clamp_u16(elem, 255, 0));
                                 }
                             }
                         }
@@ -1315,19 +1417,23 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                         cJSON* lane_recs = cJSON_GetObjectItem(root, "lane_recommended");
                         if (!lane_recs) lane_recs = cJSON_GetObjectItem(root, "lane_highlights");
                         if (lane_recs && cJSON_IsArray(lane_recs)) {
-                            instr.has_lane_guidance = true;
                             int n = cJSON_GetArraySize(lane_recs);
+                            if (instr.num_lanes == 0 && n > 0) {
+                                instr.num_lanes = static_cast<uint8_t>(std::min(n, 8));
+                            }
                             for (int i = 0; i < n && i < 8; i++) {
                                 cJSON* elem = cJSON_GetArrayItem(lane_recs, i);
                                 if (elem) {
                                     if (cJSON_IsBool(elem)) {
                                         instr.lane_recommended[i] = cJSON_IsTrue(elem) ? 1 : 0;
-                                    } else if (cJSON_IsNumber(elem)) {
-                                        instr.lane_recommended[i] = (uint8_t)elem->valueint;
+                                    } else if (cJSON_IsNumber(elem) && std::isfinite(elem->valuedouble)) {
+                                        instr.lane_recommended[i] = static_cast<uint8_t>(clamp_u16(elem, 255, 0));
                                     }
                                 }
                             }
                         }
+
+                        instr.has_lane_guidance = (instr.num_lanes > 0);
 
                         cJSON* plat_item = cJSON_GetObjectItem(root, "platform");
                         if (plat_item && cJSON_IsString(plat_item)) {
@@ -1349,32 +1455,69 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     cJSON* target_entity = cJSON_GetObjectItem(root, "entity");
                     cJSON* target_cmd = cJSON_GetObjectItem(root, "command");
                     if (cJSON_IsString(target_entity) && target_entity->valuestring && target_entity->valuestring[0] != '\0') {
-                        const char* cmd_str = (cJSON_IsString(target_cmd) && target_cmd->valuestring) ? target_cmd->valuestring : "";
-                        mqtt_enqueue_entity_cmd(target_entity->valuestring, cmd_str, "/tx");
+                        std::string cmd_str = (cJSON_IsString(target_cmd) && target_cmd->valuestring) ? target_cmd->valuestring : "";
+                        cJSON* mode_item = cJSON_GetObjectItem(root, "mode");
+                        cJSON* action_item = cJSON_GetObjectItem(root, "action");
+                        const bool has_mode = cJSON_IsString(mode_item) && mode_item->valuestring && mode_item->valuestring[0] != '\0';
+                        const bool has_action = cJSON_IsString(action_item) && action_item->valuestring && action_item->valuestring[0] != '\0';
+                        const bool is_precon_entity =
+                            (strcmp(target_entity->valuestring, "battery_preconditioning") == 0 ||
+                             strcmp(target_entity->valuestring, "precondition") == 0);
+                        if ((has_mode || has_action) && (is_precon_entity || cmd_str.empty()) &&
+                            (cmd_str.empty() || cmd_str[0] != '{')) {
+                            cJSON* fwd = cJSON_CreateObject();
+                            if (fwd) {
+                                if (has_mode) cJSON_AddStringToObject(fwd, "mode", mode_item->valuestring);
+                                if (has_action) cJSON_AddStringToObject(fwd, "action", action_item->valuestring);
+                                char* fwd_str = cJSON_PrintUnformatted(fwd);
+                                cJSON_Delete(fwd);
+                                if (fwd_str) {
+                                    cmd_str = fwd_str;
+                                    free(fwd_str);
+                                }
+                            }
+                        }
+                        mqtt_enqueue_entity_cmd(target_entity->valuestring, cmd_str.c_str(), "/tx");
                         handled = true;
                     }
 
                     if (!handled) {
                         uint32_t can_id = 0;
                         cJSON* id_item = cJSON_GetObjectItem(root, "can_id");
-                        if (id_item && cJSON_IsString(id_item)) {
-                            can_id = strtoul(id_item->valuestring, nullptr, 0);
-                        } else if (id_item && cJSON_IsNumber(id_item)) {
-                            can_id = (uint32_t)id_item->valueint;
+                        if (id_item && !cJSON_IsNull(id_item) && !parse_valid_can_id(id_item, can_id)) {
+                            ESP_LOGW(TAG, "Ignoring invalid can_id in MQTT /tx payload");
+                            can_id = 0;
                         }
 
                         uint8_t top_bus = 0;
                         cJSON* bus_item = cJSON_GetObjectItem(root, "bus");
-                        if (bus_item && cJSON_IsNumber(bus_item)) {
-                            top_bus = (uint8_t)bus_item->valueint;
-                        } else if (bus_item && cJSON_IsString(bus_item)) {
-                            top_bus = (uint8_t)strtoul(bus_item->valuestring, nullptr, 0);
+                        if (bus_item && cJSON_IsNumber(bus_item) && std::isfinite(bus_item->valuedouble)) {
+                            double bv = bus_item->valuedouble;
+                            top_bus = (bv <= 0.0) ? 0 : (bv >= 1.0 ? 1 : static_cast<uint8_t>(bv));
+                        } else if (bus_item && cJSON_IsString(bus_item) && bus_item->valuestring) {
+                            const char* p = bus_item->valuestring;
+                            while (*p && isspace(static_cast<unsigned char>(*p))) ++p;
+                            if (*p != '\0' && *p != '-' && *p != '+') {
+                                errno = 0;
+                                char* endptr = nullptr;
+                                unsigned long bv = strtoul(p, &endptr, 0);
+                                if (endptr != p && errno != ERANGE) {
+                                    top_bus = (bv >= 1UL) ? 1 : 0;
+                                }
+                            }
                         }
 
                         uint32_t delay_ms = 20;
                         cJSON* del_item = cJSON_GetObjectItem(root, "delay_ms");
-                        if (del_item && cJSON_IsNumber(del_item) && del_item->valueint >= 0) {
-                            delay_ms = (uint32_t)del_item->valueint;
+                        if (del_item && cJSON_IsNumber(del_item) && std::isfinite(del_item->valuedouble)) {
+                            double dv = del_item->valuedouble;
+                            if (dv < 0.0) {
+                                delay_ms = 0;
+                            } else if (dv > static_cast<double>(kMaxDelayMs)) {
+                                delay_ms = kMaxDelayMs;
+                            } else {
+                                delay_ms = static_cast<uint32_t>(dv);
+                            }
                         }
 
                         PsramVector<ActionStep> steps;
@@ -1390,7 +1533,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                                         if (step.can_id == 0) step.can_id = can_id;
                                         if (!cJSON_GetObjectItem(s_item, "bus")) step.bus = top_bus;
                                         if (step.repeat == 0) step.repeat = 1;
-                                        if (step.delay_ms == delay_ms) step.delay_ms = 0;
                                     }
                                     if (step.type == ActionType::TRANSMIT_FRAME && step.can_id == 0) {
                                         steps.pop_back();
@@ -1400,16 +1542,25 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                                 }
                             }
                         } else if (can_id != 0 && cJSON_GetObjectItem(root, "payload")) {
-                            steps.emplace_back();
-                            ActionStep& step = steps.back();
-                            if (parse_action_step(root, step)) {
-                                step.type = ActionType::TRANSMIT_FRAME;
-                                step.can_id = can_id;
-                                step.bus = top_bus;
-                                if (step.repeat == 0) step.repeat = 1;
-                                if (step.delay_ms == delay_ms) step.delay_ms = 0;
-                            } else {
-                                steps.pop_back();
+                            cJSON* type_item = cJSON_GetObjectItem(root, "type");
+                            const bool is_transmit_type =
+                                (!type_item || cJSON_IsNull(type_item) ||
+                                 (cJSON_IsString(type_item) && type_item->valuestring &&
+                                  (type_item->valuestring[0] == '\0' ||
+                                   strcmp(type_item->valuestring, "transmit") == 0 ||
+                                   strcmp(type_item->valuestring, "transmit_frame") == 0 ||
+                                   strcmp(type_item->valuestring, "can_tx") == 0)));
+                            if (is_transmit_type) {
+                                steps.emplace_back();
+                                ActionStep& step = steps.back();
+                                if (parse_action_step(root, step)) {
+                                    step.type = ActionType::TRANSMIT_FRAME;
+                                    step.can_id = can_id;
+                                    step.bus = top_bus;
+                                    if (step.repeat == 0) step.repeat = 1;
+                                } else {
+                                    steps.pop_back();
+                                }
                             }
                         }
 
@@ -1435,10 +1586,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     int count = cJSON_GetArraySize(root);
                     for (int i = 0; i < count; i++) {
                         cJSON* itm = cJSON_GetArrayItem(root, i);
-                        if (itm && cJSON_IsString(itm)) {
-                            ids.push_back(strtoul(itm->valuestring, nullptr, 0));
-                        } else if (itm && cJSON_IsNumber(itm)) {
-                            ids.push_back((uint32_t)itm->valueint);
+                        uint32_t parsed_id = 0;
+                        if (parse_valid_can_id(itm, parsed_id)) {
+                            ids.push_back(parsed_id);
+                        } else {
+                            ESP_LOGW(TAG, "Ignoring invalid CAN ID at index %d in subscribe_ids", i);
                         }
                     }
                     mqtt_mgr_set_monitored_ids(ids, true);
@@ -1447,7 +1599,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 if (root) cJSON_Delete(root);
             } else if (is_set_cmd) {
                 std::string entity_id = suffix.substr(4);
-                mqtt_enqueue_entity_cmd(entity_id.c_str(), payload_cstr, "/set");
+                if (payload_len >= sizeof(MqttSetCmd::payload)) {
+                    ESP_LOGW(TAG, "Rejecting oversized MQTT /set payload for '%s' (%zu bytes > %zu max)",
+                             entity_id.c_str(), payload_len, sizeof(MqttSetCmd::payload) - 1);
+                    return;
+                }
+                mqtt_enqueue_entity_cmd(entity_id.c_str(), payload_cstr ? payload_cstr : "", "/set");
             }
             break;
         }
@@ -1563,13 +1720,20 @@ void mqtt_mgr_init(void) {
             s_mqtt_pub_queue = xQueueCreate(16, sizeof(MqttPubItem));
         }
         if (s_mqtt_pub_queue) {
+            BaseType_t pub_task_ok = pdFAIL;
 #if CONFIG_SPIRAM
-            if (xTaskCreateWithCaps(mqtt_pub_worker_task, "mqtt_pub", 4096, nullptr, 3, nullptr, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
-                xTaskCreate(mqtt_pub_worker_task, "mqtt_pub", 3072, nullptr, 3, nullptr);
+            pub_task_ok = xTaskCreateWithCaps(mqtt_pub_worker_task, "mqtt_pub", 4096, nullptr, 3, nullptr, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (pub_task_ok != pdPASS) {
+                pub_task_ok = xTaskCreate(mqtt_pub_worker_task, "mqtt_pub", 3072, nullptr, 3, nullptr);
             }
 #else
-            xTaskCreate(mqtt_pub_worker_task, "mqtt_pub", 3072, nullptr, 3, nullptr);
+            pub_task_ok = xTaskCreate(mqtt_pub_worker_task, "mqtt_pub", 3072, nullptr, 3, nullptr);
 #endif
+            if (pub_task_ok != pdPASS) {
+                ESP_LOGE(TAG, "Failed to create mqtt_pub task (free=%lu, internal=%lu)",
+                         (unsigned long)esp_get_free_heap_size(),
+                         (unsigned long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+            }
         }
     }
     if (!s_mqtt_cmd_queue) {
@@ -1580,12 +1744,16 @@ void mqtt_mgr_init(void) {
             s_mqtt_cmd_queue = xQueueCreate(16, sizeof(MqttSetCmd));
         }
         if (s_mqtt_cmd_queue) {
-            xTaskCreate(mqtt_cmd_worker_task, "mqtt_cmd", 4096, nullptr, 4, nullptr);
+            if (xTaskCreate(mqtt_cmd_worker_task, "mqtt_cmd", 4096, nullptr, 4, nullptr) != pdPASS) {
+                ESP_LOGE(TAG, "Failed to create mqtt_cmd task (free=%lu, internal=%lu)",
+                         (unsigned long)esp_get_free_heap_size(),
+                         (unsigned long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+            }
         }
     }
 }
 
-void mqtt_mgr_start(void) {
+static void mqtt_mgr_start(void) {
     esp_mqtt_client_handle_t failed_client = nullptr;
     char* failed_broker_url = nullptr;
     {
@@ -1613,7 +1781,7 @@ void mqtt_mgr_start(void) {
             mqtt_cfg.credentials.authentication.password = s_mqtt_cfg.password.c_str();
         }
 
-        s_lwt_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/status";
+        s_lwt_topic = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/status";
         mqtt_cfg.session.last_will.topic = s_lwt_topic.c_str();
         mqtt_cfg.session.last_will.msg = "offline";
         mqtt_cfg.session.last_will.msg_len = 7;
@@ -1676,7 +1844,7 @@ void mqtt_mgr_start(void) {
     }
 }
 
-void mqtt_mgr_stop(void) {
+static void mqtt_mgr_stop(void) {
     esp_mqtt_client_handle_t client = nullptr;
     char* broker_url_copy = nullptr;
     bool was_connected = false;
@@ -1953,7 +2121,7 @@ static void mqtt_auto_reload_task(void* arg) {
         }
 
         if (claimed_pending || claim_error) {
-            std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/status";
+            std::string status_topic = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/config/automations/status";
             if (claim_error) {
                 static const char kErrMsg[] = "{\"status\":\"error\",\"message\":\"Failed staging automations\"}";
                 mqtt_enqueue_nonblocking(status_topic.c_str(), kErrMsg, (int)(sizeof(kErrMsg) - 1), 0, 0);
@@ -2030,7 +2198,7 @@ void mqtt_mgr_on_automations_reloaded(void) {
     }
 }
 
-void mqtt_mgr_publish_discovery(void) {
+static void mqtt_mgr_publish_discovery(void) {
     if (global_mqtt_client && s_mqtt_connected.load()) {
         stream_catalog_entities([](const CanEntity& entity) -> bool {
             if (!global_mqtt_client || !s_mqtt_connected.load()) return false;
@@ -2056,7 +2224,7 @@ void mqtt_mgr_publish_discovery(void) {
     }
 }
 
-void mqtt_mgr_clear_discovery(void) {
+static void mqtt_mgr_clear_discovery(void) {
     if (global_mqtt_client && s_mqtt_connected.load()) {
         stream_catalog_entities([](const CanEntity& entity) -> bool {
             if (!global_mqtt_client || !s_mqtt_connected.load()) return false;
@@ -2068,7 +2236,7 @@ void mqtt_mgr_clear_discovery(void) {
         PsramVector<AutomationRule> rules_snapshot = snapshot_automations_for_mqtt();
         for (const auto& rule : rules_snapshot) {
             if (!global_mqtt_client || !s_mqtt_connected.load()) break;
-            clear_ha_automation_discovery(global_mqtt_client, rule);
+            clear_ha_automation_topic(global_mqtt_client, rule.id);
             vTaskDelay(pdMS_TO_TICKS(15));
         }
         {
@@ -2087,42 +2255,42 @@ void mqtt_mgr_publish_vbat(float vbat) {
     if (len <= 0) return;
     int safe_len = std::min(len, static_cast<int>(sizeof(val_str) - 1));
 
-    // Publish to vbat and cond_aux_12v_battery topics (do NOT overwrite raw 8-byte hex 0x1CF topic!)
-    std::string vbat_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/vbat";
+    // Publish to device-scoped vbat and cond_aux_12v_battery topics (do NOT overwrite raw 8-byte hex 0x1CF topic!)
+    std::string vbat_topic = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/state/vbat";
     mqtt_enqueue_nonblocking(vbat_topic.c_str(), val_str, safe_len, 0, 1);
 
-    std::string entity_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/cond_aux_12v_battery";
+    std::string entity_topic = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/state/cond_aux_12v_battery";
     mqtt_enqueue_nonblocking(entity_topic.c_str(), val_str, safe_len, 0, 1);
-
-    std::string ha_state_topic = MQTT_BASE_TOPIC + "/state/cond_aux_12v_battery";
-    mqtt_enqueue_nonblocking(ha_state_topic.c_str(), val_str, safe_len, 0, 1);
 }
 
 void mqtt_mgr_publish_bms(float kw, float soc, float v, float a, float delta_mv, int min_t, int max_t) {
     if (!global_mqtt_client || !s_mqtt_connected.load(std::memory_order_relaxed)) return;
-    (void)min_t;
-    (void)max_t;
 
-    auto publish_bms_float = [](const char* metric, const char* fmt, float value) {
+    auto publish_bms_metric = [](const char* metric, const char* val_str, int len) {
+        if (!metric || !val_str || len <= 0) return;
+        char dev_topic[96];
+        int dev_len = snprintf(dev_topic, sizeof(dev_topic), "%s/%s/state/%s",
+                               MQTT_BASE_TOPIC, DEVICE_ID.c_str(), metric);
+        if (dev_len > 0 && dev_len < static_cast<int>(sizeof(dev_topic))) {
+            mqtt_enqueue_nonblocking(dev_topic, val_str, len, 0, 1);
+        }
+    };
+
+    auto publish_bms_float = [&publish_bms_metric](const char* metric, const char* fmt, float value) {
         if (!std::isfinite(value)) return;
         char val_str[32];
         int len = snprintf(val_str, sizeof(val_str), fmt, value);
         if (len <= 0) return;
         int safe_len = std::min(len, static_cast<int>(sizeof(val_str) - 1));
+        publish_bms_metric(metric, val_str, safe_len);
+    };
 
-        char dev_topic[96];
-        int dev_len = snprintf(dev_topic, sizeof(dev_topic), "%s/%s/state/%s",
-                               MQTT_BASE_TOPIC_LIT, DEVICE_ID.c_str(), metric);
-        if (dev_len > 0 && dev_len < static_cast<int>(sizeof(dev_topic))) {
-            mqtt_enqueue_nonblocking(dev_topic, val_str, safe_len, 0, 1);
-        }
-
-        char ha_topic[96];
-        int ha_len = snprintf(ha_topic, sizeof(ha_topic), "%s/state/%s",
-                              MQTT_BASE_TOPIC_LIT, metric);
-        if (ha_len > 0 && ha_len < static_cast<int>(sizeof(ha_topic))) {
-            mqtt_enqueue_nonblocking(ha_topic, val_str, safe_len, 0, 1);
-        }
+    auto publish_bms_int = [&publish_bms_metric](const char* metric, int value) {
+        char val_str[16];
+        int len = snprintf(val_str, sizeof(val_str), "%d", value);
+        if (len <= 0) return;
+        int safe_len = std::min(len, static_cast<int>(sizeof(val_str) - 1));
+        publish_bms_metric(metric, val_str, safe_len);
     };
 
     publish_bms_float("bms_hv_power_kw", "%.2f", kw);
@@ -2130,6 +2298,8 @@ void mqtt_mgr_publish_bms(float kw, float soc, float v, float a, float delta_mv,
     publish_bms_float("bms_hv_voltage", "%.1f", v);
     publish_bms_float("bms_hv_current", "%.1f", a);
     publish_bms_float("bms_cell_delta_mv", "%.0f", delta_mv);
+    publish_bms_int("bms_temp_min_c", min_t);
+    publish_bms_int("bms_temp_max_c", max_t);
 }
 
 void mqtt_mgr_publish_ble_button(const std::string& address, const std::string& button, const std::string& action, const std::string& combo, uint32_t hold_seconds) {
@@ -2152,7 +2322,7 @@ void mqtt_mgr_publish_ble_button(const std::string& address, const std::string& 
     char* payload = cJSON_PrintUnformatted(root);
     if (payload) {
         // Publish ONLY to device-scoped topic so Home Assistant wildcard doesn't fire twice
-        std::string topic_dev = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/ble_button";
+        std::string topic_dev = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/ble_button";
         mqtt_enqueue_nonblocking(topic_dev.c_str(), payload, (int)strlen(payload), 0, 0);
         free(payload);
     }
@@ -2176,7 +2346,7 @@ void mqtt_mgr_publish_ble_device(const std::string& address, const std::string& 
 
     char* payload = cJSON_PrintUnformatted(root);
     if (payload) {
-        std::string topic_dev = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/ble_device";
+        std::string topic_dev = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/ble_device";
         mqtt_enqueue_nonblocking(topic_dev.c_str(), payload, (int)strlen(payload), 0, 0);
         free(payload);
     }
@@ -2205,7 +2375,7 @@ void mqtt_mgr_publish_ble_beacon(const std::string& uuid, const std::string& eve
 
     char* payload = cJSON_PrintUnformatted(root);
     if (payload) {
-        std::string topic_dev = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/ble_beacon";
+        std::string topic_dev = std::string(MQTT_BASE_TOPIC) + "/" + DEVICE_ID + "/ble_beacon";
         mqtt_enqueue_nonblocking(topic_dev.c_str(), payload, (int)strlen(payload), 0, 0);
         free(payload);
     }

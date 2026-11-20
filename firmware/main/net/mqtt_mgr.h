@@ -16,21 +16,15 @@ struct MqttConfig {
     bool ha_discovery_enabled = false;
 };
 
-extern esp_mqtt_client_handle_t global_mqtt_client;
-extern const std::string MQTT_BASE_TOPIC;
 extern std::mutex g_automations_file_mutex;
 
 void mqtt_mgr_init(void);
-void mqtt_mgr_start(void);
-void mqtt_mgr_stop(void);
 void mqtt_mgr_on_wifi_disconnect(void);
 void mqtt_mgr_on_wifi_connect(void);
 void mqtt_mgr_watchdog(void);
 bool mqtt_mgr_is_connected(void);
 MqttConfig mqtt_mgr_get_config(void);
 bool mqtt_mgr_save_config(const MqttConfig& cfg);
-void mqtt_mgr_publish_discovery(void);
-void mqtt_mgr_clear_discovery(void);
 void mqtt_mgr_on_automations_reloaded(void);
 
 void mqtt_mgr_publish_can_state(uint32_t can_id, const uint8_t* data, size_t len);
@@ -42,7 +36,6 @@ void mqtt_mgr_reset_monitored_ids(void);
 bool mqtt_mgr_is_monitored_ids_customized(void);
 bool mqtt_mgr_is_monitored_id(uint32_t can_id);
 
-struct BleButtonEvent;
 void mqtt_mgr_publish_vbat(float vbat);
 void mqtt_mgr_publish_bms(float kw, float soc, float v, float a, float delta_mv, int min_t, int max_t);
 void mqtt_mgr_publish_ble_button(const std::string& address, const std::string& button, const std::string& action, const std::string& combo = "", uint32_t hold_seconds = 0);
