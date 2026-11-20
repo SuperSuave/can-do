@@ -24,8 +24,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 _BMS_ALIASES: dict[str, list[str]] = {
-    "bms_soc": ["bms_display_soc", "cond_hv_battery_soc"],
-    "bms_display_soc": ["bms_soc"],
+    "bms_display_soc": ["cond_hv_battery_soc"],
     "bms_hv_v": ["bms_hv_voltage"],
     "bms_hv_voltage": ["bms_hv_v"],
     "bms_hv_a": ["bms_hv_current"],

@@ -3048,12 +3048,20 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
             static int s_last_dF = -1, s_last_pF = -1;
             static uint32_t s_last_cabin_temp_ms = 0;
             if ((dF != s_last_dF || pF != s_last_pF) && (now_ms - s_last_cabin_temp_ms >= 100)) {
+                bool driver_changed = (dF != s_last_dF);
+                bool passenger_changed = (pF != s_last_pF);
                 s_last_dF = dF;
                 s_last_pF = pF;
                 s_last_cabin_temp_ms = now_ms;
-                char temp_buf[32];
-                snprintf(temp_buf, sizeof(temp_buf), "%d / %d", dF, pF);
-                emit_live_entity_state("climate_dual_cabin_temp", temp_buf);
+                char temp_buf[16];
+                if (driver_changed) {
+                    snprintf(temp_buf, sizeof(temp_buf), "%d°F", dF);
+                    emit_live_entity_state("climate_driver_temp", temp_buf);
+                }
+                if (passenger_changed) {
+                    snprintf(temp_buf, sizeof(temp_buf), "%d°F", pF);
+                    emit_live_entity_state("climate_passenger_temp", temp_buf);
+                }
             }
         }
     }
@@ -3269,7 +3277,7 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
                 s_last_fl = fl; s_last_fr = fr; s_last_rl = rl; s_last_rr = rr;
                 char tpms_buf[64];
                 snprintf(tpms_buf, sizeof(tpms_buf), "FL: %d FR: %d RL: %d RR: %d PSI", fl, fr, rl, rr);
-                emit_live_entity_state("wheel_speeds", tpms_buf);
+                emit_live_entity_state("tpms_tire_pressures", tpms_buf);
             }
         }
     }

@@ -120,8 +120,7 @@ class CanDoEntity(Entity):
 
         if "bms" in cid:
             bms_alias_map = {
-                "bms_display_soc": ["bms_soc", "0x7ec"],
-                "bms_soc": ["bms_display_soc", "0x7ec"],
+                "bms_display_soc": ["0x7ec"],
                 "bms_hv_voltage": ["bms_hv_v", "0x7ec"],
                 "bms_hv_v": ["bms_hv_voltage", "0x7ec"],
                 "bms_hv_current": ["bms_hv_a", "0x7ec"],

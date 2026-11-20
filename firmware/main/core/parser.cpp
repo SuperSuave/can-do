@@ -1311,7 +1311,7 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity, bool include_discov
     const char* ent_type = cJSON_IsString(entity_type_item) ? entity_type_item->valuestring : "";
     cJSON* net_type_item = network ? cJSON_GetObjectItem(network, "type") : nullptr;
     const char* net_type = cJSON_IsString(net_type_item) ? net_type_item->valuestring : "";
-    bool is_hud_nav = (strcmp(ent_type, "hud_nav") == 0 || strcmp(net_type, "hud_nav") == 0 || out_entity.id == "cluster_hud_navigation_tbt");
+    bool is_hud_nav = (strcmp(ent_type, "hud_nav") == 0 || strcmp(net_type, "hud_nav") == 0 || out_entity.id == "hud_turn_by_turn_maneuver");
 
     cJSON* root_mask = cJSON_GetObjectItem(entity_json, "mask");
     cJSON* net_state_mask = network ? cJSON_GetObjectItem(network, "state_mask") : nullptr;
@@ -1346,7 +1346,7 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity, bool include_discov
                 opt.steps.push_back(step);
             }
 
-            // If no explicit steps array in a hud_nav entity, extract icon code from match (e.g. cluster_hud_navigation_tbt)
+            // If no explicit steps array in a hud_nav entity, extract icon code from match (e.g. hud_turn_by_turn_maneuver)
             if (opt.steps.empty() && is_hud_nav) {
                 CatalogStep step;
                 step.type = ActionType::HUD_NAV;

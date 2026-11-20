@@ -2133,23 +2133,9 @@
           "default": true
         },
         {
-          "label": "Driver Door Closed",
-          "match": {
-            "D4": "0x00"
-          },
-          "mask": "0x01"
-        },
-        {
           "label": "Passenger Door Opened",
           "match": {
             "D5": "0x04"
-          },
-          "mask": "0x04"
-        },
-        {
-          "label": "Passenger Door Closed",
-          "match": {
-            "D5": "0x00"
           },
           "mask": "0x04"
         },
@@ -2161,23 +2147,9 @@
           "mask": "0x10"
         },
         {
-          "label": "Rear Left Door Closed",
-          "match": {
-            "D7": "0x00"
-          },
-          "mask": "0x10"
-        },
-        {
           "label": "Rear Right Door Opened",
           "match": {
             "D8": "0x01"
-          },
-          "mask": "0x01"
-        },
-        {
-          "label": "Rear Right Door Closed",
-          "match": {
-            "D8": "0x00"
           },
           "mask": "0x01"
         }
@@ -2352,7 +2324,7 @@
       "contributor": {
         "name": "Electroniq Buttons Community",
         "github": "",
-        "notes": "Decoded from E-GMP Body_Status frame 1041 (0x411) bits 36 and 42"
+        "notes": "Decoded from E-GMP Body_Status frame 1041 (0x411) bit 42 (Byte D6 mask 0x04)"
       },
       "options": [
         {
@@ -2360,25 +2332,60 @@
           "match": {
             "D6": "0x04"
           },
+          "mask": "0x04",
           "default": true
         },
         {
           "label": "Driver Unbuckled",
           "match": {
             "D6": "0x00"
-          }
-        },
+          },
+          "mask": "0x04"
+        }
+      ],
+      "subcategory": "Cabin Safety",
+      "state_can_id": "0x411"
+    },
+    {
+      "id": "passenger_seatbelt_status",
+      "ha_metadata": {
+        "name": "Passenger Seatbelt",
+        "domain": "binary_sensor",
+        "icon": "mdi:seatbelt"
+      },
+      "tags": [
+        "all_egmp"
+      ],
+      "category": "Doors, Access & Security",
+      "network": {
+        "bus": 0,
+        "type": "can_rx",
+        "state_can_id": "0x411"
+      },
+      "roles": [
+        "trigger",
+        "condition"
+      ],
+      "contributor": {
+        "name": "Electroniq Buttons Community",
+        "github": "",
+        "notes": "Decoded from E-GMP Body_Status frame 1041 (0x411) bit 36 (Byte D5 mask 0x10)"
+      },
+      "options": [
         {
           "label": "Passenger Buckled",
           "match": {
             "D5": "0x10"
-          }
+          },
+          "mask": "0x10",
+          "default": true
         },
         {
           "label": "Passenger Unbuckled",
           "match": {
             "D5": "0x00"
-          }
+          },
+          "mask": "0x10"
         }
       ],
       "subcategory": "Cabin Safety",
@@ -2561,13 +2568,15 @@
           "match": {
             "D6": "0x10"
           },
+          "mask": "0x10",
           "default": true
         },
         {
           "label": "Closed / Shut",
           "match": {
             "D6": "0x00"
-          }
+          },
+          "mask": "0x10"
         }
       ],
       "subcategory": "Doors & Latches",
@@ -2805,6 +2814,20 @@
       ],
       "options": [
         {
+          "label": "Flash Pulse (Lamps Lit)",
+          "match": {
+            "D2": "0x50",
+            "D4": "0x04"
+          }
+        },
+        {
+          "label": "Flash Pulse (Lamps Dark)",
+          "match": {
+            "D2": "0x00",
+            "D4": "0x04"
+          }
+        },
+        {
           "label": "Turned ON / Active",
           "match": {
             "D4": "0x04"
@@ -2826,20 +2849,6 @@
               "repeat": 3
             }
           ]
-        },
-        {
-          "label": "Flash Pulse (Lamps Lit)",
-          "match": {
-            "D2": "0x50",
-            "D4": "0x04"
-          }
-        },
-        {
-          "label": "Flash Pulse (Lamps Dark)",
-          "match": {
-            "D2": "0x00",
-            "D4": "0x04"
-          }
         },
         {
           "label": "Turned OFF / Inactive",
@@ -4486,7 +4495,7 @@
       "id": "cluster_nav_osd_countdown",
       "ha_metadata": {
         "name": "Cluster Preconditioning Countdown & Nav OSD",
-        "domain": "notify",
+        "domain": "select",
         "icon": "mdi:timer-outline"
       },
       "tags": [
@@ -6800,51 +6809,6 @@
               "mask": "0x70"
             }
           ]
-        },
-        {
-          "targets": [
-            "all_egmp",
-            "hyundai_ioniq5",
-            "hyundai_ioniq6",
-            "kia_ev6",
-            "genesis_gv60"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x70"
-          },
-          "options": [
-            {
-              "label": "P",
-              "match": {
-                "D8": "0x00"
-              },
-              "mask": "0x70",
-              "default": true
-            },
-            {
-              "label": "D",
-              "match": {
-                "D8": "0x50"
-              },
-              "mask": "0x70"
-            },
-            {
-              "label": "N",
-              "match": {
-                "D8": "0x60"
-              },
-              "mask": "0x70"
-            },
-            {
-              "label": "R",
-              "match": {
-                "D8": "0x70"
-              },
-              "mask": "0x70"
-            }
-          ]
         }
       ],
       "subcategory": "Transmission & Shifter",
@@ -6989,38 +6953,6 @@
                 "D5": "0x00"
               },
               "mask": "0x03"
-            }
-          ]
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen2a",
-            "hyundai_kona_ev",
-            "kia_niro_ev",
-            "kia_soul_ev",
-            "hyundai_ioniq_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x594"
-          },
-          "options": [
-            {
-              "label": "Charging In Progress",
-              "match": {
-                "D2": "0x02"
-              },
-              "mask": "0x02",
-              "default": true
-            },
-            {
-              "label": "Not Charging / Disconnected",
-              "match": {
-                "D2": "0x00"
-              },
-              "mask": "0x02"
             }
           ]
         }
@@ -8296,7 +8228,8 @@
         "type": "can_rx",
         "state_can_id": "0x327",
         "unit": "min",
-        "state_byte": "D1-D2"
+        "state_byte": "D1",
+        "byte_length": 2
       },
       "options": [
         {
@@ -8370,7 +8303,8 @@
             "type": "can_rx",
             "state_can_id": "0x327",
             "unit": "min",
-            "state_byte": "D1-D2"
+            "state_byte": "D1",
+            "byte_length": 2
           },
           "options": [
             {
@@ -8402,49 +8336,6 @@
               "match": {
                 "D1": "0xFF",
                 "D2": "0xFF"
-              },
-              "default": true
-            }
-          ]
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen2a",
-            "hyundai_kona_ev",
-            "kia_niro_ev",
-            "kia_soul_ev",
-            "hyundai_ioniq_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x597",
-            "unit": "min",
-            "state_byte": "D2-D3"
-          },
-          "options": [
-            {
-              "label": "Under 30 Minutes",
-              "evaluate": {
-                "byte": "D2",
-                "operator": "<=",
-                "value": "0x1E"
-              }
-            },
-            {
-              "label": "Under 1 Hour",
-              "evaluate": {
-                "byte": "D2",
-                "operator": "<=",
-                "value": "0x3C"
-              }
-            },
-            {
-              "label": "Not Charging / Inactive",
-              "match": {
-                "D2": "0xFF",
-                "D3": "0xFF"
               },
               "default": true
             }
@@ -8481,7 +8372,8 @@
         "type": "can_rx",
         "state_can_id": "0x25C",
         "unit": "min",
-        "state_byte": "D3-D4"
+        "state_byte": "D3",
+        "byte_length": 2
       },
       "options": [
         {
@@ -8555,7 +8447,8 @@
             "type": "can_rx",
             "state_can_id": "0x25C",
             "unit": "min",
-            "state_byte": "D3-D4"
+            "state_byte": "D3",
+            "byte_length": 2
           },
           "options": [
             {
@@ -8591,49 +8484,6 @@
               "default": true
             }
           ]
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen2a",
-            "hyundai_kona_ev",
-            "kia_niro_ev",
-            "kia_soul_ev",
-            "hyundai_ioniq_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x597",
-            "unit": "min",
-            "state_byte": "D4-D5"
-          },
-          "options": [
-            {
-              "label": "Under 10 Minutes (Near 80%)",
-              "evaluate": {
-                "byte": "D4",
-                "operator": "<=",
-                "value": "0x0A"
-              }
-            },
-            {
-              "label": "Under 20 Minutes",
-              "evaluate": {
-                "byte": "D4",
-                "operator": "<=",
-                "value": "0x14"
-              }
-            },
-            {
-              "label": "Not Fast Charging",
-              "match": {
-                "D4": "0xFF",
-                "D5": "0xFF"
-              },
-              "default": true
-            }
-          ]
         }
       ]
     },
@@ -8665,7 +8515,8 @@
         "type": "can_rx",
         "state_can_id": "0x328",
         "unit": "min",
-        "state_byte": "D1-D2"
+        "state_byte": "D1",
+        "byte_length": 2
       },
       "options": [
         {
@@ -8723,7 +8574,8 @@
             "type": "can_rx",
             "state_can_id": "0x328",
             "unit": "min",
-            "state_byte": "D1-D2"
+            "state_byte": "D1",
+            "byte_length": 2
           },
           "options": [
             {
@@ -8739,41 +8591,6 @@
               "match": {
                 "D1": "0xFF",
                 "D2": "0xFF"
-              },
-              "default": true
-            }
-          ]
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen2a",
-            "hyundai_kona_ev",
-            "kia_niro_ev",
-            "kia_soul_ev",
-            "hyundai_ioniq_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x4E2",
-            "unit": "min",
-            "state_byte": "D3-D4"
-          },
-          "options": [
-            {
-              "label": "Over 12 Hours",
-              "evaluate": {
-                "byte": "D4",
-                "operator": ">",
-                "value": "0x02"
-              }
-            },
-            {
-              "label": "Not Level 1 Charging",
-              "match": {
-                "D3": "0xFF",
-                "D4": "0xFF"
               },
               "default": true
             }
@@ -8894,52 +8711,6 @@
               "mask": "0x3C"
             }
           ]
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen2a",
-            "hyundai_kona_ev",
-            "kia_niro_ev",
-            "kia_soul_ev",
-            "hyundai_ioniq_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x595"
-          },
-          "options": [
-            {
-              "label": "Standard AC Charging (Level 2)",
-              "match": {
-                "D1": "0x02"
-              },
-              "mask": "0x0E",
-              "default": true
-            },
-            {
-              "label": "DC Fast Charging (CCS / 800V)",
-              "match": {
-                "D1": "0x04"
-              },
-              "mask": "0x0E"
-            },
-            {
-              "label": "120V Trickle Charging (Level 1)",
-              "match": {
-                "D1": "0x08"
-              },
-              "mask": "0x0E"
-            },
-            {
-              "label": "Not Charging / Disconnected",
-              "match": {
-                "D1": "0x00"
-              },
-              "mask": "0x0E"
-            }
-          ]
         }
       ]
     },
@@ -9052,7 +8823,8 @@
         "type": "can_rx",
         "state_can_id": "0x324",
         "unit": "min",
-        "state_byte": "D7-D8"
+        "state_byte": "D7",
+        "byte_length": 2
       },
       "options": [
         {
@@ -9618,59 +9390,6 @@
               "mask": "0x0F"
             }
           ]
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen2a",
-            "hyundai_kona_ev",
-            "kia_niro_ev",
-            "kia_soul_ev",
-            "hyundai_ioniq_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x5F7"
-          },
-          "options": [
-            {
-              "label": "Blower Off (0 Bars)",
-              "match": {
-                "D1": "0x00"
-              },
-              "mask": "0xFF"
-            },
-            {
-              "label": "Blower Low (1-2 Bars)",
-              "match": {
-                "D1": "0x01"
-              },
-              "mask": "0xFE"
-            },
-            {
-              "label": "Blower Medium (3-4 Bars)",
-              "match": {
-                "D1": "0x03"
-              },
-              "mask": "0xFE",
-              "default": true
-            },
-            {
-              "label": "Blower High (5-6 Bars)",
-              "match": {
-                "D1": "0x05"
-              },
-              "mask": "0xFE"
-            },
-            {
-              "label": "Blower Max (7-8 Bars)",
-              "match": {
-                "D1": "0x07"
-              },
-              "mask": "0xFE"
-            }
-          ]
         }
       ]
     },
@@ -9703,6 +9422,13 @@
       },
       "options": [
         {
+          "label": "Hands-Off Wheel Alert",
+          "match": {
+            "D7": "0x01"
+          },
+          "mask": "0x07"
+        },
+        {
           "label": "LKAS Actively Centering",
           "match": {
             "D2": "0x04"
@@ -9723,13 +9449,6 @@
             "D2": "0x08"
           },
           "mask": "0x3C"
-        },
-        {
-          "label": "Hands-Off Wheel Alert",
-          "match": {
-            "D7": "0x01"
-          },
-          "mask": "0x07"
         }
       ],
       "state_can_id": "0x340"
@@ -10183,45 +9902,6 @@
               "mask": "0x0F"
             }
           ]
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen2a",
-            "hyundai_kona_ev",
-            "kia_niro_ev",
-            "kia_soul_ev",
-            "hyundai_ioniq_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x490"
-          },
-          "options": [
-            {
-              "label": "Parking Brake Clamped / Engaged",
-              "match": {
-                "D1": "0x01"
-              },
-              "mask": "0x03",
-              "default": true
-            },
-            {
-              "label": "Parking Brake Released",
-              "match": {
-                "D1": "0x00"
-              },
-              "mask": "0x03"
-            },
-            {
-              "label": "Auto-Hold Active Braking",
-              "match": {
-                "D2": "0x01"
-              },
-              "mask": "0x01"
-            }
-          ]
         }
       ]
     },
@@ -10476,7 +10156,10 @@
             "D3": "0x14",
             "D8": "0x04"
           },
-          "mask": "0x04",
+          "mask": {
+            "D3": "0xFF",
+            "D8": "0x04"
+          },
           "payload": {
             "D1": "0x16",
             "D2": "0x00",
@@ -10494,7 +10177,10 @@
             "D3": "0x0A",
             "D8": "0x00"
           },
-          "mask": "0x04",
+          "mask": {
+            "D3": "0xFF",
+            "D8": "0x04"
+          },
           "payload": {
             "D1": "0x16",
             "D2": "0x00",
@@ -11150,22 +10836,6 @@
             "state_can_id": "0x321",
             "action_can_id": "0x321"
           }
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen2a",
-            "hyundai_kona_ev",
-            "kia_niro_ev",
-            "kia_soul_ev",
-            "hyundai_ioniq_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx_tx",
-            "state_can_id": "0x450",
-            "action_can_id": "0x450"
-          }
         }
       ],
       "options": [
@@ -11274,14 +10944,6 @@
       },
       "options": [
         {
-          "label": "Amplifier Normal / Active",
-          "match": {
-            "D1": "0x01"
-          },
-          "mask": "0x01",
-          "default": true
-        },
-        {
           "label": "Amplifier Thermal Derate",
           "match": {
             "D2": "0x01"
@@ -11294,6 +10956,14 @@
             "D3": "0x01"
           },
           "mask": "0x01"
+        },
+        {
+          "label": "Amplifier Normal / Active",
+          "match": {
+            "D1": "0x01"
+          },
+          "mask": "0x01",
+          "default": true
         }
       ],
       "state_can_id": "0x60F"
@@ -12814,43 +12484,6 @@
               "mask": "0x18"
             }
           ]
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen2a",
-            "hyundai_kona_ev",
-            "kia_niro_ev",
-            "kia_soul_ev",
-            "hyundai_ioniq_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x593",
-            "state_byte": "D1",
-            "state_mask": "0x03"
-          },
-          "options": [
-            {
-              "label": "Normal",
-              "match": {
-                "D1": "0x00"
-              }
-            },
-            {
-              "label": "Low Pressure Warning",
-              "match": {
-                "D1": "0x01"
-              }
-            },
-            {
-              "label": "Sensor / System Fault",
-              "match": {
-                "D1": "0x02"
-              }
-            }
-          ]
         }
       ]
     },
@@ -12982,37 +12615,6 @@
                 "D4": "0x03"
               },
               "mask": "0x03"
-            }
-          ]
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen2a",
-            "hyundai_kona_ev",
-            "kia_niro_ev",
-            "kia_soul_ev",
-            "hyundai_ioniq_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x593",
-            "state_byte": "D1",
-            "state_mask": "0x10"
-          },
-          "options": [
-            {
-              "label": "Normal",
-              "match": {
-                "D1": "0x00"
-              }
-            },
-            {
-              "label": "Low Pressure",
-              "match": {
-                "D1": "0x10"
-              }
             }
           ]
         }
@@ -13148,37 +12750,6 @@
               "mask": "0x0C"
             }
           ]
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen2a",
-            "hyundai_kona_ev",
-            "kia_niro_ev",
-            "kia_soul_ev",
-            "hyundai_ioniq_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x593",
-            "state_byte": "D1",
-            "state_mask": "0x20"
-          },
-          "options": [
-            {
-              "label": "Normal",
-              "match": {
-                "D1": "0x00"
-              }
-            },
-            {
-              "label": "Low Pressure",
-              "match": {
-                "D1": "0x20"
-              }
-            }
-          ]
         }
       ]
     },
@@ -13312,37 +12883,6 @@
               "mask": "0x30"
             }
           ]
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen2a",
-            "hyundai_kona_ev",
-            "kia_niro_ev",
-            "kia_soul_ev",
-            "hyundai_ioniq_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x593",
-            "state_byte": "D1",
-            "state_mask": "0x40"
-          },
-          "options": [
-            {
-              "label": "Normal",
-              "match": {
-                "D1": "0x00"
-              }
-            },
-            {
-              "label": "Low Pressure",
-              "match": {
-                "D1": "0x40"
-              }
-            }
-          ]
         }
       ]
     },
@@ -13474,37 +13014,6 @@
                 "D4": "0xC0"
               },
               "mask": "0xC0"
-            }
-          ]
-        },
-        {
-          "targets": [
-            "all_gen2",
-            "all_gen2a",
-            "hyundai_kona_ev",
-            "kia_niro_ev",
-            "kia_soul_ev",
-            "hyundai_ioniq_ev"
-          ],
-          "network": {
-            "bus": 0,
-            "type": "can_rx",
-            "state_can_id": "0x593",
-            "state_byte": "D1",
-            "state_mask": "0x80"
-          },
-          "options": [
-            {
-              "label": "Normal",
-              "match": {
-                "D1": "0x00"
-              }
-            },
-            {
-              "label": "Low Pressure",
-              "match": {
-                "D1": "0x80"
-              }
             }
           ]
         }

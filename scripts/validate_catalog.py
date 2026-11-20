@@ -225,6 +225,74 @@ def validate_byte_index_key(
     return int(m.group(1))
 
 
+VALID_ENDIANNESS_VALUES: frozenset[str] = frozenset({"little", "le", "intel", "big", "be", "motorola"})
+
+
+def validate_state_byte_length(
+    net_obj: dict[str, Any],
+    start_byte_idx: int | None,
+    *,
+    is_fd: bool,
+    context: str,
+    entity_id: str,
+    line: int | None,
+    findings: list[Finding],
+) -> int:
+    """
+    Validate optional network.byte_length (1 or 2) and optional network.endianness alongside state_byte.
+    Returns validated byte_length (1 or 2, defaulting to 1).
+    """
+    max_bytes = 64 if is_fd else 8
+    byte_length = 1
+
+    if "byte_length" in net_obj and net_obj["byte_length"] is not None:
+        raw_len = net_obj["byte_length"]
+        if isinstance(raw_len, bool) or not isinstance(raw_len, int) or raw_len not in (1, 2):
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "payload",
+                    "invalid_byte_length",
+                    entity_id,
+                    f"{context}.byte_length={raw_len!r} must be integer 1 or 2",
+                    None,
+                    line,
+                )
+            )
+        else:
+            byte_length = raw_len
+            if start_byte_idx is not None and (start_byte_idx + byte_length - 1) > max_bytes:
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        "payload",
+                        "byte_length_exceeds_can_limit",
+                        entity_id,
+                        f"{context}.state_byte='D{start_byte_idx}' with byte_length={byte_length} "
+                        f"exceeds {max_bytes}-byte CAN payload limit",
+                        None,
+                        line,
+                    )
+                )
+
+    if "endianness" in net_obj and net_obj["endianness"] is not None:
+        raw_endian = net_obj["endianness"]
+        if not isinstance(raw_endian, str) or raw_endian.strip().lower() not in VALID_ENDIANNESS_VALUES:
+            findings.append(
+                Finding(
+                    "ERROR",
+                    "payload",
+                    "invalid_endianness",
+                    entity_id,
+                    f"{context}.endianness={raw_endian!r} must be one of: little, big",
+                    None,
+                    line,
+                )
+            )
+
+    return byte_length
+
+
 def validate_payload_value(
     payload: Any,
     *,
@@ -468,8 +536,8 @@ def resolve_match_constraints(
 ) -> dict[int, tuple[int, int, bool]] | None:
     """
     Parse an option's `match` ByteMap into {byte_index(1..8): (masked_val, mask_val, inverted)}.
-    When include_network_state_mask=False, mirrors parser.cpp / can_utils.py runtime semantics
-    (opt.mask -> cmd.mask -> 0xFF).
+    When include_network_state_mask=True, mirrors Pass 1A parser.cpp / can_utils.py runtime semantics
+    (opt.mask -> cmd.mask -> network.state_mask -> 0xFF).
     """
     match = opt.get("match")
     if not isinstance(match, dict) or not match:
@@ -794,8 +862,8 @@ def validate_options_block(
                             )
                         )
 
-            # Record runtime RX rule for shadowing analysis
-            parsed_rule = resolve_match_constraints(opt, cmd, net, include_network_state_mask=False)
+            # Record runtime RX rule for shadowing analysis (Pass 1A: parser.cpp & can_utils.py fall back to network.state_mask)
+            parsed_rule = resolve_match_constraints(opt, cmd, net, include_network_state_mask=True)
             if parsed_rule:
                 runtime_rx_rules.append((idx, disp_label, parsed_rule))
 
@@ -887,6 +955,7 @@ def validate_catalog(catalog_path: Path) -> tuple[list[Finding], int, str]:
 
     # Track global state for cross-entity checks
     seen_entity_ids: dict[str, str] = {}
+    entity_domains: dict[str, str | None] = {}
 
     # Map (bus, CAN_ID) -> list of entity RX summaries for cross-entity collision checks
     # Each entry: (entity_id, line, runtime_rules, intended_rules, byte_mask_info)
@@ -934,9 +1003,10 @@ def validate_catalog(catalog_path: Path) -> tuple[list[Finding], int, str]:
             seen_entity_ids[norm_eid] = eid
 
         # --- 1. Payload, Byte-Index & Mask Validity (Root & Network) ---
+        root_state_byte_idx: int | None = None
         for field in ("state_byte", "action_byte"):
             if field in net and net[field] is not None:
-                validate_byte_index_key(
+                parsed_idx = validate_byte_index_key(
                     net[field],
                     is_fd=is_fd,
                     context=f"network.{field}",
@@ -945,6 +1015,18 @@ def validate_catalog(catalog_path: Path) -> tuple[list[Finding], int, str]:
                     line=eline,
                     findings=findings,
                 )
+                if field == "state_byte":
+                    root_state_byte_idx = parsed_idx
+
+        root_byte_length = validate_state_byte_length(
+            net,
+            root_state_byte_idx,
+            is_fd=is_fd,
+            context="network",
+            entity_id=eid,
+            line=eline,
+            findings=findings,
+        )
 
         if "mask" in cmd and cmd["mask"] is not None:
             validate_mask_value(
@@ -1065,12 +1147,12 @@ def validate_catalog(catalog_path: Path) -> tuple[list[Finding], int, str]:
                 if missing_mask_opts:
                     findings.append(
                         Finding(
-                            "ERROR",
+                            "WARNING",
                             "masking_variants",
                             "unpropagated_state_mask",
                             eid,
-                            f"network.state_mask='{net_state_mask_raw}' is ignored by parser.cpp & can_utils.py, "
-                            f"and {len(missing_mask_opts)}/{len(match_opts)} RX options omit option.mask (and cmd.mask is unset)",
+                            f"network.state_mask='{net_state_mask_raw}' relies on runtime fallback in parser.cpp & can_utils.py; "
+                            f"{len(missing_mask_opts)}/{len(match_opts)} RX options omit explicit option.mask (and cmd.mask is unset)",
                             None,
                             eline,
                         )
@@ -1100,9 +1182,10 @@ def validate_catalog(catalog_path: Path) -> tuple[list[Finding], int, str]:
                 v_is_fd = is_can_fd_entity(cmd, merged_net)
 
                 # Validate variant network byte indices & masks
+                v_state_byte_idx: int | None = None
                 for field in ("state_byte", "action_byte"):
                     if field in v_net and v_net[field] is not None:
-                        validate_byte_index_key(
+                        parsed_v_idx = validate_byte_index_key(
                             v_net[field],
                             is_fd=v_is_fd,
                             context=f"variants[{v_idx}].network.{field}",
@@ -1111,6 +1194,18 @@ def validate_catalog(catalog_path: Path) -> tuple[list[Finding], int, str]:
                             line=eline,
                             findings=findings,
                         )
+                        if field == "state_byte":
+                            v_state_byte_idx = parsed_v_idx
+                if "byte_length" in v_net or "endianness" in v_net:
+                    validate_state_byte_length(
+                        v_net,
+                        v_state_byte_idx if v_state_byte_idx is not None else root_state_byte_idx,
+                        is_fd=v_is_fd,
+                        context=f"variants[{v_idx}].network",
+                        entity_id=eid,
+                        line=eline,
+                        findings=findings,
+                    )
                 for mfield in ("state_mask", "mask"):
                     if mfield in v_net and v_net[mfield] is not None:
                         validate_mask_value(
@@ -1222,19 +1317,23 @@ def validate_catalog(catalog_path: Path) -> tuple[list[Finding], int, str]:
                     r_comb, i_comb, has_unm = byte_mask_info.get(b_idx, (0, 0, False))
                     byte_mask_info[b_idx] = (r_comb, i_comb | m_val, has_unm)
 
-            # Also include single-byte numeric entities using network.state_byte without options
+            # Also include single- or 2-byte numeric entities using network.state_byte without options
             sb = net.get("state_byte")
             if isinstance(sb, str) and CLASSIC_BYTE_RE.match(sb.strip()) and not runtime_rx_rules:
-                b_idx = int(sb.strip()[1:])
-                sm_raw = net.get("state_mask") or net.get("mask") or cmd.get("mask")
+                start_b = int(sb.strip()[1:])
+                sm_raw = cmd.get("mask") or net.get("state_mask") or net.get("mask")
                 i_mask = 0xFF
                 if isinstance(sm_raw, str):
                     mv, _, merr = parse_byte_value(sm_raw, allow_invert=False)
                     if not merr and mv is not None:
                         i_mask = mv
-                r_mask = 0xFF if cmd.get("mask") is None else i_mask
-                r_comb, i_comb, has_unm = byte_mask_info.get(b_idx, (0, 0, False))
-                byte_mask_info[b_idx] = (r_comb | r_mask, i_comb | i_mask, has_unm or (r_mask == 0xFF))
+                r_mask = i_mask
+                for offset in range(root_byte_length):
+                    b_idx = start_b + offset
+                    if b_idx > 8:
+                        break
+                    r_comb, i_comb, has_unm = byte_mask_info.get(b_idx, (0, 0, False))
+                    byte_mask_info[b_idx] = (r_comb | r_mask, i_comb | i_mask, has_unm or (r_mask == 0xFF))
 
             if runtime_rx_rules or byte_mask_info:
                 rx_by_can_id.setdefault((bus, state_can_id_norm), []).append(
@@ -1286,6 +1385,7 @@ def validate_catalog(catalog_path: Path) -> tuple[list[Finding], int, str]:
                 )
             else:
                 ha_domain = raw_dom
+        entity_domains[eid] = ha_domain
 
         # notify entities must target 0x6E0 (or omit action_can_id for track_popup subsystem)
         if ha_domain == "notify":
@@ -1380,6 +1480,11 @@ def validate_catalog(catalog_path: Path) -> tuple[list[Finding], int, str]:
                 eid_b, _, rt_b, int_b, bm_b = entries[j]
 
                 # 1. Exact match + mask collisions (check both runtime and intended mask signatures)
+                dom_pair = {entity_domains.get(eid_a), entity_domains.get(eid_b)}
+                is_cover_sensor_pair = dom_pair == {"cover", "sensor"}
+                collision_severity = "WARNING" if is_cover_sensor_pair else "ERROR"
+                domain_note = " (benign cover+sensor shared nibble)" if is_cover_sensor_pair else ""
+
                 exact_reported: set[tuple[str, str]] = set()
                 for lbl_a, rule_a in rt_a:
                     for lbl_b, rule_b in rt_b:
@@ -1391,12 +1496,12 @@ def validate_catalog(catalog_path: Path) -> tuple[list[Finding], int, str]:
                             )
                             findings.append(
                                 Finding(
-                                    "ERROR",
+                                    collision_severity,
                                     "collisions",
                                     "cross_entity_exact_collision",
                                     eid_a,
                                     f"exact RX match+mask collision on bus {bus} {can_id} ({sig}) "
-                                    f"with '{eid_b}' option '{lbl_b}'",
+                                    f"with '{eid_b}' option '{lbl_b}'{domain_note}",
                                     lbl_a,
                                     line_a,
                                 )
@@ -1412,12 +1517,12 @@ def validate_catalog(catalog_path: Path) -> tuple[list[Finding], int, str]:
                             )
                             findings.append(
                                 Finding(
-                                    "ERROR",
+                                    collision_severity,
                                     "collisions",
                                     "cross_entity_exact_collision",
                                     eid_a,
                                     f"exact intended RX match+mask collision on bus {bus} {can_id} ({sig}) "
-                                    f"with '{eid_b}' option '{lbl_b}' (via network.state_mask)",
+                                    f"with '{eid_b}' option '{lbl_b}' (via network.state_mask){domain_note}",
                                     lbl_a,
                                     line_a,
                                 )

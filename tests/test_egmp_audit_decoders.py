@@ -228,7 +228,7 @@ class TestEgmpAuditDecoders(unittest.TestCase):
         self.coordinator = CanDoDataCoordinator(self.hass, self.entry_data)
 
     def test_cond_charging_catalog_variants(self):
-        """Verify cond_charging resolves to 0x326 on E-GMP and 0x594 on Gen 2."""
+        """Verify cond_charging resolves to 0x326 on E-GMP."""
         cmd = self.commands_by_id.get("cond_charging")
         self.assertIsNotNone(cmd, "cond_charging must exist in catalog")
         self.assertEqual(cmd.get("state_can_id"), "0x326")
@@ -238,13 +238,8 @@ class TestEgmpAuditDecoders(unittest.TestCase):
         self.assertEqual(resolved_egmp["network"]["state_can_id"], "0x326")
         self.assertEqual(resolved_egmp.get("state_can_id"), "0x326")
 
-        # Resolve for Gen 2
-        resolved_gen2 = resolve_variant(cmd, "hyundai_kona_ev")
-        self.assertEqual(resolved_gen2["network"]["state_can_id"], "0x594")
-        self.assertEqual(resolved_gen2.get("state_can_id"), "0x594")
-
     def test_ev_charge_type_active_catalog_variants(self):
-        """Verify ev_charge_type_active resolves to 0x30B on E-GMP and 0x595 on Gen 2."""
+        """Verify ev_charge_type_active resolves to 0x30B on E-GMP."""
         cmd = self.commands_by_id.get("ev_charge_type_active")
         self.assertIsNotNone(cmd, "ev_charge_type_active must exist in catalog")
         self.assertEqual(cmd.get("state_can_id"), "0x30B")
@@ -254,13 +249,8 @@ class TestEgmpAuditDecoders(unittest.TestCase):
         self.assertEqual(resolved_egmp["network"]["state_can_id"], "0x30B")
         self.assertEqual(resolved_egmp.get("state_can_id"), "0x30B")
 
-        # Resolve for Gen 2
-        resolved_gen2 = resolve_variant(cmd, "all_gen2")
-        self.assertEqual(resolved_gen2["network"]["state_can_id"], "0x595")
-        self.assertEqual(resolved_gen2.get("state_can_id"), "0x595")
-
     def test_tpms_catalog_variants(self):
-        """Verify TPMS entities resolve to 0x3A1/0x3A2 on E-GMP and 0x593 on Gen 2."""
+        """Verify TPMS entities resolve to 0x3A1/0x3A2 on E-GMP."""
         for wheel in ("fl", "fr", "rl", "rr"):
             cid = f"tpms_low_pressure_{wheel}"
             cmd = self.commands_by_id.get(cid)
@@ -270,29 +260,23 @@ class TestEgmpAuditDecoders(unittest.TestCase):
             resolved_egmp = resolve_variant(cmd, "kia_ev6")
             self.assertEqual(resolved_egmp["network"]["state_can_id"], "0x3A1")
 
-            resolved_gen2 = resolve_variant(cmd, "hyundai_kona_ev")
-            self.assertEqual(resolved_gen2["network"]["state_can_id"], "0x593")
-
         warn_lamp = self.commands_by_id.get("tpms_warning_lamp")
         self.assertIsNotNone(warn_lamp)
         self.assertEqual(warn_lamp.get("state_can_id"), "0x3A2")
         self.assertEqual(resolve_variant(warn_lamp, "kia_ev6")["network"]["state_can_id"], "0x3A2")
-        self.assertEqual(resolve_variant(warn_lamp, "hyundai_kona_ev")["network"]["state_can_id"], "0x593")
 
     def test_epb_and_climate_variants(self):
-        """Verify EPB resolves to 0x1F1 / 0x490 and Climate Fan to 0x384 / 0x5F7."""
+        """Verify EPB resolves to 0x1F1 and Climate Fan to 0x384 on E-GMP."""
         epb = self.commands_by_id.get("electric_parking_brake_status")
         self.assertIsNotNone(epb)
         self.assertEqual(resolve_variant(epb, "kia_ev6")["network"]["state_can_id"], "0x1F1")
-        self.assertEqual(resolve_variant(epb, "hyundai_kona_ev")["network"]["state_can_id"], "0x490")
 
         fan = self.commands_by_id.get("climate_blower_fan_status")
         self.assertIsNotNone(fan)
         self.assertEqual(resolve_variant(fan, "kia_ev6")["network"]["state_can_id"], "0x384")
-        self.assertEqual(resolve_variant(fan, "hyundai_kona_ev")["network"]["state_can_id"], "0x5F7")
 
     def test_monitored_can_ids_egmp_vs_gen2(self):
-        """Verify monitored CAN IDs reflect native Gen 3 on E-GMP and Gen 2 on Kona."""
+        """Verify monitored CAN IDs reflect native Gen 3 on E-GMP."""
         egmp_ids = get_monitored_can_ids("kia_ev6")
         self.assertIn("0x326", egmp_ids)
         self.assertIn("0x30b", egmp_ids)
@@ -306,17 +290,8 @@ class TestEgmpAuditDecoders(unittest.TestCase):
         self.assertIn("0x328", egmp_ids)
         self.assertIn("0x324", egmp_ids)
 
-        gen2_ids = get_monitored_can_ids("hyundai_kona_ev")
-        self.assertIn("0x594", gen2_ids)
-        self.assertIn("0x595", gen2_ids)
-        self.assertIn("0x593", gen2_ids)
-        self.assertIn("0x490", gen2_ids)
-        self.assertIn("0x5f7", gen2_ids)
-        self.assertIn("0x597", gen2_ids)
-        self.assertIn("0x4e2", gen2_ids)
-
     def test_cond_charging_decoding(self):
-        """Test CanDoSensorEntity decoding for cond_charging from 0x326 (E-GMP) and 0x594 (Gen 2)."""
+        """Test CanDoSensorEntity decoding for cond_charging from 0x326 (E-GMP)."""
         # E-GMP (0x326)
         cmd_egmp = resolve_variant(self.commands_by_id["cond_charging"], "kia_ev6")
         sensor_egmp = CanDoSensorEntity(self.coordinator, cmd_egmp)
@@ -336,20 +311,8 @@ class TestEgmpAuditDecoders(unittest.TestCase):
         self.coordinator.can_states["cond_charging"] = "Inactive"
         self.assertEqual(sensor_egmp.native_value, "Not Charging / Disconnected")
 
-        # Gen 2 (0x594 BMS1 Byte D2 bit 1)
-        cmd_gen2 = resolve_variant(self.commands_by_id["cond_charging"], "hyundai_kona_ev")
-        sensor_gen2 = CanDoSensorEntity(self.coordinator, cmd_gen2)
-
-        # 0x594 D2 = 0x02 (Bit 1 = 1) -> Active charging
-        self.coordinator.can_states["0x594"] = [0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-        self.assertEqual(sensor_gen2.native_value, "Charging In Progress")
-
-        # 0x594 D2 = 0x00 -> Inactive
-        self.coordinator.can_states["0x594"] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-        self.assertEqual(sensor_gen2.native_value, "Not Charging / Disconnected")
-
     def test_ev_charge_type_active_decoding(self):
-        """Test CanDoSensorEntity decoding for ev_charge_type_active from 0x30B (E-GMP) and 0x595 (Gen 2)."""
+        """Test CanDoSensorEntity decoding for ev_charge_type_active from 0x30B (E-GMP)."""
         # E-GMP (0x30B)
         cmd_egmp = resolve_variant(self.commands_by_id["ev_charge_type_active"], "kia_ev6")
         sensor_egmp = CanDoSensorEntity(self.coordinator, cmd_egmp)
@@ -365,26 +328,6 @@ class TestEgmpAuditDecoders(unittest.TestCase):
         # D7 & 0x3C == 0x00 -> Not Charging / Disconnected
         self.coordinator.can_states["0x30b"] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
         self.assertEqual(sensor_egmp.native_value, "Not Charging / Disconnected")
-
-        # Gen 2 (0x595 BMS2 Byte D1)
-        cmd_gen2 = resolve_variant(self.commands_by_id["ev_charge_type_active"], "hyundai_kona_ev")
-        sensor_gen2 = CanDoSensorEntity(self.coordinator, cmd_gen2)
-
-        # D1 = 0x02 -> Level 2 AC
-        self.coordinator.can_states["0x595"] = [0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-        self.assertEqual(sensor_gen2.native_value, "Standard AC Charging (Level 2)")
-
-        # D1 = 0x04 -> DC Fast Charging
-        self.coordinator.can_states["0x595"] = [0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-        self.assertEqual(sensor_gen2.native_value, "DC Fast Charging (CCS / 800V)")
-
-        # D1 = 0x08 -> Level 1 120V Trickle Charging
-        self.coordinator.can_states["0x595"] = [0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-        self.assertEqual(sensor_gen2.native_value, "120V Trickle Charging (Level 1)")
-
-        # D1 = 0x00 -> Not Charging / Disconnected
-        self.coordinator.can_states["0x595"] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-        self.assertEqual(sensor_gen2.native_value, "Not Charging / Disconnected")
 
     def test_tpms_binary_sensor_decoding(self):
         """Test CanDoBinarySensorEntity decoding for 0x3A1 low pressure/fault and 0x3A2 warning."""
@@ -424,16 +367,8 @@ class TestEgmpAuditDecoders(unittest.TestCase):
         self.coordinator.can_states["0x3a2"] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
         self.assertFalse(warn_sensor.is_on)
 
-        # Gen 2 TPMS (0x593 D1 bit 4 for FL)
-        gen2_fl_cmd = resolve_variant(self.commands_by_id["tpms_low_pressure_fl"], "hyundai_kona_ev")
-        gen2_fl_sensor = CanDoBinarySensorEntity(self.coordinator, gen2_fl_cmd)
-        self.coordinator.can_states["0x593"] = [0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-        self.assertTrue(gen2_fl_sensor.is_on)
-        self.coordinator.can_states["0x593"] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-        self.assertFalse(gen2_fl_sensor.is_on)
-
     def test_epb_binary_sensor_decoding(self):
-        """Test CanDoBinarySensorEntity decoding for EPB 0x1F1 frame (E-GMP) and 0x490 (Gen 2)."""
+        """Test CanDoBinarySensorEntity decoding for EPB 0x1F1 frame (E-GMP)."""
         epb_cmd = resolve_variant(self.commands_by_id["electric_parking_brake_status"], "kia_ev6")
         epb_sensor = CanDoBinarySensorEntity(self.coordinator, epb_cmd)
 
@@ -449,48 +384,19 @@ class TestEgmpAuditDecoders(unittest.TestCase):
         self.coordinator.can_states["0x1f1"] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
         self.assertFalse(epb_sensor.is_on)
 
-        # Legacy Gen 2 (0x490 D1 = 0x01)
-        epb_gen2 = resolve_variant(self.commands_by_id["electric_parking_brake_status"], "hyundai_kona_ev")
-        epb_gen2_sensor = CanDoBinarySensorEntity(self.coordinator, epb_gen2)
-        self.coordinator.can_states["0x490"] = [0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-        self.assertTrue(epb_gen2_sensor.is_on)
-        self.coordinator.can_states["0x490"] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-        self.assertFalse(epb_gen2_sensor.is_on)
-
     def test_remaining_charge_time_catalog_variants_and_decoding(self):
-        """Verify remaining charge times resolve to 0x327/0x25C/0x328 on E-GMP and 0x597/0x4E2 on Gen 2."""
+        """Verify remaining charge times resolve to 0x327/0x25C/0x328 on E-GMP."""
         # AC Remaining Time
         ac_egmp = resolve_variant(self.commands_by_id["remaining_charge_time_ac"], "kia_ev6")
         self.assertEqual(ac_egmp["network"]["state_can_id"], "0x327")
-        ac_gen2 = resolve_variant(self.commands_by_id["remaining_charge_time_ac"], "hyundai_kona_ev")
-        self.assertEqual(ac_gen2["network"]["state_can_id"], "0x597")
-
-        sensor_ac_gen2 = CanDoSensorEntity(self.coordinator, ac_gen2)
-        # 0x597 Bytes 1-2 LE = 120 minutes (0x0078: D2=0x78, D3=0x00)
-        self.coordinator.can_states["0x597"] = [0x00, 0x78, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-        self.assertEqual(sensor_ac_gen2.native_value, 120)
 
         # DC Remaining Time
         dc_egmp = resolve_variant(self.commands_by_id["remaining_charge_time_dc"], "kia_ev6")
         self.assertEqual(dc_egmp["network"]["state_can_id"], "0x25C")
-        dc_gen2 = resolve_variant(self.commands_by_id["remaining_charge_time_dc"], "hyundai_kona_ev")
-        self.assertEqual(dc_gen2["network"]["state_can_id"], "0x597")
-
-        sensor_dc_gen2 = CanDoSensorEntity(self.coordinator, dc_gen2)
-        # 0x597 Bytes 3-4 LE = 35 minutes (0x0023: D4=0x23, D5=0x00)
-        self.coordinator.can_states["0x597"] = [0x00, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00, 0x00]
-        self.assertEqual(sensor_dc_gen2.native_value, 35)
 
         # 120V Level 1 Remaining Time
         l1_egmp = resolve_variant(self.commands_by_id["remaining_charge_time_120v"], "kia_ev6")
         self.assertEqual(l1_egmp["network"]["state_can_id"], "0x328")
-        l1_gen2 = resolve_variant(self.commands_by_id["remaining_charge_time_120v"], "hyundai_kona_ev")
-        self.assertEqual(l1_gen2["network"]["state_can_id"], "0x4E2")
-
-        sensor_l1_gen2 = CanDoSensorEntity(self.coordinator, l1_gen2)
-        # 0x4E2 Bytes 2-3 LE = 450 minutes (0x01C2: D3=0xC2, D4=0x01)
-        self.coordinator.can_states["0x4e2"] = [0x00, 0x00, 0xC2, 0x01, 0x00, 0x00, 0x00, 0x00]
-        self.assertEqual(sensor_l1_gen2.native_value, 450)
 
     def test_wican_direct_entity_state_and_can_id_normalization(self):
         """Verify coordinator normalizes CAN IDs (0x45 vs 0x045) and entity platforms ingest WiCAN live states."""
@@ -522,7 +428,7 @@ class TestEgmpAuditDecoders(unittest.TestCase):
         self.assertIsNone(soc_sensor.native_value)
 
         # Once direct float telemetry arrives (via aliases or entity_id), it takes precedence
-        self.coordinator.can_states["bms_soc"] = 78.4
+        self.coordinator.can_states["bms_display_soc"] = 78.4
         self.coordinator.can_states["bms_hv_v"] = 742.6
         self.coordinator.can_states["vbat"] = 13.8
 

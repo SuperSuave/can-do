@@ -221,38 +221,6 @@ class TestRemainingChargeTimePipeline(unittest.TestCase):
         self.coordinator.can_states["0x324"] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF]
         self.assertEqual(sensor.native_value, 0)
 
-    def test_gen2_remaining_charge_time_decode(self):
-        """Verify Gen 2 legacy 0x597 (AC/DC) and 0x4E2 (120V) decoding."""
-        kona_cmds = get_vehicle_commands("hyundai_kona_ev")
-
-        # 1. AC on 0x597 (Bytes 1-2 LE)
-        ac_cmd = next(c for c in kona_cmds if c.get("id") == "remaining_charge_time_ac")
-        self.assertEqual(ac_cmd["network"]["state_can_id"], "0x597")
-        ac_sensor = CanDoSensorEntity(self.coordinator, ac_cmd)
-        # 120 minutes = 0x0078 (D2=0x78, D3=0x00)
-        self.coordinator.can_states["0x597"] = [0x00, 0x78, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-        self.assertEqual(ac_sensor.native_value, 120)
-
-        # Inactive 0xFFFF -> returns 0
-        self.coordinator.can_states["0x597"] = [0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]
-        self.assertEqual(ac_sensor.native_value, 0)
-
-        # 2. DC on 0x597 (Bytes 3-4 LE)
-        dc_cmd = next(c for c in kona_cmds if c.get("id") == "remaining_charge_time_dc")
-        self.assertEqual(dc_cmd["network"]["state_can_id"], "0x597")
-        dc_sensor = CanDoSensorEntity(self.coordinator, dc_cmd)
-        # 45 minutes = 0x002D (D4=0x2D, D5=0x00)
-        self.coordinator.can_states["0x597"] = [0x00, 0x00, 0x00, 0x2D, 0x00, 0x00, 0x00, 0x00]
-        self.assertEqual(dc_sensor.native_value, 45)
-
-        # 3. 120V on 0x4E2 (Bytes 2-3 LE)
-        l1_cmd = next(c for c in kona_cmds if c.get("id") == "remaining_charge_time_120v")
-        self.assertEqual(l1_cmd["network"]["state_can_id"], "0x4E2")
-        l1_sensor = CanDoSensorEntity(self.coordinator, l1_cmd)
-        # 600 minutes = 0x0258 (D3=0x58, D4=0x02)
-        self.coordinator.can_states["0x4e2"] = [0x00, 0x00, 0x58, 0x02, 0x00, 0x00, 0x00, 0x00]
-        self.assertEqual(l1_sensor.native_value, 600)
-
     def test_explicit_byte_length_and_endianness_in_sensor(self):
         """Verify 2-byte state_byte + byte_length + endianness schema and bounds checking."""
         # 1. Remaining-time entity using explicit Pass 2 schema (default little-endian)

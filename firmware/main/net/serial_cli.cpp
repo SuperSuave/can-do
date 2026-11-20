@@ -114,7 +114,6 @@ void serial_cli_process_line(const char* raw_line, size_t len) {
             } else if (strcmp(type_str, "lock") == 0 || strcmp(type_str, "unlock") == 0) {
                 bool is_lock = (strcmp(type_str, "lock") == 0);
                 bool ok = queue_entity_command("door_locks", is_lock ? "lock" : "unlock");
-                if (!ok) ok = queue_entity_command("doors_lock_state", is_lock ? "lock" : "unlock");
                 printf(ok ? "{\"type\":\"ack\",\"status\":\"queued\"}\r\n" : "{\"type\":\"nack\",\"error\":\"lock_failed\"}\r\n");
             } else {
                 printf("{\"type\":\"ack\",\"received\":\"json\"}\r\n");

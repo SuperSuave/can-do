@@ -34,7 +34,6 @@ import {
   formatOdometerFromKm,
   parseBooleanEntityState,
   parseChargingEntityState,
-  parseDualCabinTempToF,
   parseOdometerStateToKm,
   parseSingleCabinTempToF,
   AIRFLOW_MODE_COMMAND_LABELS,
@@ -841,7 +840,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         if (normState.includes('rear right door opened')) setDoors(d => ({ ...d, rearRight: true }));
         else if (normState.includes('rear right door closed')) setDoors(d => ({ ...d, rearRight: false }));
       }
-    } else if (entity === 'door_locks' || entity === 'doors_lock_state') {
+    } else if (entity === 'door_locks') {
       if (normState.includes('unlock') || normState.includes('lock')) {
         const nextLocked = normState.includes('lock') && !normState.includes('unlock');
         if (acceptTelemetry('door_locks', String(nextLocked))) {
@@ -942,20 +941,6 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         const disp = fahrenheitToDisplayTemp(tempF, tempUnit);
         passengerTempRef.current = disp;
         setPassengerTemp(disp);
-      }
-    } else if (entity === 'climate_dual_cabin_temp') {
-      const { driverF, passengerF } = parseDualCabinTempToF(stateStr);
-      if (driverF !== null && acceptTelemetry('climate_driver_temp', String(driverF))) {
-        driverTempFRef.current = driverF;
-        const dispD = fahrenheitToDisplayTemp(driverF, tempUnit);
-        driverTempRef.current = dispD;
-        setDriverTemp(dispD);
-      }
-      if (passengerF !== null && acceptTelemetry('climate_passenger_temp', String(passengerF))) {
-        passengerTempFRef.current = passengerF;
-        const dispP = fahrenheitToDisplayTemp(passengerF, tempUnit);
-        passengerTempRef.current = dispP;
-        setPassengerTemp(dispP);
       }
     } else if (entity === 'heated_steering_wheel_toggle' || entity === 'heated_wheel_btn') {
       const lvl: SteeringHeatLevel = parseBooleanEntityState(stateStr) ? 'on' : 'off';
@@ -1058,7 +1043,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         const val = parseFloat(match[1]);
         if (val >= -40 && val <= 60) setAmbientTempC(val);
       }
-    } else if (entity === 'wheel_speeds' || entity === 'tpms_tire_pressures' || entity === 'tpms') {
+    } else if (entity === 'tpms_tire_pressures' || entity === 'tpms') {
       const match = stateStr.match(/fl:\s*(\d+).*fr:\s*(\d+).*rl:\s*(\d+).*rr:\s*(\d+)/i);
       if (match) {
         setTpms({
@@ -1068,7 +1053,7 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
           rr: parseInt(match[4], 10),
         });
       }
-    } else if (entity === 'cond_hv_battery_soc' || entity === 'bms_display_soc' || entity === 'bms_soc' || entity.includes('battery_soc')) {
+    } else if (entity === 'cond_hv_battery_soc' || entity === 'bms_display_soc' || entity.includes('battery_soc')) {
       const match = stateStr.match(/(\d+(\.\d+)?)/);
       if (match) {
         const s = parseFloat(match[1]);
@@ -1105,16 +1090,16 @@ export const VehicleDashboard: React.FC<VehicleDashboardProps> = ({
         odometerKmRef.current = km;
         setOdometer(formatOdometerFromKm(km, unitSystem));
       }
-    } else if (entity === 'hv_power_kw' || entity === 'bms_hv_kw' || entity === 'bms_hv_power_kw') {
+    } else if (entity === 'bms_hv_power_kw' || entity === 'bms_hv_kw') {
       const match = stateStr.match(/(-?\d+(\.\d+)?)/);
       if (match) setHvPowerKw(parseFloat(match[1]));
-    } else if (entity === 'hv_battery_voltage' || entity === 'bms_hv_v' || entity === 'bms_hv_voltage') {
+    } else if (entity === 'bms_hv_voltage' || entity === 'bms_hv_v') {
       const match = stateStr.match(/(\d+(\.\d+)?)/);
       if (match) setHvVoltage(parseFloat(match[1]));
-    } else if (entity === 'hv_battery_current' || entity === 'bms_hv_a' || entity === 'bms_hv_current') {
+    } else if (entity === 'bms_hv_current' || entity === 'bms_hv_a') {
       const match = stateStr.match(/(-?\d+(\.\d+)?)/);
       if (match) setHvCurrent(parseFloat(match[1]));
-    } else if (entity === 'hv_cell_delta_mv' || entity === 'bms_cell_delta_mv') {
+    } else if (entity === 'bms_cell_delta_mv') {
       const match = stateStr.match(/(\d+(\.\d+)?)/);
       if (match) setCellDeltaMv(parseFloat(match[1]));
     } else if (entity === 'sunroof_extended' || entity === 'sunroof') {

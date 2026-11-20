@@ -391,7 +391,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
 
             # Only fall back to ID heuristics when neither ha_metadata nor network.unit declared anything
             if resolved_dc is None and resolved_unit is None and resolved_sc is None:
-                if "cluster_vehicle_speed" in cid or "wheel_speeds" in cid:
+                if "cluster_vehicle_speed" in cid:
                     resolved_dc = _DEVICE_CLASS_MAP["speed"]
                     resolved_sc = SensorStateClass.MEASUREMENT
                     resolved_unit = UnitOfSpeed.KILOMETERS_PER_HOUR
@@ -512,8 +512,6 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
 
         if "bms" in cid:
             bms_aliases = {
-                "bms_display_soc": "bms_soc",
-                "bms_soc": "bms_display_soc",
                 "bms_hv_voltage": "bms_hv_v",
                 "bms_hv_v": "bms_hv_voltage",
                 "bms_hv_current": "bms_hv_a",
@@ -596,12 +594,6 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
         if "cluster_vehicle_speed" in cid or (self.state_can_id.lower() == "0x1ac" and "speed" in cid):
             if len(payload) >= 1:
                 return int(payload[0])
-
-        # 1B. Wheel Speeds (0x0A2: 4 x 16-bit little-endian unsigned, factor 0.03125 kph)
-        if "wheel_speeds" in cid or self.state_can_id.lower() == "0x0a2":
-            if len(payload) >= 2:
-                w1 = (payload[0] | (payload[1] << 8)) * 0.03125
-                return round(w1, 1)
 
         # 1C. Climate Target Temperatures (0x380 Byte D2=Driver, D3=Passenger)
         if "temp" in cid and self.state_can_id.lower() == "0x380":

@@ -1285,19 +1285,19 @@ void mqtt_mgr_publish_bms(float kw, float soc, float v, float a, float delta_mv,
     int len;
 
     len = snprintf(val_str, sizeof(val_str), "%.2f", kw);
-    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_kw").c_str(), val_str, len, 0, 1);
+    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_power_kw").c_str(), val_str, len, 0, 1);
     mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/state/bms_hv_power_kw").c_str(), val_str, len, 0, 1);
 
     len = snprintf(val_str, sizeof(val_str), "%.1f", soc);
-    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_soc").c_str(), val_str, len, 0, 1);
+    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_display_soc").c_str(), val_str, len, 0, 1);
     mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/state/bms_display_soc").c_str(), val_str, len, 0, 1);
 
     len = snprintf(val_str, sizeof(val_str), "%.1f", v);
-    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_v").c_str(), val_str, len, 0, 1);
+    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_voltage").c_str(), val_str, len, 0, 1);
     mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/state/bms_hv_voltage").c_str(), val_str, len, 0, 1);
 
     len = snprintf(val_str, sizeof(val_str), "%.1f", a);
-    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_a").c_str(), val_str, len, 0, 1);
+    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_current").c_str(), val_str, len, 0, 1);
     mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/state/bms_hv_current").c_str(), val_str, len, 0, 1);
 
     len = snprintf(val_str, sizeof(val_str), "%.0f", delta_mv);

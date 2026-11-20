@@ -38,7 +38,7 @@ cards:
           action: toggle
 
       - type: custom:mushroom-entity-card
-        entity: switch.cando_kia_ev6_telematics_unit_remote_climate___preconditioning
+        entity: switch.cando_kia_ev6_remote_climate_tmu
         name: Remote Climate
         icon: mdi:fan
         tap_action:
@@ -48,8 +48,10 @@ cards:
   - type: entities
     title: Vehicle State
     entities:
-      - entity: sensor.cando_kia_ev6_rear_seats_comfort
-        name: Rear Seat Heat
+      - entity: select.cando_kia_ev6_rear_left_seat_comfort
+        name: Rear Left Seat Heat
+      - entity: select.cando_kia_ev6_rear_right_seat_comfort
+        name: Rear Right Seat Heat
       - entity: event.cando_kia_ev6_sw_star
         name: Star Button Event
       - entity: event.cando_kia_ev6_sw_menu

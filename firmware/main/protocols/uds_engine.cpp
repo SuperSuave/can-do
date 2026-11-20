@@ -171,19 +171,19 @@ static void decode_bms_payload(const uint8_t* payload, size_t len) {
 
     // Broadcast live over WebSocket
     char buf[128];
-    snprintf(buf, sizeof(buf), "{\"type\":\"state\",\"entity\":\"hv_power_kw\",\"state\":\"%.2f kW\"}", power_kw);
+    snprintf(buf, sizeof(buf), "{\"type\":\"state\",\"entity\":\"bms_hv_power_kw\",\"state\":\"%.2f kW\"}", power_kw);
     broadcast_ws_raw(buf);
 
-    snprintf(buf, sizeof(buf), "{\"type\":\"state\",\"entity\":\"bms_soc\",\"state\":\"%.1f %%\"}", soc);
+    snprintf(buf, sizeof(buf), "{\"type\":\"state\",\"entity\":\"bms_display_soc\",\"state\":\"%.1f %%\"}", soc);
     broadcast_ws_raw(buf);
 
-    snprintf(buf, sizeof(buf), "{\"type\":\"state\",\"entity\":\"hv_battery_voltage\",\"state\":\"%.1f V\"}", voltage_v);
+    snprintf(buf, sizeof(buf), "{\"type\":\"state\",\"entity\":\"bms_hv_voltage\",\"state\":\"%.1f V\"}", voltage_v);
     broadcast_ws_raw(buf);
 
-    snprintf(buf, sizeof(buf), "{\"type\":\"state\",\"entity\":\"hv_battery_current\",\"state\":\"%.1f A\"}", current_a);
+    snprintf(buf, sizeof(buf), "{\"type\":\"state\",\"entity\":\"bms_hv_current\",\"state\":\"%.1f A\"}", current_a);
     broadcast_ws_raw(buf);
 
-    snprintf(buf, sizeof(buf), "{\"type\":\"state\",\"entity\":\"hv_cell_delta_mv\",\"state\":\"%.0f mV\"}", cell_delta_mv);
+    snprintf(buf, sizeof(buf), "{\"type\":\"state\",\"entity\":\"bms_cell_delta_mv\",\"state\":\"%.0f mV\"}", cell_delta_mv);
     broadcast_ws_raw(buf);
 
     // Publish to MQTT

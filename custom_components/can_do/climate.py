@@ -385,16 +385,10 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
 
         data = [0] * 8
         release_data = [0] * 8
-        if self.command.get("id") == "climate_dual_cabin_temp":
-            data[1] = raw_val  # D2 Driver
-            data[7] = raw_val  # D8 Passenger
-            release_data[1] = 0xFF
-            release_data[7] = 0xFF
-        else:
-            idx = get_d_index(self.action_byte)
-            if 0 <= idx < 8:
-                data[idx] = raw_val
-                release_data[idx] = 0xFF
+        idx = get_d_index(self.action_byte)
+        if 0 <= idx < 8:
+            data[idx] = raw_val
+            release_data[idx] = 0xFF
 
         hex_payload = "".join(f"{b:02X}" for b in data)
         steps = [{"payload": hex_payload, "repeat": 2, "delay_ms": 20}]
