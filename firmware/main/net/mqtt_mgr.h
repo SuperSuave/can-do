@@ -4,6 +4,7 @@
 #include <vector>
 #include <unordered_set>
 #include <atomic>
+#include <mutex>
 #include "esp_err.h"
 #include "mqtt_client.h"
 
@@ -17,6 +18,7 @@ struct MqttConfig {
 
 extern esp_mqtt_client_handle_t global_mqtt_client;
 extern const std::string MQTT_BASE_TOPIC;
+extern std::mutex g_automations_file_mutex;
 
 void mqtt_mgr_init(void);
 void mqtt_mgr_start(void);

@@ -19,6 +19,7 @@ extern QueueHandle_t tx_command_queue;
 
 // Global Control Flags
 extern std::atomic<bool> g_automations_enabled;
+extern std::atomic<bool> g_catalog_reloading;
 extern std::atomic<bool> g_sniffer_mode;
 extern std::atomic<bool> g_hardware_listen_only;
 extern std::atomic<bool> g_mitm_bridge_enabled;

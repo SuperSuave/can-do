@@ -28,6 +28,10 @@ extern std::string g_device_id;
 
 const std::string MQTT_BASE_TOPIC = "cando";
 esp_mqtt_client_handle_t global_mqtt_client = nullptr;
+std::mutex g_automations_file_mutex;
+
+static constexpr const char* MQTT_AUTOMATIONS_TMP_FILE = "/spiffs/automations.json.mqtt.tmp";
+static constexpr size_t kMaxMqttAutomationsBytes = 128 * 1024;
 
 static std::mutex s_mqtt_mutex;
 static MqttConfig s_mqtt_cfg;
@@ -61,6 +65,7 @@ static void mqtt_cmd_worker_task(void* arg) {
 
 static FILE* s_automations_tmp_file = nullptr;
 static bool s_receiving_automations = false;
+static bool s_automations_write_failed = false;
 
 struct MqttPubItem {
     char topic[96];
@@ -411,25 +416,32 @@ static void clear_ha_automation_discovery(esp_mqtt_client_handle_t client, const
 static void publish_automations_json_state(void) {
     if (!global_mqtt_client || !s_mqtt_connected.load()) return;
     std::string state_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/state";
-    FILE* state_f = fopen("/spiffs/automations.json", "r");
-    if (state_f) {
-        fseek(state_f, 0, SEEK_END);
-        long slen = ftell(state_f);
-        fseek(state_f, 0, SEEK_SET);
-        if (slen <= 0 || slen > 32768) {
-            mqtt_enqueue_nonblocking(state_topic.c_str(), "[]", 2, 0, 1);
-        } else {
-            char* sbuf = (char*)malloc(slen + 1);
-            if (sbuf) {
-                fread(sbuf, 1, slen, state_f);
-                sbuf[slen] = '\0';
-                mqtt_enqueue_nonblocking(state_topic.c_str(), sbuf, (int)slen, 0, 1);
-                free(sbuf);
+    char* sbuf = nullptr;
+    size_t slen = 0;
+    {
+        std::lock_guard<std::mutex> file_lock(g_automations_file_mutex);
+        FILE* state_f = fopen("/spiffs/automations.json", "r");
+        if (state_f) {
+            fseek(state_f, 0, SEEK_END);
+            long raw_len = ftell(state_f);
+            fseek(state_f, 0, SEEK_SET);
+            if (raw_len > 0 && raw_len <= 32768) {
+                sbuf = (char*)malloc(static_cast<size_t>(raw_len) + 1);
+                if (sbuf) {
+                    slen = fread(sbuf, 1, static_cast<size_t>(raw_len), state_f);
+                    sbuf[slen] = '\0';
+                }
             }
+            fclose(state_f);
         }
-        fclose(state_f);
+    }
+    if (sbuf && slen > 0) {
+        mqtt_enqueue_nonblocking(state_topic.c_str(), sbuf, (int)slen, 0, 1);
     } else {
         mqtt_enqueue_nonblocking(state_topic.c_str(), "[]", 2, 0, 1);
+    }
+    if (sbuf) {
+        free(sbuf);
     }
 }
 
@@ -594,30 +606,56 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 std::string init_topic(event->topic, event->topic_len);
                 std::string init_suffix;
                 if (extract_target_topic_suffix(init_topic, init_suffix) && init_suffix == "config/automations/set") {
+                    if (s_automations_tmp_file) {
+                        fclose(s_automations_tmp_file);
+                        s_automations_tmp_file = nullptr;
+                    }
                     s_receiving_automations = true;
-                    s_automations_tmp_file = fopen("/spiffs/automations.json.tmp", "w");
-                    if (!s_automations_tmp_file) {
-                        ESP_LOGE(TAG, "Failed to open automations.json.tmp for writing");
-                        s_receiving_automations = false;
+                    s_automations_write_failed = false;
+                    if (event->total_data_len <= 0 ||
+                        static_cast<size_t>(event->total_data_len) > kMaxMqttAutomationsBytes) {
+                        ESP_LOGE(TAG, "Rejecting MQTT automations payload with invalid size (%d bytes)", event->total_data_len);
+                        s_automations_write_failed = true;
+                    } else {
+                        s_automations_tmp_file = fopen(MQTT_AUTOMATIONS_TMP_FILE, "w");
+                        if (!s_automations_tmp_file) {
+                            ESP_LOGE(TAG, "Failed to open %s for writing", MQTT_AUTOMATIONS_TMP_FILE);
+                            s_automations_write_failed = true;
+                        }
                     }
                 }
             }
 
             if (s_receiving_automations) {
-                if (s_automations_tmp_file && event->data_len > 0) {
-                    fwrite(event->data, 1, event->data_len, s_automations_tmp_file);
+                if (!s_automations_write_failed && s_automations_tmp_file && event->data_len > 0) {
+                    size_t written = fwrite(event->data, 1, static_cast<size_t>(event->data_len), s_automations_tmp_file);
+                    if (written != static_cast<size_t>(event->data_len)) {
+                        ESP_LOGE(TAG, "Short fwrite on %s (%zu / %d)", MQTT_AUTOMATIONS_TMP_FILE, written, event->data_len);
+                        s_automations_write_failed = true;
+                    }
                 }
 
                 bool is_final_chunk = (event->current_data_offset + event->data_len >= event->total_data_len);
                 if (is_final_chunk) {
+                    bool flush_ok = true;
+                    bool close_ok = true;
                     if (s_automations_tmp_file) {
-                        fclose(s_automations_tmp_file);
+                        flush_ok = (fflush(s_automations_tmp_file) == 0);
+                        close_ok = (fclose(s_automations_tmp_file) == 0);
                         s_automations_tmp_file = nullptr;
                     }
+                    bool write_ok = !s_automations_write_failed && flush_ok && close_ok;
                     s_receiving_automations = false;
+                    s_automations_write_failed = false;
 
-                    s_auto_parse_tmp_pending.store(true);
-                    mqtt_mgr_on_automations_reloaded();
+                    if (write_ok) {
+                        s_auto_parse_tmp_pending.store(true);
+                        mqtt_mgr_on_automations_reloaded();
+                    } else {
+                        unlink(MQTT_AUTOMATIONS_TMP_FILE);
+                        std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/status";
+                        mqtt_enqueue_nonblocking(status_topic.c_str(), "{\"status\":\"error\",\"message\":\"Failed writing automations\"}", 57, 0, 0);
+                    }
                 }
                 return;
             }
@@ -1177,16 +1215,26 @@ static void mqtt_auto_reload_task(void* arg) {
         if (s_auto_parse_tmp_pending.exchange(false)) {
             std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/config/automations/status";
             bool valid = false;
-            struct stat st;
-            if (stat("/spiffs/automations.json.tmp", &st) == 0 && st.st_size > 0 && st.st_size <= 32768) {
-                valid = load_automations_from_fs("/spiffs/automations.json.tmp");
+            {
+                std::lock_guard<std::mutex> file_lock(g_automations_file_mutex);
+                struct stat st;
+                if (stat(MQTT_AUTOMATIONS_TMP_FILE, &st) == 0 && st.st_size > 0 &&
+                    static_cast<size_t>(st.st_size) <= kMaxMqttAutomationsBytes) {
+                    valid = load_automations_from_fs(MQTT_AUTOMATIONS_TMP_FILE);
+                }
+                if (valid) {
+                    if (rename(MQTT_AUTOMATIONS_TMP_FILE, "/spiffs/automations.json") != 0) {
+                        ESP_LOGE(TAG, "Failed to atomically commit %s to /spiffs/automations.json", MQTT_AUTOMATIONS_TMP_FILE);
+                        unlink(MQTT_AUTOMATIONS_TMP_FILE);
+                        valid = false;
+                    }
+                } else {
+                    unlink(MQTT_AUTOMATIONS_TMP_FILE);
+                }
             }
             if (valid) {
-                unlink("/spiffs/automations.json");
-                rename("/spiffs/automations.json.tmp", "/spiffs/automations.json");
                 mqtt_enqueue_nonblocking(status_topic.c_str(), "{\"status\":\"ok\"}", 15, 0, 0);
             } else {
-                unlink("/spiffs/automations.json.tmp");
                 mqtt_enqueue_nonblocking(status_topic.c_str(), "{\"status\":\"error\",\"message\":\"Invalid JSON syntax\"}", 50, 0, 0);
                 continue;
             }

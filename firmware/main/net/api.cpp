@@ -28,6 +28,7 @@
 #include "timezone_mgr.h"
 #include <cstdio>
 #include <cstring>
+#include <cctype>
 #include <algorithm>
 #include <unordered_set>
 #include <sys/stat.h>
@@ -46,6 +47,59 @@ extern std::string g_device_id;
 httpd_handle_t global_web_server = nullptr;
 static vprintf_like_t original_log_vprintf = nullptr;
 static std::atomic<int> s_active_static_transfers{0};
+
+struct StaticTransferGuard {
+    StaticTransferGuard() {
+        s_active_static_transfers.fetch_add(1, std::memory_order_relaxed);
+    }
+    ~StaticTransferGuard() {
+        s_active_static_transfers.fetch_sub(1, std::memory_order_relaxed);
+    }
+    StaticTransferGuard(const StaticTransferGuard&) = delete;
+    StaticTransferGuard& operator=(const StaticTransferGuard&) = delete;
+};
+
+struct CatalogReloadGuard {
+    CatalogReloadGuard() {
+        g_catalog_reloading.store(true, std::memory_order_release);
+    }
+    ~CatalogReloadGuard() {
+        g_catalog_reloading.store(false, std::memory_order_release);
+    }
+    CatalogReloadGuard(const CatalogReloadGuard&) = delete;
+    CatalogReloadGuard& operator=(const CatalogReloadGuard&) = delete;
+};
+
+static constexpr size_t kMaxAutomationsBytes = 128 * 1024;
+static constexpr size_t kMaxPreferencesBytes = 8 * 1024;
+static constexpr int kMaxStreamTimeoutRetries = 5;
+static constexpr int kMaxOtaTimeoutRetries = 10;
+
+static std::mutex s_crash_diag_mutex;
+static std::string s_cached_crash_diag_json;
+static bool s_crash_diag_loaded = false;
+
+static void load_crash_diag_cache_once(void) {
+    std::lock_guard<std::mutex> lock(s_crash_diag_mutex);
+    if (s_crash_diag_loaded) return;
+    s_crash_diag_loaded = true;
+    FILE *diag_f = fopen("/spiffs/crash_diag.json", "r");
+    if (!diag_f) return;
+    char diag_buf[1024] = {0};
+    size_t n = fread(diag_buf, 1, sizeof(diag_buf) - 1, diag_f);
+    fclose(diag_f);
+    if (n > 0) {
+        cJSON *cj_persisted = cJSON_Parse(diag_buf);
+        if (cj_persisted) {
+            char *normalized = cJSON_PrintUnformatted(cj_persisted);
+            cJSON_Delete(cj_persisted);
+            if (normalized) {
+                s_cached_crash_diag_json.assign(normalized);
+                free(normalized);
+            }
+        }
+    }
+}
 
 bool is_serving_static_page(void) {
     return s_active_static_transfers.load() > 0;
@@ -363,7 +417,7 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
 
         set_cors_headers(req);
         httpd_resp_send_404(req);
-        return ESP_FAIL;
+        return ESP_OK;
     }
 
     // 3. Set headers (CORS, MIME type, Content-Encoding: gzip)
@@ -382,7 +436,7 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
 
     // 4. Stream file out in 2KB chunks without dynamic heap allocation
     // Mark transfer as active to prevent WebSocket streaming from overloading Wi-Fi/LwIP during page load
-    s_active_static_transfers.fetch_add(1);
+    StaticTransferGuard transfer_guard;
 
     char s_file_chunk[2048];
     ssize_t read_bytes;
@@ -390,14 +444,12 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
         if (httpd_resp_send_chunk(req, s_file_chunk, read_bytes) != ESP_OK) {
             ESP_LOGW(TAG, "Chunk send failed for %s", filepath);
             close(fd);
-            s_active_static_transfers.fetch_sub(1);
             return ESP_FAIL;
         }
     }
 
     close(fd);
     httpd_resp_send_chunk(req, nullptr, 0); // Terminate chunked response
-    s_active_static_transfers.fetch_sub(1);
     return ESP_OK;
 }
 
@@ -418,13 +470,13 @@ static esp_err_t options_handler(httpd_req_t *req) {
 static esp_err_t send_cjson_response(httpd_req_t *req, cJSON *root) {
     if (!root) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of Memory");
-        return ESP_FAIL;
+        return ESP_OK;
     }
     char *str = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     if (!str) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of Memory");
-        return ESP_FAIL;
+        return ESP_OK;
     }
     httpd_resp_set_type(req, "application/json");
     esp_err_t err = httpd_resp_sendstr(req, str);
@@ -432,24 +484,41 @@ static esp_err_t send_cjson_response(httpd_req_t *req, cJSON *root) {
     return err;
 }
 
-static esp_err_t read_req_body(httpd_req_t *req, size_t max_len, std::string &out) {
-    out.clear();
-    if (req->content_len == 0) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty request body");
+static esp_err_t send_payload_too_large(httpd_req_t *req, const char *msg) {
+    httpd_resp_set_status(req, "413 Payload Too Large");
+    httpd_resp_set_type(req, "text/plain");
+    httpd_resp_set_hdr(req, "Connection", "close");
+    httpd_resp_sendstr(req, msg);
+    return ESP_FAIL;
+}
+
+static esp_err_t send_err_with_body_check(httpd_req_t *req, httpd_err_code_t code, const char *msg, bool body_consumed) {
+    if (!body_consumed && req->content_len > 0) {
+        httpd_resp_set_hdr(req, "Connection", "close");
+        httpd_resp_send_err(req, code, msg);
         return ESP_FAIL;
     }
+    httpd_resp_send_err(req, code, msg);
+    return ESP_OK;
+}
+
+static bool read_req_body(httpd_req_t *req, size_t max_len, std::string &out, esp_err_t *out_err) {
+    out.clear();
+    if (out_err) *out_err = ESP_OK;
+    if (req->content_len == 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty request body");
+        if (out_err) *out_err = ESP_OK;
+        return false;
+    }
     if (req->content_len > max_len) {
-        httpd_resp_set_status(req, "413 Payload Too Large");
-        httpd_resp_set_type(req, "text/plain");
-        httpd_resp_set_hdr(req, "Connection", "close");
-        httpd_resp_sendstr(req, "Request body too large");
-        return ESP_FAIL;
+        esp_err_t err = send_payload_too_large(req, "Request body too large");
+        if (out_err) *out_err = err;
+        return false;
     }
 
     out.resize(req->content_len);
     size_t total_read = 0;
     int timeout_retries = 0;
-    constexpr int kMaxTimeoutRetries = 5;
 
     while (total_read < req->content_len) {
         int r = httpd_req_recv(req, &out[total_read], req->content_len - total_read);
@@ -457,18 +526,21 @@ static esp_err_t read_req_body(httpd_req_t *req, size_t max_len, std::string &ou
             total_read += static_cast<size_t>(r);
             timeout_retries = 0;
         } else if (r == HTTPD_SOCK_ERR_TIMEOUT) {
-            if (++timeout_retries > kMaxTimeoutRetries) {
+            if (++timeout_retries > kMaxStreamTimeoutRetries) {
                 out.clear();
+                httpd_resp_set_hdr(req, "Connection", "close");
                 httpd_resp_send_err(req, HTTPD_408_REQ_TIMEOUT, "Request body timeout");
-                return ESP_FAIL;
+                if (out_err) *out_err = ESP_FAIL;
+                return false;
             }
             continue;
         } else {
             out.clear();
-            return ESP_FAIL;
+            if (out_err) *out_err = ESP_FAIL;
+            return false;
         }
     }
-    return ESP_OK;
+    return true;
 }
 
 static esp_err_t api_states_handler(httpd_req_t *req) {
@@ -517,28 +589,16 @@ static esp_err_t api_states_handler(httpd_req_t *req) {
 
 static esp_err_t api_command_handler(httpd_req_t *req) {
     set_cors_headers(req);
-    size_t content_len = req->content_len;
-    if (content_len == 0 || content_len > 8192) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid request body size");
-        return ESP_FAIL;
-    }
-
-    std::string body(content_len, '\0');
-    size_t total_read = 0;
-    while (total_read < content_len) {
-        int r = httpd_req_recv(req, &body[total_read], content_len - total_read);
-        if (r <= 0) {
-            if (r == HTTPD_SOCK_ERR_TIMEOUT) continue;
-            httpd_resp_send_err(req, HTTPD_408_REQ_TIMEOUT, "Failed to receive request body");
-            return ESP_FAIL;
-        }
-        total_read += static_cast<size_t>(r);
+    std::string body;
+    esp_err_t body_err = ESP_OK;
+    if (!read_req_body(req, 8192, body, &body_err)) {
+        return body_err;
     }
 
     cJSON *root = cJSON_Parse(body.c_str());
     if (!root) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-        return ESP_FAIL;
+        return ESP_OK;
     }
 
     cJSON *target_entity = cJSON_GetObjectItem(root, "entity");
@@ -658,32 +718,21 @@ static esp_err_t api_command_handler(httpd_req_t *req) {
 
     cJSON_Delete(root);
     httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Entity/Command not found");
-    return ESP_FAIL;
+    return ESP_OK;
 }
 
 static esp_err_t api_test_automation_handler(httpd_req_t *req) {
     set_cors_headers(req);
-    size_t content_len = req->content_len;
-    if (content_len == 0 || content_len > 16384) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid request body size");
-        return ESP_FAIL;
-    }
-
-    std::string body(content_len, '\0');
-    size_t total_read = 0;
-    while (total_read < content_len) {
-        int r = httpd_req_recv(req, &body[total_read], content_len - total_read);
-        if (r <= 0) {
-            if (r == HTTPD_SOCK_ERR_TIMEOUT) continue;
-            return ESP_FAIL;
-        }
-        total_read += static_cast<size_t>(r);
+    std::string body;
+    esp_err_t body_err = ESP_OK;
+    if (!read_req_body(req, 16384, body, &body_err)) {
+        return body_err;
     }
 
     cJSON *root = cJSON_Parse(body.c_str());
     if (!root) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-        return ESP_FAIL;
+        return ESP_OK;
     }
 
     cJSON *id_item = cJSON_GetObjectItem(root, "id");
@@ -779,7 +828,7 @@ static esp_err_t api_test_automation_handler(httpd_req_t *req) {
     }
 
     httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Automation rule not found");
-    return ESP_FAIL;
+    return ESP_OK;
 }
 
 static esp_err_t api_automations_diagnostics_handler(httpd_req_t *req) {
@@ -1035,66 +1084,413 @@ static void ensure_parent_dirs(const char *filepath) {
     mkdir(temp, 0755);
 }
 
+static bool is_json_ws(char c) {
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
+
+static bool validate_json_file_streaming(const char *filepath, bool allow_array) {
+    FILE *f = fopen(filepath, "r");
+    if (!f) return false;
+
+    struct BufferedByteReader {
+        FILE *fp;
+        char buf[1024];
+        size_t pos = 0;
+        size_t len = 0;
+        int pushed = -2;
+        size_t bytes_since_yield = 0;
+
+        explicit BufferedByteReader(FILE *f_in) : fp(f_in) {}
+
+        int next() {
+            if (pushed != -2) {
+                int c = pushed;
+                pushed = -2;
+                return c;
+            }
+            if (pos >= len) {
+                len = fread(buf, 1, sizeof(buf), fp);
+                pos = 0;
+                if (len == 0) return EOF;
+                bytes_since_yield += len;
+                if (bytes_since_yield >= 16384) {
+                    bytes_since_yield = 0;
+                    vTaskDelay(pdMS_TO_TICKS(1));
+                }
+            }
+            return static_cast<unsigned char>(buf[pos++]);
+        }
+
+        void unget(int c) {
+            pushed = c;
+        }
+    } reader(f);
+
+    auto skip_ws = [&]() -> int {
+        int c;
+        while ((c = reader.next()) != EOF) {
+            if (!is_json_ws(static_cast<char>(c))) return c;
+        }
+        return EOF;
+    };
+
+    auto read_string = [&]() -> bool {
+        while (true) {
+            int c = reader.next();
+            if (c == EOF) return false;
+            if (c == '"') return true;
+            if (c == '\\') {
+                int esc = reader.next();
+                if (esc == '"' || esc == '\\' || esc == '/' || esc == 'b' ||
+                    esc == 'f' || esc == 'n' || esc == 'r' || esc == 't') {
+                    continue;
+                }
+                if (esc == 'u') {
+                    for (int i = 0; i < 4; ++i) {
+                        int h = reader.next();
+                        if (h == EOF || !std::isxdigit(static_cast<unsigned char>(h))) return false;
+                    }
+                    continue;
+                }
+                return false;
+            }
+            if (static_cast<unsigned char>(c) < 0x20) return false;
+        }
+    };
+
+    auto read_number = [&](int first) -> bool {
+        int c = first;
+        if (c == '-') c = reader.next();
+        if (c == '0') {
+            c = reader.next();
+        } else if (c >= '1' && c <= '9') {
+            while ((c = reader.next()) >= '0' && c <= '9') {}
+        } else {
+            return false;
+        }
+        if (c == '.') {
+            c = reader.next();
+            if (c < '0' || c > '9') return false;
+            while ((c = reader.next()) >= '0' && c <= '9') {}
+        }
+        if (c == 'e' || c == 'E') {
+            c = reader.next();
+            if (c == '+' || c == '-') c = reader.next();
+            if (c < '0' || c > '9') return false;
+            while ((c = reader.next()) >= '0' && c <= '9') {}
+        }
+        if (c != EOF) reader.unget(c);
+        return true;
+    };
+
+    auto read_literal = [&](const char *rest) -> bool {
+        for (const char *p = rest; *p; ++p) {
+            if (reader.next() != static_cast<unsigned char>(*p)) return false;
+        }
+        return true;
+    };
+
+    enum class JsonState {
+        EXPECT_VALUE,
+        OBJ_FIRST_KEY_OR_END,
+        OBJ_KEY,
+        OBJ_COLON,
+        ARR_FIRST_VAL_OR_END,
+        AFTER_VALUE
+    };
+
+    JsonState state = JsonState::EXPECT_VALUE;
+    char stack[64];
+    int depth = 0;
+    bool root_seen = false;
+    bool valid = false;
+
+    while (true) {
+        if (state == JsonState::EXPECT_VALUE) {
+            int c = skip_ws();
+            if (!root_seen) {
+                root_seen = true;
+                if (c != '{' && !(allow_array && c == '[')) break;
+            }
+            if (c == '{') {
+                if (depth >= static_cast<int>(sizeof(stack))) break;
+                stack[depth++] = '{';
+                state = JsonState::OBJ_FIRST_KEY_OR_END;
+            } else if (c == '[') {
+                if (depth >= static_cast<int>(sizeof(stack))) break;
+                stack[depth++] = '[';
+                state = JsonState::ARR_FIRST_VAL_OR_END;
+            } else if (c == '"') {
+                if (!read_string()) break;
+                state = JsonState::AFTER_VALUE;
+            } else if (c == 't') {
+                if (!read_literal("rue")) break;
+                state = JsonState::AFTER_VALUE;
+            } else if (c == 'f') {
+                if (!read_literal("alse")) break;
+                state = JsonState::AFTER_VALUE;
+            } else if (c == 'n') {
+                if (!read_literal("ull")) break;
+                state = JsonState::AFTER_VALUE;
+            } else if (c == '-' || (c >= '0' && c <= '9')) {
+                if (!read_number(c)) break;
+                state = JsonState::AFTER_VALUE;
+            } else {
+                break;
+            }
+        } else if (state == JsonState::OBJ_FIRST_KEY_OR_END) {
+            int c = skip_ws();
+            if (c == '}') {
+                depth--;
+                state = JsonState::AFTER_VALUE;
+            } else if (c == '"') {
+                if (!read_string()) break;
+                state = JsonState::OBJ_COLON;
+            } else {
+                break;
+            }
+        } else if (state == JsonState::OBJ_KEY) {
+            int c = skip_ws();
+            if (c == '"') {
+                if (!read_string()) break;
+                state = JsonState::OBJ_COLON;
+            } else {
+                break;
+            }
+        } else if (state == JsonState::OBJ_COLON) {
+            int c = skip_ws();
+            if (c == ':') {
+                state = JsonState::EXPECT_VALUE;
+            } else {
+                break;
+            }
+        } else if (state == JsonState::ARR_FIRST_VAL_OR_END) {
+            int c = skip_ws();
+            if (c == ']') {
+                depth--;
+                state = JsonState::AFTER_VALUE;
+            } else if (c == EOF) {
+                break;
+            } else {
+                reader.unget(c);
+                state = JsonState::EXPECT_VALUE;
+            }
+        } else { // AFTER_VALUE
+            int c = skip_ws();
+            if (depth == 0) {
+                valid = (c == EOF);
+                break;
+            }
+            if (stack[depth - 1] == '{') {
+                if (c == ',') {
+                    state = JsonState::OBJ_KEY;
+                } else if (c == '}') {
+                    depth--;
+                } else {
+                    break;
+                }
+            } else {
+                if (c == ',') {
+                    state = JsonState::EXPECT_VALUE;
+                } else if (c == ']') {
+                    depth--;
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+
+    fclose(f);
+    return valid;
+}
+
+static bool validate_json_file(const char *filepath, bool allow_array) {
+    struct stat st;
+    if (stat(filepath, &st) != 0 || st.st_size <= 0) {
+        return false;
+    }
+
+    // Use cJSON for small/medium files; stream-validate large files (e.g. 338KB catalog.json) without OOM
+    static constexpr size_t kMaxCjsonValidateBytes = 65536;
+    size_t file_size = static_cast<size_t>(st.st_size);
+    if (file_size <= kMaxCjsonValidateBytes) {
+        FILE *f = fopen(filepath, "r");
+        if (!f) return false;
+#if CONFIG_SPIRAM
+        char *buf = static_cast<char *>(heap_caps_malloc_prefer(file_size + 1, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT));
+#else
+        char *buf = static_cast<char *>(malloc(file_size + 1));
+#endif
+        if (buf) {
+            size_t nread = fread(buf, 1, file_size, f);
+            bool read_err = (ferror(f) != 0);
+            fclose(f);
+            if (read_err || nread != file_size) {
+                free(buf);
+                return false;
+            }
+            buf[file_size] = '\0';
+            const char *parse_end = nullptr;
+            cJSON *root = cJSON_ParseWithOpts(buf, &parse_end, false);
+            bool ok = false;
+            if (root && (cJSON_IsObject(root) || (allow_array && cJSON_IsArray(root)))) {
+                ok = true;
+                if (parse_end) {
+                    while (*parse_end != '\0') {
+                        if (!is_json_ws(*parse_end)) {
+                            ok = false;
+                            break;
+                        }
+                        ++parse_end;
+                    }
+                }
+            }
+            if (root) cJSON_Delete(root);
+            free(buf);
+            return ok;
+        }
+        fclose(f);
+    }
+
+    return validate_json_file_streaming(filepath, allow_array);
+}
+
 static esp_err_t api_file_upload_handler(httpd_req_t *req) {
     set_cors_headers(req);
     char filepath[128];
     if (httpd_req_get_hdr_value_str(req, "X-File-Path", filepath, sizeof(filepath)) != ESP_OK) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing X-File-Path header");
-        return ESP_FAIL;
+        return send_err_with_body_check(req, HTTPD_400_BAD_REQUEST, "Missing X-File-Path header", false);
     }
 
-    if (strncmp(filepath, "/spiffs/", 8) != 0) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid path: must start with /spiffs/");
-        return ESP_FAIL;
+    if (strncmp(filepath, "/spiffs/", 8) != 0 || filepath[8] == '\0') {
+        return send_err_with_body_check(req, HTTPD_400_BAD_REQUEST, "Invalid path: must start with /spiffs/", false);
+    }
+
+    if (strstr(filepath + 8, "..") != nullptr) {
+        return send_err_with_body_check(req, HTTPD_400_BAD_REQUEST, "Invalid path: directory traversal rejected", false);
     }
 
     ensure_parent_dirs(filepath);
 
     if (req->content_len == 0) {
-        unlink(filepath);
+        if (strcmp(filepath, "/spiffs/automations.json") == 0) {
+            std::lock_guard<std::mutex> file_lock(g_automations_file_mutex);
+            unlink(filepath);
+        } else {
+            unlink(filepath);
+        }
+        httpd_resp_set_type(req, "application/json");
         httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"File deleted/truncated.\"}");
         return ESP_OK;
     }
 
-    FILE *fd = fopen(filepath, "w");
+    size_t total_bytes = 0, used_bytes = 0;
+    if (esp_littlefs_info("storage", &total_bytes, &used_bytes) == ESP_OK) {
+        size_t free_bytes = (total_bytes > used_bytes) ? (total_bytes - used_bytes) : 0;
+        if (req->content_len > free_bytes) {
+            ESP_LOGE(TAG, "Upload rejected for %s: %zu bytes exceeds LittleFS free space (%zu bytes)",
+                     filepath, req->content_len, free_bytes);
+            return send_payload_too_large(req, "File exceeds available LittleFS free space");
+        }
+    }
+
+    bool is_automations = (strcmp(filepath, "/spiffs/automations.json") == 0);
+    bool is_preferences = (strcmp(filepath, "/spiffs/preferences.json") == 0);
+    bool is_catalog = (strcmp(filepath, "/spiffs/catalog.json") == 0);
+
+    char tmp_filepath[144];
+    if (is_automations) {
+        snprintf(tmp_filepath, sizeof(tmp_filepath), "/spiffs/automations.json.http.tmp");
+    } else {
+        int n = snprintf(tmp_filepath, sizeof(tmp_filepath), "%s.tmp", filepath);
+        if (n <= 0 || static_cast<size_t>(n) >= sizeof(tmp_filepath)) {
+            return send_err_with_body_check(req, HTTPD_400_BAD_REQUEST, "File path too long", false);
+        }
+    }
+
+    StaticTransferGuard transfer_guard;
+
+    FILE *fd = fopen(tmp_filepath, "w");
     if (!fd) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open file for write");
-        return ESP_FAIL;
+        return send_err_with_body_check(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open temp file for write", false);
     }
 
     char buf[1024];
-    int remaining = req->content_len;
+    size_t remaining = req->content_len;
+    int timeout_retries = 0;
     while (remaining > 0) {
-        int recv_len = httpd_req_recv(req, buf, std::min(remaining, static_cast<int>(sizeof(buf))));
+        size_t to_read = std::min(remaining, sizeof(buf));
+        int recv_len = httpd_req_recv(req, buf, to_read);
+        if (recv_len == HTTPD_SOCK_ERR_TIMEOUT) {
+            if (++timeout_retries > kMaxStreamTimeoutRetries) {
+                fclose(fd);
+                unlink(tmp_filepath);
+                return send_err_with_body_check(req, HTTPD_408_REQ_TIMEOUT, "File receive timed out", false);
+            }
+            continue;
+        }
         if (recv_len <= 0) {
             fclose(fd);
-            unlink(filepath);
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "File receive failed");
+            unlink(tmp_filepath);
             return ESP_FAIL;
         }
-        size_t written = fwrite(buf, 1, recv_len, fd);
-        if (written != static_cast<size_t>(recv_len)) {
+        timeout_retries = 0;
+        size_t chunk_len = static_cast<size_t>(recv_len);
+        size_t written = fwrite(buf, 1, chunk_len, fd);
+        if (written != chunk_len) {
             fclose(fd);
-            unlink(filepath);
-            size_t total_bytes = 0, used_bytes = 0;
-            esp_littlefs_info("storage", &total_bytes, &used_bytes);
-            ESP_LOGE(TAG, "fwrite failed for %s: written %zu of %d (disk full? LittleFS total: %zu, used: %zu, free: %zu)",
-                     filepath, written, recv_len, total_bytes, used_bytes,
-                     (total_bytes > used_bytes ? total_bytes - used_bytes : 0));
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "File write failed (disk full?)");
-            return ESP_FAIL;
+            unlink(tmp_filepath);
+            size_t t_bytes = 0, u_bytes = 0;
+            esp_littlefs_info("storage", &t_bytes, &u_bytes);
+            ESP_LOGE(TAG, "fwrite failed for %s: written %zu of %zu (disk full? LittleFS total: %zu, used: %zu, free: %zu)",
+                     tmp_filepath, written, chunk_len, t_bytes, u_bytes,
+                     (t_bytes > u_bytes ? t_bytes - u_bytes : 0));
+            return send_err_with_body_check(req, HTTPD_500_INTERNAL_SERVER_ERROR, "File write failed (disk full?)", remaining == chunk_len);
         }
-        remaining -= recv_len;
+        remaining -= chunk_len;
     }
-    fflush(fd);
-    fclose(fd);
+
+    bool flush_ok = (fflush(fd) == 0);
+    bool close_ok = (fclose(fd) == 0);
+    if (!flush_ok || !close_ok) {
+        unlink(tmp_filepath);
+        ESP_LOGE(TAG, "Failed to flush/close temp upload file %s", tmp_filepath);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed finalizing uploaded file");
+        return ESP_OK;
+    }
+
+    if (is_automations || is_preferences || is_catalog) {
+        bool allow_array = is_automations;
+        if (!validate_json_file(tmp_filepath, allow_array)) {
+            unlink(tmp_filepath);
+            ESP_LOGE(TAG, "Rejected invalid JSON upload for %s", filepath);
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON payload");
+            return ESP_OK;
+        }
+    }
+
+    int rename_res = -1;
+    if (is_automations) {
+        std::lock_guard<std::mutex> file_lock(g_automations_file_mutex);
+        rename_res = rename(tmp_filepath, filepath);
+    } else {
+        rename_res = rename(tmp_filepath, filepath);
+    }
+    if (rename_res != 0) {
+        unlink(tmp_filepath);
+        ESP_LOGE(TAG, "Failed to atomically rename %s -> %s", tmp_filepath, filepath);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed committing uploaded file");
+        return ESP_OK;
+    }
 
     char no_reboot_hdr[16] = {0};
     bool skip_reboot = (httpd_req_get_hdr_value_str(req, "X-No-Reboot", no_reboot_hdr, sizeof(no_reboot_hdr)) == ESP_OK && strcmp(no_reboot_hdr, "1") == 0);
 
-    if (strcmp(filepath, "/spiffs/catalog.json") == 0 && !skip_reboot) {
+    if (is_catalog && !skip_reboot) {
         return send_reboot_json_response(req, "{\"status\":\"success\",\"message\":\"Catalog saved. Rebooting...\"}");
     } else {
+        httpd_resp_set_type(req, "application/json");
         httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"File saved successfully.\"}");
     }
     return ESP_OK;
@@ -1140,9 +1536,11 @@ static esp_err_t api_ota_handler(httpd_req_t *req) {
     if (g_ota_state.in_progress.exchange(true)) {
         httpd_resp_set_status(req, "409 Conflict");
         httpd_resp_set_type(req, "application/json");
-        httpd_resp_set_hdr(req, "Connection", "close");
+        if (req->content_len > 0) {
+            httpd_resp_set_hdr(req, "Connection", "close");
+        }
         httpd_resp_sendstr(req, "{\"status\":\"error\",\"message\":\"OTA already in progress\"}");
-        return ESP_FAIL;
+        return (req->content_len > 0) ? ESP_FAIL : ESP_OK;
     }
 
     struct OtaInProgressGuard {
@@ -1154,87 +1552,101 @@ static esp_err_t api_ota_handler(httpd_req_t *req) {
     g_ota_state.success = false;
     g_ota_state.set_error("");
 
+    if (req->content_len == 0) {
+        g_ota_state.set_error("Empty OTA payload");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty OTA payload");
+        return ESP_OK;
+    }
+
     rtc_crash_record_event("ota_start");
     esp_ota_handle_t update_handle = 0;
     const esp_partition_t *update_partition = esp_ota_get_next_update_partition(nullptr);
     if (!update_partition) {
         g_ota_state.set_error("No OTA partition found");
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No OTA partition found");
-        return ESP_FAIL;
+        return send_err_with_body_check(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No OTA partition found", false);
     }
 
-    s_active_static_transfers.fetch_add(1, std::memory_order_relaxed);
-    esp_err_t err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &update_handle);
-    if (err != ESP_OK) {
-        s_active_static_transfers.fetch_sub(1, std::memory_order_relaxed);
-        ESP_LOGE(TAG, "esp_ota_begin failed: %s", esp_err_to_name(err));
-        g_ota_state.set_error("OTA begin failed");
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA begin failed");
-        return ESP_FAIL;
+    if (req->content_len > update_partition->size) {
+        ESP_LOGE(TAG, "OTA image too large: %zu bytes > partition size %lu bytes",
+                 req->content_len, (unsigned long)update_partition->size);
+        g_ota_state.set_error("Firmware image exceeds OTA partition size");
+        return send_payload_too_large(req, "Firmware image exceeds OTA partition size");
     }
 
-    const size_t kChunkSize = 4096;
-    char *buf = static_cast<char *>(malloc(kChunkSize));
-    if (!buf) {
-        esp_ota_abort(update_handle);
-        s_active_static_transfers.fetch_sub(1, std::memory_order_relaxed);
-        g_ota_state.set_error("Out of memory for OTA buffer");
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory for OTA buffer");
-        return ESP_FAIL;
-    }
+    {
+        StaticTransferGuard transfer_guard;
 
-    int64_t total_len = static_cast<int64_t>(req->content_len);
-    int64_t written_total = 0;
-    int remaining = req->content_len;
-    while (remaining > 0) {
-        int recv_len = httpd_req_recv(req, buf, std::min(remaining, static_cast<int>(kChunkSize)));
-        if (recv_len == HTTPD_SOCK_ERR_TIMEOUT) {
-            continue;
-        }
-        if (recv_len <= 0) {
-            free(buf);
-            esp_ota_abort(update_handle);
-            s_active_static_transfers.fetch_sub(1, std::memory_order_relaxed);
-            g_ota_state.set_error("OTA socket receive failed");
-            ESP_LOGE(TAG, "OTA socket receive failed (remaining=%d)", remaining);
-            return ESP_FAIL;
-        }
-        err = esp_ota_write(update_handle, buf, recv_len);
+        esp_err_t err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &update_handle);
         if (err != ESP_OK) {
-            free(buf);
-            esp_ota_abort(update_handle);
-            s_active_static_transfers.fetch_sub(1, std::memory_order_relaxed);
-            g_ota_state.set_error("OTA write failed");
-            ESP_LOGE(TAG, "esp_ota_write failed: %s", esp_err_to_name(err));
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA write failed");
-            return ESP_FAIL;
+            ESP_LOGE(TAG, "esp_ota_begin failed: %s", esp_err_to_name(err));
+            g_ota_state.set_error("OTA begin failed");
+            return send_err_with_body_check(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA begin failed", false);
         }
-        remaining -= recv_len;
-        written_total += recv_len;
-        g_ota_state.bytes_read = static_cast<int>(written_total);
-        if (total_len > 0) {
-            g_ota_state.progress_pct = static_cast<int>((written_total * 100LL) / total_len);
-        }
-    }
-    free(buf);
-    s_active_static_transfers.fetch_sub(1, std::memory_order_relaxed);
 
-    if (esp_ota_end(update_handle) == ESP_OK && esp_ota_set_boot_partition(update_partition) == ESP_OK) {
-        g_ota_state.progress_pct = 100;
-        g_ota_state.success = true;
-        return send_reboot_json_response(req, "{\"status\":\"success\",\"message\":\"Firmware flashed. Rebooting...\"}");
+        const size_t kChunkSize = 4096;
+        char *buf = static_cast<char *>(malloc(kChunkSize));
+        if (!buf) {
+            esp_ota_abort(update_handle);
+            g_ota_state.set_error("Out of memory for OTA buffer");
+            return send_err_with_body_check(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory for OTA buffer", false);
+        }
+
+        const size_t total_len = req->content_len;
+        size_t written_total = 0;
+        size_t remaining = req->content_len;
+        int timeout_retries = 0;
+        while (remaining > 0) {
+            size_t to_read = std::min(remaining, kChunkSize);
+            int recv_len = httpd_req_recv(req, buf, to_read);
+            if (recv_len == HTTPD_SOCK_ERR_TIMEOUT) {
+                if (++timeout_retries > kMaxOtaTimeoutRetries) {
+                    free(buf);
+                    esp_ota_abort(update_handle);
+                    g_ota_state.set_error("OTA socket receive timed out");
+                    ESP_LOGE(TAG, "OTA socket receive timed out (remaining=%zu)", remaining);
+                    return send_err_with_body_check(req, HTTPD_408_REQ_TIMEOUT, "OTA receive timed out", false);
+                }
+                continue;
+            }
+            if (recv_len <= 0) {
+                free(buf);
+                esp_ota_abort(update_handle);
+                g_ota_state.set_error("OTA socket receive failed");
+                ESP_LOGE(TAG, "OTA socket receive failed (remaining=%zu)", remaining);
+                return ESP_FAIL;
+            }
+            timeout_retries = 0;
+            size_t chunk_len = static_cast<size_t>(recv_len);
+            err = esp_ota_write(update_handle, buf, chunk_len);
+            if (err != ESP_OK) {
+                free(buf);
+                esp_ota_abort(update_handle);
+                g_ota_state.set_error("OTA write failed");
+                ESP_LOGE(TAG, "esp_ota_write failed: %s", esp_err_to_name(err));
+                return send_err_with_body_check(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA write failed", remaining == chunk_len);
+            }
+            remaining -= chunk_len;
+            written_total += chunk_len;
+            g_ota_state.bytes_read = static_cast<int>(written_total);
+            if (total_len > 0) {
+                g_ota_state.progress_pct = static_cast<int>((static_cast<uint64_t>(written_total) * 100ULL) / total_len);
+            }
+        }
+        free(buf);
+
+        if (esp_ota_end(update_handle) == ESP_OK && esp_ota_set_boot_partition(update_partition) == ESP_OK) {
+            g_ota_state.progress_pct = 100;
+            g_ota_state.success = true;
+            return send_reboot_json_response(req, "{\"status\":\"success\",\"message\":\"Firmware flashed. Rebooting...\"}");
+        }
     }
 
     g_ota_state.set_error("OTA flash failed");
     httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA flash failed");
-    return ESP_FAIL;
+    return ESP_OK;
 }
 
-static void cloud_ota_task(void *pvParameter) {
-    CloudOtaTaskArgs *args = static_cast<CloudOtaTaskArgs*>(pvParameter);
-    std::string download_url = args->url;
-    delete args;
-
+static void run_cloud_ota(const std::string &download_url) {
     g_ota_state.in_progress = true;
     g_ota_state.progress_pct = 0;
     g_ota_state.bytes_read = 0;
@@ -1262,7 +1674,6 @@ static void cloud_ota_task(void *pvParameter) {
         g_ota_state.set_error("Failed to initialize HTTP client");
         g_ota_state.in_progress = false;
         broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] [E] Failed to initialize HTTP client\"}");
-        vTaskDelete(nullptr);
         return;
     }
 
@@ -1275,7 +1686,6 @@ static void cloud_ota_task(void *pvParameter) {
         g_ota_state.in_progress = false;
         broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] [E] Connection to download URL failed\"}");
         esp_http_client_cleanup(client);
-        vTaskDelete(nullptr);
         return;
     }
 
@@ -1314,7 +1724,6 @@ static void cloud_ota_task(void *pvParameter) {
         broadcast_ws_raw(err_msg);
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
-        vTaskDelete(nullptr);
         return;
     }
 
@@ -1326,129 +1735,138 @@ static void cloud_ota_task(void *pvParameter) {
         broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] [E] No active OTA partition available\"}");
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
-        vTaskDelete(nullptr);
-        return;
-    }
-
-    esp_ota_handle_t update_handle = 0;
-    err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &update_handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_ota_begin failed (%s)", esp_err_to_name(err));
-        char err_buf[128];
-        snprintf(err_buf, sizeof(err_buf), "OTA begin failed: %s", esp_err_to_name(err));
-        g_ota_state.set_error(err_buf);
-        g_ota_state.in_progress = false;
-        broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] [E] OTA begin failed\"}");
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
-        vTaskDelete(nullptr);
         return;
     }
 
     broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] Streaming binary directly into flash partition...\"}");
 
-    char *upgrade_data_buf = (char *)malloc(2048);
-    if (!upgrade_data_buf) {
-        esp_ota_abort(update_handle);
-        g_ota_state.set_error("Out of memory");
+    int binary_file_length = 0;
+    bool flash_succeeded = false;
+    {
+        // Pause WebSocket broadcasts while erasing/writing flash during Cloud OTA
+        StaticTransferGuard transfer_guard;
+
+        esp_ota_handle_t update_handle = 0;
+        err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &update_handle);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "esp_ota_begin failed (%s)", esp_err_to_name(err));
+            char err_buf[128];
+            snprintf(err_buf, sizeof(err_buf), "OTA begin failed: %s", esp_err_to_name(err));
+            g_ota_state.set_error(err_buf);
+            g_ota_state.in_progress = false;
+            esp_http_client_close(client);
+            esp_http_client_cleanup(client);
+        } else {
+            char *upgrade_data_buf = (char *)malloc(2048);
+            if (!upgrade_data_buf) {
+                esp_ota_abort(update_handle);
+                g_ota_state.set_error("Out of memory");
+                g_ota_state.in_progress = false;
+                esp_http_client_close(client);
+                esp_http_client_cleanup(client);
+            } else {
+                int data_read = 0;
+
+                while (true) {
+                    data_read = esp_http_client_read(client, upgrade_data_buf, 2048);
+                    if (data_read < 0) {
+                        ESP_LOGE(TAG, "Error: SSL/HTTP data read error");
+                        g_ota_state.set_error("Read error during binary download");
+                        err = ESP_FAIL;
+                        break;
+                    } else if (data_read > 0) {
+                        err = esp_ota_write(update_handle, (const void *)upgrade_data_buf, data_read);
+                        if (err != ESP_OK) {
+                            ESP_LOGE(TAG, "esp_ota_write failed (%s)", esp_err_to_name(err));
+                            char err_buf[128];
+                            snprintf(err_buf, sizeof(err_buf), "Flash write error: %s", esp_err_to_name(err));
+                            g_ota_state.set_error(err_buf);
+                            break;
+                        }
+                        binary_file_length += data_read;
+                        g_ota_state.bytes_read = binary_file_length;
+                        if (content_length > 0) {
+                            int pct = static_cast<int>((static_cast<int64_t>(binary_file_length) * 100LL) / content_length);
+                            if (pct > 100) pct = 100;
+                            g_ota_state.progress_pct = pct;
+                        }
+                    } else if (data_read == 0) {
+                        // End of stream
+                        break;
+                    }
+                }
+
+                free(upgrade_data_buf);
+                esp_http_client_close(client);
+                esp_http_client_cleanup(client);
+
+                bool ota_ended = false;
+                if (err == ESP_OK && binary_file_length > 100000) {
+                    ota_ended = true;
+                    err = esp_ota_end(update_handle);
+                    if (err == ESP_OK) {
+                        err = esp_ota_set_boot_partition(update_partition);
+                        if (err == ESP_OK) {
+                            flash_succeeded = true;
+                        }
+                    }
+                }
+
+                if (!flash_succeeded && !ota_ended) {
+                    esp_ota_abort(update_handle);
+                }
+            }
+        }
+    }
+
+    if (flash_succeeded) {
+        ESP_LOGI(TAG, "Direct Cloud OTA Succeeded! Total bytes: %d. Rebooting...", binary_file_length);
+        g_ota_state.progress_pct = 100;
+        g_ota_state.success = true;
         g_ota_state.in_progress = false;
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
-        vTaskDelete(nullptr);
+        broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] Cloud flash 100% complete! Rebooting device in 2s...\"}");
+        power_mgr_schedule_restart(1500);
         return;
     }
 
-    int binary_file_length = 0;
-    int data_read = 0;
-    int last_reported_pct = -1;
-
-    while (true) {
-        data_read = esp_http_client_read(client, upgrade_data_buf, 2048);
-        if (data_read < 0) {
-            ESP_LOGE(TAG, "Error: SSL/HTTP data read error");
-            g_ota_state.set_error("Read error during binary download");
-            break;
-        } else if (data_read > 0) {
-            err = esp_ota_write(update_handle, (const void *)upgrade_data_buf, data_read);
-            if (err != ESP_OK) {
-                ESP_LOGE(TAG, "esp_ota_write failed (%s)", esp_err_to_name(err));
-                char err_buf[128];
-                snprintf(err_buf, sizeof(err_buf), "Flash write error: %s", esp_err_to_name(err));
-                g_ota_state.set_error(err_buf);
-                break;
-            }
-            binary_file_length += data_read;
-            g_ota_state.bytes_read = binary_file_length;
-            if (content_length > 0) {
-                int pct = static_cast<int>((static_cast<int64_t>(binary_file_length) * 100LL) / content_length);
-                if (pct > 100) pct = 100;
-                g_ota_state.progress_pct = pct;
-                if (pct != last_reported_pct && pct % 5 == 0) {
-                    last_reported_pct = pct;
-                    char p_buf[96];
-                    snprintf(p_buf, sizeof(p_buf), "{\"type\":\"ota_progress\",\"pct\":%d,\"bytes\":%d}", pct, binary_file_length);
-                    broadcast_ws_raw(p_buf);
-                }
-            }
-        } else if (data_read == 0) {
-            // End of stream
-            break;
-        }
-    }
-
-    free(upgrade_data_buf);
-    esp_http_client_close(client);
-    esp_http_client_cleanup(client);
-
-    bool ota_ended = false;
-    if (err == ESP_OK && binary_file_length > 100000) {
-        ota_ended = true;
-        err = esp_ota_end(update_handle);
-        if (err == ESP_OK) {
-            err = esp_ota_set_boot_partition(update_partition);
-            if (err == ESP_OK) {
-                ESP_LOGI(TAG, "Direct Cloud OTA Succeeded! Total bytes: %d. Rebooting...", binary_file_length);
-                g_ota_state.progress_pct = 100;
-                g_ota_state.success = true;
-                g_ota_state.in_progress = false;
-                broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] Cloud flash 100% complete! Rebooting device in 2s...\"}");
-                power_mgr_schedule_restart(1500);
-                vTaskDelete(nullptr);
-                return;
-            }
-        }
-    }
-
-    if (!ota_ended) {
-        esp_ota_abort(update_handle);
-    }
     ESP_LOGE(TAG, "Direct Cloud OTA Failed or incomplete");
     char err_buf[128];
     snprintf(err_buf, sizeof(err_buf), "OTA incomplete or corrupted (bytes: %d)", binary_file_length);
     g_ota_state.set_error_if_empty(err_buf);
     g_ota_state.in_progress = false;
     broadcast_ws_raw("{\"type\":\"log\",\"msg\":\"[OTA] [E] Cloud OTA update failed to complete\"}");
+}
+
+static void cloud_ota_task(void *pvParameter) {
+    CloudOtaTaskArgs *args = static_cast<CloudOtaTaskArgs*>(pvParameter);
+    std::string download_url = args->url;
+    delete args;
+
+    run_cloud_ota(download_url);
+    download_url.clear();
+    download_url.shrink_to_fit();
     vTaskDelete(nullptr);
 }
 
 static esp_err_t api_ota_cloud_pull_handler(httpd_req_t *req) {
     set_cors_headers(req);
     std::string body;
-    if (read_req_body(req, 1024, body) != ESP_OK) {
-        return ESP_FAIL;
+    esp_err_t body_err = ESP_OK;
+    if (!read_req_body(req, 1024, body, &body_err)) {
+        return body_err;
     }
 
     cJSON *root = cJSON_Parse(body.c_str());
     if (!root) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-        return ESP_FAIL;
+        return ESP_OK;
     }
 
     cJSON *url_item = cJSON_GetObjectItem(root, "url");
     if (!url_item || !cJSON_IsString(url_item)) {
         cJSON_Delete(root);
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing 'url' field");
-        return ESP_FAIL;
+        return ESP_OK;
     }
 
     std::string ota_url = url_item->valuestring;
@@ -1472,7 +1890,7 @@ static esp_err_t api_ota_cloud_pull_handler(httpd_req_t *req) {
         g_ota_state.set_error("Failed to spawn cloud OTA task");
         g_ota_state.in_progress.store(false);
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to spawn cloud OTA task");
-        return ESP_FAIL;
+        return ESP_OK;
     }
 
     httpd_resp_set_type(req, "application/json");
@@ -1528,58 +1946,98 @@ static esp_err_t api_get_automations_handler(httpd_req_t *req) {
 
 static esp_err_t api_post_automations_handler(httpd_req_t *req) {
     set_cors_headers(req);
-    if (req->content_len <= 0) {
+    if (req->content_len == 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty payload");
-        return ESP_FAIL;
+        return ESP_OK;
+    }
+    if (req->content_len > kMaxAutomationsBytes) {
+        return send_payload_too_large(req, "Automations payload exceeds 128KB limit");
     }
 
-    const char *temp_filepath = "/spiffs/automations.json.tmp";
+    const char *temp_filepath = "/spiffs/automations.json.http.tmp";
     const char *target_filepath = "/spiffs/automations.json";
+
+    StaticTransferGuard transfer_guard;
 
     FILE *fd = fopen(temp_filepath, "w");
     if (!fd) {
-        fd = fopen(target_filepath, "w");
-        if (!fd) {
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open automations file for write");
-            return ESP_FAIL;
-        }
-        temp_filepath = target_filepath;
+        return send_err_with_body_check(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open automations temp file for write", false);
     }
 
     char buf[1024];
-    int remaining = req->content_len;
+    size_t remaining = req->content_len;
+    int timeout_retries = 0;
     while (remaining > 0) {
-        int recv_len = httpd_req_recv(req, buf, std::min(remaining, static_cast<int>(sizeof(buf))));
+        size_t to_read = std::min(remaining, sizeof(buf));
+        int recv_len = httpd_req_recv(req, buf, to_read);
+        if (recv_len == HTTPD_SOCK_ERR_TIMEOUT) {
+            if (++timeout_retries > kMaxStreamTimeoutRetries) {
+                fclose(fd);
+                remove(temp_filepath);
+                return send_err_with_body_check(req, HTTPD_408_REQ_TIMEOUT, "Timed out receiving automation payload", false);
+            }
+            continue;
+        }
         if (recv_len <= 0) {
             fclose(fd);
-            if (temp_filepath != target_filepath) remove(temp_filepath);
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed receiving automation payload");
+            remove(temp_filepath);
             return ESP_FAIL;
         }
-        fwrite(buf, 1, recv_len, fd);
-        remaining -= recv_len;
+        timeout_retries = 0;
+        size_t chunk_len = static_cast<size_t>(recv_len);
+        size_t written = fwrite(buf, 1, chunk_len, fd);
+        if (written != chunk_len) {
+            fclose(fd);
+            remove(temp_filepath);
+            ESP_LOGE(TAG, "fwrite failed for %s: written %zu of %zu", temp_filepath, written, chunk_len);
+            return send_err_with_body_check(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed writing automation payload", remaining == chunk_len);
+        }
+        remaining -= chunk_len;
     }
-    fclose(fd);
 
-    if (!load_automations_from_fs(temp_filepath)) {
-        if (temp_filepath != target_filepath) {
+    bool flush_ok = (fflush(fd) == 0);
+    bool close_ok = (fclose(fd) == 0);
+    if (!flush_ok || !close_ok) {
+        remove(temp_filepath);
+        ESP_LOGE(TAG, "Failed to flush/close temp automations file");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed finalizing automations file");
+        return ESP_OK;
+    }
+
+    if (!validate_json_file(temp_filepath, true)) {
+        remove(temp_filepath);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid automations JSON");
+        return ESP_OK;
+    }
+
+    bool load_ok = false;
+    bool commit_ok = false;
+    {
+        std::lock_guard<std::mutex> file_lock(g_automations_file_mutex);
+        load_ok = load_automations_from_fs(temp_filepath);
+        if (load_ok) {
+            commit_ok = (rename(temp_filepath, target_filepath) == 0);
+            if (!commit_ok) {
+                remove(temp_filepath);
+            }
+        } else {
             remove(temp_filepath);
         }
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid automations JSON");
-        return ESP_FAIL;
     }
 
-    if (temp_filepath != target_filepath) {
-        remove(target_filepath);
-        if (rename(temp_filepath, target_filepath) != 0) {
-            ESP_LOGE(TAG, "Failed to rename temp automations file");
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed committing automations file");
-            return ESP_FAIL;
-        }
+    if (!load_ok) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid automations JSON");
+        return ESP_OK;
+    }
+
+    if (!commit_ok) {
+        ESP_LOGE(TAG, "Failed to atomically rename temp automations file");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed committing automations file");
+        return ESP_OK;
     }
 
     mqtt_mgr_on_automations_reloaded();
-    ESP_LOGI(TAG, "New automations.json written (%d bytes) and hot-reloaded.", req->content_len);
+    ESP_LOGI(TAG, "New automations.json written (%zu bytes) and hot-reloaded.", req->content_len);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"status\":\"success\",\"hot_reloaded\":true,\"message\":\"Automations saved and hot-reloaded.\"}");
     return ESP_OK;
@@ -1615,49 +2073,142 @@ static esp_err_t api_get_preferences_handler(httpd_req_t *req) {
 
 static esp_err_t api_post_preferences_handler(httpd_req_t *req) {
     set_cors_headers(req);
-    if (req->content_len <= 0) {
+    if (req->content_len == 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty payload");
-        return ESP_FAIL;
+        return ESP_OK;
+    }
+    if (req->content_len > kMaxPreferencesBytes) {
+        return send_payload_too_large(req, "Preferences payload exceeds 8KB limit");
+    }
+
+    std::string incoming_body;
+    incoming_body.reserve(req->content_len);
+    char buf[1024];
+    size_t remaining = req->content_len;
+    int timeout_retries = 0;
+    while (remaining > 0) {
+        size_t to_read = std::min(remaining, sizeof(buf));
+        int recv_len = httpd_req_recv(req, buf, to_read);
+        if (recv_len == HTTPD_SOCK_ERR_TIMEOUT) {
+            if (++timeout_retries > kMaxStreamTimeoutRetries) {
+                return send_err_with_body_check(req, HTTPD_408_REQ_TIMEOUT, "Timed out receiving preferences payload", false);
+            }
+            continue;
+        }
+        if (recv_len <= 0) {
+            return ESP_FAIL;
+        }
+        timeout_retries = 0;
+        size_t chunk_len = static_cast<size_t>(recv_len);
+        incoming_body.append(buf, chunk_len);
+        remaining -= chunk_len;
+    }
+
+    const char *parse_end = nullptr;
+    cJSON *incoming = cJSON_ParseWithOpts(incoming_body.c_str(), &parse_end, false);
+    bool valid_incoming = (incoming != nullptr && cJSON_IsObject(incoming));
+    if (valid_incoming && parse_end) {
+        while (*parse_end != '\0') {
+            if (!is_json_ws(*parse_end)) {
+                valid_incoming = false;
+                break;
+            }
+            ++parse_end;
+        }
+    }
+    if (!valid_incoming) {
+        if (incoming) cJSON_Delete(incoming);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid preferences JSON object");
+        return ESP_OK;
     }
 
     const char *temp_filepath = "/spiffs/preferences.json.tmp";
     const char *target_filepath = "/spiffs/preferences.json";
 
+    StaticTransferGuard transfer_guard;
+
+    // Merge incoming keys into existing preferences object so firmware-only keys (e.g. uds_enabled) are preserved
+    cJSON *merged = nullptr;
+    FILE *existing_fd = fopen(target_filepath, "r");
+    if (existing_fd) {
+        fseek(existing_fd, 0, SEEK_END);
+        long existing_sz = ftell(existing_fd);
+        fseek(existing_fd, 0, SEEK_SET);
+        if (existing_sz > 0 && static_cast<size_t>(existing_sz) <= kMaxPreferencesBytes) {
+            std::string existing_str(static_cast<size_t>(existing_sz), '\0');
+            size_t nread = fread(&existing_str[0], 1, static_cast<size_t>(existing_sz), existing_fd);
+            existing_str.resize(nread);
+            cJSON *parsed_existing = cJSON_Parse(existing_str.c_str());
+            if (parsed_existing && cJSON_IsObject(parsed_existing)) {
+                merged = parsed_existing;
+            } else if (parsed_existing) {
+                cJSON_Delete(parsed_existing);
+            }
+        }
+        fclose(existing_fd);
+    }
+    if (!merged) {
+        merged = cJSON_CreateObject();
+    }
+    if (!merged) {
+        cJSON_Delete(incoming);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+        return ESP_OK;
+    }
+
+    cJSON *child = incoming->child;
+    while (child) {
+        cJSON *next = child->next;
+        if (child->string) {
+            std::string key(child->string);
+            cJSON *detached = cJSON_DetachItemViaPointer(incoming, child);
+            if (detached) {
+                if (cJSON_HasObjectItem(merged, key.c_str())) {
+                    cJSON_ReplaceItemInObjectCaseSensitive(merged, key.c_str(), detached);
+                } else {
+                    cJSON_AddItemToObject(merged, key.c_str(), detached);
+                }
+            }
+        }
+        child = next;
+    }
+    cJSON_Delete(incoming);
+
+    char *rendered = cJSON_PrintUnformatted(merged);
+    cJSON_Delete(merged);
+    if (!rendered) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed serializing preferences JSON");
+        return ESP_OK;
+    }
+
+    size_t rendered_len = strlen(rendered);
     FILE *fd = fopen(temp_filepath, "w");
     if (!fd) {
-        fd = fopen(target_filepath, "w");
-        if (!fd) {
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open preferences file for write");
-            return ESP_FAIL;
-        }
-        temp_filepath = target_filepath;
+        free(rendered);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open preferences temp file for write");
+        return ESP_OK;
     }
 
-    char buf[1024];
-    int remaining = req->content_len;
-    while (remaining > 0) {
-        int recv_len = httpd_req_recv(req, buf, std::min(remaining, static_cast<int>(sizeof(buf))));
-        if (recv_len <= 0) {
-            fclose(fd);
-            if (temp_filepath != target_filepath) remove(temp_filepath);
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed receiving preferences payload");
-            return ESP_FAIL;
-        }
-        fwrite(buf, 1, recv_len, fd);
-        remaining -= recv_len;
-    }
-    fclose(fd);
-
-    if (temp_filepath != target_filepath) {
-        remove(target_filepath);
-        if (rename(temp_filepath, target_filepath) != 0) {
-            ESP_LOGE(TAG, "Failed to rename temp preferences file");
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed committing preferences file");
-            return ESP_FAIL;
-        }
+    size_t written = fwrite(rendered, 1, rendered_len, fd);
+    free(rendered);
+    bool write_ok = (written == rendered_len);
+    bool flush_ok = write_ok && (fflush(fd) == 0);
+    bool close_ok = (fclose(fd) == 0);
+    if (!write_ok || !flush_ok || !close_ok) {
+        remove(temp_filepath);
+        ESP_LOGE(TAG, "Failed writing/finalizing temp preferences file");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed writing preferences file");
+        return ESP_OK;
     }
 
-    ESP_LOGI(TAG, "User preferences saved to device (%d bytes)", req->content_len);
+    if (rename(temp_filepath, target_filepath) != 0) {
+        remove(temp_filepath);
+        ESP_LOGE(TAG, "Failed to atomically rename temp preferences file");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed committing preferences file");
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "User preferences merged and saved to device (%zu bytes)", rendered_len);
     uds_engine_load_preferences();
     can_engine_load_preferences();
     timezone_mgr_load_from_fs();
@@ -1820,16 +2371,11 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
         cJSON_AddItemToObject(root, "last_crash", cj_crash);
     }
 
-    FILE* diag_f = fopen("/spiffs/crash_diag.json", "r");
-    if (diag_f) {
-        char diag_buf[1024] = {0};
-        size_t n = fread(diag_buf, 1, sizeof(diag_buf) - 1, diag_f);
-        fclose(diag_f);
-        if (n > 0) {
-            cJSON* cj_persisted = cJSON_Parse(diag_buf);
-            if (cj_persisted) {
-                cJSON_AddItemToObject(root, "persisted_crash", cj_persisted);
-            }
+    load_crash_diag_cache_once();
+    {
+        std::lock_guard<std::mutex> lock(s_crash_diag_mutex);
+        if (!s_cached_crash_diag_json.empty()) {
+            cJSON_AddRawToObject(root, "persisted_crash", s_cached_crash_diag_json.c_str());
         }
     }
 
@@ -1839,13 +2385,14 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
 static esp_err_t api_system_set_time_handler(httpd_req_t *req) {
     set_cors_headers(req);
     std::string body;
-    if (read_req_body(req, 512, body) != ESP_OK) {
-        return ESP_FAIL;
+    esp_err_t body_err = ESP_OK;
+    if (!read_req_body(req, 512, body, &body_err)) {
+        return body_err;
     }
     cJSON *root = cJSON_Parse(body.c_str());
     if (!root) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-        return ESP_FAIL;
+        return ESP_OK;
     }
 
     cJSON *tz_item = cJSON_GetObjectItem(root, "timezone");
@@ -1874,7 +2421,7 @@ static esp_err_t api_system_set_time_handler(httpd_req_t *req) {
     }
     cJSON_Delete(root);
     httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing or invalid epoch");
-    return ESP_FAIL;
+    return ESP_OK;
 }
 
 static void collect_spiffs_files_recursive(const char *dir_path, cJSON *arr) {
@@ -1904,14 +2451,15 @@ static void collect_spiffs_files_recursive(const char *dir_path, cJSON *arr) {
 static esp_err_t api_system_control_handler(httpd_req_t *req) {
     set_cors_headers(req);
     std::string body;
-    if (read_req_body(req, 16384, body) != ESP_OK) {
-        return ESP_FAIL;
+    esp_err_t body_err = ESP_OK;
+    if (!read_req_body(req, 16384, body, &body_err)) {
+        return body_err;
     }
 
     cJSON *root = cJSON_Parse(body.c_str());
     if (!root) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-        return ESP_FAIL;
+        return ESP_OK;
     }
 
     cJSON *action_item = cJSON_GetObjectItem(root, "action");
@@ -1978,11 +2526,15 @@ static esp_err_t api_system_control_handler(httpd_req_t *req) {
             cJSON_Delete(root);
             return send_cjson_response(req, resp_obj);
         } else if (strcmp(act, "reload_catalog") == 0) {
-            bool prev_auto = g_automations_enabled.exchange(false);
             struct stat st;
-            int stat_res = stat("/spiffs/catalog.json", &st);
-            bool ok = load_catalog_from_fs("/spiffs/catalog.json");
-            g_automations_enabled.store(prev_auto);
+            int stat_res = -1;
+            bool ok = false;
+            {
+                StaticTransferGuard transfer_guard;
+                CatalogReloadGuard reload_guard;
+                stat_res = stat("/spiffs/catalog.json", &st);
+                ok = load_catalog_from_fs("/spiffs/catalog.json");
+            }
             size_t cat_cnt = 0;
             size_t auto_cnt = 0;
             {
@@ -2107,14 +2659,15 @@ static esp_err_t api_wifi_get_networks_handler(httpd_req_t *req) {
 static esp_err_t api_wifi_post_networks_handler(httpd_req_t *req) {
     set_cors_headers(req);
     std::string body;
-    if (read_req_body(req, 512, body) != ESP_OK) {
-        return ESP_FAIL;
+    esp_err_t body_err = ESP_OK;
+    if (!read_req_body(req, 512, body, &body_err)) {
+        return body_err;
     }
 
     cJSON *root = cJSON_Parse(body.c_str());
     if (!root) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-        return ESP_FAIL;
+        return ESP_OK;
     }
 
     cJSON *ssid = cJSON_GetObjectItem(root, "ssid");
@@ -2133,7 +2686,7 @@ static esp_err_t api_wifi_post_networks_handler(httpd_req_t *req) {
 
     cJSON_Delete(root);
     httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing SSID");
-    return ESP_FAIL;
+    return ESP_OK;
 }
 
 static std::string url_decode(const std::string& in) {
@@ -2171,8 +2724,9 @@ static esp_err_t api_wifi_delete_networks_handler(httpd_req_t *req) {
     // 1. Prefer reading JSON body if available: {"ssid": "..."}
     if (req->content_len > 0) {
         std::string body;
-        if (read_req_body(req, 512, body) != ESP_OK) {
-            return ESP_FAIL;
+        esp_err_t body_err = ESP_OK;
+        if (!read_req_body(req, 512, body, &body_err)) {
+            return body_err;
         }
         cJSON *root = cJSON_Parse(body.c_str());
         if (root) {
@@ -2211,7 +2765,7 @@ static esp_err_t api_wifi_delete_networks_handler(httpd_req_t *req) {
     }
 
     httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing SSID");
-    return ESP_FAIL;
+    return ESP_OK;
 }
 
 static esp_err_t api_wifi_scan_handler(httpd_req_t *req) {
@@ -2240,14 +2794,15 @@ static esp_err_t api_wifi_scan_handler(httpd_req_t *req) {
 static esp_err_t api_wifi_settings_handler(httpd_req_t *req) {
     set_cors_headers(req);
     std::string body;
-    if (read_req_body(req, 512, body) != ESP_OK) {
-        return ESP_FAIL;
+    esp_err_t body_err = ESP_OK;
+    if (!read_req_body(req, 512, body, &body_err)) {
+        return body_err;
     }
 
     cJSON *root = cJSON_Parse(body.c_str());
     if (!root) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-        return ESP_FAIL;
+        return ESP_OK;
     }
 
     cJSON *ap_mode_item = cJSON_GetObjectItem(root, "ap_mode");
@@ -2287,14 +2842,15 @@ static esp_err_t api_mqtt_get_handler(httpd_req_t *req) {
 static esp_err_t api_mqtt_post_handler(httpd_req_t *req) {
     set_cors_headers(req);
     std::string body;
-    if (read_req_body(req, 1024, body) != ESP_OK) {
-        return ESP_FAIL;
+    esp_err_t body_err = ESP_OK;
+    if (!read_req_body(req, 1024, body, &body_err)) {
+        return body_err;
     }
 
     cJSON *root = cJSON_Parse(body.c_str());
     if (!root) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-        return ESP_FAIL;
+        return ESP_OK;
     }
 
     MqttConfig cfg = mqtt_mgr_get_config();
@@ -2355,14 +2911,15 @@ static esp_err_t api_can_monitored_ids_get_handler(httpd_req_t *req) {
 static esp_err_t api_can_monitored_ids_post_handler(httpd_req_t *req) {
     set_cors_headers(req);
     std::string body;
-    if (read_req_body(req, 4096, body) != ESP_OK) {
-        return ESP_FAIL;
+    esp_err_t body_err = ESP_OK;
+    if (!read_req_body(req, 4096, body, &body_err)) {
+        return body_err;
     }
 
     cJSON *root = cJSON_Parse(body.c_str());
     if (!root) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-        return ESP_FAIL;
+        return ESP_OK;
     }
 
     cJSON *arr = cJSON_IsArray(root) ? root : cJSON_GetObjectItem(root, "monitored_ids");
@@ -2373,7 +2930,7 @@ static esp_err_t api_can_monitored_ids_post_handler(httpd_req_t *req) {
     if (!arr || !cJSON_IsArray(arr)) {
         cJSON_Delete(root);
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Expected JSON array of CAN IDs");
-        return ESP_FAIL;
+        return ESP_OK;
     }
 
     std::vector<uint32_t> ids;
@@ -2422,13 +2979,14 @@ static esp_err_t api_can_active_ids_get_handler(httpd_req_t *req) {
 static esp_err_t api_notify_handler(httpd_req_t *req) {
     set_cors_headers(req);
     std::string body;
-    if (read_req_body(req, 1024, body) != ESP_OK) {
-        return ESP_FAIL;
+    esp_err_t body_err = ESP_OK;
+    if (!read_req_body(req, 1024, body, &body_err)) {
+        return body_err;
     }
     cJSON *root = cJSON_Parse(body.c_str());
     if (!root) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-        return ESP_FAIL;
+        return ESP_OK;
     }
     cJSON *msg_item = cJSON_GetObjectItem(root, "message");
     if (!msg_item) msg_item = cJSON_GetObjectItem(root, "text");
@@ -2453,7 +3011,7 @@ static esp_err_t api_notify_handler(httpd_req_t *req) {
 
     if (msg.empty()) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing message");
-        return ESP_FAIL;
+        return ESP_OK;
     }
 
     bool sent = false;
@@ -2471,20 +3029,21 @@ static esp_err_t api_notify_handler(httpd_req_t *req) {
         return ESP_OK;
     } else {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to queue notification");
-        return ESP_FAIL;
+        return ESP_OK;
     }
 }
 
 static esp_err_t api_nav_handler(httpd_req_t *req) {
     set_cors_headers(req);
     std::string body;
-    if (read_req_body(req, 2048, body) != ESP_OK) {
-        return ESP_FAIL;
+    esp_err_t body_err = ESP_OK;
+    if (!read_req_body(req, 2048, body, &body_err)) {
+        return body_err;
     }
     cJSON *root = cJSON_Parse(body.c_str());
     if (!root) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-        return ESP_FAIL;
+        return ESP_OK;
     }
 
     cJSON *act = cJSON_GetObjectItem(root, "action");
@@ -2584,7 +3143,7 @@ static esp_err_t api_nav_handler(httpd_req_t *req) {
         return ESP_OK;
     } else {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to update HUD navigation");
-        return ESP_FAIL;
+        return ESP_OK;
     }
 }
 
@@ -2720,8 +3279,9 @@ static esp_err_t api_ble_pair_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     std::string body;
-    if (read_req_body(req, 512, body) != ESP_OK) {
-        return ESP_FAIL;
+    esp_err_t body_err = ESP_OK;
+    if (!read_req_body(req, 512, body, &body_err)) {
+        return body_err;
     }
     cJSON *root = cJSON_Parse(body.c_str());
     if (root) {
@@ -2748,8 +3308,9 @@ static esp_err_t api_ble_unpair_handler(httpd_req_t *req) {
     std::string addr_str = "";
     if (req->content_len > 0) {
         std::string body;
-        if (read_req_body(req, 512, body) != ESP_OK) {
-            return ESP_FAIL;
+        esp_err_t body_err = ESP_OK;
+        if (!read_req_body(req, 512, body, &body_err)) {
+            return body_err;
         }
         cJSON *root = cJSON_Parse(body.c_str());
         if (root) {
@@ -2773,8 +3334,9 @@ static esp_err_t api_ble_test_event_handler(httpd_req_t *req) {
     std::string act_str = "press";
     if (req->content_len > 0) {
         std::string body;
-        if (read_req_body(req, 512, body) != ESP_OK) {
-            return ESP_FAIL;
+        esp_err_t body_err = ESP_OK;
+        if (!read_req_body(req, 512, body, &body_err)) {
+            return body_err;
         }
         cJSON *root = cJSON_Parse(body.c_str());
         if (root) {
@@ -2810,8 +3372,9 @@ static esp_err_t api_ble_beacons_post_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     std::string body;
-    if (read_req_body(req, 1024, body) != ESP_OK) {
-        return ESP_FAIL;
+    esp_err_t body_err = ESP_OK;
+    if (!read_req_body(req, 1024, body, &body_err)) {
+        return body_err;
     }
     cJSON *root = cJSON_Parse(body.c_str());
     if (root) {
@@ -2837,15 +3400,16 @@ static esp_err_t api_ble_beacons_post_handler(httpd_req_t *req) {
         }
     }
     httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid beacon JSON");
-    return ESP_FAIL;
+    return ESP_OK;
 }
 
 static esp_err_t api_ble_beacons_delete_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     std::string body;
-    if (read_req_body(req, 512, body) != ESP_OK) {
-        return ESP_FAIL;
+    esp_err_t body_err = ESP_OK;
+    if (!read_req_body(req, 512, body, &body_err)) {
+        return body_err;
     }
     cJSON *root = cJSON_Parse(body.c_str());
     if (root) {
@@ -2864,10 +3428,11 @@ static esp_err_t api_ble_beacons_delete_handler(httpd_req_t *req) {
         }
     }
     httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid beacon delete JSON");
-    return ESP_FAIL;
+    return ESP_OK;
 }
 
 httpd_handle_t start_webserver(void) {
+    load_crash_diag_cache_once();
     httpd_handle_t server = nullptr;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.stack_size = 8192;

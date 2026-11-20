@@ -504,11 +504,17 @@ static PsramUnorderedMap<uint32_t, CachedCanFrame> can_state_cache;
 QueueHandle_t tx_command_queue = nullptr;
 
 std::atomic<bool> g_automations_enabled{true};
+std::atomic<bool> g_catalog_reloading{false};
 std::atomic<bool> g_sniffer_mode{false};
 std::atomic<bool> g_hardware_listen_only{false};
 std::atomic<bool> g_mitm_bridge_enabled{false};
 std::atomic<bool> g_twai_reconfig_pending{false};
 std::atomic<twai_mode_t> g_twai_requested_mode{TWAI_MODE_NORMAL};
+
+static inline bool are_automations_active(void) {
+    return g_automations_enabled.load(std::memory_order_relaxed) &&
+           !g_catalog_reloading.load(std::memory_order_acquire);
+}
 
 void set_automations_enabled(bool enabled) {
     g_automations_enabled.store(enabled);
@@ -3569,7 +3575,7 @@ void can_rx_task(void* arg) {
             }
 
             // 2. Evaluate automations if globally enabled and CAN ID is referenced by a trigger
-            if (g_automations_enabled.load()) {
+            if (are_automations_active()) {
                 if (g_automations_gen.load(std::memory_order_acquire) != auto_gen) {
                     refresh_watched_auto_ids();
                 }
@@ -3697,7 +3703,7 @@ void time_scheduler_task(void* arg) {
         uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
 
         // 1. Evaluate multi-press click windows and sustained-duration conditions/triggers (works 100% offline before NTP sync)
-        if (g_automations_enabled.load()) {
+        if (are_automations_active()) {
             std::vector<FiredRuleEvent> fired_events;
             {
                 std::lock_guard<std::mutex> lock(g_automations_mutex);
@@ -3779,7 +3785,7 @@ void time_scheduler_task(void* arg) {
 
         int cur_wday = timeinfo.tm_wday; // 0=Sun .. 6=Sat
 
-        if (!g_automations_enabled.load()) {
+        if (!are_automations_active()) {
             continue;
         }
 
@@ -3804,7 +3810,7 @@ void time_scheduler_task(void* arg) {
 }
 
 void can_engine_on_device_event(const std::string& event_type, const std::string& detail_str, int8_t rssi) {
-    if (!g_automations_enabled.load()) return;
+    if (!are_automations_active()) return;
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
 
     std::vector<FiredRuleEvent> fired_events;
@@ -3886,7 +3892,7 @@ void can_engine_on_ble_event(const std::string& address, const std::string& butt
 
     mqtt_mgr_publish_ble_button(address, button, action, combo, hold_seconds);
 
-    if (!g_automations_enabled.load()) return;
+    if (!are_automations_active()) return;
 
     uint32_t learn_until = s_ble_learn_until_ms.load();
     if (learn_until != 0) {
@@ -3969,7 +3975,7 @@ void can_engine_on_ble_device_event(const std::string& address, const std::strin
 
     mqtt_mgr_publish_ble_device(address, event, rssi, name);
 
-    if (!g_automations_enabled.load()) return;
+    if (!are_automations_active()) return;
 
     std::vector<FiredRuleEvent> fired_events;
     {
@@ -4051,7 +4057,7 @@ void can_engine_on_ble_beacon_event(const std::string& uuid, const std::string& 
 
     mqtt_mgr_publish_ble_beacon(uuid, event, rssi, major, minor, mac, name);
 
-    if (!g_automations_enabled.load()) return;
+    if (!are_automations_active()) return;
 
     std::vector<FiredRuleEvent> fired_events;
     {
