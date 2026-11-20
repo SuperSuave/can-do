@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "driver/twai.h"
+#include "can.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,7 +31,7 @@ typedef struct {
 } bms_live_data_t;
 
 void uds_engine_init(void);
-void uds_engine_on_can_rx(const twai_message_t* msg);
+void uds_engine_on_can_rx(const twai_message_t* msg, can_bus_t bus, bool from_physical_bus);
 bool uds_engine_is_vehicle_awake(void);
 bool uds_engine_is_gate_open(void);
 bms_live_data_t uds_engine_get_bms_data(void);

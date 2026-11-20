@@ -3508,7 +3508,7 @@ void can_rx_task(void* arg) {
             }
 
             s_rtc_crash.step_marker = 4;
-            uds_engine_on_can_rx(&rx_msg);
+            uds_engine_on_can_rx(&rx_msg, frame_bus, from_physical_bus);
 
             // Stream raw frame to connected SavvyCAN/GVRET client with bus metadata
             s_rtc_crash.step_marker = 6;

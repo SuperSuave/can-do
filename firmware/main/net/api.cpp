@@ -1903,6 +1903,10 @@ struct OtaState {
 };
 static OtaState g_ota_state;
 
+bool api_is_ota_in_progress(void) {
+    return g_ota_state.in_progress.load();
+}
+
 static esp_err_t api_ota_handler(httpd_req_t *req) {
     set_cors_headers(req);
     if (g_ota_state.in_progress.exchange(true)) {

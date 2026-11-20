@@ -13,6 +13,7 @@ void broadcast_ws_automation_event(const std::string& id, const std::string& nam
 int custom_websocket_logger(const char *fmt, va_list args);
 bool is_serving_static_page(void);
 bool has_active_websocket_clients(void);
+bool api_is_ota_in_progress(void);
 PsramUnorderedMap<std::string, std::string> get_live_state_cache(void);
 
 httpd_handle_t start_webserver(void);

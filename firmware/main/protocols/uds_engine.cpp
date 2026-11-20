@@ -3,6 +3,7 @@
 #include "vbat_sensor.h"
 #include "can_engine.h"
 #include "api.h"
+#include "gvret_server.h"
 #include "mqtt_mgr.h"
 #include "network_mgr.h"
 #include "power_mgr.h"
@@ -44,11 +45,27 @@ void uds_engine_set_config(const uds_config_t* cfg) {
 static std::atomic<uint32_t> s_last_can_traffic_ms{0};
 static bms_live_data_t s_bms_data = {};
 
-// ISO-TP Multi-frame Assembly state
+// ISO-TP Multi-frame Assembly & Poll Session state
+#define ISOTP_NCR_TIMEOUT_MS         1000
+#define ISOTP_SESSION_TIMEOUT_MS     2000
+#define UDS_POLL_RESPONSE_TIMEOUT_MS 1000
+
 static uint8_t s_isotp_buf[256];
-static size_t s_isotp_expected_len = 0;
-static size_t s_isotp_received_len = 0;
-static uint32_t s_isotp_start_ms = 0;
+static std::atomic<size_t> s_isotp_expected_len{0};
+static std::atomic<size_t> s_isotp_received_len{0};
+static std::atomic<uint32_t> s_isotp_start_ms{0};
+static std::atomic<uint32_t> s_isotp_last_frame_ms{0};
+static std::atomic<uint8_t> s_isotp_next_sn{1};
+static std::atomic<bool> s_poll_inflight{false};
+static std::atomic<uint32_t> s_poll_sent_ms{0};
+
+static inline void reset_isotp_session(void) {
+    s_isotp_expected_len.store(0, std::memory_order_release);
+    s_isotp_received_len.store(0, std::memory_order_relaxed);
+    s_isotp_start_ms.store(0, std::memory_order_relaxed);
+    s_isotp_last_frame_ms.store(0, std::memory_order_relaxed);
+    s_isotp_next_sn.store(1, std::memory_order_relaxed);
+}
 
 static inline uint32_t get_time_ms(void) {
     return (uint32_t)(esp_timer_get_time() / 1000ULL);
@@ -85,8 +102,18 @@ static bool is_quiet_hours(void) {
     }
 }
 
+static bool is_uds_tx_mode_allowed(void) {
+    return s_config.enabled &&
+           !g_sniffer_mode.load() &&
+           !g_hardware_listen_only.load() &&
+           !power_mgr_is_restarting() &&
+           !g_catalog_reloading.load() &&
+           !api_is_ota_in_progress() &&
+           (gvret_get_client_count() == 0);
+}
+
 bool uds_engine_is_gate_open(void) {
-    if (!s_config.enabled) return false;
+    if (!is_uds_tx_mode_allowed()) return false;
 
     // Gate 1: 12V Battery Gate (Hardware ADC on GPIO 4)
     float vbat = vbat_sensor_get_last();
@@ -113,15 +140,16 @@ bms_live_data_t uds_engine_get_bms_data(void) {
     return s_bms_data;
 }
 
-static void send_can_frame(uint32_t id, const uint8_t* data, uint8_t dlc) {
+static bool send_can_frame(uint32_t id, const uint8_t* data, uint8_t dlc) {
+    if (!data || dlc > 8) return false;
     twai_status_info_t info;
     if (can_engine_get_status_info(&info) != ESP_OK || info.state != TWAI_STATE_RUNNING) {
-        return;
+        return false;
     }
     if (info.tx_error_counter >= 16) {
         ESP_LOGW(TAG, "CAN TX error counter elevated (%lu), suppressing UDS TX", 
                  (unsigned long)info.tx_error_counter);
-        return;
+        return false;
     }
     twai_message_t tx_msg = {};
     tx_msg.identifier = id;
@@ -130,7 +158,7 @@ static void send_can_frame(uint32_t id, const uint8_t* data, uint8_t dlc) {
     tx_msg.rtr = 0;
     tx_msg.ss = 1; // Single-Shot mode: never loop in hardware retries on un-ACKed frames, eliminating BUS_OFF
     memcpy(tx_msg.data, data, dlc);
-    can_send(CAN_BUS_0, &tx_msg, pdMS_TO_TICKS(20));
+    return can_send(CAN_BUS_0, &tx_msg, pdMS_TO_TICKS(20)) == ESP_OK;
 }
 
 static void decode_bms_payload(const uint8_t* payload, size_t len) {
@@ -190,11 +218,15 @@ static void decode_bms_payload(const uint8_t* payload, size_t len) {
     mqtt_mgr_publish_bms(power_kw, soc, voltage_v, current_a, cell_delta_mv, temp_min, temp_max);
 }
 
-void uds_engine_on_can_rx(const twai_message_t* msg) {
+void uds_engine_on_can_rx(const twai_message_t* msg, can_bus_t bus, bool from_physical_bus) {
     if (!msg) return;
 
-    // Filter out our own transmitted frames
-    if (msg->identifier != BMS_REQ_CAN_ID) {
+    // Only process real physical CAN_BUS_0 frames for passive wake tracking and BMS ISO-TP reassembly
+    if (!from_physical_bus || bus != CAN_BUS_0) return;
+
+    // Filter out our own UDS traffic (0x7E4/0x7EC) and RTR frames from passive wake tracking
+    // so BMS responses to our polls cannot create a self-wake feedback loop
+    if (!msg->rtr && msg->identifier != BMS_REQ_CAN_ID && msg->identifier != BMS_RESP_CAN_ID) {
         uint32_t now = get_time_ms();
         uint32_t last = s_last_can_traffic_ms.exchange(now);
         uint32_t sleep_sec = s_config.sleep_delay_sec > 0 ? s_config.sleep_delay_sec : 10;
@@ -205,39 +237,117 @@ void uds_engine_on_can_rx(const twai_message_t* msg) {
         }
     }
 
-    // Process ISO-TP response from BMS
-    if (msg->identifier == BMS_RESP_CAN_ID && msg->data_length_code >= 2) {
+    // Process ISO-TP response from BMS (standard 11-bit classic CAN data frames only)
+    if (msg->identifier == BMS_RESP_CAN_ID &&
+        !msg->extd && !msg->rtr &&
+        msg->data_length_code >= 2 && msg->data_length_code <= 8) {
         uint8_t pci = msg->data[0] & 0xF0;
+        uint32_t now = get_time_ms();
 
-        if (pci == 0x10 && msg->data_length_code >= 3) {
-            // First Frame (FF): Extract length and data
-            s_isotp_expected_len = ((msg->data[0] & 0x0F) << 8) | msg->data[1];
-            s_isotp_received_len = 0;
-            s_isotp_start_ms = get_time_ms();
+        if (pci == 0x10) {
+            // First Frame (FF): always reset any previous ISO-TP session first
+            reset_isotp_session();
 
-            if (s_isotp_expected_len <= sizeof(s_isotp_buf)) {
-                size_t chunk = msg->data_length_code - 2;
-                memcpy(s_isotp_buf, &msg->data[2], chunk);
-                s_isotp_received_len = chunk;
-
-                // Send Flow Control (FC) frame: CTS, BlockSize=0, STmin=0
-                uint8_t fc[8] = { 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-                send_can_frame(BMS_REQ_CAN_ID, fc, 8);
+            // Classic CAN ISO-TP First Frame requires full 8-byte DLC
+            if (msg->data_length_code != 8) {
+                return;
             }
-        } else if (pci == 0x20 && msg->data_length_code >= 2) {
-            // Consecutive Frame (CF)
-            if (s_isotp_expected_len > 0 && s_isotp_received_len < s_isotp_expected_len) {
-                size_t chunk = msg->data_length_code - 1;
-                if (s_isotp_received_len + chunk > s_isotp_expected_len) {
-                    chunk = s_isotp_expected_len - s_isotp_received_len;
-                }
-                memcpy(&s_isotp_buf[s_isotp_received_len], &msg->data[1], chunk);
-                s_isotp_received_len += chunk;
 
-                if (s_isotp_received_len >= s_isotp_expected_len) {
-                    decode_bms_payload(s_isotp_buf, s_isotp_received_len);
-                    s_isotp_expected_len = 0;
+            // Only transmit Flow Control (0x30) when CAN Do has an active, un-timed-out 0x7E4 poll in flight
+            bool inflight = s_poll_inflight.load(std::memory_order_acquire);
+            uint32_t poll_sent_ms = s_poll_sent_ms.load(std::memory_order_relaxed);
+            if (!inflight || (now - poll_sent_ms) > UDS_POLL_RESPONSE_TIMEOUT_MS) {
+                s_poll_inflight.store(false, std::memory_order_release);
+                return;
+            }
+            // Consume the in-flight poll so at most one FC is emitted per 0x7E4 request
+            s_poll_inflight.store(false, std::memory_order_release);
+
+            // Enforce all mode & lifecycle gates before transmitting Flow Control (0x30)
+            if (!is_uds_tx_mode_allowed()) {
+                return;
+            }
+
+            // Parse 12-bit ISO-TP length into local size_t and validate bounds before arming
+            size_t expected_len = ((size_t)(msg->data[0] & 0x0F) << 8) | msg->data[1];
+            if (expected_len < 8 || expected_len > sizeof(s_isotp_buf)) {
+                return;
+            }
+
+            constexpr size_t ff_chunk = 6;
+            memcpy(s_isotp_buf, &msg->data[2], ff_chunk);
+            s_isotp_start_ms.store(now, std::memory_order_relaxed);
+            s_isotp_last_frame_ms.store(now, std::memory_order_relaxed);
+            s_isotp_next_sn.store(1, std::memory_order_relaxed);
+            s_isotp_received_len.store(ff_chunk, std::memory_order_relaxed);
+            s_isotp_expected_len.store(expected_len, std::memory_order_release);
+
+            // Send Flow Control (FC) frame: CTS, BlockSize=0, STmin=0
+            uint8_t fc[8] = { 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+            if (!send_can_frame(BMS_REQ_CAN_ID, fc, 8)) {
+                reset_isotp_session();
+            }
+        } else if (pci == 0x20) {
+            // Consecutive Frame (CF)
+            size_t expected_len = s_isotp_expected_len.load(std::memory_order_acquire);
+            size_t received_len = s_isotp_received_len.load(std::memory_order_relaxed);
+            if (expected_len == 0 || expected_len > sizeof(s_isotp_buf) || received_len >= expected_len) {
+                if (expected_len > sizeof(s_isotp_buf)) {
+                    reset_isotp_session();
                 }
+                return;
+            }
+
+            // Enforce N_Cr (1000ms inter-frame) and total session (2000ms) timeouts
+            uint32_t last_frame_ms = s_isotp_last_frame_ms.load(std::memory_order_relaxed);
+            uint32_t start_ms = s_isotp_start_ms.load(std::memory_order_relaxed);
+            if ((now - last_frame_ms) > ISOTP_NCR_TIMEOUT_MS || (now - start_ms) > ISOTP_SESSION_TIMEOUT_MS) {
+                reset_isotp_session();
+                return;
+            }
+
+            // Validate Sequence Number (SN): 1..15 wrapping to 0..15; abort on mismatch
+            uint8_t sn = msg->data[0] & 0x0F;
+            uint8_t expected_sn = s_isotp_next_sn.load(std::memory_order_relaxed);
+            if (sn != expected_sn) {
+                reset_isotp_session();
+                return;
+            }
+
+            size_t remaining = expected_len - received_len;
+            size_t available_data = (size_t)(msg->data_length_code - 1);
+
+            // Require DLC == 8 on non-final CFs (remaining >= 7), and sufficient bytes on final CF
+            if (remaining >= 7) {
+                if (msg->data_length_code != 8) {
+                    reset_isotp_session();
+                    return;
+                }
+            } else {
+                if (available_data < remaining) {
+                    reset_isotp_session();
+                    return;
+                }
+            }
+
+            size_t chunk = available_data;
+            if (chunk > remaining) {
+                chunk = remaining;
+            }
+            size_t buf_space = sizeof(s_isotp_buf) - received_len;
+            if (chunk > buf_space) {
+                chunk = buf_space;
+            }
+
+            memcpy(&s_isotp_buf[received_len], &msg->data[1], chunk);
+            received_len += chunk;
+            s_isotp_received_len.store(received_len, std::memory_order_relaxed);
+            s_isotp_last_frame_ms.store(now, std::memory_order_relaxed);
+            s_isotp_next_sn.store((expected_sn + 1) & 0x0F, std::memory_order_relaxed);
+
+            if (received_len >= expected_len) {
+                decode_bms_payload(s_isotp_buf, received_len);
+                reset_isotp_session();
             }
         }
     }
@@ -279,11 +389,28 @@ static void uds_worker_task(void* arg) {
             uint32_t now = get_time_ms();
 
             if (now - s_last_poll_ms >= (s_config.awake_interval_sec * 1000)) {
+                // Drop any stale ISO-TP session before initiating a new poll; avoid overlapping an active one
+                if (s_isotp_expected_len.load(std::memory_order_acquire) > 0) {
+                    uint32_t last_frame_ms = s_isotp_last_frame_ms.load(std::memory_order_relaxed);
+                    uint32_t start_ms = s_isotp_start_ms.load(std::memory_order_relaxed);
+                    if ((now - last_frame_ms) > ISOTP_NCR_TIMEOUT_MS || (now - start_ms) > ISOTP_SESSION_TIMEOUT_MS) {
+                        reset_isotp_session();
+                    } else {
+                        continue;
+                    }
+                }
+
                 s_last_poll_ms = now;
+
+                // Arm in-flight poll window before TX so an immediate BMS reply on CAN_RX is accepted
+                s_poll_sent_ms.store(now, std::memory_order_relaxed);
+                s_poll_inflight.store(true, std::memory_order_release);
 
                 // Dispatch UDS Request for PID 220101 to BMS (0x7E4)
                 uint8_t req[8] = { 0x03, 0x22, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00 };
-                send_can_frame(BMS_REQ_CAN_ID, req, 8);
+                if (!send_can_frame(BMS_REQ_CAN_ID, req, 8)) {
+                    s_poll_inflight.store(false, std::memory_order_release);
+                }
             }
         }
     }
