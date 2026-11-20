@@ -77,7 +77,7 @@ struct AutomationCondition {
     std::shared_ptr<SustainedState> sustained;
 
     // Nested sub-conditions for AND, OR, NOT groups
-    std::vector<AutomationCondition> sub_conditions;
+    PsramVector<AutomationCondition> sub_conditions;
 };
 
 enum class ActionType {
@@ -96,8 +96,8 @@ enum class ActionType {
 };
 
 struct ChoiceBranch {
-    std::vector<AutomationCondition> conditions;
-    std::vector<ActionStep> sequence;
+    PsramVector<AutomationCondition> conditions;
+    PsramVector<ActionStep> sequence;
 };
 
 struct ActionStep {
@@ -143,14 +143,14 @@ struct ActionStep {
     uint8_t nav_lane_recommended[8] = {0};
 
     // For IF_THEN
-    std::vector<AutomationCondition> if_conditions;
-    std::vector<ActionStep> then_steps;
-    std::vector<ActionStep> else_steps;
+    PsramVector<AutomationCondition> if_conditions;
+    PsramVector<ActionStep> then_steps;
+    PsramVector<ActionStep> else_steps;
 
     // For CHOOSE / CYCLE_ENTITY
-    std::vector<ChoiceBranch> choices;
-    std::vector<ActionStep> default_steps;
-    std::vector<std::string> cycle_states;
+    PsramVector<ChoiceBranch> choices;
+    PsramVector<ActionStep> default_steps;
+    PsramVector<std::string> cycle_states;
     std::string cycle_direction = "forward"; // "forward", "reverse", "ping_pong"
     bool cycle_wrap = true;
     std::string cycle_fallback_state = "__first__";
@@ -163,7 +163,7 @@ struct ActionStep {
     uint32_t interval_ms = 1000;
     uint32_t timeout_ms = 30000;
     AutomationCondition condition;
-    std::vector<ActionStep> sequence;
+    PsramVector<ActionStep> sequence;
 };
 
 struct CatalogStep {
@@ -177,8 +177,8 @@ struct CatalogStep {
     uint8_t nav_icon = 0;
 };
 
-inline std::vector<ActionStep> catalog_steps_to_action_steps(const PsramVector<CatalogStep>& src) {
-    std::vector<ActionStep> out;
+inline PsramVector<ActionStep> catalog_steps_to_action_steps(const PsramVector<CatalogStep>& src) {
+    PsramVector<ActionStep> out;
     out.reserve(src.size());
     for (const auto& cs : src) {
         ActionStep a;
@@ -316,16 +316,16 @@ struct AutomationRule {
     uint32_t last_exec_time_ms = 0;
     std::shared_ptr<std::atomic<bool>> is_running = std::make_shared<std::atomic<bool>>(false);
     std::shared_ptr<TriggerCombineState> trigger_state = std::make_shared<TriggerCombineState>();
-    std::vector<AutomationTrigger> triggers;
-    std::vector<AutomationCondition> conditions;
-    std::vector<ActionStep> actions;
+    PsramVector<AutomationTrigger> triggers;
+    PsramVector<AutomationCondition> conditions;
+    PsramVector<ActionStep> actions;
 };
 
 struct CanBurstCmd {
     uint32_t can_id = 0;
     uint32_t delay_ms = 20;
     std::string trigger_id;
-    std::vector<ActionStep> inline_steps;
+    PsramVector<ActionStep> inline_steps;
     bool async = false;
     std::shared_ptr<std::atomic<bool>> rule_is_running = nullptr;
 };

@@ -509,7 +509,7 @@ static esp_err_t api_command_handler(httpd_req_t *req) {
     // Multi-step CAN sequence fallback (e.g. door_locks, seat comfort, charging limits, airflow, press/release bursts)
     cJSON *steps_item = cJSON_GetObjectItem(root, "steps");
     if (cJSON_IsArray(steps_item) && cJSON_GetArraySize(steps_item) > 0) {
-        std::vector<ActionStep> parsed_steps;
+        PsramVector<ActionStep> parsed_steps;
         cJSON *s_item = nullptr;
         cJSON_ArrayForEach(s_item, steps_item) {
             ActionStep step;
@@ -578,7 +578,7 @@ static esp_err_t api_command_handler(httpd_req_t *req) {
             }
         }
 
-        std::vector<ActionStep> steps = { step };
+        PsramVector<ActionStep> steps = { step };
         if (queue_action_steps(cid, top_delay_ms, steps)) {
             cJSON_Delete(root);
             httpd_resp_set_type(req, "application/json");
@@ -629,7 +629,7 @@ static esp_err_t api_test_automation_handler(httpd_req_t *req) {
     bool dry_passed = true;
     std::string debug_msg = "All conditions passed";
     std::string fired_name = req_id;
-    std::vector<ActionStep> inline_steps;
+    PsramVector<ActionStep> inline_steps;
     bool has_inline_steps = false;
 
     if (is_live_fire && cJSON_IsArray(inline_actions_item) && cJSON_GetArraySize(inline_actions_item) > 0) {
@@ -644,7 +644,7 @@ static esp_err_t api_test_automation_handler(httpd_req_t *req) {
     }
 
     if (is_dry_run || is_live_fire) {
-        std::vector<ActionStep> matched_steps;
+        PsramVector<ActionStep> matched_steps;
         std::shared_ptr<std::atomic<bool>> matched_running;
         if (has_inline_steps) {
             found = true;

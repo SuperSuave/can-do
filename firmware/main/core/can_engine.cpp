@@ -38,9 +38,6 @@
 #include "cJSON.h"
 #include <cstdio>
 
-template <typename K>
-using PsramUnorderedSet = std::unordered_set<K, std::hash<K>, std::equal_to<K>, PsramAllocator<K>>;
-
 static bool mac_matches(const std::string& a, const std::string& b) {
     const char* pa = a.c_str();
     const char* pb = b.c_str();
@@ -1156,7 +1153,7 @@ static void collect_sustained_condition_can_ids(const AutomationCondition& cond,
     }
 }
 
-static void collect_sustained_step_can_ids(const std::vector<ActionStep>& steps, PsramUnorderedSet<uint32_t>& out_ids) {
+static void collect_sustained_step_can_ids(const PsramVector<ActionStep>& steps, PsramUnorderedSet<uint32_t>& out_ids) {
     for (const auto& step : steps) {
         if (step.type == ActionType::IF_THEN) {
             for (const auto& c : step.if_conditions) collect_sustained_condition_can_ids(c, out_ids);
@@ -1184,7 +1181,7 @@ static void tick_sustained_condition_tree(const AutomationCondition& cond, uint3
     }
 }
 
-static void tick_sustained_conditions_in_steps(const std::vector<ActionStep>& steps, uint32_t filter_can_id = 0) {
+static void tick_sustained_conditions_in_steps(const PsramVector<ActionStep>& steps, uint32_t filter_can_id = 0) {
     for (const auto& step : steps) {
         if (step.type == ActionType::IF_THEN) {
             for (const auto& c : step.if_conditions) tick_sustained_condition_tree(c, filter_can_id);
@@ -1297,7 +1294,7 @@ static bool is_trigger_match(const uint8_t* incoming_data, uint8_t dlc,
 }
 
 static CanBurstCmd* prepare_action_burst(uint32_t can_id, uint32_t delay_ms,
-                                         const std::vector<ActionStep>& steps,
+                                         const PsramVector<ActionStep>& steps,
                                          const std::string& trigger_id,
                                          std::shared_ptr<std::atomic<bool>> rule_is_running);
 static bool submit_action_burst(CanBurstCmd* cmd, TickType_t wait_ticks);
@@ -1707,7 +1704,7 @@ static bool is_ambient_entity_id(const std::string& id) {
 
 static constexpr int MAX_BURST_RECURSION_DEPTH = 8;
 
-static void execute_can_burst_ctx(uint32_t can_id, const std::vector<ActionStep>& steps,
+static void execute_can_burst_ctx(uint32_t can_id, const PsramVector<ActionStep>& steps,
                                   uint32_t delay_ms, const EvalContext& ctx, int depth);
 
 static __attribute__((noinline)) void execute_entity_command_step(const ActionStep& step,
@@ -1738,7 +1735,7 @@ static __attribute__((noinline)) void execute_entity_command_step(const ActionSt
     bool executed_inline = false;
     uint32_t tx_can_id = 0;
     uint32_t tx_delay_ms = 0;
-    std::vector<ActionStep> tx_steps;
+    PsramVector<ActionStep> tx_steps;
     {
         std::lock_guard<std::mutex> lock(g_catalog_mutex);
         for (const auto& entity : global_catalog) {
@@ -1776,7 +1773,7 @@ static __attribute__((noinline)) void execute_cycle_entity_step(const ActionStep
         return;
     }
 
-    std::vector<std::string> states = step.cycle_states;
+    PsramVector<std::string> states = step.cycle_states;
     if (states.empty()) {
         for (const auto& opt : entity.options) {
             if (!opt.label.empty()) states.push_back(opt.label);
@@ -1932,7 +1929,7 @@ static __attribute__((noinline)) void execute_cycle_entity_step(const ActionStep
     }
 }
 
-static void execute_can_burst_ctx(uint32_t can_id, const std::vector<ActionStep>& steps,
+static void execute_can_burst_ctx(uint32_t can_id, const PsramVector<ActionStep>& steps,
                                   uint32_t delay_ms, const EvalContext& ctx, int depth) {
     if (depth > MAX_BURST_RECURSION_DEPTH) {
         ESP_LOGW(TAG, "execute_can_burst: max recursion depth (%d) exceeded, aborting nested steps",
@@ -2162,7 +2159,7 @@ static void execute_can_burst_ctx(uint32_t can_id, const std::vector<ActionStep>
     }
 }
 
-void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, uint32_t delay_ms) {
+void execute_can_burst(uint32_t can_id, const PsramVector<ActionStep>& steps, uint32_t delay_ms) {
     execute_can_burst_ctx(can_id, steps, delay_ms, EvalContext{}, 0);
 }
 
@@ -2421,7 +2418,7 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
             }
 
             ambient_anim_stop();
-            std::vector<ActionStep> amb_steps;
+            PsramVector<ActionStep> amb_steps;
             ActionStep s1 = {};
             s1.type = ActionType::TRANSMIT_FRAME;
             s1.can_id = AMBIENT_CAN_ID_DASH;
@@ -2654,7 +2651,7 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
 
 static constexpr uint32_t ASYNC_DURATION_THRESHOLD_MS = 500;
 
-static uint32_t estimate_steps_duration_ms(const std::vector<ActionStep>& steps,
+static uint32_t estimate_steps_duration_ms(const PsramVector<ActionStep>& steps,
                                            uint32_t default_delay_ms,
                                            bool* force_async,
                                            int depth = 0) {
@@ -2712,7 +2709,7 @@ static uint32_t estimate_steps_duration_ms(const std::vector<ActionStep>& steps,
     return static_cast<uint32_t>(total_ms);
 }
 
-static bool steps_contain_async(const std::vector<ActionStep>& steps, uint32_t default_delay_ms = 20) {
+static bool steps_contain_async(const PsramVector<ActionStep>& steps, uint32_t default_delay_ms = 20) {
     bool force_async = false;
     uint32_t est_ms = estimate_steps_duration_ms(steps, default_delay_ms, &force_async, 0);
     return force_async || (est_ms >= ASYNC_DURATION_THRESHOLD_MS);
@@ -2748,7 +2745,7 @@ static void execute_can_burst_async_task(void* arg) {
 }
 
 static CanBurstCmd* prepare_action_burst(uint32_t can_id, uint32_t delay_ms,
-                                         const std::vector<ActionStep>& steps,
+                                         const PsramVector<ActionStep>& steps,
                                          const std::string& trigger_id,
                                          std::shared_ptr<std::atomic<bool>> rule_is_running) {
     if (!tx_command_queue) {
@@ -2782,7 +2779,7 @@ static bool submit_action_burst(CanBurstCmd* cmd, TickType_t wait_ticks) {
     return true;
 }
 
-bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>& steps, const std::string& trigger_id, std::shared_ptr<std::atomic<bool>> rule_is_running) {
+bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const PsramVector<ActionStep>& steps, const std::string& trigger_id, std::shared_ptr<std::atomic<bool>> rule_is_running) {
     CanBurstCmd* cmd = prepare_action_burst(can_id, delay_ms, steps, trigger_id, rule_is_running);
     if (!cmd) {
         return false;

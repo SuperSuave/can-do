@@ -800,7 +800,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                             delay_ms = (uint32_t)del_item->valueint;
                         }
 
-                        std::vector<ActionStep> steps;
+                        PsramVector<ActionStep> steps;
                         cJSON* steps_arr = cJSON_GetObjectItem(root, "steps");
                         if (steps_arr && cJSON_IsArray(steps_arr) && cJSON_GetArraySize(steps_arr) > 0) {
                             cJSON* s_item = nullptr;
@@ -1126,7 +1126,7 @@ bool mqtt_mgr_save_config(const MqttConfig& cfg) {
     return true;
 }
 
-static std::vector<AutomationRule> snapshot_automations_for_mqtt(void) {
+static PsramVector<AutomationRule> snapshot_automations_for_mqtt(void) {
     std::lock_guard<std::mutex> lock(g_automations_mutex);
     return global_automations;
 }
@@ -1141,7 +1141,7 @@ static void refresh_automation_discovery_locked_check(void) {
     }
     if (!disco_en) return;
 
-    std::vector<AutomationRule> rules_snapshot = snapshot_automations_for_mqtt();
+    PsramVector<AutomationRule> rules_snapshot = snapshot_automations_for_mqtt();
     std::unordered_set<std::string> new_exposed;
     for (const auto& rule : rules_snapshot) {
         if (rule.ha_expose && !rule.id.empty()) {
@@ -1219,7 +1219,7 @@ void mqtt_mgr_publish_discovery(void) {
             return true;
         });
 
-        std::vector<AutomationRule> rules_snapshot = snapshot_automations_for_mqtt();
+        PsramVector<AutomationRule> rules_snapshot = snapshot_automations_for_mqtt();
         std::unordered_set<std::string> new_exposed;
         for (const auto& rule : rules_snapshot) {
             if (!global_mqtt_client || !s_mqtt_connected.load()) break;
@@ -1245,7 +1245,7 @@ void mqtt_mgr_clear_discovery(void) {
             return true;
         });
 
-        std::vector<AutomationRule> rules_snapshot = snapshot_automations_for_mqtt();
+        PsramVector<AutomationRule> rules_snapshot = snapshot_automations_for_mqtt();
         for (const auto& rule : rules_snapshot) {
             if (!global_mqtt_client || !s_mqtt_connected.load()) break;
             clear_ha_automation_discovery(global_mqtt_client, rule);

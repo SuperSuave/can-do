@@ -37,9 +37,9 @@ bool can_engine_inject_frame(const twai_message_t* msg);
 bool evaluate_condition(const AutomationCondition& cond);
 bool is_match(const uint8_t* incoming_data, const EntityOption& option, uint8_t dlc = 8);
 
-void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, uint32_t delay_ms);
+void execute_can_burst(uint32_t can_id, const PsramVector<ActionStep>& steps, uint32_t delay_ms);
 bool queue_entity_command(const std::string& entity_id, const std::string& command_label);
-bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>& steps, const std::string& trigger_id = "", std::shared_ptr<std::atomic<bool>> rule_is_running = nullptr);
+bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const PsramVector<ActionStep>& steps, const std::string& trigger_id = "", std::shared_ptr<std::atomic<bool>> rule_is_running = nullptr);
 bool get_cached_can_frame(uint32_t can_id, uint8_t out_data[8], uint8_t* out_dlc = nullptr);
 
 struct BleButtonEvent;

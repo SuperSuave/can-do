@@ -7,7 +7,7 @@
 #include <cstring>
 #include <cmath>
 #include <cctype>
-#include <list>
+#include <cerrno>
 #include <unordered_set>
 #include <algorithm>
 #include <type_traits>
@@ -22,7 +22,7 @@ static const char* TAG = "CATALOG_PARSER";
 PsramVector<CanEntity> global_catalog;
 static PsramList<CanEntity> s_dynamic_entities;
 PsramUnorderedMap<uint32_t, PsramVector<CanEntity*>> catalog_by_can_id;
-std::vector<AutomationRule> global_automations;
+PsramVector<AutomationRule> global_automations;
 std::mutex g_catalog_mutex;
 std::mutex g_automations_mutex;
 std::atomic<uint32_t> g_automations_gen{1};
@@ -40,7 +40,7 @@ static std::mutex s_mitm_mutex;
 
 static void rebuild_mitm_rules_locked(void) {
     int64_t now_ms = esp_timer_get_time() / 1000LL;
-    std::unordered_map<std::string, int64_t> prev_armed;
+    PsramUnorderedMap<std::string, int64_t> prev_armed;
     {
         std::lock_guard<std::mutex> mlock(s_mitm_mutex);
         for (const auto& rule : s_mitm_rules) {
@@ -109,11 +109,6 @@ static void rebuild_catalog_can_id_index_locked(void) {
         }
     }
     rebuild_mitm_rules_locked();
-}
-
-void rebuild_catalog_can_id_index(void) {
-    std::lock_guard<std::mutex> lock(g_catalog_mutex);
-    rebuild_catalog_can_id_index_locked();
 }
 
 void mitm_arm_entity(const std::string& entity_id, uint32_t hold_ms_override) {
@@ -211,38 +206,40 @@ int get_d_index(const char* key) {
     return -1;
 }
 
-bool decode_can_uint(const uint8_t* data, size_t payload_len, int start_idx, uint8_t byte_length, bool big_endian, uint16_t* out_value) {
-    if (!data || !out_value) return false;
-    if (start_idx < 0) return false;
-    if (byte_length != 1 && byte_length != 2) return false;
-    if (static_cast<size_t>(start_idx) + static_cast<size_t>(byte_length) > payload_len) return false;
-
-    if (byte_length == 1) {
-        *out_value = data[start_idx];
-        return true;
-    }
-
-    uint8_t b0 = data[start_idx];
-    uint8_t b1 = data[start_idx + 1];
-    *out_value = big_endian
-                     ? static_cast<uint16_t>((static_cast<uint16_t>(b0) << 8) | b1)
-                     : static_cast<uint16_t>(b0 | (static_cast<uint16_t>(b1) << 8));
-    return true;
-}
-
-bool decode_entity_state_uint(const CanEntity& entity, const uint8_t* data, size_t payload_len, uint16_t* out_value) {
-    return decode_can_uint(data, payload_len, entity.state_byte, entity.state_byte_length, entity.state_big_endian, out_value);
-}
-
 uint8_t parse_hex_string(const char* hex_str, bool* is_inverted) {
-    if (hex_str == nullptr) return 0;
     if (is_inverted) *is_inverted = false;
+    if (hex_str == nullptr) return 0;
     const char* p = hex_str;
+    while (*p && isspace(static_cast<unsigned char>(*p))) p++;
     if (*p == '!') {
         if (is_inverted) *is_inverted = true;
         p++;
+        while (*p && isspace(static_cast<unsigned char>(*p))) p++;
     }
-    return static_cast<uint8_t>(strtol(p, nullptr, 16));
+    if (*p == '\0' || *p == '-' || *p == '+') {
+        if (is_inverted) *is_inverted = false;
+        ESP_LOGW(TAG, "Invalid hex byte string '%s'", hex_str);
+        return 0;
+    }
+    errno = 0;
+    char* endptr = nullptr;
+    unsigned long val = strtoul(p, &endptr, 16);
+    if (endptr == p) {
+        if (is_inverted) *is_inverted = false;
+        ESP_LOGW(TAG, "Invalid hex byte string '%s'", hex_str);
+        return 0;
+    }
+    while (*endptr && isspace(static_cast<unsigned char>(*endptr))) endptr++;
+    if (*endptr != '\0') {
+        if (is_inverted) *is_inverted = false;
+        ESP_LOGW(TAG, "Invalid trailing characters in hex byte string '%s'", hex_str);
+        return 0;
+    }
+    if (errno == ERANGE || val > 0xFFUL) {
+        ESP_LOGW(TAG, "Hex byte string '%s' exceeds 0xFF; clamping to 0xFF", hex_str);
+        return 0xFF;
+    }
+    return static_cast<uint8_t>(val);
 }
 
 ConditionOperator parse_operator(const char* op_str) {
@@ -297,12 +294,104 @@ uint8_t parse_weekdays_mask(cJSON* days_arr) {
     return mask == 0 ? 0x7F : mask;
 }
 
+constexpr int MAX_PARSE_DEPTH = 8;
+constexpr uint32_t MAX_STEP_REPEAT = 50U;
+constexpr uint32_t MAX_DELAY_MS = 3600000U;      // 1 hour
+constexpr uint32_t MAX_COOLDOWN_MS = 86400000U;  // 24 hours
+constexpr uint32_t MAX_SUSTAINED_MS = 86400000U; // 24 hours
+constexpr uint32_t MAX_CAN_ID = 0x1FFFFFFFUL;    // 29-bit extended CAN ID maximum
+
+static uint32_t clamp_u32(cJSON* item, uint32_t min_val, uint32_t max_val, uint32_t fallback) {
+    if (!item || !cJSON_IsNumber(item)) return fallback;
+    double v = item->valuedouble;
+    if (!std::isfinite(v)) return fallback;
+    if (v < 0.0 || v < static_cast<double>(min_val)) return min_val;
+    if (v > static_cast<double>(max_val)) return max_val;
+    return static_cast<uint32_t>(v);
+}
+
+static uint8_t clamp_bus(cJSON* item, uint8_t fallback = 0) {
+    return static_cast<uint8_t>(clamp_u32(item, 0, 4, fallback));
+}
+
+static int8_t clamp_rssi(cJSON* item, int8_t fallback = 0) {
+    if (!item || !cJSON_IsNumber(item)) return fallback;
+    double v = item->valuedouble;
+    if (!std::isfinite(v)) return fallback;
+    if (v < -127.0) return -127;
+    if (v > 0.0) return 0;
+    return static_cast<int8_t>(v);
+}
+
+static bool parse_can_id(cJSON* item, uint32_t& out_id) {
+    if (!item) return false;
+    if (cJSON_IsString(item)) {
+        const char* p = item->valuestring;
+        if (!p) return false;
+        while (*p && isspace(static_cast<unsigned char>(*p))) p++;
+        if (*p == '\0' || *p == '-' || *p == '+') return false;
+        errno = 0;
+        char* endptr = nullptr;
+        unsigned long val = strtoul(p, &endptr, 16);
+        if (endptr == p || errno == ERANGE) return false;
+        while (*endptr && isspace(static_cast<unsigned char>(*endptr))) endptr++;
+        if (*endptr != '\0') return false;
+        if (val > MAX_CAN_ID) return false;
+        out_id = static_cast<uint32_t>(val);
+        return true;
+    }
+    if (cJSON_IsNumber(item)) {
+        double v = item->valuedouble;
+        if (!std::isfinite(v) || v < 0.0 || v > static_cast<double>(MAX_CAN_ID) || std::floor(v) != v) {
+            return false;
+        }
+        out_id = static_cast<uint32_t>(v);
+        return true;
+    }
+    return false;
+}
+
 static bool is_valid_mask_json(cJSON* obj) {
     if (!obj || cJSON_IsNull(obj)) return false;
     if (cJSON_IsString(obj)) return obj->valuestring != nullptr && obj->valuestring[0] != '\0';
     if (cJSON_IsNumber(obj)) return true;
     if (cJSON_IsObject(obj)) return obj->child != nullptr;
     return false;
+}
+
+static uint8_t parse_byte_mask_for_index(cJSON* mask_obj, int byte_idx, uint8_t default_mask = 0xFF) {
+    if (!mask_obj || cJSON_IsNull(mask_obj) || byte_idx < 0 || byte_idx > 7) {
+        return default_mask;
+    }
+    if (cJSON_IsString(mask_obj)) {
+        if (!mask_obj->valuestring || mask_obj->valuestring[0] == '\0') return default_mask;
+        return parse_hex_string(mask_obj->valuestring);
+    }
+    if (cJSON_IsNumber(mask_obj)) {
+        return static_cast<uint8_t>(clamp_u32(mask_obj, 0, 255, default_mask));
+    }
+    if (cJSON_IsObject(mask_obj)) {
+        char d_key[3] = { 'D', static_cast<char>('1' + byte_idx), '\0' };
+        cJSON* m_item = cJSON_GetObjectItem(mask_obj, d_key);
+        if (!m_item) {
+            cJSON* child = nullptr;
+            cJSON_ArrayForEach(child, mask_obj) {
+                if (get_d_index(child->string) == byte_idx) {
+                    m_item = child;
+                    break;
+                }
+            }
+        }
+        if (m_item) {
+            if (cJSON_IsString(m_item) && m_item->valuestring && m_item->valuestring[0] != '\0') {
+                return parse_hex_string(m_item->valuestring);
+            }
+            if (cJSON_IsNumber(m_item)) {
+                return static_cast<uint8_t>(clamp_u32(m_item, 0, 255, default_mask));
+            }
+        }
+    }
+    return default_mask;
 }
 
 static void parse_byte_match(cJSON* match_obj, uint8_t match_payload[8], uint8_t& match_mask, uint8_t& invert_mask, uint8_t* byte_masks = nullptr, cJSON* mask_obj = nullptr) {
@@ -320,49 +409,12 @@ static void parse_byte_match(cJSON* match_obj, uint8_t match_payload[8], uint8_t
         }
     }
     if (byte_masks && mask_obj) {
-        if (cJSON_IsString(mask_obj)) {
-            uint8_t m = parse_hex_string(mask_obj->valuestring);
-            for (int i = 0; i < 8; i++) {
-                if (match_mask & (1 << i)) {
-                    byte_masks[i] = m;
-                }
-            }
-        } else if (cJSON_IsNumber(mask_obj)) {
-            uint8_t m = static_cast<uint8_t>(mask_obj->valueint & 0xFF);
-            for (int i = 0; i < 8; i++) {
-                if (match_mask & (1 << i)) {
-                    byte_masks[i] = m;
-                }
-            }
-        } else if (cJSON_IsObject(mask_obj)) {
-            cJSON* m_item = nullptr;
-            cJSON_ArrayForEach(m_item, mask_obj) {
-                int idx = get_d_index(m_item->string);
-                if (idx >= 0) {
-                    if (cJSON_IsString(m_item)) {
-                        byte_masks[idx] = parse_hex_string(m_item->valuestring);
-                    } else if (cJSON_IsNumber(m_item)) {
-                        byte_masks[idx] = static_cast<uint8_t>(m_item->valueint & 0xFF);
-                    }
-                }
+        for (int i = 0; i < 8; i++) {
+            if ((match_mask & (1 << i)) != 0 || cJSON_IsObject(mask_obj)) {
+                byte_masks[i] = parse_byte_mask_for_index(mask_obj, i, byte_masks[i]);
             }
         }
     }
-}
-
-constexpr int MAX_PARSE_DEPTH = 8;
-constexpr uint32_t MAX_STEP_REPEAT = 50U;
-constexpr uint32_t MAX_DELAY_MS = 3600000U;      // 1 hour
-constexpr uint32_t MAX_COOLDOWN_MS = 86400000U;  // 24 hours
-constexpr uint32_t MAX_SUSTAINED_MS = 86400000U; // 24 hours
-
-static uint32_t clamp_u32(cJSON* item, uint32_t min_val, uint32_t max_val, uint32_t fallback) {
-    if (!item || !cJSON_IsNumber(item)) return fallback;
-    double v = item->valuedouble;
-    if (!std::isfinite(v)) return fallback;
-    if (v < 0.0 || v < static_cast<double>(min_val)) return min_val;
-    if (v > static_cast<double>(max_val)) return max_val;
-    return static_cast<uint32_t>(v);
 }
 
 static void parse_hex_payload_string(const char* hex_str, uint8_t payload[8], uint8_t& mask) {
@@ -541,7 +593,7 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond, int depth)
 
         cJSON* rssi = cJSON_GetObjectItem(c_item, "target_rssi");
         if (!rssi) rssi = cJSON_GetObjectItem(c_item, "rssi");
-        if (cJSON_IsNumber(rssi)) cond.target_rssi = static_cast<int8_t>(rssi->valueint);
+        if (cJSON_IsNumber(rssi)) cond.target_rssi = clamp_rssi(rssi, cond.target_rssi);
 
         return true;
     }
@@ -597,7 +649,7 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond, int depth)
 
         cJSON* rssi = cJSON_GetObjectItem(c_item, "target_rssi");
         if (!rssi) rssi = cJSON_GetObjectItem(c_item, "rssi");
-        if (cJSON_IsNumber(rssi)) cond.target_rssi = static_cast<int8_t>(rssi->valueint);
+        if (cJSON_IsNumber(rssi)) cond.target_rssi = clamp_rssi(rssi, cond.target_rssi);
 
         cJSON* op = cJSON_GetObjectItem(c_item, "operator");
         if (cJSON_IsString(op)) cond.op = parse_operator(op->valuestring);
@@ -625,7 +677,7 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond, int depth)
 
         cJSON* rssi = cJSON_GetObjectItem(c_item, "target_rssi");
         if (!rssi) rssi = cJSON_GetObjectItem(c_item, "rssi");
-        if (cJSON_IsNumber(rssi)) cond.target_rssi = static_cast<int8_t>(rssi->valueint);
+        if (cJSON_IsNumber(rssi)) cond.target_rssi = clamp_rssi(rssi, cond.target_rssi);
 
         cJSON* op = cJSON_GetObjectItem(c_item, "operator");
         if (cJSON_IsString(op)) cond.op = parse_operator(op->valuestring);
@@ -651,21 +703,31 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond, int depth)
 
     cond.type = "can_state";
     cJSON* cid = cJSON_GetObjectItem(c_item, "can_id");
-    if (cJSON_IsString(cid)) cond.can_id = strtol(cid->valuestring, nullptr, 16);
-    else if (cJSON_IsNumber(cid)) cond.can_id = static_cast<uint32_t>(cid->valueint);
+    if (!parse_can_id(cid, cond.can_id)) {
+        ESP_LOGW(TAG, "Invalid or missing can_id in can_state condition; rejecting condition");
+        return false;
+    }
 
     cJSON* bus = cJSON_GetObjectItem(c_item, "bus");
-    if (cJSON_IsNumber(bus)) cond.bus = static_cast<uint8_t>(bus->valueint);
+    if (cJSON_IsNumber(bus)) cond.bus = clamp_bus(bus, cond.bus);
 
     cJSON* match_obj = cJSON_GetObjectItem(c_item, "match");
     if (!match_obj) match_obj = cJSON_GetObjectItem(c_item, "match_payload");
     cJSON* eval = cJSON_GetObjectItem(c_item, "evaluate");
     cJSON* mask_obj = eval ? cJSON_GetObjectItem(eval, "mask") : cJSON_GetObjectItem(c_item, "mask");
+    cJSON* op_item = eval ? cJSON_GetObjectItem(eval, "operator") : cJSON_GetObjectItem(c_item, "operator");
+
+    auto apply_inversion = [](ConditionOperator& op_ref, bool inverted) {
+        if (!inverted) return;
+        if (op_ref == ConditionOperator::EQUAL) op_ref = ConditionOperator::NOT_EQUAL;
+        else if (op_ref == ConditionOperator::NOT_EQUAL) op_ref = ConditionOperator::EQUAL;
+    };
 
     // If multi-byte match map is provided (e.g. All Doors Closed or multi-selected state options), synthesize an AND_GROUP
     if (cJSON_IsObject(match_obj) && cJSON_GetArraySize(match_obj) > 1) {
         cond.logic = ConditionLogic::AND_GROUP;
         cond.type = "and_group";
+        ConditionOperator base_op = cJSON_IsString(op_item) ? parse_operator(op_item->valuestring) : ConditionOperator::EQUAL;
         cJSON* m_item = nullptr;
         cJSON_ArrayForEach(m_item, match_obj) {
             int idx = get_d_index(m_item->string);
@@ -676,68 +738,72 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond, int depth)
                 sub.can_id = cond.can_id;
                 sub.bus = cond.bus;
                 sub.byte_index = static_cast<uint8_t>(idx);
-                sub.op = ConditionOperator::EQUAL;
+                sub.op = base_op;
                 if (cJSON_IsString(m_item)) {
-                    sub.target_value = parse_hex_string(m_item->valuestring);
+                    bool inverted = false;
+                    sub.target_value = parse_hex_string(m_item->valuestring, &inverted);
+                    apply_inversion(sub.op, inverted);
                 } else if (cJSON_IsNumber(m_item)) {
-                    sub.target_value = static_cast<uint8_t>(m_item->valueint);
+                    sub.target_value = static_cast<uint8_t>(clamp_u32(m_item, 0, 255, 0));
                 }
-                sub.byte_mask = 0xFF;
-                if (mask_obj) {
-                    if (cJSON_IsString(mask_obj)) {
-                        sub.byte_mask = parse_hex_string(mask_obj->valuestring);
-                    } else if (cJSON_IsObject(mask_obj)) {
-                        cJSON* mask_val = cJSON_GetObjectItem(mask_obj, m_item->string);
-                        if (cJSON_IsString(mask_val)) sub.byte_mask = parse_hex_string(mask_val->valuestring);
-                        else if (cJSON_IsNumber(mask_val)) sub.byte_mask = static_cast<uint8_t>(mask_val->valueint);
-                    }
-                }
+                sub.byte_mask = parse_byte_mask_for_index(mask_obj, idx, 0xFF);
                 cond.sub_conditions.push_back(sub);
             }
+        }
+        if (cond.sub_conditions.empty()) {
+            ESP_LOGW(TAG, "Multi-byte condition match had no valid D1-D8 keys; rejecting condition");
+            return false;
         }
         return true;
     }
 
     cJSON* b = eval ? cJSON_GetObjectItem(eval, "byte") : cJSON_GetObjectItem(c_item, "byte");
+    bool value_inverted = false;
     if (cJSON_IsString(b)) {
         int idx = get_d_index(b->valuestring);
-        if (idx >= 0) cond.byte_index = static_cast<uint8_t>(idx);
+        if (idx < 0) {
+            ESP_LOGW(TAG, "Invalid condition byte '%s'; rejecting condition", b->valuestring ? b->valuestring : "");
+            return false;
+        }
+        cond.byte_index = static_cast<uint8_t>(idx);
     } else if (cJSON_IsNumber(b)) {
-        cond.byte_index = static_cast<uint8_t>(b->valueint);
+        double v = b->valuedouble;
+        if (!std::isfinite(v) || v < 0.0 || v > 7.0 || std::floor(v) != v) {
+            ESP_LOGW(TAG, "Out-of-range numeric condition byte %.2f; rejecting condition", v);
+            return false;
+        }
+        cond.byte_index = static_cast<uint8_t>(v);
     } else if (cJSON_IsObject(match_obj) && cJSON_GetArraySize(match_obj) == 1) {
         cJSON* first_item = match_obj->child;
         if (first_item) {
             int idx = get_d_index(first_item->string);
-            if (idx >= 0) cond.byte_index = static_cast<uint8_t>(idx);
-            if (cJSON_IsString(first_item)) cond.target_value = parse_hex_string(first_item->valuestring);
-            else if (cJSON_IsNumber(first_item)) cond.target_value = static_cast<uint8_t>(first_item->valueint);
+            if (idx < 0) {
+                ESP_LOGW(TAG, "Invalid condition match byte '%s'; rejecting condition", first_item->string ? first_item->string : "");
+                return false;
+            }
+            cond.byte_index = static_cast<uint8_t>(idx);
+            if (cJSON_IsString(first_item)) {
+                cond.target_value = parse_hex_string(first_item->valuestring, &value_inverted);
+            } else if (cJSON_IsNumber(first_item)) {
+                cond.target_value = static_cast<uint8_t>(clamp_u32(first_item, 0, 255, 0));
+            }
         }
     }
 
-    cJSON* mask = mask_obj;
-    if (cJSON_IsString(mask)) {
-        cond.byte_mask = parse_hex_string(mask->valuestring);
-    } else if (cJSON_IsNumber(mask)) {
-        cond.byte_mask = static_cast<uint8_t>(mask->valueint);
-    } else if (cJSON_IsObject(mask)) {
-        std::string d_str = "D" + std::to_string(cond.byte_index + 1);
-        cJSON* mask_val = cJSON_GetObjectItem(mask, d_str.c_str());
-        if (cJSON_IsString(mask_val)) cond.byte_mask = parse_hex_string(mask_val->valuestring);
-        else if (cJSON_IsNumber(mask_val)) cond.byte_mask = static_cast<uint8_t>(mask_val->valueint);
-        else cond.byte_mask = 0xFF;
-    } else {
-        cond.byte_mask = 0xFF;
-    }
+    cond.byte_mask = parse_byte_mask_for_index(mask_obj, cond.byte_index, 0xFF);
 
-    cJSON* op = eval ? cJSON_GetObjectItem(eval, "operator") : cJSON_GetObjectItem(c_item, "operator");
-    if (cJSON_IsString(op)) cond.op = parse_operator(op->valuestring);
+    if (cJSON_IsString(op_item)) cond.op = parse_operator(op_item->valuestring);
 
     cJSON* val = eval ? cJSON_GetObjectItem(eval, "value") : cJSON_GetObjectItem(c_item, "value");
     if (cJSON_IsString(val)) {
-        cond.target_value = parse_hex_string(val->valuestring);
+        value_inverted = false;
+        cond.target_value = parse_hex_string(val->valuestring, &value_inverted);
     } else if (cJSON_IsNumber(val)) {
-        cond.target_value = static_cast<uint8_t>(val->valueint);
+        value_inverted = false;
+        cond.target_value = static_cast<uint8_t>(clamp_u32(val, 0, 255, 0));
     }
+
+    apply_inversion(cond.op, value_inverted);
 
     return true;
 }
@@ -763,8 +829,12 @@ bool parse_action_step(cJSON* a_item, ActionStep& step, int depth) {
     } else if (strcmp(type_str, "track_popup") == 0 || strcmp(type_str, "popup") == 0) {
         step.type = ActionType::TRACK_POPUP;
         cJSON* txt = cJSON_GetObjectItem(a_item, "text");
-        if (!txt) txt = cJSON_GetObjectItem(a_item, "message");
-        if (cJSON_IsString(txt)) step.popup_text = txt->valuestring;
+        if (!cJSON_IsString(txt)) txt = cJSON_GetObjectItem(a_item, "message");
+        if (!cJSON_IsString(txt)) txt = cJSON_GetObjectItem(a_item, "popup_message");
+        if (cJSON_IsString(txt) && txt->valuestring) {
+            step.popup_text = txt->valuestring;
+            step.popup_message = txt->valuestring;
+        }
 
         cJSON* lvl = cJSON_GetObjectItem(a_item, "level");
         if (cJSON_IsString(lvl)) step.popup_level = lvl->valuestring;
@@ -862,14 +932,14 @@ bool parse_action_step(cJSON* a_item, ActionStep& step, int depth) {
         cJSON* lanes = cJSON_GetObjectItem(a_item, "lanes");
         if (!lanes) lanes = cJSON_GetObjectItem(a_item, "num_lanes");
         if (lanes && cJSON_IsNumber(lanes)) {
-            step.nav_num_lanes = static_cast<uint8_t>(lanes->valueint);
-            if (step.nav_num_lanes > 8) step.nav_num_lanes = 8;
-            step.nav_has_lane_guidance = true;
+            int raw_lanes = std::isfinite(lanes->valuedouble) ? lanes->valueint : 0;
+            if (raw_lanes < 0) raw_lanes = 0;
+            if (raw_lanes > 8) raw_lanes = 8;
+            step.nav_num_lanes = static_cast<uint8_t>(raw_lanes);
         }
 
         cJSON* lane_dirs = cJSON_GetObjectItem(a_item, "lane_directions");
         if (lane_dirs && cJSON_IsArray(lane_dirs)) {
-            step.nav_has_lane_guidance = true;
             int n = cJSON_GetArraySize(lane_dirs);
             if (step.nav_num_lanes == 0 && n > 0) {
                 step.nav_num_lanes = (n > 8) ? 8 : static_cast<uint8_t>(n);
@@ -885,8 +955,10 @@ bool parse_action_step(cJSON* a_item, ActionStep& step, int depth) {
         cJSON* lane_recs = cJSON_GetObjectItem(a_item, "lane_recommended");
         if (!lane_recs) lane_recs = cJSON_GetObjectItem(a_item, "lane_highlights");
         if (lane_recs && cJSON_IsArray(lane_recs)) {
-            step.nav_has_lane_guidance = true;
             int n = cJSON_GetArraySize(lane_recs);
+            if (step.nav_num_lanes == 0 && n > 0) {
+                step.nav_num_lanes = (n > 8) ? 8 : static_cast<uint8_t>(n);
+            }
             for (int i = 0; i < n && i < 8; i++) {
                 cJSON* elem = cJSON_GetArrayItem(lane_recs, i);
                 if (elem) {
@@ -898,6 +970,7 @@ bool parse_action_step(cJSON* a_item, ActionStep& step, int depth) {
                 }
             }
         }
+        step.nav_has_lane_guidance = (step.nav_num_lanes > 0);
         return true;
     } else if (strcmp(type_str, "delay") == 0) {
         step.type = ActionType::DELAY;
@@ -1039,15 +1112,18 @@ bool parse_action_step(cJSON* a_item, ActionStep& step, int depth) {
     } else if (strcmp(type_str, "repeat_until") == 0 || strcmp(type_str, "wait_for") == 0) {
         step.type = (strcmp(type_str, "wait_for") == 0) ? ActionType::WAIT_FOR : ActionType::REPEAT_UNTIL;
 
+        uint32_t default_interval = (step.type == ActionType::WAIT_FOR) ? 50U : step.interval_ms;
         cJSON* interval = cJSON_GetObjectItem(a_item, "interval_ms");
-        step.interval_ms = clamp_u32(interval, 0, MAX_DELAY_MS, step.interval_ms);
+        step.interval_ms = clamp_u32(interval, 0, MAX_DELAY_MS, default_interval);
 
-        cJSON* timeout = cJSON_GetObjectItem(a_item, "timeout_ms");
-        if (!timeout) timeout = cJSON_GetObjectItem(a_item, "timeout");
-        if (cJSON_IsNumber(timeout)) {
-            uint32_t raw_t = clamp_u32(timeout, 0, MAX_DELAY_MS, step.timeout_ms);
+        cJSON* timeout_ms_item = cJSON_GetObjectItem(a_item, "timeout_ms");
+        cJSON* timeout_item = cJSON_GetObjectItem(a_item, "timeout");
+        if (cJSON_IsNumber(timeout_ms_item)) {
+            step.timeout_ms = clamp_u32(timeout_ms_item, 0, MAX_DELAY_MS, step.timeout_ms);
+        } else if (cJSON_IsNumber(timeout_item)) {
+            uint32_t raw_t = clamp_u32(timeout_item, 0, MAX_DELAY_MS, step.timeout_ms);
             // If > 0 and <= 300, it's likely specified in seconds, so convert to ms; if > 300, already in ms
-            step.timeout_ms = (raw_t > 0 && raw_t <= 300) ? (raw_t * 1000U) : raw_t;
+            step.timeout_ms = (raw_t > 0 && raw_t <= 300U) ? (raw_t * 1000U) : raw_t;
         }
         cJSON* timeout_s = cJSON_GetObjectItem(a_item, "timeout_s");
         if (cJSON_IsNumber(timeout_s)) {
@@ -1055,37 +1131,62 @@ bool parse_action_step(cJSON* a_item, ActionStep& step, int depth) {
             step.timeout_ms = raw_s * 1000U;
         }
 
+        auto is_non_empty_condition = [](const AutomationCondition& c) -> bool {
+            return c.logic == ConditionLogic::LEAF || !c.sub_conditions.empty();
+        };
+
+        bool has_valid_condition = false;
         cJSON* cond_obj = cJSON_GetObjectItem(a_item, "condition");
         cJSON* conds_arr = cJSON_GetObjectItem(a_item, "conditions");
         if (cond_obj && cJSON_IsObject(cond_obj)) {
-            parse_single_condition(cond_obj, step.condition, depth + 1);
-            // If condition was a leaf but conditions array contains multiple items, treat as OR group
-            if (step.condition.logic == ConditionLogic::LEAF && cJSON_IsArray(conds_arr) && cJSON_GetArraySize(conds_arr) > 1) {
-                step.condition.logic = ConditionLogic::OR_GROUP;
-                step.condition.type = "or_group";
-                step.condition.sub_conditions.clear();
+            if (parse_single_condition(cond_obj, step.condition, depth + 1) && is_non_empty_condition(step.condition)) {
+                has_valid_condition = true;
+            }
+            // If condition was a leaf (or invalid) and conditions array contains multiple items, treat as OR group
+            if ((!has_valid_condition || step.condition.logic == ConditionLogic::LEAF) &&
+                cJSON_IsArray(conds_arr) && cJSON_GetArraySize(conds_arr) > 1) {
+                AutomationCondition or_cond;
+                or_cond.logic = ConditionLogic::OR_GROUP;
+                or_cond.type = "or_group";
                 cJSON* sub = nullptr;
                 cJSON_ArrayForEach(sub, conds_arr) {
-                    step.condition.sub_conditions.emplace_back();
-                    if (!parse_single_condition(sub, step.condition.sub_conditions.back(), depth + 1)) {
-                        step.condition.sub_conditions.pop_back();
+                    or_cond.sub_conditions.emplace_back();
+                    if (!parse_single_condition(sub, or_cond.sub_conditions.back(), depth + 1) ||
+                        !is_non_empty_condition(or_cond.sub_conditions.back())) {
+                        or_cond.sub_conditions.pop_back();
                     }
+                }
+                if (!or_cond.sub_conditions.empty()) {
+                    step.condition = std::move(or_cond);
+                    has_valid_condition = true;
                 }
             }
         } else if (cJSON_IsArray(conds_arr)) {
             if (cJSON_GetArraySize(conds_arr) == 1) {
-                parse_single_condition(cJSON_GetArrayItem(conds_arr, 0), step.condition, depth + 1);
+                if (parse_single_condition(cJSON_GetArrayItem(conds_arr, 0), step.condition, depth + 1) &&
+                    is_non_empty_condition(step.condition)) {
+                    has_valid_condition = true;
+                }
             } else if (cJSON_GetArraySize(conds_arr) > 1) {
                 step.condition.logic = ConditionLogic::OR_GROUP;
                 step.condition.type = "or_group";
                 cJSON* sub = nullptr;
                 cJSON_ArrayForEach(sub, conds_arr) {
                     step.condition.sub_conditions.emplace_back();
-                    if (!parse_single_condition(sub, step.condition.sub_conditions.back(), depth + 1)) {
+                    if (!parse_single_condition(sub, step.condition.sub_conditions.back(), depth + 1) ||
+                        !is_non_empty_condition(step.condition.sub_conditions.back())) {
                         step.condition.sub_conditions.pop_back();
                     }
                 }
+                if (!step.condition.sub_conditions.empty()) {
+                    has_valid_condition = true;
+                }
             }
+        }
+
+        if (!has_valid_condition) {
+            ESP_LOGW(TAG, "Ignoring %s action step with no valid condition", type_str);
+            return false;
         }
 
         cJSON* seq_arr = cJSON_GetObjectItem(a_item, "sequence");
@@ -1106,11 +1207,15 @@ bool parse_action_step(cJSON* a_item, ActionStep& step, int depth) {
         step.type = ActionType::TRANSMIT_FRAME;
         cJSON* cid = cJSON_GetObjectItem(a_item, "can_id");
         if (!cid) cid = cJSON_GetObjectItem(a_item, "action_can_id");
-        if (cJSON_IsString(cid)) step.can_id = strtol(cid->valuestring, nullptr, 16);
-        else if (cJSON_IsNumber(cid)) step.can_id = static_cast<uint32_t>(cid->valueint);
+        uint32_t parsed_cid = 0;
+        if (parse_can_id(cid, parsed_cid)) {
+            step.can_id = parsed_cid;
+        } else if (cid && !cJSON_IsNull(cid)) {
+            ESP_LOGW(TAG, "Invalid can_id in transmit action step");
+        }
 
         cJSON* bus = cJSON_GetObjectItem(a_item, "bus");
-        if (cJSON_IsNumber(bus)) step.bus = static_cast<uint8_t>(bus->valueint);
+        if (cJSON_IsNumber(bus)) step.bus = clamp_bus(bus, step.bus);
 
         cJSON* rep = cJSON_GetObjectItem(a_item, "repeat");
         if (cJSON_IsNumber(rep)) {
@@ -1135,9 +1240,14 @@ bool parse_action_step(cJSON* a_item, ActionStep& step, int depth) {
                 cJSON* p_item = nullptr;
                 cJSON_ArrayForEach(p_item, p) {
                     int idx = get_d_index(p_item->string);
-                    if (idx >= 0 && cJSON_IsString(p_item)) {
-                        step.payload[idx] = parse_hex_string(p_item->valuestring);
-                        step.mask |= (1 << idx);
+                    if (idx >= 0) {
+                        if (cJSON_IsString(p_item)) {
+                            step.payload[idx] = parse_hex_string(p_item->valuestring);
+                            step.mask |= (1 << idx);
+                        } else if (cJSON_IsNumber(p_item)) {
+                            step.payload[idx] = static_cast<uint8_t>(clamp_u32(p_item, 0, 255, 0));
+                            step.mask |= (1 << idx);
+                        }
                     }
                 }
             }
@@ -1162,7 +1272,7 @@ static void parse_catalog_payload(cJSON* payload_json, CatalogStep& step) {
                     step.payload[idx] = parse_hex_string(p_item->valuestring);
                     step.mask |= (1 << idx);
                 } else if (cJSON_IsNumber(p_item)) {
-                    step.payload[idx] = static_cast<uint8_t>(p_item->valueint);
+                    step.payload[idx] = static_cast<uint8_t>(clamp_u32(p_item, 0, 255, 0));
                     step.mask |= (1 << idx);
                 }
             }
@@ -1170,7 +1280,7 @@ static void parse_catalog_payload(cJSON* payload_json, CatalogStep& step) {
     }
 }
 
-static bool parse_catalog_step(cJSON* a_item, CatalogStep& step) {
+static bool parse_catalog_step(cJSON* a_item, const CanEntity& entity, CatalogStep& step) {
     if (!a_item) return false;
     cJSON* type = cJSON_GetObjectItem(a_item, "type");
     const char* type_str = cJSON_IsString(type) ? type->valuestring : "";
@@ -1193,13 +1303,21 @@ static bool parse_catalog_step(cJSON* a_item, CatalogStep& step) {
     }
 
     step.type = ActionType::TRANSMIT_FRAME;
+    step.can_id = entity.action_can_id ? entity.action_can_id : entity.state_can_id;
+    step.bus = entity.action_bus;
+    step.delay_ms = entity.delay_ms;
+
     cJSON* cid = cJSON_GetObjectItem(a_item, "can_id");
     if (!cid) cid = cJSON_GetObjectItem(a_item, "action_can_id");
-    if (cJSON_IsString(cid)) step.can_id = strtol(cid->valuestring, nullptr, 16);
-    else if (cJSON_IsNumber(cid)) step.can_id = static_cast<uint32_t>(cid->valueint);
+    uint32_t parsed_cid = 0;
+    if (parse_can_id(cid, parsed_cid)) {
+        step.can_id = parsed_cid;
+    } else if (cid && !cJSON_IsNull(cid)) {
+        ESP_LOGW(TAG, "Invalid can_id in catalog step for entity '%s'", entity.id.c_str());
+    }
 
     cJSON* bus = cJSON_GetObjectItem(a_item, "bus");
-    if (cJSON_IsNumber(bus)) step.bus = static_cast<uint8_t>(bus->valueint);
+    if (cJSON_IsNumber(bus)) step.bus = clamp_bus(bus, step.bus);
 
     cJSON* rep = cJSON_GetObjectItem(a_item, "repeat");
     if (cJSON_IsNumber(rep)) {
@@ -1220,7 +1338,7 @@ static bool parse_catalog_step(cJSON* a_item, CatalogStep& step) {
     return true;
 }
 
-static void parse_steps(cJSON* steps_array, PsramVector<CatalogStep>& out_steps) {
+static void parse_steps(cJSON* steps_array, const CanEntity& entity, PsramVector<CatalogStep>& out_steps) {
     if (!steps_array || !cJSON_IsArray(steps_array)) return;
     int count = cJSON_GetArraySize(steps_array);
     if (count > 0) {
@@ -1229,7 +1347,7 @@ static void parse_steps(cJSON* steps_array, PsramVector<CatalogStep>& out_steps)
     cJSON* step_json = nullptr;
     cJSON_ArrayForEach(step_json, steps_array) {
         CatalogStep step;
-        if (parse_catalog_step(step_json, step)) {
+        if (parse_catalog_step(step_json, entity, step)) {
             out_steps.push_back(step);
         }
     }
@@ -1263,19 +1381,20 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity, bool include_discov
     cJSON* network = cJSON_GetObjectItem(entity_json, "network");
     if (network) {
         cJSON* bus_item = cJSON_GetObjectItem(network, "bus");
-        if (cJSON_IsNumber(bus_item) && bus_item->valueint >= 0 && bus_item->valueint <= 4) {
-            out_entity.bus = static_cast<uint8_t>(bus_item->valueint);
+        if (cJSON_IsNumber(bus_item)) {
+            out_entity.bus = clamp_bus(bus_item, out_entity.bus);
         }
         out_entity.action_bus = out_entity.bus;
         cJSON* action_bus_item = cJSON_GetObjectItem(network, "action_bus");
-        if (cJSON_IsNumber(action_bus_item) && action_bus_item->valueint >= 0 && action_bus_item->valueint <= 4) {
-            out_entity.action_bus = static_cast<uint8_t>(action_bus_item->valueint);
+        if (cJSON_IsNumber(action_bus_item)) {
+            out_entity.action_bus = clamp_bus(action_bus_item, out_entity.action_bus);
         }
         cJSON* state_can_id = cJSON_GetObjectItem(network, "state_can_id");
         cJSON* action_can_id = cJSON_GetObjectItem(network, "action_can_id");
         cJSON* delay = cJSON_GetObjectItem(network, "delay_ms");
-        if (cJSON_IsString(state_can_id)) out_entity.state_can_id = strtol(state_can_id->valuestring, nullptr, 16);
-        if (cJSON_IsString(action_can_id)) out_entity.action_can_id = strtol(action_can_id->valuestring, nullptr, 16);
+        uint32_t parsed_cid = 0;
+        if (parse_can_id(state_can_id, parsed_cid)) out_entity.state_can_id = parsed_cid;
+        if (parse_can_id(action_can_id, parsed_cid)) out_entity.action_can_id = parsed_cid;
         out_entity.delay_ms = clamp_u32(delay, 0, MAX_DELAY_MS, out_entity.delay_ms);
 
         cJSON* state_byte_item = cJSON_GetObjectItem(network, "state_byte");
@@ -1328,22 +1447,21 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity, bool include_discov
                 }
             }
             cJSON* src_bus = cJSON_GetObjectItem(mitm_obj, "source_bus");
-            if (cJSON_IsNumber(src_bus) && src_bus->valueint >= 0 && src_bus->valueint <= 4) {
-                out_entity.mitm.source_bus = static_cast<uint8_t>(src_bus->valueint);
+            if (cJSON_IsNumber(src_bus)) {
+                out_entity.mitm.source_bus = clamp_bus(src_bus, out_entity.mitm.source_bus);
             }
             cJSON* dst_bus = cJSON_GetObjectItem(mitm_obj, "target_bus");
-            if (cJSON_IsNumber(dst_bus) && dst_bus->valueint >= 0 && dst_bus->valueint <= 4) {
-                out_entity.mitm.target_bus = static_cast<uint8_t>(dst_bus->valueint);
+            if (cJSON_IsNumber(dst_bus)) {
+                out_entity.mitm.target_bus = clamp_bus(dst_bus, out_entity.mitm.target_bus);
             }
             auto parse_id_array = [](cJSON* arr, PsramVector<uint32_t>& out_ids) {
                 if (!cJSON_IsArray(arr)) return;
                 cJSON* item = nullptr;
                 cJSON_ArrayForEach(item, arr) {
-                    if (cJSON_IsString(item) && item->valuestring && item->valuestring[0] != '\0') {
-                        uint32_t cid = static_cast<uint32_t>(strtoul(item->valuestring, nullptr, 16));
-                        if (cid != 0 && std::find(out_ids.begin(), out_ids.end(), cid) == out_ids.end()) {
-                            out_ids.push_back(cid);
-                        }
+                    uint32_t cid = 0;
+                    if (parse_can_id(item, cid) && cid != 0 &&
+                        std::find(out_ids.begin(), out_ids.end(), cid) == out_ids.end()) {
+                        out_ids.push_back(cid);
                     }
                 }
             };
@@ -1367,7 +1485,7 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity, bool include_discov
     const char* ent_type = cJSON_IsString(entity_type_item) ? entity_type_item->valuestring : "";
     cJSON* net_type_item = network ? cJSON_GetObjectItem(network, "type") : nullptr;
     const char* net_type = cJSON_IsString(net_type_item) ? net_type_item->valuestring : "";
-    bool is_hud_nav = (strcmp(ent_type, "hud_nav") == 0 || strcmp(net_type, "hud_nav") == 0 || out_entity.id == "hud_turn_by_turn_maneuver");
+    bool is_hud_nav = (strcmp(ent_type, "hud_nav") == 0 || strcmp(net_type, "hud_nav") == 0);
 
     cJSON* root_mask = cJSON_GetObjectItem(entity_json, "mask");
     cJSON* net_state_mask = network ? cJSON_GetObjectItem(network, "state_mask") : nullptr;
@@ -1392,7 +1510,7 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity, bool include_discov
             cJSON* opt_mask = cJSON_GetObjectItem(opt_json, "mask");
             cJSON* effective_mask = is_valid_mask_json(opt_mask) ? opt_mask : entity_fallback_mask;
             parse_byte_match(cJSON_GetObjectItem(opt_json, "match"), opt.match_payload, opt.match_mask, opt.invert_mask, opt.byte_masks, effective_mask);
-            parse_steps(cJSON_GetObjectItem(opt_json, "steps"), opt.steps);
+            parse_steps(cJSON_GetObjectItem(opt_json, "steps"), out_entity, opt.steps);
 
             // If no explicit steps array but option provides CAN payload (e.g. Kids Mode / Quiet Mode), synthesize a CatalogStep
             cJSON* opt_payload = cJSON_GetObjectItem(opt_json, "payload");
@@ -1428,7 +1546,7 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity, bool include_discov
             opt.label = "Active";
             opt.is_default = true;
             parse_byte_match(root_match, opt.match_payload, opt.match_mask, opt.invert_mask, opt.byte_masks, entity_fallback_mask);
-            parse_steps(root_steps, opt.steps);
+            parse_steps(root_steps, out_entity, opt.steps);
             if (opt.steps.empty() && root_payload) {
                 CatalogStep step;
                 synthesize_step_from_payload(root_payload, out_entity, step);
@@ -1487,7 +1605,6 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
             if (cJSON_IsNumber(cc_item) && cc_item->valueint >= 1 && cc_item->valueint <= 5) {
                 tr.click_count = static_cast<uint8_t>(cc_item->valueint);
             }
-            tr.multi_click = std::make_shared<MultiClickState>();
             tr.for_ms = (tr.click_count > 1) ? 0 : parse_sustained_for_ms(t_item);
             if (tr.for_ms > 0) {
                 tr.sustained = std::make_shared<SustainedState>();
@@ -1528,7 +1645,7 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
 
                 cJSON* rssi_item = cJSON_GetObjectItem(t_item, "target_rssi");
                 if (!rssi_item) rssi_item = cJSON_GetObjectItem(t_item, "rssi");
-                if (cJSON_IsNumber(rssi_item)) tr.target_rssi = static_cast<int8_t>(rssi_item->valueint);
+                if (cJSON_IsNumber(rssi_item)) tr.target_rssi = clamp_rssi(rssi_item, tr.target_rssi);
             } else if (tr.type == "ble_button" || tr.type == "ble_key" || tr.type == "ble") {
                 tr.type = "ble_button";
                 cJSON* btn = cJSON_GetObjectItem(t_item, "ble_button");
@@ -1583,7 +1700,7 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
 
                 cJSON* rssi_item = cJSON_GetObjectItem(t_item, "target_rssi");
                 if (!rssi_item) rssi_item = cJSON_GetObjectItem(t_item, "rssi");
-                if (cJSON_IsNumber(rssi_item)) tr.target_rssi = static_cast<int8_t>(rssi_item->valueint);
+                if (cJSON_IsNumber(rssi_item)) tr.target_rssi = clamp_rssi(rssi_item, tr.target_rssi);
             } else if (tr.type == "ble_device_event" || tr.type == "ble_device" || tr.type == "ble_presence" || tr.source == "ble") {
                 tr.type = "ble_device_event";
                 cJSON* evt = cJSON_GetObjectItem(t_item, "ble_event");
@@ -1599,13 +1716,17 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
 
                 cJSON* rssi_item = cJSON_GetObjectItem(t_item, "target_rssi");
                 if (!rssi_item) rssi_item = cJSON_GetObjectItem(t_item, "rssi");
-                if (cJSON_IsNumber(rssi_item)) tr.target_rssi = static_cast<int8_t>(rssi_item->valueint);
+                if (cJSON_IsNumber(rssi_item)) tr.target_rssi = clamp_rssi(rssi_item, tr.target_rssi);
             } else {
                 cJSON* cid = cJSON_GetObjectItem(t_item, "can_id");
-                if (cJSON_IsString(cid)) tr.can_id = strtol(cid->valuestring, nullptr, 16);
-                else if (cJSON_IsNumber(cid)) tr.can_id = static_cast<uint32_t>(cid->valueint);
+                uint32_t parsed_cid = 0;
+                if (parse_can_id(cid, parsed_cid)) {
+                    tr.can_id = parsed_cid;
+                } else if (cid && !cJSON_IsNull(cid)) {
+                    ESP_LOGW(TAG, "Invalid can_id in automation trigger");
+                }
                 cJSON* bus = cJSON_GetObjectItem(t_item, "bus");
-                if (cJSON_IsNumber(bus)) tr.bus = bus->valueint;
+                if (cJSON_IsNumber(bus)) tr.bus = clamp_bus(bus, tr.bus);
 
                 uint8_t dummy_invert = 0;
                 parse_byte_match(cJSON_GetObjectItem(t_item, "match"), tr.match_payload, tr.match_mask, dummy_invert, tr.byte_masks, cJSON_GetObjectItem(t_item, "mask"));
@@ -1617,11 +1738,8 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
                     if (b_idx >= 0) {
                         tr.byte_index = b_idx;
                         cJSON* mask_item = cJSON_GetObjectItem(t_item, "mask");
-                        if (cJSON_IsString(mask_item)) {
-                            tr.byte_mask = parse_hex_string(mask_item->valuestring);
-                        } else {
-                            tr.byte_mask = 0xFF;
-                        }
+                        tr.byte_mask = parse_byte_mask_for_index(mask_item, b_idx, 0xFF);
+                        tr.byte_masks[b_idx] = tr.byte_mask;
 
                         cJSON* op_item = cJSON_GetObjectItem(t_item, "operator");
                         if (cJSON_IsString(op_item)) {
@@ -1634,13 +1752,21 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
                         if (cJSON_IsString(from_item)) {
                             tr.from_value = parse_hex_string(from_item->valuestring);
                             tr.has_from_value = true;
+                        } else if (cJSON_IsNumber(from_item)) {
+                            tr.from_value = static_cast<uint8_t>(clamp_u32(from_item, 0, 255, 0));
+                            tr.has_from_value = true;
                         }
                         if (cJSON_IsString(to_item)) {
-                            tr.to_value = parse_hex_string(to_item->valuestring);
+                            bool to_inverted = false;
+                            tr.to_value = parse_hex_string(to_item->valuestring, &to_inverted);
+                            if (to_inverted) {
+                                if (tr.op == ConditionOperator::EQUAL) tr.op = ConditionOperator::NOT_EQUAL;
+                                else if (tr.op == ConditionOperator::NOT_EQUAL) tr.op = ConditionOperator::EQUAL;
+                            }
                             tr.match_payload[b_idx] = tr.to_value;
                             tr.match_mask |= (1 << b_idx);
                         } else if (cJSON_IsNumber(to_item)) {
-                            tr.to_value = static_cast<uint8_t>(to_item->valueint);
+                            tr.to_value = static_cast<uint8_t>(clamp_u32(to_item, 0, 255, 0));
                             tr.match_payload[b_idx] = tr.to_value;
                             tr.match_mask |= (1 << b_idx);
                         }
@@ -1648,7 +1774,13 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
                 }
             }
 
-            out_rule.triggers.push_back(tr);
+            if (tr.click_count > 1) {
+                tr.multi_click = std::make_shared<MultiClickState>();
+                tr.for_ms = 0;
+                tr.sustained.reset();
+            }
+
+            out_rule.triggers.push_back(std::move(tr));
         }
     }
 
@@ -1679,22 +1811,105 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
     return true;
 }
 
+static constexpr size_t MAX_STREAM_KEY_LEN = 64;
+static constexpr size_t MAX_STREAM_OBJ_LEN = 32768; // 32 KB cap per streamed JSON object (accommodates ~20 KB ambient_light_colors while preventing OOM on corrupt JSON)
+static constexpr long MAX_AUTOMATIONS_FILE_SIZE = 128L * 1024L;
+
+static void* psram_prefer_malloc(size_t size) {
+    if (size == 0) return nullptr;
+#if CONFIG_SPIRAM
+    return heap_caps_malloc_prefer(size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
+#else
+    return malloc(size);
+#endif
+}
+
+struct BufferedFile {
+    FILE* fp = nullptr;
+    char* io_buf = nullptr;
+
+    BufferedFile() = default;
+    BufferedFile(const BufferedFile&) = delete;
+    BufferedFile& operator=(const BufferedFile&) = delete;
+
+    ~BufferedFile() {
+        close();
+    }
+
+    bool open(const char* path, const char* mode, size_t buf_size) {
+        close();
+        if (!path || !mode) return false;
+        fp = fopen(path, mode);
+        if (!fp) return false;
+        if (buf_size > 0) {
+            io_buf = static_cast<char*>(psram_prefer_malloc(buf_size));
+            if (io_buf && setvbuf(fp, io_buf, _IOFBF, buf_size) != 0) {
+                free(io_buf);
+                io_buf = nullptr;
+            }
+        }
+        return true;
+    }
+
+    void close() {
+        if (fp) {
+            fclose(fp);
+            fp = nullptr;
+        }
+        if (io_buf) {
+            free(io_buf);
+            io_buf = nullptr;
+        }
+    }
+};
+
+static bool open_default_catalog_file(BufferedFile& file, size_t buf_size) {
+    static constexpr const char* kCatalogPaths[] = {
+        "/spiffs/catalog.json",
+        "/spiffs/can_do_catalog.json"
+    };
+    for (const char* p : kCatalogPaths) {
+        if (file.open(p, "r", buf_size)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 template<typename Handler>
 static bool stream_parse_array_from_file(FILE* f, const char* target_key, Handler handler) {
     if (!f || !target_key) return false;
 
-    // Note: I/O buffering is handled via heap in load_catalog_from_fs
+    const size_t target_len = strlen(target_key);
+    if (target_len == 0 || target_len > MAX_STREAM_KEY_LEN) {
+        ESP_LOGW(TAG, "stream_parse: target key length %zu exceeds cap %zu", target_len, MAX_STREAM_KEY_LEN);
+        return false;
+    }
 
-    // 1. Scan for target key in quotes
+    // 1. Scan for target key at root depth 1, followed by optional whitespace, ':', optional whitespace, and '['
     int c;
     bool in_quote = false;
     bool escape = false;
-    std::string key_buf;
-    bool found_key = false;
+    bool key_invalid = false;
+    int nest_depth = 0;
+    char key_buf[MAX_STREAM_KEY_LEN + 1];
+    size_t key_len = 0;
+    bool found_array = false;
+
+    auto skip_ws = [&]() -> int {
+        int ch;
+        while ((ch = fgetc(f)) != EOF) {
+            if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n') {
+                return ch;
+            }
+        }
+        return EOF;
+    };
 
     while ((c = fgetc(f)) != EOF) {
         if (escape) {
             escape = false;
+            if (in_quote) key_invalid = true;
             continue;
         }
         if (c == '\\' && in_quote) {
@@ -1704,40 +1919,62 @@ static bool stream_parse_array_from_file(FILE* f, const char* target_key, Handle
         if (c == '"') {
             if (!in_quote) {
                 in_quote = true;
-                key_buf.clear();
+                key_len = 0;
+                key_invalid = false;
             } else {
                 in_quote = false;
-                if (key_buf == target_key) {
-                    found_key = true;
-                    break;
+                if (nest_depth == 1 && !key_invalid && key_len == target_len &&
+                    memcmp(key_buf, target_key, target_len) == 0) {
+                    int next = skip_ws();
+                    if (next == ':') {
+                        int val_start = skip_ws();
+                        if (val_start == '[') {
+                            found_array = true;
+                            break;
+                        }
+                        if (val_start == EOF) break;
+                        ungetc(val_start, f);
+                    } else {
+                        if (next == EOF) break;
+                        ungetc(next, f);
+                    }
                 }
             }
         } else if (in_quote) {
-            key_buf += static_cast<char>(c);
+            if (nest_depth == 1 && !key_invalid) {
+                if (key_len < target_len && key_len < MAX_STREAM_KEY_LEN) {
+                    key_buf[key_len++] = static_cast<char>(c);
+                } else {
+                    key_invalid = true;
+                }
+            }
+        } else {
+            if (c == '{' || c == '[') {
+                nest_depth++;
+            } else if (c == '}' || c == ']') {
+                if (nest_depth > 0) nest_depth--;
+            }
         }
     }
 
-    if (!found_key) {
-        ESP_LOGW(TAG, "stream_parse: key '%s' not found in file", target_key);
+    if (!found_array) {
+        ESP_LOGW(TAG, "stream_parse: root array key '%s' not found in file", target_key);
         return false;
     }
 
-    // 2. Find '['
-    bool found_bracket = false;
-    while ((c = fgetc(f)) != EOF) {
-        if (c == '[') {
-            found_bracket = true;
-            break;
-        } else if (c == ']' || c == '}') {
-            return false;
-        }
-    }
-    if (!found_bracket) return false;
-
-    // 3. Extract each '{ ... }' object
-    std::string obj_buf;
+    // 3. Extract each '{ ... }' object into a bounded PSRAM-backed buffer
+    PsramVector<char> obj_buf;
     obj_buf.reserve(2048);
     int parsed_count = 0;
+
+    auto reset_obj_buf = [&]() {
+        if (obj_buf.capacity() > 4096) {
+            PsramVector<char>().swap(obj_buf);
+            obj_buf.reserve(2048);
+        } else {
+            obj_buf.clear();
+        }
+    };
 
     while ((c = fgetc(f)) != EOF) {
         // Skip whitespace, commas, newlines until '{' or ']'
@@ -1750,16 +1987,27 @@ static bool stream_parse_array_from_file(FILE* f, const char* target_key, Handle
 
         // c is '{'
         obj_buf.clear();
-        obj_buf += '{';
+        obj_buf.push_back('{');
         int depth = 1;
         bool in_str = false;
         escape = false;
+        bool obj_overflow = false;
+        size_t skipped_bytes = 0;
 
         while ((c = fgetc(f)) != EOF) {
             if (!in_str && (c == ' ' || c == '\n' || c == '\r' || c == '\t')) {
                 continue;
             }
-            obj_buf += static_cast<char>(c);
+            if (!obj_overflow) {
+                if (obj_buf.size() + 1 < MAX_STREAM_OBJ_LEN) {
+                    obj_buf.push_back(static_cast<char>(c));
+                } else {
+                    obj_overflow = true;
+                    reset_obj_buf();
+                }
+            } else if ((++skipped_bytes & 0xFFFU) == 0) {
+                vTaskDelay(pdMS_TO_TICKS(1));
+            }
             if (escape) {
                 escape = false;
             } else if (c == '\\' && in_str) {
@@ -1778,14 +2026,17 @@ static bool stream_parse_array_from_file(FILE* f, const char* target_key, Handle
             }
         }
 
+        if (obj_overflow) {
+            ESP_LOGW(TAG, "stream_parse: object in '%s' exceeded %zu bytes; skipping object",
+                     target_key, MAX_STREAM_OBJ_LEN);
+            reset_obj_buf();
+            continue;
+        }
+
         if (depth == 0) {
-            cJSON* item_json = cJSON_Parse(obj_buf.c_str());
-            if (obj_buf.capacity() > 4096) {
-                std::string().swap(obj_buf);
-                obj_buf.reserve(2048);
-            } else {
-                obj_buf.clear();
-            }
+            obj_buf.push_back('\0');
+            cJSON* item_json = cJSON_Parse(obj_buf.data());
+            reset_obj_buf();
             if (item_json) {
                 bool keep_going = true;
                 if constexpr (std::is_same_v<std::invoke_result_t<Handler, cJSON*>, bool>) {
@@ -1807,6 +2058,34 @@ static bool stream_parse_array_from_file(FILE* f, const char* target_key, Handle
 
     ESP_LOGI(TAG, "stream_parse: key '%s' finished with %d items", target_key, parsed_count);
     return parsed_count > 0;
+}
+
+template<typename Handler>
+static bool stream_parse_catalog_items(FILE* f, Handler handler) {
+    if (!f) return false;
+    bool stopped = false;
+    auto wrapped = [&](cJSON* item_json) -> bool {
+        if constexpr (std::is_same_v<std::invoke_result_t<Handler, cJSON*>, bool>) {
+            if (!handler(item_json)) {
+                stopped = true;
+                return false;
+            }
+            return true;
+        } else {
+            handler(item_json);
+            return true;
+        }
+    };
+
+    fseek(f, 0, SEEK_SET);
+    clearerr(f);
+    bool ok = stream_parse_array_from_file(f, "commands", wrapped);
+    if (!ok && !stopped) {
+        fseek(f, 0, SEEK_SET);
+        clearerr(f);
+        ok = stream_parse_array_from_file(f, "entities", wrapped);
+    }
+    return ok || stopped;
 }
 
 bool load_catalog_from_fs(const char* filepath) {
@@ -1834,16 +2113,14 @@ bool load_catalog_from_fs(const char* filepath) {
     }
     long size = st.st_size;
 
-    FILE* f = fopen(filepath, "r");
-    if (!f) {
+    BufferedFile f;
+    if (!f.open(filepath, "r", 4096)) {
         ESP_LOGE(TAG, "Failed to open catalog file: %s", filepath);
         return false;
     }
-    // Heap-backed 4KB I/O buffer (automatically freed on fclose by libc)
-    setvbuf(f, nullptr, _IOFBF, 4096);
 
     PsramVector<CanEntity> new_catalog;
-    std::vector<AutomationRule> new_autos;
+    PsramVector<AutomationRule> new_autos;
 
     auto commit_catalog = [&]() {
         size_t cat_count = 0;
@@ -1877,36 +2154,24 @@ bool load_catalog_from_fs(const char* filepath) {
         ESP_LOGI(TAG, "Using low-memory streaming parser for large catalog (%ld bytes)", size);
 
         // 1. Parse "commands" (fallback to "entities")
-        fseek(f, 0, SEEK_SET);
-        clearerr(f);
-        bool ok = stream_parse_array_from_file(f, "commands", [&](cJSON* cmd_json) {
+        stream_parse_catalog_items(f.fp, [&](cJSON* cmd_json) {
             CanEntity entity;
             if (parse_entity(cmd_json, entity, false)) {
                 new_catalog.push_back(std::move(entity));
             }
         });
-        if (!ok) {
-            fseek(f, 0, SEEK_SET);
-            clearerr(f);
-            stream_parse_array_from_file(f, "entities", [&](cJSON* cmd_json) {
-                CanEntity entity;
-                if (parse_entity(cmd_json, entity, false)) {
-                    new_catalog.push_back(std::move(entity));
-                }
-            });
-        }
 
         // 2. Parse "automations" if present
-        fseek(f, 0, SEEK_SET);
-        clearerr(f);
-        stream_parse_array_from_file(f, "automations", [&](cJSON* auto_json) {
+        fseek(f.fp, 0, SEEK_SET);
+        clearerr(f.fp);
+        stream_parse_array_from_file(f.fp, "automations", [&](cJSON* auto_json) {
             AutomationRule rule;
             if (parse_automation(auto_json, rule)) {
-                new_autos.push_back(rule);
+                new_autos.push_back(std::move(rule));
             }
         });
 
-        fclose(f);
+        f.close();
         if (new_catalog.empty()) {
             return false;
         }
@@ -1915,16 +2180,28 @@ bool load_catalog_from_fs(const char* filepath) {
     }
 
     // Standard fallback parser for smaller files
-    char* buffer = static_cast<char*>(malloc(size + 1));
+    if (size <= 0) {
+        f.close();
+        ESP_LOGW(TAG, "Catalog file %s is empty", filepath);
+        return false;
+    }
+
+    char* buffer = static_cast<char*>(psram_prefer_malloc(static_cast<size_t>(size) + 1));
     if (!buffer) {
-        fclose(f);
+        f.close();
         ESP_LOGE(TAG, "Out of memory allocating %ld bytes for catalog", size);
         return false;
     }
 
-    fread(buffer, 1, size, f);
-    buffer[size] = '\0';
-    fclose(f);
+    size_t nread = fread(buffer, 1, static_cast<size_t>(size), f.fp);
+    buffer[nread] = '\0';
+    bool read_err = (ferror(f.fp) != 0);
+    f.close();
+    if (read_err || nread != static_cast<size_t>(size)) {
+        ESP_LOGE(TAG, "Short or failed read on catalog %s (%zu / %ld bytes)", filepath, nread, size);
+        free(buffer);
+        return false;
+    }
 
     cJSON* root = cJSON_Parse(buffer);
     free(buffer);
@@ -1955,58 +2232,38 @@ bool load_catalog_from_fs(const char* filepath) {
         cJSON_ArrayForEach(auto_json, autos_array) {
             AutomationRule rule;
             if (parse_automation(auto_json, rule)) {
-                new_autos.push_back(rule);
+                new_autos.push_back(std::move(rule));
             }
         }
     }
 
     cJSON_Delete(root);
+    if (new_catalog.empty()) {
+        ESP_LOGW(TAG, "Catalog file %s contained 0 valid entities; skipping commit", filepath);
+        return false;
+    }
     commit_catalog();
     return true;
 }
 
 bool stream_catalog_entities(std::function<bool(const CanEntity&)> callback) {
-    const char* paths[] = {"/spiffs/catalog.json", "/spiffs/can_do_catalog.json"};
-    FILE* f = nullptr;
-    for (const char* p : paths) {
-        f = fopen(p, "r");
-        if (f) break;
-    }
-    if (!f) {
+    BufferedFile f;
+    if (!open_default_catalog_file(f, 2048)) {
         ESP_LOGW(TAG, "No catalog file found for streaming");
         return false;
     }
 
-    setvbuf(f, nullptr, _IOFBF, 2048);
-
-    bool user_stopped = false;
-    bool ok = stream_parse_array_from_file(f, "commands", [&](cJSON* cmd_json) -> bool {
+    stream_parse_catalog_items(f.fp, [&](cJSON* cmd_json) -> bool {
         CanEntity entity;
         if (parse_entity(cmd_json, entity)) {
             if (!callback(entity)) {
-                user_stopped = true;
                 return false;
             }
         }
         return true;
     });
 
-    if (!ok && !user_stopped) {
-        fseek(f, 0, SEEK_SET);
-        clearerr(f);
-        stream_parse_array_from_file(f, "entities", [&](cJSON* cmd_json) -> bool {
-            CanEntity entity;
-            if (parse_entity(cmd_json, entity)) {
-                if (!callback(entity)) {
-                    user_stopped = true;
-                    return false;
-                }
-            }
-            return true;
-        });
-    }
-
-    fclose(f);
+    f.close();
     return true;
 }
 
@@ -2033,37 +2290,23 @@ bool find_entity_in_catalog(const std::string& entity_id, CanEntity& out_entity)
     }
 
     // 3. Search catalog file on LittleFS without constructing CanEntity for non-matching items
-    const char* paths[] = {"/spiffs/catalog.json", "/spiffs/can_do_catalog.json"};
-    FILE* f = nullptr;
-    for (const char* p : paths) {
-        f = fopen(p, "r");
-        if (f) break;
-    }
-    if (!f) {
+    BufferedFile f;
+    if (!open_default_catalog_file(f, 2048)) {
         return false;
     }
 
-    setvbuf(f, nullptr, _IOFBF, 2048);
-
     bool found = false;
-    auto match_handler = [&](cJSON* cmd_json) -> bool {
+    stream_parse_catalog_items(f.fp, [&](cJSON* cmd_json) -> bool {
         cJSON* id_item = cJSON_GetObjectItem(cmd_json, "id");
         if (cJSON_IsString(id_item) && id_item->valuestring && entity_id == id_item->valuestring) {
-            if (parse_entity(cmd_json, out_entity)) {
+            if (parse_entity(cmd_json, out_entity, false)) {
                 found = true;
                 return false; // Stop streaming
             }
         }
         return true; // Continue
-    };
-
-    bool ok = stream_parse_array_from_file(f, "commands", match_handler);
-    if (!ok && !found) {
-        fseek(f, 0, SEEK_SET);
-        clearerr(f);
-        stream_parse_array_from_file(f, "entities", match_handler);
-    }
-    fclose(f);
+    });
+    f.close();
 
     if (found) {
         std::lock_guard<std::mutex> lock(g_catalog_mutex);
@@ -2117,17 +2360,29 @@ bool load_automations_from_fs(const char* filepath) {
         ESP_LOGW(TAG, "Automations file %s is empty", filepath);
         return false;
     }
+    if (size > MAX_AUTOMATIONS_FILE_SIZE) {
+        fclose(f);
+        ESP_LOGE(TAG, "Automations file %s too large (%ld > %ld bytes); refusing to load",
+                 filepath, size, MAX_AUTOMATIONS_FILE_SIZE);
+        return false;
+    }
 
-    char* buffer = static_cast<char*>(malloc(size + 1));
+    char* buffer = static_cast<char*>(psram_prefer_malloc(static_cast<size_t>(size) + 1));
     if (!buffer) {
         fclose(f);
         ESP_LOGE(TAG, "Out of memory allocating %ld bytes for automations", size);
         return false;
     }
 
-    fread(buffer, 1, size, f);
-    buffer[size] = '\0';
+    size_t nread = fread(buffer, 1, static_cast<size_t>(size), f);
+    buffer[nread] = '\0';
+    bool read_err = (ferror(f) != 0);
     fclose(f);
+    if (read_err || nread != static_cast<size_t>(size)) {
+        ESP_LOGE(TAG, "Short or failed read on automations %s (%zu / %ld bytes)", filepath, nread, size);
+        free(buffer);
+        return false;
+    }
 
     cJSON* root = cJSON_Parse(buffer);
     free(buffer);
@@ -2137,7 +2392,7 @@ bool load_automations_from_fs(const char* filepath) {
         return false;
     }
 
-    std::vector<AutomationRule> new_rules;
+    PsramVector<AutomationRule> new_rules;
 
     cJSON* rules_array = nullptr;
     if (cJSON_IsArray(root)) {
@@ -2159,7 +2414,7 @@ bool load_automations_from_fs(const char* filepath) {
         cJSON_ArrayForEach(auto_json, rules_array) {
             AutomationRule rule;
             if (parse_automation(auto_json, rule)) {
-                new_rules.push_back(rule);
+                new_rules.push_back(std::move(rule));
             }
         }
     }
@@ -2167,9 +2422,9 @@ bool load_automations_from_fs(const char* filepath) {
     cJSON_Delete(root);
 
     // Preload entities referenced in automations (triggers, actions) before acquiring g_automations_mutex
-    std::unordered_set<std::string> referenced_entities;
-    std::function<void(const std::vector<ActionStep>&, int)> collect_from_steps;
-    collect_from_steps = [&](const std::vector<ActionStep>& steps, int depth) {
+    PsramUnorderedSet<std::string> referenced_entities;
+    std::function<void(const PsramVector<ActionStep>&, int)> collect_from_steps;
+    collect_from_steps = [&](const PsramVector<ActionStep>& steps, int depth) {
         if (depth > MAX_PARSE_DEPTH) {
             ESP_LOGW(TAG, "Max action nesting depth (%d) exceeded while collecting entities; skipping subtree", MAX_PARSE_DEPTH);
             return;

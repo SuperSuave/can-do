@@ -7,6 +7,7 @@
 #include <list>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include "sdkconfig.h"
 
@@ -81,3 +82,10 @@ using PsramUnorderedMap = std::unordered_map<
     std::hash<K>,
     std::equal_to<K>,
     PsramAllocator<std::pair<const K, V>>>;
+
+template <typename K>
+using PsramUnorderedSet = std::unordered_set<
+    K,
+    std::hash<K>,
+    std::equal_to<K>,
+    PsramAllocator<K>>;
