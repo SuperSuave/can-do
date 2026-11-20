@@ -1,13 +1,18 @@
 #include "mqtt_mgr.h"
 #include "parser.h"
 #include "can_engine.h"
+#include "psram_alloc.h"
 #include "track_popup.h"
 #include "hud_nav.h"
 #include "power_mgr.h"
 #include "cJSON.h"
 #include "esp_log.h"
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
+#include <memory>
 #include <mutex>
 #include <unordered_set>
 #include "esp_system.h"
@@ -26,7 +31,8 @@ static const char* MQTT_CONFIG_FILE = "/spiffs/mqtt.json";
 extern std::string g_device_id;
 #define DEVICE_ID g_device_id
 
-const std::string MQTT_BASE_TOPIC = "cando";
+#define MQTT_BASE_TOPIC_LIT "cando"
+const std::string MQTT_BASE_TOPIC = MQTT_BASE_TOPIC_LIT;
 esp_mqtt_client_handle_t global_mqtt_client = nullptr;
 std::mutex g_automations_file_mutex;
 
@@ -35,6 +41,8 @@ static constexpr const char* MQTT_AUTOMATIONS_STAGE_FILE = "/spiffs/automations.
 static constexpr const char* MQTT_AUTOMATIONS_PENDING_FILE = "/spiffs/automations.json.mqtt.pending";
 static constexpr const char* MQTT_AUTOMATIONS_WORK_FILE = "/spiffs/automations.json.mqtt.work";
 static constexpr size_t kMaxMqttAutomationsBytes = 128 * 1024;
+static constexpr size_t kMaxMonitoredIdsFileBytes = 16 * 1024;
+static constexpr size_t kMaxMqttConfigFileBytes = 4 * 1024;
 
 static std::mutex s_mqtt_mutex;
 static MqttConfig s_mqtt_cfg;
@@ -52,11 +60,25 @@ static bool s_auto_reload_task_running = false;
 static bool s_auto_reload_pending = false;
 static std::atomic<bool> s_auto_parse_tmp_pending{false};
 static std::atomic<bool> s_monitored_ids_persist_pending{false};
-static std::unordered_set<std::string> s_exposed_auto_ids;
+static PsramUnorderedSet<std::string> s_exposed_auto_ids;
 static std::string s_lwt_topic;
 
 static bool save_monitored_ids_to_fs(void);
 static void trigger_post_connect_sync(void);
+
+struct HeapFreeDeleter {
+    void operator()(void* ptr) const noexcept {
+        free(ptr);
+    }
+};
+
+static inline char* alloc_mqtt_pub_buf(size_t sz) {
+#if CONFIG_SPIRAM
+    return (char*)heap_caps_malloc_prefer(sz, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
+#else
+    return (char*)malloc(sz);
+#endif
+}
 
 static bool atomic_write_text_file(const char* target_path, const char* tmp_path, const char* data, size_t len) {
     if (!target_path || !tmp_path || !data) {
@@ -102,12 +124,18 @@ static uint8_t* s_mqtt_cmd_queue_storage = nullptr;
 static void mqtt_enqueue_entity_cmd(const char* entity_id, const char* payload, const char* source_label) {
     if (!entity_id || !payload) return;
     if (s_mqtt_cmd_queue) {
-        MqttSetCmd cmd = {};
-        cmd.kind = MqttCmdKind::ENTITY_CMD;
-        strncpy(cmd.entity_id, entity_id, sizeof(cmd.entity_id) - 1);
-        strncpy(cmd.payload, payload, sizeof(cmd.payload) - 1);
-        if (xQueueSend(s_mqtt_cmd_queue, &cmd, 0) != pdTRUE) {
-            ESP_LOGW(TAG, "MQTT cmd queue full, dropping %s/%s", source_label ? source_label : "cmd", cmd.entity_id);
+        std::unique_ptr<MqttSetCmd, HeapFreeDeleter> cmd(
+            static_cast<MqttSetCmd*>(static_cast<void*>(alloc_mqtt_pub_buf(sizeof(MqttSetCmd)))));
+        if (!cmd) {
+            ESP_LOGE(TAG, "OOM allocating MqttSetCmd for %s/%s", source_label ? source_label : "cmd", entity_id);
+            return;
+        }
+        memset(cmd.get(), 0, sizeof(MqttSetCmd));
+        cmd->kind = MqttCmdKind::ENTITY_CMD;
+        strncpy(cmd->entity_id, entity_id, sizeof(cmd->entity_id) - 1);
+        strncpy(cmd->payload, payload, sizeof(cmd->payload) - 1);
+        if (xQueueSend(s_mqtt_cmd_queue, cmd.get(), 0) != pdTRUE) {
+            ESP_LOGW(TAG, "MQTT cmd queue full, dropping %s/%s", source_label ? source_label : "cmd", cmd->entity_id);
         }
     } else {
         ESP_LOGW(TAG, "MQTT cmd queue not initialized");
@@ -116,15 +144,21 @@ static void mqtt_enqueue_entity_cmd(const char* entity_id, const char* payload, 
 
 static void mqtt_cmd_worker_task(void* arg) {
     (void)arg;
-    MqttSetCmd cmd;
+    std::unique_ptr<MqttSetCmd, HeapFreeDeleter> cmd(
+        static_cast<MqttSetCmd*>(static_cast<void*>(alloc_mqtt_pub_buf(sizeof(MqttSetCmd)))));
+    if (!cmd) {
+        ESP_LOGE(TAG, "Failed to allocate MqttSetCmd buffer for mqtt_cmd task");
+        vTaskDelete(nullptr);
+        return;
+    }
     while (true) {
         TickType_t wait_ticks = s_monitored_ids_persist_pending.load(std::memory_order_acquire)
             ? pdMS_TO_TICKS(50)
             : portMAX_DELAY;
-        if (xQueueReceive(s_mqtt_cmd_queue, &cmd, wait_ticks) == pdTRUE) {
-            if (cmd.kind == MqttCmdKind::ENTITY_CMD) {
+        if (xQueueReceive(s_mqtt_cmd_queue, cmd.get(), wait_ticks) == pdTRUE) {
+            if (cmd->kind == MqttCmdKind::ENTITY_CMD) {
                 rtc_crash_record_event("mqtt_set_cmd");
-                queue_entity_command(cmd.entity_id, cmd.payload);
+                queue_entity_command(cmd->entity_id, cmd->payload);
             }
         }
         if (s_monitored_ids_persist_pending.exchange(false, std::memory_order_acq_rel)) {
@@ -209,14 +243,6 @@ static uint8_t* s_mqtt_pub_queue_storage = nullptr;
 static QueueHandle_t s_mqtt_pub_queue = nullptr;
 static std::mutex s_mqtt_pub_mutex;
 
-static inline char* alloc_mqtt_pub_buf(size_t sz) {
-#if CONFIG_SPIRAM
-    return (char*)heap_caps_malloc_prefer(sz, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT);
-#else
-    return (char*)malloc(sz);
-#endif
-}
-
 static void mqtt_pub_worker_task(void* arg) {
     (void)arg;
     MqttPubItem item;
@@ -264,7 +290,8 @@ static void mqtt_pub_worker_task(void* arg) {
 // Non-blocking MQTT enqueue helper: queues to s_mqtt_pub_queue with 0-tick wait so can_rx_task never touches MQTT_API_LOCK
 static inline void mqtt_enqueue_nonblocking(const char* topic, const char* data, int len, int qos, int retain) {
     if (!s_mqtt_pub_queue || !global_mqtt_client || !s_mqtt_connected.load(std::memory_order_relaxed) || !topic) return;
-    int actual_len = (len > 0) ? len : (data ? (int)strlen(data) : 0);
+    if (len < 0) return;
+    int actual_len = (!data) ? 0 : ((len > 0) ? len : (int)strlen(data));
     MqttPubItem item = {};
     strncpy(item.topic, topic, sizeof(item.topic) - 1);
     item.len = actual_len;
@@ -286,8 +313,8 @@ static inline void mqtt_enqueue_nonblocking(const char* topic, const char* data,
     }
 }
 
-// Default monitored CAN IDs (Gen5W / E-GMP vehicle telemetry)
-static const std::unordered_set<uint32_t> s_default_monitored_ids = {
+// Default monitored CAN IDs (Gen5W / E-GMP vehicle telemetry) stored in flash rodata
+static constexpr uint32_t s_default_monitored_ids[] = {
     0x038, 0x045, 0x070, 0x0A2, 0x130, 0x151, 0x152, 0x1AC, 0x1BA, 0x1CF, 0x1F1, 0x1F9, 0x1FA,
     0x200, 0x203, 0x220, 0x226, 0x227, 0x25C, 0x29B, 0x29C, 0x2AD, 0x2AF, 0x2C0, 0x2DB, 0x2FC,
     0x30B, 0x30C, 0x30E, 0x31B, 0x31C, 0x321, 0x324, 0x326, 0x327, 0x328, 0x340, 0x380, 0x384,
@@ -298,45 +325,79 @@ static const std::unordered_set<uint32_t> s_default_monitored_ids = {
     0x540, 0x541, 0x542, 0x553, 0x559, 0x578, 0x584, 0x587, 0x593, 0x594, 0x595, 0x597, 0x5CC,
     0x5D0, 0x5D6, 0x5D7, 0x5F5, 0x5F7, 0x60C, 0x60D, 0x60E, 0x60F, 0x651, 0x652, 0x7EC
 };
-static std::unordered_set<uint32_t> s_monitored_ids = s_default_monitored_ids;
+static PsramUnorderedSet<uint32_t> s_monitored_ids;
+static bool s_monitored_ids_initialized = false;
 static std::mutex s_monitored_mutex;
 static std::mutex s_monitored_file_mutex;
 static const char* MONITORED_IDS_FILE = "/spiffs/monitored_ids.json";
 static const char* MONITORED_IDS_TMP_FILE = "/spiffs/monitored_ids.json.tmp";
 
+static void ensure_monitored_ids_seeded_locked(void) {
+    if (!s_monitored_ids_initialized) {
+        s_monitored_ids.clear();
+        s_monitored_ids.reserve(sizeof(s_default_monitored_ids) / sizeof(s_default_monitored_ids[0]));
+        s_monitored_ids.insert(std::begin(s_default_monitored_ids), std::end(s_default_monitored_ids));
+        s_monitored_ids_initialized = true;
+    }
+}
+
 static void load_monitored_ids_from_fs(void) {
     FILE* f = fopen(MONITORED_IDS_FILE, "r");
-    if (!f) return;
+    if (!f) {
+        std::lock_guard<std::mutex> lock(s_monitored_mutex);
+        ensure_monitored_ids_seeded_locked();
+        return;
+    }
 
     fseek(f, 0, SEEK_END);
     long len = ftell(f);
     fseek(f, 0, SEEK_SET);
-    if (len <= 0) {
+    if (len <= 0 || static_cast<size_t>(len) > kMaxMonitoredIdsFileBytes) {
+        if (len > static_cast<long>(kMaxMonitoredIdsFileBytes)) {
+            ESP_LOGW(TAG, "Ignoring oversized %s (%ld > %zu bytes)", MONITORED_IDS_FILE, len, kMaxMonitoredIdsFileBytes);
+        }
         fclose(f);
+        std::lock_guard<std::mutex> lock(s_monitored_mutex);
+        ensure_monitored_ids_seeded_locked();
         return;
     }
 
-    std::string buf(len, '\0');
-    fread(&buf[0], 1, len, f);
+    char* buf = alloc_mqtt_pub_buf(static_cast<size_t>(len) + 1);
+    if (!buf) {
+        ESP_LOGE(TAG, "Failed to allocate %ld bytes for %s", len + 1, MONITORED_IDS_FILE);
+        fclose(f);
+        std::lock_guard<std::mutex> lock(s_monitored_mutex);
+        ensure_monitored_ids_seeded_locked();
+        return;
+    }
+    size_t nread = fread(buf, 1, static_cast<size_t>(len), f);
     fclose(f);
+    buf[nread] = '\0';
 
-    cJSON* root = cJSON_Parse(buf.c_str());
+    cJSON* root = cJSON_ParseWithLength(buf, nread);
+    free(buf);
     if (!root || !cJSON_IsArray(root)) {
         if (root) cJSON_Delete(root);
+        std::lock_guard<std::mutex> lock(s_monitored_mutex);
+        ensure_monitored_ids_seeded_locked();
         return;
     }
 
     std::lock_guard<std::mutex> lock(s_monitored_mutex);
     s_monitored_ids.clear();
     int count = cJSON_GetArraySize(root);
+    if (count > 0) {
+        s_monitored_ids.reserve(static_cast<size_t>(count));
+    }
     for (int i = 0; i < count; i++) {
         cJSON* itm = cJSON_GetArrayItem(root, i);
-        if (itm && cJSON_IsString(itm)) {
+        if (itm && cJSON_IsString(itm) && itm->valuestring) {
             s_monitored_ids.insert(strtoul(itm->valuestring, nullptr, 0));
         } else if (itm && cJSON_IsNumber(itm)) {
             s_monitored_ids.insert((uint32_t)itm->valueint);
         }
     }
+    s_monitored_ids_initialized = true;
     cJSON_Delete(root);
     ESP_LOGI(TAG, "Loaded %d monitored CAN IDs from %s", (int)s_monitored_ids.size(), MONITORED_IDS_FILE);
 }
@@ -347,12 +408,18 @@ static bool save_monitored_ids_to_fs(void) {
     if (!root) return false;
     {
         std::lock_guard<std::mutex> lock(s_monitored_mutex);
-        std::vector<uint32_t> sorted(s_monitored_ids.begin(), s_monitored_ids.end());
+        ensure_monitored_ids_seeded_locked();
+        PsramVector<uint32_t> sorted(s_monitored_ids.begin(), s_monitored_ids.end());
         std::sort(sorted.begin(), sorted.end());
         for (uint32_t id : sorted) {
             char hex_buf[16];
             snprintf(hex_buf, sizeof(hex_buf), "0x%03lX", (unsigned long)id);
-            cJSON_AddItemToArray(root, cJSON_CreateString(hex_buf));
+            cJSON* str_item = cJSON_CreateString(hex_buf);
+            if (!str_item || !cJSON_AddItemToArray(root, str_item)) {
+                if (str_item) cJSON_Delete(str_item);
+                cJSON_Delete(root);
+                return false;
+            }
         }
     }
 
@@ -402,10 +469,16 @@ void mqtt_mgr_publish_active_ids(bool force) {
     if (active.empty() && !force) return;
 
     cJSON* root = cJSON_CreateArray();
+    if (!root) return;
     for (uint32_t id : active) {
         char hex_buf[16];
         snprintf(hex_buf, sizeof(hex_buf), "0x%03lX", (unsigned long)id);
-        cJSON_AddItemToArray(root, cJSON_CreateString(hex_buf));
+        cJSON* str_item = cJSON_CreateString(hex_buf);
+        if (!str_item || !cJSON_AddItemToArray(root, str_item)) {
+            if (str_item) cJSON_Delete(str_item);
+            cJSON_Delete(root);
+            return;
+        }
     }
     char* rendered = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
@@ -421,10 +494,11 @@ void mqtt_mgr_publish_active_ids(bool force) {
 }
 
 void mqtt_mgr_set_monitored_ids(const std::vector<uint32_t>& ids, bool persist) {
-    std::unordered_set<uint32_t> next_ids(ids.begin(), ids.end());
+    PsramUnorderedSet<uint32_t> next_ids(ids.begin(), ids.end());
     bool changed = false;
     {
         std::lock_guard<std::mutex> lock(s_monitored_mutex);
+        ensure_monitored_ids_seeded_locked();
         if (next_ids != s_monitored_ids) {
             s_monitored_ids.swap(next_ids);
             changed = true;
@@ -435,10 +509,16 @@ void mqtt_mgr_set_monitored_ids(const std::vector<uint32_t>& ids, bool persist) 
     }
     s_monitored_ids_persist_pending.store(true, std::memory_order_release);
     if (s_mqtt_cmd_queue) {
-        MqttSetCmd cmd = {};
-        cmd.kind = MqttCmdKind::PERSIST_MONITORED_IDS;
-        if (xQueueSend(s_mqtt_cmd_queue, &cmd, 0) != pdTRUE) {
-            ESP_LOGW(TAG, "MQTT cmd queue full; deferring monitored_ids persistence");
+        std::unique_ptr<MqttSetCmd, HeapFreeDeleter> cmd(
+            static_cast<MqttSetCmd*>(static_cast<void*>(alloc_mqtt_pub_buf(sizeof(MqttSetCmd)))));
+        if (!cmd) {
+            ESP_LOGW(TAG, "OOM allocating MqttSetCmd; deferring monitored_ids persistence");
+        } else {
+            memset(cmd.get(), 0, sizeof(MqttSetCmd));
+            cmd->kind = MqttCmdKind::PERSIST_MONITORED_IDS;
+            if (xQueueSend(s_mqtt_cmd_queue, cmd.get(), 0) != pdTRUE) {
+                ESP_LOGW(TAG, "MQTT cmd queue full; deferring monitored_ids persistence");
+            }
         }
     } else if (s_monitored_ids_persist_pending.exchange(false, std::memory_order_acq_rel)) {
         save_monitored_ids_to_fs();
@@ -447,6 +527,7 @@ void mqtt_mgr_set_monitored_ids(const std::vector<uint32_t>& ids, bool persist) 
 
 std::vector<uint32_t> mqtt_mgr_get_monitored_ids(void) {
     std::lock_guard<std::mutex> lock(s_monitored_mutex);
+    ensure_monitored_ids_seeded_locked();
     std::vector<uint32_t> ids(s_monitored_ids.begin(), s_monitored_ids.end());
     std::sort(ids.begin(), ids.end());
     return ids;
@@ -456,7 +537,10 @@ void mqtt_mgr_reset_monitored_ids(void) {
     std::lock_guard<std::mutex> file_lock(s_monitored_file_mutex);
     {
         std::lock_guard<std::mutex> lock(s_monitored_mutex);
-        s_monitored_ids = s_default_monitored_ids;
+        s_monitored_ids.clear();
+        s_monitored_ids.reserve(sizeof(s_default_monitored_ids) / sizeof(s_default_monitored_ids[0]));
+        s_monitored_ids.insert(std::begin(s_default_monitored_ids), std::end(s_default_monitored_ids));
+        s_monitored_ids_initialized = true;
     }
     s_monitored_ids_persist_pending.store(false, std::memory_order_release);
     unlink(MONITORED_IDS_FILE);
@@ -471,6 +555,7 @@ bool mqtt_mgr_is_monitored_ids_customized(void) {
 
 bool mqtt_mgr_is_monitored_id(uint32_t can_id) {
     std::lock_guard<std::mutex> lock(s_monitored_mutex);
+    ensure_monitored_ids_seeded_locked();
     return s_monitored_ids.find(can_id) != s_monitored_ids.end();
 }
 
@@ -478,6 +563,7 @@ static void publish_ha_discovery(esp_mqtt_client_handle_t client, const CanEntit
     if (!client || entity.ha_domain.empty()) return;
 
     cJSON *root = cJSON_CreateObject();
+    if (!root) return;
     cJSON_AddStringToObject(root, "name", entity.ha_name.c_str());
 
     std::string unique_id = DEVICE_ID + "_" + entity.id;
@@ -490,8 +576,17 @@ static void publish_ha_discovery(esp_mqtt_client_handle_t client, const CanEntit
 
     if (!entity.options.empty()) {
         cJSON *options_array = cJSON_AddArrayToObject(root, "options");
+        if (!options_array) {
+            cJSON_Delete(root);
+            return;
+        }
         for (const auto& opt : entity.options) {
-            cJSON_AddItemToArray(options_array, cJSON_CreateString(opt.label.c_str()));
+            cJSON *opt_str = cJSON_CreateString(opt.label.c_str());
+            if (!opt_str || !cJSON_AddItemToArray(options_array, opt_str)) {
+                if (opt_str) cJSON_Delete(opt_str);
+                cJSON_Delete(root);
+                return;
+            }
         }
     }
 
@@ -512,6 +607,10 @@ static void publish_ha_discovery(esp_mqtt_client_handle_t client, const CanEntit
     }
 
     cJSON *device = cJSON_AddObjectToObject(root, "device");
+    if (!device) {
+        cJSON_Delete(root);
+        return;
+    }
     cJSON_AddStringToObject(device, "identifiers", DEVICE_ID.c_str());
     cJSON_AddStringToObject(device, "name", ("CAN Do (" + DEVICE_ID + ")").c_str());
     cJSON_AddStringToObject(device, "model", "Edge Engine");
@@ -536,6 +635,7 @@ static void publish_ha_automation_discovery(esp_mqtt_client_handle_t client, con
     if (!client || !rule.ha_expose || rule.id.empty()) return;
 
     cJSON *root = cJSON_CreateObject();
+    if (!root) return;
     cJSON_AddStringToObject(root, "name", rule.name.c_str());
 
     std::string unique_id = DEVICE_ID + "_auto_" + rule.id;
@@ -561,6 +661,10 @@ static void publish_ha_automation_discovery(esp_mqtt_client_handle_t client, con
     cJSON_AddStringToObject(root, "state_off", "OFF");
 
     cJSON *device = cJSON_AddObjectToObject(root, "device");
+    if (!device) {
+        cJSON_Delete(root);
+        return;
+    }
     cJSON_AddStringToObject(device, "identifiers", DEVICE_ID.c_str());
     cJSON_AddStringToObject(device, "name", ("CAN Do (" + DEVICE_ID + ")").c_str());
     cJSON_AddStringToObject(device, "model", "Edge Engine");
@@ -644,9 +748,10 @@ static void mqtt_post_connect_sync_task(void* arg) {
         if (!s_mqtt_connected.load() || is_superseded()) continue;
 
         // 1. Stream cached CAN frames with yields so outbox and IDLE0 never starve
-        std::vector<uint32_t> mon_snapshot;
+        PsramVector<uint32_t> mon_snapshot;
         {
             std::lock_guard<std::mutex> lock(s_monitored_mutex);
+            ensure_monitored_ids_seeded_locked();
             mon_snapshot.assign(s_monitored_ids.begin(), s_monitored_ids.end());
         }
         int count = 0;
@@ -744,21 +849,24 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             ESP_LOGI(TAG, "MQTT connected to broker (%s)", broker_url);
 
             // 1. Pack all 14 control topics into a SINGLE MQTT SUBSCRIBE packet (QoS 0)
-            // Avoids 14 separate WebSocket frames AND avoids # wildcard broker echo on /state/*
-            std::string t_dev_tx       = MQTT_BASE_TOPIC + "/+/tx";
-            std::string t_base_tx      = MQTT_BASE_TOPIC + "/tx";
-            std::string t_dev_notify   = MQTT_BASE_TOPIC + "/+/notify";
-            std::string t_base_notify  = MQTT_BASE_TOPIC + "/notify";
-            std::string t_dev_nav      = MQTT_BASE_TOPIC + "/+/nav/set";
-            std::string t_base_nav     = MQTT_BASE_TOPIC + "/nav/set";
-            std::string t_dev_sub_ids  = MQTT_BASE_TOPIC + "/+/subscribe_ids";
-            std::string t_base_sub_ids = MQTT_BASE_TOPIC + "/subscribe_ids";
-            std::string t_dev_cfg_set  = MQTT_BASE_TOPIC + "/+/config/automations/set";
-            std::string t_base_cfg_set = MQTT_BASE_TOPIC + "/config/automations/set";
-            std::string t_dev_cfg_get  = MQTT_BASE_TOPIC + "/+/config/automations/get";
-            std::string t_base_cfg_get = MQTT_BASE_TOPIC + "/config/automations/get";
-            std::string t_dev_set_all  = MQTT_BASE_TOPIC + "/+/set/#";
-            std::string t_base_set_all = MQTT_BASE_TOPIC + "/set/#";
+            // Stored in flash rodata to avoid 14 stack std::string objects on esp_mqtt_task
+            static constexpr esp_mqtt_topic_t kSubList[] = {
+                { .filter = MQTT_BASE_TOPIC_LIT "/+/tx",                     .qos = 0 },
+                { .filter = MQTT_BASE_TOPIC_LIT "/tx",                       .qos = 0 },
+                { .filter = MQTT_BASE_TOPIC_LIT "/+/notify",                 .qos = 0 },
+                { .filter = MQTT_BASE_TOPIC_LIT "/notify",                   .qos = 0 },
+                { .filter = MQTT_BASE_TOPIC_LIT "/+/nav/set",                .qos = 0 },
+                { .filter = MQTT_BASE_TOPIC_LIT "/nav/set",                  .qos = 0 },
+                { .filter = MQTT_BASE_TOPIC_LIT "/+/subscribe_ids",          .qos = 0 },
+                { .filter = MQTT_BASE_TOPIC_LIT "/subscribe_ids",            .qos = 0 },
+                { .filter = MQTT_BASE_TOPIC_LIT "/+/config/automations/set", .qos = 0 },
+                { .filter = MQTT_BASE_TOPIC_LIT "/config/automations/set",   .qos = 0 },
+                { .filter = MQTT_BASE_TOPIC_LIT "/+/config/automations/get", .qos = 0 },
+                { .filter = MQTT_BASE_TOPIC_LIT "/config/automations/get",   .qos = 0 },
+                { .filter = MQTT_BASE_TOPIC_LIT "/+/set/#",                  .qos = 0 },
+                { .filter = MQTT_BASE_TOPIC_LIT "/set/#",                    .qos = 0 },
+                { .filter = "homeassistant/status",                          .qos = 0 },
+            };
 
             bool ha_disco_en = false;
             {
@@ -766,32 +874,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 ha_disco_en = s_mqtt_cfg.ha_discovery_enabled;
             }
 
-            const esp_mqtt_topic_t sub_list[] = {
-                { .filter = t_dev_tx.c_str(),       .qos = 0 },
-                { .filter = t_base_tx.c_str(),      .qos = 0 },
-                { .filter = t_dev_notify.c_str(),   .qos = 0 },
-                { .filter = t_base_notify.c_str(),  .qos = 0 },
-                { .filter = t_dev_nav.c_str(),      .qos = 0 },
-                { .filter = t_base_nav.c_str(),     .qos = 0 },
-                { .filter = t_dev_sub_ids.c_str(),  .qos = 0 },
-                { .filter = t_base_sub_ids.c_str(), .qos = 0 },
-                { .filter = t_dev_cfg_set.c_str(),  .qos = 0 },
-                { .filter = t_base_cfg_set.c_str(), .qos = 0 },
-                { .filter = t_dev_cfg_get.c_str(),  .qos = 0 },
-                { .filter = t_base_cfg_get.c_str(), .qos = 0 },
-                { .filter = t_dev_set_all.c_str(),  .qos = 0 },
-                { .filter = t_base_set_all.c_str(), .qos = 0 },
-                { .filter = "homeassistant/status", .qos = 0 },
-            };
-
-            const int sub_count = (int)(sizeof(sub_list) / sizeof(sub_list[0])) - (ha_disco_en ? 0 : 1);
-            esp_mqtt_client_subscribe_multiple(event->client, sub_list, sub_count);
+            const int sub_count = (int)(sizeof(kSubList) / sizeof(kSubList[0])) - (ha_disco_en ? 0 : 1);
+            esp_mqtt_client_subscribe_multiple(event->client, kSubList, sub_count);
 
             // Cold-boot fallback: If RTC state cache was empty, subscribe to retained entity states once
             if (!g_state_restored_from_rtc.load() && !s_hydrated_from_mqtt.load(std::memory_order_acquire)) {
-                std::string state_sub = MQTT_BASE_TOPIC + "/state/+";
-                esp_mqtt_client_subscribe(event->client, state_sub.c_str(), 0);
-                ESP_LOGI(TAG, "Cold boot detected without RTC cache: Subscribed to retained states (%s)", state_sub.c_str());
+                static constexpr const char* kStateSub = MQTT_BASE_TOPIC_LIT "/state/+";
+                esp_mqtt_client_subscribe(event->client, kStateSub, 0);
+                ESP_LOGI(TAG, "Cold boot detected without RTC cache: Subscribed to retained states (%s)", kStateSub);
             }
 
             // 2. Mark connected after subscribe finishes and publish LWT online status
@@ -799,8 +889,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             s_mqtt_connected.store(true, std::memory_order_relaxed);
             uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
             s_last_ha_birth_sync_ms.store(now_ms ? now_ms : 1, std::memory_order_relaxed);
-            std::string status_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/status";
-            mqtt_enqueue_nonblocking(status_topic.c_str(), "online", 6, 0, 1);
+            char status_topic[64];
+            snprintf(status_topic, sizeof(status_topic), "%s/%s/status", MQTT_BASE_TOPIC_LIT, DEVICE_ID.c_str());
+            mqtt_enqueue_nonblocking(status_topic, "online", 6, 0, 1);
 
             // 3. Defer state dump & HA discovery to background worker (queues fresh pass if already running)
             trigger_post_connect_sync();
@@ -815,9 +906,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             break;
 
         case MQTT_EVENT_DATA: {
-            if (event->data_len < 0 || event->total_data_len < 0 || event->current_data_offset < 0) {
-                ESP_LOGW(TAG, "Invalid MQTT_EVENT_DATA bounds (offset=%d, len=%d, total=%d); aborting partial RX",
-                         event->current_data_offset, event->data_len, event->total_data_len);
+            if (event->data_len < 0 || event->total_data_len < 0 || event->current_data_offset < 0 ||
+                event->topic_len < 0 || (event->topic_len > 0 && event->topic == nullptr) ||
+                (event->data_len > 0 && event->data == nullptr)) {
+                ESP_LOGW(TAG, "Invalid MQTT_EVENT_DATA bounds/pointers (offset=%d, len=%d, total=%d, topic_len=%d); aborting partial RX",
+                         event->current_data_offset, event->data_len, event->total_data_len, event->topic_len);
                 abort_mqtt_automations_rx();
                 abort_mqtt_reassembly_rx();
                 return;
@@ -846,9 +939,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 return false;
             };
 
-            const bool is_new_message = (event->current_data_offset == 0 && event->topic_len > 0);
+            const bool is_new_message = (event->current_data_offset == 0 && event->topic != nullptr && event->topic_len > 0);
             if (is_new_message) {
-                std::string init_topic(event->topic, event->topic_len);
+                std::string init_topic(event->topic, static_cast<size_t>(event->topic_len));
                 std::string init_suffix;
                 if (extract_target_topic_suffix(init_topic, init_suffix) && init_suffix == "config/automations/set") {
                     abort_mqtt_automations_rx();
@@ -975,7 +1068,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                              event->data_len, event->total_data_len);
                     return;
                 }
-                topic.assign(event->topic, event->topic_len);
+                topic.assign(event->topic, static_cast<size_t>(event->topic_len));
 
                 if (event->total_data_len > event->data_len) {
                     std::string init_suffix;
@@ -1039,7 +1132,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     return;
                 }
 
-                if (event->data && event->data_len > 0) {
+                if (event->data != nullptr && event->data_len > 0) {
                     single_payload.assign(event->data, static_cast<size_t>(event->data_len));
                 }
                 payload_cstr = single_payload.c_str();
@@ -1113,7 +1206,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             std::string state_prefix = MQTT_BASE_TOPIC + "/state/";
             if (topic.rfind(state_prefix, 0) == 0 && topic.length() > state_prefix.length()) {
                 std::string entity_id = topic.substr(state_prefix.length());
-                can_engine_hydrate_from_mqtt(entity_id, std::string(payload_cstr, payload_len));
+                can_engine_hydrate_from_mqtt(
+                    entity_id,
+                    (payload_cstr != nullptr && payload_len > 0) ? std::string(payload_cstr, payload_len) : std::string());
                 return;
             }
 
@@ -1134,10 +1229,10 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             bool is_set_cmd = (suffix.rfind("set/", 0) == 0);
 
             if (is_notify) {
-                std::string msg(payload_cstr, payload_len);
+                std::string msg = (payload_cstr != nullptr && payload_len > 0) ? std::string(payload_cstr, payload_len) : std::string();
                 std::string level = "info";
 
-                cJSON* root = cJSON_Parse(payload_cstr);
+                cJSON* root = (payload_cstr != nullptr && payload_len > 0) ? cJSON_ParseWithLength(payload_cstr, payload_len) : nullptr;
                 if (root) {
                     cJSON* m = cJSON_GetObjectItem(root, "message");
                     if (!m) m = cJSON_GetObjectItem(root, "text");
@@ -1158,7 +1253,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     track_popup_show_info(msg.c_str());
                 }
             } else if (is_nav_set) {
-                cJSON* root = cJSON_Parse(payload_cstr);
+                cJSON* root = (payload_cstr != nullptr && payload_len > 0) ? cJSON_ParseWithLength(payload_cstr, payload_len) : nullptr;
                 if (root) {
                     cJSON* act = cJSON_GetObjectItem(root, "action");
                     if (act && cJSON_IsString(act) && strcmp(act->valuestring, "clear") == 0) {
@@ -1248,7 +1343,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     cJSON_Delete(root);
                 }
             } else if (is_tx) {
-                cJSON* root = cJSON_Parse(payload_cstr);
+                cJSON* root = (payload_cstr != nullptr && payload_len > 0) ? cJSON_ParseWithLength(payload_cstr, payload_len) : nullptr;
                 if (root) {
                     bool handled = false;
                     cJSON* target_entity = cJSON_GetObjectItem(root, "entity");
@@ -1285,9 +1380,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                         PsramVector<ActionStep> steps;
                         cJSON* steps_arr = cJSON_GetObjectItem(root, "steps");
                         if (steps_arr && cJSON_IsArray(steps_arr) && cJSON_GetArraySize(steps_arr) > 0) {
+                            steps.reserve(static_cast<size_t>(cJSON_GetArraySize(steps_arr)));
                             cJSON* s_item = nullptr;
                             cJSON_ArrayForEach(s_item, steps_arr) {
-                                ActionStep step;
+                                steps.emplace_back();
+                                ActionStep& step = steps.back();
                                 if (parse_action_step(s_item, step)) {
                                     if (step.type == ActionType::TRANSMIT_FRAME) {
                                         if (step.can_id == 0) step.can_id = can_id;
@@ -1295,20 +1392,24 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                                         if (step.repeat == 0) step.repeat = 1;
                                         if (step.delay_ms == delay_ms) step.delay_ms = 0;
                                     }
-                                    if (step.type != ActionType::TRANSMIT_FRAME || step.can_id != 0) {
-                                        steps.push_back(std::move(step));
+                                    if (step.type == ActionType::TRANSMIT_FRAME && step.can_id == 0) {
+                                        steps.pop_back();
                                     }
+                                } else {
+                                    steps.pop_back();
                                 }
                             }
                         } else if (can_id != 0 && cJSON_GetObjectItem(root, "payload")) {
-                            ActionStep step;
+                            steps.emplace_back();
+                            ActionStep& step = steps.back();
                             if (parse_action_step(root, step)) {
                                 step.type = ActionType::TRANSMIT_FRAME;
                                 step.can_id = can_id;
                                 step.bus = top_bus;
                                 if (step.repeat == 0) step.repeat = 1;
                                 if (step.delay_ms == delay_ms) step.delay_ms = 0;
-                                steps.push_back(std::move(step));
+                            } else {
+                                steps.pop_back();
                             }
                         }
 
@@ -1328,7 +1429,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     cJSON_Delete(root);
                 }
             } else if (is_sub_ids) {
-                cJSON* root = cJSON_Parse(payload_cstr);
+                cJSON* root = (payload_cstr != nullptr && payload_len > 0) ? cJSON_ParseWithLength(payload_cstr, payload_len) : nullptr;
                 if (root && cJSON_IsArray(root)) {
                     std::vector<uint32_t> ids;
                     int count = cJSON_GetArraySize(root);
@@ -1400,17 +1501,28 @@ static void load_settings_from_fs_locked(void) {
     long len = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    if (len <= 0) {
+    if (len <= 0 || static_cast<size_t>(len) > kMaxMqttConfigFileBytes) {
+        if (len > static_cast<long>(kMaxMqttConfigFileBytes)) {
+            ESP_LOGW(TAG, "Ignoring oversized %s (%ld > %zu bytes)", MQTT_CONFIG_FILE, len, kMaxMqttConfigFileBytes);
+        }
         fclose(f);
         s_mqtt_initialized = true;
         return;
     }
 
-    std::string content(len, '\0');
-    fread(&content[0], 1, len, f);
+    char* content = alloc_mqtt_pub_buf(static_cast<size_t>(len) + 1);
+    if (!content) {
+        ESP_LOGE(TAG, "Failed to allocate %ld bytes for %s", len + 1, MQTT_CONFIG_FILE);
+        fclose(f);
+        s_mqtt_initialized = true;
+        return;
+    }
+    size_t nread = fread(content, 1, static_cast<size_t>(len), f);
     fclose(f);
+    content[nread] = '\0';
 
-    cJSON* root = cJSON_Parse(content.c_str());
+    cJSON* root = cJSON_ParseWithLength(content, nread);
+    free(content);
     if (!root) {
         s_mqtt_initialized = true;
         return;
@@ -1654,11 +1766,15 @@ bool mqtt_mgr_save_config(const MqttConfig& cfg) {
             ESP_LOGE(TAG, "Failed to allocate JSON object for %s", MQTT_CONFIG_FILE);
             return false;
         }
-        cJSON_AddBoolToObject(root, "enabled", cfg.enabled);
-        cJSON_AddBoolToObject(root, "ha_discovery", cfg.ha_discovery_enabled);
-        cJSON_AddStringToObject(root, "broker_url", cfg.broker_url.c_str());
-        cJSON_AddStringToObject(root, "username", cfg.username.c_str());
-        cJSON_AddStringToObject(root, "password", cfg.password.c_str());
+        if (!cJSON_AddBoolToObject(root, "enabled", cfg.enabled) ||
+            !cJSON_AddBoolToObject(root, "ha_discovery", cfg.ha_discovery_enabled) ||
+            !cJSON_AddStringToObject(root, "broker_url", cfg.broker_url.c_str()) ||
+            !cJSON_AddStringToObject(root, "username", cfg.username.c_str()) ||
+            !cJSON_AddStringToObject(root, "password", cfg.password.c_str())) {
+            cJSON_Delete(root);
+            ESP_LOGE(TAG, "Failed to populate JSON object for %s", MQTT_CONFIG_FILE);
+            return false;
+        }
 
         char* rendered = cJSON_Print(root);
         cJSON_Delete(root);
@@ -1694,7 +1810,7 @@ static PsramVector<AutomationRule> snapshot_automations_for_mqtt(void) {
 
 static void refresh_automation_discovery_locked_check(void) {
     bool disco_en = false;
-    std::unordered_set<std::string> prev_exposed;
+    PsramUnorderedSet<std::string> prev_exposed;
     {
         std::lock_guard<std::mutex> lock(s_mqtt_mutex);
         disco_en = s_mqtt_cfg.ha_discovery_enabled;
@@ -1703,7 +1819,7 @@ static void refresh_automation_discovery_locked_check(void) {
     if (!disco_en) return;
 
     PsramVector<AutomationRule> rules_snapshot = snapshot_automations_for_mqtt();
-    std::unordered_set<std::string> new_exposed;
+    PsramUnorderedSet<std::string> new_exposed;
     for (const auto& rule : rules_snapshot) {
         if (rule.ha_expose && !rule.id.empty()) {
             new_exposed.insert(rule.id);
@@ -1924,7 +2040,7 @@ void mqtt_mgr_publish_discovery(void) {
         });
 
         PsramVector<AutomationRule> rules_snapshot = snapshot_automations_for_mqtt();
-        std::unordered_set<std::string> new_exposed;
+        PsramUnorderedSet<std::string> new_exposed;
         for (const auto& rule : rules_snapshot) {
             if (!global_mqtt_client || !s_mqtt_connected.load()) break;
             if (rule.ha_expose && !rule.id.empty()) {
@@ -1964,20 +2080,22 @@ void mqtt_mgr_clear_discovery(void) {
 
 void mqtt_mgr_publish_vbat(float vbat) {
     if (!global_mqtt_client || !s_mqtt_connected.load(std::memory_order_relaxed)) return;
+    if (!std::isfinite(vbat)) return;
 
     char val_str[16];
     int len = snprintf(val_str, sizeof(val_str), "%.1f", vbat);
     if (len <= 0) return;
+    int safe_len = std::min(len, static_cast<int>(sizeof(val_str) - 1));
 
     // Publish to vbat and cond_aux_12v_battery topics (do NOT overwrite raw 8-byte hex 0x1CF topic!)
     std::string vbat_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/vbat";
-    mqtt_enqueue_nonblocking(vbat_topic.c_str(), val_str, len, 0, 1);
+    mqtt_enqueue_nonblocking(vbat_topic.c_str(), val_str, safe_len, 0, 1);
 
     std::string entity_topic = MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/cond_aux_12v_battery";
-    mqtt_enqueue_nonblocking(entity_topic.c_str(), val_str, len, 0, 1);
+    mqtt_enqueue_nonblocking(entity_topic.c_str(), val_str, safe_len, 0, 1);
 
     std::string ha_state_topic = MQTT_BASE_TOPIC + "/state/cond_aux_12v_battery";
-    mqtt_enqueue_nonblocking(ha_state_topic.c_str(), val_str, len, 0, 1);
+    mqtt_enqueue_nonblocking(ha_state_topic.c_str(), val_str, safe_len, 0, 1);
 }
 
 void mqtt_mgr_publish_bms(float kw, float soc, float v, float a, float delta_mv, int min_t, int max_t) {
@@ -1985,28 +2103,33 @@ void mqtt_mgr_publish_bms(float kw, float soc, float v, float a, float delta_mv,
     (void)min_t;
     (void)max_t;
 
-    char val_str[32];
-    int len;
+    auto publish_bms_float = [](const char* metric, const char* fmt, float value) {
+        if (!std::isfinite(value)) return;
+        char val_str[32];
+        int len = snprintf(val_str, sizeof(val_str), fmt, value);
+        if (len <= 0) return;
+        int safe_len = std::min(len, static_cast<int>(sizeof(val_str) - 1));
 
-    len = snprintf(val_str, sizeof(val_str), "%.2f", kw);
-    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_power_kw").c_str(), val_str, len, 0, 1);
-    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/state/bms_hv_power_kw").c_str(), val_str, len, 0, 1);
+        char dev_topic[96];
+        int dev_len = snprintf(dev_topic, sizeof(dev_topic), "%s/%s/state/%s",
+                               MQTT_BASE_TOPIC_LIT, DEVICE_ID.c_str(), metric);
+        if (dev_len > 0 && dev_len < static_cast<int>(sizeof(dev_topic))) {
+            mqtt_enqueue_nonblocking(dev_topic, val_str, safe_len, 0, 1);
+        }
 
-    len = snprintf(val_str, sizeof(val_str), "%.1f", soc);
-    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_display_soc").c_str(), val_str, len, 0, 1);
-    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/state/bms_display_soc").c_str(), val_str, len, 0, 1);
+        char ha_topic[96];
+        int ha_len = snprintf(ha_topic, sizeof(ha_topic), "%s/state/%s",
+                              MQTT_BASE_TOPIC_LIT, metric);
+        if (ha_len > 0 && ha_len < static_cast<int>(sizeof(ha_topic))) {
+            mqtt_enqueue_nonblocking(ha_topic, val_str, safe_len, 0, 1);
+        }
+    };
 
-    len = snprintf(val_str, sizeof(val_str), "%.1f", v);
-    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_voltage").c_str(), val_str, len, 0, 1);
-    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/state/bms_hv_voltage").c_str(), val_str, len, 0, 1);
-
-    len = snprintf(val_str, sizeof(val_str), "%.1f", a);
-    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_hv_current").c_str(), val_str, len, 0, 1);
-    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/state/bms_hv_current").c_str(), val_str, len, 0, 1);
-
-    len = snprintf(val_str, sizeof(val_str), "%.0f", delta_mv);
-    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/" + DEVICE_ID + "/state/bms_cell_delta_mv").c_str(), val_str, len, 0, 1);
-    mqtt_enqueue_nonblocking((MQTT_BASE_TOPIC + "/state/bms_cell_delta_mv").c_str(), val_str, len, 0, 1);
+    publish_bms_float("bms_hv_power_kw", "%.2f", kw);
+    publish_bms_float("bms_display_soc", "%.1f", soc);
+    publish_bms_float("bms_hv_voltage", "%.1f", v);
+    publish_bms_float("bms_hv_current", "%.1f", a);
+    publish_bms_float("bms_cell_delta_mv", "%.0f", delta_mv);
 }
 
 void mqtt_mgr_publish_ble_button(const std::string& address, const std::string& button, const std::string& action, const std::string& combo, uint32_t hold_seconds) {
