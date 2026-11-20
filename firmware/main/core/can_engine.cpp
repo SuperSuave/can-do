@@ -1,4 +1,5 @@
 #include "can_engine.h"
+#include "psram_alloc.h"
 #include "parser.h"
 #include "api.h"
 #include "gvret_server.h"
@@ -38,11 +39,26 @@
 #include "cJSON.h"
 #include <cstdio>
 
+template <typename K>
+using PsramUnorderedSet = std::unordered_set<K, std::hash<K>, std::equal_to<K>, PsramAllocator<K>>;
+
 static bool mac_matches(const std::string& a, const std::string& b) {
-    std::string clean_a, clean_b;
-    for (char c : a) { if (isxdigit((unsigned char)c)) clean_a += (char)tolower((unsigned char)c); }
-    for (char c : b) { if (isxdigit((unsigned char)c)) clean_b += (char)tolower((unsigned char)c); }
-    return !clean_a.empty() && clean_a == clean_b;
+    const char* pa = a.c_str();
+    const char* pb = b.c_str();
+    bool matched_any = false;
+    while (true) {
+        while (*pa && !isxdigit((unsigned char)*pa)) ++pa;
+        while (*pb && !isxdigit((unsigned char)*pb)) ++pb;
+        if (!*pa || !*pb) {
+            return matched_any && (*pa == '\0') && (*pb == '\0');
+        }
+        if (tolower((unsigned char)*pa) != tolower((unsigned char)*pb)) {
+            return false;
+        }
+        matched_any = true;
+        ++pa;
+        ++pb;
+    }
 }
 
 
@@ -114,7 +130,7 @@ extern "C" bool can_bus_is_available(can_bus_t bus) {
     if (dual_can_is_available(bus)) return true;
     if (bus == CAN_BUS_0) {
         twai_status_info_t info;
-        return (twai_get_status_info(&info) == ESP_OK && info.state == TWAI_STATE_RUNNING);
+        return (can_engine_get_status_info(&info) == ESP_OK && info.state == TWAI_STATE_RUNNING);
     }
     return false;
 }
@@ -204,10 +220,14 @@ extern "C" esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t
         return ESP_ERR_NOT_FOUND;
     }
 
+    const TickType_t max_wait = pdMS_TO_TICKS(50);
+    if (ticks_to_wait > max_wait) {
+        ticks_to_wait = max_wait;
+    }
+
     SemaphoreHandle_t mtx = get_or_create_twai_mutex();
-    TickType_t mutex_wait = ticks_to_wait < pdMS_TO_TICKS(50) ? pdMS_TO_TICKS(50) : ticks_to_wait;
     if (mtx) {
-        if (xSemaphoreTake(mtx, mutex_wait) != pdTRUE) {
+        if (xSemaphoreTake(mtx, max_wait) != pdTRUE) {
             return ESP_ERR_TIMEOUT;
         }
     }
@@ -488,7 +508,7 @@ struct BleBeaconState {
 };
 static std::unordered_map<std::string, BleBeaconState> s_ble_beacons;
 
-std::unordered_map<uint32_t, CachedCanFrame> can_state_cache;
+static PsramUnorderedMap<uint32_t, CachedCanFrame> can_state_cache;
 QueueHandle_t tx_command_queue = nullptr;
 extern esp_mqtt_client_handle_t global_mqtt_client;
 
@@ -586,6 +606,10 @@ bool can_state_cache_get(uint32_t can_id, uint8_t byte_index, uint32_t* out_val)
 }
 
 static QueueHandle_t s_can_inject_queue = nullptr;
+#if CONFIG_SPIRAM
+static StaticQueue_t s_can_inject_queue_struct;
+static uint8_t* s_can_inject_queue_storage = nullptr;
+#endif
 
 bool can_engine_inject_frame(const twai_message_t* msg) {
     if (!s_can_inject_queue || !msg) return false;
@@ -595,10 +619,19 @@ bool can_engine_inject_frame(const twai_message_t* msg) {
 void init_can_engine(void) {
     (void)get_or_create_twai_mutex();
     if (!tx_command_queue) {
-        tx_command_queue = xQueueCreate(16, sizeof(CanBurstCmd*));
+        tx_command_queue = xQueueCreate(32, sizeof(CanBurstCmd*));
     }
     if (!s_can_inject_queue) {
-        s_can_inject_queue = xQueueCreate(128, sizeof(twai_message_t));
+#if CONFIG_SPIRAM
+        s_can_inject_queue_storage = static_cast<uint8_t*>(
+            heap_caps_malloc_prefer(128 * sizeof(twai_message_t), 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT));
+        if (s_can_inject_queue_storage) {
+            s_can_inject_queue = xQueueCreateStatic(128, sizeof(twai_message_t), s_can_inject_queue_storage, &s_can_inject_queue_struct);
+        }
+#endif
+        if (!s_can_inject_queue) {
+            s_can_inject_queue = xQueueCreate(128, sizeof(twai_message_t));
+        }
     }
     hud_nav_init(HUD_PLATFORM_EGMP_CANFD);
 }
@@ -643,20 +676,19 @@ static bool exchange_cached_can_frame(uint32_t can_id, const uint8_t* new_data, 
 }
 
 static std::bitset<2048> s_seen_std_ids;
-static std::unordered_set<uint32_t> s_active_can_ids;
+static PsramUnorderedSet<uint32_t> s_active_can_ids;
 static std::mutex s_active_ids_mutex;
 static std::atomic<bool> s_active_ids_changed{false};
 
 void can_engine_record_active_id(uint32_t can_id) {
+    std::lock_guard<std::mutex> lock(s_active_ids_mutex);
     if (can_id < 2048) {
         if (!s_seen_std_ids.test(can_id)) {
             s_seen_std_ids.set(can_id);
-            std::lock_guard<std::mutex> lock(s_active_ids_mutex);
             s_active_can_ids.insert(can_id);
             s_active_ids_changed.store(true, std::memory_order_release);
         }
     } else {
-        std::lock_guard<std::mutex> lock(s_active_ids_mutex);
         if (s_active_can_ids.find(can_id) == s_active_can_ids.end()) {
             s_active_can_ids.insert(can_id);
             s_active_ids_changed.store(true, std::memory_order_release);
@@ -681,6 +713,7 @@ void can_engine_clear_active_ids_changed(void) {
 
 void rtc_clock_anchor_update(uint64_t epoch_sec) {
     if (epoch_sec < 1704067200) return; // Must be >= Jan 1, 2024
+    std::lock_guard<std::mutex> lock(s_cache_mutex);
     s_rtc_can_cache.wall_time_epoch_at_sync = epoch_sec;
     s_rtc_can_cache.esp_timer_us_at_sync = esp_timer_get_time();
     s_rtc_can_cache.time_valid = 1;
@@ -1139,7 +1172,7 @@ static bool condition_uses_can_id(const AutomationCondition& cond, uint32_t can_
 }
 
 static void collect_sustained_condition_can_ids(const AutomationCondition& cond,
-                                                std::unordered_set<uint32_t>& out_ids,
+                                                PsramUnorderedSet<uint32_t>& out_ids,
                                                 bool parent_sustained = false) {
     bool is_sustained = parent_sustained || (cond.for_ms > 0);
     if (is_sustained && cond.type == "can_state" && cond.can_id != 0) {
@@ -1150,7 +1183,7 @@ static void collect_sustained_condition_can_ids(const AutomationCondition& cond,
     }
 }
 
-static void collect_sustained_step_can_ids(const std::vector<ActionStep>& steps, std::unordered_set<uint32_t>& out_ids) {
+static void collect_sustained_step_can_ids(const std::vector<ActionStep>& steps, PsramUnorderedSet<uint32_t>& out_ids) {
     for (const auto& step : steps) {
         if (step.type == ActionType::IF_THEN) {
             for (const auto& c : step.if_conditions) collect_sustained_condition_can_ids(c, out_ids);
@@ -1290,15 +1323,68 @@ static bool is_trigger_match(const uint8_t* incoming_data, uint8_t dlc,
     return is_can_target_match(incoming_data, dlc, trig);
 }
 
+static CanBurstCmd* prepare_action_burst(uint32_t can_id, uint32_t delay_ms,
+                                         const std::vector<ActionStep>& steps,
+                                         const std::string& trigger_id,
+                                         std::shared_ptr<std::atomic<bool>> rule_is_running);
+static bool submit_action_burst(CanBurstCmd* cmd, TickType_t wait_ticks);
+
 struct FiredRuleEvent {
     std::string rule_id;
     std::string rule_name;
     std::string trig_id;
-    const char* source_label;
+    const char* source_label = "";
+    CanBurstCmd* pending_cmd = nullptr;
+
+    FiredRuleEvent() = default;
+    FiredRuleEvent(std::string rid, std::string rname, std::string tid, const char* src, CanBurstCmd* cmd = nullptr)
+        : rule_id(std::move(rid)), rule_name(std::move(rname)), trig_id(std::move(tid)), source_label(src), pending_cmd(cmd) {}
+    FiredRuleEvent(const FiredRuleEvent&) = delete;
+    FiredRuleEvent& operator=(const FiredRuleEvent&) = delete;
+    FiredRuleEvent(FiredRuleEvent&& other) noexcept
+        : rule_id(std::move(other.rule_id)),
+          rule_name(std::move(other.rule_name)),
+          trig_id(std::move(other.trig_id)),
+          source_label(other.source_label),
+          pending_cmd(other.pending_cmd) {
+        other.pending_cmd = nullptr;
+    }
+    FiredRuleEvent& operator=(FiredRuleEvent&& other) noexcept {
+        if (this != &other) {
+            release_pending();
+            rule_id = std::move(other.rule_id);
+            rule_name = std::move(other.rule_name);
+            trig_id = std::move(other.trig_id);
+            source_label = other.source_label;
+            pending_cmd = other.pending_cmd;
+            other.pending_cmd = nullptr;
+        }
+        return *this;
+    }
+    ~FiredRuleEvent() {
+        release_pending();
+    }
+    void release_pending() {
+        if (pending_cmd) {
+            if (pending_cmd->rule_is_running) {
+                pending_cmd->rule_is_running->store(false, std::memory_order_release);
+            }
+            delete pending_cmd;
+            pending_cmd = nullptr;
+        }
+    }
 };
 
-static void dispatch_fired_rule_events(const std::vector<FiredRuleEvent>& events) {
-    for (const auto& ev : events) {
+static void dispatch_fired_rule_events(std::vector<FiredRuleEvent>& events, TickType_t queue_wait = 0) {
+    for (auto& ev : events) {
+        if (ev.pending_cmd) {
+            CanBurstCmd* cmd = ev.pending_cmd;
+            ev.pending_cmd = nullptr;
+            if (!submit_action_burst(cmd, queue_wait)) {
+                ESP_LOGW(TAG, "%s dropped rule '%s': TX command queue full", ev.source_label, ev.rule_name.c_str());
+                continue;
+            }
+        }
         ESP_LOGI(TAG, "%s fired rule: %s (trigger: %s)", ev.source_label, ev.rule_name.c_str(), ev.trig_id.c_str());
         broadcast_ws_automation_event(ev.rule_id, ev.rule_name);
     }
@@ -1408,13 +1494,19 @@ static bool try_fire_rule_trigger(AutomationRule& rule, const AutomationTrigger&
 
     if (!passed) return false;
 
-    if (!queue_action_steps_ptr(0, 20, &rule.actions, trig.id, rule.is_running)) {
+    CanBurstCmd* cmd = prepare_action_burst(0, 20, rule.actions, trig.id, rule.is_running);
+    if (!cmd) {
+        return false;
+    }
+    if (fired_out) {
+        rule.last_exec_time_ms = now_ms;
+        fired_out->emplace_back(rule.id, rule.name, trig.id, source_label, cmd);
+        return true;
+    }
+    if (!submit_action_burst(cmd, 0)) {
         return false;
     }
     rule.last_exec_time_ms = now_ms;
-    if (fired_out) {
-        fired_out->push_back({rule.id, rule.name, trig.id, source_label});
-    }
     return true;
 }
 
@@ -2138,7 +2230,7 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
         std::string matched_rule_id, matched_rule_name, matched_state;
         bool matched_rule = false;
         bool trigger_manual = false;
-        bool manual_ok = false;
+        CanBurstCmd* pending_manual_cmd = nullptr;
         {
             std::lock_guard<std::mutex> lock(g_automations_mutex);
             for (auto& rule : global_automations) {
@@ -2160,9 +2252,8 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
                         rule.last_exec_time_ms = now_ms;
                         if (rule.is_running && rule.is_running->load()) {
                             ESP_LOGW(TAG, "Rule '%s' is already executing; skipping manual trigger", rule.name.c_str());
-                            manual_ok = false;
                         } else {
-                            manual_ok = queue_action_steps_ptr(0, 20, &rule.actions, "manual_ha", rule.is_running);
+                            pending_manual_cmd = prepare_action_burst(0, 20, rule.actions, "manual_ha", rule.is_running);
                         }
                     }
                     break;
@@ -2171,6 +2262,7 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
         }
         if (matched_rule) {
             if (trigger_manual) {
+                bool manual_ok = pending_manual_cmd ? submit_action_burst(pending_manual_cmd, pdMS_TO_TICKS(10)) : false;
                 ESP_LOGI(TAG, "Triggering automation rule '%s' manually via command '%s'", matched_rule_id.c_str(), command_label.c_str());
                 broadcast_ws_automation_event(matched_rule_id, matched_rule_name);
                 return manual_ok;
@@ -2583,25 +2675,70 @@ bool queue_entity_command(const std::string& entity_id, const std::string& comma
     return ok;
 }
 
-bool steps_contain_async(const std::vector<ActionStep>& steps) {
+static constexpr uint32_t ASYNC_DURATION_THRESHOLD_MS = 500;
+
+static uint32_t estimate_steps_duration_ms(const std::vector<ActionStep>& steps,
+                                           uint32_t default_delay_ms,
+                                           bool* force_async,
+                                           int depth = 0) {
+    if (depth > MAX_BURST_RECURSION_DEPTH) {
+        if (force_async) *force_async = true;
+        return ASYNC_DURATION_THRESHOLD_MS;
+    }
+    uint64_t total_ms = 0;
     for (const auto& step : steps) {
         if (step.type == ActionType::REPEAT_UNTIL || step.type == ActionType::WAIT_FOR) {
-            return true;
+            if (force_async) *force_async = true;
+            return ASYNC_DURATION_THRESHOLD_MS;
         }
-        if (step.type == ActionType::DELAY && step.delay_ms >= 500) {
-            return true;
-        }
-        if (step.type == ActionType::IF_THEN) {
-            if (steps_contain_async(step.then_steps) || steps_contain_async(step.else_steps)) return true;
-        }
-        if (step.type == ActionType::CHOOSE) {
-            for (const auto& choice : step.choices) {
-                if (steps_contain_async(choice.sequence)) return true;
+        if (step.type == ActionType::DELAY) {
+            total_ms += step.delay_ms;
+        } else if (step.type == ActionType::TRANSMIT_FRAME) {
+            uint32_t frame_delay_ms = (step.delay_ms > 0) ? step.delay_ms : default_delay_ms;
+            total_ms += static_cast<uint64_t>(step.repeat) * static_cast<uint64_t>(frame_delay_ms);
+        } else if (step.type == ActionType::IF_THEN) {
+            bool branch_async = false;
+            uint32_t then_ms = estimate_steps_duration_ms(step.then_steps, default_delay_ms, &branch_async, depth + 1);
+            if (branch_async) {
+                if (force_async) *force_async = true;
+                return ASYNC_DURATION_THRESHOLD_MS;
             }
-            if (steps_contain_async(step.default_steps)) return true;
+            uint32_t else_ms = estimate_steps_duration_ms(step.else_steps, default_delay_ms, &branch_async, depth + 1);
+            if (branch_async) {
+                if (force_async) *force_async = true;
+                return ASYNC_DURATION_THRESHOLD_MS;
+            }
+            total_ms += (then_ms > else_ms) ? then_ms : else_ms;
+        } else if (step.type == ActionType::CHOOSE) {
+            uint32_t max_branch_ms = 0;
+            bool branch_async = false;
+            for (const auto& choice : step.choices) {
+                uint32_t br_ms = estimate_steps_duration_ms(choice.sequence, default_delay_ms, &branch_async, depth + 1);
+                if (branch_async) {
+                    if (force_async) *force_async = true;
+                    return ASYNC_DURATION_THRESHOLD_MS;
+                }
+                if (br_ms > max_branch_ms) max_branch_ms = br_ms;
+            }
+            uint32_t def_ms = estimate_steps_duration_ms(step.default_steps, default_delay_ms, &branch_async, depth + 1);
+            if (branch_async) {
+                if (force_async) *force_async = true;
+                return ASYNC_DURATION_THRESHOLD_MS;
+            }
+            if (def_ms > max_branch_ms) max_branch_ms = def_ms;
+            total_ms += max_branch_ms;
+        }
+        if (total_ms >= ASYNC_DURATION_THRESHOLD_MS) {
+            return ASYNC_DURATION_THRESHOLD_MS;
         }
     }
-    return false;
+    return static_cast<uint32_t>(total_ms);
+}
+
+bool steps_contain_async(const std::vector<ActionStep>& steps, uint32_t default_delay_ms = 20) {
+    bool force_async = false;
+    uint32_t est_ms = estimate_steps_duration_ms(steps, default_delay_ms, &force_async, 0);
+    return force_async || (est_ms >= ASYNC_DURATION_THRESHOLD_MS);
 }
 
 static std::atomic<int> s_active_async_tasks{0};
@@ -2635,31 +2772,47 @@ static void execute_can_burst_async_task(void* arg) {
     vTaskDelete(NULL);
 }
 
-bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>& steps, const std::string& trigger_id, std::shared_ptr<std::atomic<bool>> rule_is_running) {
+static CanBurstCmd* prepare_action_burst(uint32_t can_id, uint32_t delay_ms,
+                                         const std::vector<ActionStep>& steps,
+                                         const std::string& trigger_id,
+                                         std::shared_ptr<std::atomic<bool>> rule_is_running) {
     if (!tx_command_queue) {
-        if (rule_is_running) rule_is_running->store(false);
-        return false;
+        if (rule_is_running) rule_is_running->store(false, std::memory_order_release);
+        return nullptr;
     }
     CanBurstCmd* cmd = new (std::nothrow) CanBurstCmd();
     if (!cmd) {
-        return false;
+        return nullptr;
     }
     if (rule_is_running && rule_is_running->exchange(true, std::memory_order_acq_rel)) {
         delete cmd;
-        return false;
+        return nullptr;
     }
     cmd->can_id = can_id;
     cmd->delay_ms = delay_ms;
     cmd->trigger_id = trigger_id;
     cmd->inline_steps = steps;
-    cmd->async = steps_contain_async(steps);
+    cmd->async = steps_contain_async(steps, delay_ms);
     cmd->rule_is_running = rule_is_running;
-    if (xQueueSend(tx_command_queue, &cmd, pdMS_TO_TICKS(10)) != pdTRUE) {
-        if (rule_is_running) rule_is_running->store(false, std::memory_order_release);
+    return cmd;
+}
+
+static bool submit_action_burst(CanBurstCmd* cmd, TickType_t wait_ticks) {
+    if (!cmd) return false;
+    if (!tx_command_queue || xQueueSend(tx_command_queue, &cmd, wait_ticks) != pdTRUE) {
+        if (cmd->rule_is_running) cmd->rule_is_running->store(false, std::memory_order_release);
         delete cmd;
         return false;
     }
     return true;
+}
+
+bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>& steps, const std::string& trigger_id, std::shared_ptr<std::atomic<bool>> rule_is_running) {
+    CanBurstCmd* cmd = prepare_action_burst(can_id, delay_ms, steps, trigger_id, rule_is_running);
+    if (!cmd) {
+        return false;
+    }
+    return submit_action_burst(cmd, pdMS_TO_TICKS(10));
 }
 
 bool queue_action_steps_ptr(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>* steps, const std::string& trigger_id, std::shared_ptr<std::atomic<bool>> rule_is_running) {
@@ -2669,7 +2822,8 @@ bool queue_action_steps_ptr(uint32_t can_id, uint32_t delay_ms, const std::vecto
     return queue_action_steps(can_id, delay_ms, *steps, trigger_id, rule_is_running);
 }
 
-static void emit_live_entity_state_split(const std::string& entity_id, const std::string& mqtt_state, const std::string& ws_state) {
+static void emit_live_entity_state_split(const char* entity_id, const char* mqtt_state, const char* ws_state) {
+    if (!entity_id || !mqtt_state || !ws_state) return;
     {
         std::lock_guard<std::mutex> lock(g_catalog_mutex);
         for (auto& entity : global_catalog) {
@@ -2683,7 +2837,7 @@ static void emit_live_entity_state_split(const std::string& entity_id, const std
     broadcast_ws_state(entity_id, ws_state);
 }
 
-static void emit_live_entity_state(const std::string& entity_id, const std::string& state) {
+static void emit_live_entity_state(const char* entity_id, const char* state) {
     emit_live_entity_state_split(entity_id, state, state);
 }
 
@@ -2874,7 +3028,7 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
 
     // Transmission Gear Selection (0x045, 0x070, 0x130, 0x035)
     if ((identifier == 0x045 || identifier == 0x070 || identifier == 0x130 || identifier == 0x035) && data_length_code >= 6) {
-        std::string detected_gear;
+        const char* detected_gear = nullptr;
         if (identifier == 0x130) {
             if ((data[4] & 0xF0) == 0x10) detected_gear = "P";
             else if ((data[5] & 0xF0) == 0x50) detected_gear = "D";
@@ -2902,9 +3056,9 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
                 }
             }
         }
-        if (!detected_gear.empty()) {
-            static std::string s_last_gear = "";
-            if (detected_gear != s_last_gear) {
+        if (detected_gear) {
+            static const char* s_last_gear = nullptr;
+            if (!s_last_gear || strcmp(detected_gear, s_last_gear) != 0) {
                 s_last_gear = detected_gear;
                 emit_live_entity_state("vehicle_gear_state", detected_gear);
             }
@@ -2920,27 +3074,25 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
         bool rr = (data[7] & 0x01); // Rear Right Door
         bool is_locked = (data_length_code >= 3) ? (data[2] == 0x00 || (data[2] & 0x40) == 0) : true;
 
-        std::string new_door_state;
-        if (!fl && !fr && !rl && !rr) {
-            new_door_state = "All Doors Closed";
-        } else if (fl && fr && rl && rr) {
-            new_door_state = "All Doors Opened";
-        } else {
-            std::string s;
-            s += (fl ? "Driver Door Opened" : "Driver Door Closed");
-            s += ", ";
-            s += (fr ? "Passenger Door Opened" : "Passenger Door Closed");
-            s += ", ";
-            s += (rl ? "Rear Left Door Opened" : "Rear Left Door Closed");
-            s += ", ";
-            s += (rr ? "Rear Right Door Opened" : "Rear Right Door Closed");
-            new_door_state = s;
-        }
-
-        static std::string s_last_doors = "";
-        if (new_door_state != s_last_doors) {
-            s_last_doors = new_door_state;
-            emit_live_entity_state("doors_status", new_door_state);
+        uint8_t door_mask = static_cast<uint8_t>((fl ? 1u : 0u) | (fr ? 2u : 0u) | (rl ? 4u : 0u) | (rr ? 8u : 0u));
+        static uint8_t s_last_door_mask = 0xFF;
+        if (door_mask != s_last_door_mask) {
+            s_last_door_mask = door_mask;
+            char door_buf[128];
+            const char* door_state = nullptr;
+            if (door_mask == 0x00) {
+                door_state = "All Doors Closed";
+            } else if (door_mask == 0x0F) {
+                door_state = "All Doors Opened";
+            } else {
+                snprintf(door_buf, sizeof(door_buf), "%s, %s, %s, %s",
+                         fl ? "Driver Door Opened" : "Driver Door Closed",
+                         fr ? "Passenger Door Opened" : "Passenger Door Closed",
+                         rl ? "Rear Left Door Opened" : "Rear Left Door Closed",
+                         rr ? "Rear Right Door Opened" : "Rear Right Door Closed");
+                door_state = door_buf;
+            }
+            emit_live_entity_state("doors_status", door_state);
         }
 
         static int s_last_locked = -1;
@@ -3024,20 +3176,20 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
     // Active EV Charge Type (Native E-GMP 0x30B Byte 7 [D7], Legacy Gen 2 0x595 Byte 1 [D1])
     if (identifier == 0x30B && data_length_code >= 7) {
         uint8_t d7 = data[6];
-        std::string ctype = "Not Charging / Disconnected";
+        const char* ctype = "Not Charging / Disconnected";
         if ((d7 & 0x30) == 0x10) {
             ctype = "Standard AC Charging (Level 2)";
         } else if ((d7 & 0x0C) == 0x04) {
             ctype = "DC Fast Charging (CCS / 800V)";
         }
-        static std::string s_last_ctype = "";
-        if (ctype != s_last_ctype) {
+        static const char* s_last_ctype = nullptr;
+        if (!s_last_ctype || strcmp(ctype, s_last_ctype) != 0) {
             s_last_ctype = ctype;
             emit_live_entity_state("ev_charge_type_active", ctype);
         }
     } else if (identifier == 0x595 && data_length_code >= 1) {
         uint8_t d0 = data[0];
-        std::string ctype = "Not Charging / Disconnected";
+        const char* ctype = "Not Charging / Disconnected";
         if (d0 & 0x02) {
             ctype = "Standard AC Charging (Level 2)";
         } else if (d0 & 0x04) {
@@ -3045,8 +3197,8 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
         } else if (d0 & 0x08) {
             ctype = "120V Trickle Charging (Level 1)";
         }
-        static std::string s_last_ctype = "";
-        if (ctype != s_last_ctype) {
+        static const char* s_last_ctype = nullptr;
+        if (!s_last_ctype || strcmp(ctype, s_last_ctype) != 0) {
             s_last_ctype = ctype;
             emit_live_entity_state("ev_charge_type_active", ctype);
         }
@@ -3488,7 +3640,7 @@ void can_rx_task(void* arg) {
 
     // Index automation CAN IDs and rebuild cleanly whenever automations hot-reload
     uint32_t auto_gen = 0;
-    std::unordered_set<uint32_t> watched_auto_ids;
+    PsramUnorderedSet<uint32_t> watched_auto_ids;
     auto refresh_watched_auto_ids = [&]() {
         std::lock_guard<std::mutex> lock(g_automations_mutex);
         watched_auto_ids.clear();
@@ -3551,31 +3703,33 @@ void can_rx_task(void* arg) {
                 ESP_LOGI(TAG, "Reconfiguring TWAI peripheral to mode %d...", (int)new_mode);
 
                 SemaphoreHandle_t mtx = get_or_create_twai_mutex();
-                if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
+                if (!mtx || xSemaphoreTake(mtx, pdMS_TO_TICKS(500)) == pdTRUE) {
+                    // Flush TX queue first to prevent uninstaller hanging on pending semaphores
+                    twai_clear_transmit_queue();
+                    twai_stop();
+                    twai_driver_uninstall();
 
-                // Flush TX queue first to prevent uninstaller hanging on pending semaphores
-                twai_clear_transmit_queue();
-                twai_stop();
-                twai_driver_uninstall();
+                    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, new_mode);
+                    g_config.rx_queue_len = 128;
+                    g_config.tx_queue_len = 32;
+                    g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_RX_QUEUE_FULL;
+                    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
+                    twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
-                twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, new_mode);
-                g_config.rx_queue_len = 128;
-                g_config.tx_queue_len = 32;
-                g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_RX_QUEUE_FULL;
-                twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
-                twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+                    esp_err_t ret = twai_driver_install(&g_config, &t_config, &f_config);
+                    if (ret == ESP_OK) {
+                        twai_start();
+                        ESP_LOGI(TAG, "TWAI reconfigured to %s",
+                                 new_mode == TWAI_MODE_LISTEN_ONLY ? "LISTEN_ONLY" : "NORMAL");
+                    } else {
+                        ESP_LOGE(TAG, "Failed reinstalling TWAI driver (%s)", esp_err_to_name(ret));
+                    }
 
-                esp_err_t ret = twai_driver_install(&g_config, &t_config, &f_config);
-                if (ret == ESP_OK) {
-                    twai_start();
-                    ESP_LOGI(TAG, "TWAI reconfigured to %s",
-                             new_mode == TWAI_MODE_LISTEN_ONLY ? "LISTEN_ONLY" : "NORMAL");
+                    if (mtx) xSemaphoreGive(mtx);
+                    g_twai_reconfig_pending.store(false);
                 } else {
-                    ESP_LOGE(TAG, "Failed reinstalling TWAI driver (%s)", esp_err_to_name(ret));
+                    ESP_LOGW(TAG, "Timed out waiting for TWAI mutex during mode reconfig; will retry");
                 }
-
-                if (mtx) xSemaphoreGive(mtx);
-                g_twai_reconfig_pending.store(false);
             }
 
             // Drain alerts so alert buffer never fills up
@@ -3585,7 +3739,16 @@ void can_rx_task(void* arg) {
                     ESP_LOGW(TAG, "TWAI alert: BUS_OFF");
                 }
                 if (alerts & TWAI_ALERT_RX_QUEUE_FULL) {
-                    ESP_LOGW(TAG, "TWAI alert: RX queue full, dropping frame");
+                    static uint32_t s_last_rx_full_log_ms = 0;
+                    static uint32_t s_rx_full_suppressed = 0;
+                    if (s_last_rx_full_log_ms == 0 || (now_ms - s_last_rx_full_log_ms) >= 3000) {
+                        ESP_LOGW(TAG, "TWAI alert: RX queue full, dropping frame (suppressed=%lu)",
+                                 (unsigned long)s_rx_full_suppressed);
+                        s_last_rx_full_log_ms = now_ms;
+                        s_rx_full_suppressed = 0;
+                    } else {
+                        s_rx_full_suppressed++;
+                    }
                 }
             }
 
@@ -3597,33 +3760,38 @@ void can_rx_task(void* arg) {
             if (twai_status.state == TWAI_STATE_BUS_OFF) {
                 ESP_LOGW(TAG, "TWAI controller in BUS_OFF! Initiating hardware recovery...");
                 SemaphoreHandle_t mtx = get_or_create_twai_mutex();
-                if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
-
-                twai_clear_transmit_queue();
-                if (twai_initiate_recovery() != ESP_OK) {
-                    twai_driver_uninstall();
-                    twai_mode_t cur_mode = g_twai_requested_mode.load();
-                    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, cur_mode);
-                    g_config.rx_queue_len = 128;
-                    g_config.tx_queue_len = 32;
-                    g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_RX_QUEUE_FULL;
-                    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
-                    twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-                    if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK) {
-                        twai_start();
+                if (!mtx || xSemaphoreTake(mtx, pdMS_TO_TICKS(500)) == pdTRUE) {
+                    twai_clear_transmit_queue();
+                    if (twai_initiate_recovery() != ESP_OK) {
+                        twai_driver_uninstall();
+                        twai_mode_t cur_mode = g_twai_requested_mode.load();
+                        twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, cur_mode);
+                        g_config.rx_queue_len = 128;
+                        g_config.tx_queue_len = 32;
+                        g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_RX_QUEUE_FULL;
+                        twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
+                        twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+                        if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK) {
+                            twai_start();
+                        }
                     }
-                }
 
-                if (mtx) xSemaphoreGive(mtx);
-                s_bus_off_or_recovering_start_ms = now_ms;
+                    if (mtx) xSemaphoreGive(mtx);
+                    s_bus_off_or_recovering_start_ms = now_ms;
+                } else {
+                    ESP_LOGW(TAG, "Timed out waiting for TWAI mutex during BUS_OFF recovery");
+                }
             } else if (twai_status.state == TWAI_STATE_STOPPED) {
                 ESP_LOGI(TAG, "TWAI controller STOPPED. Starting controller...");
                 SemaphoreHandle_t mtx = get_or_create_twai_mutex();
-                if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
-                twai_clear_transmit_queue();
-                twai_start();
-                if (mtx) xSemaphoreGive(mtx);
-                s_bus_off_or_recovering_start_ms = 0;
+                if (!mtx || xSemaphoreTake(mtx, pdMS_TO_TICKS(500)) == pdTRUE) {
+                    twai_clear_transmit_queue();
+                    twai_start();
+                    if (mtx) xSemaphoreGive(mtx);
+                    s_bus_off_or_recovering_start_ms = 0;
+                } else {
+                    ESP_LOGW(TAG, "Timed out waiting for TWAI mutex during STOPPED recovery");
+                }
             } else if (twai_status.state == TWAI_STATE_RECOVERING) {
                 if (s_bus_off_or_recovering_start_ms == 0) {
                     s_bus_off_or_recovering_start_ms = now_ms;
@@ -3633,8 +3801,44 @@ void can_rx_task(void* arg) {
                 if (now_ms - s_bus_off_or_recovering_start_ms > 3000) {
                     ESP_LOGW(TAG, "TWAI stuck in RECOVERING state (>3000ms). Reinstalling driver without MCU reset...");
                     SemaphoreHandle_t mtx = get_or_create_twai_mutex();
-                    if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
+                    if (!mtx || xSemaphoreTake(mtx, pdMS_TO_TICKS(500)) == pdTRUE) {
+                        twai_clear_transmit_queue();
+                        twai_stop();
+                        twai_driver_uninstall();
 
+                        twai_mode_t cur_mode = g_twai_requested_mode.load();
+                        twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, cur_mode);
+                        g_config.rx_queue_len = 128;
+                        g_config.tx_queue_len = 32;
+                        g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_RX_QUEUE_FULL;
+                        twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
+                        twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+
+                        esp_err_t err = twai_driver_install(&g_config, &t_config, &f_config);
+                        if (err == ESP_OK) {
+                            twai_start();
+                            ESP_LOGI(TAG, "TWAI driver re-installed and running after recovery timeout");
+                        } else {
+                            ESP_LOGE(TAG, "TWAI driver reinstall failed (%s)", esp_err_to_name(err));
+                        }
+
+                        if (mtx) xSemaphoreGive(mtx);
+                        s_bus_off_or_recovering_start_ms = 0;
+                    } else {
+                        ESP_LOGW(TAG, "Timed out waiting for TWAI mutex during RECOVERING reinstall");
+                    }
+                }
+            } else if (twai_status.state == TWAI_STATE_RUNNING) {
+                s_bus_off_or_recovering_start_ms = 0;
+            }
+        } else {
+            // Driver not running or in uninstalled/invalid state
+            static uint32_t s_last_reinstall_attempt_ms = 0;
+            if (now_ms - s_last_reinstall_attempt_ms > 1000) {
+                s_last_reinstall_attempt_ms = now_ms;
+                ESP_LOGW(TAG, "TWAI driver not running or not installed! Attempting reinstall...");
+                SemaphoreHandle_t mtx = get_or_create_twai_mutex();
+                if (!mtx || xSemaphoreTake(mtx, pdMS_TO_TICKS(500)) == pdTRUE) {
                     twai_clear_transmit_queue();
                     twai_stop();
                     twai_driver_uninstall();
@@ -3650,47 +3854,15 @@ void can_rx_task(void* arg) {
                     esp_err_t err = twai_driver_install(&g_config, &t_config, &f_config);
                     if (err == ESP_OK) {
                         twai_start();
-                        ESP_LOGI(TAG, "TWAI driver re-installed and running after recovery timeout");
+                        ESP_LOGI(TAG, "TWAI driver re-installed and running after invalid state recovery");
                     } else {
                         ESP_LOGE(TAG, "TWAI driver reinstall failed (%s)", esp_err_to_name(err));
                     }
 
                     if (mtx) xSemaphoreGive(mtx);
-                    s_bus_off_or_recovering_start_ms = 0;
-                }
-            } else if (twai_status.state == TWAI_STATE_RUNNING) {
-                s_bus_off_or_recovering_start_ms = 0;
-            }
-        } else {
-            // Driver not running or in uninstalled/invalid state
-            static uint32_t s_last_reinstall_attempt_ms = 0;
-            if (now_ms - s_last_reinstall_attempt_ms > 1000) {
-                s_last_reinstall_attempt_ms = now_ms;
-                ESP_LOGW(TAG, "TWAI driver not running or not installed! Attempting reinstall...");
-                SemaphoreHandle_t mtx = get_or_create_twai_mutex();
-                if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
-
-                twai_clear_transmit_queue();
-                twai_stop();
-                twai_driver_uninstall();
-
-                twai_mode_t cur_mode = g_twai_requested_mode.load();
-                twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, cur_mode);
-                g_config.rx_queue_len = 128;
-                g_config.tx_queue_len = 32;
-                g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_RX_QUEUE_FULL;
-                twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
-                twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-
-                esp_err_t err = twai_driver_install(&g_config, &t_config, &f_config);
-                if (err == ESP_OK) {
-                    twai_start();
-                    ESP_LOGI(TAG, "TWAI driver re-installed and running after invalid state recovery");
                 } else {
-                    ESP_LOGE(TAG, "TWAI driver reinstall failed (%s)", esp_err_to_name(err));
+                    ESP_LOGW(TAG, "Timed out waiting for TWAI mutex during invalid-state reinstall");
                 }
-
-                if (mtx) xSemaphoreGive(mtx);
             }
         }
             } // end throttled TWAI status poll
@@ -3875,7 +4047,7 @@ void can_rx_task(void* arg) {
             if (mqtt_mgr_is_monitored_id(rx_msg.identifier)) {
                 if (!has_prev || has_masked_can_data_changed(rx_msg.identifier, prev_data, rx_msg.data, rx_msg.data_length_code)) {
                     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-                    static std::unordered_map<uint32_t, uint32_t> s_last_mqtt_pub_ms;
+                    static PsramUnorderedMap<uint32_t, uint32_t> s_last_mqtt_pub_ms;
                     auto pit = s_last_mqtt_pub_ms.find(rx_msg.identifier);
                     bool throttle = false;
                     // For continuous high-frequency telemetry, throttle to max 10Hz (100ms) to protect MQTT outbox

@@ -15,7 +15,6 @@ struct CachedCanFrame {
     uint8_t data[8];
 };
 
-extern std::unordered_map<uint32_t, CachedCanFrame> can_state_cache;
 extern QueueHandle_t tx_command_queue;
 
 // Global Control Flags
