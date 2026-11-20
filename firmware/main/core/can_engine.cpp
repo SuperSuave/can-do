@@ -54,6 +54,12 @@ static StaticSemaphore_t s_twai_mutex_buf;
 static std::atomic<SemaphoreHandle_t> s_twai_mutex{nullptr};
 static std::mutex s_twai_mutex_init_lock;
 static std::atomic<uint32_t> s_last_can_rx_ms{0};
+static std::atomic<uint32_t> s_last_bus_rx_ms[CAN_BUS_COUNT]{};
+static std::atomic<uint32_t> s_dual_tec_check_ms[CAN_BUS_COUNT]{};
+static std::atomic<uint8_t>  s_dual_cached_tec[CAN_BUS_COUNT]{};
+static std::atomic<bool>     s_dual_cached_bo[CAN_BUS_COUNT]{};
+static std::atomic<uint32_t> s_dual_last_tx_fail[CAN_BUS_COUNT]{};
+static std::atomic<uint32_t> s_dual_last_tec_log_ms[CAN_BUS_COUNT]{};
 
 static inline SemaphoreHandle_t get_or_create_twai_mutex(void) {
     SemaphoreHandle_t mtx = s_twai_mutex.load(std::memory_order_acquire);
@@ -113,12 +119,64 @@ extern "C" bool can_bus_is_available(can_bus_t bus) {
     return false;
 }
 
+static esp_err_t dual_can_tx_guard(can_bus_t bus) {
+    if (bus >= CAN_BUS_COUNT) return ESP_ERR_INVALID_ARG;
+    mcp2518fd_t* dev = dual_can_get_device(bus);
+    if (!dev || !dev->initialized || dev->config.listen_only) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    uint32_t last_rx = s_last_bus_rx_ms[bus].load(std::memory_order_relaxed);
+    bool bus_silent = (last_rx == 0) || ((now_ms - last_rx) > 1500);
+
+    uint8_t tec = s_dual_cached_tec[bus].load(std::memory_order_relaxed);
+    bool bus_off = s_dual_cached_bo[bus].load(std::memory_order_relaxed);
+    uint32_t last_chk = s_dual_tec_check_ms[bus].load(std::memory_order_relaxed);
+    uint32_t cur_tx_fail = dev->tx_fail_count;
+    uint32_t prev_tx_fail = s_dual_last_tx_fail[bus].load(std::memory_order_relaxed);
+
+    if (bus_silent || bus_off || tec >= 16 || cur_tx_fail != prev_tx_fail ||
+        last_chk == 0 || (now_ms - last_chk) >= 50) {
+        uint8_t fresh_tec = tec;
+        uint8_t fresh_rec = 0;
+        bool fresh_bo = bus_off;
+        esp_err_t err = mcp2518fd_get_error_counts(dev, &fresh_tec, &fresh_rec, &fresh_bo);
+        if (err == ESP_OK) {
+            tec = fresh_tec;
+            bus_off = fresh_bo;
+            s_dual_cached_tec[bus].store(tec, std::memory_order_relaxed);
+            s_dual_cached_bo[bus].store(bus_off, std::memory_order_relaxed);
+            s_dual_tec_check_ms[bus].store(now_ms, std::memory_order_relaxed);
+            s_dual_last_tx_fail[bus].store(cur_tx_fail, std::memory_order_relaxed);
+        } else if (err != ESP_ERR_TIMEOUT) {
+            return ESP_ERR_INVALID_STATE;
+        }
+    }
+
+    if (bus_off || tec >= 96 || (bus_silent && tec >= 16)) {
+        uint32_t last_log = s_dual_last_tec_log_ms[bus].load(std::memory_order_relaxed);
+        if (last_log == 0 || (now_ms - last_log) >= 2000) {
+            s_dual_last_tec_log_ms[bus].store(now_ms, std::memory_order_relaxed);
+            ESP_LOGW("CAN_ENGINE", "Dual-CAN bus %d TX suppressed: TEC=%u bus_off=%d (silent=%d)",
+                     (int)bus, (unsigned)tec, bus_off ? 1 : 0, bus_silent ? 1 : 0);
+        }
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    return ESP_OK;
+}
+
 extern "C" esp_err_t can_send_fd(can_bus_t bus, const can_fd_frame_t *frame, TickType_t ticks_to_wait) {
     if (!frame) return ESP_ERR_INVALID_ARG;
     if (g_sniffer_mode.load()) return ESP_ERR_INVALID_STATE;
 
     if (dual_can_is_available(bus)) {
-        return dual_can_send(bus, frame, ticks_to_wait);
+        esp_err_t guard_err = dual_can_tx_guard(bus);
+        if (guard_err != ESP_OK) return guard_err;
+        can_fd_frame_t tx_frame = *frame;
+        tx_frame.flags.ss = 1;
+        return dual_can_send(bus, &tx_frame, ticks_to_wait);
     }
 
     if (bus == CAN_BUS_0) {
@@ -136,6 +194,9 @@ extern "C" esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t
     }
 
     if (dual_can_is_available(bus)) {
+        esp_err_t guard_err = dual_can_tx_guard(bus);
+        if (guard_err != ESP_OK) return guard_err;
+        message->ss = 1;
         return dual_can_send_twai(bus, message, ticks_to_wait);
     }
 
@@ -427,7 +488,7 @@ struct BleBeaconState {
 };
 static std::unordered_map<std::string, BleBeaconState> s_ble_beacons;
 
-std::unordered_map<uint32_t, std::array<uint8_t, 8>> can_state_cache;
+std::unordered_map<uint32_t, CachedCanFrame> can_state_cache;
 QueueHandle_t tx_command_queue = nullptr;
 extern esp_mqtt_client_handle_t global_mqtt_client;
 
@@ -499,19 +560,25 @@ void set_sniffer_mode(bool enabled, bool hardware_listen_only) {
 
 static std::mutex s_cache_mutex;
 
-bool get_cached_can_frame(uint32_t can_id, uint8_t out_data[8]) {
+bool get_cached_can_frame(uint32_t can_id, uint8_t out_data[8], uint8_t* out_dlc) {
     std::lock_guard<std::mutex> lock(s_cache_mutex);
     auto it = can_state_cache.find(can_id);
     bool found = (it != can_state_cache.end());
-    if (found && out_data) {
-        memcpy(out_data, it->second.data(), 8);
+    if (found) {
+        if (out_data) {
+            memcpy(out_data, it->second.data, 8);
+        }
+        if (out_dlc) {
+            *out_dlc = it->second.dlc;
+        }
     }
     return found;
 }
 
 bool can_state_cache_get(uint32_t can_id, uint8_t byte_index, uint32_t* out_val) {
-    uint8_t data[8];
-    if (get_cached_can_frame(can_id, data) && byte_index < 8) {
+    uint8_t data[8] = {0};
+    uint8_t dlc = 0;
+    if (get_cached_can_frame(can_id, data, &dlc) && byte_index < dlc && byte_index < 8) {
         if (out_val) *out_val = data[byte_index];
         return true;
     }
@@ -536,26 +603,42 @@ void init_can_engine(void) {
     hud_nav_init(HUD_PLATFORM_EGMP_CANFD);
 }
 
-void update_state_cache(uint32_t can_id, const uint8_t* data) {
-    std::array<uint8_t, 8> payload;
-    memcpy(payload.data(), data, 8);
+void update_state_cache(uint32_t can_id, const uint8_t* data, uint8_t dlc) {
+    CachedCanFrame entry = {};
+    uint8_t copy_len = dlc > 8 ? 8 : dlc;
+    entry.dlc = copy_len;
+    if (data && copy_len > 0) {
+        memcpy(entry.data, data, copy_len);
+    }
     std::lock_guard<std::mutex> lock(s_cache_mutex);
-    can_state_cache[can_id] = payload;
+    can_state_cache[can_id] = entry;
 }
 
-static bool exchange_cached_can_frame(uint32_t can_id, const uint8_t* new_data, uint8_t prev_out[8]) {
+static bool exchange_cached_can_frame(uint32_t can_id, const uint8_t* new_data, uint8_t new_dlc,
+                                      uint8_t prev_out[8], uint8_t* prev_dlc_out = nullptr) {
+    uint8_t clamped_dlc = new_dlc > 8 ? 8 : new_dlc;
     std::lock_guard<std::mutex> lock(s_cache_mutex);
     auto it = can_state_cache.find(can_id);
     if (it != can_state_cache.end()) {
         if (prev_out) {
-            memcpy(prev_out, it->second.data(), 8);
+            memcpy(prev_out, it->second.data, 8);
         }
-        memcpy(it->second.data(), new_data, 8);
+        if (prev_dlc_out) {
+            *prev_dlc_out = it->second.dlc;
+        }
+        it->second.dlc = clamped_dlc;
+        memset(it->second.data, 0, 8);
+        if (new_data && clamped_dlc > 0) {
+            memcpy(it->second.data, new_data, clamped_dlc);
+        }
         return true;
     }
-    std::array<uint8_t, 8> payload;
-    memcpy(payload.data(), new_data, 8);
-    can_state_cache.emplace(can_id, payload);
+    CachedCanFrame entry = {};
+    entry.dlc = clamped_dlc;
+    if (new_data && clamped_dlc > 0) {
+        memcpy(entry.data, new_data, clamped_dlc);
+    }
+    can_state_cache.emplace(can_id, entry);
     return false;
 }
 
@@ -609,8 +692,8 @@ void rtc_can_state_save(void) {
     for (const auto& pair : can_state_cache) {
         if (count >= RTC_MAX_SAVED_FRAMES) break;
         s_rtc_can_cache.frames[count].can_id = pair.first;
-        s_rtc_can_cache.frames[count].dlc = 8;
-        memcpy(s_rtc_can_cache.frames[count].data, pair.second.data(), 8);
+        s_rtc_can_cache.frames[count].dlc = pair.second.dlc > 8 ? 8 : pair.second.dlc;
+        memcpy(s_rtc_can_cache.frames[count].data, pair.second.data, 8);
         count++;
     }
     s_rtc_can_cache.count = count;
@@ -701,9 +784,13 @@ bool rtc_can_state_restore(void) {
         can_state_cache.clear();
         for (uint32_t i = 0; i < count; ++i) {
             const auto& entry = s_rtc_can_cache.frames[i];
-            std::array<uint8_t, 8> payload;
-            memcpy(payload.data(), entry.data, 8);
-            can_state_cache.emplace(entry.can_id, payload);
+            CachedCanFrame cached = {};
+            uint8_t dlc = entry.dlc > 8 ? 8 : entry.dlc;
+            cached.dlc = dlc;
+            if (dlc > 0) {
+                memcpy(cached.data, entry.data, dlc);
+            }
+            can_state_cache.emplace(entry.can_id, cached);
         }
     }
 
@@ -994,10 +1081,11 @@ static bool evaluate_condition_raw(const AutomationCondition& cond, const EvalCo
                 }
             }
 
-            uint8_t cached_frame[8];
-            if (!get_cached_can_frame(cond.can_id, cached_frame)) return false;
+            uint8_t cached_frame[8] = {0};
+            uint8_t cached_dlc = 0;
+            if (!get_cached_can_frame(cond.can_id, cached_frame, &cached_dlc)) return false;
 
-            if (cond.byte_index >= 8) return false;
+            if (cond.byte_index >= 8 || cond.byte_index >= cached_dlc) return false;
             uint8_t actual = cached_frame[cond.byte_index];
             uint8_t mask = cond.byte_mask;
 
@@ -1106,10 +1194,11 @@ static void tick_sustained_conditions_in_steps(const std::vector<ActionStep>& st
     }
 }
 
-bool is_match(const uint8_t* incoming_data, const EntityOption& option) {
-    if (option.match_mask == 0) return false;
+bool is_match(const uint8_t* incoming_data, const EntityOption& option, uint8_t dlc) {
+    if (!incoming_data || option.match_mask == 0) return false;
     for (int i = 0; i < 8; i++) {
         if ((option.match_mask & (1 << i)) != 0) {
+            if (i >= dlc) return false;
             bool inverted = (option.invert_mask & (1 << i)) != 0;
             uint8_t mask = option.byte_masks[i];
             uint8_t actual = incoming_data[i] & mask;
@@ -1139,8 +1228,10 @@ static inline bool evaluate_masked_byte(uint8_t actual_value, uint8_t target_val
     }
 }
 
-static bool is_can_target_match(const uint8_t* incoming_data, const AutomationTrigger& trig) {
-    if (trig.type == "byte_transition" && trig.byte_index >= 0 && trig.byte_index < 8) {
+static bool is_can_target_match(const uint8_t* incoming_data, uint8_t dlc, const AutomationTrigger& trig) {
+    if (!incoming_data) return false;
+    if (trig.type == "byte_transition") {
+        if (trig.byte_index < 0 || trig.byte_index >= 8 || trig.byte_index >= dlc) return false;
         bool is_to = evaluate_masked_byte(incoming_data[trig.byte_index], trig.to_value, trig.byte_mask, trig.op);
         // Menu Up fallback alias: CAN ID 0x448, byte index 6 (D7)
         if (!is_to && trig.op == ConditionOperator::EQUAL && trig.can_id == 0x448 && trig.byte_index == 6 && (trig.to_value == 0x40 || trig.to_value == 0x02)) {
@@ -1155,6 +1246,7 @@ static bool is_can_target_match(const uint8_t* incoming_data, const AutomationTr
     if (trig.match_mask == 0) return true; // match whole ID if no byte mask
     for (int i = 0; i < 8; i++) {
         if ((trig.match_mask & (1 << i)) != 0) {
+            if (i >= dlc) return false;
             uint8_t mask = trig.byte_masks[i];
             bool match = ((incoming_data[i] & mask) == (trig.match_payload[i] & mask));
             // Menu Up fallback alias: CAN ID 0x448, byte index 6 (D7)
@@ -1170,16 +1262,20 @@ static bool is_can_target_match(const uint8_t* incoming_data, const AutomationTr
     return true;
 }
 
-static bool is_trigger_match(const uint8_t* incoming_data, const uint8_t* previous_data, const AutomationTrigger& trig) {
-    if (trig.type == "byte_transition" && trig.byte_index >= 0 && trig.byte_index < 8) {
-        if (!previous_data) return false;
-        bool is_to = is_can_target_match(incoming_data, trig);
+static bool is_trigger_match(const uint8_t* incoming_data, uint8_t dlc,
+                             const uint8_t* previous_data, uint8_t prev_dlc,
+                             const AutomationTrigger& trig) {
+    if (!incoming_data) return false;
+    if (trig.type == "byte_transition") {
+        if (trig.byte_index < 0 || trig.byte_index >= 8 || trig.byte_index >= dlc) return false;
+        if (!previous_data || trig.byte_index >= prev_dlc) return false;
+        bool is_to = is_can_target_match(incoming_data, dlc, trig);
         if (trig.has_from_value) {
             bool was_from = evaluate_masked_byte(previous_data[trig.byte_index], trig.from_value, trig.byte_mask);
             return was_from && is_to && ((previous_data[trig.byte_index] & trig.byte_mask) != (incoming_data[trig.byte_index] & trig.byte_mask));
         } else {
             bool was_to = evaluate_masked_byte(previous_data[trig.byte_index], trig.to_value, trig.byte_mask, trig.op);
-            if (was_to && trig.op == ConditionOperator::EQUAL && trig.can_id == 0x448 && trig.byte_index == 6 && (trig.to_value == 0x40 || trig.to_value == 0x02)) {
+            if (!was_to && trig.op == ConditionOperator::EQUAL && trig.can_id == 0x448 && trig.byte_index == 6 && (trig.to_value == 0x40 || trig.to_value == 0x02)) {
                 uint8_t prev_nibble = previous_data[6] & 0x0F;
                 was_to = (prev_nibble == 0x02 || prev_nibble == 0x04 || (previous_data[6] & 0xF0) == 0x40);
             }
@@ -1187,11 +1283,11 @@ static bool is_trigger_match(const uint8_t* incoming_data, const uint8_t* previo
         }
     }
 
-    if (trig.click_count > 1 && previous_data && is_can_target_match(previous_data, trig)) {
+    if (trig.click_count > 1 && previous_data && is_can_target_match(previous_data, prev_dlc, trig)) {
         return false; // Require rising edge for multi-click counting on can_rx triggers
     }
 
-    return is_can_target_match(incoming_data, trig);
+    return is_can_target_match(incoming_data, dlc, trig);
 }
 
 struct FiredRuleEvent {
@@ -1416,9 +1512,10 @@ static bool handle_trigger_press_edge(AutomationRule& rule, const AutomationTrig
 
 static bool evaluate_trigger_state_now(const AutomationTrigger& trig, uint32_t now_ms) {
     if (trig.type == "can_rx" || trig.type == "byte_transition") {
-        uint8_t frame[8];
-        if (!get_cached_can_frame(trig.can_id, frame)) return false;
-        return is_can_target_match(frame, trig);
+        uint8_t frame[8] = {0};
+        uint8_t frame_dlc = 0;
+        if (!get_cached_can_frame(trig.can_id, frame, &frame_dlc)) return false;
+        return is_can_target_match(frame, frame_dlc, trig);
     }
 
     if (trig.type == "ble_beacon" || trig.type == "beacon" ||
@@ -1637,10 +1734,11 @@ static __attribute__((noinline)) void execute_cycle_entity_step(const ActionStep
     int cur_idx = -1;
     if (entity.state_can_id != 0 && !(is_ambient_entity_id(entity.id) && ambient_anim_is_active())) {
         uint8_t frame[8] = {0};
-        if (get_cached_can_frame(entity.state_can_id, frame)) {
+        uint8_t frame_dlc = 0;
+        if (get_cached_can_frame(entity.state_can_id, frame, &frame_dlc)) {
             for (int idx = 0; idx < (int)states.size(); ++idx) {
                 const EntityOption* opt = find_option_by_label(states[idx]);
-                if (opt && opt->match_mask != 0 && is_match(frame, *opt)) {
+                if (opt && opt->match_mask != 0 && is_match(frame, *opt, frame_dlc)) {
                     cur_idx = idx;
                     break;
                 }
@@ -1976,13 +2074,19 @@ static void execute_can_burst_ctx(uint32_t can_id, const std::vector<ActionStep>
             if (fwd_res == FWD_BLOCK) {
                 continue;
             }
-            if (can_send(target_bus, &msg_to_send, pdMS_TO_TICKS(10)) == ESP_OK) {
+            esp_err_t tx_err = can_send(target_bus, &msg_to_send, pdMS_TO_TICKS(10));
+            if (tx_err == ESP_OK) {
                 board_led_can_activity();
                 if (frame_delay_ms > 0) {
                     vTaskDelay(pdMS_TO_TICKS(frame_delay_ms));
                 }
+            } else if (tx_err == ESP_ERR_INVALID_STATE) {
+                ESP_LOGW(TAG, "CAN TX suppressed/unavailable for ID 0x%03lX (bus %d); aborting remaining %d repeats",
+                         (unsigned long)msg_to_send.identifier, (int)target_bus, step.repeat - r - 1);
+                break;
             } else {
-                ESP_LOGW(TAG, "CAN TX failed or queue full for ID 0x%03lX", (unsigned long)msg_to_send.identifier);
+                ESP_LOGW(TAG, "CAN TX failed or queue full for ID 0x%03lX (%s)",
+                         (unsigned long)msg_to_send.identifier, esp_err_to_name(tx_err));
                 vTaskDelay(pdMS_TO_TICKS(frame_delay_ms > 0 ? frame_delay_ms : 2));
             }
         }
@@ -2606,7 +2710,7 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
                 }
 
                 for (const auto& opt : entity.options) {
-                    if (is_match(data, opt)) {
+                    if (is_match(data, opt, data_length_code)) {
                         if (entity.current_state != opt.label) {
                             entity.current_state = opt.label;
                             std::string payload = opt.label;
@@ -2736,8 +2840,9 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
     }
 
     // 12V Aux Battery Voltage (0x1CF Byte 5 or 0x594 Byte 4 = factor 0.1V)
-    if ((identifier == 0x1CF || identifier == 0x594) && data_length_code >= 5) {
-        uint8_t vByte = data_length_code >= 6 ? data[5] : data[4];
+    if ((identifier == 0x1CF && data_length_code >= 6) ||
+        (identifier == 0x594 && data_length_code >= 5)) {
+        uint8_t vByte = (identifier == 0x1CF) ? data[5] : data[4];
         float v = (float)(vByte * 0.1f);
         if (v >= 8.0f && v <= 16.5f) {
             static float s_last_aux_v = 0.0f;
@@ -3356,7 +3461,7 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
 }
 
 void can_rx_task(void* arg) {
-    twai_message_t rx_msg;
+    twai_message_t rx_msg = {};
     ESP_LOGI(TAG, "CAN RX task running");
 
     esp_task_wdt_config_t twdt_cfg = {
@@ -3377,6 +3482,7 @@ void can_rx_task(void* arg) {
     const bool use_dual_can = dual_can_is_available(CAN_BUS_0) || dual_can_is_available(CAN_BUS_1);
     bool prefer_bus1 = false;
     uint32_t last_dual_can_health_ms = 0;
+    uint32_t last_twai_status_poll_ms = 0;
     uint32_t last_diag_snapshot_ms = 0;
     int64_t burst_start_us = esp_timer_get_time();
 
@@ -3415,8 +3521,15 @@ void can_rx_task(void* arg) {
 
         if (use_dual_can) {
             if (g_twai_reconfig_pending.load()) {
-                dual_can_set_listen_only(g_hardware_listen_only.load());
-                g_twai_reconfig_pending.store(false);
+                static uint32_t s_last_dual_reconfig_ms = 0;
+                if (s_last_dual_reconfig_ms == 0 || (now_ms - s_last_dual_reconfig_ms) >= 100) {
+                    s_last_dual_reconfig_ms = now_ms;
+                    bool listen_only = (g_twai_requested_mode.load() == TWAI_MODE_LISTEN_ONLY);
+                    if (dual_can_set_listen_only(listen_only) == ESP_OK) {
+                        g_twai_reconfig_pending.store(false);
+                        s_last_dual_reconfig_ms = 0;
+                    }
+                }
             }
             if ((now_ms - last_dual_can_health_ms) >= 1000) {
                 last_dual_can_health_ms = now_ms;
@@ -3476,7 +3589,9 @@ void can_rx_task(void* arg) {
                 }
             }
 
-            // Auto-recover supervisor for TWAI peripheral
+            // Auto-recover supervisor for TWAI peripheral (throttled to 50 ms unless alerts fired)
+            if (alerts != 0 || last_twai_status_poll_ms == 0 || (now_ms - last_twai_status_poll_ms) >= 50) {
+            last_twai_status_poll_ms = now_ms;
             twai_status_info_t twai_status;
             if (twai_get_status_info(&twai_status) == ESP_OK) {
             if (twai_status.state == TWAI_STATE_BUS_OFF) {
@@ -3487,7 +3602,7 @@ void can_rx_task(void* arg) {
                 twai_clear_transmit_queue();
                 if (twai_initiate_recovery() != ESP_OK) {
                     twai_driver_uninstall();
-                    twai_mode_t cur_mode = g_hardware_listen_only.load() ? TWAI_MODE_LISTEN_ONLY : TWAI_MODE_NORMAL;
+                    twai_mode_t cur_mode = g_twai_requested_mode.load();
                     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, cur_mode);
                     g_config.rx_queue_len = 128;
                     g_config.tx_queue_len = 32;
@@ -3524,7 +3639,7 @@ void can_rx_task(void* arg) {
                     twai_stop();
                     twai_driver_uninstall();
 
-                    twai_mode_t cur_mode = g_hardware_listen_only.load() ? TWAI_MODE_LISTEN_ONLY : TWAI_MODE_NORMAL;
+                    twai_mode_t cur_mode = g_twai_requested_mode.load();
                     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, cur_mode);
                     g_config.rx_queue_len = 128;
                     g_config.tx_queue_len = 32;
@@ -3559,7 +3674,7 @@ void can_rx_task(void* arg) {
                 twai_stop();
                 twai_driver_uninstall();
 
-                twai_mode_t cur_mode = g_hardware_listen_only.load() ? TWAI_MODE_LISTEN_ONLY : TWAI_MODE_NORMAL;
+                twai_mode_t cur_mode = g_twai_requested_mode.load();
                 twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, cur_mode);
                 g_config.rx_queue_len = 128;
                 g_config.tx_queue_len = 32;
@@ -3578,6 +3693,7 @@ void can_rx_task(void* arg) {
                 if (mtx) xSemaphoreGive(mtx);
             }
         }
+            } // end throttled TWAI status poll
         } // end !use_dual_can
 
         bool has_frame = false;
@@ -3600,6 +3716,10 @@ void can_rx_task(void* arg) {
                 }
             }
             if (!has_frame && s_can_inject_queue && xQueueReceive(s_can_inject_queue, &rx_msg, 0) == pdTRUE) {
+                if (rx_msg.data_length_code > 8) rx_msg.data_length_code = 8;
+                if (rx_msg.data_length_code < 8) {
+                    memset(&rx_msg.data[rx_msg.data_length_code], 0, 8 - rx_msg.data_length_code);
+                }
                 has_frame = true;
                 from_physical_bus = false;
                 frame_bus = CAN_BUS_0;
@@ -3611,11 +3731,19 @@ void can_rx_task(void* arg) {
         } else {
             // On-chip TWAI or inject queue
             if (twai_receive(&rx_msg, pdMS_TO_TICKS(2)) == ESP_OK) {
+                if (rx_msg.data_length_code > 8) rx_msg.data_length_code = 8;
+                if (rx_msg.data_length_code < 8) {
+                    memset(&rx_msg.data[rx_msg.data_length_code], 0, 8 - rx_msg.data_length_code);
+                }
                 has_frame = true;
                 from_physical_bus = true;
                 frame_bus = CAN_BUS_0;
                 can_twai_to_fd(&rx_msg, CAN_BUS_0, &rx_fd_msg);
             } else if (s_can_inject_queue && xQueueReceive(s_can_inject_queue, &rx_msg, 0) == pdTRUE) {
+                if (rx_msg.data_length_code > 8) rx_msg.data_length_code = 8;
+                if (rx_msg.data_length_code < 8) {
+                    memset(&rx_msg.data[rx_msg.data_length_code], 0, 8 - rx_msg.data_length_code);
+                }
                 has_frame = true;
                 from_physical_bus = false;
                 frame_bus = CAN_BUS_0;
@@ -3631,7 +3759,12 @@ void can_rx_task(void* arg) {
                 burst_start_us = esp_timer_get_time();
             }
             s_last_can_frame_ms = now_ms;
-            s_last_can_rx_ms.store(now_ms, std::memory_order_relaxed);
+            if (from_physical_bus) {
+                s_last_can_rx_ms.store(now_ms, std::memory_order_relaxed);
+                if (frame_bus < CAN_BUS_COUNT) {
+                    s_last_bus_rx_ms[frame_bus].store(now_ms, std::memory_order_relaxed);
+                }
+            }
             s_can_led_idle_cleared = false;
             board_led_can_activity();
             can_engine_record_active_id(rx_msg.identifier);
@@ -3647,7 +3780,7 @@ void can_rx_task(void* arg) {
             if (from_physical_bus && use_dual_can &&
                 g_mitm_bridge_enabled.load(std::memory_order_relaxed) &&
                 !g_sniffer_mode.load(std::memory_order_relaxed) &&
-                !g_hardware_listen_only.load(std::memory_order_relaxed) &&
+                g_twai_requested_mode.load(std::memory_order_relaxed) != TWAI_MODE_LISTEN_ONLY &&
                 dual_can_is_available(CAN_BUS_0) &&
                 dual_can_is_available(CAN_BUS_1)) {
                 can_bus_t dst_bus = (frame_bus == CAN_BUS_0) ? CAN_BUS_1 : CAN_BUS_0;
@@ -3669,7 +3802,18 @@ void can_rx_task(void* arg) {
                             memcpy(fwd_fd.data, fwd_msg.data, copy_len);
                         }
                     }
-                    can_send_fd(dst_bus, &fwd_fd, pdMS_TO_TICKS(1));
+                    esp_err_t fwd_tx_err = can_send_fd(dst_bus, &fwd_fd, pdMS_TO_TICKS(1));
+                    if (fwd_tx_err != ESP_OK) {
+                        static uint32_t s_mitm_tx_drop_count = 0;
+                        static uint32_t s_mitm_tx_drop_log_ms = 0;
+                        s_mitm_tx_drop_count++;
+                        if (s_mitm_tx_drop_log_ms == 0 || (now_ms - s_mitm_tx_drop_log_ms) >= 2000) {
+                            s_mitm_tx_drop_log_ms = now_ms;
+                            ESP_LOGW(TAG, "MITM bridge TX drop on CAN%d (ID 0x%03lX, err=%s, total_drops=%lu)",
+                                     (int)dst_bus, (unsigned long)fwd_fd.identifier,
+                                     esp_err_to_name(fwd_tx_err), (unsigned long)s_mitm_tx_drop_count);
+                        }
+                    }
                 }
             }
 
@@ -3688,7 +3832,8 @@ void can_rx_task(void* arg) {
             // 1. Exchange previous & current state cache in a single lock/lookup
             s_rtc_crash.step_marker = 7;
             uint8_t prev_data[8] = {0};
-            bool has_prev = exchange_cached_can_frame(rx_msg.identifier, rx_msg.data, prev_data);
+            uint8_t prev_dlc = 0;
+            bool has_prev = exchange_cached_can_frame(rx_msg.identifier, rx_msg.data, rx_msg.data_length_code, prev_data, &prev_dlc);
 
             // Helper: Mask out rolling counter and checksum bytes during MQTT change detection
             auto get_can_comparison_mask = [](uint32_t can_id, uint8_t mask_out[8]) {
@@ -3775,12 +3920,15 @@ void can_rx_task(void* arg) {
 
                             for (const auto& trig : rule.triggers) {
                                 if ((trig.type == "can_rx" || trig.type == "byte_transition") && trig.can_id == rx_msg.identifier) {
+                                    if (use_dual_can && trig.bus != static_cast<uint8_t>(frame_bus)) {
+                                        continue;
+                                    }
                                     if (trig.for_ms > 0 && trig.click_count <= 1) {
-                                        update_sustained_trigger_state(trig, is_can_target_match(rx_msg.data, trig), now_ms);
+                                        update_sustained_trigger_state(trig, is_can_target_match(rx_msg.data, rx_msg.data_length_code, trig), now_ms);
                                         continue;
                                     }
                                     if (rule_running) continue;
-                                    if (is_trigger_match(rx_msg.data, has_prev ? prev_data : nullptr, trig)) {
+                                    if (is_trigger_match(rx_msg.data, rx_msg.data_length_code, has_prev ? prev_data : nullptr, prev_dlc, trig)) {
                                         handle_trigger_press_edge(rule, trig, now_ms, "CAN automation", &fired_events);
                                     }
                                 }
@@ -3801,11 +3949,11 @@ void can_rx_task(void* arg) {
                 s_can_led_idle_cleared = true;
                 board_led_can_set(false);
             }
-            static uint32_t s_last_rtc_periodic_sync_ms = 0;
-            if (now_ms - s_last_rtc_periodic_sync_ms >= 5000) {
-                s_last_rtc_periodic_sync_ms = now_ms;
-                rtc_can_state_save();
-            }
+        }
+        static uint32_t s_last_rtc_periodic_sync_ms = 0;
+        if (now_ms - s_last_rtc_periodic_sync_ms >= 5000) {
+            s_last_rtc_periodic_sync_ms = now_ms;
+            rtc_can_state_save();
         }
         static uint32_t s_last_precon_tick_ms = 0;
         if (now_ms - s_last_precon_tick_ms >= 40) {
