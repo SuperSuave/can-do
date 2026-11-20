@@ -67,6 +67,18 @@ static FILE* s_automations_tmp_file = nullptr;
 static bool s_receiving_automations = false;
 static bool s_automations_write_failed = false;
 
+static void abort_mqtt_automations_rx(void) {
+    if (s_automations_tmp_file) {
+        fclose(s_automations_tmp_file);
+        s_automations_tmp_file = nullptr;
+    }
+    if (s_receiving_automations) {
+        unlink(MQTT_AUTOMATIONS_TMP_FILE);
+    }
+    s_receiving_automations = false;
+    s_automations_write_failed = false;
+}
+
 struct MqttPubItem {
     char topic[96];
     char inline_data[144];
@@ -575,6 +587,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
         case MQTT_EVENT_DISCONNECTED:
             s_mqtt_connected = false;
+            abort_mqtt_automations_rx();
             ESP_LOGW(TAG, "MQTT disconnected from broker");
             break;
 
@@ -606,10 +619,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 std::string init_topic(event->topic, event->topic_len);
                 std::string init_suffix;
                 if (extract_target_topic_suffix(init_topic, init_suffix) && init_suffix == "config/automations/set") {
-                    if (s_automations_tmp_file) {
-                        fclose(s_automations_tmp_file);
-                        s_automations_tmp_file = nullptr;
-                    }
+                    abort_mqtt_automations_rx();
                     s_receiving_automations = true;
                     s_automations_write_failed = false;
                     if (event->total_data_len <= 0 ||
@@ -617,12 +627,16 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                         ESP_LOGE(TAG, "Rejecting MQTT automations payload with invalid size (%d bytes)", event->total_data_len);
                         s_automations_write_failed = true;
                     } else {
+                        std::lock_guard<std::mutex> file_lock(g_automations_file_mutex);
+                        s_auto_parse_tmp_pending.store(false);
                         s_automations_tmp_file = fopen(MQTT_AUTOMATIONS_TMP_FILE, "w");
                         if (!s_automations_tmp_file) {
                             ESP_LOGE(TAG, "Failed to open %s for writing", MQTT_AUTOMATIONS_TMP_FILE);
                             s_automations_write_failed = true;
                         }
                     }
+                } else if (s_receiving_automations) {
+                    abort_mqtt_automations_rx();
                 }
             }
 
@@ -1220,7 +1234,21 @@ static void mqtt_auto_reload_task(void* arg) {
                 struct stat st;
                 if (stat(MQTT_AUTOMATIONS_TMP_FILE, &st) == 0 && st.st_size > 0 &&
                     static_cast<size_t>(st.st_size) <= kMaxMqttAutomationsBytes) {
-                    valid = load_automations_from_fs(MQTT_AUTOMATIONS_TMP_FILE);
+                    bool looks_like_json_container = false;
+                    FILE* check_f = fopen(MQTT_AUTOMATIONS_TMP_FILE, "r");
+                    if (check_f) {
+                        int ch;
+                        while ((ch = fgetc(check_f)) != EOF) {
+                            if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n') {
+                                looks_like_json_container = (ch == '{' || ch == '[');
+                                break;
+                            }
+                        }
+                        fclose(check_f);
+                    }
+                    if (looks_like_json_container) {
+                        valid = load_automations_from_fs(MQTT_AUTOMATIONS_TMP_FILE);
+                    }
                 }
                 if (valid) {
                     if (rename(MQTT_AUTOMATIONS_TMP_FILE, "/spiffs/automations.json") != 0) {

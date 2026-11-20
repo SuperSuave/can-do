@@ -1301,6 +1301,9 @@ static bool validate_json_file_streaming(const char *filepath, bool allow_array)
         }
     }
 
+    if (ferror(f) != 0) {
+        valid = false;
+    }
     fclose(f);
     return valid;
 }
@@ -1371,9 +1374,8 @@ static esp_err_t api_file_upload_handler(httpd_req_t *req) {
         return send_err_with_body_check(req, HTTPD_400_BAD_REQUEST, "Invalid path: directory traversal rejected", false);
     }
 
-    ensure_parent_dirs(filepath);
-
     if (req->content_len == 0) {
+        StaticTransferGuard transfer_guard;
         if (strcmp(filepath, "/spiffs/automations.json") == 0) {
             std::lock_guard<std::mutex> file_lock(g_automations_file_mutex);
             unlink(filepath);
@@ -1410,6 +1412,7 @@ static esp_err_t api_file_upload_handler(httpd_req_t *req) {
     }
 
     StaticTransferGuard transfer_guard;
+    ensure_parent_dirs(filepath);
 
     FILE *fd = fopen(tmp_filepath, "w");
     if (!fd) {
@@ -2163,8 +2166,10 @@ static esp_err_t api_post_preferences_handler(httpd_req_t *req) {
             std::string key(child->string);
             cJSON *detached = cJSON_DetachItemViaPointer(incoming, child);
             if (detached) {
-                if (cJSON_HasObjectItem(merged, key.c_str())) {
-                    cJSON_ReplaceItemInObjectCaseSensitive(merged, key.c_str(), detached);
+                if (cJSON_GetObjectItemCaseSensitive(merged, key.c_str()) != nullptr) {
+                    if (!cJSON_ReplaceItemInObjectCaseSensitive(merged, key.c_str(), detached)) {
+                        cJSON_Delete(detached);
+                    }
                 } else {
                     cJSON_AddItemToObject(merged, key.c_str(), detached);
                 }
