@@ -3,7 +3,7 @@
 import re
 from typing import Any
 
-from .catalog_loader import get_d_index, parse_hex_val
+from .catalog_loader import check_match, get_d_index, parse_hex_val
 
 _OFF_OPTION_RE = re.compile(r"\b(off|inactive|disabled?|shut|stop|cancel)\b", re.IGNORECASE)
 _ON_OPTION_RE = re.compile(r"\b(on|active|enabled?|start)\b", re.IGNORECASE)
@@ -39,6 +39,67 @@ def find_switch_option(command: dict[str, Any], turn_on: bool) -> dict[str, Any]
             return opt
 
     return None
+
+
+def _is_valid_mask(mask: Any) -> bool:
+    """Return True if a mask specification is populated (non-None, non-empty, non-bool)."""
+    if mask is None or isinstance(mask, bool):
+        return False
+    if isinstance(mask, str):
+        return bool(mask.strip())
+    if isinstance(mask, dict):
+        return bool(mask)
+    return isinstance(mask, int)
+
+
+def resolve_effective_mask(
+    command: dict[str, Any] | None = None,
+    option: dict[str, Any] | None = None,
+) -> Any:
+    """Resolve CAN byte bitmask with fallback order:
+    option.mask -> root cmd.mask -> network.state_mask -> 0xFF.
+    """
+    if isinstance(option, dict):
+        opt_mask = option.get("mask")
+        if _is_valid_mask(opt_mask):
+            return opt_mask
+
+    if isinstance(command, dict):
+        cmd_mask = command.get("mask")
+        if _is_valid_mask(cmd_mask):
+            return cmd_mask
+
+        net = command.get("network")
+        if isinstance(net, dict):
+            state_mask = net.get("state_mask")
+            if _is_valid_mask(state_mask):
+                return state_mask
+
+    return 0xFF
+
+
+def option_matches(
+    data: list[int],
+    option: dict[str, Any],
+    command: dict[str, Any] | None = None,
+    *,
+    fallback_to_payload: bool = False,
+) -> bool:
+    """Check whether a raw CAN payload matches a catalog option.
+
+    Applies mask fallback order: option.mask -> root cmd.mask -> network.state_mask -> 0xFF.
+    """
+    if not isinstance(option, dict):
+        return False
+
+    match_spec = option.get("match")
+    if not match_spec and fallback_to_payload:
+        match_spec = option.get("payload")
+    if not isinstance(match_spec, dict) or not match_spec:
+        return False
+
+    effective_mask = resolve_effective_mask(command, option)
+    return check_match(data, match_spec, effective_mask)
 
 
 def _build_step_dict(

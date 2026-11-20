@@ -8,6 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .can_utils import option_matches, resolve_effective_mask
 from .catalog_loader import check_match
 from .const import DOMAIN
 from .coordinator import CanDoDataCoordinator
@@ -132,8 +133,7 @@ class CanDoEventEntity(CanDoEntity, EventEntity):
                 label = opt.get("label", "").strip()
                 if label.lower() in self._IDLE_OPTION_LABELS:
                     continue
-                match_spec = opt.get("match") or opt.get("payload")
-                if match_spec and check_match(payload, match_spec, opt.get("mask")):
+                if option_matches(payload, opt, self.command, fallback_to_payload=True):
                     matched_label = label or "press"
                     break
 
@@ -148,7 +148,7 @@ class CanDoEventEntity(CanDoEntity, EventEntity):
 
         is_now_match = False
         if "match" in self.command:
-            is_now_match = check_match(payload, self.command["match"], self.command.get("mask"))
+            is_now_match = check_match(payload, self.command["match"], resolve_effective_mask(self.command))
 
         # Fire event on rising edge transition (unmatched -> matched)
         if is_now_match and not self._last_matched:

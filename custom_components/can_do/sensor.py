@@ -19,16 +19,100 @@ from homeassistant.const import (
     UnitOfSpeed,
     UnitOfTemperature,
 )
+
+try:
+    from homeassistant.const import UnitOfPressure
+except ImportError:  # pragma: no cover - minimal unit-test stubs
+    UnitOfPressure = None  # type: ignore[assignment]
+
+try:
+    from homeassistant.const import UnitOfTime
+except ImportError:  # pragma: no cover - minimal unit-test stubs
+    UnitOfTime = None  # type: ignore[assignment]
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .can_utils import decode_outdoor_temperature_c
+from .can_utils import decode_outdoor_temperature_c, option_matches, resolve_effective_mask
 from .catalog_loader import check_match, get_d_index, parse_hex_val
 from .const import DOMAIN
 from .coordinator import CanDoDataCoordinator
 from .entity import CanDoEntity
 
 _LOGGER = logging.getLogger(__name__)
+
+_UNIT_MINUTES = getattr(UnitOfTime, "MINUTES", "min") if UnitOfTime is not None else "min"
+_UNIT_SECONDS = getattr(UnitOfTime, "SECONDS", "s") if UnitOfTime is not None else "s"
+_UNIT_HOURS = getattr(UnitOfTime, "HOURS", "h") if UnitOfTime is not None else "h"
+_UNIT_BAR = getattr(UnitOfPressure, "BAR", "bar") if UnitOfPressure is not None else "bar"
+_UNIT_PSI = getattr(UnitOfPressure, "PSI", "psi") if UnitOfPressure is not None else "psi"
+_UNIT_KPA = getattr(UnitOfPressure, "KPA", "kPa") if UnitOfPressure is not None else "kPa"
+_UNIT_WATT = getattr(UnitOfPower, "WATT", "W")
+
+_DEVICE_CLASS_MAP: dict[str, Any] = {
+    "speed": getattr(SensorDeviceClass, "SPEED", "speed"),
+    "temperature": getattr(SensorDeviceClass, "TEMPERATURE", "temperature"),
+    "distance": getattr(SensorDeviceClass, "DISTANCE", "distance"),
+    "duration": getattr(SensorDeviceClass, "DURATION", "duration"),
+    "pressure": getattr(SensorDeviceClass, "PRESSURE", "pressure"),
+    "power": getattr(SensorDeviceClass, "POWER", "power"),
+    "current": getattr(SensorDeviceClass, "CURRENT", "current"),
+    "voltage": getattr(SensorDeviceClass, "VOLTAGE", "voltage"),
+    "battery": getattr(SensorDeviceClass, "BATTERY", "battery"),
+    "signal_strength": getattr(SensorDeviceClass, "SIGNAL_STRENGTH", "signal_strength"),
+    "energy": getattr(SensorDeviceClass, "ENERGY", "energy"),
+    "frequency": getattr(SensorDeviceClass, "FREQUENCY", "frequency"),
+    "enum": getattr(SensorDeviceClass, "ENUM", "enum"),
+}
+
+_STATE_CLASS_MAP: dict[str, Any] = {
+    "measurement": getattr(SensorStateClass, "MEASUREMENT", "measurement"),
+    "total": getattr(SensorStateClass, "TOTAL", "total"),
+    "total_increasing": getattr(SensorStateClass, "TOTAL_INCREASING", "total_increasing"),
+}
+
+
+def _resolve_unit_and_device_class(unit_str: str) -> tuple[Any, Any]:
+    """Map a unit string from ha_metadata or network.unit to (HA unit, inferred device_class)."""
+    u = unit_str.strip()
+    ul = u.lower()
+    if ul in ("km/h", "kph"):
+        return UnitOfSpeed.KILOMETERS_PER_HOUR, _DEVICE_CLASS_MAP["speed"]
+    if ul == "mph":
+        return UnitOfSpeed.MILES_PER_HOUR, _DEVICE_CLASS_MAP["speed"]
+    if ul in ("°c", "c"):
+        return UnitOfTemperature.CELSIUS, _DEVICE_CLASS_MAP["temperature"]
+    if ul in ("°f", "f"):
+        return UnitOfTemperature.FAHRENHEIT, _DEVICE_CLASS_MAP["temperature"]
+    if ul == "km":
+        return UnitOfLength.KILOMETERS, _DEVICE_CLASS_MAP["distance"]
+    if ul == "mi":
+        return UnitOfLength.MILES, _DEVICE_CLASS_MAP["distance"]
+    if ul in ("min", "mins", "minute", "minutes"):
+        return _UNIT_MINUTES, _DEVICE_CLASS_MAP["duration"]
+    if ul in ("s", "sec", "second", "seconds"):
+        return _UNIT_SECONDS, _DEVICE_CLASS_MAP["duration"]
+    if ul in ("h", "hr", "hour", "hours"):
+        return _UNIT_HOURS, _DEVICE_CLASS_MAP["duration"]
+    if ul == "bar":
+        return _UNIT_BAR, _DEVICE_CLASS_MAP["pressure"]
+    if ul == "psi":
+        return _UNIT_PSI, _DEVICE_CLASS_MAP["pressure"]
+    if ul == "kpa":
+        return _UNIT_KPA, _DEVICE_CLASS_MAP["pressure"]
+    if ul == "kw":
+        return UnitOfPower.KILO_WATT, _DEVICE_CLASS_MAP["power"]
+    if ul == "w":
+        return _UNIT_WATT, _DEVICE_CLASS_MAP["power"]
+    if ul == "a":
+        return UnitOfElectricCurrent.AMPERE, _DEVICE_CLASS_MAP["current"]
+    if ul == "mv":
+        return UnitOfElectricPotential.MILLIVOLT, _DEVICE_CLASS_MAP["voltage"]
+    if ul == "v":
+        return UnitOfElectricPotential.VOLT, _DEVICE_CLASS_MAP["voltage"]
+    if ul == "%":
+        return PERCENTAGE, _DEVICE_CLASS_MAP["battery"]
+    return u, None
 
 
 async def async_setup_entry(
@@ -253,53 +337,103 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
         super().__init__(coordinator, command)
         self._last_native_val: Any = None
 
-        net = command.get("network", {})
-        unit = net.get("unit", "")
+        ha_meta = command.get("ha_metadata") or {}
+        net = command.get("network") or {}
+        options = command.get("options") or []
         cid = self.entity_id_str.lower()
 
-        # Infer Device Class & Units
-        if unit in ("km/h", "kph", "mph") or "cluster_vehicle_speed" in cid or "wheel_speeds" in cid:
-            self._attr_device_class = SensorDeviceClass.SPEED
-            self._attr_state_class = SensorStateClass.MEASUREMENT
-            self._attr_native_unit_of_measurement = UnitOfSpeed.MILES_PER_HOUR if "mph" in unit else UnitOfSpeed.KILOMETERS_PER_HOUR
-        elif "temp" in cid or unit in ("°F", "°C", "C", "F"):
-            self._attr_device_class = SensorDeviceClass.TEMPERATURE
-            self._attr_state_class = SensorStateClass.MEASUREMENT
-            self._attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT if "f" in unit.lower() else UnitOfTemperature.CELSIUS
-        elif "odometer" in cid or unit in ("km", "mi"):
-            self._attr_device_class = SensorDeviceClass.DISTANCE
-            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
-            self._attr_native_unit_of_measurement = (
-                UnitOfLength.KILOMETERS
-                if ("odometer" in cid or "km" in unit.lower())
-                else UnitOfLength.MILES
+        meta_dc_raw = ha_meta.get("device_class")
+        meta_sc_raw = ha_meta.get("state_class")
+        meta_unit_raw = ha_meta.get("unit_of_measurement")
+        net_unit_raw = net.get("unit")
+
+        meta_dc = str(meta_dc_raw).strip().lower() if meta_dc_raw not in (None, "") else ""
+        meta_sc = str(meta_sc_raw).strip().lower() if meta_sc_raw not in (None, "") else ""
+        raw_unit = (
+            str(meta_unit_raw).strip()
+            if meta_unit_raw not in (None, "")
+            else (str(net_unit_raw).strip() if net_unit_raw not in (None, "") else "")
+        )
+
+        # Entities with discrete text options and no declared numeric metadata/unit
+        # (or explicit enum device_class) must never receive numeric state_class or units.
+        has_text_options = any(
+            isinstance(opt, dict) and bool(opt.get("label")) for opt in options
+        )
+        has_declared_numeric_meta = bool(
+            raw_unit or (meta_dc and meta_dc != "enum") or meta_sc
+        )
+        is_discrete_text_sensor = meta_dc == "enum" or (
+            has_text_options and not has_declared_numeric_meta
+        )
+
+        if meta_dc == "enum":
+            self._attr_device_class = _DEVICE_CLASS_MAP["enum"]
+        elif not is_discrete_text_sensor:
+            resolved_unit: Any = None
+            inferred_dc: Any = None
+            if raw_unit:
+                resolved_unit, inferred_dc = _resolve_unit_and_device_class(raw_unit)
+
+            resolved_dc: Any = (
+                _DEVICE_CLASS_MAP.get(meta_dc, meta_dc) if meta_dc else inferred_dc
             )
-        elif "power" in cid or unit.lower() in ("kw", "w"):
-            self._attr_device_class = SensorDeviceClass.POWER
-            self._attr_state_class = SensorStateClass.MEASUREMENT
-            self._attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
-        elif "current" in cid or unit.lower() == "a":
-            self._attr_device_class = SensorDeviceClass.CURRENT
-            self._attr_state_class = SensorStateClass.MEASUREMENT
-            self._attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
-        elif "delta" in cid or unit.lower() == "mv":
-            self._attr_device_class = SensorDeviceClass.VOLTAGE
-            self._attr_state_class = SensorStateClass.MEASUREMENT
-            self._attr_native_unit_of_measurement = UnitOfElectricPotential.MILLIVOLT
-        elif "soc" in cid or "v2l" in cid or unit == "%":
-            self._attr_device_class = SensorDeviceClass.BATTERY
-            self._attr_state_class = SensorStateClass.MEASUREMENT
-            self._attr_native_unit_of_measurement = PERCENTAGE
-        elif "voltage" in cid or (("battery" in cid or "12v" in cid) and unit in ("v", "V")):
-            self._attr_device_class = SensorDeviceClass.VOLTAGE
-            self._attr_state_class = SensorStateClass.MEASUREMENT
-            self._attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
+            resolved_sc: Any = (
+                _STATE_CLASS_MAP.get(meta_sc, meta_sc) if meta_sc else None
+            )
+
+            # Only fall back to ID heuristics when neither ha_metadata nor network.unit declared anything
+            if resolved_dc is None and resolved_unit is None and resolved_sc is None:
+                if "cluster_vehicle_speed" in cid or "wheel_speeds" in cid:
+                    resolved_dc = _DEVICE_CLASS_MAP["speed"]
+                    resolved_sc = SensorStateClass.MEASUREMENT
+                    resolved_unit = UnitOfSpeed.KILOMETERS_PER_HOUR
+                elif "temp" in cid:
+                    resolved_dc = _DEVICE_CLASS_MAP["temperature"]
+                    resolved_sc = SensorStateClass.MEASUREMENT
+                    resolved_unit = UnitOfTemperature.CELSIUS
+                elif "odometer" in cid:
+                    resolved_dc = _DEVICE_CLASS_MAP["distance"]
+                    resolved_sc = SensorStateClass.TOTAL_INCREASING
+                    resolved_unit = UnitOfLength.KILOMETERS
+                elif "power" in cid:
+                    resolved_dc = _DEVICE_CLASS_MAP["power"]
+                    resolved_sc = SensorStateClass.MEASUREMENT
+                    resolved_unit = UnitOfPower.KILO_WATT
+                elif "current" in cid:
+                    resolved_dc = _DEVICE_CLASS_MAP["current"]
+                    resolved_sc = SensorStateClass.MEASUREMENT
+                    resolved_unit = UnitOfElectricCurrent.AMPERE
+                elif "delta" in cid:
+                    resolved_dc = _DEVICE_CLASS_MAP["voltage"]
+                    resolved_sc = SensorStateClass.MEASUREMENT
+                    resolved_unit = UnitOfElectricPotential.MILLIVOLT
+                elif "soc" in cid:
+                    resolved_dc = _DEVICE_CLASS_MAP["battery"]
+                    resolved_sc = SensorStateClass.MEASUREMENT
+                    resolved_unit = PERCENTAGE
+                elif "voltage" in cid:
+                    resolved_dc = _DEVICE_CLASS_MAP["voltage"]
+                    resolved_sc = SensorStateClass.MEASUREMENT
+                    resolved_unit = UnitOfElectricPotential.VOLT
+
+            if resolved_sc is None and (resolved_unit is not None or resolved_dc is not None):
+                if resolved_dc == _DEVICE_CLASS_MAP["distance"] and "odometer" in cid:
+                    resolved_sc = SensorStateClass.TOTAL_INCREASING
+                else:
+                    resolved_sc = SensorStateClass.MEASUREMENT
+
+            if resolved_dc is not None:
+                self._attr_device_class = resolved_dc
+            if resolved_sc is not None:
+                self._attr_state_class = resolved_sc
+            if resolved_unit is not None:
+                self._attr_native_unit_of_measurement = resolved_unit
 
     def _match_discrete_options(self, payload: list[int]) -> str | None:
         """Match raw CAN payload against catalog option conditions or evaluate rules."""
         for opt in self.command.get("options", []):
-            match_spec = opt.get("match")
-            if match_spec and check_match(payload, match_spec, opt.get("mask")):
+            if option_matches(payload, opt, self.command):
                 return opt.get("label")
 
             evaluate = opt.get("evaluate")
@@ -353,7 +487,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                     self.coordinator.get_can_payload("0x226"),
                 )
             if temp_c is not None:
-                if self._attr_native_unit_of_measurement == UnitOfTemperature.FAHRENHEIT:
+                if getattr(self, "_attr_native_unit_of_measurement", None) == UnitOfTemperature.FAHRENHEIT:
                     return round(temp_c * 1.8 + 32.0, 1)
                 return round(temp_c, 1)
             return self._last_native_val
@@ -462,7 +596,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                 raw = payload[idx]
                 if 0x06 <= raw <= 0x1A:
                     # 0x06 = 17.0°C / 62°F, each step is 0.5°C / 1°F
-                    if self._attr_native_unit_of_measurement == UnitOfTemperature.FAHRENHEIT:
+                    if getattr(self, "_attr_native_unit_of_measurement", None) == UnitOfTemperature.FAHRENHEIT:
                         return 62 + (raw - 0x06)
                     return round(17.0 + (raw - 0x06) * 0.5, 1)
 
@@ -471,7 +605,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
             if len(payload) >= 1:
                 raw = payload[0]
                 temp_c = float(raw if raw < 128 else raw - 256)
-                if self._attr_native_unit_of_measurement == UnitOfTemperature.FAHRENHEIT:
+                if getattr(self, "_attr_native_unit_of_measurement", None) == UnitOfTemperature.FAHRENHEIT:
                     return round(temp_c * 1.8 + 32, 1)
                 return temp_c
 
@@ -484,7 +618,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
         if cid == "bms_module_extremes_temp" or (self.state_can_id and self.state_can_id.lower() == "0x5d7"):
             if isinstance(payload, list) and len(payload) >= 1 and 0 < payload[0] < 255:
                 temp_c = float(payload[0] - 40)
-                if self._attr_native_unit_of_measurement == UnitOfTemperature.FAHRENHEIT:
+                if getattr(self, "_attr_native_unit_of_measurement", None) == UnitOfTemperature.FAHRENHEIT:
                     return round(temp_c * 1.8 + 32, 1)
                 return temp_c
 
@@ -508,7 +642,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
 
             if raw_val > 0:
                 km_val = raw_val * 0.1
-                if self._attr_native_unit_of_measurement == UnitOfLength.MILES:
+                if getattr(self, "_attr_native_unit_of_measurement", None) == UnitOfLength.MILES:
                     return round(km_val * 0.621371192, 1)
                 return round(km_val, 1)
 
@@ -609,7 +743,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
 
         # 3. Command-Level Binary Match
         if "match" in self.command:
-            if check_match(payload, self.command["match"], self.command.get("mask")):
+            if check_match(payload, self.command["match"], resolve_effective_mask(self.command)):
                 return "Active"
             return "Inactive"
 

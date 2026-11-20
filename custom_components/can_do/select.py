@@ -8,8 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .can_utils import build_action_steps, resolve_base_payload
-from .catalog_loader import check_match
+from .can_utils import build_action_steps, option_matches, resolve_base_payload
 from .const import DOMAIN
 from .coordinator import CanDoDataCoordinator
 from .entity import CanDoEntity
@@ -52,8 +51,7 @@ class CanDoSelectEntity(CanDoEntity, SelectEntity):
             payload = self.coordinator.get_can_payload(self.state_can_id)
             if isinstance(payload, list):
                 for opt in self.command.get("options", []):
-                    match_spec = opt.get("match") or opt.get("payload")
-                    if match_spec and check_match(payload, match_spec, opt.get("mask")):
+                    if option_matches(payload, opt, self.command, fallback_to_payload=True):
                         return opt.get("label")
 
                 # Fallback for E-GMP charging limits (0x1F9: Byte 2 = AC limit, Byte 3 = DC limit)

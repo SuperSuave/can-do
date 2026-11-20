@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .can_utils import build_action_steps
+from .can_utils import build_action_steps, resolve_effective_mask
 from .catalog_loader import check_match
 from .const import DOMAIN
 from .coordinator import CanDoDataCoordinator
@@ -79,9 +79,17 @@ class CanDoLockEntity(CanDoEntity, LockEntity):
                     if not match_spec:
                         continue
 
-                    mask = opt.get("mask")
+                    has_explicit_mask = any(
+                        m is not None and m != "" and m != {}
+                        for m in (
+                            opt.get("mask"),
+                            self.command.get("mask"),
+                            self.command.get("network", {}).get("state_mask"),
+                        )
+                    )
+                    mask = resolve_effective_mask(self.command, opt)
                     # Fallback mask for door_locks on 0x411 if mask is not explicitly configured
-                    if not mask and self.state_can_id.lower() == "0x411":
+                    if not has_explicit_mask and self.state_can_id.lower() == "0x411":
                         mask = {"D3": "0x40"}
 
                     if "unlock" in label and check_match(payload, match_spec, mask):

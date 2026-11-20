@@ -13,6 +13,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .can_utils import option_matches, resolve_effective_mask
 from .catalog_loader import check_match
 from .const import DOMAIN
 from .coordinator import CanDoDataCoordinator
@@ -251,22 +252,20 @@ class CanDoBinarySensorEntity(CanDoEntity, BinarySensorEntity):
         options = self.command.get("options", [])
         for opt in options:
             label = opt.get("label", "")
-            match_spec = opt.get("match") or opt.get("payload")
-            if match_spec and _is_bs_on_label(label) and check_match(payload, match_spec, opt.get("mask")):
+            if _is_bs_on_label(label) and option_matches(payload, opt, self.command, fallback_to_payload=True):
                 is_active = True
                 break
 
         if is_active is None:
             for opt in options:
                 label = opt.get("label", "")
-                match_spec = opt.get("match") or opt.get("payload")
-                if match_spec and _is_bs_off_label(label) and check_match(payload, match_spec, opt.get("mask")):
+                if _is_bs_off_label(label) and option_matches(payload, opt, self.command, fallback_to_payload=True):
                     is_active = False
                     break
 
         # 2. Check command-level match
         if is_active is None and "match" in self.command:
-            is_active = check_match(payload, self.command["match"], self.command.get("mask"))
+            is_active = check_match(payload, self.command["match"], resolve_effective_mask(self.command))
 
         if is_active is None:
             is_active = False

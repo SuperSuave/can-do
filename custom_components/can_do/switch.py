@@ -13,7 +13,9 @@ from .can_utils import (
     find_switch_option,
     is_off_option_label,
     is_on_option_label,
+    option_matches,
     resolve_base_payload,
+    resolve_effective_mask,
 )
 from .catalog_loader import check_match
 from .const import DOMAIN
@@ -75,7 +77,7 @@ class CanDoSwitchEntity(CanDoEntity, SwitchEntity):
             match_spec = opt.get("match") or opt.get("payload")
             is_off = is_off_option_label(label)
             is_on = is_on_option_label(label) or (on_opt is opt and not is_off)
-            if match_spec and check_match(payload, match_spec, opt.get("mask")):
+            if option_matches(payload, opt, self.command, fallback_to_payload=True):
                 if is_off:
                     return False
                 if is_on:
@@ -85,7 +87,7 @@ class CanDoSwitchEntity(CanDoEntity, SwitchEntity):
 
         # Check command-level match
         if "match" in self.command:
-            return check_match(payload, self.command["match"], self.command.get("mask"))
+            return check_match(payload, self.command["match"], resolve_effective_mask(self.command))
 
         return self._is_on
 

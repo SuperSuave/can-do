@@ -12,8 +12,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .can_utils import build_action_steps
-from .catalog_loader import check_match
+from .can_utils import build_action_steps, option_matches
 from .const import DOMAIN
 from .coordinator import CanDoDataCoordinator
 from .entity import CanDoEntity
@@ -90,13 +89,9 @@ class CanDoCoverEntity(CanDoEntity, CoverEntity):
 
         for opt in self.command.get("options", []):
             label = opt.get("label", "").lower()
-            match_spec = opt.get("match") or opt.get("payload")
-            if not match_spec:
-                continue
-
-            if "closed" in label and check_match(payload, match_spec, opt.get("mask")):
+            if "closed" in label and option_matches(payload, opt, self.command, fallback_to_payload=True):
                 return True
-            elif ("open" in label or "opening" in label) and check_match(payload, match_spec, opt.get("mask")):
+            elif ("open" in label or "opening" in label) and option_matches(payload, opt, self.command, fallback_to_payload=True):
                 return False
 
         return None
@@ -111,10 +106,8 @@ class CanDoCoverEntity(CanDoEntity, CoverEntity):
             return None
         for opt in self.command.get("options", []):
             label = opt.get("label", "").lower()
-            if "opening" in label:
-                match_spec = opt.get("match") or opt.get("payload")
-                if match_spec and check_match(payload, match_spec, opt.get("mask")):
-                    return True
+            if "opening" in label and option_matches(payload, opt, self.command, fallback_to_payload=True):
+                return True
         return False
 
     @property
@@ -127,10 +120,8 @@ class CanDoCoverEntity(CanDoEntity, CoverEntity):
             return None
         for opt in self.command.get("options", []):
             label = opt.get("label", "").lower()
-            if "closing" in label:
-                match_spec = opt.get("match") or opt.get("payload")
-                if match_spec and check_match(payload, match_spec, opt.get("mask")):
-                    return True
+            if "closing" in label and option_matches(payload, opt, self.command, fallback_to_payload=True):
+                return True
         return False
 
     @property

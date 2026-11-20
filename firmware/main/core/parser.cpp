@@ -269,6 +269,14 @@ uint8_t parse_weekdays_mask(cJSON* days_arr) {
     return mask == 0 ? 0x7F : mask;
 }
 
+static bool is_valid_mask_json(cJSON* obj) {
+    if (!obj || cJSON_IsNull(obj)) return false;
+    if (cJSON_IsString(obj)) return obj->valuestring != nullptr && obj->valuestring[0] != '\0';
+    if (cJSON_IsNumber(obj)) return true;
+    if (cJSON_IsObject(obj)) return obj->child != nullptr;
+    return false;
+}
+
 static void parse_byte_match(cJSON* match_obj, uint8_t match_payload[8], uint8_t& match_mask, uint8_t& invert_mask, uint8_t* byte_masks = nullptr, cJSON* mask_obj = nullptr) {
     if (!match_obj) return;
     cJSON* item = nullptr;
@@ -291,12 +299,23 @@ static void parse_byte_match(cJSON* match_obj, uint8_t match_payload[8], uint8_t
                     byte_masks[i] = m;
                 }
             }
+        } else if (cJSON_IsNumber(mask_obj)) {
+            uint8_t m = static_cast<uint8_t>(mask_obj->valueint & 0xFF);
+            for (int i = 0; i < 8; i++) {
+                if (match_mask & (1 << i)) {
+                    byte_masks[i] = m;
+                }
+            }
         } else if (cJSON_IsObject(mask_obj)) {
             cJSON* m_item = nullptr;
             cJSON_ArrayForEach(m_item, mask_obj) {
                 int idx = get_d_index(m_item->string);
-                if (idx >= 0 && cJSON_IsString(m_item)) {
-                    byte_masks[idx] = parse_hex_string(m_item->valuestring);
+                if (idx >= 0) {
+                    if (cJSON_IsString(m_item)) {
+                        byte_masks[idx] = parse_hex_string(m_item->valuestring);
+                    } else if (cJSON_IsNumber(m_item)) {
+                        byte_masks[idx] = static_cast<uint8_t>(m_item->valueint & 0xFF);
+                    }
                 }
             }
         }
@@ -1231,6 +1250,12 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity, bool include_discov
     const char* net_type = cJSON_IsString(net_type_item) ? net_type_item->valuestring : "";
     bool is_hud_nav = (strcmp(ent_type, "hud_nav") == 0 || strcmp(net_type, "hud_nav") == 0 || out_entity.id == "cluster_hud_navigation_tbt");
 
+    cJSON* root_mask = cJSON_GetObjectItem(entity_json, "mask");
+    cJSON* net_state_mask = network ? cJSON_GetObjectItem(network, "state_mask") : nullptr;
+    cJSON* entity_fallback_mask = is_valid_mask_json(root_mask)
+                                      ? root_mask
+                                      : (is_valid_mask_json(net_state_mask) ? net_state_mask : nullptr);
+
     // Options array
     cJSON* options_array = cJSON_GetObjectItem(entity_json, "options");
     if (cJSON_IsArray(options_array) && cJSON_GetArraySize(options_array) > 0) {
@@ -1245,7 +1270,9 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity, bool include_discov
             cJSON* def = cJSON_GetObjectItem(opt_json, "default");
             if (cJSON_IsBool(def)) opt.is_default = cJSON_IsTrue(def);
 
-            parse_byte_match(cJSON_GetObjectItem(opt_json, "match"), opt.match_payload, opt.match_mask, opt.invert_mask, opt.byte_masks, cJSON_GetObjectItem(opt_json, "mask"));
+            cJSON* opt_mask = cJSON_GetObjectItem(opt_json, "mask");
+            cJSON* effective_mask = is_valid_mask_json(opt_mask) ? opt_mask : entity_fallback_mask;
+            parse_byte_match(cJSON_GetObjectItem(opt_json, "match"), opt.match_payload, opt.match_mask, opt.invert_mask, opt.byte_masks, effective_mask);
             parse_steps(cJSON_GetObjectItem(opt_json, "steps"), opt.steps);
 
             // If no explicit steps array but option provides CAN payload (e.g. Kids Mode / Quiet Mode), synthesize a CatalogStep
@@ -1281,7 +1308,7 @@ bool parse_entity(cJSON* entity_json, CanEntity& out_entity, bool include_discov
             EntityOption opt;
             opt.label = "Active";
             opt.is_default = true;
-            parse_byte_match(root_match, opt.match_payload, opt.match_mask, opt.invert_mask, opt.byte_masks, cJSON_GetObjectItem(entity_json, "mask"));
+            parse_byte_match(root_match, opt.match_payload, opt.match_mask, opt.invert_mask, opt.byte_masks, entity_fallback_mask);
             parse_steps(root_steps, opt.steps);
             if (opt.steps.empty() && root_payload) {
                 CatalogStep step;

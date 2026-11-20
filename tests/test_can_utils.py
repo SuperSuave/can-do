@@ -23,7 +23,9 @@ from custom_components.can_do.can_utils import (
     find_switch_option,
     is_off_option_label,
     is_on_option_label,
+    option_matches,
     resolve_base_payload,
+    resolve_effective_mask,
 )
 
 
@@ -315,6 +317,74 @@ class TestResolveBasePayload(unittest.TestCase):
         self.assertEqual(
             resolve_base_payload(coord, cmd_default, "0x41D", "0x465"),
             [0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+        )
+
+
+class TestOptionMatchesMaskFallback(unittest.TestCase):
+    """Test mask fallback order: option.mask -> cmd.mask -> network.state_mask -> 0xFF."""
+
+    def test_mask_precedence_order(self) -> None:
+        """Verify option.mask overrides cmd.mask, which overrides network.state_mask, else 0xFF."""
+        cmd_all = {"mask": "0xF0", "network": {"state_mask": "0x07"}}
+        opt_with_mask = {"match": {"D2": "0x01"}, "mask": "0x03"}
+        opt_no_mask = {"match": {"D2": "0x10"}}
+
+        self.assertEqual(resolve_effective_mask(cmd_all, opt_with_mask), "0x03")
+        self.assertEqual(resolve_effective_mask(cmd_all, opt_no_mask), "0xF0")
+
+        cmd_state_only = {"network": {"state_mask": "0x07"}}
+        self.assertEqual(resolve_effective_mask(cmd_state_only, opt_no_mask), "0x07")
+
+        cmd_none = {"network": {}}
+        self.assertEqual(resolve_effective_mask(cmd_none, opt_no_mask), 0xFF)
+        self.assertEqual(resolve_effective_mask(None, opt_no_mask), 0xFF)
+
+        # Empty/None option mask falls through to cmd.mask / network.state_mask
+        self.assertEqual(resolve_effective_mask(cmd_state_only, {"match": {"D2": "0x01"}, "mask": ""}), "0x07")
+        self.assertEqual(resolve_effective_mask(cmd_state_only, {"match": {"D2": "0x01"}, "mask": None}), "0x07")
+
+    def test_option_matches_applies_network_state_mask_with_noisy_bits(self) -> None:
+        """Bit-masked catalog entities without option.mask must mask out unrelated bits."""
+        catalog_path = Path(__file__).resolve().parent.parent / "catalog" / "can_do_catalog.json"
+        catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+        by_id = {c["id"]: c for c in catalog.get("commands", [])}
+
+        # pdw_sensor_front_center (0x436 D2 mask 0x07) & pdw_sensor_rear_center (D2 mask 0x38)
+        # Combined D2 = 0xCB (bits 7:6=11 noise, bits 5:3=001 rear Zone 1 [0x08], bits 2:0=011 front Zone 3 [0x03])
+        pdw_frame = [0x00, 0xCB, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        front_cmd = by_id["pdw_sensor_front_center"]
+        front_matched = [o["label"] for o in front_cmd["options"] if option_matches(pdw_frame, o, front_cmd)]
+        self.assertEqual(front_matched, ["Zone 3 (Close ~30cm / Critical)"])
+
+        rear_cmd = by_id["pdw_sensor_rear_center"]
+        rear_matched = [o["label"] for o in rear_cmd["options"] if option_matches(pdw_frame, o, rear_cmd)]
+        self.assertEqual(rear_matched, ["Zone 1 (Far ~100cm)"])
+
+        # ptgm_tailgate_status (0x3A6 D1 mask 0x0F) with high nibble noise 0xA0
+        ptgm_cmd = by_id["ptgm_tailgate_status"]
+        ptgm_frame = [0xA2, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        ptgm_matched = [o["label"] for o in ptgm_cmd["options"] if option_matches(ptgm_frame, o, ptgm_cmd)]
+        self.assertEqual(ptgm_matched, ["Fully Closed & Latched"])
+
+        # blind_spot_warning_left (D4 mask 0x03) & right (D5 mask 0x03) with upper bits set
+        bsw_l = by_id["blind_spot_warning_left"]
+        bsw_r = by_id["blind_spot_warning_right"]
+        bsw_frame = [0x00, 0x00, 0x00, 0xFD, 0xFE, 0x00, 0x00, 0x00]
+        self.assertEqual(
+            [o["label"] for o in bsw_l["options"] if option_matches(bsw_frame, o, bsw_l)],
+            ["Vehicle Detected (Mirror LED Solid)"],
+        )
+        self.assertEqual(
+            [o["label"] for o in bsw_r["options"] if option_matches(bsw_frame, o, bsw_r)],
+            ["Flashing Warning (Turn Signal Active)"],
+        )
+
+        # ac_charging_current_limit (0x578 D3 mask 0x03) with upper bits set
+        ac_cmd = by_id["ac_charging_current_limit"]
+        ac_frame = [0x00, 0x00, 0xFC | 0x02, 0x00, 0x00, 0x00, 0x00, 0x00]
+        self.assertEqual(
+            [o["label"] for o in ac_cmd["options"] if option_matches(ac_frame, o, ac_cmd)],
+            ["Maximum (100% Full Rating)"],
         )
 
 

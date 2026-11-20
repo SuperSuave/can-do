@@ -706,6 +706,75 @@ class TestEgmpAuditDecoders(unittest.TestCase):
         mqtt_mgr_src = mqtt_mgr_path.read_text(encoding="utf-8")
         self.assertIn("0x31C", mqtt_mgr_src)
 
+    def test_sensor_ha_metadata_and_discrete_options(self):
+        """Verify sensor.py honors ha_metadata, supports min/bar, and omits numeric metadata on discrete text options."""
+        # 1. vehicle_odometer: honors ha_metadata (distance / total_increasing / mi) and converts 0x227 km -> mi
+        odo_sensor = CanDoSensorEntity(self.coordinator, self.commands_by_id["vehicle_odometer"])
+        self.assertEqual(odo_sensor._attr_device_class, SensorDeviceClass.DISTANCE)
+        self.assertEqual(odo_sensor._attr_state_class, SensorStateClass.TOTAL_INCREASING)
+        self.assertEqual(odo_sensor._attr_native_unit_of_measurement, ha_const.UnitOfLength.MILES)
+        # Raw 871417 (0x0D4BF9) = 87141.7 km = 54147.3 mi
+        self.coordinator.can_states["0x227"] = [0x9F, 0xF9, 0x4B, 0x0D, 0x00, 0x00, 0x00, 0x00]
+        self.assertEqual(odo_sensor.native_value, 54147.3)
+
+        # 2. v2l_discharge_remaining_time & remaining_charge_time_ac: DURATION + min (NOT BATTERY / %)
+        v2l_sensor = CanDoSensorEntity(self.coordinator, self.commands_by_id["v2l_discharge_remaining_time"])
+        self.assertEqual(v2l_sensor._attr_device_class, SensorDeviceClass.DURATION)
+        self.assertEqual(v2l_sensor._attr_state_class, SensorStateClass.MEASUREMENT)
+        self.assertEqual(v2l_sensor._attr_native_unit_of_measurement, "min")
+
+        ac_time_sensor = CanDoSensorEntity(self.coordinator, self.commands_by_id["remaining_charge_time_ac"])
+        self.assertEqual(ac_time_sensor._attr_device_class, SensorDeviceClass.DURATION)
+        self.assertEqual(ac_time_sensor._attr_native_unit_of_measurement, "min")
+
+        # 3. master_cylinder_brake_pressure: network.unit == "bar" -> PRESSURE + bar
+        brake_sensor = CanDoSensorEntity(self.coordinator, self.commands_by_id["master_cylinder_brake_pressure"])
+        self.assertEqual(brake_sensor._attr_device_class, "pressure")
+        self.assertEqual(brake_sensor._attr_state_class, SensorStateClass.MEASUREMENT)
+        self.assertEqual(brake_sensor._attr_native_unit_of_measurement, "bar")
+
+        # 4. hv_battery_temperatures: discrete text options -> NO numeric device_class/state_class/unit
+        hv_temp_sensor = CanDoSensorEntity(self.coordinator, self.commands_by_id["hv_battery_temperatures"])
+        self.assertFalse(hasattr(hv_temp_sensor, "_attr_device_class"))
+        self.assertFalse(hasattr(hv_temp_sensor, "_attr_state_class"))
+        self.assertFalse(hasattr(hv_temp_sensor, "_attr_native_unit_of_measurement"))
+        self.coordinator.can_states["hv_battery_temperatures"] = "Cold Battery (Min Temp < 15C / 59F)"
+        self.assertEqual(hv_temp_sensor.native_value, "Cold Battery (Min Temp < 15C / 59F)")
+
+        # 5. battery_preconditioning_state & climate_fan_speed_level: discrete text options -> no numeric state_class/unit
+        for discrete_id in ("battery_preconditioning_state", "climate_fan_speed_level", "camera_speed_limit_sign"):
+            ent = CanDoSensorEntity(self.coordinator, self.commands_by_id[discrete_id])
+            self.assertFalse(hasattr(ent, "_attr_state_class"), f"{discrete_id} must not set state_class")
+            self.assertFalse(hasattr(ent, "_attr_native_unit_of_measurement"), f"{discrete_id} must not set unit")
+
+    def test_network_state_mask_fallback_entities(self):
+        """Verify HA sensor and binary_sensor entities honor network.state_mask fallback when option.mask is absent."""
+        # PDW front (D2 & 0x07) and rear (D2 & 0x38) sharing byte D2 with upper noise bits
+        front_pdw = CanDoSensorEntity(self.coordinator, self.commands_by_id["pdw_sensor_front_center"])
+        rear_pdw = CanDoSensorEntity(self.coordinator, self.commands_by_id["pdw_sensor_rear_center"])
+        self.coordinator.can_states["0x436"] = [0x00, 0xDA, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]  # 0xC0 noise | 0x18 rear Z3 | 0x02 front Z2
+        self.assertEqual(front_pdw.native_value, "Zone 2 (Mid ~60cm)")
+        self.assertEqual(rear_pdw.native_value, "Zone 3 (Close ~30cm / Critical)")
+
+        # PTGM tailgate status (0x3A6 D1 & 0x0F) with high nibble noise
+        ptgm = CanDoSensorEntity(self.coordinator, self.commands_by_id["ptgm_tailgate_status"])
+        self.coordinator.can_states["0x3a6"] = [0xF3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        self.assertEqual(ptgm.native_value, "Opening in Motion")
+
+        # Blind spot warnings left/right (0x1BA D4/D5 & 0x03) with upper bits set
+        bsw_l = CanDoSensorEntity(self.coordinator, self.commands_by_id["blind_spot_warning_left"])
+        bsw_r = CanDoSensorEntity(self.coordinator, self.commands_by_id["blind_spot_warning_right"])
+        self.coordinator.can_states["0x1ba"] = [0x00, 0x00, 0x00, 0xFC, 0xFD, 0x00, 0x00, 0x00]
+        self.assertEqual(bsw_l.native_value, "Clear")
+        self.assertEqual(bsw_r.native_value, "Vehicle Detected (Mirror LED Solid)")
+
+        # Smart key proximity welcome binary_sensor (0x553 D8 & 0x01) with upper bits set
+        smk = CanDoBinarySensorEntity(self.coordinator, self.commands_by_id["smart_key_proximity_welcome"])
+        self.coordinator.can_states["0x553"] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFE]
+        self.assertFalse(smk.is_on)
+        self.coordinator.can_states["0x553"] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF]
+        self.assertTrue(smk.is_on)
+
 
 if __name__ == "__main__":
     unittest.main()
