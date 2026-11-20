@@ -611,6 +611,9 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond, int depth)
         if (!act) act = cJSON_GetObjectItem(c_item, "action");
         if (cJSON_IsString(act)) cond.ble_action = act->valuestring;
         else cond.ble_action = "press";
+        if (strcasecmp(cond.ble_action.c_str(), "single_press") == 0) {
+            cond.ble_action = "press";
+        }
 
         cJSON* dev = cJSON_GetObjectItem(c_item, "ble_device");
         if (!dev) dev = cJSON_GetObjectItem(c_item, "device");
@@ -643,6 +646,14 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond, int depth)
         if (!dev) dev = cJSON_GetObjectItem(c_item, "mac");
         if (!dev) dev = cJSON_GetObjectItem(c_item, "client_mac");
         if (cJSON_IsString(dev)) cond.ble_device = dev->valuestring;
+
+        cJSON* maj = cJSON_GetObjectItem(c_item, "beacon_major");
+        if (!maj) maj = cJSON_GetObjectItem(c_item, "major");
+        if (cJSON_IsNumber(maj)) cond.beacon_major = static_cast<uint16_t>(maj->valueint);
+
+        cJSON* min = cJSON_GetObjectItem(c_item, "beacon_minor");
+        if (!min) min = cJSON_GetObjectItem(c_item, "minor");
+        if (cJSON_IsNumber(min)) cond.beacon_minor = static_cast<uint16_t>(min->valueint);
 
         cJSON* target_b = cJSON_GetObjectItem(c_item, "target_bool");
         if (cJSON_IsBool(target_b)) cond.target_bool = cJSON_IsTrue(target_b);
@@ -1657,7 +1668,9 @@ bool parse_automation(cJSON* auto_json, AutomationRule& out_rule) {
                 if (cJSON_IsString(act)) tr.ble_action = act->valuestring;
                 else tr.ble_action = "press";
 
-                if (strcasecmp(tr.ble_action.c_str(), "double_press") == 0) {
+                if (strcasecmp(tr.ble_action.c_str(), "single_press") == 0) {
+                    tr.ble_action = "press";
+                } else if (strcasecmp(tr.ble_action.c_str(), "double_press") == 0) {
                     tr.ble_action = "press";
                     if (tr.click_count <= 1) tr.click_count = 2;
                 } else if (strcasecmp(tr.ble_action.c_str(), "triple_press") == 0) {

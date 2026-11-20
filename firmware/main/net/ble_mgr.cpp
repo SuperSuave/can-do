@@ -9,6 +9,8 @@
 #include "cJSON.h"
 #include "can_engine.h"
 #include "api.h"
+#include "psram_alloc.h"
+#include "esp_heap_caps.h"
 
 #include <vector>
 #include <string>
@@ -30,6 +32,8 @@ extern std::string g_device_id;
 #define BLE_MIN_RSSI_DISCOVERY -70
 #define BLE_COMBO_SETTLE_MS 85U
 #define BLE_HOLD_TICK_MS 1000U
+static constexpr uint32_t BLE_RECONNECT_BACKOFF_MIN_MS = 15000U;
+static constexpr uint32_t BLE_RECONNECT_BACKOFF_MAX_MS = 120000U;
 
 struct BleButtonEvent {
     std::string device_address;
@@ -63,6 +67,9 @@ struct PairedDevice {
     bool bonded = true;
     int battery_pct = 100;
     uint8_t addr_type = 0; // BLE_ADDR_PUBLIC (0) or BLE_ADDR_RANDOM (1)
+    uint32_t last_prox_send_ms = 0;
+    uint32_t last_connect_attempt_ms = 0;
+    uint32_t reconnect_backoff_ms = 0;
 };
 
 struct DiscoveredDevice {
@@ -97,34 +104,73 @@ struct DiscoveredBeacon {
     uint32_t last_seen_ms = 0;
 };
 
+struct PendingButtonDispatch {
+    std::string addr;
+    std::string name;
+    std::string btn;
+    std::string act;
+    std::string combo;
+    uint32_t hold_seconds = 0;
+};
+
+struct PendingDeviceDispatch {
+    std::string event; // "connected", "disconnected", "proximity"
+    std::string addr;
+    std::string name;
+    int rssi = 0;
+};
+
+struct PendingBeaconDispatch {
+    const char* evt;
+    std::string uuid;
+    std::string mac;
+    std::string name;
+    int last_rssi = -100;
+    uint16_t major = 0;
+    uint16_t minor = 0;
+};
+
+static constexpr size_t BLE_MAX_PENDING_EVENTS = 16;
+static constexpr size_t MAX_PAIRED_DEVICES = 5;
+static constexpr size_t MAX_BEACON_TARGETS = 8;
+static constexpr size_t MAX_DISCOVERED_DEVICES = 32;
+static constexpr size_t MAX_DISCOVERED_BEACONS = 10;
+static constexpr size_t MAX_RECENT_BLE_EVENTS = 30;
+static constexpr size_t MAX_BLE_NVS_JSON_LEN = 4096;
+
 static std::mutex s_ble_mutex;
-static std::vector<DiscoveredDevice> s_discovered_devices;
-static std::vector<PairedDevice> s_paired_devices;
-static std::vector<BeaconTarget> s_beacon_targets;
-static std::vector<DiscoveredBeacon> s_discovered_beacons;
-static std::vector<BleButtonEvent> s_recent_ble_events;
+static PsramVector<DiscoveredDevice> s_discovered_devices;
+static PsramVector<PairedDevice> s_paired_devices;
+static PsramVector<BeaconTarget> s_beacon_targets;
+static PsramVector<DiscoveredBeacon> s_discovered_beacons;
+static PsramVector<BleButtonEvent> s_recent_ble_events;
+static PsramVector<PendingButtonDispatch> s_pending_button_events;
+static PsramVector<PendingDeviceDispatch> s_pending_device_events;
+static PsramVector<PendingBeaconDispatch> s_pending_beacon_events;
 static BleButtonEvent s_last_ble_event = {};
 static bool s_has_last_event = false;
 static BleChordState s_chord;
 static TaskHandle_t s_ble_worker_task = nullptr;
 
 static inline void wake_ble_worker(void) {
-    if (s_ble_worker_task) {
-        xTaskNotifyGive(s_ble_worker_task);
+    TaskHandle_t task = s_ble_worker_task;
+    if (task) {
+        xTaskNotifyGive(task);
     }
 }
 
-static bool s_ble_scanning = false;
+static std::atomic<bool> s_ble_scanning{false};
 static std::atomic<bool> s_ble_shutting_down{false};
 static std::atomic<bool> s_bg_scan_has_targets{false};
-static uint32_t s_ble_scan_start_ms = 0;
-static uint32_t s_ble_scan_duration_ms = 10000;
-static bool s_ble_client_connected = false;
+static std::atomic<bool> s_ble_client_connected{false};
+static std::atomic<bool> s_ble_connecting{false};
+static uint32_t s_scan_pause_start_ms = 0; // Protected by s_ble_mutex
 static std::string s_connected_device_addr = "";
 
-// Deferred connection request structure
+// Deferred connection/disconnection request structure
 static std::mutex s_connect_mutex;
 static bool s_pending_connect_req = false;
+static bool s_pending_disconnect_req = false;
 static std::string s_pending_connect_addr = "";
 static uint8_t s_pending_connect_type = 0;
 
@@ -142,21 +188,138 @@ static bool iequals(const std::string& a, const std::string& b) {
     return true;
 }
 
+static bool is_hex_char(char c) {
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+static bool normalize_ble_mac(const std::string& raw, std::string& out_mac) {
+    size_t start = 0;
+    size_t end = raw.size();
+    while (start < end && std::isspace((unsigned char)raw[start])) ++start;
+    while (end > start && std::isspace((unsigned char)raw[end - 1])) --end;
+    const size_t len = end - start;
+
+    char hex[12];
+    if (len == 17) {
+        char sep = raw[start + 2];
+        if (sep != ':' && sep != '-') return false;
+        size_t h = 0;
+        for (size_t i = 0; i < 17; ++i) {
+            char c = raw[start + i];
+            if (i == 2 || i == 5 || i == 8 || i == 11 || i == 14) {
+                if (c != sep) return false;
+            } else {
+                if (!is_hex_char(c)) return false;
+                hex[h++] = (char)std::toupper((unsigned char)c);
+            }
+        }
+    } else if (len == 12) {
+        for (size_t i = 0; i < 12; ++i) {
+            char c = raw[start + i];
+            if (!is_hex_char(c)) return false;
+            hex[i] = (char)std::toupper((unsigned char)c);
+        }
+    } else {
+        return false;
+    }
+
+    char formatted[18];
+    snprintf(formatted, sizeof(formatted), "%c%c:%c%c:%c%c:%c%c:%c%c:%c%c",
+             hex[0], hex[1], hex[2], hex[3], hex[4], hex[5],
+             hex[6], hex[7], hex[8], hex[9], hex[10], hex[11]);
+    out_mac = formatted;
+    return true;
+}
+
+static bool normalize_ibeacon_uuid(const std::string& raw, std::string& out_uuid) {
+    size_t start = 0;
+    size_t end = raw.size();
+    while (start < end && std::isspace((unsigned char)raw[start])) ++start;
+    while (end > start && std::isspace((unsigned char)raw[end - 1])) --end;
+    const size_t len = end - start;
+
+    char hex[32];
+    if (len == 36) {
+        size_t h = 0;
+        for (size_t i = 0; i < 36; ++i) {
+            char c = raw[start + i];
+            if (i == 8 || i == 13 || i == 18 || i == 23) {
+                if (c != '-') return false;
+            } else {
+                if (!is_hex_char(c)) return false;
+                hex[h++] = (char)std::toupper((unsigned char)c);
+            }
+        }
+    } else if (len == 32) {
+        for (size_t i = 0; i < 32; ++i) {
+            char c = raw[start + i];
+            if (!is_hex_char(c)) return false;
+            hex[i] = (char)std::toupper((unsigned char)c);
+        }
+    } else {
+        return false;
+    }
+
+    char formatted[37];
+    snprintf(formatted, sizeof(formatted),
+             "%.8s-%.4s-%.4s-%.4s-%.12s",
+             &hex[0], &hex[8], &hex[12], &hex[16], &hex[20]);
+    out_uuid = formatted;
+    return true;
+}
+
+static void note_ble_scan_paused_locked(uint32_t now_ms) {
+    if (s_scan_pause_start_ms == 0) {
+        s_scan_pause_start_ms = (now_ms != 0) ? now_ms : 1U;
+    }
+}
+
+static void compensate_beacon_scan_pause_locked(uint32_t now_ms, bool clear_pause) {
+    if (s_scan_pause_start_ms != 0) {
+        int32_t paused_ms = (int32_t)(now_ms - s_scan_pause_start_ms);
+        if (paused_ms > 0) {
+            for (auto& target : s_beacon_targets) {
+                if (target.is_present) {
+                    target.last_seen_ms += (uint32_t)paused_ms;
+                    if ((int32_t)(now_ms - target.last_seen_ms) < 0) {
+                        target.last_seen_ms = now_ms;
+                    }
+                }
+            }
+        }
+        s_scan_pause_start_ms = clear_pause ? 0U : ((now_ms != 0) ? now_ms : 1U);
+    }
+}
+
 static void start_background_ble_scan(void) {
-    if (s_ble_shutting_down.load(std::memory_order_relaxed) || s_ble_client_connected || s_ble_scanning) {
+    bool has_paired = false;
+    bool has_beacons = false;
+    {
+        std::lock_guard<std::mutex> lock(s_ble_mutex);
+        has_paired = !s_paired_devices.empty();
+        has_beacons = !s_beacon_targets.empty();
+    }
+    const bool is_connected = s_ble_client_connected.load(std::memory_order_relaxed);
+    const bool has_targets = has_beacons || (!is_connected && has_paired);
+    s_bg_scan_has_targets.store(has_targets, std::memory_order_relaxed);
+
+    if (s_ble_shutting_down.load(std::memory_order_relaxed) ||
+        s_ble_connecting.load(std::memory_order_relaxed) ||
+        s_ble_scanning.load(std::memory_order_relaxed)) {
         return;
     }
     if (!NimBLEDevice::isInitialized()) return;
 
-    bool has_targets = false;
-    {
-        std::lock_guard<std::mutex> lock(s_ble_mutex);
-        has_targets = !s_paired_devices.empty() || !s_beacon_targets.empty();
-    }
-    s_bg_scan_has_targets.store(has_targets, std::memory_order_relaxed);
-
     NimBLEScan* pScan = NimBLEDevice::getScan();
     if (!pScan) return;
+
+    if (is_connected && !has_beacons) {
+        if (pScan->isScanning()) {
+            pScan->stop();
+        }
+        return;
+    }
+
     pScan->clearResults();
     pScan->setMaxResults(0);
     pScan->setActiveScan(false); // Passive scan
@@ -170,65 +333,105 @@ static void start_background_ble_scan(void) {
         pScan->setInterval(250); // 250ms
         pScan->setWindow(20);    // 20ms
     }
-    pScan->start(0, false, true);
+    if (pScan->start(0, false, true)) {
+        std::lock_guard<std::mutex> lock(s_ble_mutex);
+        compensate_beacon_scan_pause_locked(get_time_ms(), true);
+    }
 }
 
 // ============================================================================
 // NVS Persistence
 // ============================================================================
 static void load_paired_ble_devices(void) {
-    s_paired_devices.clear();
+    {
+        std::lock_guard<std::mutex> lock(s_ble_mutex);
+        s_paired_devices.clear();
+    }
     nvs_handle_t handle;
-    if (nvs_open("ble_cfg", NVS_READONLY, &handle) == ESP_OK) {
+    esp_err_t err = nvs_open("ble_cfg", NVS_READONLY, &handle);
+    if (err == ESP_OK) {
         size_t required_size = 0;
-        if (nvs_get_str(handle, "paired", nullptr, &required_size) == ESP_OK && required_size > 0) {
-            char* buf = (char*)malloc(required_size);
-            if (buf) {
-                if (nvs_get_str(handle, "paired", buf, &required_size) == ESP_OK) {
-                    cJSON* root = cJSON_Parse(buf);
-                    if (root && cJSON_IsArray(root)) {
-                        int sz = cJSON_GetArraySize(root);
-                        for (int i = 0; i < sz; i++) {
-                            cJSON* itm = cJSON_GetArrayItem(root, i);
-                            if (!itm) continue;
-                            cJSON* addr = cJSON_GetObjectItem(itm, "address");
-                            if (!addr) addr = cJSON_GetObjectItem(itm, "mac");
-                            cJSON* name = cJSON_GetObjectItem(itm, "name");
-                            cJSON* rssi = cJSON_GetObjectItem(itm, "rssi");
-                            cJSON* bonded = cJSON_GetObjectItem(itm, "bonded");
-                            cJSON* batt = cJSON_GetObjectItem(itm, "battery_pct");
-                            cJSON* atype = cJSON_GetObjectItem(itm, "addr_type");
+        err = nvs_get_str(handle, "paired", nullptr, &required_size);
+        if (err == ESP_OK && required_size > 0) {
+            if (required_size > MAX_BLE_NVS_JSON_LEN) {
+                ESP_LOGW(TAG, "Paired BLE NVS blob too large (%zu > %zu bytes), ignoring",
+                         required_size, MAX_BLE_NVS_JSON_LEN);
+            } else {
+                char* buf = (char*)malloc(required_size);
+                if (!buf) {
+                    ESP_LOGE(TAG, "Failed to allocate %zu bytes for paired BLE NVS load", required_size);
+                } else {
+                    err = nvs_get_str(handle, "paired", buf, &required_size);
+                    if (err != ESP_OK) {
+                        ESP_LOGW(TAG, "Failed to read paired BLE devices from NVS: %s", esp_err_to_name(err));
+                    } else {
+                        cJSON* root = cJSON_Parse(buf);
+                        if (!root || !cJSON_IsArray(root)) {
+                            ESP_LOGW(TAG, "Invalid paired BLE devices JSON in NVS");
+                        } else {
+                            std::lock_guard<std::mutex> lock(s_ble_mutex);
+                            int sz = cJSON_GetArraySize(root);
+                            for (int i = 0; i < sz; i++) {
+                                if (s_paired_devices.size() >= MAX_PAIRED_DEVICES) {
+                                    ESP_LOGW(TAG, "Paired BLE devices in NVS exceeded cap (%zu), truncating",
+                                             MAX_PAIRED_DEVICES);
+                                    break;
+                                }
+                                cJSON* itm = cJSON_GetArrayItem(root, i);
+                                if (!itm) continue;
+                                cJSON* addr = cJSON_GetObjectItem(itm, "address");
+                                if (!addr) addr = cJSON_GetObjectItem(itm, "mac");
+                                cJSON* name = cJSON_GetObjectItem(itm, "name");
+                                cJSON* rssi = cJSON_GetObjectItem(itm, "rssi");
+                                cJSON* bonded = cJSON_GetObjectItem(itm, "bonded");
+                                cJSON* batt = cJSON_GetObjectItem(itm, "battery_pct");
+                                cJSON* atype = cJSON_GetObjectItem(itm, "addr_type");
 
-                            PairedDevice dev;
-                            dev.address = (addr && cJSON_IsString(addr)) ? addr->valuestring : "";
-                            dev.name = (name && cJSON_IsString(name)) ? name->valuestring : "Paired Controller";
-                            dev.rssi = (rssi && cJSON_IsNumber(rssi)) ? (int8_t)rssi->valueint : -60;
-                            dev.connected = false;
-                            dev.bonded = (!bonded || cJSON_IsTrue(bonded));
-                            dev.battery_pct = (batt && cJSON_IsNumber(batt)) ? batt->valueint : 100;
-                            dev.addr_type = (atype && cJSON_IsNumber(atype)) ? (uint8_t)atype->valueint : 0;
+                                PairedDevice dev;
+                                dev.address = (addr && cJSON_IsString(addr)) ? addr->valuestring : "";
+                                dev.name = (name && cJSON_IsString(name)) ? name->valuestring : "Paired Controller";
+                                dev.rssi = (rssi && cJSON_IsNumber(rssi)) ? (int8_t)rssi->valueint : -60;
+                                dev.connected = false;
+                                dev.bonded = (!bonded || cJSON_IsTrue(bonded));
+                                dev.battery_pct = (batt && cJSON_IsNumber(batt)) ? batt->valueint : 100;
+                                dev.addr_type = (atype && cJSON_IsNumber(atype)) ? (uint8_t)atype->valueint : 0;
 
-                            if (!dev.address.empty()) {
-                                s_paired_devices.push_back(dev);
+                                if (!dev.address.empty()) {
+                                    s_paired_devices.push_back(dev);
+                                }
                             }
                         }
+                        if (root) cJSON_Delete(root);
                     }
-                    if (root) cJSON_Delete(root);
+                    free(buf);
                 }
-                free(buf);
             }
+        } else if (err != ESP_ERR_NVS_NOT_FOUND && err != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to query paired BLE NVS size: %s", esp_err_to_name(err));
         }
         nvs_close(handle);
+    } else if (err != ESP_ERR_NVS_NOT_FOUND) {
+        ESP_LOGW(TAG, "Failed to open NVS 'ble_cfg' for reading paired devices: %s", esp_err_to_name(err));
     }
-    ESP_LOGI(TAG, "Loaded %u paired BLE devices from NVS", (unsigned)s_paired_devices.size());
+    size_t loaded_count = 0;
+    {
+        std::lock_guard<std::mutex> lock(s_ble_mutex);
+        loaded_count = s_paired_devices.size();
+    }
+    ESP_LOGI(TAG, "Loaded %u paired BLE devices from NVS", (unsigned)loaded_count);
 }
 
 static void persist_paired_ble_devices(void) {
     cJSON* arr = cJSON_CreateArray();
+    if (!arr) {
+        ESP_LOGE(TAG, "Failed to allocate cJSON array for paired BLE devices");
+        return;
+    }
     {
         std::lock_guard<std::mutex> lock(s_ble_mutex);
         for (const auto& dev : s_paired_devices) {
             cJSON* itm = cJSON_CreateObject();
+            if (!itm) continue;
             cJSON_AddStringToObject(itm, "address", dev.address.c_str());
             cJSON_AddStringToObject(itm, "name", dev.name.c_str());
             cJSON_AddNumberToObject(itm, "rssi", dev.rssi);
@@ -241,68 +444,126 @@ static void persist_paired_ble_devices(void) {
     char* json_str = cJSON_PrintUnformatted(arr);
     cJSON_Delete(arr);
 
-    if (json_str) {
-        nvs_handle_t handle;
-        if (nvs_open("ble_cfg", NVS_READWRITE, &handle) == ESP_OK) {
-            nvs_set_str(handle, "paired", json_str);
-            nvs_commit(handle);
-            nvs_close(handle);
-        }
-        free(json_str);
+    if (!json_str) {
+        ESP_LOGE(TAG, "Failed to serialize paired BLE devices JSON");
+        return;
     }
+
+    if (strlen(json_str) >= MAX_BLE_NVS_JSON_LEN) {
+        ESP_LOGE(TAG, "Paired BLE devices JSON exceeds NVS cap (%zu >= %zu bytes), refusing to persist",
+                 strlen(json_str), MAX_BLE_NVS_JSON_LEN);
+        free(json_str);
+        return;
+    }
+
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("ble_cfg", NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open NVS 'ble_cfg' for paired devices: %s", esp_err_to_name(err));
+        free(json_str);
+        return;
+    }
+    err = nvs_set_str(handle, "paired", json_str);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to write paired BLE devices to NVS: %s", esp_err_to_name(err));
+    } else {
+        err = nvs_commit(handle);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to commit paired BLE devices to NVS: %s", esp_err_to_name(err));
+        }
+    }
+    nvs_close(handle);
+    free(json_str);
 }
 
 static void load_beacon_targets(void) {
-    s_beacon_targets.clear();
+    {
+        std::lock_guard<std::mutex> lock(s_ble_mutex);
+        s_beacon_targets.clear();
+    }
     nvs_handle_t handle;
-    if (nvs_open("ble_cfg", NVS_READONLY, &handle) == ESP_OK) {
+    esp_err_t err = nvs_open("ble_cfg", NVS_READONLY, &handle);
+    if (err == ESP_OK) {
         size_t required_size = 0;
-        if (nvs_get_str(handle, "targets", nullptr, &required_size) == ESP_OK && required_size > 0) {
-            char* buf = (char*)malloc(required_size);
-            if (buf) {
-                if (nvs_get_str(handle, "targets", buf, &required_size) == ESP_OK) {
-                    cJSON* root = cJSON_Parse(buf);
-                    if (root && cJSON_IsArray(root)) {
-                        int sz = cJSON_GetArraySize(root);
-                        for (int i = 0; i < sz; i++) {
-                            cJSON* itm = cJSON_GetArrayItem(root, i);
-                            if (!itm) continue;
-                            cJSON* uuid = cJSON_GetObjectItem(itm, "uuid");
-                            cJSON* mac = cJSON_GetObjectItem(itm, "mac");
-                            if (!mac) mac = cJSON_GetObjectItem(itm, "address");
-                            cJSON* name = cJSON_GetObjectItem(itm, "name");
-                            cJSON* enter_rssi = cJSON_GetObjectItem(itm, "enter_rssi");
-                            cJSON* exit_timeout = cJSON_GetObjectItem(itm, "exit_timeout_s");
-                            if (!exit_timeout) exit_timeout = cJSON_GetObjectItem(itm, "exit_timeout");
+        err = nvs_get_str(handle, "targets", nullptr, &required_size);
+        if (err == ESP_OK && required_size > 0) {
+            if (required_size > MAX_BLE_NVS_JSON_LEN) {
+                ESP_LOGW(TAG, "Beacon targets NVS blob too large (%zu > %zu bytes), ignoring",
+                         required_size, MAX_BLE_NVS_JSON_LEN);
+            } else {
+                char* buf = (char*)malloc(required_size);
+                if (!buf) {
+                    ESP_LOGE(TAG, "Failed to allocate %zu bytes for beacon targets NVS load", required_size);
+                } else {
+                    err = nvs_get_str(handle, "targets", buf, &required_size);
+                    if (err != ESP_OK) {
+                        ESP_LOGW(TAG, "Failed to read beacon targets from NVS: %s", esp_err_to_name(err));
+                    } else {
+                        cJSON* root = cJSON_Parse(buf);
+                        if (!root || !cJSON_IsArray(root)) {
+                            ESP_LOGW(TAG, "Invalid beacon targets JSON in NVS");
+                        } else {
+                            std::lock_guard<std::mutex> lock(s_ble_mutex);
+                            int sz = cJSON_GetArraySize(root);
+                            for (int i = 0; i < sz; i++) {
+                                if (s_beacon_targets.size() >= MAX_BEACON_TARGETS) {
+                                    ESP_LOGW(TAG, "Beacon targets in NVS exceeded cap (%zu), truncating",
+                                             MAX_BEACON_TARGETS);
+                                    break;
+                                }
+                                cJSON* itm = cJSON_GetArrayItem(root, i);
+                                if (!itm) continue;
+                                cJSON* uuid = cJSON_GetObjectItem(itm, "uuid");
+                                cJSON* mac = cJSON_GetObjectItem(itm, "mac");
+                                if (!mac) mac = cJSON_GetObjectItem(itm, "address");
+                                cJSON* name = cJSON_GetObjectItem(itm, "name");
+                                cJSON* enter_rssi = cJSON_GetObjectItem(itm, "enter_rssi");
+                                cJSON* exit_timeout = cJSON_GetObjectItem(itm, "exit_timeout_s");
+                                if (!exit_timeout) exit_timeout = cJSON_GetObjectItem(itm, "exit_timeout");
 
-                            BeaconTarget b;
-                            b.uuid = (uuid && cJSON_IsString(uuid)) ? uuid->valuestring : "";
-                            b.mac = (mac && cJSON_IsString(mac)) ? mac->valuestring : "";
-                            b.name = (name && cJSON_IsString(name)) ? name->valuestring : "Phone Beacon";
-                            b.enter_rssi = (enter_rssi && cJSON_IsNumber(enter_rssi)) ? enter_rssi->valueint : -75;
-                            b.exit_timeout_s = (exit_timeout && cJSON_IsNumber(exit_timeout)) ? exit_timeout->valueint : 20;
+                                BeaconTarget b;
+                                b.uuid = (uuid && cJSON_IsString(uuid)) ? uuid->valuestring : "";
+                                b.mac = (mac && cJSON_IsString(mac)) ? mac->valuestring : "";
+                                b.name = (name && cJSON_IsString(name)) ? name->valuestring : "Phone Beacon";
+                                b.enter_rssi = (enter_rssi && cJSON_IsNumber(enter_rssi)) ? enter_rssi->valueint : -75;
+                                b.exit_timeout_s = (exit_timeout && cJSON_IsNumber(exit_timeout)) ? exit_timeout->valueint : 20;
 
-                            if (!b.uuid.empty() || !b.mac.empty()) {
-                                s_beacon_targets.push_back(b);
+                                if (!b.uuid.empty() || !b.mac.empty()) {
+                                    s_beacon_targets.push_back(b);
+                                }
                             }
                         }
+                        if (root) cJSON_Delete(root);
                     }
-                    if (root) cJSON_Delete(root);
+                    free(buf);
                 }
-                free(buf);
             }
+        } else if (err != ESP_ERR_NVS_NOT_FOUND && err != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to query beacon targets NVS size: %s", esp_err_to_name(err));
         }
         nvs_close(handle);
+    } else if (err != ESP_ERR_NVS_NOT_FOUND) {
+        ESP_LOGW(TAG, "Failed to open NVS 'ble_cfg' for reading beacon targets: %s", esp_err_to_name(err));
     }
-    ESP_LOGI(TAG, "Loaded %u beacon targets from NVS", (unsigned)s_beacon_targets.size());
+    size_t loaded_count = 0;
+    {
+        std::lock_guard<std::mutex> lock(s_ble_mutex);
+        loaded_count = s_beacon_targets.size();
+    }
+    ESP_LOGI(TAG, "Loaded %u beacon targets from NVS", (unsigned)loaded_count);
 }
 
 static void persist_beacon_targets(void) {
     cJSON* arr = cJSON_CreateArray();
+    if (!arr) {
+        ESP_LOGE(TAG, "Failed to allocate cJSON array for beacon targets");
+        return;
+    }
     {
         std::lock_guard<std::mutex> lock(s_ble_mutex);
         for (const auto& b : s_beacon_targets) {
             cJSON* itm = cJSON_CreateObject();
+            if (!itm) continue;
             cJSON_AddStringToObject(itm, "uuid", b.uuid.c_str());
             cJSON_AddStringToObject(itm, "mac", b.mac.c_str());
             cJSON_AddStringToObject(itm, "name", b.name.c_str());
@@ -314,15 +575,36 @@ static void persist_beacon_targets(void) {
     char* json_str = cJSON_PrintUnformatted(arr);
     cJSON_Delete(arr);
 
-    if (json_str) {
-        nvs_handle_t handle;
-        if (nvs_open("ble_cfg", NVS_READWRITE, &handle) == ESP_OK) {
-            nvs_set_str(handle, "targets", json_str);
-            nvs_commit(handle);
-            nvs_close(handle);
-        }
-        free(json_str);
+    if (!json_str) {
+        ESP_LOGE(TAG, "Failed to serialize beacon targets JSON");
+        return;
     }
+
+    if (strlen(json_str) >= MAX_BLE_NVS_JSON_LEN) {
+        ESP_LOGE(TAG, "Beacon targets JSON exceeds NVS cap (%zu >= %zu bytes), refusing to persist",
+                 strlen(json_str), MAX_BLE_NVS_JSON_LEN);
+        free(json_str);
+        return;
+    }
+
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("ble_cfg", NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open NVS 'ble_cfg' for beacon targets: %s", esp_err_to_name(err));
+        free(json_str);
+        return;
+    }
+    err = nvs_set_str(handle, "targets", json_str);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to write beacon targets to NVS: %s", esp_err_to_name(err));
+    } else {
+        err = nvs_commit(handle);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to commit beacon targets to NVS: %s", esp_err_to_name(err));
+        }
+    }
+    nvs_close(handle);
+    free(json_str);
 }
 
 // ============================================================================
@@ -338,8 +620,10 @@ static std::string format_chord(const std::vector<std::string>& keys) {
 }
 
 static void append_ble_event_json(cJSON* obj, const BleButtonEvent& ev) {
+    cJSON_AddStringToObject(obj, "address", ev.device_address.c_str());
     cJSON_AddStringToObject(obj, "device_address", ev.device_address.c_str());
     cJSON_AddStringToObject(obj, "device_name", ev.device_name.c_str());
+    cJSON_AddStringToObject(obj, "button", ev.button_name.c_str());
     cJSON_AddStringToObject(obj, "button_name", ev.button_name.c_str());
     cJSON_AddStringToObject(obj, "action", ev.action.c_str());
     cJSON_AddNumberToObject(obj, "timestamp_ms", ev.timestamp_ms);
@@ -355,39 +639,90 @@ static void fire_ble_button_event(const std::string& addr, const std::string& na
                                   const std::string& btn, const std::string& act,
                                   const std::string& combo = "", uint32_t hold_seconds = 0) {
     uint32_t now_ms = get_time_ms();
+    BleButtonEvent ev = { addr, name, btn, act, now_ms, combo, hold_seconds };
     {
         std::lock_guard<std::mutex> lock(s_ble_mutex);
-        s_last_ble_event = { addr, name, btn, act, now_ms, combo, hold_seconds };
+        s_last_ble_event = ev;
         s_has_last_event = true;
-        if (s_recent_ble_events.size() >= 30) {
+        if (s_recent_ble_events.size() >= MAX_RECENT_BLE_EVENTS) {
             s_recent_ble_events.erase(s_recent_ble_events.begin());
         }
-        s_recent_ble_events.push_back(s_last_ble_event);
+        s_recent_ble_events.push_back(ev);
     }
 
     cJSON* root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "type", "ble_event");
-    cJSON_AddStringToObject(root, "address", addr.c_str());
-    cJSON_AddStringToObject(root, "device_name", name.c_str());
-    cJSON_AddStringToObject(root, "button", btn.c_str());
-    cJSON_AddStringToObject(root, "action", act.c_str());
-    if (!combo.empty()) {
-        cJSON_AddStringToObject(root, "combo", combo.c_str());
+    if (root) {
+        cJSON_AddStringToObject(root, "type", "ble_event");
+        append_ble_event_json(root, ev);
+        char* json_str = cJSON_PrintUnformatted(root);
+        if (json_str) {
+            broadcast_ws_raw(json_str);
+            free(json_str);
+        }
+        cJSON_Delete(root);
     }
-    if (hold_seconds > 0) {
-        cJSON_AddNumberToObject(root, "hold_seconds", hold_seconds);
-    }
-    cJSON_AddNumberToObject(root, "timestamp_ms", now_ms);
-    char* json_str = cJSON_PrintUnformatted(root);
-    if (json_str) {
-        broadcast_ws_raw(json_str);
-        free(json_str);
-    }
-    cJSON_Delete(root);
 
     ESP_LOGI(TAG, "[BLE BTN] %s '%s' from %s (%s) combo=%s hold_s=%lu",
              act.c_str(), btn.c_str(), name.c_str(), addr.c_str(), combo.c_str(), (unsigned long)hold_seconds);
     can_engine_on_ble_event(addr, btn, act, combo, hold_seconds);
+}
+
+static void append_ble_device_json(cJSON* obj, const std::string& address, const std::string& name,
+                                   int rssi, bool connected, bool bonded, int battery_pct = -1) {
+    cJSON_AddStringToObject(obj, "address", address.c_str());
+    cJSON_AddStringToObject(obj, "name", name.c_str());
+    cJSON_AddNumberToObject(obj, "rssi", rssi);
+    cJSON_AddBoolToObject(obj, "connected", connected);
+    cJSON_AddBoolToObject(obj, "bonded", bonded);
+    if (battery_pct >= 0) {
+        cJSON_AddNumberToObject(obj, "battery_pct", battery_pct);
+    }
+}
+
+static void emit_ws_ble_beacon(const char* evt, const std::string& uuid, const std::string& mac,
+                               const std::string& name, int rssi, uint16_t major, uint16_t minor,
+                               bool is_present) {
+    cJSON* b_evt = cJSON_CreateObject();
+    if (!b_evt) return;
+    cJSON_AddStringToObject(b_evt, "type", "ble_beacon");
+    cJSON_AddStringToObject(b_evt, "event", evt);
+    cJSON_AddStringToObject(b_evt, "uuid", uuid.c_str());
+    cJSON_AddStringToObject(b_evt, "mac", mac.c_str());
+    cJSON_AddStringToObject(b_evt, "name", name.c_str());
+    cJSON_AddBoolToObject(b_evt, "is_present", is_present);
+    cJSON_AddNumberToObject(b_evt, "rssi", rssi);
+    cJSON_AddNumberToObject(b_evt, "major", major);
+    cJSON_AddNumberToObject(b_evt, "minor", minor);
+    char* b_out = cJSON_PrintUnformatted(b_evt);
+    if (b_out) {
+        broadcast_ws_raw(b_out);
+        free(b_out);
+    }
+    cJSON_Delete(b_evt);
+}
+
+static void enqueue_button_dispatch_locked(const std::string& addr, const std::string& name,
+                                           const std::string& btn, const std::string& act,
+                                           const std::string& combo, uint32_t hold_s) {
+    if (s_pending_button_events.size() >= BLE_MAX_PENDING_EVENTS) {
+        s_pending_button_events.erase(s_pending_button_events.begin());
+    }
+    s_pending_button_events.push_back({addr, name, btn, act, combo, hold_s});
+}
+
+static void enqueue_device_dispatch_locked(const std::string& event, const std::string& addr,
+                                           const std::string& name, int rssi) {
+    if (s_pending_device_events.size() >= BLE_MAX_PENDING_EVENTS) {
+        s_pending_device_events.erase(s_pending_device_events.begin());
+    }
+    s_pending_device_events.push_back({event, addr, name, rssi});
+}
+
+static void enqueue_beacon_dispatch_locked(const PendingBeaconDispatch& pe) {
+    if (s_pending_beacon_events.size() >= BLE_MAX_PENDING_EVENTS) {
+        s_pending_beacon_events.erase(s_pending_beacon_events.begin());
+    }
+    s_pending_beacon_events.push_back(pe);
 }
 
 static void flush_chord_release_locked(bool* out_was_settling, bool* out_had_chord,
@@ -406,15 +741,20 @@ static void flush_chord_release_locked(bool* out_was_settling, bool* out_had_cho
     s_chord = {};
 }
 
-static void emit_chord_release(bool was_settling, bool had_chord,
-                               const std::string& addr, const std::string& name,
-                               const std::string& chord, bool is_combo, uint32_t hold_s) {
-    if (!had_chord) return;
+static bool enqueue_chord_release_locked(void) {
+    bool was_settling = false;
+    bool had_chord = false;
+    bool is_combo = false;
+    uint32_t hold_s = 0;
+    std::string addr, name, chord;
+    flush_chord_release_locked(&was_settling, &had_chord, &addr, &name, &chord, &is_combo, &hold_s);
+    if (!had_chord) return false;
     const std::string combo_str = is_combo ? chord : "";
     if (was_settling) {
-        fire_ble_button_event(addr, name, chord, "press", combo_str, 0);
+        enqueue_button_dispatch_locked(addr, name, chord, "press", combo_str, 0);
     }
-    fire_ble_button_event(addr, name, chord, "release", combo_str, hold_s);
+    enqueue_button_dispatch_locked(addr, name, chord, "release", combo_str, hold_s);
+    return true;
 }
 
 static std::vector<std::string> parse_hid_report_keys(const uint8_t* pData, size_t length) {
@@ -437,6 +777,9 @@ static std::vector<std::string> parse_hid_report_keys(const uint8_t* pData, size
                 has_kbd_keys = true;
                 break;
             }
+        }
+        if (!has_kbd_keys && length == 8) {
+            return keys;
         }
     }
 
@@ -483,7 +826,7 @@ static std::vector<std::string> parse_hid_report_keys(const uint8_t* pData, size
     } else {
         // Consumer Control / Media / Macro Keypad reports
         uint16_t usage = 0;
-        if (length >= 2 && pData[0] == 0x00 && (pData[1] != 0 || (length >= 3 && pData[2] != 0))) {
+        if (length >= 3 && pData[0] == 0x00 && (pData[1] != 0 || pData[2] != 0)) {
             usage = pData[1] | ((uint16_t)pData[2] << 8);
         } else if (length >= 2 && (pData[0] != 0 || pData[1] != 0)) {
             usage = pData[0] | ((uint16_t)pData[1] << 8);
@@ -569,16 +912,14 @@ static void on_hid_report_notify(NimBLERemoteCharacteristic* pChar, uint8_t* pDa
         }
         wake_ble_worker();
     } else {
-        bool was_settling = false;
-        bool had_chord = false;
-        bool is_combo = false;
-        uint32_t hold_s = 0;
-        std::string addr, name, chord;
+        bool queued = false;
         {
             std::lock_guard<std::mutex> lock(s_ble_mutex);
-            flush_chord_release_locked(&was_settling, &had_chord, &addr, &name, &chord, &is_combo, &hold_s);
+            queued = enqueue_chord_release_locked();
         }
-        emit_chord_release(was_settling, had_chord, addr, name, chord, is_combo, hold_s);
+        if (queued) {
+            wake_ble_worker();
+        }
     }
 }
 
@@ -589,82 +930,71 @@ class ClientCallbacks : public NimBLEClientCallbacks {
     void onConnect(NimBLEClient* pClient) override {
         std::string addr = pClient->getPeerAddress().toString();
         ESP_LOGI(TAG, "Connected to %s", addr.c_str());
-        NimBLEDevice::getScan()->stop();
+        if (NimBLEScan* pScan = NimBLEDevice::getScan()) {
+            pScan->stop();
+        }
+        s_ble_scanning.store(false, std::memory_order_relaxed);
 
         std::string dev_name = "";
-        int cur_rssi = pClient->getRssi();
+        int cur_rssi = 0;
         {
             std::lock_guard<std::mutex> lock(s_ble_mutex);
-            s_ble_client_connected = true;
+            note_ble_scan_paused_locked(get_time_ms());
+            s_ble_client_connected.store(true, std::memory_order_relaxed);
             s_connected_device_addr = addr;
             for (auto& dev : s_paired_devices) {
                 if (iequals(dev.address, addr)) {
                     dev.connected = true;
+                    dev.reconnect_backoff_ms = 0;
+                    dev.last_connect_attempt_ms = 0;
                     dev_name = dev.name;
+                    cur_rssi = dev.rssi;
                     break;
                 }
             }
+            enqueue_device_dispatch_locked("connected", addr, dev_name, cur_rssi);
         }
-
-        cJSON* root = cJSON_CreateObject();
-        cJSON_AddStringToObject(root, "type", "ble_device_event");
-        cJSON_AddStringToObject(root, "event", "connected");
-        cJSON_AddStringToObject(root, "address", addr.c_str());
-        cJSON_AddStringToObject(root, "name", dev_name.c_str());
-        cJSON_AddNumberToObject(root, "rssi", cur_rssi);
-        char* out = cJSON_PrintUnformatted(root);
-        if (out) {
-            broadcast_ws_raw(out);
-            free(out);
-        }
-        cJSON_Delete(root);
-
-        can_engine_on_ble_device_event(addr, "connected", cur_rssi, dev_name);
+        wake_ble_worker();
     }
 
     void onDisconnect(NimBLEClient* pClient, int reason) override {
-        std::string disc_addr = s_connected_device_addr;
-        ESP_LOGI(TAG, "Disconnected from %s (reason: %d)", disc_addr.c_str(), reason);
-
-        bool was_settling = false;
-        bool had_chord = false;
-        bool is_combo = false;
-        uint32_t hold_s = 0;
-        std::string ev_addr, ev_name, chord;
+        (void)pClient;
+        std::string disc_addr;
         {
             std::lock_guard<std::mutex> lock(s_ble_mutex);
-            s_ble_client_connected = false;
+            disc_addr = s_connected_device_addr;
+            s_ble_client_connected.store(false, std::memory_order_relaxed);
             s_connected_device_addr = "";
-            flush_chord_release_locked(&was_settling, &had_chord, &ev_addr, &ev_name, &chord, &is_combo, &hold_s);
+            enqueue_chord_release_locked();
             for (auto& dev : s_paired_devices) {
                 if (iequals(dev.address, disc_addr)) {
                     dev.connected = false;
                     break;
                 }
             }
+            enqueue_device_dispatch_locked("disconnected", disc_addr, "", 0);
         }
-        emit_chord_release(was_settling, had_chord, ev_addr, ev_name, chord, is_combo, hold_s);
 
-        cJSON* root = cJSON_CreateObject();
-        cJSON_AddStringToObject(root, "type", "ble_device_event");
-        cJSON_AddStringToObject(root, "event", "disconnected");
-        cJSON_AddStringToObject(root, "address", disc_addr.c_str());
-        char* out = cJSON_PrintUnformatted(root);
-        if (out) {
-            broadcast_ws_raw(out);
-            free(out);
-        }
-        cJSON_Delete(root);
-
-        can_engine_on_ble_device_event(disc_addr, "disconnected", 0, "");
+        ESP_LOGI(TAG, "Disconnected from %s (reason: %d)", disc_addr.c_str(), reason);
 
         // Resume continuous background scan
         start_background_ble_scan();
+        wake_ble_worker();
     }
 } s_client_callbacks;
 
 static void connect_ble_device(const std::string& address, uint8_t addr_type = 0xFF, const NimBLEAdvertisedDevice* pAdvDev = nullptr) {
     if (address.empty() && !pAdvDev) return;
+
+    s_ble_connecting.store(true, std::memory_order_relaxed);
+    {
+        std::lock_guard<std::mutex> lock(s_ble_mutex);
+        note_ble_scan_paused_locked(get_time_ms());
+    }
+    if (NimBLEScan* pScan = NimBLEDevice::getScan()) {
+        pScan->stop();
+    }
+    s_ble_scanning.store(false, std::memory_order_relaxed);
 
     if (!s_ble_client) {
         s_ble_client = NimBLEDevice::createClient();
@@ -677,6 +1007,8 @@ static void connect_ble_device(const std::string& address, uint8_t addr_type = 0
     }
 
     s_ble_client->setConnectTimeout(3 * 1000);
+    // Use 15-30ms interval, slave latency 4, 4.0s timeout so HID remotes don't default to 7.5ms and starve Wi-Fi
+    s_ble_client->setConnectionParams(12, 24, 4, 400);
     bool connected = false;
     uint8_t target_type = addr_type;
 
@@ -713,12 +1045,12 @@ static void connect_ble_device(const std::string& address, uint8_t addr_type = 0
         }
 
         NimBLEAddress bleAddr(address, target_type);
-        ESP_LOGI(TAG, "Attempting connection to %s (type=%d)...", address.c_str(), target_type);
+        ESP_LOGD(TAG, "Attempting connection to %s (type=%d)...", address.c_str(), target_type);
 
         connected = s_ble_client->connect(bleAddr, false);
         if (!connected) {
             uint8_t alt_type = (target_type == BLE_ADDR_RANDOM) ? BLE_ADDR_PUBLIC : BLE_ADDR_RANDOM;
-            ESP_LOGI(TAG, "Retrying connection to %s with alternate type (%d)...", address.c_str(), alt_type);
+            ESP_LOGD(TAG, "Retrying connection to %s with alternate type (%d)...", address.c_str(), alt_type);
             NimBLEAddress altAddr(address, alt_type);
             connected = s_ble_client->connect(altAddr, false);
             if (connected) {
@@ -737,6 +1069,8 @@ static void connect_ble_device(const std::string& address, uint8_t addr_type = 0
                 if (iequals(dev.address, address)) {
                     dev.addr_type = target_type;
                     dev.connected = true;
+                    dev.reconnect_backoff_ms = 0;
+                    dev.last_connect_attempt_ms = 0;
                     break;
                 }
             }
@@ -789,10 +1123,31 @@ static void connect_ble_device(const std::string& address, uint8_t addr_type = 0
                 }
             }
         }
+        if (s_ble_client->isConnected()) {
+            s_ble_client->updateConnParams(12, 24, 4, 400);
+        }
     } else {
-        ESP_LOGW(TAG, "Connection to %s failed. Resuming continuous scan.", address.c_str());
-        start_background_ble_scan();
+        uint32_t next_backoff_ms = BLE_RECONNECT_BACKOFF_MIN_MS;
+        {
+            std::lock_guard<std::mutex> lock(s_ble_mutex);
+            uint32_t now_ms = get_time_ms();
+            for (auto& dev : s_paired_devices) {
+                if (iequals(dev.address, address)) {
+                    dev.reconnect_backoff_ms = (dev.reconnect_backoff_ms == 0)
+                        ? BLE_RECONNECT_BACKOFF_MIN_MS
+                        : std::min<uint32_t>(dev.reconnect_backoff_ms * 2U, BLE_RECONNECT_BACKOFF_MAX_MS);
+                    dev.last_connect_attempt_ms = now_ms;
+                    next_backoff_ms = dev.reconnect_backoff_ms;
+                    break;
+                }
+            }
+        }
+        ESP_LOGW(TAG, "Connection to %s failed (next retry in %lus). Resuming continuous scan.",
+                 address.c_str(), (unsigned long)(next_backoff_ms / 1000U));
     }
+
+    s_ble_connecting.store(false, std::memory_order_relaxed);
+    start_background_ble_scan();
 }
 
 // ============================================================================
@@ -802,7 +1157,8 @@ class ScanCallbacks : public NimBLEScanCallbacks {
     void onDiscovered(const NimBLEAdvertisedDevice* advertisedDevice) override {
         bool has_mfg = advertisedDevice->getManufacturerDataCount() > 0;
         bool has_targets = s_bg_scan_has_targets.load(std::memory_order_relaxed);
-        if (!s_ble_scanning && !has_targets && !has_mfg) {
+        bool is_scanning = s_ble_scanning.load(std::memory_order_relaxed);
+        if (!is_scanning && !has_targets && !has_mfg) {
             return;
         }
 
@@ -810,7 +1166,7 @@ class ScanCallbacks : public NimBLEScanCallbacks {
         int8_t rssi = advertisedDevice->getRSSI();
         uint8_t a_type = advertisedDevice->getAddressType();
         std::string name;
-        if (s_ble_scanning || has_targets) {
+        if (is_scanning || has_targets) {
             name = advertisedDevice->getName();
             if (name.empty() || name == "Unknown Device") {
                 char short_buf[32];
@@ -821,7 +1177,7 @@ class ScanCallbacks : public NimBLEScanCallbacks {
         }
 
         // 1. Discovery filtering: active user-initiated scan within vehicle range
-        if (s_ble_scanning && rssi >= BLE_MIN_RSSI_DISCOVERY) {
+        if (is_scanning && rssi >= BLE_MIN_RSSI_DISCOVERY) {
             std::lock_guard<std::mutex> lock(s_ble_mutex);
             bool exists = false;
             for (auto& dev : s_discovered_devices) {
@@ -842,14 +1198,26 @@ class ScanCallbacks : public NimBLEScanCallbacks {
                 nd.rssi = rssi;
                 nd.is_connectable = advertisedDevice->isConnectable();
                 nd.addr_type = a_type;
-                s_discovered_devices.push_back(nd);
+                if (s_discovered_devices.size() < MAX_DISCOVERED_DEVICES) {
+                    s_discovered_devices.push_back(nd);
+                } else {
+                    auto weakest_it = std::min_element(
+                        s_discovered_devices.begin(), s_discovered_devices.end(),
+                        [](const DiscoveredDevice& a, const DiscoveredDevice& b) {
+                            return a.rssi < b.rssi;
+                        });
+                    if (weakest_it != s_discovered_devices.end() && rssi > weakest_it->rssi) {
+                        *weakest_it = nd;
+                    }
+                }
             }
         }
 
         // 2. Check if device is paired and needs reconnection
-        bool is_paired = false;
-        std::string paired_name = "";
+        bool send_prox = false;
+        bool try_connect = false;
         if (has_targets) {
+            uint32_t now = get_time_ms();
             std::lock_guard<std::mutex> lock(s_ble_mutex);
             for (auto& paired : s_paired_devices) {
                 if (iequals(paired.address, addr)) {
@@ -858,97 +1226,92 @@ class ScanCallbacks : public NimBLEScanCallbacks {
                     if (!name.empty() && name.find("BLE Device") == std::string::npos) {
                         paired.name = name;
                     }
-                    is_paired = true;
-                    paired_name = paired.name;
+                    if (paired.last_prox_send_ms == 0 || (now - paired.last_prox_send_ms > 2000)) {
+                        paired.last_prox_send_ms = now;
+                        enqueue_device_dispatch_locked("proximity", addr, paired.name, rssi);
+                        send_prox = true;
+                    }
+                    uint32_t wait_ms = paired.reconnect_backoff_ms ? paired.reconnect_backoff_ms : BLE_RECONNECT_BACKOFF_MIN_MS;
+                    if (!s_ble_client_connected.load(std::memory_order_relaxed) &&
+                        !s_ble_connecting.load(std::memory_order_relaxed) &&
+                        (paired.last_connect_attempt_ms == 0 || (now - paired.last_connect_attempt_ms >= wait_ms))) {
+                        paired.last_connect_attempt_ms = now;
+                        try_connect = true;
+                    }
                     break;
                 }
             }
         }
-
-        if (is_paired) {
-            static uint32_t s_last_prox_send = 0;
-            uint32_t now = get_time_ms();
-            if (now - s_last_prox_send > 2000) {
-                s_last_prox_send = now;
-                can_engine_on_ble_device_event(addr, "proximity", rssi, paired_name);
-            }
-
-            // Request deferred connection if disconnected
-            static uint32_t s_last_connect_attempt = 0;
-            if (!s_ble_client_connected && (now - s_last_connect_attempt > 15000)) {
-                s_last_connect_attempt = now;
-                {
-                    std::lock_guard<std::mutex> clock(s_connect_mutex);
-                    s_pending_connect_addr = addr;
-                    s_pending_connect_type = a_type;
-                    s_pending_connect_req = true;
-                }
-                wake_ble_worker();
-            }
+        if (try_connect) {
+            std::lock_guard<std::mutex> clock(s_connect_mutex);
+            s_pending_connect_addr = addr;
+            s_pending_connect_type = a_type;
+            s_pending_connect_req = true;
+        }
+        if (send_prox || try_connect) {
+            wake_ble_worker();
         }
 
-        // 3. iBeacon / Proximity Detection
+        // 3. iBeacon / Proximity Detection (scan all manufacturer AD records in multi-AD payloads)
         std::string adv_uuid = "";
         uint16_t adv_major = 0;
         uint16_t adv_minor = 0;
 
         if (has_mfg) {
-            std::string mfg = advertisedDevice->getManufacturerData(0);
-            if (mfg.length() >= 25 &&
-                (uint8_t)mfg[0] == 0x4C && (uint8_t)mfg[1] == 0x00 &&
-                (uint8_t)mfg[2] == 0x02 && (uint8_t)mfg[3] == 0x15) {
+            uint8_t mfg_count = advertisedDevice->getManufacturerDataCount();
+            for (uint8_t mfg_idx = 0; mfg_idx < mfg_count; ++mfg_idx) {
+                std::string mfg = advertisedDevice->getManufacturerData(mfg_idx);
+                if (mfg.length() >= 25 &&
+                    (uint8_t)mfg[0] == 0x4C && (uint8_t)mfg[1] == 0x00 &&
+                    (uint8_t)mfg[2] == 0x02 && (uint8_t)mfg[3] == 0x15) {
 
-                char uuid_buf[37];
-                snprintf(uuid_buf, sizeof(uuid_buf),
-                         "%02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X",
-                         (uint8_t)mfg[4], (uint8_t)mfg[5], (uint8_t)mfg[6], (uint8_t)mfg[7],
-                         (uint8_t)mfg[8], (uint8_t)mfg[9],
-                         (uint8_t)mfg[10], (uint8_t)mfg[11],
-                         (uint8_t)mfg[12], (uint8_t)mfg[13],
-                         (uint8_t)mfg[14], (uint8_t)mfg[15], (uint8_t)mfg[16], (uint8_t)mfg[17], (uint8_t)mfg[18], (uint8_t)mfg[19]);
-                adv_uuid = uuid_buf;
-                adv_major = ((uint8_t)mfg[20] << 8) | (uint8_t)mfg[21];
-                adv_minor = ((uint8_t)mfg[22] << 8) | (uint8_t)mfg[23];
+                    char uuid_buf[37];
+                    snprintf(uuid_buf, sizeof(uuid_buf),
+                             "%02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X",
+                             (uint8_t)mfg[4], (uint8_t)mfg[5], (uint8_t)mfg[6], (uint8_t)mfg[7],
+                             (uint8_t)mfg[8], (uint8_t)mfg[9],
+                             (uint8_t)mfg[10], (uint8_t)mfg[11],
+                             (uint8_t)mfg[12], (uint8_t)mfg[13],
+                             (uint8_t)mfg[14], (uint8_t)mfg[15], (uint8_t)mfg[16], (uint8_t)mfg[17], (uint8_t)mfg[18], (uint8_t)mfg[19]);
+                    adv_uuid = uuid_buf;
+                    adv_major = ((uint8_t)mfg[20] << 8) | (uint8_t)mfg[21];
+                    adv_minor = ((uint8_t)mfg[22] << 8) | (uint8_t)mfg[23];
 
-                uint32_t now_ms = get_time_ms();
-                std::lock_guard<std::mutex> lock(s_ble_mutex);
-                bool b_exists = false;
-                for (auto& b : s_discovered_beacons) {
-                    if (iequals(b.uuid, adv_uuid)) {
-                        b.rssi = rssi;
-                        b.mac = addr;
-                        b.major = adv_major;
-                        b.minor = adv_minor;
-                        b.last_seen_ms = now_ms;
-                        b_exists = true;
-                        break;
+                    uint32_t now_ms = get_time_ms();
+                    std::lock_guard<std::mutex> lock(s_ble_mutex);
+                    bool b_exists = false;
+                    for (auto& b : s_discovered_beacons) {
+                        if (iequals(b.uuid, adv_uuid)) {
+                            b.rssi = rssi;
+                            b.mac = addr;
+                            b.major = adv_major;
+                            b.minor = adv_minor;
+                            b.last_seen_ms = now_ms;
+                            b_exists = true;
+                            break;
+                        }
                     }
-                }
-                if (!b_exists) {
-                    if (s_discovered_beacons.size() >= 10) s_discovered_beacons.erase(s_discovered_beacons.begin());
-                    DiscoveredBeacon nb;
-                    nb.uuid = adv_uuid;
-                    nb.mac = addr;
-                    nb.rssi = rssi;
-                    nb.major = adv_major;
-                    nb.minor = adv_minor;
-                    nb.last_seen_ms = now_ms;
-                    s_discovered_beacons.push_back(nb);
+                    if (!b_exists) {
+                        if (s_discovered_beacons.size() >= MAX_DISCOVERED_BEACONS) {
+                            s_discovered_beacons.erase(s_discovered_beacons.begin());
+                        }
+                        DiscoveredBeacon nb;
+                        nb.uuid = adv_uuid;
+                        nb.mac = addr;
+                        nb.rssi = rssi;
+                        nb.major = adv_major;
+                        nb.minor = adv_minor;
+                        nb.last_seen_ms = now_ms;
+                        s_discovered_beacons.push_back(nb);
+                    }
+                    break;
                 }
             }
         }
 
         // 4. Match against configured beacon targets (never hold s_ble_mutex across WS/CAN/MQTT dispatch)
         if (has_targets) {
-            struct PendingBeaconEvt {
-                const char* evt;
-                std::string uuid;
-                std::string name;
-                int last_rssi;
-                uint16_t major;
-                uint16_t minor;
-            };
-            std::vector<PendingBeaconEvt> pending_evts;
+            bool queued_beacon = false;
             uint32_t now_ms = get_time_ms();
             {
                 std::lock_guard<std::mutex> lock(s_ble_mutex);
@@ -978,39 +1341,25 @@ class ScanCallbacks : public NimBLEScanCallbacks {
                             target.last_prox_send_ms = now_ms;
                             ESP_LOGI(TAG, "[BEACON] Target '%s' ENTERED (Smoothed RSSI %d dBm >= %d dBm)",
                                      target.name.c_str(), target.last_rssi, target.enter_rssi);
-                            pending_evts.push_back({"enter", target.uuid, target.name, target.last_rssi, target.major, target.minor});
+                            enqueue_beacon_dispatch_locked({"enter", target.uuid, addr, target.name, target.last_rssi, target.major, target.minor});
+                            queued_beacon = true;
                         } else if (target.is_present && (now_ms - target.last_prox_send_ms > 2500)) {
                             target.last_prox_send_ms = now_ms;
-                            pending_evts.push_back({"proximity", target.uuid, target.name, target.last_rssi, target.major, target.minor});
+                            enqueue_beacon_dispatch_locked({"proximity", target.uuid, addr, target.name, target.last_rssi, target.major, target.minor});
+                            queued_beacon = true;
                         }
                     }
                 }
             }
 
-            for (const auto& pe : pending_evts) {
-                cJSON* b_evt = cJSON_CreateObject();
-                cJSON_AddStringToObject(b_evt, "type", "ble_beacon");
-                cJSON_AddStringToObject(b_evt, "event", pe.evt);
-                cJSON_AddStringToObject(b_evt, "uuid", pe.uuid.c_str());
-                cJSON_AddStringToObject(b_evt, "mac", addr.c_str());
-                cJSON_AddStringToObject(b_evt, "name", pe.name.c_str());
-                cJSON_AddNumberToObject(b_evt, "rssi", pe.last_rssi);
-                cJSON_AddNumberToObject(b_evt, "major", pe.major);
-                cJSON_AddNumberToObject(b_evt, "minor", pe.minor);
-                char* b_out = cJSON_PrintUnformatted(b_evt);
-                if (b_out) {
-                    broadcast_ws_raw(b_out);
-                    free(b_out);
-                }
-                cJSON_Delete(b_evt);
-
-                can_engine_on_ble_beacon_event(pe.uuid, pe.evt, pe.last_rssi, pe.major, pe.minor, addr, pe.name);
+            if (queued_beacon) {
+                wake_ble_worker();
             }
         }
     }
 
     void onScanEnd(const NimBLEScanResults& scanResults, int reason) override {
-        s_ble_scanning = false;
+        s_ble_scanning.store(false, std::memory_order_relaxed);
         ESP_LOGI(TAG, "Active scan ended (reason: %d, count: %d)", reason, scanResults.getCount());
 
         start_background_ble_scan();
@@ -1046,7 +1395,11 @@ static void ble_worker_task(void* pvParameters) {
                     has_event = true;
                 } else if (s_chord.phase == ChordPhase::PRESSED && (int32_t)(now_ms - s_chord.next_hold_tick_ms) >= 0) {
                     s_chord.hold_seconds += 1;
-                    s_chord.next_hold_tick_ms += BLE_HOLD_TICK_MS;
+                    if ((int32_t)(now_ms - s_chord.next_hold_tick_ms) >= (int32_t)BLE_HOLD_TICK_MS) {
+                        s_chord.next_hold_tick_ms = now_ms + BLE_HOLD_TICK_MS;
+                    } else {
+                        s_chord.next_hold_tick_ms += BLE_HOLD_TICK_MS;
+                    }
                     ev_addr = s_chord.addr;
                     ev_name = s_chord.name;
                     ev_btn = format_chord(s_chord.peak_keys);
@@ -1060,12 +1413,42 @@ static void ble_worker_task(void* pvParameters) {
             fire_ble_button_event(ev_addr, ev_name, ev_btn, ev_act, ev_combo, ev_hold_s);
         }
 
-        // 2. Process deferred connect request
+        // 1b. Drain pending events offloaded from nimble_host callbacks
+        PsramVector<PendingButtonDispatch> pending_btns;
+        PsramVector<PendingDeviceDispatch> pending_devs;
+        PsramVector<PendingBeaconDispatch> pending_beacons;
+        {
+            std::lock_guard<std::mutex> lock(s_ble_mutex);
+            if (!s_pending_button_events.empty()) pending_btns.swap(s_pending_button_events);
+            if (!s_pending_device_events.empty()) pending_devs.swap(s_pending_device_events);
+            if (!s_pending_beacon_events.empty()) pending_beacons.swap(s_pending_beacon_events);
+        }
+
+        for (const auto& ev : pending_btns) {
+            fire_ble_button_event(ev.addr, ev.name, ev.btn, ev.act, ev.combo, ev.hold_seconds);
+        }
+
+        for (const auto& ev : pending_devs) {
+            can_engine_on_ble_device_event(ev.addr, ev.event, (int8_t)ev.rssi, ev.name);
+        }
+
+        for (const auto& pe : pending_beacons) {
+            bool is_present = (strcmp(pe.evt, "exit") != 0);
+            emit_ws_ble_beacon(pe.evt, pe.uuid, pe.mac, pe.name, pe.last_rssi, pe.major, pe.minor, is_present);
+            can_engine_on_ble_beacon_event(pe.uuid, pe.evt, (int8_t)pe.last_rssi, pe.major, pe.minor, pe.mac, pe.name);
+        }
+
+        // 2. Process deferred disconnect / connect request
         std::string connect_addr = "";
         uint8_t connect_type = 0;
         bool do_connect = false;
+        bool do_disconnect = false;
         {
             std::lock_guard<std::mutex> clock(s_connect_mutex);
+            if (s_pending_disconnect_req) {
+                s_pending_disconnect_req = false;
+                do_disconnect = true;
+            }
             if (s_pending_connect_req) {
                 connect_addr = s_pending_connect_addr;
                 connect_type = s_pending_connect_type;
@@ -1073,7 +1456,13 @@ static void ble_worker_task(void* pvParameters) {
                 do_connect = true;
             }
         }
-        if (do_connect && !connect_addr.empty()) {
+        if (do_disconnect) {
+            if (s_ble_client && s_ble_client->isConnected()) {
+                s_ble_client->disconnect();
+            }
+            start_background_ble_scan();
+        }
+        if (do_connect && !connect_addr.empty() && !s_ble_shutting_down.load(std::memory_order_relaxed)) {
             connect_ble_device(connect_addr, connect_type);
         }
 
@@ -1081,11 +1470,17 @@ static void ble_worker_task(void* pvParameters) {
         uint32_t now = get_time_ms();
         if (now - last_exit_check >= 1000) {
             last_exit_check = now;
-            std::vector<BeaconTarget> exited;
+            PsramVector<BeaconTarget> exited;
             {
                 std::lock_guard<std::mutex> lock(s_ble_mutex);
+                const bool connecting = s_ble_connecting.load(std::memory_order_relaxed);
+                if (connecting || s_scan_pause_start_ms != 0) {
+                    compensate_beacon_scan_pause_locked(now, !connecting);
+                }
                 for (auto& target : s_beacon_targets) {
-                    if (target.is_present && (now - target.last_seen_ms > (uint32_t)target.exit_timeout_s * 1000)) {
+                    if (target.is_present &&
+                        (int32_t)(now - target.last_seen_ms) > 0 &&
+                        (now - target.last_seen_ms) > (uint32_t)target.exit_timeout_s * 1000) {
                         target.is_present = false;
                         target.smoothed_rssi = -100.0f;
                         target.last_rssi = -100;
@@ -1096,20 +1491,7 @@ static void ble_worker_task(void* pvParameters) {
 
             for (const auto& target : exited) {
                 ESP_LOGI(TAG, "[BEACON] Target '%s' EXITED / AWAY (timeout %ds)", target.name.c_str(), target.exit_timeout_s);
-                cJSON* b_evt = cJSON_CreateObject();
-                cJSON_AddStringToObject(b_evt, "type", "ble_beacon");
-                cJSON_AddStringToObject(b_evt, "event", "exit");
-                cJSON_AddStringToObject(b_evt, "uuid", target.uuid.c_str());
-                cJSON_AddStringToObject(b_evt, "mac", target.mac.c_str());
-                cJSON_AddStringToObject(b_evt, "name", target.name.c_str());
-                cJSON_AddNumberToObject(b_evt, "rssi", -100);
-                char* b_out = cJSON_PrintUnformatted(b_evt);
-                if (b_out) {
-                    broadcast_ws_raw(b_out);
-                    free(b_out);
-                }
-                cJSON_Delete(b_evt);
-
+                emit_ws_ble_beacon("exit", target.uuid, target.mac, target.name, -100, target.major, target.minor, false);
                 can_engine_on_ble_beacon_event(target.uuid, "exit", -100, target.major, target.minor, target.mac, target.name);
             }
         }
@@ -1117,15 +1499,20 @@ static void ble_worker_task(void* pvParameters) {
         uint32_t wait_ms = 150;
         {
             std::lock_guard<std::mutex> lock(s_ble_mutex);
-            uint32_t wake_now = get_time_ms();
-            if (s_chord.phase == ChordPhase::SETTLING) {
-                int32_t rem = (int32_t)(s_chord.settle_deadline_ms - wake_now);
-                wait_ms = (rem <= 0) ? 1U : std::min<uint32_t>(wait_ms, (uint32_t)rem);
-            } else if (s_chord.phase == ChordPhase::PRESSED) {
-                int32_t rem = (int32_t)(s_chord.next_hold_tick_ms - wake_now);
-                wait_ms = (rem <= 0) ? 1U : std::min<uint32_t>(wait_ms, (uint32_t)rem);
+            if (!s_pending_button_events.empty() || !s_pending_device_events.empty() || !s_pending_beacon_events.empty()) {
+                wait_ms = 0;
+            } else {
+                uint32_t wake_now = get_time_ms();
+                if (s_chord.phase == ChordPhase::SETTLING) {
+                    int32_t rem = (int32_t)(s_chord.settle_deadline_ms - wake_now);
+                    wait_ms = (rem <= 0) ? 1U : std::min<uint32_t>(wait_ms, (uint32_t)rem);
+                } else if (s_chord.phase == ChordPhase::PRESSED) {
+                    int32_t rem = (int32_t)(s_chord.next_hold_tick_ms - wake_now);
+                    wait_ms = (rem <= 0) ? 1U : std::min<uint32_t>(wait_ms, (uint32_t)rem);
+                }
             }
         }
+        if (s_ble_shutting_down.load(std::memory_order_relaxed)) break;
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(wait_ms));
     }
     s_ble_worker_task = nullptr;
@@ -1148,26 +1535,38 @@ void ble_mgr_init(void) {
     pScan->setScanCallbacks(&s_scan_callbacks, false);
     start_background_ble_scan();
 
-    xTaskCreate(ble_worker_task, "ble_worker", 6144, nullptr, 3, &s_ble_worker_task);
+    BaseType_t task_ok = xTaskCreate(ble_worker_task, "ble_worker", 6144, nullptr, 3, &s_ble_worker_task);
+    if (task_ok != pdPASS || s_ble_worker_task == nullptr) {
+        s_ble_worker_task = nullptr;
+        ESP_LOGE(TAG, "Failed to create ble_worker task (internal_free_heap=%u bytes)",
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+        return;
+    }
     ESP_LOGI(TAG, "Native BLE Central & Observer Subsystem initialized successfully.");
 }
 
 void ble_mgr_shutdown(void) {
     if (s_ble_shutting_down.exchange(true)) return;
+    wake_ble_worker();
     if (NimBLEDevice::isInitialized()) {
         NimBLEScan* pScan = NimBLEDevice::getScan();
         if (pScan) {
             pScan->stop();
         }
-        vTaskDelay(pdMS_TO_TICKS(50));
+        for (int i = 0; i < 25 && s_ble_worker_task != nullptr; ++i) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
         NimBLEDevice::deinit(false);
     }
 }
 
 std::string ble_mgr_get_status_json(void) {
     cJSON* root = cJSON_CreateObject();
+    if (!root) {
+        return "{}";
+    }
     cJSON_AddBoolToObject(root, "enabled", true);
-    cJSON_AddBoolToObject(root, "scanning", s_ble_scanning);
+    cJSON_AddBoolToObject(root, "scanning", s_ble_scanning.load(std::memory_order_relaxed));
 
     std::lock_guard<std::mutex> lock(s_ble_mutex);
 
@@ -1176,100 +1575,110 @@ std::string ble_mgr_get_status_json(void) {
     for (const auto& dev : s_paired_devices) {
         if (dev.connected || iequals(dev.address, s_connected_device_addr)) {
             cJSON* conn = cJSON_CreateObject();
-            cJSON_AddStringToObject(conn, "address", dev.address.c_str());
-            cJSON_AddStringToObject(conn, "name", dev.name.c_str());
-            cJSON_AddNumberToObject(conn, "rssi", dev.rssi);
-            cJSON_AddBoolToObject(conn, "connected", true);
-            cJSON_AddBoolToObject(conn, "bonded", dev.bonded);
-            cJSON_AddNumberToObject(conn, "battery_pct", dev.battery_pct);
-            cJSON_AddItemToObject(root, "connected_device", conn);
-            has_conn = true;
+            if (conn) {
+                append_ble_device_json(conn, dev.address, dev.name, dev.rssi, true, dev.bonded, dev.battery_pct);
+                cJSON_AddItemToObject(root, "connected_device", conn);
+                has_conn = true;
+            }
             break;
         }
     }
     if (!has_conn) {
         cJSON_AddNullToObject(root, "connected_device");
     }
+    cJSON_AddBoolToObject(root, "connected", has_conn);
 
     // Paired devices
     cJSON* paired = cJSON_CreateArray();
-    for (const auto& dev : s_paired_devices) {
-        cJSON* itm = cJSON_CreateObject();
-        cJSON_AddStringToObject(itm, "address", dev.address.c_str());
-        cJSON_AddStringToObject(itm, "name", dev.name.c_str());
-        cJSON_AddNumberToObject(itm, "rssi", dev.rssi);
-        cJSON_AddBoolToObject(itm, "connected", dev.connected || iequals(dev.address, s_connected_device_addr));
-        cJSON_AddBoolToObject(itm, "bonded", dev.bonded);
-        cJSON_AddNumberToObject(itm, "battery_pct", dev.battery_pct);
-        cJSON_AddItemToArray(paired, itm);
+    if (paired) {
+        for (const auto& dev : s_paired_devices) {
+            cJSON* itm = cJSON_CreateObject();
+            if (!itm) continue;
+            append_ble_device_json(itm, dev.address, dev.name, dev.rssi,
+                                   dev.connected || iequals(dev.address, s_connected_device_addr),
+                                   dev.bonded, dev.battery_pct);
+            cJSON_AddItemToArray(paired, itm);
+        }
+        cJSON_AddItemToObject(root, "paired_devices", paired);
     }
-    cJSON_AddItemToObject(root, "paired_devices", paired);
 
     // Discovered devices
     cJSON* disc = cJSON_CreateArray();
-    for (const auto& dev : s_discovered_devices) {
-        cJSON* itm = cJSON_CreateObject();
-        cJSON_AddStringToObject(itm, "address", dev.address.c_str());
-        cJSON_AddStringToObject(itm, "name", dev.name.c_str());
-        cJSON_AddNumberToObject(itm, "rssi", dev.rssi);
-        cJSON_AddBoolToObject(itm, "connected", false);
-        cJSON_AddBoolToObject(itm, "bonded", false);
-        cJSON_AddItemToArray(disc, itm);
+    if (disc) {
+        for (const auto& dev : s_discovered_devices) {
+            cJSON* itm = cJSON_CreateObject();
+            if (!itm) continue;
+            append_ble_device_json(itm, dev.address, dev.name, dev.rssi, false, false);
+            cJSON_AddItemToArray(disc, itm);
+        }
+        cJSON_AddItemToObject(root, "discovered_devices", disc);
     }
-    cJSON_AddItemToObject(root, "discovered_devices", disc);
 
     // Last event
     if (s_has_last_event) {
         cJSON* ev = cJSON_CreateObject();
-        append_ble_event_json(ev, s_last_ble_event);
-        cJSON_AddItemToObject(root, "last_event", ev);
+        if (ev) {
+            append_ble_event_json(ev, s_last_ble_event);
+            cJSON_AddItemToObject(root, "last_event", ev);
+        } else {
+            cJSON_AddNullToObject(root, "last_event");
+        }
     } else {
         cJSON_AddNullToObject(root, "last_event");
     }
 
     // Recent events (newest first)
     cJSON* recent = cJSON_CreateArray();
-    for (auto it = s_recent_ble_events.rbegin(); it != s_recent_ble_events.rend(); ++it) {
-        cJSON* itm = cJSON_CreateObject();
-        append_ble_event_json(itm, *it);
-        cJSON_AddItemToArray(recent, itm);
+    if (recent) {
+        for (auto it = s_recent_ble_events.rbegin(); it != s_recent_ble_events.rend(); ++it) {
+            cJSON* itm = cJSON_CreateObject();
+            if (!itm) continue;
+            append_ble_event_json(itm, *it);
+            cJSON_AddItemToArray(recent, itm);
+        }
+        cJSON_AddItemToObject(root, "recent_events", recent);
     }
-    cJSON_AddItemToObject(root, "recent_events", recent);
 
     // Beacon targets
     cJSON* btargets = cJSON_CreateArray();
-    for (const auto& b : s_beacon_targets) {
-        cJSON* itm = cJSON_CreateObject();
-        cJSON_AddStringToObject(itm, "uuid", b.uuid.c_str());
-        cJSON_AddStringToObject(itm, "mac", b.mac.c_str());
-        cJSON_AddStringToObject(itm, "name", b.name.c_str());
-        cJSON_AddNumberToObject(itm, "enter_rssi", b.enter_rssi);
-        cJSON_AddNumberToObject(itm, "exit_timeout_s", b.exit_timeout_s);
-        cJSON_AddBoolToObject(itm, "is_present", b.is_present);
-        cJSON_AddNumberToObject(itm, "rssi", b.last_rssi);
-        cJSON_AddNumberToObject(itm, "major", b.major);
-        cJSON_AddNumberToObject(itm, "minor", b.minor);
-        cJSON_AddNumberToObject(itm, "last_seen_ms", b.last_seen_ms);
-        cJSON_AddItemToArray(btargets, itm);
+    if (btargets) {
+        for (const auto& b : s_beacon_targets) {
+            cJSON* itm = cJSON_CreateObject();
+            if (!itm) continue;
+            cJSON_AddStringToObject(itm, "uuid", b.uuid.c_str());
+            cJSON_AddStringToObject(itm, "mac", b.mac.c_str());
+            cJSON_AddStringToObject(itm, "name", b.name.c_str());
+            cJSON_AddNumberToObject(itm, "enter_rssi", b.enter_rssi);
+            cJSON_AddNumberToObject(itm, "exit_timeout_s", b.exit_timeout_s);
+            cJSON_AddBoolToObject(itm, "is_present", b.is_present);
+            cJSON_AddNumberToObject(itm, "rssi", b.last_rssi);
+            cJSON_AddNumberToObject(itm, "major", b.major);
+            cJSON_AddNumberToObject(itm, "minor", b.minor);
+            cJSON_AddNumberToObject(itm, "last_seen_ms", b.last_seen_ms);
+            cJSON_AddItemToArray(btargets, itm);
+        }
+        cJSON_AddItemToObject(root, "beacon_targets", btargets);
     }
-    cJSON_AddItemToObject(root, "beacon_targets", btargets);
 
     // Discovered beacons (last 60s)
     uint32_t now_ms = get_time_ms();
     cJSON* dbeacons = cJSON_CreateArray();
-    for (const auto& b : s_discovered_beacons) {
-        if (now_ms - b.last_seen_ms < 60000) {
-            cJSON* itm = cJSON_CreateObject();
-            cJSON_AddStringToObject(itm, "uuid", b.uuid.c_str());
-            cJSON_AddStringToObject(itm, "mac", b.mac.c_str());
-            cJSON_AddNumberToObject(itm, "rssi", b.rssi);
-            cJSON_AddNumberToObject(itm, "major", b.major);
-            cJSON_AddNumberToObject(itm, "minor", b.minor);
-            cJSON_AddNumberToObject(itm, "last_seen_ms", b.last_seen_ms);
-            cJSON_AddItemToArray(dbeacons, itm);
+    if (dbeacons) {
+        for (const auto& b : s_discovered_beacons) {
+            if (now_ms - b.last_seen_ms < 60000) {
+                cJSON* itm = cJSON_CreateObject();
+                if (!itm) continue;
+                cJSON_AddStringToObject(itm, "uuid", b.uuid.c_str());
+                cJSON_AddStringToObject(itm, "mac", b.mac.c_str());
+                cJSON_AddNumberToObject(itm, "rssi", b.rssi);
+                cJSON_AddNumberToObject(itm, "major", b.major);
+                cJSON_AddNumberToObject(itm, "minor", b.minor);
+                cJSON_AddNumberToObject(itm, "last_seen_ms", b.last_seen_ms);
+                cJSON_AddItemToArray(dbeacons, itm);
+            }
         }
+        cJSON_AddItemToObject(root, "discovered_beacons", dbeacons);
     }
-    cJSON_AddItemToObject(root, "discovered_beacons", dbeacons);
 
     char* out = cJSON_PrintUnformatted(root);
     std::string res = out ? out : "{}";
@@ -1283,25 +1692,35 @@ void ble_mgr_start_scan(uint32_t duration_sec) {
     {
         std::lock_guard<std::mutex> lock(s_ble_mutex);
         s_discovered_devices.clear();
-        s_ble_scan_duration_ms = duration_sec * 1000;
-        s_ble_scan_start_ms = get_time_ms();
-        s_ble_scanning = true;
+        s_ble_scanning.store(true, std::memory_order_relaxed);
     }
 
     NimBLEScan* pScan = NimBLEDevice::getScan();
+    if (!pScan) {
+        s_ble_scanning.store(false, std::memory_order_relaxed);
+        return;
+    }
     pScan->stop();
     pScan->clearResults();
     pScan->setMaxResults(0);
     pScan->setInterval(160);
-    pScan->setWindow(64);
+    pScan->setWindow(36);
     pScan->setDuplicateFilter(true);
     pScan->setActiveScan(true);
-    pScan->start(duration_sec * 1000, false, true);
+    if (!pScan->start(duration_sec * 1000, false, true)) {
+        s_ble_scanning.store(false, std::memory_order_relaxed);
+        ESP_LOGW(TAG, "Failed to start %u-second in-car active scan", (unsigned)duration_sec);
+        return;
+    }
     ESP_LOGI(TAG, "Started %u-second in-car active scan", (unsigned)duration_sec);
 }
 
-bool ble_mgr_pair_device(const std::string& address, const std::string& in_name) {
-    if (address.empty()) return false;
+bool ble_mgr_pair_device(const std::string& raw_address, const std::string& in_name) {
+    std::string address;
+    if (!normalize_ble_mac(raw_address, address)) {
+        ESP_LOGW(TAG, "Rejecting ble_mgr_pair_device: invalid MAC '%s'", raw_address.c_str());
+        return false;
+    }
     std::string name = in_name;
     uint8_t addr_type = BLE_ADDR_PUBLIC;
 
@@ -1321,13 +1740,21 @@ bool ble_mgr_pair_device(const std::string& address, const std::string& in_name)
         bool found = false;
         for (auto& p : s_paired_devices) {
             if (iequals(p.address, address)) {
+                p.address = address;
                 p.name = name;
                 p.addr_type = addr_type;
+                p.reconnect_backoff_ms = 0;
+                p.last_connect_attempt_ms = 0;
                 found = true;
                 break;
             }
         }
         if (!found) {
+            if (s_paired_devices.size() >= MAX_PAIRED_DEVICES) {
+                ESP_LOGW(TAG, "Cannot pair %s: max paired devices (%zu) reached",
+                         address.c_str(), MAX_PAIRED_DEVICES);
+                return false;
+            }
             PairedDevice dev;
             dev.address = address;
             dev.name = name;
@@ -1355,28 +1782,50 @@ bool ble_mgr_pair_device(const std::string& address, const std::string& in_name)
     return true;
 }
 
-void ble_mgr_unpair_device(const std::string& address) {
-    if (s_ble_client && s_ble_client->isConnected()) {
-        s_ble_client->disconnect();
+bool ble_mgr_unpair_device(const std::string& raw_address) {
+    std::string address;
+    if (!raw_address.empty() && !normalize_ble_mac(raw_address, address)) {
+        ESP_LOGW(TAG, "Rejecting ble_mgr_unpair_device: invalid MAC '%s'", raw_address.c_str());
+        return false;
     }
 
+    bool should_disconnect = false;
     {
         std::lock_guard<std::mutex> lock(s_ble_mutex);
         if (address.empty()) {
+            should_disconnect = s_ble_client_connected.load(std::memory_order_relaxed) || !s_connected_device_addr.empty();
             s_paired_devices.clear();
             s_chord = {};
         } else {
+            should_disconnect = !s_connected_device_addr.empty() && iequals(s_connected_device_addr, address);
             for (auto it = s_paired_devices.begin(); it != s_paired_devices.end(); ++it) {
                 if (iequals(it->address, address)) {
                     s_paired_devices.erase(it);
                     break;
                 }
             }
+            if (!s_chord.addr.empty() && iequals(s_chord.addr, address)) {
+                s_chord = {};
+            }
+        }
+    }
+    {
+        std::lock_guard<std::mutex> clock(s_connect_mutex);
+        if (address.empty() || (s_pending_connect_req && iequals(s_pending_connect_addr, address))) {
+            s_pending_connect_req = false;
+            s_pending_connect_addr.clear();
+        }
+        if (should_disconnect) {
+            s_pending_disconnect_req = true;
         }
     }
     persist_paired_ble_devices();
     ESP_LOGI(TAG, "Unpaired device(s): %s", address.empty() ? "all" : address.c_str());
     start_background_ble_scan();
+    if (should_disconnect) {
+        wake_ble_worker();
+    }
+    return true;
 }
 
 void ble_mgr_inject_test_event(const std::string& button, const std::string& action) {
@@ -1390,54 +1839,22 @@ void ble_mgr_inject_test_event(const std::string& button, const std::string& act
     fire_ble_button_event("00:00:00:00:00:00", "Simulated Controller", btn, act, combo, hold_s);
 }
 
-std::string ble_mgr_get_beacons_json(void) {
-    cJSON* resp = cJSON_CreateObject();
-    cJSON* targets = cJSON_CreateArray();
-    cJSON* disc = cJSON_CreateArray();
+bool ble_mgr_set_beacon(const std::string& raw_uuid, const std::string& raw_mac, const std::string& name, int enter_rssi, int exit_timeout_s) {
+    if (raw_uuid.empty() && raw_mac.empty()) return false;
 
-    {
-        std::lock_guard<std::mutex> lock(s_ble_mutex);
-        for (const auto& b : s_beacon_targets) {
-            cJSON* itm = cJSON_CreateObject();
-            cJSON_AddStringToObject(itm, "uuid", b.uuid.c_str());
-            cJSON_AddStringToObject(itm, "mac", b.mac.c_str());
-            cJSON_AddStringToObject(itm, "name", b.name.c_str());
-            cJSON_AddNumberToObject(itm, "enter_rssi", b.enter_rssi);
-            cJSON_AddNumberToObject(itm, "exit_timeout_s", b.exit_timeout_s);
-            cJSON_AddBoolToObject(itm, "is_present", b.is_present);
-            cJSON_AddNumberToObject(itm, "rssi", b.last_rssi);
-            cJSON_AddNumberToObject(itm, "major", b.major);
-            cJSON_AddNumberToObject(itm, "minor", b.minor);
-            cJSON_AddNumberToObject(itm, "last_seen_ms", b.last_seen_ms);
-            cJSON_AddItemToArray(targets, itm);
-        }
-
-        uint32_t now_ms = get_time_ms();
-        for (const auto& b : s_discovered_beacons) {
-            if (now_ms - b.last_seen_ms < 60000) {
-                cJSON* itm = cJSON_CreateObject();
-                cJSON_AddStringToObject(itm, "uuid", b.uuid.c_str());
-                cJSON_AddStringToObject(itm, "mac", b.mac.c_str());
-                cJSON_AddNumberToObject(itm, "rssi", b.rssi);
-                cJSON_AddNumberToObject(itm, "major", b.major);
-                cJSON_AddNumberToObject(itm, "minor", b.minor);
-                cJSON_AddNumberToObject(itm, "last_seen_ms", b.last_seen_ms);
-                cJSON_AddItemToArray(disc, itm);
-            }
-        }
+    std::string uuid;
+    if (!raw_uuid.empty() && !normalize_ibeacon_uuid(raw_uuid, uuid)) {
+        ESP_LOGW(TAG, "Rejecting ble_mgr_set_beacon: invalid UUID '%s'", raw_uuid.c_str());
+        return false;
+    }
+    std::string mac;
+    if (!raw_mac.empty() && !normalize_ble_mac(raw_mac, mac)) {
+        ESP_LOGW(TAG, "Rejecting ble_mgr_set_beacon: invalid MAC '%s'", raw_mac.c_str());
+        return false;
     }
 
-    cJSON_AddItemToObject(resp, "targets", targets);
-    cJSON_AddItemToObject(resp, "discovered", disc);
-    char* out = cJSON_PrintUnformatted(resp);
-    std::string res = out ? out : "{\"targets\":[],\"discovered\":[]}";
-    if (out) free(out);
-    cJSON_Delete(resp);
-    return res;
-}
-
-bool ble_mgr_set_beacon(const std::string& uuid, const std::string& mac, const std::string& name, int enter_rssi, int exit_timeout_s) {
-    if (uuid.empty() && mac.empty()) return false;
+    enter_rssi = std::clamp(enter_rssi, -100, -25);
+    exit_timeout_s = std::clamp(exit_timeout_s, 5, 600);
 
     {
         std::lock_guard<std::mutex> lock(s_ble_mutex);
@@ -1448,18 +1865,23 @@ bool ble_mgr_set_beacon(const std::string& uuid, const std::string& mac, const s
                 b.mac = mac;
                 b.name = name.empty() ? "Phone Beacon" : name;
                 b.enter_rssi = enter_rssi;
-                b.exit_timeout_s = exit_timeout_s > 0 ? exit_timeout_s : 20;
+                b.exit_timeout_s = exit_timeout_s;
                 updated = true;
                 break;
             }
         }
         if (!updated) {
+            if (s_beacon_targets.size() >= MAX_BEACON_TARGETS) {
+                ESP_LOGW(TAG, "Cannot add beacon target: max beacon targets (%zu) reached",
+                         MAX_BEACON_TARGETS);
+                return false;
+            }
             BeaconTarget bt;
             bt.uuid = uuid;
             bt.mac = mac;
             bt.name = name.empty() ? "Phone Beacon" : name;
             bt.enter_rssi = enter_rssi;
-            bt.exit_timeout_s = exit_timeout_s > 0 ? exit_timeout_s : 20;
+            bt.exit_timeout_s = exit_timeout_s;
             s_beacon_targets.push_back(bt);
         }
     }
@@ -1469,8 +1891,19 @@ bool ble_mgr_set_beacon(const std::string& uuid, const std::string& mac, const s
     return true;
 }
 
-bool ble_mgr_delete_beacon(const std::string& uuid, const std::string& mac) {
-    if (uuid.empty() && mac.empty()) return false;
+bool ble_mgr_delete_beacon(const std::string& raw_uuid, const std::string& raw_mac) {
+    if (raw_uuid.empty() && raw_mac.empty()) return false;
+
+    std::string uuid;
+    if (!raw_uuid.empty() && !normalize_ibeacon_uuid(raw_uuid, uuid)) {
+        ESP_LOGW(TAG, "Rejecting ble_mgr_delete_beacon: invalid UUID '%s'", raw_uuid.c_str());
+        return false;
+    }
+    std::string mac;
+    if (!raw_mac.empty() && !normalize_ble_mac(raw_mac, mac)) {
+        ESP_LOGW(TAG, "Rejecting ble_mgr_delete_beacon: invalid MAC '%s'", raw_mac.c_str());
+        return false;
+    }
 
     {
         std::lock_guard<std::mutex> lock(s_ble_mutex);
@@ -1491,10 +1924,6 @@ bool ble_mgr_is_enabled(void) {
     return true;
 }
 
-bool ble_mgr_is_scanning(void) {
-    return s_ble_scanning;
-}
-
 void ble_mgr_clear_events(void) {
     std::lock_guard<std::mutex> lock(s_ble_mutex);
     s_recent_ble_events.clear();
@@ -1511,21 +1940,19 @@ void ble_mgr_init(void) {
 void ble_mgr_shutdown(void) {}
 
 std::string ble_mgr_get_status_json(void) {
-    return "{\"enabled\":false,\"scanning\":false,\"connected_device\":null,\"paired_devices\":[],\"discovered_devices\":[],\"beacon_targets\":[],\"discovered_beacons\":[]}";
+    return "{\"enabled\":false,\"scanning\":false,\"connected\":false,\"connected_device\":null,\"paired_devices\":[],\"discovered_devices\":[],\"last_event\":null,\"recent_events\":[],\"beacon_targets\":[],\"discovered_beacons\":[]}";
 }
 
 void ble_mgr_start_scan(uint32_t duration_sec) { (void)duration_sec; }
 bool ble_mgr_pair_device(const std::string& address, const std::string& name) { (void)address; (void)name; return false; }
-void ble_mgr_unpair_device(const std::string& address) { (void)address; }
+bool ble_mgr_unpair_device(const std::string& address) { (void)address; return false; }
 void ble_mgr_inject_test_event(const std::string& button, const std::string& action) { (void)button; (void)action; }
 void ble_mgr_clear_events(void) {}
-std::string ble_mgr_get_beacons_json(void) { return "{\"targets\":[],\"discovered\":[]}"; }
 bool ble_mgr_set_beacon(const std::string& uuid, const std::string& mac, const std::string& name, int enter_rssi, int exit_timeout_s) {
     (void)uuid; (void)mac; (void)name; (void)enter_rssi; (void)exit_timeout_s; return false;
 }
 bool ble_mgr_delete_beacon(const std::string& uuid, const std::string& mac) { (void)uuid; (void)mac; return false; }
 bool ble_mgr_is_enabled(void) { return false; }
-bool ble_mgr_is_scanning(void) { return false; }
 
 #endif // CONFIG_BT_ENABLED
 

@@ -472,8 +472,13 @@ static bool ble_button_matches(const std::string& target, const std::string& but
 
 static bool ble_action_matches(const std::string& expected, const std::string& actual, uint32_t hold_seconds) {
     if (expected.empty() || expected == "any") return true;
+    const bool expected_is_press = (strcasecmp(expected.c_str(), "press") == 0 ||
+                                    strcasecmp(expected.c_str(), "single_press") == 0);
+    const bool actual_is_press = (strcasecmp(actual.c_str(), "press") == 0 ||
+                                  strcasecmp(actual.c_str(), "single_press") == 0);
+    if (expected_is_press && actual_is_press) return true;
     if (strcasecmp(expected.c_str(), actual.c_str()) == 0) return true;
-    if (strcasecmp(expected.c_str(), "press") == 0 && actual.rfind("combo_", 0) == 0) return true;
+    if (expected_is_press && actual.rfind("combo_", 0) == 0) return true;
     if (strcasecmp(expected.c_str(), "tap") == 0 && strcasecmp(actual.c_str(), "release") == 0 && hold_seconds == 0) return true;
     if (strcasecmp(expected.c_str(), "hold") == 0 && actual.rfind("hold_", 0) == 0) return true;
     return false;
@@ -486,7 +491,7 @@ struct BleDeviceInfo {
     int8_t rssi = -100;
     uint32_t last_seen_ms = 0;
 };
-static std::unordered_map<std::string, BleDeviceInfo> s_ble_devices;
+static PsramUnorderedMap<std::string, BleDeviceInfo> s_ble_devices;
 static std::atomic<uint32_t> s_ble_learn_until_ms{0};
 
 struct BleBeaconState {
@@ -499,7 +504,7 @@ struct BleBeaconState {
     bool present = false;
     uint32_t last_seen_ms = 0;
 };
-static std::unordered_map<std::string, BleBeaconState> s_ble_beacons;
+static PsramUnorderedMap<std::string, BleBeaconState> s_ble_beacons;
 
 static PsramUnorderedMap<uint32_t, CachedCanFrame> can_state_cache;
 QueueHandle_t tx_command_queue = nullptr;
@@ -995,6 +1000,8 @@ static bool evaluate_condition_raw(const AutomationCondition& cond, const EvalCo
                 if (target_uuid.empty()) {
                     bool any_present = false;
                     for (const auto& kv : s_ble_beacons) {
+                        if (cond.beacon_major > 0 && kv.second.major != cond.beacon_major) continue;
+                        if (cond.beacon_minor > 0 && kv.second.minor != cond.beacon_minor) continue;
                         if (kv.second.present && (now_ms - kv.second.last_seen_ms <= 60000)) {
                             any_present = true;
                             break;
@@ -1009,6 +1016,8 @@ static bool evaluate_condition_raw(const AutomationCondition& cond, const EvalCo
                     if (!kv.second.uuid.empty() && strcasestr(kv.second.uuid.c_str(), target_uuid.c_str()) != nullptr) match = true;
                     if (!kv.second.mac.empty() && mac_matches(target_uuid, kv.second.mac)) match = true;
                     if (!kv.second.name.empty() && strcasecmp(target_uuid.c_str(), kv.second.name.c_str()) == 0) match = true;
+                    if (cond.beacon_major > 0 && kv.second.major != cond.beacon_major) match = false;
+                    if (cond.beacon_minor > 0 && kv.second.minor != cond.beacon_minor) match = false;
 
                     if (match) {
                         bool is_present = kv.second.present && (now_ms - kv.second.last_seen_ms <= 60000);
@@ -1608,6 +1617,8 @@ static bool evaluate_trigger_state_now(const AutomationTrigger& trig, uint32_t n
         if (target_filter.empty()) {
             bool any_present = false;
             for (const auto& kv : s_ble_beacons) {
+                if (trig.beacon_major > 0 && kv.second.major != trig.beacon_major) continue;
+                if (trig.beacon_minor > 0 && kv.second.minor != trig.beacon_minor) continue;
                 if (kv.second.present && (now_ms - kv.second.last_seen_ms <= 60000)) {
                     if (check_away || trig.target_rssi == 0 || kv.second.rssi >= trig.target_rssi) {
                         any_present = true;
@@ -1623,6 +1634,8 @@ static bool evaluate_trigger_state_now(const AutomationTrigger& trig, uint32_t n
             if (!kv.second.uuid.empty() && strcasestr(kv.second.uuid.c_str(), target_filter.c_str()) != nullptr) match = true;
             if (!kv.second.mac.empty() && mac_matches(target_filter, kv.second.mac)) match = true;
             if (!kv.second.name.empty() && strcasecmp(target_filter.c_str(), kv.second.name.c_str()) == 0) match = true;
+            if (trig.beacon_major > 0 && kv.second.major != trig.beacon_major) match = false;
+            if (trig.beacon_minor > 0 && kv.second.minor != trig.beacon_minor) match = false;
             if (match) {
                 bool is_present = kv.second.present && (now_ms - kv.second.last_seen_ms <= 60000);
                 if (check_away) return !is_present;
@@ -4114,6 +4127,12 @@ void can_engine_on_ble_beacon_event(const std::string& uuid, const std::string& 
                         if (!mac.empty() && mac_matches(target_filter, mac)) match = true;
                         if (!name.empty() && strcasecmp(target_filter.c_str(), name.c_str()) == 0) match = true;
                         if (!match) continue;
+                    }
+                    if (trig.beacon_major > 0 && major != trig.beacon_major) {
+                        continue;
+                    }
+                    if (trig.beacon_minor > 0 && minor != trig.beacon_minor) {
+                        continue;
                     }
 
                     // Match target RSSI if specified (only for enter/present/proximity, NOT for exit/away!)
