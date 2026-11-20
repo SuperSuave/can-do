@@ -9,6 +9,7 @@
 #include <bitset>
 #include <cctype>
 #include <mutex>
+#include <new>
 #include <unordered_set>
 #include <sys/time.h>
 #include "esp_log.h"
@@ -49,19 +50,22 @@ static bool mac_matches(const std::string& a, const std::string& b) {
 #define strcasecmp _stricmp
 #endif
 
-static SemaphoreHandle_t s_twai_mutex = nullptr;
-static portMUX_TYPE s_twai_spinlock = portMUX_INITIALIZER_UNLOCKED;
+static StaticSemaphore_t s_twai_mutex_buf;
+static std::atomic<SemaphoreHandle_t> s_twai_mutex{nullptr};
+static std::mutex s_twai_mutex_init_lock;
 static std::atomic<uint32_t> s_last_can_rx_ms{0};
 
 static inline SemaphoreHandle_t get_or_create_twai_mutex(void) {
-    if (!s_twai_mutex) {
-        portENTER_CRITICAL(&s_twai_spinlock);
-        if (!s_twai_mutex) {
-            s_twai_mutex = xSemaphoreCreateMutex();
+    SemaphoreHandle_t mtx = s_twai_mutex.load(std::memory_order_acquire);
+    if (!mtx) {
+        std::lock_guard<std::mutex> lock(s_twai_mutex_init_lock);
+        mtx = s_twai_mutex.load(std::memory_order_relaxed);
+        if (!mtx) {
+            mtx = xSemaphoreCreateMutexStatic(&s_twai_mutex_buf);
+            s_twai_mutex.store(mtx, std::memory_order_release);
         }
-        portEXIT_CRITICAL(&s_twai_spinlock);
     }
-    return s_twai_mutex;
+    return mtx;
 }
 
 esp_err_t can_engine_get_status_info(twai_status_info_t* status_info) {
@@ -368,7 +372,10 @@ void init_crash_diagnostics(void) {
     esp_register_shutdown_handler(crash_diag_shutdown_handler);
 }
 
-static std::string s_current_firing_trigger_id = "";
+struct EvalContext {
+    const char* firing_trigger_id = "";
+    uint32_t wait_for_start_ms = 0;
+};
 
 static std::mutex s_ble_mutex;
 
@@ -406,7 +413,6 @@ struct BleDeviceInfo {
     uint32_t last_seen_ms = 0;
 };
 static std::unordered_map<std::string, BleDeviceInfo> s_ble_devices;
-static uint32_t s_wait_for_start_ms = 0;
 static std::atomic<uint32_t> s_ble_learn_until_ms{0};
 
 struct BleBeaconState {
@@ -520,9 +526,7 @@ bool can_engine_inject_frame(const twai_message_t* msg) {
 }
 
 void init_can_engine(void) {
-    if (!s_twai_mutex) {
-        s_twai_mutex = xSemaphoreCreateMutex();
-    }
+    (void)get_or_create_twai_mutex();
     if (!tx_command_queue) {
         tx_command_queue = xQueueCreate(16, sizeof(CanBurstCmd*));
     }
@@ -716,25 +720,27 @@ bool rtc_can_state_restore(void) {
     return true;
 }
 
-static bool evaluate_condition_raw(const AutomationCondition& cond) {
+static bool evaluate_condition_ctx(const AutomationCondition& cond, const EvalContext& ctx);
+
+static bool evaluate_condition_raw(const AutomationCondition& cond, const EvalContext& ctx) {
     switch (cond.logic) {
         case ConditionLogic::AND_GROUP: {
             for (const auto& sub : cond.sub_conditions) {
-                if (!evaluate_condition(sub)) return false;
+                if (!evaluate_condition_ctx(sub, ctx)) return false;
             }
             return true;
         }
         case ConditionLogic::OR_GROUP: {
             if (cond.sub_conditions.empty()) return false;
             for (const auto& sub : cond.sub_conditions) {
-                if (evaluate_condition(sub)) return true;
+                if (evaluate_condition_ctx(sub, ctx)) return true;
             }
             return false;
         }
         case ConditionLogic::NOT_GROUP: {
             if (cond.sub_conditions.empty()) return true;
             for (const auto& sub : cond.sub_conditions) {
-                if (evaluate_condition(sub)) return false;
+                if (evaluate_condition_ctx(sub, ctx)) return false;
             }
             return true;
         }
@@ -742,7 +748,7 @@ static bool evaluate_condition_raw(const AutomationCondition& cond) {
         default: {
             if (cond.type == "triggered_by") {
                 if (cond.trigger_id.empty()) return true;
-                return cond.trigger_id == s_current_firing_trigger_id;
+                return ctx.firing_trigger_id && cond.trigger_id == ctx.firing_trigger_id;
             }
 
             if (cond.type == "time_condition") {
@@ -855,9 +861,9 @@ static bool evaluate_condition_raw(const AutomationCondition& cond) {
             if (cond.type == "ble_button" || cond.type == "ble" || cond.type == "bluetooth") {
                 std::lock_guard<std::mutex> lock(s_ble_mutex);
                 uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-                uint32_t threshold_ms = (s_wait_for_start_ms > 0) ? s_wait_for_start_ms : (now_ms > 2500 ? now_ms - 2500 : 0);
-                if (s_wait_for_start_ms > 0) {
-                    if (s_last_ble_event.timestamp_ms <= s_wait_for_start_ms) {
+                uint32_t threshold_ms = (ctx.wait_for_start_ms > 0) ? ctx.wait_for_start_ms : (now_ms > 2500 ? now_ms - 2500 : 0);
+                if (ctx.wait_for_start_ms > 0) {
+                    if (s_last_ble_event.timestamp_ms <= ctx.wait_for_start_ms) {
                         return false;
                     }
                 } else if (s_last_ble_event.timestamp_ms < threshold_ms) {
@@ -1011,8 +1017,8 @@ static bool evaluate_condition_raw(const AutomationCondition& cond) {
     }
 }
 
-bool evaluate_condition(const AutomationCondition& cond) {
-    bool raw = evaluate_condition_raw(cond);
+static bool evaluate_condition_ctx(const AutomationCondition& cond, const EvalContext& ctx) {
+    bool raw = evaluate_condition_raw(cond, ctx);
     if (cond.for_ms == 0 || !cond.sustained) {
         return raw;
     }
@@ -1030,6 +1036,10 @@ bool evaluate_condition(const AutomationCondition& cond) {
     cond.sustained->active = false;
     cond.sustained->since_ms = 0;
     return false;
+}
+
+bool evaluate_condition(const AutomationCondition& cond) {
+    return evaluate_condition_ctx(cond, EvalContext{});
 }
 
 static bool condition_uses_can_id(const AutomationCondition& cond, uint32_t can_id) {
@@ -1279,6 +1289,9 @@ static bool check_trigger_combine_mode(AutomationRule& rule, const AutomationTri
 
 static bool try_fire_rule_trigger(AutomationRule& rule, const AutomationTrigger& trig, uint32_t now_ms,
                                   const char* source_label, std::vector<FiredRuleEvent>* fired_out = nullptr) {
+    if (rule.is_running && rule.is_running->load(std::memory_order_acquire)) {
+        return false;
+    }
     if (rule.last_exec_time_ms != 0 && (now_ms - rule.last_exec_time_ms < rule.cooldown_ms)) {
         return false;
     }
@@ -1287,10 +1300,11 @@ static bool try_fire_rule_trigger(AutomationRule& rule, const AutomationTrigger&
         return false;
     }
 
-    s_current_firing_trigger_id = trig.id;
+    EvalContext eval_ctx;
+    eval_ctx.firing_trigger_id = trig.id.c_str();
     bool passed = true;
     for (const auto& cond : rule.conditions) {
-        if (!evaluate_condition(cond)) {
+        if (!evaluate_condition_ctx(cond, eval_ctx)) {
             passed = false;
             break;
         }
@@ -1298,8 +1312,10 @@ static bool try_fire_rule_trigger(AutomationRule& rule, const AutomationTrigger&
 
     if (!passed) return false;
 
+    if (!queue_action_steps_ptr(0, 20, &rule.actions, trig.id, rule.is_running)) {
+        return false;
+    }
     rule.last_exec_time_ms = now_ms;
-    queue_action_steps_ptr(0, 20, &rule.actions, trig.id, rule.is_running);
     if (fired_out) {
         fired_out->push_back({rule.id, rule.name, trig.id, source_label});
     }
@@ -1527,7 +1543,240 @@ static bool is_ambient_entity_id(const std::string& id) {
            strcasecmp(id.c_str(), "ambient_light") == 0;
 }
 
-void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, uint32_t delay_ms) {
+static constexpr int MAX_BURST_RECURSION_DEPTH = 8;
+
+static void execute_can_burst_ctx(uint32_t can_id, const std::vector<ActionStep>& steps,
+                                  uint32_t delay_ms, const EvalContext& ctx, int depth);
+
+static __attribute__((noinline)) void execute_entity_command_step(const ActionStep& step,
+                                                                  const EvalContext& ctx, int depth) {
+    if (is_ambient_entity_id(step.entity_id)) {
+        if (ambient_anim_start_by_name(step.command)) {
+            std::string new_state = ambient_anim_get_effect_name();
+            mitm_arm_entity("ambient_light_colors");
+            {
+                std::lock_guard<std::mutex> lock(g_catalog_mutex);
+                for (auto& cat_ent : global_catalog) {
+                    if (strcasecmp(cat_ent.id.c_str(), step.entity_id.c_str()) == 0 ||
+                        cat_ent.id == "ambient_light_colors") {
+                        cat_ent.current_state = new_state;
+                    }
+                }
+            }
+            mqtt_mgr_publish_entity_state("ambient_light_colors", new_state);
+            broadcast_ws_state("ambient_light_colors", new_state);
+            return;
+        }
+        if (strcasecmp(step.command.c_str(), "stop") == 0) {
+            ambient_anim_stop();
+            return;
+        }
+    }
+
+    bool executed_inline = false;
+    uint32_t tx_can_id = 0;
+    uint32_t tx_delay_ms = 0;
+    std::vector<ActionStep> tx_steps;
+    {
+        std::lock_guard<std::mutex> lock(g_catalog_mutex);
+        for (const auto& entity : global_catalog) {
+            if (strcasecmp(entity.id.c_str(), step.entity_id.c_str()) == 0) {
+                for (const auto& option : entity.options) {
+                    if (strcasecmp(option.label.c_str(), step.command.c_str()) == 0 || (entity.options.size() == 1 && step.command.empty())) {
+                        tx_can_id = entity.action_can_id;
+                        tx_delay_ms = entity.delay_ms;
+                        tx_steps = catalog_steps_to_action_steps(option.steps);
+                        executed_inline = true;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+    }
+    if (executed_inline) {
+        if (is_ambient_entity_id(step.entity_id)) {
+            ambient_anim_stop();
+        }
+        mitm_arm_entity(step.entity_id);
+        execute_can_burst_ctx(tx_can_id, tx_steps, tx_delay_ms, ctx, depth + 1);
+    } else if (!queue_entity_command(step.entity_id, step.command)) {
+        ESP_LOGW(TAG, "Entity '%s' command '%s' not found for inline execution",
+                 step.entity_id.c_str(), step.command.c_str());
+    }
+}
+
+static __attribute__((noinline)) void execute_cycle_entity_step(const ActionStep& step,
+                                                                const EvalContext& ctx, int depth) {
+    CanEntity entity;
+    if (!find_entity_in_catalog(step.entity_id, entity)) {
+        ESP_LOGW(TAG, "CYCLE_ENTITY: Entity '%s' not found in catalog", step.entity_id.c_str());
+        return;
+    }
+
+    std::vector<std::string> states = step.cycle_states;
+    if (states.empty()) {
+        for (const auto& opt : entity.options) {
+            if (!opt.label.empty()) states.push_back(opt.label);
+        }
+    }
+    if (states.empty()) {
+        ESP_LOGW(TAG, "CYCLE_ENTITY: Entity '%s' has no states to cycle", step.entity_id.c_str());
+        return;
+    }
+
+    auto find_option_by_label = [&](const std::string& lbl) -> const EntityOption* {
+        for (const auto& opt : entity.options) {
+            if (strcasecmp(opt.label.c_str(), lbl.c_str()) == 0) {
+                return &opt;
+            }
+        }
+        return nullptr;
+    };
+
+    int cur_idx = -1;
+    if (entity.state_can_id != 0 && !(is_ambient_entity_id(entity.id) && ambient_anim_is_active())) {
+        uint8_t frame[8] = {0};
+        if (get_cached_can_frame(entity.state_can_id, frame)) {
+            for (int idx = 0; idx < (int)states.size(); ++idx) {
+                const EntityOption* opt = find_option_by_label(states[idx]);
+                if (opt && opt->match_mask != 0 && is_match(frame, *opt)) {
+                    cur_idx = idx;
+                    break;
+                }
+            }
+        }
+    }
+    if (cur_idx < 0 && !entity.current_state.empty()) {
+        for (int idx = 0; idx < (int)states.size(); ++idx) {
+            if (strcasecmp(states[idx].c_str(), entity.current_state.c_str()) == 0) {
+                cur_idx = idx;
+                break;
+            }
+        }
+    }
+
+    std::string target_label;
+    const int n = (int)states.size();
+    if (cur_idx < 0) {
+        if (step.cycle_fallback_state == "__none__") {
+            ESP_LOGI(TAG, "CYCLE_ENTITY: '%s' current state unknown/outside sequence and fallback is none", step.entity_id.c_str());
+            return;
+        }
+        if (step.cycle_fallback_state.empty() || step.cycle_fallback_state == "__first__") {
+            target_label = states[0];
+        } else {
+            target_label = step.cycle_fallback_state;
+        }
+        if (step.ping_pong_dir) {
+            step.ping_pong_dir->store(1);
+        }
+    } else if (n == 1) {
+        target_label = states[0];
+    } else if (step.cycle_direction == "ping_pong") {
+        int dir = step.ping_pong_dir ? step.ping_pong_dir->load() : 1;
+        if (cur_idx == 0) dir = 1;
+        else if (cur_idx >= n - 1) dir = -1;
+        int next_idx = cur_idx + dir;
+        if (next_idx < 0) next_idx = 0;
+        if (next_idx >= n) next_idx = n - 1;
+        if (step.ping_pong_dir) {
+            if (dir > 0 && next_idx >= n - 1) step.ping_pong_dir->store(-1);
+            else if (dir < 0 && next_idx <= 0) step.ping_pong_dir->store(1);
+            else step.ping_pong_dir->store(dir);
+        }
+        target_label = states[next_idx];
+    } else {
+        const bool is_rev = (step.cycle_direction == "reverse");
+        int next_idx = is_rev ? (cur_idx - 1) : (cur_idx + 1);
+        if (next_idx >= n) next_idx = step.cycle_wrap ? 0 : (n - 1);
+        if (next_idx < 0) next_idx = step.cycle_wrap ? (n - 1) : 0;
+        target_label = states[next_idx];
+    }
+
+    const EntityOption* target_opt = find_option_by_label(target_label);
+    std::string resolved_label = target_label;
+    if (target_opt) {
+        if (is_ambient_entity_id(entity.id)) {
+            ambient_anim_stop();
+        }
+        uint32_t tx_can_id = entity.action_can_id ? entity.action_can_id : entity.state_can_id;
+        mitm_arm_entity(entity.id);
+        execute_can_burst_ctx(tx_can_id, catalog_steps_to_action_steps(target_opt->steps), entity.delay_ms, ctx, depth + 1);
+        resolved_label = target_opt->label;
+    } else if (is_ambient_entity_id(entity.id) && ambient_anim_start_by_name(target_label)) {
+        resolved_label = ambient_anim_get_effect_name();
+        mitm_arm_entity(entity.id);
+    } else {
+        ESP_LOGW(TAG, "CYCLE_ENTITY: Target state '%s' not found in entity '%s'", target_label.c_str(), step.entity_id.c_str());
+        return;
+    }
+
+    // Sync live entity state cache and broadcast outside g_catalog_mutex
+    {
+        std::lock_guard<std::mutex> lock(g_catalog_mutex);
+        for (auto& cat_ent : global_catalog) {
+            if (cat_ent.id == entity.id) {
+                cat_ent.current_state = resolved_label;
+                break;
+            }
+        }
+    }
+    std::string mqtt_payload = resolved_label;
+    if (entity.ha_domain == "switch") {
+        std::string l_lower = resolved_label;
+        std::transform(l_lower.begin(), l_lower.end(), l_lower.begin(), ::tolower);
+        if (l_lower.find("off") != std::string::npos || l_lower.find("disable") != std::string::npos || l_lower.find("inactive") != std::string::npos) {
+            mqtt_payload = "OFF";
+        } else {
+            mqtt_payload = "ON";
+        }
+    }
+    mqtt_mgr_publish_entity_state(entity.id, mqtt_payload);
+    broadcast_ws_state(entity.id, resolved_label);
+
+    if (step.cycle_show_popup) {
+        std::string ent_name = !entity.ha_name.empty() ? entity.ha_name : step.entity_id;
+        std::string popup_txt;
+        if (!step.cycle_popup_prefix.empty()) {
+            const std::string& tmpl = step.cycle_popup_prefix;
+            if (tmpl.find("{state}") != std::string::npos || tmpl.find("{entity}") != std::string::npos) {
+                popup_txt = tmpl;
+                size_t pos = 0;
+                while ((pos = popup_txt.find("{state}", pos)) != std::string::npos) {
+                    popup_txt.replace(pos, 7, resolved_label);
+                    pos += resolved_label.length();
+                }
+                pos = 0;
+                while ((pos = popup_txt.find("{entity}", pos)) != std::string::npos) {
+                    popup_txt.replace(pos, 8, ent_name);
+                    pos += ent_name.length();
+                }
+            } else {
+                popup_txt = tmpl + resolved_label;
+            }
+        } else {
+            popup_txt = ent_name + ": " + resolved_label;
+        }
+
+        if (step.popup_level == "warning") {
+            track_popup_show_warning(popup_txt.c_str());
+        } else if (step.popup_level == "error") {
+            track_popup_show_error(popup_txt.c_str());
+        } else {
+            track_popup_show_info(popup_txt.c_str());
+        }
+    }
+}
+
+static void execute_can_burst_ctx(uint32_t can_id, const std::vector<ActionStep>& steps,
+                                  uint32_t delay_ms, const EvalContext& ctx, int depth) {
+    if (depth > MAX_BURST_RECURSION_DEPTH) {
+        ESP_LOGW(TAG, "execute_can_burst: max recursion depth (%d) exceeded, aborting nested steps",
+                 MAX_BURST_RECURSION_DEPTH);
+        return;
+    }
+
     twai_message_t tx_msg = {};
     tx_msg.extd = 0;
     tx_msg.data_length_code = 8;
@@ -1539,60 +1788,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
         }
 
         if (step.type == ActionType::ENTITY_COMMAND) {
-            if (is_ambient_entity_id(step.entity_id)) {
-                if (ambient_anim_start_by_name(step.command)) {
-                    std::string new_state = ambient_anim_get_effect_name();
-                    mitm_arm_entity("ambient_light_colors");
-                    {
-                        std::lock_guard<std::mutex> lock(g_catalog_mutex);
-                        for (auto& cat_ent : global_catalog) {
-                            if (strcasecmp(cat_ent.id.c_str(), step.entity_id.c_str()) == 0 ||
-                                cat_ent.id == "ambient_light_colors") {
-                                cat_ent.current_state = new_state;
-                            }
-                        }
-                    }
-                    mqtt_mgr_publish_entity_state("ambient_light_colors", new_state);
-                    broadcast_ws_state("ambient_light_colors", new_state);
-                    continue;
-                }
-                if (strcasecmp(step.command.c_str(), "stop") == 0) {
-                    ambient_anim_stop();
-                    continue;
-                }
-            }
-
-            bool executed_inline = false;
-            uint32_t tx_can_id = 0;
-            uint32_t tx_delay_ms = 0;
-            std::vector<ActionStep> tx_steps;
-            {
-                std::lock_guard<std::mutex> lock(g_catalog_mutex);
-                for (const auto& entity : global_catalog) {
-                    if (strcasecmp(entity.id.c_str(), step.entity_id.c_str()) == 0) {
-                        for (const auto& option : entity.options) {
-                            if (strcasecmp(option.label.c_str(), step.command.c_str()) == 0 || (entity.options.size() == 1 && step.command.empty())) {
-                                tx_can_id = entity.action_can_id;
-                                tx_delay_ms = entity.delay_ms;
-                                tx_steps = catalog_steps_to_action_steps(option.steps);
-                                executed_inline = true;
-                                break;
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
-            if (executed_inline) {
-                if (is_ambient_entity_id(step.entity_id)) {
-                    ambient_anim_stop();
-                }
-                mitm_arm_entity(step.entity_id);
-                execute_can_burst(tx_can_id, tx_steps, tx_delay_ms);
-            } else if (!queue_entity_command(step.entity_id, step.command)) {
-                ESP_LOGW(TAG, "Entity '%s' command '%s' not found for inline execution",
-                         step.entity_id.c_str(), step.command.c_str());
-            }
+            execute_entity_command_step(step, ctx, depth);
             continue;
         }
 
@@ -1652,15 +1848,15 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
         if (step.type == ActionType::IF_THEN) {
             bool passed = true;
             for (const auto& c : step.if_conditions) {
-                if (!evaluate_condition(c)) {
+                if (!evaluate_condition_ctx(c, ctx)) {
                     passed = false;
                     break;
                 }
             }
             if (passed) {
-                execute_can_burst(can_id, step.then_steps, delay_ms);
+                execute_can_burst_ctx(can_id, step.then_steps, delay_ms, ctx, depth + 1);
             } else {
-                execute_can_burst(can_id, step.else_steps, delay_ms);
+                execute_can_burst_ctx(can_id, step.else_steps, delay_ms, ctx, depth + 1);
             }
             continue;
         }
@@ -1674,7 +1870,7 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                 const auto& choice = step.choices[idx];
                 bool branch_passed = true;
                 for (const auto& c : choice.conditions) {
-                    if (!evaluate_condition(c)) {
+                    if (!evaluate_condition_ctx(c, ctx)) {
                         branch_passed = false;
                         break;
                     }
@@ -1696,9 +1892,9 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                         } else {
                             step.ping_pong_dir->store(dir);
                         }
-                        execute_can_burst(can_id, step.choices[exec_idx].sequence, delay_ms);
+                        execute_can_burst_ctx(can_id, step.choices[exec_idx].sequence, delay_ms, ctx, depth + 1);
                     } else {
-                        execute_can_burst(can_id, choice.sequence, delay_ms);
+                        execute_can_burst_ctx(can_id, choice.sequence, delay_ms, ctx, depth + 1);
                     }
                     matched = true;
                     break;
@@ -1708,177 +1904,20 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                 if (step.cycle_ping_pong && step.ping_pong_dir) {
                     step.ping_pong_dir->store(1);
                 }
-                execute_can_burst(can_id, step.default_steps, delay_ms);
+                execute_can_burst_ctx(can_id, step.default_steps, delay_ms, ctx, depth + 1);
             }
             continue;
         }
 
         if (step.type == ActionType::CYCLE_ENTITY) {
-            CanEntity entity;
-            if (!find_entity_in_catalog(step.entity_id, entity)) {
-                ESP_LOGW(TAG, "CYCLE_ENTITY: Entity '%s' not found in catalog", step.entity_id.c_str());
-                continue;
-            }
-
-            std::vector<std::string> states = step.cycle_states;
-            if (states.empty()) {
-                for (const auto& opt : entity.options) {
-                    if (!opt.label.empty()) states.push_back(opt.label);
-                }
-            }
-            if (states.empty()) {
-                ESP_LOGW(TAG, "CYCLE_ENTITY: Entity '%s' has no states to cycle", step.entity_id.c_str());
-                continue;
-            }
-
-            auto find_option_by_label = [&](const std::string& lbl) -> const EntityOption* {
-                for (const auto& opt : entity.options) {
-                    if (strcasecmp(opt.label.c_str(), lbl.c_str()) == 0) {
-                        return &opt;
-                    }
-                }
-                return nullptr;
-            };
-
-            int cur_idx = -1;
-            if (entity.state_can_id != 0 && !(is_ambient_entity_id(entity.id) && ambient_anim_is_active())) {
-                uint8_t frame[8] = {0};
-                if (get_cached_can_frame(entity.state_can_id, frame)) {
-                    for (int idx = 0; idx < (int)states.size(); ++idx) {
-                        const EntityOption* opt = find_option_by_label(states[idx]);
-                        if (opt && opt->match_mask != 0 && is_match(frame, *opt)) {
-                            cur_idx = idx;
-                            break;
-                        }
-                    }
-                }
-            }
-            if (cur_idx < 0 && !entity.current_state.empty()) {
-                for (int idx = 0; idx < (int)states.size(); ++idx) {
-                    if (strcasecmp(states[idx].c_str(), entity.current_state.c_str()) == 0) {
-                        cur_idx = idx;
-                        break;
-                    }
-                }
-            }
-
-            std::string target_label;
-            const int n = (int)states.size();
-            if (cur_idx < 0) {
-                if (step.cycle_fallback_state == "__none__") {
-                    ESP_LOGI(TAG, "CYCLE_ENTITY: '%s' current state unknown/outside sequence and fallback is none", step.entity_id.c_str());
-                    continue;
-                }
-                if (step.cycle_fallback_state.empty() || step.cycle_fallback_state == "__first__") {
-                    target_label = states[0];
-                } else {
-                    target_label = step.cycle_fallback_state;
-                }
-                if (step.ping_pong_dir) {
-                    step.ping_pong_dir->store(1);
-                }
-            } else if (n == 1) {
-                target_label = states[0];
-            } else if (step.cycle_direction == "ping_pong") {
-                int dir = step.ping_pong_dir ? step.ping_pong_dir->load() : 1;
-                if (cur_idx == 0) dir = 1;
-                else if (cur_idx >= n - 1) dir = -1;
-                int next_idx = cur_idx + dir;
-                if (next_idx < 0) next_idx = 0;
-                if (next_idx >= n) next_idx = n - 1;
-                if (step.ping_pong_dir) {
-                    if (dir > 0 && next_idx >= n - 1) step.ping_pong_dir->store(-1);
-                    else if (dir < 0 && next_idx <= 0) step.ping_pong_dir->store(1);
-                    else step.ping_pong_dir->store(dir);
-                }
-                target_label = states[next_idx];
-            } else {
-                const bool is_rev = (step.cycle_direction == "reverse");
-                int next_idx = is_rev ? (cur_idx - 1) : (cur_idx + 1);
-                if (next_idx >= n) next_idx = step.cycle_wrap ? 0 : (n - 1);
-                if (next_idx < 0) next_idx = step.cycle_wrap ? (n - 1) : 0;
-                target_label = states[next_idx];
-            }
-
-            const EntityOption* target_opt = find_option_by_label(target_label);
-            std::string resolved_label = target_label;
-            if (target_opt) {
-                if (is_ambient_entity_id(entity.id)) {
-                    ambient_anim_stop();
-                }
-                uint32_t tx_can_id = entity.action_can_id ? entity.action_can_id : entity.state_can_id;
-                mitm_arm_entity(entity.id);
-                execute_can_burst(tx_can_id, catalog_steps_to_action_steps(target_opt->steps), entity.delay_ms);
-                resolved_label = target_opt->label;
-            } else if (is_ambient_entity_id(entity.id) && ambient_anim_start_by_name(target_label)) {
-                resolved_label = ambient_anim_get_effect_name();
-                mitm_arm_entity(entity.id);
-            } else {
-                ESP_LOGW(TAG, "CYCLE_ENTITY: Target state '%s' not found in entity '%s'", target_label.c_str(), step.entity_id.c_str());
-                continue;
-            }
-
-            // Sync live entity state cache and broadcast outside g_catalog_mutex
-            {
-                std::lock_guard<std::mutex> lock(g_catalog_mutex);
-                for (auto& cat_ent : global_catalog) {
-                    if (cat_ent.id == entity.id) {
-                        cat_ent.current_state = resolved_label;
-                        break;
-                    }
-                }
-            }
-            std::string mqtt_payload = resolved_label;
-            if (entity.ha_domain == "switch") {
-                std::string l_lower = resolved_label;
-                std::transform(l_lower.begin(), l_lower.end(), l_lower.begin(), ::tolower);
-                if (l_lower.find("off") != std::string::npos || l_lower.find("disable") != std::string::npos || l_lower.find("inactive") != std::string::npos) {
-                    mqtt_payload = "OFF";
-                } else {
-                    mqtt_payload = "ON";
-                }
-            }
-            mqtt_mgr_publish_entity_state(entity.id, mqtt_payload);
-            broadcast_ws_state(entity.id, resolved_label);
-
-            if (step.cycle_show_popup) {
-                std::string ent_name = !entity.ha_name.empty() ? entity.ha_name : step.entity_id;
-                std::string popup_txt;
-                if (!step.cycle_popup_prefix.empty()) {
-                    const std::string& tmpl = step.cycle_popup_prefix;
-                    if (tmpl.find("{state}") != std::string::npos || tmpl.find("{entity}") != std::string::npos) {
-                        popup_txt = tmpl;
-                        size_t pos = 0;
-                        while ((pos = popup_txt.find("{state}", pos)) != std::string::npos) {
-                            popup_txt.replace(pos, 7, resolved_label);
-                            pos += resolved_label.length();
-                        }
-                        pos = 0;
-                        while ((pos = popup_txt.find("{entity}", pos)) != std::string::npos) {
-                            popup_txt.replace(pos, 8, ent_name);
-                            pos += ent_name.length();
-                        }
-                    } else {
-                        popup_txt = tmpl + resolved_label;
-                    }
-                } else {
-                    popup_txt = ent_name + ": " + resolved_label;
-                }
-
-                if (step.popup_level == "warning") {
-                    track_popup_show_warning(popup_txt.c_str());
-                } else if (step.popup_level == "error") {
-                    track_popup_show_error(popup_txt.c_str());
-                } else {
-                    track_popup_show_info(popup_txt.c_str());
-                }
-            }
+            execute_cycle_entity_step(step, ctx, depth);
             continue;
         }
 
         if (step.type == ActionType::REPEAT_UNTIL || step.type == ActionType::WAIT_FOR) {
             uint32_t start_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-            s_wait_for_start_ms = start_ms;
+            EvalContext wait_ctx = ctx;
+            wait_ctx.wait_for_start_ms = start_ms;
             uint32_t effective_timeout_ms = step.timeout_ms > 0 ? step.timeout_ms : 60000;
             uint32_t interval = step.interval_ms > 0 ? step.interval_ms : 50;
             bool condition_met = false;
@@ -1891,15 +1930,14 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
                     break;
                 }
                 if (step.type == ActionType::REPEAT_UNTIL && !step.sequence.empty()) {
-                    execute_can_burst(can_id, step.sequence, delay_ms);
+                    execute_can_burst_ctx(can_id, step.sequence, delay_ms, ctx, depth + 1);
                 }
-                if (evaluate_condition(step.condition)) {
+                if (evaluate_condition_ctx(step.condition, wait_ctx)) {
                     condition_met = true;
                     break;
                 }
                 vTaskDelay(pdMS_TO_TICKS(interval));
             }
-            s_wait_for_start_ms = 0;
             if (step.type == ActionType::WAIT_FOR && !condition_met) {
                 ESP_LOGW(TAG, "WAIT_FOR condition not met before timeout; aborting remainder of action sequence");
                 break;
@@ -1949,6 +1987,10 @@ void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, ui
             }
         }
     }
+}
+
+void execute_can_burst(uint32_t can_id, const std::vector<ActionStep>& steps, uint32_t delay_ms) {
+    execute_can_burst_ctx(can_id, steps, delay_ms, EvalContext{}, 0);
 }
 
 static bool has_word_ci(const std::string& haystack_lower, const char* needle_lower) {
@@ -2470,7 +2512,7 @@ static void execute_can_burst_async_task(void* arg) {
             ~AsyncCleanup() {
                 if (c) {
                     if (c->rule_is_running) {
-                        c->rule_is_running->store(false);
+                        c->rule_is_running->store(false, std::memory_order_release);
                     }
                     delete c;
                 }
@@ -2478,19 +2520,28 @@ static void execute_can_burst_async_task(void* arg) {
             }
         } cleanup(cmd);
 
+        EvalContext ctx;
+        ctx.firing_trigger_id = cmd->trigger_id.c_str();
         if (!cmd->inline_steps.empty()) {
-            execute_can_burst(cmd->can_id, cmd->inline_steps, cmd->delay_ms);
+            execute_can_burst_ctx(cmd->can_id, cmd->inline_steps, cmd->delay_ms, ctx, 0);
         } else if (cmd->steps && !cmd->steps->empty()) {
-            execute_can_burst(cmd->can_id, *cmd->steps, cmd->delay_ms);
+            execute_can_burst_ctx(cmd->can_id, *cmd->steps, cmd->delay_ms, ctx, 0);
         }
     }
     vTaskDelete(NULL);
 }
 
 bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>& steps, const std::string& trigger_id, std::shared_ptr<std::atomic<bool>> rule_is_running) {
+    if (!tx_command_queue) {
+        if (rule_is_running) rule_is_running->store(false);
+        return false;
+    }
     CanBurstCmd* cmd = new (std::nothrow) CanBurstCmd();
     if (!cmd) {
-        if (rule_is_running) rule_is_running->store(false);
+        return false;
+    }
+    if (rule_is_running && rule_is_running->exchange(true, std::memory_order_acq_rel)) {
+        delete cmd;
         return false;
     }
     cmd->can_id = can_id;
@@ -2499,11 +2550,8 @@ bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<Ac
     cmd->inline_steps = steps;
     cmd->async = steps_contain_async(steps);
     cmd->rule_is_running = rule_is_running;
-    if (cmd->rule_is_running) {
-        cmd->rule_is_running->store(true);
-    }
     if (xQueueSend(tx_command_queue, &cmd, pdMS_TO_TICKS(10)) != pdTRUE) {
-        if (rule_is_running) rule_is_running->store(false);
+        if (rule_is_running) rule_is_running->store(false, std::memory_order_release);
         delete cmd;
         return false;
     }
@@ -2512,7 +2560,6 @@ bool queue_action_steps(uint32_t can_id, uint32_t delay_ms, const std::vector<Ac
 
 bool queue_action_steps_ptr(uint32_t can_id, uint32_t delay_ms, const std::vector<ActionStep>* steps, const std::string& trigger_id, std::shared_ptr<std::atomic<bool>> rule_is_running) {
     if (!steps) {
-        if (rule_is_running) rule_is_running->store(false);
         return false;
     }
     return queue_action_steps(can_id, delay_ms, *steps, trigger_id, rule_is_running);
@@ -3784,36 +3831,40 @@ void can_tx_task(void* arg) {
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
+        if (!tx_command_queue) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
         if (xQueueReceive(tx_command_queue, &cmd, pdMS_TO_TICKS(200)) == pdTRUE && cmd) {
             if (cmd->async) {
                 if (s_active_async_tasks.load() >= MAX_CONCURRENT_ASYNC_TASKS) {
                     ESP_LOGW(TAG, "Dropping async action burst: max concurrent tasks (%d) reached", MAX_CONCURRENT_ASYNC_TASKS);
                     if (cmd->rule_is_running) {
-                        cmd->rule_is_running->store(false);
+                        cmd->rule_is_running->store(false, std::memory_order_release);
                     }
                     delete cmd;
                     continue;
                 }
                 s_active_async_tasks.fetch_add(1);
-                BaseType_t res = xTaskCreate(execute_can_burst_async_task, "can_tx_async", 4096, cmd, 5, NULL);
+                BaseType_t res = xTaskCreate(execute_can_burst_async_task, "can_tx_async", 6144, cmd, 3, NULL);
                 if (res != pdPASS) {
                     ESP_LOGE(TAG, "Failed to create can_tx_async task (out of memory?)");
                     s_active_async_tasks.fetch_sub(1);
                     if (cmd->rule_is_running) {
-                        cmd->rule_is_running->store(false);
+                        cmd->rule_is_running->store(false, std::memory_order_release);
                     }
                     delete cmd;
                 }
             } else {
-                s_current_firing_trigger_id = cmd->trigger_id;
+                EvalContext ctx;
+                ctx.firing_trigger_id = cmd->trigger_id.c_str();
                 if (!cmd->inline_steps.empty()) {
-                    execute_can_burst(cmd->can_id, cmd->inline_steps, cmd->delay_ms);
+                    execute_can_burst_ctx(cmd->can_id, cmd->inline_steps, cmd->delay_ms, ctx, 0);
                 } else if (cmd->steps && !cmd->steps->empty()) {
-                    execute_can_burst(cmd->can_id, *cmd->steps, cmd->delay_ms);
+                    execute_can_burst_ctx(cmd->can_id, *cmd->steps, cmd->delay_ms, ctx, 0);
                 }
-                s_current_firing_trigger_id = "";
                 if (cmd->rule_is_running) {
-                    cmd->rule_is_running->store(false);
+                    cmd->rule_is_running->store(false, std::memory_order_release);
                 }
                 delete cmd;
             }
