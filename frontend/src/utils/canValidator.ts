@@ -14,6 +14,9 @@ export const CLUSTER_POPUP_SEVERITY_PREFIX_LEN = 2;
 export const CLUSTER_POPUP_MAX_TEXT_CODE_UNITS =
   CLUSTER_POPUP_MAX_CODE_UNITS - CLUSTER_POPUP_SEVERITY_PREFIX_LEN;
 
+// Matches firmware/main/core/parser.cpp MAX_PARSE_DEPTH
+export const MAX_PARSE_DEPTH = 8;
+
 export function resolveCycleEntityPopupText(
   popupPrefix: string | undefined,
   entityName: string,
@@ -1043,6 +1046,7 @@ function validateTriggerNode(
     if (isNaN(val) || val <= 0 || val > 100) {
       push('error', 'voltage_val', 'Voltage trigger requires a valid voltage threshold (0–100 V).');
     }
+    push('warning', 'type', 'Voltage triggers are not supported by the ESP32 firmware engine (voltage is only supported as a condition).');
     return;
   }
 
@@ -1050,6 +1054,7 @@ function validateTriggerNode(
     if (!trig.mqtt_topic?.trim()) {
       push('error', 'mqtt_topic', 'MQTT trigger is missing a topic filter.');
     }
+    push('warning', 'type', 'MQTT triggers are not supported by the ESP32 firmware engine.');
     return;
   }
 
@@ -1123,8 +1128,10 @@ function validateConditionNode(
   ruleMeta: { id: string; name: string },
   catalog: Catalog | undefined,
   issues: AutomationValidationIssue[],
-  pathPrefix = ''
+  pathPrefix = '',
+  depth = 0
 ) {
+  if (!cond || typeof cond !== 'object') return;
   const prefix = pathPrefix ? `${pathPrefix}Condition #${idx + 1}` : `Condition #${idx + 1}`;
   const push = (type: 'error' | 'warning', field: string | undefined, message: string) => {
     issues.push({
@@ -1138,6 +1145,15 @@ function validateConditionNode(
     });
   };
 
+  if (depth > MAX_PARSE_DEPTH) {
+    push(
+      'error',
+      'conditions',
+      `Condition nesting depth (${depth}) exceeds the ESP32 firmware limit (MAX_PARSE_DEPTH = ${MAX_PARSE_DEPTH}).`
+    );
+    return;
+  }
+
   // Logic groups (AND / OR / NOT)
   const isLogicGroup =
     cond.logic === 'and' ||
@@ -1148,7 +1164,10 @@ function validateConditionNode(
     cond.type === 'not' ||
     cond.type === 'and_group' ||
     cond.type === 'or_group' ||
-    cond.type === 'not_group';
+    cond.type === 'not_group' ||
+    Array.isArray(cond.and) ||
+    Array.isArray(cond.or) ||
+    (cond.not !== undefined && cond.not !== null);
 
   if (isLogicGroup) {
     const children: AutomationCondition[] =
@@ -1160,7 +1179,7 @@ function validateConditionNode(
       push('warning', 'conditions', 'Logic group has no child conditions.');
     } else {
       children.forEach((child, cIdx) => {
-        validateConditionNode(child, cIdx, ruleMeta, catalog, issues, `${prefix} ▸ `);
+        validateConditionNode(child, cIdx, ruleMeta, catalog, issues, `${prefix} ▸ `, depth + 1);
       });
     }
     return;
@@ -1270,8 +1289,11 @@ function validateActionNode(
   ruleMeta: { id: string; name: string },
   catalog: Catalog | undefined,
   issues: AutomationValidationIssue[],
-  pathPrefix = ''
+  pathPrefix = '',
+  depth = 0,
+  isSoleRuleAction = false
 ) {
+  if (!act || typeof act !== 'object') return;
   const prefix = pathPrefix ? `${pathPrefix}Action #${idx + 1}` : `Action #${idx + 1}`;
   const push = (type: 'error' | 'warning', field: string | undefined, message: string) => {
     issues.push({
@@ -1285,6 +1307,15 @@ function validateActionNode(
     });
   };
 
+  if (depth > MAX_PARSE_DEPTH) {
+    push(
+      'error',
+      'type',
+      `Action nesting depth (${depth}) exceeds the ESP32 firmware limit (MAX_PARSE_DEPTH = ${MAX_PARSE_DEPTH}).`
+    );
+    return;
+  }
+
   const aType = act.type;
 
   if (aType === 'if_then') {
@@ -1292,7 +1323,7 @@ function validateActionNode(
       push('warning', 'conditions', 'If / Then block has no conditions (Then branch will always run).');
     } else {
       act.conditions.forEach((c, cIdx) =>
-        validateConditionNode(c, cIdx, ruleMeta, catalog, issues, `${prefix} (If) ▸ `)
+        validateConditionNode(c, cIdx, ruleMeta, catalog, issues, `${prefix} (If) ▸ `, depth + 1)
       );
     }
 
@@ -1302,10 +1333,10 @@ function validateActionNode(
       push('error', 'then', 'If / Then block has no actions in either Then or Else.');
     } else {
       thenList.forEach((sub, sIdx) =>
-        validateActionNode(sub, sIdx, ruleMeta, catalog, issues, `${prefix} (Then) ▸ `)
+        validateActionNode(sub, sIdx, ruleMeta, catalog, issues, `${prefix} (Then) ▸ `, depth + 1, false)
       );
       elseList.forEach((sub, sIdx) =>
-        validateActionNode(sub, sIdx, ruleMeta, catalog, issues, `${prefix} (Else) ▸ `)
+        validateActionNode(sub, sIdx, ruleMeta, catalog, issues, `${prefix} (Else) ▸ `, depth + 1, false)
       );
     }
     return;
@@ -1325,7 +1356,7 @@ function validateActionNode(
         push('warning', `choices[${bIdx}].conditions`, `${bLabel} has no conditions and will always match first.`);
       } else {
         branch.conditions.forEach((c, cIdx) =>
-          validateConditionNode(c, cIdx, ruleMeta, catalog, issues, `${prefix} (${bLabel}) ▸ `)
+          validateConditionNode(c, cIdx, ruleMeta, catalog, issues, `${prefix} (${bLabel}) ▸ `, depth + 1)
         );
       }
 
@@ -1333,13 +1364,13 @@ function validateActionNode(
         push('error', `choices[${bIdx}].sequence`, `${bLabel} has no actions.`);
       } else {
         branch.sequence.forEach((sub, sIdx) =>
-          validateActionNode(sub, sIdx, ruleMeta, catalog, issues, `${prefix} (${bLabel}) ▸ `)
+          validateActionNode(sub, sIdx, ruleMeta, catalog, issues, `${prefix} (${bLabel}) ▸ `, depth + 1, false)
         );
       }
     });
 
     def.forEach((sub, sIdx) =>
-      validateActionNode(sub, sIdx, ruleMeta, catalog, issues, `${prefix} (Default) ▸ `)
+      validateActionNode(sub, sIdx, ruleMeta, catalog, issues, `${prefix} (Default) ▸ `, depth + 1, false)
     );
     return;
   }
@@ -1351,7 +1382,7 @@ function validateActionNode(
       push('error', 'condition', `${label} requires at least one stop condition.`);
     } else {
       conds.forEach((c, cIdx) =>
-        validateConditionNode(c, cIdx, ruleMeta, catalog, issues, `${prefix} (${label}) ▸ `)
+        validateConditionNode(c, cIdx, ruleMeta, catalog, issues, `${prefix} (${label}) ▸ `, depth + 1)
       );
     }
 
@@ -1367,7 +1398,7 @@ function validateActionNode(
         push('error', 'sequence', 'Repeat Until block has no actions in its loop sequence.');
       } else {
         act.sequence.forEach((sub, sIdx) =>
-          validateActionNode(sub, sIdx, ruleMeta, catalog, issues, `${prefix} (Loop) ▸ `)
+          validateActionNode(sub, sIdx, ruleMeta, catalog, issues, `${prefix} (Loop) ▸ `, depth + 1, false)
         );
       }
     }
@@ -1421,7 +1452,7 @@ function validateActionNode(
   }
 
   if (aType === 'track_popup' || aType === 'popup') {
-    const rawText = act.text || act.popup_message || '';
+    const rawText = String(act.text ?? act.message ?? act.popup_message ?? act.popup_text ?? '');
     if (!rawText.trim()) {
       push('error', 'text', 'Head unit popup action has empty message text.');
     } else {
@@ -1448,8 +1479,9 @@ function validateActionNode(
     return;
   }
 
-  if (aType === 'climate_target' || aType === 'remote_climate') {
-    const temp = act.target_temp_c ?? act.target_c;
+  if (aType === 'climate_target' || aType === 'remote_climate' || aType === 'climate') {
+    const rawAct = act as any;
+    const temp = act.target_temp_c ?? act.target_c ?? rawAct.target_temp ?? rawAct.temp;
     if (temp !== undefined && (isNaN(Number(temp)) || Number(temp) < 10 || Number(temp) > 35)) {
       push('warning', 'target_temp_c', `Climate target temperature ${temp}°C is outside normal E-GMP range (14–30°C).`);
     }
@@ -1461,7 +1493,15 @@ function validateActionNode(
   }
 
   if (aType === 'webhook') {
-    push('warning', 'type', 'Webhook actions cannot run offline on the ESP32; consider CAN TX or Home Assistant MQTT.');
+    if (isSoleRuleAction) {
+      push(
+        'error',
+        'type',
+        'Webhook is the sole action in this rule and cannot run offline on the ESP32; use CAN TX or Home Assistant MQTT instead.'
+      );
+    } else {
+      push('warning', 'type', 'Webhook actions cannot run offline on the ESP32; consider CAN TX or Home Assistant MQTT.');
+    }
     return;
   }
 
@@ -1602,9 +1642,20 @@ export function validateAutomationRule(
     });
   }
 
+  if (Array.isArray(rule.off_actions) && rule.off_actions.length > 0) {
+    issues.push({
+      type: 'warning',
+      ruleId: ruleMeta.id,
+      ruleName: ruleMeta.name,
+      section: 'action',
+      field: 'off_actions',
+      message: 'Off Actions are not executed by the ESP32 firmware engine and will be ignored on-device.'
+    });
+  }
+
   triggers.forEach((trig, idx) => validateTriggerNode(trig, idx, ruleMeta, rule, catalog, issues));
-  conditions.forEach((cond, idx) => validateConditionNode(cond, idx, ruleMeta, catalog, issues));
-  actions.forEach((act, idx) => validateActionNode(act, idx, ruleMeta, catalog, issues));
+  conditions.forEach((cond, idx) => validateConditionNode(cond, idx, ruleMeta, catalog, issues, '', 0));
+  actions.forEach((act, idx) => validateActionNode(act, idx, ruleMeta, catalog, issues, '', 0, actions.length === 1));
 
   return issues;
 }

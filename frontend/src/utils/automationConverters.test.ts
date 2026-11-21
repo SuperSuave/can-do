@@ -20,15 +20,20 @@ import {
   decompileCondition,
   decompileActionList,
   decompileAutomationRule,
+  decompileAutomationRules,
+  exportToCandoJson,
   commandToTrigger,
   commandToCondition,
   commandToAction,
   applyOptionToTrigger,
+  applyOptionToAction,
+  applyOptionToCondition,
   applyOptionsToCondition,
   applyEffectToAction,
   formatDefaultTriggerName,
+  resolveActionBus,
 } from './automationConverters.js';
-import type { Catalog, Command } from '../types/catalog.js';
+import type { Catalog, Command, Vehicle } from '../types/catalog.js';
 import type {
   AutomationTrigger,
   AutomationAction,
@@ -435,22 +440,32 @@ test('convertTriggerToCondition and convertConditionToTrigger correctly map cros
   assert.notStrictEqual(backToTrig.id, cond.id);
 });
 
-test('normalizeCanId handles numbers, decimal strings, hex strings, and bare hex', () => {
+test('normalizeCanId handles decimal numbers and hex strings matching firmware parser.cpp', () => {
   assert.strictEqual(normalizeCanId(1186), '0x4a2');
-  assert.strictEqual(normalizeCanId('1186'), '0x4a2');
+  assert.strictEqual(normalizeCanId('1186'), '0x1186');
+  assert.strictEqual(normalizeCanId('448'), '0x448');
   assert.strictEqual(normalizeCanId('0x4A2'), '0x4a2');
   assert.strictEqual(normalizeCanId('0x4a2'), '0x4a2');
   assert.strictEqual(normalizeCanId('4A2'), '0x4a2');
+  assert.strictEqual(normalizeCanId(-1), '');
+  assert.strictEqual(normalizeCanId(0x20000000), '');
   assert.strictEqual(normalizeCanId(null), '');
   assert.strictEqual(normalizeCanId(undefined), '');
   assert.strictEqual(normalizeCanId(''), '');
 });
 
-test('formatCanId formats numbers, decimal strings, and hex strings into canonical 0x... format', () => {
+test('formatCanId formats decimal numbers (0..0x1FFFFFFF) and base-16 hex strings into canonical 0x... format', () => {
   assert.strictEqual(formatCanId(1186), '0x4A2');
-  assert.strictEqual(formatCanId('1186'), '0x4A2');
+  assert.strictEqual(formatCanId(0x1FFFFFFF), '0x1FFFFFFF');
+  assert.strictEqual(formatCanId(0), '0x0');
+  assert.strictEqual(formatCanId(-1), '');
+  assert.strictEqual(formatCanId(1.5), '');
+  assert.strictEqual(formatCanId(0x20000000), '');
+  assert.strictEqual(formatCanId('448'), '0x448');
+  assert.strictEqual(formatCanId('1186'), '0x1186');
   assert.strictEqual(formatCanId('0x4a2'), '0x4A2');
   assert.strictEqual(formatCanId('4a2'), '0x4A2');
+  assert.strictEqual(formatCanId('0x20000000'), '');
   assert.strictEqual(formatCanId(null), '');
   assert.strictEqual(formatCanId(undefined), '');
 });
@@ -2038,6 +2053,1713 @@ test('applyEffectToAction, compileAction, and decompileActionList preserve dynam
   assert.strictEqual(decompiled[1].command, 'Sunset Glow');
 });
 
+test('Wave A1-1: formatHexByte validates bounds/strict hex/negated bytes, compileToByteMap handles arrays & wrapper objects, and compileAction emits empty payload', () => {
+  // formatHexByte bounds & strict 0x parsing
+  assert.strictEqual(formatHexByte(-1), undefined);
+  assert.strictEqual(formatHexByte(256), undefined);
+  assert.strictEqual(formatHexByte(Infinity), undefined);
+  assert.strictEqual(formatHexByte(NaN), undefined);
+  assert.strictEqual(formatHexByte('0x1FF'), undefined);
+  assert.strictEqual(formatHexByte('0x12G'), undefined);
+  assert.strictEqual(formatHexByte('0x5'), '0x05');
 
+  // allowNegated support for condition/match compilation
+  assert.strictEqual(formatHexByte('!0x00'), undefined);
+  assert.strictEqual(formatHexByte('!0x00', true), '!0x00');
+  assert.strictEqual(formatHexByte('!0x0f', true), '!0x0F');
+  assert.strictEqual(formatHexByte('!ff', true), '!0xFF');
+  assert.strictEqual(formatHexByte('!!0x00', true), undefined);
+
+  // compileToByteMap maps arrays 0..7 -> D1..D8 without left-shifting
+  assert.deepStrictEqual(compileToByteMap([0xAA, 0xBB, 0xCC, '*', 0x05]), {
+    D1: '0xAA',
+    D2: '0xBB',
+    D3: '0xCC',
+    D5: '0x05',
+  });
+
+  // compileToByteMap unwraps { hex | data | raw } objects
+  assert.deepStrictEqual(compileToByteMap({ hex: 'D0C1751500000000' }), {
+    D1: '0xD0',
+    D2: '0xC1',
+    D3: '0x75',
+    D4: '0x15',
+    D5: '0x00',
+    D6: '0x00',
+    D7: '0x00',
+    D8: '0x00',
+  });
+  assert.deepStrictEqual(compileToByteMap({ data: '01020304' }), {
+    D1: '0x01',
+    D2: '0x02',
+    D3: '0x03',
+    D4: '0x04',
+  });
+  assert.deepStrictEqual(compileToByteMap({ raw: '0xAABB' }), {
+    D1: '0xAA',
+    D2: '0xBB',
+  });
+
+  // Negated bytes survive condition compilation
+  const negCond = compileCondition({
+    id: 'c_neg',
+    type: 'can_state',
+    can_id: '0x496',
+    match: { D1: '!0x00', D2: '0x10' },
+  });
+  assert.deepStrictEqual(negCond.match, { D1: '!0x00', D2: '0x10' });
+
+  // compileAction emits {} instead of { D1: '0x01' } when payload is empty
+  const emptyTx = compileAction({
+    id: 'act_empty',
+    type: 'can_tx',
+    can_id: '0x000',
+    payload: {},
+  });
+  assert.deepStrictEqual(emptyTx.payload, {});
+});
+
+test('Wave A1-2: compileAction preserves clamped delay_ms on single/repeated transmit steps and decompileActionList preserves item.delay_ms separately from inter-step delays', () => {
+  const catalog = createMockCatalog(2);
+
+  // Single-step transmit with repeat pacing delay_ms
+  const compiledSingle = compileAction(
+    {
+      id: 'act_single_delay',
+      type: 'can_tx',
+      can_id: '0x4A2',
+      bus: 0,
+      payload: { D5: '0x3F' },
+      repeat: 4,
+      delay_ms: 65,
+    },
+    catalog
+  );
+  assert.strictEqual(compiledSingle.delay_ms, 65);
+
+  // Clamps delay_ms to 60000
+  const compiledClamped = compileAction(
+    {
+      id: 'act_clamped_delay',
+      type: 'can_tx',
+      can_id: '0x4A2',
+      bus: 0,
+      payload: { D5: '0x3F' },
+      repeat: 2,
+      delay_ms: 999999,
+    },
+    catalog
+  );
+  assert.strictEqual(compiledClamped.delay_ms, 60000);
+
+  // Decompile preserves transmit delay_ms without conflating with differing inter-step delay
+  const rawGrouped = [
+    {
+      id: 'act_grp_delay',
+      type: 'transmit',
+      can_id: '0x4A2',
+      bus: 0,
+      payload: { D5: '0x4F' },
+      repeat: 3,
+      delay_ms: 40,
+      _step_group_id: 'grp_pacing',
+    },
+    {
+      type: 'delay',
+      ms: 500,
+      _step_group_id: 'grp_pacing',
+    },
+    {
+      type: 'transmit',
+      can_id: '0x4A2',
+      bus: 0,
+      payload: { D5: '0xFF' },
+      repeat: 1,
+      _step_group_id: 'grp_pacing',
+    },
+  ];
+
+  const decompiled = decompileActionList(rawGrouped, catalog);
+  assert.strictEqual(decompiled.length, 1);
+  assert.strictEqual(decompiled[0].steps?.length, 3);
+  assert.strictEqual(decompiled[0].steps?.[0].delay_ms, 40);
+  assert.strictEqual(decompiled[0].steps?.[1].type, 'delay');
+  assert.strictEqual(decompiled[0].steps?.[1].delay_ms, 500);
+
+  // Round-trip re-compilation preserves repeat delay_ms=40 and inter-step delay=500 without duplicating delays
+  const recompiled = compileActionList(decompiled, catalog);
+  assert.strictEqual(recompiled.length, 3);
+  assert.strictEqual(recompiled[0].type, 'transmit');
+  assert.strictEqual(recompiled[0].delay_ms, 40);
+  assert.strictEqual(recompiled[1].type, 'delay');
+  assert.strictEqual(recompiled[1].ms, 500);
+  assert.strictEqual(recompiled[2].type, 'transmit');
+});
+
+test('Wave A1-3: battery_preconditioning alias, Cancel/Off STOP inference, and applyOptionToAction precondition handling', () => {
+  const preconCmd: Command = {
+    id: 'battery_preconditioning',
+    name: 'Battery Preconditioning Control',
+    type: 'precondition',
+    category: 'High Voltage & Charging',
+    roles: ['action'],
+    network: { bus: 0, type: 'precondition', action_can_id: '0x0C7' },
+    options: [
+      {
+        label: 'Persistent',
+        precon_mode: 'persistent',
+        steps: [{ payload: { D4: '0x40', D5: '0x03' }, repeat: 3 }],
+      },
+      {
+        label: 'Continuous',
+        precon_mode: 'continuous',
+        steps: [{ payload: { D4: '0x40', D5: '0x03' }, repeat: 3 }],
+      },
+      {
+        label: 'Cancel / Off',
+        precon_mode: 'cancel',
+        steps: [{ payload: { D1: '0x00', D4: '0x00' }, repeat: 3 }],
+      },
+    ],
+  };
+  const catalog: Catalog = { can_do_version: '1.0.0', vehicles: [], commands: [preconCmd] };
+
+  // Alias type='battery_preconditioning' with mode='cancel' compiles to stop, never fallback transmit
+  const compiledAliasCancel = compileAction(
+    { id: 'p1', type: 'battery_preconditioning', mode: 'cancel' } as any,
+    catalog
+  );
+  assert.strictEqual(compiledAliasCancel.type, 'precondition');
+  assert.strictEqual(compiledAliasCancel.mode, 'cancel');
+  assert.strictEqual(compiledAliasCancel.action, 'stop');
+
+  // entity_command with command='Cancel / Off' compiles to stop, never start
+  const compiledEntityStop = compileAction(
+    { id: 'p2', type: 'entity_command', entity_id: 'battery_preconditioning', command: 'Cancel / Off' },
+    catalog
+  );
+  assert.strictEqual(compiledEntityStop.type, 'precondition');
+  assert.strictEqual(compiledEntityStop.mode, 'cancel');
+  assert.strictEqual(compiledEntityStop.action, 'stop');
+
+  // compileActionList (which runs decompileActionList first) also preserves precondition STOP instead of 0x0C7 bursts
+  const compiledListStop = compileActionList(
+    [{ id: 'p2b', type: 'entity_command', entity_id: 'battery_preconditioning', command: 'Cancel / Off' }],
+    catalog
+  );
+  assert.strictEqual(compiledListStop.length, 1);
+  assert.strictEqual(compiledListStop[0].type, 'precondition');
+  assert.strictEqual(compiledListStop[0].mode, 'cancel');
+  assert.strictEqual(compiledListStop[0].action, 'stop');
+
+  // decompileActionList maps { type: 'precondition', mode: 'cancel' } without action -> precon_action: 'stop'
+  const decompiledCancel = decompileActionList(
+    [
+      { id: 'p3', type: 'precondition', mode: 'cancel' },
+      { id: 'p4', type: 'battery_preconditioning', mode: 'continuous' },
+    ],
+    catalog
+  );
+  assert.strictEqual(decompiledCancel[0].type, 'precondition');
+  assert.strictEqual(decompiledCancel[0].precon_mode, 'cancel');
+  assert.strictEqual(decompiledCancel[0].precon_action, 'stop');
+  assert.strictEqual(decompiledCancel[1].type, 'precondition');
+  assert.strictEqual(decompiledCancel[1].precon_mode, 'continuous');
+  assert.strictEqual(decompiledCancel[1].precon_action, 'start');
+
+  // applyOptionToAction stays type='precondition' instead of raw 0x0C7 steps
+  const appliedCancel = applyOptionToAction(
+    { id: 'p5', type: 'precondition', precon_mode: 'persistent', precon_action: 'start' },
+    preconCmd,
+    preconCmd.options![2]
+  );
+  assert.strictEqual(appliedCancel.type, 'precondition');
+  assert.strictEqual(appliedCancel.precon_mode, 'cancel');
+  assert.strictEqual(appliedCancel.precon_action, 'stop');
+  assert.strictEqual(appliedCancel.steps, undefined);
+  assert.strictEqual(appliedCancel.can_id, undefined);
+});
+
+test('Wave A1-4: decompileActionList preserves non-catalog and rule-targeting entity_command actions', () => {
+  const catalog = createMockCatalog(2);
+  catalog.commands.push({
+    id: 'virtual_sensor_entity',
+    name: 'Virtual Sensor',
+    category: 'General',
+    roles: ['condition'],
+    network: { state_can_id: '0x333' },
+  });
+
+  const actions = [
+    { id: 'a_rule_toggle', type: 'entity_command', entity_id: 'rule_auto_hold', command: 'OFF' },
+    { id: 'a_virtual', type: 'entity_command', entity_id: 'virtual_sensor_entity', command: 'Refresh' },
+    { id: 'a_static', type: 'entity_command', entity_id: 'cmd_1', command: 'On' },
+  ];
+
+  const decompiled = decompileActionList(actions, catalog);
+  assert.strictEqual(decompiled.length, 3);
+
+  // Rule-targeting entity_command preserved verbatim
+  assert.strictEqual(decompiled[0].type, 'entity_command');
+  assert.strictEqual(decompiled[0].entity_id, 'rule_auto_hold');
+  assert.strictEqual(decompiled[0].command, 'OFF');
+
+  // Non-static catalog command preserved as entity_command
+  assert.strictEqual(decompiled[1].type, 'entity_command');
+  assert.strictEqual(decompiled[1].entity_id, 'virtual_sensor_entity');
+  assert.strictEqual(decompiled[1].command, 'Refresh');
+
+  // Static CAN catalog command coerced to can_tx with resolved payload
+  assert.strictEqual(decompiled[2].type, 'can_tx');
+  assert.strictEqual(decompiled[2].can_id, '0xC9');
+  assert.deepStrictEqual(decompiled[2].payload, { D1: '0x01' });
+
+  // Full compileActionList preserves rule-targeting entity_command end-to-end
+  const compiled = compileActionList([actions[0] as AutomationAction], catalog);
+  assert.strictEqual(compiled.length, 1);
+  assert.strictEqual(compiled[0].type, 'entity_command');
+  assert.strictEqual(compiled[0].entity_id, 'rule_auto_hold');
+  assert.strictEqual(compiled[0].command, 'OFF');
+});
+
+test('Wave A1-5: resolveActionBus honors dual-CAN network.action_bus consistently across all action converters', () => {
+  const dualBusCmd: Command = {
+    id: 'dual_bus_cmd',
+    name: 'Dual Bus Action',
+    category: 'General',
+    roles: ['action', 'condition'],
+    network: {
+      bus: 0,
+      action_bus: 1,
+      state_can_id: '0x310',
+      action_can_id: '0x410',
+      delay_ms: 20,
+    },
+    options: [
+      {
+        label: 'Activate',
+        steps: [{ payload: { D1: '0x01' } }, { payload: { D1: '0x00' } }],
+      },
+    ],
+    effects: [{ label: 'Pulse', name: 'Pulse' }],
+  };
+
+  const reverseDualBusCmd: Command = {
+    id: 'reverse_dual_bus_cmd',
+    name: 'Reverse Dual Bus Action',
+    category: 'General',
+    roles: ['action'],
+    network: {
+      bus: 1,
+      action_bus: 0,
+      action_can_id: '0x411',
+    },
+    options: [{ label: 'Go', payload: { D1: '0x02' } }],
+  };
+
+  const catalog: Catalog = {
+    can_do_version: '1.0.0',
+    vehicles: [],
+    commands: [dualBusCmd, reverseDualBusCmd],
+  };
+
+  assert.strictEqual(resolveActionBus(dualBusCmd), 1);
+  assert.strictEqual(resolveActionBus(reverseDualBusCmd), 0);
+  assert.strictEqual(resolveActionBus({ ...dualBusCmd, network: { action_bus: 9 } }), 1);
+  assert.strictEqual(resolveActionBus({ ...dualBusCmd, network: { action_bus: -3 } }), 0);
+
+  // commandToAction
+  const actFromCmd = commandToAction(dualBusCmd, dualBusCmd.options![0]);
+  assert.strictEqual(actFromCmd.bus, 1);
+  assert.strictEqual(actFromCmd.steps?.[0].bus, 1);
+  assert.strictEqual(actFromCmd.steps?.[1].bus, 1);
+
+  const actReverse = commandToAction(reverseDualBusCmd, reverseDualBusCmd.options![0]);
+  assert.strictEqual(actReverse.bus, 0);
+
+  // applyOptionToAction
+  const appliedOpt = applyOptionToAction(
+    { id: 'a1', type: 'can_tx', bus: 0 },
+    dualBusCmd,
+    dualBusCmd.options![0]
+  );
+  assert.strictEqual(appliedOpt.bus, 1);
+  assert.strictEqual(appliedOpt.steps?.[0].bus, 1);
+
+  // applyEffectToAction
+  const appliedEff = applyEffectToAction(
+    { id: 'a2', type: 'can_tx', bus: 0 },
+    dualBusCmd,
+    dualBusCmd.effects![0]
+  );
+  assert.strictEqual(appliedEff.bus, 1);
+
+  // compileAction (entity_command)
+  const compiled = compileAction(
+    { id: 'a3', type: 'entity_command', entity_id: 'dual_bus_cmd', command: 'Activate' },
+    catalog
+  );
+  assert.ok(Array.isArray(compiled));
+  assert.strictEqual(compiled[0].bus, 1);
+  assert.strictEqual(compiled[2].bus, 1);
+
+  // decompileActionList (dynamic effect + multi-step)
+  const decompiledEff = decompileActionList(
+    [{ id: 'a4', type: 'entity_command', entity_id: 'dual_bus_cmd', command: 'Pulse' }],
+    catalog
+  );
+  assert.strictEqual(decompiledEff[0].bus, 1);
+
+  const decompiledMulti = decompileActionList(
+    [{ id: 'a5', type: 'entity_command', entity_id: 'dual_bus_cmd', command: 'Activate' }],
+    catalog
+  );
+  assert.strictEqual(decompiledMulti[0].bus, 1);
+  assert.strictEqual(decompiledMulti[0].steps?.[0].bus, 1);
+});
+
+test('Wave A2-1: byte_transition omits default/relational from, commandToTrigger omits from: 0x00, and can_rx normalizes match & mask', () => {
+  const catalog = createMockCatalog(2);
+  const tempRangeCmd: Command = {
+    id: 'cabin_temp_range',
+    name: 'Cabin Temp',
+    category: 'Climate',
+    roles: ['trigger'],
+    type: 'param_range',
+    network: {
+      state_can_id: '0x380',
+      bus: 0,
+      state_byte: 'D2',
+      state_mask: '0xFF',
+      min: 62,
+      max: 82,
+      step: 1,
+      unit: '°F',
+      raw_min: 0x06,
+      raw_max: 0x1A,
+    },
+  };
+
+  // Range trigger and discrete trigger do not pre-fill from: '0x00'
+  const rangeTrig = commandToTrigger(tempRangeCmd);
+  assert.strictEqual(rangeTrig.from, undefined);
+  const discreteTrig = commandToTrigger(catalog.commands[0], catalog.commands[0].options![0]);
+  assert.strictEqual(discreteTrig.from, undefined);
+
+  const rule: AutomationRule = {
+    id: 'rule_a2_1',
+    name: 'Wave A2-1 Rule',
+    enabled: true,
+    ha_expose: false,
+    ha_icon: 'mdi:car',
+    exec_mode: 'one_shot',
+    cooldown_ms: 500,
+    triggers: [
+      // 1. Empty/undefined from -> omitted
+      { id: 't_empty_from', source: 'can', type: 'byte_transition', can_id: '0x380', byte: 'D2', mask: '0xFF', to: '0x10' },
+      // 2. Relational operators with stale from: '0x00' -> from omitted
+      { id: 't_gt', source: 'can', type: 'byte_transition', can_id: '0x380', byte: 'D2', mask: '0xFF', from: '0x00', to: '0x12', operator: 'greater_than' },
+      { id: 't_lte', source: 'can', type: 'byte_transition', can_id: '0x380', byte: 'D2', mask: '0xFF', from: '0x00', to: '0x0A', operator: 'less_than_or_equal' },
+      { id: 't_neq', source: 'can', type: 'byte_transition', can_id: '0x380', byte: 'D2', mask: '0xFF', from: '0x00', to: '0x00', operator: 'not_equal' },
+      // 3. Explicit from with equal operator -> preserved
+      { id: 't_explicit_from', source: 'can', type: 'byte_transition', can_id: '0x448', byte: 'D7', mask: '0xF0', from: '0x00', to: '0x10' },
+      // 4. Single-byte byte_transition with multi-byte match stays byte_transition
+      { id: 't_single_with_match', source: 'can', can_id: '0x448', byte: 'D7', mask: '0xF0', to: '0x10', match: { D1: '0x00', D7: '0x10' } },
+      // 5. Multi-byte match without trig.byte -> enters can_rx with normalized match & mask
+      { id: 't_can_rx_multi', source: 'can', can_id: '0x496', match: { D1: 16, D3: 255 } as any, mask: { D1: 240 } as any },
+      // 6. Explicit can_rx using to_payload and numeric scalar mask
+      { id: 't_can_rx_explicit', source: 'can', type: 'can_rx', can_id: '0x496', to_payload: { D2: 15, D4: 'ab' } as any, mask: 240 as any },
+    ],
+    conditions: [],
+    actions: [],
+  };
+
+  const compiled = compileAutomationRule(rule, catalog);
+  assert.strictEqual(compiled.triggers[0].type, 'byte_transition');
+  assert.strictEqual('from' in compiled.triggers[0], false);
+
+  assert.strictEqual(compiled.triggers[1].type, 'byte_transition');
+  assert.strictEqual('from' in compiled.triggers[1], false);
+  assert.strictEqual(compiled.triggers[1].operator, 'greater_than');
+
+  assert.strictEqual(compiled.triggers[2].type, 'byte_transition');
+  assert.strictEqual('from' in compiled.triggers[2], false);
+  assert.strictEqual(compiled.triggers[2].operator, 'less_than_or_equal');
+
+  assert.strictEqual(compiled.triggers[3].type, 'byte_transition');
+  assert.strictEqual('from' in compiled.triggers[3], false);
+  assert.strictEqual(compiled.triggers[3].operator, 'not_equal');
+
+  assert.strictEqual(compiled.triggers[4].type, 'byte_transition');
+  assert.strictEqual(compiled.triggers[4].from, '0x00');
+
+  assert.strictEqual(compiled.triggers[5].type, 'byte_transition');
+  assert.strictEqual(compiled.triggers[5].byte, 'D7');
+
+  assert.strictEqual(compiled.triggers[6].type, 'can_rx');
+  assert.deepStrictEqual(compiled.triggers[6].match, { D1: '0x10', D3: '0xFF' });
+  assert.deepStrictEqual(compiled.triggers[6].mask, { D1: '0xF0', D3: '0xFF' });
+
+  assert.strictEqual(compiled.triggers[7].type, 'can_rx');
+  assert.deepStrictEqual(compiled.triggers[7].match, { D2: '0x0F', D4: '0xAB' });
+  assert.deepStrictEqual(compiled.triggers[7].mask, { D2: '0xF0', D4: '0xF0' });
+});
+
+test('Wave A2-2: AND/OR/NOT logic groups round-trip cleanly, empty NOT is omitted, and mixed OR never deletes children', () => {
+  const catalog: Catalog = {
+    can_do_version: '1.0.0',
+    vehicles: [],
+    commands: [
+      {
+        id: 'seat_heater',
+        name: 'Seat Heater',
+        category: 'Comfort',
+        roles: ['condition'],
+        network: { state_can_id: '0x496' },
+        options: [
+          { label: 'Off', match: { D3: '0x00' } },
+          { label: 'Low', match: { D3: '0x01' } },
+          { label: 'High', match: { D3: '0x03' } },
+        ],
+      },
+    ],
+  };
+
+  // 1. Decompile shorthand { and }, { or }, { not } and *_group types into UI { id, logic, conditions, ...sustained }
+  const decompiledAnd = decompileCondition(
+    {
+      and: [
+        { can_id: '0x496', byte: 'D3', value: '0x01' },
+        { type: 'voltage', operator: 'greater', value: 12.2 },
+      ],
+      for_sec: 5,
+    },
+    catalog
+  );
+  assert.strictEqual(decompiledAnd.logic, 'and');
+  assert.strictEqual('and' in decompiledAnd, false);
+  assert.strictEqual(decompiledAnd.for_sec, 5);
+  assert.strictEqual(decompiledAnd.conditions?.length, 2);
+
+  const decompiledNotSingle = decompileCondition(
+    { not: { can_id: '0x496', byte: 'D3', value: '0x00' } },
+    catalog
+  );
+  assert.strictEqual(decompiledNotSingle.logic, 'not');
+  assert.strictEqual('not' in decompiledNotSingle, false);
+  assert.strictEqual(decompiledNotSingle.conditions?.length, 1);
+
+  const decompiledNotMulti = decompileCondition(
+    {
+      type: 'not_group',
+      conditions: [
+        { can_id: '0x496', byte: 'D3', value: '0x00' },
+        { type: 'voltage', operator: 'less', value: 11.5 },
+      ],
+    },
+    catalog
+  );
+  assert.strictEqual(decompiledNotMulti.logic, 'not');
+  assert.strictEqual(decompiledNotMulti.type, undefined);
+  assert.strictEqual(decompiledNotMulti.conditions?.length, 2);
+
+  // 2. Compile recognizes logic, type (*_group), shorthand, single vs multi NOT, and omits empty NOT
+  const compiledNotSingle = compileCondition(decompiledNotSingle, catalog);
+  assert.ok(compiledNotSingle.not && !Array.isArray(compiledNotSingle.not));
+  assert.strictEqual(compiledNotSingle.not.value, '0x00');
+
+  const compiledNotMulti = compileCondition(decompiledNotMulti, catalog);
+  assert.ok(Array.isArray(compiledNotMulti.not));
+  assert.strictEqual(compiledNotMulti.not.length, 2);
+
+  const compiledFromType = compileCondition(
+    {
+      id: 'grp_type',
+      type: 'or_group',
+      conditions: [{ id: 'c1', type: 'voltage', operator: 'greater', value: '12.5' }],
+    },
+    catalog
+  );
+  assert.ok(Array.isArray(compiledFromType.or));
+  assert.strictEqual(compiledFromType.or.length, 1);
+
+  const compiledFromShorthand = compileCondition(
+    {
+      id: 'grp_short',
+      and: [{ id: 'c1', type: 'voltage', operator: 'greater', value: '12.5' }],
+    },
+    catalog
+  );
+  assert.ok(Array.isArray(compiledFromShorthand.and));
+  assert.strictEqual(compiledFromShorthand.and.length, 1);
+
+  const compiledEmptyNot = compileCondition({ id: 'empty_not', logic: 'not', conditions: [] }, catalog);
+  assert.strictEqual(compiledEmptyNot, undefined);
+
+  const compiledRuleWithEmptyNot = compileAutomationRule(
+    {
+      id: 'rule_empty_not',
+      name: 'Empty NOT Rule',
+      enabled: true,
+      ha_expose: false,
+      ha_icon: 'mdi:car',
+      exec_mode: 'one_shot',
+      cooldown_ms: 500,
+      triggers: [],
+      conditions: [{ id: 'empty_not', logic: 'not', conditions: [] }],
+      actions: [],
+    },
+    catalog
+  );
+  assert.deepStrictEqual(compiledRuleWithEmptyNot.conditions, []);
+
+  // 3. Mixed OR group (2 catalog leaves + 1 non-catalog condition) MUST NOT collapse or delete the 3rd child
+  const mixedOrRaw = {
+    or: [
+      { can_id: '0x496', byte: 'D3', operator: 'equal', value: '0x01', source_command_id: 'seat_heater', option_label: 'Low' },
+      { can_id: '0x496', byte: 'D3', operator: 'equal', value: '0x03', source_command_id: 'seat_heater', option_label: 'High' },
+      { type: 'voltage', operator: 'less', value: 12.0 },
+    ],
+  };
+  const decompiledMixedOr = decompileCondition(mixedOrRaw, catalog);
+  assert.strictEqual(decompiledMixedOr.logic, 'or');
+  assert.strictEqual('or' in decompiledMixedOr, false);
+  assert.strictEqual(decompiledMixedOr.conditions?.length, 3);
+  assert.strictEqual(decompiledMixedOr.conditions?.[2].type, 'voltage');
+
+  // 4. Same-command OR with non-equal operator MUST NOT collapse
+  const nonEqualOrRaw = {
+    or: [
+      { can_id: '0x496', byte: 'D3', operator: 'equal', value: '0x01', source_command_id: 'seat_heater', option_label: 'Low' },
+      { can_id: '0x496', byte: 'D3', operator: 'not_equal', value: '0x00', source_command_id: 'seat_heater', option_label: 'Off' },
+    ],
+  };
+  const decompiledNonEqualOr = decompileCondition(nonEqualOrRaw, catalog);
+  assert.strictEqual(decompiledNonEqualOr.logic, 'or');
+  assert.strictEqual(decompiledNonEqualOr.conditions?.length, 2);
+
+  // 5. Pure single-entity multi-option OR STILL collapses cleanly
+  const pureMultiOrRaw = {
+    or: [
+      { can_id: '0x496', byte: 'D3', operator: 'equal', value: '0x01', source_command_id: 'seat_heater', option_label: 'Low' },
+      { can_id: '0x496', byte: 'D3', operator: 'equal', value: '0x03', source_command_id: 'seat_heater', option_label: 'High' },
+    ],
+  };
+  const decompiledPureOr = decompileCondition(pureMultiOrRaw, catalog);
+  assert.strictEqual(decompiledPureOr.type, 'can_state');
+  assert.strictEqual(decompiledPureOr.logic, undefined);
+  assert.deepStrictEqual(decompiledPureOr.selected_options, ['Low', 'High']);
+});
+
+test('Wave A2-3: BLE proximity classification, default RSSI operator, and time_condition/time defaults & day expansion', () => {
+  const catalog = createMockCatalog(2);
+
+  // 1. Any-beacon proximity trigger & major/minor-only beacon trigger compile to ble_beacon
+  const compiledBleRule = compileAutomationRule(
+    {
+      id: 'rule_ble_prox',
+      name: 'BLE Proximity',
+      enabled: true,
+      ha_expose: false,
+      ha_icon: 'mdi:bluetooth',
+      exec_mode: 'one_shot',
+      cooldown_ms: 500,
+      triggers: [
+        { id: 't_prox', source: 'ble', type: 'ble_presence', ble_event: 'proximity', target_rssi: -65 },
+        { id: 't_maj', source: 'ble', type: 'ble_presence', beacon_major: 42 },
+        { id: 't_min', source: 'ble', type: 'ble_presence', beacon_minor: 7 },
+      ],
+      conditions: [],
+      actions: [],
+    },
+    catalog
+  );
+  assert.strictEqual(compiledBleRule.triggers[0].type, 'ble_beacon');
+  assert.strictEqual(compiledBleRule.triggers[0].ble_event, 'proximity');
+  assert.strictEqual(compiledBleRule.triggers[1].type, 'ble_beacon');
+  assert.strictEqual(compiledBleRule.triggers[1].beacon_major, 42);
+  assert.strictEqual(compiledBleRule.triggers[2].type, 'ble_beacon');
+  assert.strictEqual(compiledBleRule.triggers[2].beacon_minor, 7);
+
+  // 2. Default RSSI operator >= when target_rssi is non-zero and operator omitted
+  const compiledBeaconRssi = compileCondition({ id: 'c1', type: 'ble_beacon', target_rssi: -70 }, catalog);
+  assert.strictEqual(compiledBeaconRssi.operator, 'greater_than_or_equal');
+
+  const compiledDeviceRssi = compileCondition({ id: 'c2', type: 'ble_device', target_rssi: -65 }, catalog);
+  assert.strictEqual(compiledDeviceRssi.operator, 'greater_than_or_equal');
+
+  const compiledWifiConnectedRssi = compileCondition(
+    { id: 'c3', type: 'device_state', device_property: 'wifi_connected', target_rssi: -60 },
+    catalog
+  );
+  assert.strictEqual(compiledWifiConnectedRssi.operator, 'greater_than_or_equal');
+
+  const compiledWifiRssi = compileCondition(
+    { id: 'c4', type: 'device_state', device_property: 'wifi_rssi', target_rssi: -75 },
+    catalog
+  );
+  assert.strictEqual(compiledWifiRssi.operator, 'greater_than_or_equal');
+
+  const compiledApClientRssi = compileCondition(
+    { id: 'c5', type: 'wifi', device_property: 'ap_client_rssi', target_rssi: -55 },
+    catalog
+  );
+  assert.strictEqual(compiledApClientRssi.operator, 'greater_than_or_equal');
+
+  // Explicit operator preserved; zero target_rssi does not synthesize operator
+  const compiledExplicitOp = compileCondition(
+    { id: 'c6', type: 'ble_beacon', target_rssi: -70, operator: 'less_than' },
+    catalog
+  );
+  assert.strictEqual(compiledExplicitOp.operator, 'less_than');
+  const compiledZeroRssi = compileCondition({ id: 'c7', type: 'ble_beacon', target_rssi: 0 }, catalog);
+  assert.strictEqual(compiledZeroRssi.operator, undefined);
+
+  // 3. time_condition empty days defaults to all 7 days
+  const compiledTimeCond = compileCondition({ id: 'c_time', type: 'time_condition', start_time: '07:00', end_time: '21:00', days: [] }, catalog);
+  assert.deepStrictEqual(compiledTimeCond.days, ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
+
+  // 4. decompileAutomationRule recognizes firmware alias type: 'time' and expands day aliases/numbers
+  const decompiledTimeRule = decompileAutomationRule(
+    {
+      id: 'rule_time_alias',
+      name: 'Time Alias Rule',
+      triggers: [
+        { id: 't_time_1', type: 'time', time: '06:30', days: ['weekdays'] },
+        { id: 't_time_2', type: 'time_schedule', time: '09:00', days: [0, 6] },
+        { id: 't_time_3', type: 'time', time: '12:00', days: ['Monday', 3, '7'] },
+      ],
+      conditions: [
+        { id: 'c_time_1', type: 'time', start_time: '08:00', end_time: '17:00', days: ['weekends'] },
+      ],
+      actions: [],
+    },
+    catalog
+  );
+  assert.strictEqual(decompiledTimeRule.triggers[0].type, 'time_schedule');
+  assert.strictEqual(decompiledTimeRule.triggers[0].source, 'time');
+  assert.deepStrictEqual(decompiledTimeRule.triggers[0].days, ['mon', 'tue', 'wed', 'thu', 'fri']);
+  assert.deepStrictEqual(decompiledTimeRule.triggers[1].days, ['sat', 'sun']);
+  assert.deepStrictEqual(decompiledTimeRule.triggers[2].days, ['mon', 'wed', 'sun']);
+  assert.strictEqual(decompiledTimeRule.conditions[0].type, 'time_condition');
+  assert.deepStrictEqual(decompiledTimeRule.conditions[0].days, ['sat', 'sun']);
+});
+
+test('Wave A2-4: BLE button action/click_count normalization, beacon/device target_string mapping, and ble_device_event decompile', () => {
+  const catalog = createMockCatalog(2);
+
+  // 1. Compile normalizes single_press/double_press/triple_press (even with click_count: 1) and prevents click_count > 1 on hold_Ns
+  const compiledRule = compileAutomationRule(
+    {
+      id: 'rule_ble_norm',
+      name: 'BLE Normalization',
+      enabled: true,
+      ha_expose: false,
+      ha_icon: 'mdi:bluetooth',
+      exec_mode: 'one_shot',
+      cooldown_ms: 500,
+      triggers: [
+        { id: 't_single', source: 'ble', type: 'ble_button', ble_button: 'play', ble_action: 'single_press', click_count: 1 },
+        { id: 't_double', source: 'ble', type: 'ble_button', ble_button: 'play', ble_action: 'double_press', click_count: 1 },
+        { id: 't_triple', source: 'ble', type: 'ble_button', ble_button: 'play', ble_action: 'triple_press', click_count: 1 },
+        { id: 't_hold', source: 'ble', type: 'ble_button', ble_button: 'play', ble_action: 'hold_3s', click_count: 2 },
+      ],
+      conditions: [
+        { id: 'c_btn', type: 'ble_button', ble_button: 'mute', ble_action: 'single_press' },
+        { id: 'c_beacon_rssi', type: 'ble_presence', device_property: 'beacon_rssi', target_string: 'FDA5-UUID', target_rssi: -68 },
+        { id: 'c_beacon_major', type: 'ble_presence', beacon_major: 10, target_string: 'MAJOR-UUID' },
+        { id: 'c_dev_str', type: 'ble_device', device_property: 'connected', target_string: 'AA:BB:CC:DD:EE:FF' },
+      ],
+      actions: [],
+    },
+    catalog
+  );
+
+  assert.strictEqual(compiledRule.triggers[0].ble_action, 'press');
+  assert.strictEqual(compiledRule.triggers[0].click_count, undefined);
+  assert.strictEqual(compiledRule.triggers[1].ble_action, 'press');
+  assert.strictEqual(compiledRule.triggers[1].click_count, 2);
+  assert.strictEqual(compiledRule.triggers[2].ble_action, 'press');
+  assert.strictEqual(compiledRule.triggers[2].click_count, 3);
+  assert.strictEqual(compiledRule.triggers[3].ble_action, 'hold_3s');
+  assert.strictEqual(compiledRule.triggers[3].click_count, undefined);
+
+  assert.strictEqual(compiledRule.conditions[0].ble_action, 'press');
+  assert.strictEqual(compiledRule.conditions[1].type, 'ble_beacon');
+  assert.strictEqual(compiledRule.conditions[1].beacon_uuid, 'FDA5-UUID');
+  assert.strictEqual(compiledRule.conditions[1].operator, 'greater_than_or_equal');
+  assert.strictEqual(compiledRule.conditions[2].type, 'ble_beacon');
+  assert.strictEqual(compiledRule.conditions[2].beacon_uuid, 'MAJOR-UUID');
+  assert.strictEqual(compiledRule.conditions[3].type, 'ble_device');
+  assert.strictEqual(compiledRule.conditions[3].ble_device, 'AA:BB:CC:DD:EE:FF');
+
+  // 2. Decompile normalizes single_press/double_press/triple_press even with click_count: 1, clamps hold_Ns, and maps ble_device_event -> ble_presence
+  const decompiled = decompileAutomationRule(
+    {
+      id: 'rule_ble_dec',
+      name: 'BLE Decompile',
+      triggers: [
+        { id: 't1', type: 'ble_button', ble_button: 'play', ble_action: 'single_press', click_count: 1 },
+        { id: 't2', type: 'ble_button', ble_button: 'play', ble_action: 'double_press', click_count: 1 },
+        { id: 't3', type: 'ble_button', ble_button: 'play', ble_action: 'triple_press', click_count: 1 },
+        { id: 't4', type: 'ble_button', ble_button: 'play', ble_action: 'hold_2s', click_count: 3 },
+        { id: 't5', type: 'ble_device_event', ble_event: 'connected', ble_device: 'AA:BB:CC:DD:EE:FF' },
+        { id: 't6', type: 'ble_beacon', target_rssi: -62 },
+      ],
+      conditions: [
+        { id: 'c1', type: 'ble_button', ble_button: 'mute', ble_action: 'single_press' },
+        { id: 'c2', type: 'ble_beacon', target_rssi: -64 },
+      ],
+      actions: [],
+    },
+    catalog
+  );
+
+  assert.strictEqual(decompiled.triggers[0].ble_action, 'press');
+  assert.strictEqual(decompiled.triggers[0].click_count, 1);
+  assert.strictEqual(decompiled.triggers[1].ble_action, 'press');
+  assert.strictEqual(decompiled.triggers[1].click_count, 2);
+  assert.strictEqual(decompiled.triggers[2].ble_action, 'press');
+  assert.strictEqual(decompiled.triggers[2].click_count, 3);
+  assert.strictEqual(decompiled.triggers[3].ble_action, 'hold_2s');
+  assert.strictEqual(decompiled.triggers[3].click_count, 1);
+  assert.strictEqual(decompiled.triggers[4].type, 'ble_presence');
+  assert.strictEqual(decompiled.triggers[4].source, 'ble');
+  assert.strictEqual(decompiled.triggers[5].type, 'ble_presence');
+  assert.strictEqual(decompiled.triggers[5].ble_event, 'present');
+  assert.strictEqual(decompiled.conditions[0].ble_action, 'press');
+  assert.strictEqual(decompiled.conditions[1].type, 'ble_presence');
+  assert.strictEqual(decompiled.conditions[1].device_property, 'present');
+
+  // Recompiling decompiled ble_device_event and Any-Beacon ble_beacon round-trips cleanly
+  const recompiled = compileAutomationRule(decompiled, catalog);
+  assert.strictEqual(recompiled.triggers[4].type, 'ble_device_event');
+  assert.strictEqual(recompiled.triggers[4].ble_event, 'connected');
+  assert.strictEqual(recompiled.triggers[4].ble_device, 'AA:BB:CC:DD:EE:FF');
+  assert.strictEqual(recompiled.triggers[5].type, 'ble_beacon');
+  assert.strictEqual(recompiled.conditions[1].type, 'ble_beacon');
+  assert.strictEqual(recompiled.conditions[1].operator, 'greater_than_or_equal');
+});
+
+test('Regression: double round-trip (compile -> decompile -> compile) idempotency for AND/OR/NOT, mixed-command OR, and multi-child NOT', () => {
+  const catalog = createMockCatalog(4);
+  const rule: AutomationRule = {
+    id: 'rule_double_rt_logic',
+    name: 'Logic Groups Double Round-Trip',
+    enabled: true,
+    ha_expose: false,
+    ha_icon: 'mdi:logic-gate',
+    exec_mode: 'one_shot',
+    cooldown_ms: 500,
+    triggers: [
+      {
+        id: 't_1',
+        source: 'can',
+        type: 'byte_transition',
+        can_id: '0x101',
+        bus: 0,
+        byte: 'D1',
+        mask: '0xFF',
+        to: '0x01',
+      },
+    ],
+    conditions: [
+      {
+        id: 'c_and',
+        type: 'and',
+        logic: 'and',
+        for_sec: 3,
+        conditions: [
+          {
+            id: 'c_and_1',
+            type: 'can_state',
+            can_id: '0x101',
+            bus: 0,
+            byte: 'D1',
+            mask: '0xFF',
+            operator: 'equal',
+            value: '0x01',
+            source_command_id: 'cmd_1',
+          },
+          {
+            id: 'c_not_single',
+            type: 'not',
+            logic: 'not',
+            conditions: [
+              {
+                id: 'c_not_single_child',
+                type: 'can_state',
+                can_id: '0x102',
+                bus: 0,
+                byte: 'D1',
+                mask: '0xFF',
+                operator: 'equal',
+                value: '0x00',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'c_mixed_or',
+        type: 'or',
+        logic: 'or',
+        conditions: [
+          {
+            id: 'c_or_cat',
+            type: 'can_state',
+            can_id: '0x103',
+            bus: 0,
+            byte: 'D1',
+            mask: '0xFF',
+            operator: 'equal',
+            value: '0x01',
+            source_command_id: 'cmd_3',
+            option_label: 'On',
+          },
+          {
+            id: 'c_or_volt',
+            type: 'voltage',
+            operator: 'greater',
+            value: '13.1',
+          },
+        ],
+      },
+      {
+        id: 'c_not_multi',
+        type: 'not',
+        logic: 'not',
+        conditions: [
+          {
+            id: 'c_not_a',
+            type: 'can_state',
+            can_id: '0x101',
+            bus: 0,
+            byte: 'D1',
+            mask: '0xFF',
+            operator: 'equal',
+            value: '0x00',
+          },
+          {
+            id: 'c_not_b',
+            type: 'voltage',
+            operator: 'less',
+            value: '11.8',
+          },
+        ],
+      },
+    ],
+    actions: [
+      {
+        id: 'a_1',
+        type: 'transmit',
+        can_id: '0x201',
+        bus: 0,
+        payload: { D1: '0x01' },
+      },
+    ],
+  };
+
+  const compiled1 = compileAutomationRule(rule, catalog);
+  // Verify multi-child NOT stays an array and mixed-command OR preserves non-catalog voltage child
+  assert.ok(Array.isArray(compiled1.conditions[0].and));
+  assert.strictEqual(compiled1.conditions[0].for_sec, 3);
+  assert.strictEqual(compiled1.conditions[1].or.length, 2);
+  assert.strictEqual(compiled1.conditions[1].or[1].type, 'voltage');
+  assert.strictEqual(compiled1.conditions[1].or[1].value, 13.1);
+  assert.ok(Array.isArray(compiled1.conditions[2].not));
+  assert.strictEqual(compiled1.conditions[2].not.length, 2);
+
+  const decompiled = decompileAutomationRule(compiled1, catalog);
+  assert.strictEqual(decompiled.conditions[0].logic, 'and');
+  assert.strictEqual(decompiled.conditions[1].logic, 'or');
+  assert.strictEqual(decompiled.conditions[1].conditions?.length, 2);
+  assert.strictEqual(decompiled.conditions[1].conditions?.[1].type, 'voltage');
+  assert.strictEqual(decompiled.conditions[2].logic, 'not');
+  assert.strictEqual(decompiled.conditions[2].conditions?.length, 2);
+
+  const compiled2 = compileAutomationRule(decompiled, catalog);
+  assert.deepStrictEqual(compiled2, compiled1);
+});
+
+test('Regression: action contracts (precondition, track_popup/popup, transmit_frame, delay_ms pacing, climate_target, hud_nav, non-catalog entity_command, dual-CAN action_bus)', () => {
+  const dualCanCmd: Command = {
+    id: 'dual_bus_cmd',
+    name: 'Dual Bus Command',
+    category: 'Chassis',
+    roles: ['action'],
+    network: {
+      bus: 0,
+      action_bus: 1,
+      action_can_id: '0x390',
+    },
+    options: [
+      { label: 'Trigger', payload: { D1: '0xAA', D2: '0x55' } },
+    ],
+  };
+  const catalog: Catalog = {
+    can_do_version: '1.0.0',
+    vehicles: [],
+    commands: [dualCanCmd],
+  };
+
+  // 1. precondition / battery_preconditioning including "Cancel / Off" -> stop
+  const preconCancel = compileAction(
+    { id: 'a_pre_cancel', type: 'battery_preconditioning' as any, option_label: 'Cancel / Off' },
+    catalog
+  );
+  assert.deepStrictEqual(preconCancel, {
+    id: 'a_pre_cancel',
+    type: 'precondition',
+    mode: 'cancel',
+    action: 'stop',
+  });
+
+  const preconStart = compileAction(
+    { id: 'a_pre_start', type: 'precondition', mode: 'continuous' } as any,
+    catalog
+  );
+  assert.deepStrictEqual(preconStart, {
+    id: 'a_pre_start',
+    type: 'precondition',
+    mode: 'continuous',
+    action: 'start',
+  });
+
+  // 2. track_popup / popup aliases (message, popup_text, critical)
+  const popupFromMessage = compileAction(
+    { id: 'a_pop_1', type: 'popup' as any, message: 'Battery Low', level: 'critical' } as any,
+    catalog
+  );
+  assert.deepStrictEqual(popupFromMessage, {
+    id: 'a_pop_1',
+    type: 'track_popup',
+    level: 'critical',
+    text: 'Battery Low',
+  });
+
+  const popupFromPopupText = compileAction(
+    { id: 'a_pop_2', type: 'track_popup', popup_text: 'Preconditioning Active' } as any,
+    catalog
+  );
+  assert.deepStrictEqual(popupFromPopupText, {
+    id: 'a_pop_2',
+    type: 'track_popup',
+    level: 'info',
+    text: 'Preconditioning Active',
+  });
+
+  // 3. transmit_frame alias + repeat pacing delay_ms
+  const compiledTxFrame = compileAction(
+    {
+      id: 'a_tx_alias',
+      type: 'transmit_frame' as any,
+      can_id: '0x390',
+      bus: 1,
+      payload: { D1: '0x05' },
+      repeat: 4,
+      delay_ms: 120,
+    },
+    catalog
+  );
+  assert.strictEqual(compiledTxFrame.type, 'transmit');
+  assert.strictEqual(compiledTxFrame.repeat, 4);
+  assert.strictEqual(compiledTxFrame.delay_ms, 120);
+
+  const decompiledTxAlias = decompileActionList(
+    [{ id: 'a_tx_raw', type: 'transmit_frame', can_id: '0x391', bus: 0, payload: { D1: '0x07' }, repeat: 2, delay_ms: 75 }],
+    catalog
+  );
+  assert.strictEqual(decompiledTxAlias.length, 1);
+  assert.strictEqual(decompiledTxAlias[0].type, 'can_tx');
+  assert.strictEqual(decompiledTxAlias[0].delay_ms, 75);
+
+  // 4. climate_target (Fahrenheit conversion + extended fields)
+  const compiledClimate = compileAction(
+    {
+      id: 'a_clim',
+      type: 'climate_target',
+      target_temp_f: 77,
+      zone: 'passenger',
+      defrost: true,
+      sync_on: true,
+      driver_only: false,
+      monitor_0x38: true,
+      duration_minutes: 15,
+    } as any,
+    catalog
+  );
+  assert.deepStrictEqual(compiledClimate, {
+    id: 'a_clim',
+    type: 'climate_target',
+    target_temp_c: 25,
+    defrost: true,
+    duration_minutes: 15,
+    zone: 'passenger',
+    sync_on: true,
+    driver_only: false,
+    monitor_0x38: true,
+  });
+
+  // 5. hud_nav (lane_highlights, heading, omitted num_lanes, and clear)
+  const compiledHud = compileAction(
+    {
+      id: 'a_hud',
+      type: 'hud_nav',
+      icon: 4,
+      heading: 270,
+      distance: 350,
+      lane_highlights: [true, false, true],
+      street: 'Main St',
+    } as any,
+    catalog
+  );
+  assert.strictEqual(compiledHud.type, 'hud_nav');
+  assert.strictEqual(compiledHud.direction_deg, 270);
+  assert.strictEqual(compiledHud.distance_meters, 350);
+  assert.strictEqual(compiledHud.num_lanes, 3);
+  assert.deepStrictEqual(compiledHud.lane_directions, [1, 1, 1]);
+  assert.deepStrictEqual(compiledHud.lane_recommended, [1, 0, 1]);
+
+  const compiledHudClear = compileAction(
+    { id: 'a_hud_clr', type: 'hud_nav', action: 'clear' },
+    catalog
+  );
+  assert.deepStrictEqual(compiledHudClear, {
+    id: 'a_hud_clr',
+    type: 'hud_nav',
+    action: 'clear',
+  });
+
+  // 6. Non-catalog entity_command preserved across compile -> decompile -> compile
+  const customEntity: AutomationAction = {
+    id: 'a_custom_ent',
+    type: 'entity_command',
+    entity_id: 'custom_aux_relay',
+    command: 'Pulse',
+  };
+  const compiledCustom = compileActionList([customEntity], catalog);
+  assert.strictEqual(compiledCustom[0].type, 'entity_command');
+  assert.strictEqual(compiledCustom[0].entity_id, 'custom_aux_relay');
+  assert.strictEqual(compiledCustom[0].command, 'Pulse');
+  const decompiledCustom = decompileActionList(compiledCustom, catalog);
+  assert.strictEqual(decompiledCustom[0].type, 'entity_command');
+  assert.strictEqual(decompiledCustom[0].entity_id, 'custom_aux_relay');
+  assert.strictEqual(decompiledCustom[0].command, 'Pulse');
+
+  // 7. Dual-CAN network.action_bus honored across converters
+  assert.strictEqual(resolveActionBus(dualCanCmd), 1);
+  const fromCmd = commandToAction(dualCanCmd, dualCanCmd.options![0]);
+  assert.strictEqual(fromCmd.bus, 1);
+  const compiledFromEntity = compileAction(
+    { id: 'a_dual', type: 'entity_command', entity_id: 'dual_bus_cmd', command: 'Trigger' },
+    catalog
+  );
+  assert.strictEqual(compiledFromEntity.bus, 1);
+  assert.strictEqual(compiledFromEntity.can_id, '0x390');
+});
+
+test('Regression: trigger/condition contracts (byte_transition relational ops, can_rx numeric/multi-byte match, time defaults, BLE proximity empty UUID, press counts, default >= RSSI)', () => {
+  const catalog = createMockCatalog(2);
+  const compiled = compileAutomationRule(
+    {
+      id: 'rule_trig_cond_contracts',
+      name: 'Trigger & Condition Contracts',
+      enabled: true,
+      ha_expose: false,
+      ha_icon: 'mdi:radar',
+      exec_mode: 'one_shot',
+      cooldown_ms: 500,
+      triggers: [
+        {
+          id: 't_rel_gt',
+          source: 'can',
+          type: 'byte_transition',
+          can_id: '0x101',
+          bus: 0,
+          byte: 'D2',
+          mask: '0xFF',
+          operator: 'greater_than',
+          from: '0x00',
+          to: '0x40',
+        },
+        {
+          id: 't_rel_lte',
+          source: 'can',
+          type: 'byte_transition',
+          can_id: '0x101',
+          bus: 0,
+          byte: 'D3',
+          mask: '0xFF',
+          operator: 'less_than_or_equal',
+          from: '0x10',
+          to: '0x05',
+        },
+        {
+          id: 't_can_rx',
+          source: 'can',
+          type: 'can_rx',
+          can_id: '0x250',
+          bus: 1,
+          match: { D1: 16 as any, D3: '3f' },
+          mask: { D1: '0xF0', D3: 255 } as any,
+        },
+        {
+          id: 't_time_alias',
+          source: 'time',
+          type: 'time' as any,
+          time: '06:45',
+          days: [],
+        },
+        {
+          id: 't_ble_prox_empty_uuid',
+          source: 'ble',
+          type: 'ble_presence',
+          ble_event: 'proximity',
+          beacon_uuid: '',
+          target_rssi: -70,
+        },
+        {
+          id: 't_single',
+          source: 'ble',
+          type: 'ble_button',
+          ble_button: 'next_track',
+          ble_action: 'single_press',
+        },
+        {
+          id: 't_double',
+          source: 'ble',
+          type: 'ble_button',
+          ble_button: 'next_track',
+          ble_action: 'double_press',
+        },
+        {
+          id: 't_triple',
+          source: 'ble',
+          type: 'ble_button',
+          ble_button: 'next_track',
+          ble_action: 'triple_press',
+        },
+      ],
+      conditions: [
+        {
+          id: 'c_time_alias',
+          type: 'time' as any,
+          start_time: '09:00',
+          end_time: '17:00',
+        },
+        {
+          id: 'c_ble_rssi_default',
+          type: 'ble_presence',
+          device_property: 'beacon_rssi',
+          target_rssi: -65,
+        },
+        {
+          id: 'c_wifi_rssi_default',
+          type: 'device_state',
+          device_property: 'wifi_rssi',
+          target_rssi: -72,
+        },
+      ],
+      actions: [],
+    },
+    catalog
+  );
+
+  // Relational byte_transition omits `from`
+  assert.strictEqual(compiled.triggers[0].operator, 'greater_than');
+  assert.strictEqual(compiled.triggers[0].from, undefined);
+  assert.strictEqual(compiled.triggers[1].operator, 'less_than_or_equal');
+  assert.strictEqual(compiled.triggers[1].from, undefined);
+
+  // can_rx numeric + multi-byte match & mask normalized
+  assert.strictEqual(compiled.triggers[2].type, 'can_rx');
+  assert.deepStrictEqual(compiled.triggers[2].match, { D1: '0x10', D3: '0x3F' });
+  assert.deepStrictEqual(compiled.triggers[2].mask, { D1: '0xF0', D3: '0xFF' });
+
+  // time alias expands to 7 days
+  assert.strictEqual(compiled.triggers[3].type, 'time_schedule');
+  assert.deepStrictEqual(compiled.triggers[3].days, ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
+
+  // BLE proximity with empty beacon_uuid -> ble_beacon without empty beacon_uuid
+  assert.strictEqual(compiled.triggers[4].type, 'ble_beacon');
+  assert.strictEqual(compiled.triggers[4].ble_event, 'proximity');
+  assert.strictEqual(compiled.triggers[4].beacon_uuid, undefined);
+  assert.strictEqual(compiled.triggers[4].target_rssi, -70);
+
+  // single/double/triple press normalization
+  assert.strictEqual(compiled.triggers[5].ble_action, 'press');
+  assert.strictEqual(compiled.triggers[5].click_count, undefined);
+  assert.strictEqual(compiled.triggers[6].ble_action, 'press');
+  assert.strictEqual(compiled.triggers[6].click_count, 2);
+  assert.strictEqual(compiled.triggers[7].ble_action, 'press');
+  assert.strictEqual(compiled.triggers[7].click_count, 3);
+
+  // time condition alias -> time_condition with 7 days
+  assert.strictEqual(compiled.conditions[0].type, 'time_condition');
+  assert.deepStrictEqual(compiled.conditions[0].days, ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
+
+  // default >= RSSI operator on BLE & Wi-Fi conditions
+  assert.strictEqual(compiled.conditions[1].type, 'ble_beacon');
+  assert.strictEqual(compiled.conditions[1].operator, 'greater_than_or_equal');
+  assert.strictEqual(compiled.conditions[2].type, 'device_state');
+  assert.strictEqual(compiled.conditions[2].operator, 'greater_than_or_equal');
+});
+
+test('Regression: malformed-JSON defensive handling (null/primitives, array/{hex} payloads, !0x.. negated bytes, NaN/Infinity/negative numbers, non-string id/command/option_label)', () => {
+  const catalog = createMockCatalog(2);
+
+  // 1. Array and { hex } payloads in compileToByteMap + !0x.. negated bytes
+  assert.deepStrictEqual(
+    compileToByteMap([0x10, 255, null, '3f', -5, Number.NaN, Number.POSITIVE_INFINITY, '0x0a']),
+    { D1: '0x10', D2: '0xFF', D4: '0x3F', D8: '0x0A' }
+  );
+  assert.deepStrictEqual(
+    compileToByteMap({ hex: '10 20 ?? 3f' }),
+    { D1: '0x10', D2: '0x20', D4: '0x3F' }
+  );
+  assert.strictEqual(formatHexByte('!0x00', true), '!0x00');
+  assert.strictEqual(formatHexByte('!0x00', false), undefined);
+  assert.deepStrictEqual(compileToByteMap({ D1: '!0x00', D2: '0x01' }, true), { D1: '!0x00', D2: '0x01' });
+  assert.deepStrictEqual(compileToByteMap({ D1: '!0x00', D2: '0x01' }, false), { D2: '0x01' });
+
+  // 2. NaN / Infinity / negative numeric inputs
+  assert.strictEqual(formatHexByte(Number.NaN), undefined);
+  assert.strictEqual(formatHexByte(Number.POSITIVE_INFINITY), undefined);
+  assert.strictEqual(formatHexByte(Number.NEGATIVE_INFINITY), undefined);
+  assert.strictEqual(formatHexByte(-1), undefined);
+  assert.strictEqual(formatHexByte(256), undefined);
+  assert.strictEqual(formatCanId(Number.NaN), '');
+  assert.strictEqual(formatCanId(Number.POSITIVE_INFINITY), '');
+
+  // 3. null / primitive elements across rules, triggers, conditions, actions, choices, steps, and non-string id/command/option_label
+  const malformedRule: any = {
+    id: 12345,
+    name: 'Malformed Rule',
+    cooldown_ms: -999,
+    trigger_window_ms: Number.POSITIVE_INFINITY,
+    triggers: [
+      null,
+      'bad_trigger',
+      42,
+      {
+        id: 777,
+        source: 'can',
+        type: 'byte_transition',
+        can_id: '0x101',
+        byte: 'D1',
+        to: '0x01',
+        option_label: { nested: true },
+        for_sec: Number.NaN,
+        target_rssi: Number.NEGATIVE_INFINITY,
+      },
+    ],
+    conditions: [
+      null,
+      false,
+      'bad_cond',
+      {
+        id: 888,
+        type: 'can_state',
+        can_id: '0x101',
+        byte: 'D1',
+        value: '0x01',
+        option_label: 999,
+      },
+    ],
+    actions: [
+      null,
+      123,
+      'bad_action',
+      {
+        id: 999,
+        type: 'delay',
+        delay_ms: -500,
+      },
+      {
+        id: 'a_choose',
+        type: 'choose',
+        choices: [
+          null,
+          'bad_choice',
+          {
+            label: 'Valid Branch',
+            conditions: [null, 'bad', { type: 'can_state', can_id: '0x101', byte: 'D1', value: '0x01' }],
+            sequence: [null, 42, { type: 'delay', ms: Number.NaN }],
+          },
+        ],
+        default: [null, 'bad'],
+      },
+      {
+        id: 'a_steps',
+        type: 'transmit',
+        can_id: '0x201',
+        bus: 0,
+        steps: [null, 'bad_step', { payload: [0x01, 0x02], delay_ms: Number.POSITIVE_INFINITY }, { payload: { hex: '03 04' }, delay_ms: -10 }],
+      },
+      {
+        id: 'a_ent_non_str',
+        type: 'entity_command',
+        entity_id: 'cmd_1',
+        command: 42,
+        option_label: { invalid: 1 },
+      },
+    ],
+  };
+
+  const decompiledRules = decompileAutomationRules([null, 42, 'invalid', malformedRule] as any, catalog);
+  assert.strictEqual(decompiledRules.length, 1);
+  assert.strictEqual(decompiledRules[0].triggers.length, 1);
+  assert.strictEqual(decompiledRules[0].conditions.length, 1);
+  assert.ok(decompiledRules[0].actions.length >= 1);
+  assert.strictEqual(decompiledRules[0].cooldown_ms, 0);
+
+  const exportedJson = exportToCandoJson([null, 'bad', decompiledRules[0]] as any, {}, catalog);
+  const parsedExport = JSON.parse(exportedJson);
+  assert.strictEqual(parsedExport.rules.length, 1);
+  assert.strictEqual(parsedExport.rules[0].cooldown_ms, 0);
+  assert.strictEqual(parsedExport.rules[0].triggers.length, 1);
+  assert.strictEqual(parsedExport.rules[0].conditions.length, 1);
+});
+
+test('Regression: Task 2 & 3 fixes (vehicle variant threading, cond.invert, applyOptionsToCondition cmd.mask, payload key-order dedup, _step_group_id nested repeat_until/wait_for, regenerateActionIds singular condition, and cross-paste field/op preservation)', () => {
+  const ev6Vehicle: Vehicle = {
+    id: 'kia_ev6_2024',
+    name: '2024 Kia EV6 GT-Line',
+    make: 'Kia',
+    model: 'EV6',
+    trim: 'GT-Line',
+    region: 'US',
+    family: 'egmp',
+    years: [2024],
+    features: [],
+  };
+  const variantCmd: Command = {
+    id: 'variant_seat_cmd',
+    name: 'Seat Heater',
+    category: 'Comfort',
+    roles: ['trigger', 'action'],
+    network: {
+      bus: 0,
+      state_can_id: '0x210',
+      action_can_id: '0x211',
+    },
+    mask: '0x0F',
+    options: [
+      { label: 'Off', payload: { D1: '0x00' }, match: { D1: '0x00' } },
+      { label: 'High', payload: { D1: '0x03' }, match: { D1: '0x03' } },
+    ],
+    variants: [
+      {
+        targets: ['hyundai_ioniq5_2022'],
+        network: {
+          bus: 0,
+          state_can_id: '0x210',
+          action_can_id: '0x211',
+        },
+        options: [
+          { label: 'Off', payload: { D1: '0x00' }, match: { D1: '0x00' } },
+          { label: 'High', payload: { D1: '0x03' }, match: { D1: '0x03' } },
+        ],
+      },
+      {
+        targets: ['kia_ev6_2024'],
+        network: {
+          bus: 1,
+          state_can_id: '0x310',
+          action_can_id: '0x311',
+        },
+        options: [
+          { label: 'Off', payload: { D1: '0x00' }, match: { D1: '0x00' } },
+          { label: 'High', payload: { D1: '0x09' }, match: { D1: '0x09' } },
+        ],
+      },
+    ],
+  };
+  const catalog: Catalog = { can_do_version: '1.0.0', vehicles: [ev6Vehicle], commands: [variantCmd] };
+
+  // 1. Vehicle variant resolution threaded through exportToCandoJson / compileAutomationRule / decompileAutomationRule
+  const baseRule: AutomationRule = {
+    id: 'rule_variant',
+    name: 'Variant Test',
+    enabled: true,
+    ha_expose: false,
+    ha_icon: 'mdi:car-seat-heater',
+    exec_mode: 'one_shot',
+    cooldown_ms: 500,
+    triggers: [commandToTrigger(variantCmd, undefined, ev6Vehicle)],
+    conditions: [],
+    actions: [{ id: 'a_var', type: 'entity_command', entity_id: 'variant_seat_cmd', command: 'High' }],
+  };
+
+  const exportedDefault = JSON.parse(exportToCandoJson([baseRule], {}, catalog));
+  const exportedEv6 = JSON.parse(exportToCandoJson([baseRule], {}, catalog, ev6Vehicle));
+  assert.strictEqual(exportedDefault.rules[0].actions[0].can_id, '0x211');
+  assert.deepStrictEqual(exportedDefault.rules[0].actions[0].payload, { D1: '0x03' });
+  assert.strictEqual(exportedEv6.rules[0].actions[0].can_id, '0x311');
+  assert.strictEqual(exportedEv6.rules[0].actions[0].bus, 1);
+  assert.deepStrictEqual(exportedEv6.rules[0].actions[0].payload, { D1: '0x09' });
+
+  const decompiledEv6 = decompileAutomationRule(exportedEv6.rules[0], catalog, ev6Vehicle);
+  assert.strictEqual(decompiledEv6.actions[0].source_command_id, 'variant_seat_cmd');
+  assert.strictEqual(decompiledEv6.actions[0].option_label, 'High');
+
+  // 2. compileCondition inverts equal <-> not_equal when invert === true, leaves relational ops intact
+  const invEq = compileCondition({
+    id: 'c_inv_eq',
+    type: 'can_state',
+    can_id: '0x210',
+    byte: 'D1',
+    value: '0x03',
+    operator: 'equal',
+    invert: true,
+  });
+  assert.strictEqual(invEq.operator, 'not_equal');
+
+  const invNeq = compileCondition({
+    id: 'c_inv_neq',
+    type: 'can_state',
+    can_id: '0x210',
+    byte: 'D1',
+    value: '0x03',
+    operator: 'not_equal',
+    invert: true,
+  });
+  assert.strictEqual(invNeq.operator, 'equal');
+
+  const invGt = compileCondition({
+    id: 'c_inv_gt',
+    type: 'can_state',
+    can_id: '0x210',
+    byte: 'D1',
+    value: '0x03',
+    operator: 'greater_than',
+    invert: true,
+  });
+  assert.strictEqual(invGt.operator, 'greater_than');
+
+  // 3. applyOptionsToCondition inherits command-level cmd.mask
+  const multiOptCond = applyOptionsToCondition(
+    { id: 'c_mask', type: 'can_state', can_id: '0x210' },
+    variantCmd,
+    [variantCmd.options![1]],
+    null
+  );
+  assert.strictEqual(multiOptCond.mask, '0x0F');
+  const singleOptCond = applyOptionToCondition(
+    { id: 'c_mask_single', type: 'can_state', can_id: '0x210' },
+    variantCmd,
+    variantCmd.options![1],
+    null
+  );
+  assert.strictEqual(singleOptCond.mask, '0x0F');
+
+  // 4. Key-order-independent payload matching & custom catalog forwarding in matchAndConsumeRemainingCatalogSteps
+  const multiStepCmd: Command = {
+    id: 'custom_two_step_cmd',
+    name: 'Custom Two Step',
+    category: 'General',
+    roles: ['action'],
+    network: { bus: 0, action_can_id: '0x400', delay_ms: 20 },
+    options: [
+      {
+        label: 'Activate',
+        steps: [
+          { payload: { D1: '0x01', D2: '0x02' }, repeat: 2 },
+          { payload: { D1: '0x00', D2: '0xFF' }, repeat: 1 },
+        ],
+      },
+    ],
+  };
+  const customCatalog: Catalog = { can_do_version: '1.0.0', vehicles: [ev6Vehicle], commands: [variantCmd, multiStepCmd] };
+  const coalescedReversedKeys = decompileActionList(
+    [
+      {
+        type: 'transmit',
+        can_id: '0x400',
+        bus: 0,
+        payload: { D2: '0x02', D1: '0x01' },
+        repeat: 2,
+        source_command_id: 'custom_two_step_cmd',
+        option_label: 'Activate',
+      },
+      { type: 'delay', ms: 20 },
+      { type: 'transmit', can_id: '0x400', bus: 0, payload: { D2: '0xFF', D1: '0x00' }, repeat: 1 },
+      { type: 'delay', ms: 20 },
+      { type: 'transmit', can_id: '0x400', bus: 0, payload: { D1: '0x00', D2: '0xFF' }, repeat: 1 },
+    ],
+    customCatalog
+  );
+  assert.strictEqual(coalescedReversedKeys.length, 1);
+  assert.strictEqual(coalescedReversedKeys[0].source_command_id, 'custom_two_step_cmd');
+  assert.strictEqual(coalescedReversedKeys[0].steps?.length, 2);
+
+  // 5. _step_group_id containing transmit + repeat_until / wait_for is recursively decompiled
+  const nestedInGroup = decompileActionList(
+    [
+      {
+        id: 'act_tx_in_grp',
+        _step_group_id: 'grp_nested',
+        type: 'transmit',
+        can_id: '0x311',
+        bus: 1,
+        payload: { D1: '0x09' },
+        repeat: 1,
+      },
+      {
+        id: 'act_wait_in_grp',
+        _step_group_id: 'grp_nested',
+        type: 'wait_for',
+        interval_ms: 100,
+        timeout_ms: 5000,
+        condition: { can_id: '0x310', bus: 1, byte: 'D1', mask: '0x0F', operator: 'equal', value: '0x09' },
+      },
+      {
+        id: 'act_rep_in_grp',
+        _step_group_id: 'grp_nested',
+        type: 'repeat_until',
+        interval_ms: 250,
+        timeout_ms: 8000,
+        condition: { can_id: '0x310', bus: 1, byte: 'D1', mask: '0x0F', operator: 'equal', value: '0x00' },
+        sequence: [{ type: 'transmit', can_id: '0x311', bus: 1, payload: { D1: '0x09' } }],
+      },
+    ],
+    catalog,
+    0,
+    ev6Vehicle
+  );
+  assert.strictEqual(nestedInGroup.length, 1);
+  assert.strictEqual(nestedInGroup[0].steps?.length, 3);
+  const waitStep: any = nestedInGroup[0].steps?.[1];
+  const repStep: any = nestedInGroup[0].steps?.[2];
+  assert.strictEqual(waitStep.type, 'wait_for');
+  assert.strictEqual(waitStep._step_group_id, undefined);
+  assert.strictEqual(waitStep.conditions?.length, 1);
+  assert.strictEqual(waitStep.conditions[0].can_id, '0x310');
+  assert.strictEqual(repStep.type, 'repeat_until');
+  assert.strictEqual(repStep._step_group_id, undefined);
+  assert.strictEqual(repStep.sequence?.length, 1);
+  assert.strictEqual(repStep.sequence[0].source_command_id, 'variant_seat_cmd');
+
+  // 6. regenerateActionIds regenerates singular clone.condition
+  const waitAction: AutomationAction = {
+    id: 'act_orig_wait',
+    type: 'wait_for',
+    condition: {
+      id: 'cond_orig_singular',
+      _clientId: 'client_orig_singular',
+      type: 'can_state',
+      can_id: '0x210',
+      byte: 'D1',
+      value: '0x03',
+    },
+  };
+  const regenWait = regenerateActionIds(waitAction);
+  assert.notStrictEqual(regenWait.id, waitAction.id);
+  assert.ok(regenWait.condition);
+  assert.notStrictEqual(regenWait.condition!.id, 'cond_orig_singular');
+  assert.notStrictEqual(regenWait.condition!._clientId, 'client_orig_singular');
+  assert.strictEqual(waitAction.condition!.id, 'cond_orig_singular');
+
+  // 7. convertTriggerToCondition & convertConditionToTrigger preserve relational ops & map Wi-Fi/BLE/time/voltage
+  const relTrig: AutomationTrigger = {
+    id: 't_rel',
+    source: 'can',
+    type: 'byte_transition',
+    can_id: '0x380',
+    byte: 'D2',
+    operator: 'greater_than',
+    to: '0x2A',
+  };
+  const relCond = convertTriggerToCondition(relTrig);
+  assert.strictEqual(relCond.type, 'can_state');
+  assert.strictEqual(relCond.operator, 'greater_than');
+  assert.strictEqual(relCond.value, '0x2A');
+
+  const relBackTrig = convertConditionToTrigger({ ...relCond, operator: 'equal', invert: true });
+  assert.strictEqual(relBackTrig.type, 'byte_transition');
+  assert.strictEqual(relBackTrig.operator, 'not_equal');
+
+  const wifiTrig: AutomationTrigger = {
+    id: 't_wifi',
+    source: 'wifi',
+    type: 'wifi_event',
+    wifi_event: 'ap_client_connected',
+    client_mac: 'AA:BB:CC:DD:EE:FF',
+  };
+  const wifiCond = convertTriggerToCondition(wifiTrig);
+  assert.strictEqual(wifiCond.type, 'device_state');
+  assert.strictEqual(wifiCond.device_property, 'ap_client_connected');
+  assert.strictEqual(wifiCond.target_string, 'AA:BB:CC:DD:EE:FF');
+  assert.strictEqual(wifiCond.target_bool, true);
+
+  const wifiBackTrig = convertConditionToTrigger(wifiCond);
+  assert.strictEqual(wifiBackTrig.type, 'wifi_event');
+  assert.strictEqual(wifiBackTrig.wifi_event, 'ap_client_connected');
+  assert.strictEqual(wifiBackTrig.client_mac, 'AA:BB:CC:DD:EE:FF');
+
+  const wifiSsidCond = convertTriggerToCondition({
+    id: 't_wifi_ssid',
+    source: 'wifi',
+    type: 'wifi_event',
+    wifi_event: 'wifi_disconnected',
+    ssid: 'HomeNet',
+  });
+  assert.strictEqual(wifiSsidCond.device_property, 'wifi_connected');
+  assert.strictEqual(wifiSsidCond.target_string, 'HomeNet');
+  assert.strictEqual(wifiSsidCond.target_bool, false);
+  const wifiSsidBack = convertConditionToTrigger(wifiSsidCond);
+  assert.strictEqual(wifiSsidBack.wifi_event, 'wifi_disconnected');
+  assert.strictEqual(wifiSsidBack.ssid, 'HomeNet');
+
+  const bleProxCond = convertTriggerToCondition({
+    id: 't_ble_prox',
+    source: 'ble',
+    type: 'ble_presence',
+    ble_event: 'proximity',
+    beacon_uuid: 'UUID-1234',
+    target_rssi: -66,
+  });
+  assert.strictEqual(bleProxCond.type, 'ble_presence');
+  assert.strictEqual(bleProxCond.device_property, 'beacon_rssi');
+  assert.strictEqual(bleProxCond.target_string, 'UUID-1234');
+  assert.strictEqual(bleProxCond.operator, 'greater_than_or_equal');
+  const bleProxBack = convertConditionToTrigger(bleProxCond);
+  assert.strictEqual(bleProxBack.type, 'ble_presence');
+  assert.strictEqual(bleProxBack.ble_event, 'proximity');
+  assert.strictEqual(bleProxBack.beacon_uuid, 'UUID-1234');
+
+  const timeCond = convertTriggerToCondition({
+    id: 't_time',
+    source: 'time',
+    type: 'time_schedule',
+    time: '07:15',
+    days: ['mon', 'fri'],
+  });
+  assert.strictEqual(timeCond.type, 'time_condition');
+  assert.strictEqual(timeCond.start_time, '07:15');
+  assert.deepStrictEqual(timeCond.days, ['mon', 'fri']);
+  const timeBack = convertConditionToTrigger(timeCond);
+  assert.strictEqual(timeBack.type, 'time_schedule');
+  assert.strictEqual(timeBack.time, '07:15');
+  assert.deepStrictEqual(timeBack.days, ['mon', 'fri']);
+
+  const voltCond = convertTriggerToCondition({
+    id: 't_volt',
+    source: 'voltage',
+    type: 'voltage',
+    voltage_val: '11.9',
+    voltage_dir: 'below',
+  });
+  assert.strictEqual(voltCond.type, 'voltage');
+  assert.strictEqual(voltCond.operator, 'less');
+  assert.strictEqual(voltCond.value, '11.9');
+  assert.strictEqual(voltCond.voltage_dir, 'below');
+  const voltBack = convertConditionToTrigger(voltCond);
+  assert.strictEqual(voltBack.type, 'voltage');
+  assert.strictEqual(voltBack.operator, 'less');
+  assert.strictEqual(voltBack.voltage_val, '11.9');
+  assert.strictEqual(voltBack.voltage_dir, 'below');
+});
 
 

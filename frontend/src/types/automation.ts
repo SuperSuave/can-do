@@ -171,7 +171,7 @@ export interface AutomationActionStep {
   ms?: number;
 }
 
-export type PopupLevel = 'info' | 'warning' | 'error';
+export type PopupLevel = 'info' | 'warning' | 'error' | 'critical';
 
 export interface AutomationAction {
   id: string;
@@ -179,7 +179,9 @@ export interface AutomationAction {
   type: 'can_tx' | 'transmit' | 'entity_command' | 'delay' | 'precondition' | 'climate_target' | 'hud_nav' | 'webhook' | 'choose' | 'if_then' | 'track_popup' | 'popup' | 'repeat_until' | 'wait_for' | 'cycle_entity' | string;
   level?: PopupLevel;
   text?: string;
+  message?: string;
   popup_message?: string;
+  popup_text?: string;
   target_temp_c?: number;
   target_c?: number;
   defrost?: boolean;
@@ -187,6 +189,7 @@ export interface AutomationAction {
   zone?: 'driver' | 'passenger';
   sync_on?: boolean;
   driver_only?: boolean;
+  monitor_0x38?: boolean;
   trigger_id?: string;
   can_id?: string;
   bus?: number;
@@ -220,6 +223,7 @@ export interface AutomationAction {
   action?: string;
   icon?: number;
   direction_deg?: number;
+  heading?: number;
   distance_meters?: number;
   distance?: number;
   bars?: number;
@@ -230,6 +234,7 @@ export interface AutomationAction {
   lanes?: number;
   lane_directions?: number[];
   lane_recommended?: number[];
+  lane_highlights?: number[];
 
   // For if_then
   conditions?: AutomationCondition[];
