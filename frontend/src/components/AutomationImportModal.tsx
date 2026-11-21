@@ -17,10 +17,8 @@ import { formatCanId, formatHexByte, compileToByteMap, decompileAutomationRule }
 import {
   X,
   Upload,
-  FileCode,
   CheckCircle2,
   AlertTriangle,
-  Layers,
   ArrowRight,
   ClipboardPaste,
   FileJson
@@ -33,7 +31,6 @@ interface AutomationImportModalProps {
   onClose: () => void;
   onImport: (
     importedRules: AutomationRule[],
-    mode: 'merge' | 'replace',
     importedSettings?: AutomationSettings
   ) => void;
 }
@@ -288,7 +285,7 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
     if (!parsedRules || parsedRules.length === 0) return;
 
     if (mode === 'replace') {
-      onImport(parsedRules, 'replace', parsedSettings);
+      onImport(parsedRules, parsedSettings);
       onClose();
       return;
     }
@@ -298,7 +295,7 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
     const mergedList: AutomationRule[] = [...existingRules];
 
     parsedRules.forEach(rule => {
-      let finalRule = { ...rule };
+      const finalRule = { ...rule };
       if (existingIds.has(finalRule.id)) {
         finalRule.id = `${finalRule.id}_copy_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
         finalRule.name = `${finalRule.name} (Imported)`;
@@ -307,7 +304,7 @@ export const AutomationImportModal: React.FC<AutomationImportModalProps> = ({
       mergedList.push(finalRule);
     });
 
-    onImport(mergedList, 'merge', parsedSettings);
+    onImport(mergedList, parsedSettings);
     onClose();
   };
 

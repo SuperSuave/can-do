@@ -129,12 +129,140 @@ export default defineConfig(() => {
               }
             }
 
+            // Local development support for /api/automations (GET/POST)
+            if (cleanUrl === '/api/automations') {
+              const autoDataFile = path.resolve(__dirname, '../firmware/data/automations.json');
+              const autoRepoFile = path.resolve(__dirname, '../firmware/automations.json');
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+
+              if (method === 'GET') {
+                const sourceFile = fs.existsSync(autoDataFile)
+                  ? autoDataFile
+                  : fs.existsSync(autoRepoFile)
+                    ? autoRepoFile
+                    : null;
+                if (sourceFile) {
+                  return res.end(fs.readFileSync(sourceFile, 'utf-8'));
+                }
+                return res.end(JSON.stringify({
+                  settings: {
+                    vehicle_model: 'all_egmp',
+                    unit_system: 'imperial',
+                    can_do_version: appVersion
+                  },
+                  rules: []
+                }));
+              }
+
+              if (method === 'POST') {
+                let body = '';
+                req.on('data', chunk => {
+                  body += chunk;
+                });
+                req.on('end', () => {
+                  try {
+                    const parsed = JSON.parse(body || '{}');
+                    const dir = path.dirname(autoDataFile);
+                    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+                    fs.writeFileSync(autoDataFile, JSON.stringify(parsed), 'utf-8');
+                    res.statusCode = 200;
+                    return res.end(JSON.stringify({
+                      status: 'ok',
+                      message: 'Automations saved and hot-reloaded (dev mock).'
+                    }));
+                  } catch (err: any) {
+                    res.statusCode = 400;
+                    return res.end(JSON.stringify({ error: err.message || 'Invalid JSON' }));
+                  }
+                });
+                return;
+              }
+            }
+
+            // Local development mock for /api/automations/test
+            if (cleanUrl === '/api/automations/test') {
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              let body = '';
+              req.on('data', chunk => {
+                body += chunk;
+              });
+              req.on('end', () => {
+                try {
+                  const parsed = JSON.parse(body || '{}');
+                  const mode = parsed?.mode || 'dry_run';
+                  res.statusCode = 200;
+                  if (mode === 'dry_run') {
+                    return res.end(JSON.stringify({
+                      status: 'ok',
+                      passed: true,
+                      message: 'All conditions passed (dev mock)'
+                    }));
+                  }
+                  return res.end(JSON.stringify({
+                    status: 'ok',
+                    message: 'Live fire actions queued'
+                  }));
+                } catch (err: any) {
+                  res.statusCode = 400;
+                  return res.end(JSON.stringify({ error: err.message || 'Invalid JSON' }));
+                }
+              });
+              return;
+            }
+
+            // Local development mock for /api/wifi/status
+            if (cleanUrl === '/api/wifi/status') {
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.statusCode = 200;
+              return res.end(JSON.stringify({
+                sta_connected: true,
+                sta_ssid: 'DevWiFi',
+                sta_ip: '127.0.0.1',
+                sta_gw: '127.0.0.1',
+                sta_mask: '255.255.255.0',
+                sta_rssi: -55,
+                ap_active: false,
+                ap_ssid: 'CAN-Do-Setup',
+                ap_ip: '192.168.4.1',
+                ap_clients: 0,
+                ap_mode: 'auto'
+              }));
+            }
+
             // Local development mock for /api/command
             if (cleanUrl === '/api/command') {
               res.setHeader('Content-Type', 'application/json');
               res.setHeader('Access-Control-Allow-Origin', '*');
               res.statusCode = 200;
-              return res.end(JSON.stringify({ status: 'ok' }));
+              return res.end(JSON.stringify({ status: 'queued' }));
+            }
+
+            // Local development mock for /api/nav
+            if (cleanUrl === '/api/nav') {
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              let body = '';
+              req.on('data', chunk => {
+                body += chunk;
+              });
+              req.on('end', () => {
+                try {
+                  const parsed = JSON.parse(body || '{}');
+                  const isClear = parsed?.action === 'clear';
+                  res.statusCode = 200;
+                  return res.end(JSON.stringify({
+                    status: 'ok',
+                    message: isClear ? 'HUD navigation cleared' : 'HUD navigation updated'
+                  }));
+                } catch (err: any) {
+                  res.statusCode = 400;
+                  return res.end(JSON.stringify({ error: err.message || 'Invalid JSON' }));
+                }
+              });
+              return;
             }
 
             // Local development mock for /api/states

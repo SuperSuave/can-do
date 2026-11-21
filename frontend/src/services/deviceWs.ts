@@ -4,19 +4,19 @@
  * redundant FreeRTOS task overhead, TCP socket exhaustion, and heap churn.
  */
 
-import { resolveDeviceBaseUrl } from '../utils/hostUtils';
+import { isRunningOnDevice, resolveDeviceBaseUrl } from '../utils/hostUtils';
 
-export type DeviceWsMessage = 
-  | { type: 'can_frame'; id: string; dlc?: number; data?: string }
+export type DeviceWsMessage =
   | { type: 'state'; entity: string; state: string }
   | { type: 'log'; msg?: string; [key: string]: any }
-  | { type: 'automation_fired'; rule_id?: string; id?: string; trigger_id?: string }
+  | { type: 'automation_fired'; id?: string; name?: string; ts?: number }
   | { type: string; [key: string]: any };
 
 type Listener = (msg: DeviceWsMessage, raw: string) => void;
 
 class DeviceWebSocketService {
   private ws: WebSocket | null = null;
+  private currentUrl: string | null = null;
   private listeners: Set<Listener> = new Set();
   private reconnectTimer: any = null;
   private isConnected: boolean = false;
@@ -36,9 +36,15 @@ class DeviceWebSocketService {
     return this.isConnected;
   }
 
-  public getWsUrl(): string {
+  public getWsUrl(hostOverride?: string | null): string {
     try {
-      const baseUrl = resolveDeviceBaseUrl(typeof localStorage !== 'undefined' ? localStorage.getItem('cando_device_host') : null);
+      const rawHost =
+        hostOverride !== undefined
+          ? hostOverride
+          : typeof localStorage !== 'undefined'
+            ? localStorage.getItem('cando_device_host')
+            : null;
+      const baseUrl = resolveDeviceBaseUrl(rawHost);
       const parsed = new URL(baseUrl);
       const wsProto = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
       return `${wsProto}//${parsed.host}/ws`;
@@ -47,8 +53,37 @@ class DeviceWebSocketService {
     }
   }
 
+  public setHost(host: string): void {
+    const trimmed = (host || '').trim();
+    const isCurrentDeviceOrigin =
+      typeof window !== 'undefined' &&
+      isRunningOnDevice() &&
+      (trimmed === '' ||
+        trimmed === 'auto' ||
+        trimmed === window.location.host ||
+        trimmed === window.location.origin);
+    const storageValue = isCurrentDeviceOrigin ? 'auto' : trimmed || 'auto';
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('cando_device_host', storageValue);
+      }
+    } catch {}
+
+    const nextUrl = this.getWsUrl();
+    if (this.currentUrl !== nextUrl) {
+      this.reconnect();
+    } else if (this.listeners.size > 0 && (!this.ws || this.ws.readyState === WebSocket.CLOSED)) {
+      this.connect();
+    }
+  }
+
   public connect(): void {
-    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+    const url = this.getWsUrl();
+    if (
+      this.ws &&
+      this.currentUrl === url &&
+      (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)
+    ) {
       return;
     }
 
@@ -57,20 +92,34 @@ class DeviceWebSocketService {
       this.reconnectTimer = null;
     }
 
-    const url = this.getWsUrl();
+    if (this.ws) {
+      const prevWs = this.ws;
+      this.ws = null;
+      try { prevWs.close(); } catch {}
+      if (this.isConnected) {
+        this.isConnected = false;
+        this.notifyConnectionState(false);
+      }
+    }
+
     if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('ws://')) {
       // In secure HTTPS context (e.g. GitHub Pages), browsers block mixed content ws://.
+      this.currentUrl = url;
       return;
     }
     try {
-      this.ws = new WebSocket(url);
+      this.currentUrl = url;
+      const ws = new WebSocket(url);
+      this.ws = ws;
 
-      this.ws.onopen = () => {
+      ws.onopen = () => {
+        if (this.ws !== ws) return;
         this.isConnected = true;
         this.notifyConnectionState(true);
       };
 
-      this.ws.onmessage = (event: MessageEvent) => {
+      ws.onmessage = (event: MessageEvent) => {
+        if (this.ws !== ws) return;
         const raw = String(event.data || '');
         let parsed: any;
         try {
@@ -100,14 +149,16 @@ class DeviceWebSocketService {
         dispatch(parsed);
       };
 
-      this.ws.onclose = () => {
+      ws.onclose = () => {
+        if (this.ws !== ws) return;
         this.handleDisconnect();
       };
 
-      this.ws.onerror = () => {
+      ws.onerror = () => {
+        if (this.ws !== ws) return;
         this.handleDisconnect();
         try {
-          this.ws?.close();
+          ws.close();
         } catch {}
       };
     } catch (e) {
@@ -136,10 +187,20 @@ class DeviceWebSocketService {
   }
 
   public reconnect(): void {
-    if (this.ws) {
-      try { this.ws.close(); } catch {}
-      this.ws = null;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
+    if (this.ws) {
+      const prevWs = this.ws;
+      this.ws = null;
+      try { prevWs.close(); } catch {}
+      if (this.isConnected) {
+        this.isConnected = false;
+        this.notifyConnectionState(false);
+      }
+    }
+    this.currentUrl = null;
     this.connect();
   }
 

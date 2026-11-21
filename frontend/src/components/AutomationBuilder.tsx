@@ -1,105 +1,74 @@
-import React, { useState, useEffect, useRef, useCallback, useContext, useId, createContext } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useId } from 'react';
 import { createPortal } from 'react-dom';
 import mqtt from 'mqtt';
-import { Switch, Button, CloseButton, ButtonGroup, Slider } from '@heroui/react';
+import {
+  Switch,
+  Button,
+  CloseButton,
+  ButtonGroup,
+  Slider,
+  Modal,
+  ModalBackdrop,
+  ModalContainer,
+  ModalDialog,
+  ModalHeader,
+  ModalHeading,
+  ModalBody,
+  ModalFooter
+} from '@heroui/react';
 import {
   AutomationRule,
   AutomationSettings,
   AutomationTrigger,
   AutomationCondition,
   AutomationAction,
-  AutomationActionStep,
-  ChoiceBranch,
-  CycleEntityAction,
   ClipboardBlockType,
   AutomationClipboardItem
 } from '../types/automation';
-import { Catalog, Command, CommandOption } from '../types/catalog';
+import { Catalog } from '../types/catalog';
 import {
   exportToCandoJson,
-  commandToTrigger,
-  commandToCondition,
   commandToAction,
   compileToByteMap,
-  resolveCatalogCommandForTrigger,
-  resolveCatalogCommandForCondition,
   resolveCatalogCommandForAction,
-  applyOptionToTrigger,
-  applyOptionToCondition,
-  applyOptionsToCondition,
-  applyOptionToAction,
-  regenerateActionIds,
-  regenerateConditionIds,
   regenerateTriggerIds,
-  regenerateBranchIds,
   cloneRuleWithNewIds,
-  convertTriggerToCondition,
-  convertConditionToTrigger,
   deepClone,
   normalizeCanId,
-  formatCanId,
   decompileAutomationRule,
   decompileAutomationRules,
-  compileActionList
+  compileActionList,
+  MAX_AUTOMATIONS_PAYLOAD_BYTES,
+  getPayloadByteLength
 } from '../utils/automationConverters';
-import { getDefaultEspIp, resolveDeviceBaseUrl, isRunningOnDevice } from '../utils/hostUtils';
+import { getDefaultEspIp, resolveDeviceBaseUrl } from '../utils/hostUtils';
 import { deviceWs } from '../services/deviceWs';
-import { BleButtonComboPicker } from './BleButtonComboPicker';
-import { BleDeviceSelect, BleBeaconSelect } from './BleSelects';
 import {
   Zap,
   Shield,
   Send,
   Plus,
   Trash2,
-  Copy,
-  CopyPlus,
   Check,
   CheckSquare,
   Download,
   Upload,
   Play,
-  RotateCw,
-  Sliders,
   Sparkles,
-  Layers,
   ChevronDown,
   ChevronUp,
   ArrowUp,
   ArrowDown,
   Search,
-  ExternalLink,
-  Code,
-  FileJson,
-  RefreshCcw,
   RefreshCw,
-  Eye,
-  Info,
-  Car,
-  GitFork,
-  Split,
-  Clock,
-  MessageSquare,
-  Thermometer,
-  Radio,
-  Wifi,
-  Bluetooth,
-  Signal,
-  SignalHigh,
-  SignalMedium,
-  SignalLow,
   X,
-  Share2,
-  Users,
   HelpCircle,
-  XCircle,
-  Clipboard,
-  ClipboardCopy,
   ClipboardPaste,
   ClipboardCheck,
   Tag,
   Ban,
-  CheckCircle2
+  CheckCircle2,
+  AlertTriangle
 } from 'lucide-react';
 import { AddElementModal, AddElementTarget } from './AddElementModal';
 import { CommunityAutomationsModal } from './CommunityAutomationsModal';
@@ -126,52 +95,201 @@ import {
   serializeClipboardEnvelope,
   setActiveScopedDrag
 } from '../utils/automationClipboard';
-
-interface AutomationBuilderProps {
-  catalog: Catalog;
-  rules: AutomationRule[];
-  onUpdateRules: (newRules: AutomationRule[]) => void;
-  settings: AutomationSettings;
-  onUpdateSettings: (newSettings: AutomationSettings) => void;
-  onBackToCatalog?: () => void;
-  onNavigateToCatalog?: () => void;
-  initialSelectedCommandIds?: string[];
-  // If items were selected from the catalog to pull into an automation
-  pulledCommands?: { command: Command; option?: CommandOption; role?: 'trigger' | 'condition' | 'action' }[];
-  onClearPulledCommands?: () => void;
-}
-
 import {
   AutomationClipboardContext,
-  CLIPBOARD_STORAGE_KEY,
-  AutomationClipboardContextType
+  CLIPBOARD_STORAGE_KEY
 } from './automation/AutomationClipboardContext';
 import {
   LiveWifiStatus,
   LiveBleItem,
-  OptionGridGroup,
-  ConditionValidityState,
-  EvaluatedConditionResult,
-  groupOptionsIntoGridRows,
-  parseHexPayload,
-  isOptionCurrentlyValid,
   evaluateConditionState
 } from './automation/liveEvaluator';
-import { DayOfWeekPicker } from './automation/DayOfWeekPicker';
 import { SwipeableRuleItem } from './automation/SwipeableRuleItem';
 import { TriggerNodeEditor } from './automation/TriggerNodeEditor';
-import { ConditionNodeEditor, ConditionListEditor } from './automation/ConditionNodeEditor';
-import { ActionNodeEditor, ActionListEditor } from './automation/ActionNodeEditor';
+import { ConditionListEditor } from './automation/ConditionNodeEditor';
+import { ActionListEditor } from './automation/ActionNodeEditor';
+
+interface AutomationBuilderProps {
+  catalog: Catalog;
+  rules: AutomationRule[];
+  onUpdateRules: React.Dispatch<React.SetStateAction<AutomationRule[]>>;
+  settings: AutomationSettings;
+  onUpdateSettings: (newSettings: AutomationSettings) => void;
+}
+
+interface MqttRemoteConfig {
+  wsUrl: string;
+  deviceId: string;
+  user: string;
+  pass: string;
+}
+
+interface MqttSessionContext {
+  client: mqtt.MqttClient;
+  deviceId: string;
+  isSettled: () => boolean;
+  finish: (statusMsg?: string, clearAfterMs?: number, onSettled?: () => void) => void;
+}
+
+const EMPTY_LIVE_FRAMES = new Map<string, { data: string }>();
+
+const mapWifi = (wData: any): LiveWifiStatus => ({
+  sta_connected: !!wData.sta_connected,
+  sta_ssid: wData.sta_ssid || '',
+  sta_ip: wData.sta_ip || '',
+  sta_rssi: typeof wData.sta_rssi === 'number' ? wData.sta_rssi : -65,
+  ap_active: !!wData.ap_active,
+  ap_clients: typeof wData.ap_clients === 'number' ? wData.ap_clients : 0
+});
+
+const upsertBle = (
+  map: Map<string, LiveBleItem>,
+  item: LiveBleItem,
+  options?: { overwrite?: boolean; extraKeys?: string[] }
+) => {
+  const overwrite = options?.overwrite ?? true;
+  const keys = [item.uuid, item.mac, item.address, item.name, ...(options?.extraKeys || [])];
+  for (const rawKey of keys) {
+    const key = typeof rawKey === 'string' ? rawKey.trim().toLowerCase() : '';
+    if (!key) continue;
+    if (overwrite || !map.has(key)) {
+      map.set(key, item);
+    }
+  }
+};
+
+const createEmptyRule = (ruleNumber = 1, id = `rule_${Date.now().toString(36)}`): AutomationRule => ({
+  id,
+  name: `New Automation Rule #${ruleNumber}`,
+  enabled: true,
+  ha_expose: true,
+  ha_icon: 'mdi:car-cog',
+  exec_mode: 'one_shot',
+  trigger_mode: 'any',
+  cooldown_ms: 0,
+  timeout_reset_ms: 0,
+  triggers: [],
+  conditions: [],
+  actions: []
+});
+
+interface PushFabProps {
+  syncing: boolean;
+  ruleCount: number;
+  onPush: () => void;
+  onDismiss: () => void;
+}
+
+const PushFab: React.FC<PushFabProps> = ({ syncing, ruleCount, onPush, onDismiss }) => (
+  <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+    <Button
+      variant="primary"
+      size="sm"
+      isDisabled={syncing}
+      onPress={onPush}
+      className="ha-save-fab dirty !bg-warning !text-warning-foreground shadow-lg shadow-warning/25"
+      aria-label="Push unsaved automation changes to device"
+    >
+      {syncing ? (
+        <>
+          <RefreshCw className="w-4 h-4 animate-spin" />
+          <span>Pushing Changes...</span>
+        </>
+      ) : (
+        <>
+          <ArrowUp className="w-4 h-4" />
+          <span>Push Changes ({ruleCount} Rule{ruleCount !== 1 ? 's' : ''})</span>
+        </>
+      )}
+    </Button>
+    <CloseButton
+      aria-label="Dismiss push changes FAB"
+      onPress={onDismiss}
+      className="size-8 rounded-full bg-surface-secondary/90 hover:bg-surface-tertiary border border-border text-muted hover:text-foreground shadow-overlay backdrop-blur transition flex items-center justify-center shrink-0 cursor-pointer pointer-events-auto"
+    />
+  </div>
+);
+
+let triggerClientIdCounter = 0;
+
+const createTriggerClientId = (hint?: string): string => {
+  triggerClientIdCounter += 1;
+  return `trig_client_${hint || triggerClientIdCounter}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+};
+
+const ensureTriggerClientId = (trig: AutomationTrigger): AutomationTrigger =>
+  trig._clientId ? trig : { ...trig, _clientId: createTriggerClientId(trig.id) };
+
+const ensureRuleTriggerClientIds = (rule: AutomationRule): AutomationRule => {
+  const triggers = rule.triggers || [];
+  if (triggers.every(t => Boolean(t._clientId))) return rule;
+  return {
+    ...rule,
+    triggers: triggers.map(ensureTriggerClientId)
+  };
+};
+
+const ensureRulesTriggerClientIds = (ruleList: AutomationRule[]): AutomationRule[] => {
+  let changed = false;
+  const next = ruleList.map(rule => {
+    const ensured = ensureRuleTriggerClientIds(rule);
+    if (ensured !== rule) changed = true;
+    return ensured;
+  });
+  return changed ? next : ruleList;
+};
+
+const serializeRulesForDirtyCheck = (ruleList: AutomationRule[]): string =>
+  JSON.stringify(ruleList, (key, value) => (key === '_clientId' ? undefined : value));
+
+const getInitialEspIp = (): string => {
+  try {
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('cando_device_host') : null;
+    const trimmed = (saved || '').trim();
+    if (trimmed && trimmed !== 'auto') {
+      return trimmed;
+    }
+  } catch {}
+  return getDefaultEspIp();
+};
+
+const createTimedAbortSignal = (
+  parentSignal: AbortSignal,
+  timeoutMs: number
+): { signal: AbortSignal; cleanup: () => void } => {
+  if (
+    typeof AbortSignal !== 'undefined' &&
+    typeof AbortSignal.any === 'function' &&
+    typeof AbortSignal.timeout === 'function'
+  ) {
+    return {
+      signal: AbortSignal.any([parentSignal, AbortSignal.timeout(timeoutMs)]),
+      cleanup: () => {}
+    };
+  }
+  const controller = new AbortController();
+  const onParentAbort = () => controller.abort();
+  if (parentSignal.aborted) {
+    controller.abort();
+  } else {
+    parentSignal.addEventListener('abort', onParentAbort, { once: true });
+  }
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timer);
+      parentSignal.removeEventListener('abort', onParentAbort);
+    }
+  };
+};
 
 export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   catalog,
   rules,
   onUpdateRules,
   settings,
-  onUpdateSettings,
-  onBackToCatalog,
-  pulledCommands = [],
-  onClearPulledCommands
+  onUpdateSettings
 }) => {
   const [selectedRuleId, setSelectedRuleId] = useState<string>(
     rules.length > 0 ? rules[0].id : ''
@@ -188,7 +306,12 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [ruleFireStats, setRuleFireStats] = useState<Record<string, RuleFireRecord>>({});
   const [recentlyFiredIds, setRecentlyFiredIds] = useState<Set<string>>(new Set());
   const [relativeTimeTick, setRelativeTimeTick] = useState<number>(() => Date.now());
-  const [espIp, setEspIp] = useState<string>(() => getDefaultEspIp());
+  const [espIp, setEspIp] = useState<string>(() => getInitialEspIp());
+  const [espIpDraft, setEspIpDraft] = useState<string>(() => getInitialEspIp());
+  const espIpRef = useRef<string>(espIp);
+  espIpRef.current = espIp;
+  const espIpDraftRef = useRef<string>(espIpDraft);
+  espIpDraftRef.current = espIpDraft;
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [communityModalTab, setCommunityModalTab] = useState<'browse' | 'share'>('browse');
@@ -196,27 +319,87 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [editingCategoryRule, setEditingCategoryRule] = useState<AutomationRule | null>(null);
   const [editingSettingsRule, setEditingSettingsRule] = useState<AutomationRule | null>(null);
   const [prePushReport, setPrePushReport] = useState<AutomationValidationReport | null>(null);
-  const lastPushedJsonRef = useRef<string>(JSON.stringify(rules));
-  const hasUnpushedChanges = lastPushedJsonRef.current !== JSON.stringify(rules);
+  const [pendingPullConfirmation, setPendingPullConfirmation] = useState<{
+    rules: AutomationRule[];
+    settings?: AutomationSettings;
+    sourceLabel: string;
+    hasUnpushedChanges: boolean;
+    isEmptyDeviceOverwrite: boolean;
+  } | null>(null);
+
+  const isMountedRef = useRef<boolean>(true);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeMqttClientsRef = useRef<Set<mqtt.MqttClient>>(new Set());
+  const mqttTimeoutTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+  const latestRulesRef = useRef<AutomationRule[]>(rules);
+  latestRulesRef.current = rules;
+
+  const rulesJson = useMemo(() => serializeRulesForDirtyCheck(rules), [rules]);
+  const [lastPushedJson, setLastPushedJson] = useState<string>(() => rulesJson);
+  const lastPushedJsonRef = useRef<string>(lastPushedJson);
+  lastPushedJsonRef.current = lastPushedJson;
+  const hasUnpushedChanges = useMemo(
+    () => lastPushedJson !== rulesJson,
+    [lastPushedJson, rulesJson]
+  );
+
+  const markRulesAsSynced = useCallback((snapshotJson: string) => {
+    lastPushedJsonRef.current = snapshotJson;
+    if (isMountedRef.current) {
+      setLastPushedJson(snapshotJson);
+    }
+  }, []);
+
+  const commitEspIp = useCallback((rawValue?: string): string => {
+    const candidate = (rawValue !== undefined ? rawValue : espIpDraftRef.current).trim();
+    const nextHost = candidate || getDefaultEspIp();
+    espIpDraftRef.current = nextHost;
+    espIpRef.current = nextHost;
+    setEspIpDraft(nextHost);
+    setEspIp(prev => (prev === nextHost ? prev : nextHost));
+    deviceWs.setHost(nextHost);
+    return nextHost;
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleHostStorage = (e: StorageEvent) => {
+      if (e.key !== 'cando_device_host') return;
+      const synced = getInitialEspIp();
+      espIpDraftRef.current = synced;
+      espIpRef.current = synced;
+      setEspIpDraft(synced);
+      setEspIp(prev => (prev === synced ? prev : synced));
+    };
+    window.addEventListener('storage', handleHostStorage);
+    return () => window.removeEventListener('storage', handleHostStorage);
+  }, []);
+
+  // Ensure loaded rules have stable _clientId values on triggers without mutating during render
+  useEffect(() => {
+    if (!rules.some(r => (r.triggers || []).some(t => !t._clientId))) return;
+    onUpdateRules(prev => ensureRulesTriggerClientIds(prev));
+  }, [rules, onUpdateRules]);
 
   const [mounted, setMounted] = useState(false);
   const [isPushFabDismissed, setIsPushFabDismissed] = useState(false);
-  const prevRulesJsonRef = useRef(JSON.stringify(rules));
+  const prevRulesJsonRef = useRef<string>(rulesJson);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    const currentJson = JSON.stringify(rules);
-    if (lastPushedJsonRef.current === currentJson) {
+    if (lastPushedJson === rulesJson) {
       setIsPushFabDismissed(false);
-    } else if (currentJson !== prevRulesJsonRef.current) {
+    } else if (rulesJson !== prevRulesJsonRef.current) {
       // Re-surface FAB on new edits
       setIsPushFabDismissed(false);
     }
-    prevRulesJsonRef.current = currentJson;
-  }, [rules]);
+    prevRulesJsonRef.current = rulesJson;
+  }, [rulesJson, lastPushedJson]);
 
   const portalTarget = mounted && typeof document !== 'undefined' ? document.getElementById('ha-fab-stack') : null;
 
@@ -226,10 +409,56 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [triggerDragIdx, setTriggerDragIdx] = useState<number | null>(null);
   const [triggerDragOverIdx, setTriggerDragOverIdx] = useState<number | null>(null);
 
-  const showClipboardToast = useCallback((message: string, type: 'success' | 'error' | 'info') => {
-    setActionTestToast({ message, type });
-    setTimeout(() => setActionTestToast(null), 3200);
+  const clearToast = useCallback(() => {
+    if (toastTimerRef.current !== null) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    if (isMountedRef.current) {
+      setActionTestToast(null);
+    }
   }, []);
+
+  const showToast = useCallback(
+    (message: string, type: 'success' | 'error' | 'info', autoClearMs?: number) => {
+      if (toastTimerRef.current !== null) {
+        clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
+      }
+      if (!isMountedRef.current) return;
+      setActionTestToast({ message, type });
+      if (autoClearMs && autoClearMs > 0) {
+        toastTimerRef.current = setTimeout(() => {
+          toastTimerRef.current = null;
+          if (isMountedRef.current) {
+            setActionTestToast(null);
+          }
+        }, autoClearMs);
+      }
+    },
+    []
+  );
+
+  const showSyncStatus = useCallback((message: string | null, autoClearMs?: number) => {
+    if (syncStatusTimerRef.current !== null) {
+      clearTimeout(syncStatusTimerRef.current);
+      syncStatusTimerRef.current = null;
+    }
+    if (!isMountedRef.current) return;
+    setSyncStatus(message);
+    if (message !== null && autoClearMs && autoClearMs > 0) {
+      syncStatusTimerRef.current = setTimeout(() => {
+        syncStatusTimerRef.current = null;
+        if (isMountedRef.current) {
+          setSyncStatus(null);
+        }
+      }, autoClearMs);
+    }
+  }, []);
+
+  const showClipboardToast = useCallback((message: string, type: 'success' | 'error' | 'info') => {
+    showToast(message, type, 3200);
+  }, [showToast]);
 
   const persistClipboardStorage = useCallback((item: AutomationClipboardItem | null) => {
     try {
@@ -502,23 +731,46 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [collapsedConditions, setCollapsedConditions] = useState(false);
   const [collapsedActions, setCollapsedActions] = useState(false);
 
-  // Live CAN frames & Entity states for real-time condition validity evaluation
-  const [liveFrames, setLiveFrames] = useState<Map<string, { data: string }>>(new Map());
+  // Live Entity states for real-time condition validity evaluation
   const [entityStates, setEntityStates] = useState<Map<string, string>>(new Map());
-  const [lastFiredTriggerId, setLastFiredTriggerId] = useState<string | undefined>();
 
   // Live Wi-Fi & BLE status for condition validity & threshold auto-population
   const [liveWifiStatus, setLiveWifiStatus] = useState<LiveWifiStatus | null>(null);
   const [liveBleMap, setLiveBleMap] = useState<Map<string, LiveBleItem>>(new Map());
   const bleMapRef = useRef<Map<string, LiveBleItem>>(new Map());
 
-  const framesRef = useRef<Map<string, { data: string }>>(new Map());
   const entityStatesRef = useRef<Map<string, string>>(new Map());
   const pingPongDirRef = useRef<Map<string, number>>(new Map());
   const fireTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
+  // Clean up all timers and active MQTT clients on unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (toastTimerRef.current !== null) {
+        clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
+      }
+      if (syncStatusTimerRef.current !== null) {
+        clearTimeout(syncStatusTimerRef.current);
+        syncStatusTimerRef.current = null;
+      }
+      fireTimersRef.current.forEach(timer => clearTimeout(timer));
+      fireTimersRef.current.clear();
+      mqttTimeoutTimersRef.current.forEach(timer => clearTimeout(timer));
+      mqttTimeoutTimersRef.current.clear();
+      activeMqttClientsRef.current.forEach(client => {
+        try {
+          client.end(true);
+        } catch {}
+      });
+      activeMqttClientsRef.current.clear();
+    };
+  }, []);
+
   const recordRuleFired = useCallback((ruleId: string) => {
-    if (!ruleId) return;
+    if (!ruleId || !isMountedRef.current) return;
     const now = Date.now();
     setRelativeTimeTick(now);
     setRuleFireStats(prev => {
@@ -543,6 +795,8 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     const prevTimer = fireTimersRef.current.get(ruleId);
     if (prevTimer) clearTimeout(prevTimer);
     const timer = setTimeout(() => {
+      fireTimersRef.current.delete(ruleId);
+      if (!isMountedRef.current) return;
       setRecentlyFiredIds(prev => {
         if (!prev.has(ruleId)) return prev;
         const next = new Set(prev);
@@ -563,216 +817,289 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   }, [ruleFireStats]);
 
   // WebSocket connection & background polling for live telemetry
-  React.useEffect(() => {
+  useEffect(() => {
     let isCancelled = false;
+    let pollInFlight = false;
+    let hadWsConnection = false;
+    const effectAbortController = new AbortController();
+
+    // Clear previous device telemetry whenever the committed host changes
+    entityStatesRef.current.clear();
+    bleMapRef.current.clear();
+    setEntityStates(new Map());
+    setLiveBleMap(new Map());
+    setLiveWifiStatus(null);
+
+    // Ensure deviceWs and localStorage.cando_device_host target the same ESP32 as REST fetches
+    deviceWs.setHost(espIp);
+
+    let statesDirty = false;
+    let bleDirty = false;
+    let wsFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const clearPendingWsFlush = () => {
+      if (wsFlushTimer !== null) {
+        clearTimeout(wsFlushTimer);
+        wsFlushTimer = null;
+      }
+      statesDirty = false;
+      bleDirty = false;
+    };
+
+    const flushWsUpdates = () => {
+      wsFlushTimer = null;
+      if (isCancelled) return;
+      if (statesDirty) {
+        statesDirty = false;
+        setEntityStates(new Map(entityStatesRef.current));
+      }
+      if (bleDirty) {
+        bleDirty = false;
+        setLiveBleMap(new Map(bleMapRef.current));
+      }
+    };
+
+    const scheduleWsFlush = () => {
+      if (isCancelled || wsFlushTimer !== null) return;
+      wsFlushTimer = setTimeout(flushWsUpdates, 150);
+    };
 
     // Fetch initial entity states via REST
     const fetchInitialStates = async () => {
+      const { signal, cleanup } = createTimedAbortSignal(effectAbortController.signal, 3000);
       try {
         const base = resolveDeviceBaseUrl(espIp);
-        const res = await fetch(`${base}/api/states`);
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) {
-            for (const item of data) {
-              if (item && typeof item.entity === 'string' && item.state !== undefined) {
-                entityStatesRef.current.set(item.entity.toLowerCase(), String(item.state));
-              }
-            }
-            setEntityStates(new Map(entityStatesRef.current));
+        const res = await fetch(`${base}/api/states`, { signal });
+        if (isCancelled || !res.ok) return;
+        const data = await res.json();
+        if (isCancelled || !Array.isArray(data)) return;
+        for (const item of data) {
+          if (item && typeof item.entity === 'string' && item.state !== undefined) {
+            entityStatesRef.current.set(item.entity.toLowerCase(), String(item.state));
           }
         }
+        setEntityStates(new Map(entityStatesRef.current));
       } catch {
         // Device not connected or running in simulator mode
+      } finally {
+        cleanup();
       }
     };
 
-    // Fetch live Wi-Fi and BLE status
+    // Fetch live Wi-Fi and BLE status (in-flight guarded, separate try blocks, 3s timeout per request)
     const fetchLiveNetworkAndBle = async () => {
+      if (pollInFlight || isCancelled) return;
+      pollInFlight = true;
+      const base = resolveDeviceBaseUrl(espIp);
+
       try {
-        const base = resolveDeviceBaseUrl(espIp);
         // Wi-Fi Status
-        const wifiRes = await fetch(`${base}/api/wifi/status`);
-        if (wifiRes.ok) {
-          const wData = await wifiRes.json();
-          if (wData && typeof wData === 'object') {
-            setLiveWifiStatus({
-              sta_connected: !!wData.sta_connected,
-              sta_ssid: wData.sta_ssid || '',
-              sta_ip: wData.sta_ip || '',
-              sta_rssi: typeof wData.sta_rssi === 'number' ? wData.sta_rssi : -65,
-              ap_clients: typeof wData.ap_clients === 'number' ? wData.ap_clients : 0
-            });
+        const wifiSignal = createTimedAbortSignal(effectAbortController.signal, 3000);
+        try {
+          const wifiRes = await fetch(`${base}/api/wifi/status`, { signal: wifiSignal.signal });
+          if (!isCancelled && wifiRes.ok) {
+            const wData = await wifiRes.json();
+            if (!isCancelled && wData && typeof wData === 'object') {
+              setLiveWifiStatus(mapWifi(wData));
+            }
           }
+        } catch {
+          // Offline / Wi-Fi JSON failure must not skip BLE poll
+        } finally {
+          wifiSignal.cleanup();
         }
+
+        if (isCancelled) return;
+
         // BLE Status
-        const bleRes = await fetch(`${base}/api/ble/status`);
-        if (bleRes.ok) {
-          const bData = await bleRes.json();
-          if (bData && typeof bData === 'object') {
-            if (Array.isArray(bData.beacon_targets)) {
-              for (const b of bData.beacon_targets) {
-                const item: LiveBleItem = {
-                  name: b.name,
-                  uuid: b.uuid,
-                  mac: b.mac,
-                  rssi: b.rssi,
-                  is_present: Boolean(b.is_present),
-                  connected: false
-                };
-                if (b.uuid) bleMapRef.current.set(b.uuid.toLowerCase(), item);
-                if (b.mac) bleMapRef.current.set(b.mac.toLowerCase(), item);
-                if (b.name) bleMapRef.current.set(b.name.toLowerCase(), item);
+        const bleSignal = createTimedAbortSignal(effectAbortController.signal, 3000);
+        try {
+          const bleRes = await fetch(`${base}/api/ble/status`, { signal: bleSignal.signal });
+          if (!isCancelled && bleRes.ok) {
+            const bData = await bleRes.json();
+            if (!isCancelled && bData && typeof bData === 'object') {
+              // Rebuild from scratch on each poll so disconnected devices and removed beacons do not linger
+              const nextBleMap = new Map<string, LiveBleItem>();
+              if (Array.isArray(bData.beacon_targets)) {
+                for (const b of bData.beacon_targets) {
+                  upsertBle(nextBleMap, {
+                    name: b.name,
+                    uuid: b.uuid,
+                    mac: b.mac,
+                    major: typeof b.major === 'number' ? b.major : undefined,
+                    minor: typeof b.minor === 'number' ? b.minor : undefined,
+                    rssi: typeof b.rssi === 'number' ? b.rssi : undefined,
+                    is_present: Boolean(b.is_present),
+                    connected: false
+                  });
+                }
               }
-            }
-            if (Array.isArray(bData.discovered_beacons)) {
-              for (const b of bData.discovered_beacons) {
-                const item: LiveBleItem = {
-                  name: b.name,
-                  uuid: b.uuid,
-                  mac: b.mac,
-                  rssi: b.rssi,
-                  is_present: true,
-                  connected: false
-                };
-                if (b.uuid && !bleMapRef.current.has(b.uuid.toLowerCase())) bleMapRef.current.set(b.uuid.toLowerCase(), item);
-                if (b.mac && !bleMapRef.current.has(b.mac.toLowerCase())) bleMapRef.current.set(b.mac.toLowerCase(), item);
-                if (b.name && !bleMapRef.current.has(b.name.toLowerCase())) bleMapRef.current.set(b.name.toLowerCase(), item);
+              if (Array.isArray(bData.discovered_beacons)) {
+                for (const b of bData.discovered_beacons) {
+                  upsertBle(
+                    nextBleMap,
+                    {
+                      name: b.name,
+                      uuid: b.uuid,
+                      mac: b.mac,
+                      major: typeof b.major === 'number' ? b.major : undefined,
+                      minor: typeof b.minor === 'number' ? b.minor : undefined,
+                      rssi: typeof b.rssi === 'number' ? b.rssi : undefined,
+                      is_present: true,
+                      connected: false
+                    },
+                    { overwrite: false }
+                  );
+                }
               }
+              if (bData.connected_device) {
+                const cd = bData.connected_device;
+                upsertBle(
+                  nextBleMap,
+                  {
+                    name: cd.name,
+                    address: cd.address,
+                    mac: cd.address,
+                    rssi: cd.rssi,
+                    is_present: true,
+                    connected: true
+                  },
+                  { extraKeys: ['connected_device'] }
+                );
+              }
+              bleMapRef.current = nextBleMap;
+              bleDirty = false;
+              setLiveBleMap(new Map(nextBleMap));
             }
-            if (bData.connected_device) {
-              const cd = bData.connected_device;
-              const item: LiveBleItem = {
-                name: cd.name,
-                mac: cd.address,
-                rssi: cd.rssi,
-                is_present: true,
-                connected: true
-              };
-              if (cd.address) bleMapRef.current.set(cd.address.toLowerCase(), item);
-              if (cd.name) bleMapRef.current.set(cd.name.toLowerCase(), item);
-              bleMapRef.current.set('connected_device', item);
-            }
-            setLiveBleMap(new Map(bleMapRef.current));
           }
+        } catch {
+          // Offline / simulator mode
+        } finally {
+          bleSignal.cleanup();
         }
-      } catch {
-        // Offline / simulator mode
+      } finally {
+        pollInFlight = false;
       }
     };
 
-    fetchInitialStates();
-    fetchLiveNetworkAndBle();
+    void fetchInitialStates();
+    void fetchLiveNetworkAndBle();
     const pollInterval = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) return;
-      fetchLiveNetworkAndBle();
+      void fetchLiveNetworkAndBle();
     }, 4000);
+
+    const unsubscribeConn = deviceWs.onConnectionChange((connected) => {
+      if (isCancelled) return;
+      if (connected) {
+        hadWsConnection = true;
+      } else if (hadWsConnection) {
+        // WebSocket dropped: mark live telemetry unknown/stale so condition gates don't show stale data
+        clearPendingWsFlush();
+        entityStatesRef.current.clear();
+        bleMapRef.current.clear();
+        setEntityStates(new Map());
+        setLiveBleMap(new Map());
+        setLiveWifiStatus(null);
+      }
+    });
 
     const unsubscribeMsgs = deviceWs.subscribe((msg) => {
       if (isCancelled) return;
-      if (msg.type === 'can_frame' && (msg as any).id) {
-        const normId = String((msg as any).id).trim().toLowerCase();
-        framesRef.current.set(normId, { data: (msg as any).data || '' });
-        setLiveFrames(new Map(framesRef.current));
-      } else if (msg.type === 'state' && (msg as any).entity) {
+      if (msg.type === 'state' && (msg as any).entity) {
         entityStatesRef.current.set(String((msg as any).entity).toLowerCase(), String((msg as any).state || ''));
-        setEntityStates(new Map(entityStatesRef.current));
+        statesDirty = true;
+        scheduleWsFlush();
       } else if (msg.type === 'automation_fired') {
-        if ((msg as any).trigger_id) {
-          setLastFiredTriggerId((msg as any).trigger_id);
-        }
-        const firedRuleId = String((msg as any).id || (msg as any).rule_id || '').trim();
+        const firedRuleId = String((msg as any).id || '').trim();
         if (firedRuleId) {
           recordRuleFired(firedRuleId);
         }
-      } else if (msg.type === 'wifi_status') {
-        const wData = msg as any;
-        setLiveWifiStatus({
-          sta_connected: !!wData.sta_connected,
-          sta_ssid: wData.sta_ssid || '',
-          sta_ip: wData.sta_ip || '',
-          sta_rssi: typeof wData.sta_rssi === 'number' ? wData.sta_rssi : -65,
-          ap_clients: typeof wData.ap_clients === 'number' ? wData.ap_clients : 0
-        });
-      } else if (msg.type === 'ble_beacon' || msg.type === 'ble_proximity') {
+      } else if (msg.type === 'ble_beacon') {
         const raw = msg as any;
         const evt = typeof raw.event === 'string' ? raw.event.toLowerCase() : '';
+        const isExit = evt === 'exit' || evt === 'away';
         const isPresent = typeof raw.is_present === 'boolean'
           ? raw.is_present
           : evt === 'enter' || evt === 'proximity' || evt === 'present'
             ? true
-            : evt === 'exit' || evt === 'away'
-              ? false
-              : msg.type === 'ble_proximity';
+            : false;
         const item: LiveBleItem = {
           name: raw.name,
           uuid: raw.uuid,
           mac: raw.mac || raw.address,
-          rssi: raw.rssi,
+          major: typeof raw.major === 'number' ? raw.major : undefined,
+          minor: typeof raw.minor === 'number' ? raw.minor : undefined,
+          rssi: isExit ? undefined : raw.rssi,
           is_present: isPresent,
           connected: false
         };
-        if (item.uuid) bleMapRef.current.set(item.uuid.toLowerCase(), item);
-        if (item.mac) bleMapRef.current.set(item.mac.toLowerCase(), item);
-        if (item.name) bleMapRef.current.set(item.name.toLowerCase(), item);
-        setLiveBleMap(new Map(bleMapRef.current));
+        upsertBle(bleMapRef.current, item);
+        bleDirty = true;
+        scheduleWsFlush();
       }
     });
 
     return () => {
       isCancelled = true;
+      effectAbortController.abort();
+      clearPendingWsFlush();
       clearInterval(pollInterval);
+      unsubscribeConn();
       unsubscribeMsgs();
     };
-  }, [espIp]);
+  }, [espIp, recordRuleFired]);
 
-  // Formats any raw payload or ByteMap into clean 8-byte space-separated hex and ByteMap object
-  const formatPayloadForApi = (payload: string | any): { str: string; obj: Record<string, string> } => {
+  // Formats any raw payload or ByteMap into clean 8-byte space-separated hex.
+  // Returns null when payload is undefined, empty, or unresolved so callers never emit an all-zero CAN frame.
+  const formatPayloadForApi = (payload: string | any): string | null => {
+    if (payload === undefined || payload === null) {
+      return null;
+    }
     const byteMap = compileToByteMap(payload);
-    const obj: Record<string, string> = {};
+    if (Object.keys(byteMap).length === 0) {
+      return null;
+    }
     const hexBytes: string[] = [];
     for (let i = 1; i <= 8; i++) {
       const key = `D${i}`;
       const rawVal = byteMap[key] || '0x00';
       const hexVal = String(rawVal).replace(/^0x/i, '').padStart(2, '0').slice(-2).toUpperCase();
-      obj[key] = `0x${hexVal}`;
       hexBytes.push(hexVal);
     }
-    return { str: hexBytes.join(' '), obj };
+    return hexBytes.join(' ');
   };
 
   // Handler for testing an individual action manually across all command types and structures
-  const handleTestSingleAction = async (act: AutomationAction) => {
+  const handleTestSingleAction = async (act: AutomationAction): Promise<{ ok: boolean; error?: string }> => {
     try {
-      const base = resolveDeviceBaseUrl(espIp);
+      const base = resolveDeviceBaseUrl(espIpRef.current);
 
       // Flow 1: Delay
       if (act.type === 'delay') {
         const ms = act.delay_ms || act.ms || 1000;
-        setActionTestToast({ message: `Testing delay: waiting ${ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`}...`, type: 'info' });
+        showToast(`Testing delay: waiting ${ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`}...`, 'info');
         await new Promise(r => setTimeout(r, Math.min(ms, 3000)));
-        setActionTestToast({ message: `Delay test completed (${ms}ms)`, type: 'success' });
-        setTimeout(() => setActionTestToast(null), 3500);
-        return;
+        showToast(`Delay test completed (${ms}ms)`, 'success', 3500);
+        return { ok: true };
       }
 
       // Flow 2: Wait For Condition
       if (act.type === 'wait_for') {
         const condList = act.conditions && act.conditions.length > 0 ? act.conditions : (act.condition ? [act.condition] : []);
         if (condList.length === 0) {
-          setActionTestToast({ message: 'Wait-for action has no target condition (will proceed immediately)', type: 'info' });
-          setTimeout(() => setActionTestToast(null), 4000);
-          return;
+          showToast('Wait-for action has no target condition (will proceed immediately)', 'info', 4000);
+          return { ok: true };
         }
-        const results = condList.map(c => evaluateConditionState(c, liveFrames, entityStates, lastFiredTriggerId, catalog, liveWifiStatus, liveBleMap));
+        const results = condList.map(c => evaluateConditionState(c, undefined, entityStates, undefined, catalog, liveWifiStatus, liveBleMap));
         const matchedResult = results.find(r => r.state === 'valid') || results[0];
         const isMatched = matchedResult.state === 'valid';
-        setActionTestToast({
-          message: `Wait-for condition: ${isMatched ? 'MATCHED' : matchedResult.state === 'invalid' ? 'NOT MET' : 'Awaiting telemetry'} (${matchedResult.reason || 'live state'})`,
-          type: isMatched ? 'success' : 'info'
-        });
-        setTimeout(() => setActionTestToast(null), 4500);
-        return;
+        showToast(
+          `Wait-for condition: ${isMatched ? 'MATCHED' : matchedResult.state === 'invalid' ? 'NOT MET' : 'Awaiting telemetry'} (${matchedResult.reason || 'live state'})`,
+          isMatched ? 'success' : 'info',
+          4500
+        );
+        return { ok: true };
       }
 
       // Flow 2b: Repeat Until (Loop) - preview 1 safe iteration when stop condition is not yet met
@@ -780,49 +1107,49 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         const condList = act.conditions && act.conditions.length > 0 ? act.conditions : (act.condition ? [act.condition] : []);
         const seq = act.sequence || [];
         if (condList.length > 0) {
-          const results = condList.map(c => evaluateConditionState(c, liveFrames, entityStates, lastFiredTriggerId, catalog, liveWifiStatus, liveBleMap));
+          const results = condList.map(c => evaluateConditionState(c, undefined, entityStates, undefined, catalog, liveWifiStatus, liveBleMap));
           const met = results.some(r => r.state === 'valid');
           if (met) {
-            setActionTestToast({
-              message: 'Repeat-Until stop condition is ALREADY MET; loop skipped.',
-              type: 'success'
-            });
-            setTimeout(() => setActionTestToast(null), 4000);
-            return;
+            showToast(
+              'Repeat-Until stop condition is ALREADY MET; loop skipped.',
+              'success',
+              4000
+            );
+            return { ok: true };
           }
         }
         if (seq.length === 0) {
-          setActionTestToast({ message: 'Repeat-Until has no loop body actions to execute.', type: 'info' });
-          setTimeout(() => setActionTestToast(null), 3500);
-          return;
+          showToast('Repeat-Until has no loop body actions to execute.', 'info', 3500);
+          return { ok: true };
         }
-        setActionTestToast({
-          message: `Repeat-Until: Running 1 preview pass (${seq.length} action${seq.length !== 1 ? 's' : ''})...`,
-          type: 'info'
-        });
+        showToast(
+          `Repeat-Until: Running 1 preview pass (${seq.length} action${seq.length !== 1 ? 's' : ''})...`,
+          'info'
+        );
         for (const subAct of seq) {
-          await handleTestSingleAction(subAct);
+          const subRes = await handleTestSingleAction(subAct);
+          if (!subRes.ok) return subRes;
         }
-        return;
+        return { ok: true };
       }
 
       // Flow 3: IF-THEN-ELSE
       if (act.type === 'if_then') {
         const condList = act.conditions || [];
-        const passed = condList.length === 0 || condList.every(c => evaluateConditionState(c, liveFrames, entityStates, lastFiredTriggerId, catalog, liveWifiStatus, liveBleMap).state === 'valid');
+        const passed = condList.length === 0 || condList.every(c => evaluateConditionState(c, undefined, entityStates, undefined, catalog, liveWifiStatus, liveBleMap).state === 'valid');
         const branchActs = passed ? (act.then || []) : (act.else || []);
-        setActionTestToast({
-          message: `IF-THEN evaluated to ${passed ? 'TRUE' : 'FALSE'}. ${branchActs.length > 0 ? `Testing ${branchActs.length} action(s) in ${passed ? 'THEN' : 'ELSE'} branch` : `Empty ${passed ? 'THEN' : 'ELSE'} branch`}`,
-          type: 'info'
-        });
+        showToast(
+          `IF-THEN evaluated to ${passed ? 'TRUE' : 'FALSE'}. ${branchActs.length > 0 ? `Testing ${branchActs.length} action(s) in ${passed ? 'THEN' : 'ELSE'} branch` : `Empty ${passed ? 'THEN' : 'ELSE'} branch`}`,
+          'info',
+          branchActs.length > 0 ? undefined : 4000
+        );
         if (branchActs.length > 0) {
           for (const subAct of branchActs) {
-            await handleTestSingleAction(subAct);
+            const subRes = await handleTestSingleAction(subAct);
+            if (!subRes.ok) return subRes;
           }
-        } else {
-          setTimeout(() => setActionTestToast(null), 4000);
         }
-        return;
+        return { ok: true };
       }
 
       // Flow 4: CHOOSE
@@ -833,7 +1160,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         for (let i = 0; i < choices.length; i++) {
           const ch = choices[i];
           const conds = ch.conditions || [];
-          if (conds.length === 0 || conds.every(c => evaluateConditionState(c, liveFrames, entityStates, lastFiredTriggerId, catalog, liveWifiStatus, liveBleMap).state === 'valid')) {
+          if (conds.length === 0 || conds.every(c => evaluateConditionState(c, undefined, entityStates, undefined, catalog, liveWifiStatus, liveBleMap).state === 'valid')) {
             matchedBranch = ch.sequence || [];
             matchedIdx = i;
             break;
@@ -842,52 +1169,53 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         if (!matchedBranch) {
           matchedBranch = act.default || [];
         }
-        setActionTestToast({
-          message: `CHOOSE branch: ${matchedIdx >= 0 ? `Branch #${matchedIdx + 1}` : 'DEFAULT'}. ${matchedBranch.length > 0 ? `Testing ${matchedBranch.length} action(s)` : 'Empty sequence'}`,
-          type: 'info'
-        });
+        showToast(
+          `CHOOSE branch: ${matchedIdx >= 0 ? `Branch #${matchedIdx + 1}` : 'DEFAULT'}. ${matchedBranch.length > 0 ? `Testing ${matchedBranch.length} action(s)` : 'Empty sequence'}`,
+          'info',
+          matchedBranch.length > 0 ? undefined : 4000
+        );
         if (matchedBranch.length > 0) {
           for (const subAct of matchedBranch) {
-            await handleTestSingleAction(subAct);
+            const subRes = await handleTestSingleAction(subAct);
+            if (!subRes.ok) return subRes;
           }
-        } else {
-          setTimeout(() => setActionTestToast(null), 4000);
         }
-        return;
+        return { ok: true };
       }
 
-      // Flow 5: Legacy Webhook
+      // Flow 5: Legacy Webhook (not supported on offline ESP32 firmware)
       if (act.type === 'webhook') {
-        if (act.webhook_url) {
-          await fetch(act.webhook_url, {
-            method: act.webhook_method || 'POST',
-            mode: 'no-cors'
-          });
-          setActionTestToast({ message: `Browser-only webhook dispatched to ${act.webhook_url} (not executed by ESP32)`, type: 'info' });
-        } else {
-          setActionTestToast({ message: 'Webhook actions are not supported on offline ESP32 firmware.', type: 'error' });
-        }
-        setTimeout(() => setActionTestToast(null), 4500);
-        return;
+        const errMsg = 'Webhook actions are not supported on offline ESP32 firmware.';
+        showToast(errMsg, 'error', 4500);
+        return { ok: false, error: errMsg };
       }
 
       // Flow 6: Cluster Notification Popup
       if (act.type === 'track_popup' || act.type === 'popup') {
         const msg = act.text || act.popup_message || 'Test cluster notification';
+        let res: Response;
         try {
-          const res = await fetch(`${base}/api/notify`, {
+          res = await fetch(`${base}/api/notify`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: msg, level: act.level || 'info' })
           });
-          if (res.ok) {
-            setActionTestToast({ message: `Triggered cluster popup: "${msg}"`, type: 'success' });
-            setTimeout(() => setActionTestToast(null), 4000);
-            return;
-          }
         } catch {
-          // If /api/notify endpoint is unavailable on device, fallback to /api/command below
+          showToast(
+            `Simulated cluster popup (device unreachable): "${msg}"`,
+            'info',
+            4000
+          );
+          return { ok: true };
         }
+        if (res.ok) {
+          showToast(`Triggered cluster popup: "${msg}"`, 'success', 4000);
+          return { ok: true };
+        }
+        const errBody = (await res.text().catch(() => '')).trim();
+        const errMsg = `Cluster popup failed (HTTP ${res.status}): ${errBody || res.statusText || 'Request rejected'}`;
+        showToast(errMsg, 'error', 5000);
+        return { ok: false, error: errMsg };
       }
 
       // Flow 6b: HUD / Cluster Turn-by-Turn Navigation Guidance
@@ -914,35 +1242,37 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     }
                   : {})
               };
+        let res: Response;
         try {
-          const res = await fetch(`${base}/api/nav`, {
+          res = await fetch(`${base}/api/nav`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(navPayload)
           });
-          if (res.ok) {
-            setActionTestToast({
-              message:
-                navMode === 'clear'
-                  ? 'Cleared HUD navigation guidance'
-                  : `Projected HUD guidance${act.street ? `: "${act.street}"` : ''}`,
-              type: 'success'
-            });
-            setTimeout(() => setActionTestToast(null), 4000);
-            return;
-          }
         } catch {
-          //Offline / preview fallback toast
-        }
-        setActionTestToast({
-          message:
+          showToast(
             navMode === 'clear'
-              ? 'Simulated HUD navigation clear'
-              : `Simulated HUD guidance${act.street ? `: "${act.street}"` : ''} (${Math.round(distMeters * 3.28084)} ft / ${distMeters}m)`,
-          type: 'info'
-        });
-        setTimeout(() => setActionTestToast(null), 4000);
-        return;
+              ? 'Simulated HUD navigation clear (device unreachable)'
+              : `Simulated HUD guidance (device unreachable)${act.street ? `: "${act.street}"` : ''} (${Math.round(distMeters * 3.28084)} ft / ${distMeters}m)`,
+            'info',
+            4000
+          );
+          return { ok: true };
+        }
+        if (res.ok) {
+          showToast(
+            navMode === 'clear'
+              ? 'Cleared HUD navigation guidance'
+              : `Projected HUD guidance${act.street ? `: "${act.street}"` : ''}`,
+            'success',
+            4000
+          );
+          return { ok: true };
+        }
+        const errBody = (await res.text().catch(() => '')).trim();
+        const errMsg = `HUD navigation failed (HTTP ${res.status}): ${errBody || res.statusText || 'Request rejected'}`;
+        showToast(errMsg, 'error', 5000);
+        return { ok: false, error: errMsg };
       }
 
       // Flow: Cycle Entity State Stepper (must run before generic CAN / multi-step flows!)
@@ -969,12 +1299,12 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         if (curIdx < 0) {
           const fb = act.fallback_state || '__first__';
           if (fb === '__none__') {
-            setActionTestToast({
-              message: `Cycle ${entId}: current state "${curState}" is outside sequence (Fallback: Do Nothing)`,
-              type: 'info'
-            });
-            setTimeout(() => setActionTestToast(null), 4000);
-            return;
+            showToast(
+              `Cycle ${entId}: current state "${curState}" is outside sequence (Fallback: Do Nothing)`,
+              'info',
+              4000
+            );
+            return { ok: true };
           }
           nextState = fb === '__first__' ? states[0] : fb;
           if (dir === 'ping_pong') {
@@ -1013,7 +1343,8 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         );
         if (cycleCmd && nextOpt) {
           const syntheticAct = commandToAction(cycleCmd, nextOpt);
-          await handleTestSingleAction(syntheticAct);
+          const stepRes = await handleTestSingleAction(syntheticAct);
+          if (!stepRes.ok) return stepRes;
         }
 
         // Update local entity state map so consecutive Test clicks step cleanly through the sequence
@@ -1023,30 +1354,42 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           entityStatesRef.current.set(cycleCmd.id.toLowerCase(), nextState);
           entityStatesRef.current.set(cycleCmd.id, nextState);
         }
-        setEntityStates(new Map(entityStatesRef.current));
+        if (isMountedRef.current) {
+          setEntityStates(new Map(entityStatesRef.current));
+        }
 
-        setActionTestToast({
-          message: `Cycle ${entId}: ${curState} ➔ ${nextState} (${dir}${dir === 'ping_pong' ? ' bounce' : `, wrap=${act.wrap !== false}`})`,
-          type: 'success'
-        });
-        setTimeout(() => setActionTestToast(null), 4000);
-        return;
+        showToast(
+          `Cycle ${entId}: ${curState} ➔ ${nextState} (${dir}${dir === 'ping_pong' ? ' bounce' : `, wrap=${act.wrap !== false}`})`,
+          'success',
+          4000
+        );
+        return { ok: true };
       }
 
       // Flow 7: Resolve Command & Option Details from Catalog if available
       const { command: catalogCmd, matchedOption } = catalog ? resolveCatalogCommandForAction(act, catalog) : { command: undefined, matchedOption: undefined };
-      
-      const targetCanId = act.can_id || catalogCmd?.network?.action_can_id || catalogCmd?.action_can_id || catalogCmd?.network?.state_can_id || catalogCmd?.state_can_id;
+
+      // Never fall back to state_can_id for TX frames
+      const rawTargetCanId = act.can_id || catalogCmd?.network?.action_can_id || catalogCmd?.action_can_id;
+      const targetCanId =
+        rawTargetCanId && normalizeCanId(rawTargetCanId) !== '0x0' && normalizeCanId(rawTargetCanId) !== '0x000'
+          ? rawTargetCanId
+          : undefined;
       const targetEntityId = act.entity_id || act.source_command_id || catalogCmd?.id;
-      const targetCommand = act.command || act.option_label || matchedOption?.label || (catalogCmd?.options && catalogCmd.options[0]?.label);
       const rawActPayload =
         (typeof act.payload === 'object' && act.payload && Object.keys(act.payload).length > 0
           ? act.payload
           : typeof act.payload === 'string' && act.payload.trim() !== ''
           ? act.payload
           : undefined);
+      const targetCommand =
+        act.command ||
+        act.option_label ||
+        matchedOption?.label ||
+        (!rawActPayload && catalogCmd?.options && catalogCmd.options[0]?.label) ||
+        undefined;
       const rawPayload = rawActPayload || matchedOption?.payload || (matchedOption?.steps && matchedOption.steps[0]?.payload) || catalogCmd?.payload;
-      const { str: cleanPayloadStr } = formatPayloadForApi(rawPayload);
+      const cleanPayloadStr = formatPayloadForApi(rawPayload);
       const targetRepeat = act.repeat || matchedOption?.repeat || (matchedOption?.steps && matchedOption.steps[0]?.repeat) || 1;
       const targetDelay = act.delay_ms || (matchedOption?.steps && matchedOption.steps[0]?.delay_ms) || catalogCmd?.network?.delay_ms || catalogCmd?.delay_ms || 20;
       const targetBus = act.bus ?? catalogCmd?.network?.bus ?? catalogCmd?.action_bus ?? 0;
@@ -1074,7 +1417,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               mode: preconMode,
               action: preconAction,
               can_id: targetCanId || '0x0C7',
-              payload: cleanPayloadStr,
+              ...(cleanPayloadStr ? { payload: cleanPayloadStr } : {}),
               repeat: 3
             })
           });
@@ -1084,7 +1427,10 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         if (!sent && preconSteps.length > 0) {
           for (let sIdx = 0; sIdx < preconSteps.length; sIdx++) {
             const s = preconSteps[sIdx];
-            const { str: sStr } = formatPayloadForApi(s.payload);
+            const sStr = formatPayloadForApi(s.payload);
+            if (!sStr) {
+              throw new Error(`Preconditioning step #${sIdx + 1} has no valid CAN payload`);
+            }
             const stepRes = await fetch(`${base}/api/command`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1096,19 +1442,22 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 bus: normBus
               })
             });
-            if (!stepRes.ok) throw new Error(`HTTP ${stepRes.status}: ${stepRes.statusText}`);
+            if (!stepRes.ok) {
+              const errBody = (await stepRes.text().catch(() => '')).trim();
+              throw new Error(`HTTP ${stepRes.status}: ${errBody || stepRes.statusText}`);
+            }
             if (sIdx < preconSteps.length - 1) {
               await new Promise(r => setTimeout(r, 25));
             }
           }
         }
 
-        setActionTestToast({
-          message: `Action tested: Triggered Battery Preconditioning (${preconMode} - ${preconAction})`,
-          type: 'success'
-        });
-        setTimeout(() => setActionTestToast(null), 4000);
-        return;
+        showToast(
+          `Action tested: Triggered Battery Preconditioning (${preconMode} - ${preconAction})`,
+          'success',
+          4000
+        );
+        return { ok: true };
       }
 
       // Special Flow 9: Climate Target
@@ -1122,19 +1471,22 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             entity: 'remote_climate',
             command: JSON.stringify({ action: 'start', temp: targetTemp, zone: targetZone, sync: act.sync_on !== false }),
             can_id: targetCanId || '0x4A0',
-            payload: cleanPayloadStr,
+            ...(cleanPayloadStr ? { payload: cleanPayloadStr } : {}),
             repeat: targetRepeat,
             delay_ms: targetDelay,
             bus: normBus
           })
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        setActionTestToast({
-          message: `Action tested: Set Climate Target ${targetTemp}°C (${targetZone})`,
-          type: 'success'
-        });
-        setTimeout(() => setActionTestToast(null), 4000);
-        return;
+        if (!res.ok) {
+          const errBody = (await res.text().catch(() => '')).trim();
+          throw new Error(`HTTP ${res.status}: ${errBody || res.statusText}`);
+        }
+        showToast(
+          `Action tested: Set Climate Target ${targetTemp}°C (${targetZone})`,
+          'success',
+          4000
+        );
+        return { ok: true };
       }
 
       // Special Flow 9.5: Ambient Mood Lighting (executes hardware-timed 2-stage burst on 0x4AD)
@@ -1157,58 +1509,96 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         }
 
         if (dispatchedViaEntity) {
-          setActionTestToast({
-            message: `Action tested: Ambient Mood Lighting ➔ ${targetCommand} (0x4AD)`,
-            type: 'success'
-          });
-          setTimeout(() => setActionTestToast(null), 4000);
-          return;
+          showToast(
+            `Action tested: Ambient Mood Lighting ➔ ${targetCommand} (0x4AD)`,
+            'success',
+            4000
+          );
+          return { ok: true };
         }
       }
 
-      // Flow 10: Multi-Step Action Execution (e.g. ambient lighting burst + latch commit, seat comfort 2-stage)
+      // Flow 10 (prioritized): Entity Command Dispatch — try before raw-frame TX whenever an entity command is available
+      if (targetEntityId && targetCommand) {
+        const res = await fetch(`${base}/api/command`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entity: targetEntityId,
+            command: targetCommand
+          })
+        });
+
+        if (res.ok) {
+          showToast(
+            `Dispatched command to ${targetEntityId}: ${targetCommand}`,
+            'success',
+            4000
+          );
+          return { ok: true };
+        }
+
+        const hasRawFallback = Boolean(
+          (targetSteps && targetSteps.length > 1) || (targetCanId && cleanPayloadStr)
+        );
+        if (res.status !== 404 || !hasRawFallback) {
+          const errBody = (await res.text().catch(() => '')).trim();
+          throw new Error(`HTTP ${res.status}: ${errBody || res.statusText || 'Command failed'}`);
+        }
+      }
+
+      // Flow 11: Multi-Step Action Execution (e.g. ambient lighting burst + latch commit, seat comfort 2-stage)
       if (targetSteps && targetSteps.length > 1) {
         for (let sIdx = 0; sIdx < targetSteps.length; sIdx++) {
           const stepItem = targetSteps[sIdx];
+          if ((stepItem as any).type === 'delay') {
+            const waitMs = (stepItem as any).delay_ms || (stepItem as any).ms || 0;
+            if (waitMs > 0) {
+              await new Promise(r => setTimeout(r, Math.min(waitMs, 2000)));
+            }
+            continue;
+          }
           const stepPayloadMap = compileToByteMap(stepItem.payload);
           const resolvedStepPayload =
             Object.keys(stepPayloadMap).length > 0
               ? stepPayloadMap
               : matchedOption?.steps?.[sIdx]?.payload || stepItem.payload;
-          const { str: sStr } = formatPayloadForApi(resolvedStepPayload);
+          const sStr = formatPayloadForApi(resolvedStepPayload);
           const sRepeat = stepItem.repeat || targetRepeat;
           const sDelay = stepItem.delay_ms || targetDelay;
           const sCid = stepItem.can_id || targetCanId;
           const sBus = stepItem.bus ?? normBus;
-          if (sCid) {
-            const stepRes = await fetch(`${base}/api/command`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                can_id: sCid,
-                payload: sStr,
-                repeat: sRepeat,
-                delay_ms: sDelay,
-                bus: sBus
-              })
-            });
-            if (!stepRes.ok) {
-              throw new Error(`HTTP ${stepRes.status}: ${stepRes.statusText}`);
-            }
-            if (sIdx < targetSteps.length - 1 && sDelay > 0) {
-              await new Promise(r => setTimeout(r, Math.min(sDelay, 2000)));
-            }
+          if (!sCid || !sStr) {
+            throw new Error(`Step #${sIdx + 1} is missing a valid CAN ID or payload`);
+          }
+          const stepRes = await fetch(`${base}/api/command`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              can_id: sCid,
+              payload: sStr,
+              repeat: sRepeat,
+              delay_ms: sDelay,
+              bus: sBus
+            })
+          });
+          if (!stepRes.ok) {
+            const errBody = (await stepRes.text().catch(() => '')).trim();
+            throw new Error(`HTTP ${stepRes.status}: ${errBody || stepRes.statusText}`);
+          }
+          if (sIdx < targetSteps.length - 1 && sDelay > 0) {
+            await new Promise(r => setTimeout(r, Math.min(sDelay, 2000)));
           }
         }
-        setActionTestToast({
-          message: `Action tested: Transmitted sequence (${targetSteps.length} steps) on ${targetCanId || 'CAN'}${targetCommand ? ` (${targetCommand})` : ''}`,
-          type: 'success'
-        });
-        setTimeout(() => setActionTestToast(null), 4000);
-        return;
+        showToast(
+          `Action tested: Transmitted sequence (${targetSteps.length} steps) on ${targetCanId || 'CAN'}${targetCommand ? ` (${targetCommand})` : ''}`,
+          'success',
+          4000
+        );
+        return { ok: true };
       }
 
-      // Flow 11: Direct CAN Frame Dispatch (for commands with known CAN ID & payload, e.g. windows, locks, seats)
+      // Flow 12: Direct CAN Frame Dispatch (for commands with explicit TX CAN ID & non-empty payload)
       if (targetCanId && cleanPayloadStr) {
         const res = await fetch(`${base}/api/command`, {
           method: 'POST',
@@ -1223,110 +1613,78 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         });
 
         if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          const errBody = (await res.text().catch(() => '')).trim();
+          throw new Error(`HTTP ${res.status}: ${errBody || res.statusText}`);
         }
 
         const labelText = targetCommand ? ` (${targetCommand})` : '';
-        setActionTestToast({
-          message: `Action tested: Transmitted CAN ${targetCanId} [${cleanPayloadStr}]${labelText}`,
-          type: 'success'
-        });
-        setTimeout(() => setActionTestToast(null), 4000);
-        return;
+        showToast(
+          `Action tested: Transmitted CAN ${targetCanId} [${cleanPayloadStr}]${labelText}`,
+          'success',
+          4000
+        );
+        return { ok: true };
       }
 
-      // Flow 12: Entity Command Dispatch (for firmware-handled entities without raw CAN ID)
-      if (targetEntityId && targetCommand) {
-        const res = await fetch(`${base}/api/command`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            entity: targetEntityId,
-            command: targetCommand
-          })
-        });
-
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        }
-
-        setActionTestToast({
-          message: `Dispatched command to ${targetEntityId}: ${targetCommand}`,
-          type: 'success'
-        });
-        setTimeout(() => setActionTestToast(null), 4000);
-        return;
+      // Guard unresolved CAN/entity actions instead of simulating or transmitting zeros
+      if (act.type === 'can_tx' || act.type === 'entity_command') {
+        const errMsg = !targetCanId
+          ? `Cannot test action "${targetEntityId || act.type}": no TX CAN ID or firmware entity command available.`
+          : `Cannot test CAN action ${targetCanId}: payload is empty or unresolved.`;
+        showToast(errMsg, 'error', 5000);
+        return { ok: false, error: errMsg };
       }
 
       // Fallback
-      setActionTestToast({ message: `Simulated action test for: ${act.type || targetEntityId || 'unknown'}`, type: 'info' });
-      setTimeout(() => setActionTestToast(null), 4000);
+      showToast(`Simulated action test for: ${act.type || targetEntityId || 'unknown'}`, 'info', 4000);
+      return { ok: true };
     } catch (err: any) {
-      setActionTestToast({ message: `Action test failed: ${err.message}`, type: 'error' });
-      setTimeout(() => setActionTestToast(null), 5000);
+      const errMsg = err?.message || String(err);
+      showToast(`Action test failed: ${errMsg}`, 'error', 5000);
+      return { ok: false, error: errMsg };
     }
   };
 
   const activeRule = rules.find(r => r.id === selectedRuleId) || rules[0];
+  const activeRuleId = activeRule?.id;
 
-  // Handle incoming pulled commands from the catalog
-  React.useEffect(() => {
-    if (pulledCommands.length > 0 && activeRule) {
-      const updatedRules = rules.map(r => {
-        if (r.id === activeRule.id) {
-          const newTriggers = [...r.triggers];
-          const newConditions = [...r.conditions];
-          const newActions = [...r.actions];
+  const handleUpdateActiveRule = useCallback(
+    (updated: Partial<AutomationRule> | ((rule: AutomationRule) => AutomationRule)) => {
+      if (!activeRuleId) return;
+      onUpdateRules(prev =>
+        prev.map(r => {
+          if (r.id !== activeRuleId) return r;
+          return typeof updated === 'function' ? updated(r) : { ...r, ...updated };
+        })
+      );
+    },
+    [activeRuleId, onUpdateRules]
+  );
 
-          pulledCommands.forEach(({ command, option, role }) => {
-            const assignedRole = role || (command.roles.includes('trigger') ? 'trigger' : command.roles.includes('condition') ? 'condition' : 'action');
-            if (assignedRole === 'trigger') {
-              newTriggers.push(commandToTrigger(command, option));
-            } else if (assignedRole === 'condition') {
-              newConditions.push(commandToCondition(command, option));
-            } else {
-              newActions.push(commandToAction(command, option));
-            }
-          });
-
-          return {
-            ...r,
-            triggers: newTriggers,
-            conditions: newConditions,
-            actions: newActions
-          };
-        }
-        return r;
-      });
-
-      onUpdateRules(updatedRules);
-      if (onClearPulledCommands) onClearPulledCommands();
-    }
-  }, [pulledCommands]);
-
-  const handleUpdateActiveRule = (updated: Partial<AutomationRule>) => {
-    if (!activeRule) return;
-    const newRules = rules.map(r => (r.id === activeRule.id ? { ...r, ...updated } : r));
-    onUpdateRules(newRules);
-  };
-
-  const handleUpdateRule = (ruleId: string, updated: Partial<AutomationRule>) => {
-    const newRules = rules.map(r => (r.id === ruleId ? { ...r, ...updated } : r));
-    onUpdateRules(newRules);
-  };
+  const handleUpdateRule = useCallback(
+    (ruleId: string, updated: Partial<AutomationRule> | ((rule: AutomationRule) => AutomationRule)) => {
+      onUpdateRules(prev =>
+        prev.map(r => {
+          if (r.id !== ruleId) return r;
+          return typeof updated === 'function' ? updated(r) : { ...r, ...updated };
+        })
+      );
+    },
+    [onUpdateRules]
+  );
 
   const handleRunAllRuleActions = async (targetRule: AutomationRule) => {
     const acts = targetRule.actions || [];
     if (acts.length === 0) {
-      setActionTestToast({ message: `Rule "${targetRule.name}" has no actions configured.`, type: 'info' });
-      setTimeout(() => setActionTestToast(null), 3000);
+      showToast(`Rule "${targetRule.name}" has no actions configured.`, 'info', 3000);
       return;
     }
-    setActionTestToast({ message: `Executing ${acts.length} action(s) for "${targetRule.name}"...`, type: 'info' });
+    showToast(`Executing ${acts.length} action(s) for "${targetRule.name}"...`, 'info');
     try {
       const compiledActions = compileActionList(acts, catalog);
-      const base = resolveDeviceBaseUrl(espIp);
+      const base = resolveDeviceBaseUrl(espIpRef.current);
       let handledByDevice = false;
+      let deviceError: string | null = null;
       try {
         const res = await fetch(`${base}/api/automations/test`, {
           method: 'POST',
@@ -1339,37 +1697,58 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         });
         if (res.ok) {
           handledByDevice = true;
+        } else if (res.status !== 404) {
+          const errBody = (await res.text().catch(() => '')).trim();
+          deviceError = `HTTP ${res.status}: ${errBody || res.statusText}`;
         }
       } catch {
         // Offline / preview sandbox fallback
       }
 
+      if (deviceError) {
+        showToast(
+          `Failed to execute "${targetRule.name}" on ESP32: ${deviceError}`,
+          'error',
+          5000
+        );
+        return;
+      }
+
       if (!handledByDevice) {
-        for (const act of acts) {
-          await handleTestSingleAction(act);
+        for (let i = 0; i < acts.length; i++) {
+          const result = await handleTestSingleAction(acts[i]);
+          if (!result.ok) {
+            showToast(
+              `Action #${i + 1} of "${targetRule.name}" failed: ${result.error || 'Unknown error'}`,
+              'error',
+              5000
+            );
+            return;
+          }
         }
       }
 
       recordRuleFired(targetRule.id);
-      setActionTestToast({
-        message: handledByDevice
+      showToast(
+        handledByDevice
           ? `ESP32 executed "${targetRule.name}" actions!`
           : `Executed actions for "${targetRule.name}" locally!`,
-        type: 'success'
-      });
+        'success',
+        4000
+      );
     } catch (err: any) {
-      setActionTestToast({ message: `Error running actions: ${err?.message || err}`, type: 'error' });
+      showToast(`Error running actions: ${err?.message || err}`, 'error', 4000);
     }
-    setTimeout(() => setActionTestToast(null), 4000);
   };
 
   const queryHardwareDryRun = async (targetRule: AutomationRule): Promise<{ passed: boolean; message: string } | null> => {
     try {
-      const base = resolveDeviceBaseUrl(espIp);
+      const base = resolveDeviceBaseUrl(espIpRef.current);
       const res = await fetch(`${base}/api/automations/test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: targetRule.id, mode: 'dry_run' })
+        body: JSON.stringify({ id: targetRule.id, mode: 'dry_run' }),
+        signal: AbortSignal.timeout(5000)
       });
       if (res.ok) {
         const data = await res.json();
@@ -1378,69 +1757,60 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           message: data.message || (data.passed ? 'PASSED (Rule armed on ESP32)' : 'FAILED / INACTIVE on ESP32')
         };
       }
+      if (res.status === 404) {
+        return {
+          passed: false,
+          message: 'Rule not found on ESP32 (not pushed yet — push automations first).'
+        };
+      }
+      const errBody = (await res.text().catch(() => '')).trim();
+      return {
+        passed: false,
+        message: `ESP32 returned HTTP ${res.status}: ${errBody || res.statusText || 'Dry-run check failed'}`
+      };
     } catch {
       // Offline / unreachable
     }
     return null;
   };
 
-  const handleSimulateRuleFor = (targetRule: AutomationRule) => {
-    setSelectedRuleId(targetRule.id);
+  const handleSimulateRule = (targetRule?: AutomationRule) => {
+    const target = targetRule || activeRule;
+    if (!target) return;
+    if (targetRule) {
+      setSelectedRuleId(targetRule.id);
+    }
     setShowSimulateModal(true);
   };
 
   const handleAddRule = () => {
     const newId = `rule_${Date.now().toString(36)}`;
-    const newRule: AutomationRule = {
-      id: newId,
-      name: `New Automation Rule #${rules.length + 1}`,
-      enabled: true,
-      ha_expose: true,
-      ha_icon: 'mdi:car-cog',
-      exec_mode: 'one_shot',
-      trigger_mode: 'any',
-      cooldown_ms: 0,
-      timeout_reset_ms: 0,
-      triggers: [],
-      conditions: [],
-      actions: []
-    };
-
-    onUpdateRules([...rules, newRule]);
+    onUpdateRules(prev => [...prev, createEmptyRule(prev.length + 1, newId)]);
     setSelectedRuleId(newId);
   };
 
   const handleDuplicateRule = (ruleToDup: AutomationRule) => {
-    const duplicated = cloneRuleWithNewIds(ruleToDup);
-    onUpdateRules([...rules, duplicated]);
+    const duplicated = ensureRuleTriggerClientIds(cloneRuleWithNewIds(ruleToDup));
+    onUpdateRules(prev => [...prev, duplicated]);
     setSelectedRuleId(duplicated.id);
   };
 
   const handleDeleteRule = (ruleId: string) => {
-    const newRules = rules.filter(r => r.id !== ruleId);
-    if (newRules.length === 0) {
-      const newId = `rule_${Date.now().toString(36)}`;
-      const freshRule: AutomationRule = {
-        id: newId,
-        name: 'New Automation Rule #1',
-        enabled: true,
-        ha_expose: true,
-        ha_icon: 'mdi:car-cog',
-        exec_mode: 'one_shot',
-        trigger_mode: 'any',
-        cooldown_ms: 0,
-        timeout_reset_ms: 0,
-        triggers: [],
-        conditions: [],
-        actions: []
-      };
-      onUpdateRules([freshRule]);
-      setSelectedRuleId(newId);
-    } else {
-      onUpdateRules(newRules);
-      if (selectedRuleId === ruleId) {
-        setSelectedRuleId(newRules[0].id);
+    const fallbackId = `rule_${Date.now().toString(36)}`;
+    let nextSelectedId: string | null = null;
+    onUpdateRules(prev => {
+      const remaining = prev.filter(r => r.id !== ruleId);
+      if (remaining.length === 0) {
+        nextSelectedId = fallbackId;
+        return [createEmptyRule(1, fallbackId)];
       }
+      if (selectedRuleId === ruleId) {
+        nextSelectedId = remaining[0].id;
+      }
+      return remaining;
+    });
+    if (nextSelectedId) {
+      setSelectedRuleId(nextSelectedId);
     }
   };
 
@@ -1458,30 +1828,22 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
   const handleBatchDelete = () => {
     if (selectedRuleIdsForDelete.size === 0) return;
-    const remaining = rules.filter(r => !selectedRuleIdsForDelete.has(r.id));
-    if (remaining.length === 0) {
-      const newId = `rule_${Date.now().toString(36)}`;
-      const freshRule: AutomationRule = {
-        id: newId,
-        name: 'New Automation Rule #1',
-        enabled: true,
-        ha_expose: true,
-        ha_icon: 'mdi:car-cog',
-        exec_mode: 'one_shot',
-        trigger_mode: 'any',
-        cooldown_ms: 0,
-        timeout_reset_ms: 0,
-        triggers: [],
-        conditions: [],
-        actions: []
-      };
-      onUpdateRules([freshRule]);
-      setSelectedRuleId(newId);
-    } else {
-      onUpdateRules(remaining);
-      if (selectedRuleIdsForDelete.has(selectedRuleId)) {
-        setSelectedRuleId(remaining[0].id);
+    const idsToDelete = new Set(selectedRuleIdsForDelete);
+    const fallbackId = `rule_${Date.now().toString(36)}`;
+    let nextSelectedId: string | null = null;
+    onUpdateRules(prev => {
+      const remaining = prev.filter(r => !idsToDelete.has(r.id));
+      if (remaining.length === 0) {
+        nextSelectedId = fallbackId;
+        return [createEmptyRule(1, fallbackId)];
       }
+      if (idsToDelete.has(selectedRuleId)) {
+        nextSelectedId = remaining[0].id;
+      }
+      return remaining;
+    });
+    if (nextSelectedId) {
+      setSelectedRuleId(nextSelectedId);
     }
     setSelectedRuleIdsForDelete(new Set());
     setIsSelectMode(false);
@@ -1490,16 +1852,18 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
   const handleBatchEnable = (enabled: boolean) => {
     if (selectedRuleIdsForDelete.size === 0) return;
-    onUpdateRules(
-      rules.map(r => (selectedRuleIdsForDelete.has(r.id) ? { ...r, enabled } : r))
+    const idsToUpdate = new Set(selectedRuleIdsForDelete);
+    onUpdateRules(prev =>
+      prev.map(r => (idsToUpdate.has(r.id) ? { ...r, enabled } : r))
     );
   };
 
   const handleBatchAssignCategory = () => {
     if (selectedRuleIdsForDelete.size === 0) return;
+    const idsToUpdate = new Set(selectedRuleIdsForDelete);
     const trimmed = bulkCategoryValue.trim();
-    onUpdateRules(
-      rules.map(r => (selectedRuleIdsForDelete.has(r.id) ? { ...r, category: trimmed } : r))
+    onUpdateRules(prev =>
+      prev.map(r => (idsToUpdate.has(r.id) ? { ...r, category: trimmed } : r))
     );
     setShowBulkCategoryInput(false);
     setBulkCategoryValue('');
@@ -1534,80 +1898,234 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const executePushToEsp = async () => {
-    setSyncing(true);
+  const buildAndCheckPushPayload = (): { payload: string; bytes: number } | null => {
+    const payload = exportToCandoJson(rules, settings, catalog, null, { minify: true });
+    const bytes = getPayloadByteLength(payload);
+    if (bytes > MAX_AUTOMATIONS_PAYLOAD_BYTES) {
+      const kb = (bytes / 1024).toFixed(1);
+      showSyncStatus(
+        `Push blocked: automations.json is ${kb} KB (${bytes.toLocaleString()} bytes), exceeding the 128 KB (${MAX_AUTOMATIONS_PAYLOAD_BYTES.toLocaleString()} byte) ESP32 limit.`
+      );
+      return null;
+    }
+    return { payload, bytes };
+  };
 
-    if (useMqttSync) {
-      setSyncStatus('Connecting to MQTT Broker...');
-      try {
-        const { wsUrl, deviceId, user, pass } = mqttRemoteConfig;
-        if (!wsUrl || !deviceId) throw new Error('Broker URL and Device ID required');
-        
-        const client = mqtt.connect(wsUrl, {
-          username: user || undefined,
-          password: pass || undefined,
-          connectTimeout: 5000
-        });
+  const commitPulledAutomations = (
+    decompiled: AutomationRule[],
+    pulledSettings: AutomationSettings | undefined,
+    sourceLabel: string
+  ) => {
+    const hydrated = ensureRulesTriggerClientIds(decompiled);
+    markRulesAsSynced(serializeRulesForDirtyCheck(hydrated));
+    onUpdateRules(hydrated);
+    if (pulledSettings) onUpdateSettings(pulledSettings);
+    if (hydrated[0]?.id) setSelectedRuleId(hydrated[0].id);
+    showSyncStatus(`Imported ${hydrated.length} rule(s)${sourceLabel}!`, 6000);
+  };
 
-        let timeoutTimer = setTimeout(() => {
-          client.end();
-          setSyncStatus('MQTT push timed out.');
-          setSyncing(false);
-        }, 10000);
+  const applyPulledAutomations = (data: any, sourceLabel: string) => {
+    let rawRules: any[] | null = null;
+    let pulledSettings: AutomationSettings | undefined;
+    if (data && data.rules && Array.isArray(data.rules)) {
+      rawRules = data.rules;
+      if (data.settings) pulledSettings = data.settings;
+    } else if (Array.isArray(data)) {
+      rawRules = data;
+    }
 
-        client.on('connect', () => {
-          setSyncStatus('Publishing automations to device topic...');
-          const payload = exportToCandoJson(rules, settings, catalog);
-          client.publish(`cando/${deviceId}/config/automations/set`, payload, { qos: 1 }, (err) => {
-            if (timeoutTimer) clearTimeout(timeoutTimer);
-            if (err) {
-              setSyncStatus(`Publish failed: ${err.message}`);
-            } else {
-              setSyncStatus('Success: Sent via MQTT!');
-              setTimeout(() => setSyncStatus(null), 6000);
-            }
-            client.end();
-            setSyncing(false);
-          });
-        });
-
-        client.on('error', (err) => {
-          if (timeoutTimer) clearTimeout(timeoutTimer);
-          setSyncStatus(`MQTT Connection Error: ${err.message}`);
-          setSyncing(false);
-          client.end();
-        });
-      } catch (err: any) {
-        setSyncStatus(`MQTT Init Error: ${err.message}`);
-        setSyncing(false);
-      }
+    if (!rawRules) {
+      showSyncStatus('No rules array found in device response.', 6000);
       return;
     }
 
-    setSyncStatus('Pushing automations.json to ESP32...');
+    const decompiled = ensureRulesTriggerClientIds(decompileAutomationRules(rawRules, catalog));
+    const localRules = latestRulesRef.current;
+    const currentHasUnpushed = lastPushedJsonRef.current !== serializeRulesForDirtyCheck(localRules);
+    const isEmptyDeviceOverwrite = decompiled.length === 0 && localRules.length > 0;
+
+    if (currentHasUnpushed || isEmptyDeviceOverwrite) {
+      setPendingPullConfirmation({
+        rules: decompiled,
+        settings: pulledSettings,
+        sourceLabel,
+        hasUnpushedChanges: currentHasUnpushed,
+        isEmptyDeviceOverwrite
+      });
+      showSyncStatus(
+        isEmptyDeviceOverwrite
+          ? 'Pull paused: device returned 0 rules — confirm overwrite.'
+          : 'Pull paused: unpushed local edits — confirm overwrite.'
+      );
+      return;
+    }
+
+    commitPulledAutomations(decompiled, pulledSettings, sourceLabel);
+  };
+
+  const withMqttClient = (
+    cfg: MqttRemoteConfig,
+    options: { connectingMessage: string; timeoutMessage: string; timeoutMs?: number },
+    fn: (ctx: MqttSessionContext) => void
+  ) => {
+    showSyncStatus(options.connectingMessage);
+    try {
+      const { wsUrl, deviceId, user, pass } = cfg;
+      if (!wsUrl || !deviceId) throw new Error('Broker URL and Device ID required');
+
+      const client = mqtt.connect(wsUrl, {
+        username: user || undefined,
+        password: pass || undefined,
+        connectTimeout: 5000
+      });
+      activeMqttClientsRef.current.add(client);
+
+      let settled = false;
+      const timeoutTimer = setTimeout(() => {
+        finish(options.timeoutMessage);
+      }, options.timeoutMs ?? 15000);
+      mqttTimeoutTimersRef.current.add(timeoutTimer);
+
+      const finish = (statusMsg?: string, clearAfterMs?: number, onSettled?: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutTimer);
+        mqttTimeoutTimersRef.current.delete(timeoutTimer);
+        activeMqttClientsRef.current.delete(client);
+        try {
+          client.end(true);
+        } catch {}
+        if (isMountedRef.current) {
+          if (statusMsg !== undefined) {
+            showSyncStatus(statusMsg, clearAfterMs);
+          }
+          if (onSettled) onSettled();
+          setSyncing(false);
+        }
+      };
+
+      client.on('error', (err) => {
+        finish(`MQTT Connection Error: ${err.message}`);
+      });
+
+      fn({
+        client,
+        deviceId,
+        isSettled: () => settled || !isMountedRef.current,
+        finish
+      });
+    } catch (err: any) {
+      showSyncStatus(`MQTT Init Error: ${err.message}`);
+      if (isMountedRef.current) setSyncing(false);
+    }
+  };
+
+  const executePushToEsp = async () => {
+    const built = buildAndCheckPushPayload();
+    if (!built) return;
+    const { payload } = built;
+    const rulesSnapshotJson = serializeRulesForDirtyCheck(latestRulesRef.current);
+
+    setSyncing(true);
+
+    if (useMqttSync) {
+      withMqttClient(
+        mqttRemoteConfig,
+        {
+          connectingMessage: 'Connecting to MQTT Broker...',
+          timeoutMessage: 'MQTT push timed out waiting for ESP32 acknowledgment.'
+        },
+        ({ client, deviceId, isSettled, finish }) => {
+          const statusTopic = `cando/${deviceId}/config/automations/status`;
+          const setTopic = `cando/${deviceId}/config/automations/set`;
+
+          client.once('connect', () => {
+            if (isSettled()) return;
+            showSyncStatus('Subscribing to ESP32 push status...');
+            client.subscribe(statusTopic, (subErr) => {
+              if (isSettled()) return;
+              if (subErr) {
+                finish(`MQTT subscribe failed: ${subErr.message}`);
+                return;
+              }
+              showSyncStatus('Publishing automations to device topic...');
+              client.publish(setTopic, payload, { qos: 1 }, (pubErr) => {
+                if (isSettled()) return;
+                if (pubErr) {
+                  finish(`Publish failed: ${pubErr.message}`);
+                  return;
+                }
+                showSyncStatus('Waiting for ESP32 confirmation...');
+              });
+            });
+          });
+
+          client.on('message', (topic, message, packet) => {
+            if (isSettled() || topic !== statusTopic) return;
+            if (packet?.retain) return;
+            const rawText = message.toString().trim();
+            try {
+              const ack = JSON.parse(rawText);
+              if (ack?.status === 'ok' || ack?.status === 'success') {
+                markRulesAsSynced(rulesSnapshotJson);
+                finish(`Success: ${ack.message || 'Automations saved and hot-reloaded via MQTT!'}`, 6000);
+              } else {
+                finish(`MQTT push rejected by ESP32: ${ack?.message || rawText || 'Unknown error'}`);
+              }
+            } catch {
+              if (rawText.toLowerCase() === 'ok') {
+                markRulesAsSynced(rulesSnapshotJson);
+                finish('Success: Automations saved and hot-reloaded via MQTT!', 6000);
+              } else {
+                finish(`MQTT push error from ESP32: ${rawText || 'Malformed status reply'}`);
+              }
+            }
+          });
+        }
+      );
+      return;
+    }
+
+    const activeHost = commitEspIp();
+    showSyncStatus('Pushing automations.json to ESP32...');
 
     try {
-      const payload = exportToCandoJson(rules, settings, catalog);
-      const base = resolveDeviceBaseUrl(espIp);
+      const base = resolveDeviceBaseUrl(activeHost);
       const url = `${base}/api/automations`;
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: payload
+        body: payload,
+        signal: AbortSignal.timeout(10000)
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      const data = await res.json();
-      lastPushedJsonRef.current = JSON.stringify(rules);
-      setSyncStatus(`Success: ${data.message || 'Saved. Rebooting ESP32...'}`);
-      setTimeout(() => setSyncStatus(null), 6000);
+      if (!res.ok) {
+        const msg = (await res.text().catch(() => '')).trim();
+        if (res.status === 413) {
+          throw new Error(`Payload too large (HTTP 413): ${msg || 'Exceeds 128 KB ESP32 limit.'}`);
+        }
+        if (res.status === 408) {
+          throw new Error(`Upload timed out (HTTP 408): ${msg || 'ESP32 timed out receiving payload.'}`);
+        }
+        throw new Error(`HTTP ${res.status}: ${msg || res.statusText || 'Request failed'}`);
+      }
+      const data = await res.json().catch(() => ({}));
+      markRulesAsSynced(rulesSnapshotJson);
+      showSyncStatus(`Success: ${data?.message || 'Automations saved and hot-reloaded.'}`, 6000);
     } catch (err: any) {
-      setSyncStatus(`Push failed: ${err.message}`);
+      const displayMsg =
+        err?.name === 'TimeoutError' || err?.name === 'AbortError'
+          ? 'Request timed out after 10s (ESP32 did not respond).'
+          : err?.message || String(err);
+      showSyncStatus(`Push failed: ${displayMsg}`);
     } finally {
-      setSyncing(false);
+      if (isMountedRef.current) setSyncing(false);
     }
   };
 
   const handlePushToEsp = () => {
+    if (!buildAndCheckPushPayload()) {
+      return;
+    }
     const report = validateAutomationRules(rules, catalog);
     if (report.errors.length > 0 || report.warnings.length > 0) {
       setPrePushReport(report);
@@ -1620,130 +2138,87 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     setSyncing(true);
 
     if (useMqttSync) {
-      setSyncStatus('Connecting to MQTT broker for pull...');
-      try {
-        const { wsUrl, deviceId, user, pass } = mqttRemoteConfig;
-        if (!wsUrl || !deviceId) throw new Error('Broker URL and Device ID required');
-        
-        const client = mqtt.connect(wsUrl, {
-          username: user || undefined,
-          password: pass || undefined,
-          connectTimeout: 5000
-        });
+      withMqttClient(
+        mqttRemoteConfig,
+        {
+          connectingMessage: 'Connecting to MQTT broker for pull...',
+          timeoutMessage: 'MQTT pull timed out (no live response from device).'
+        },
+        ({ client, deviceId, isSettled, finish }) => {
+          const stateTopic = `cando/${deviceId}/config/automations/state`;
+          const getTopic = `cando/${deviceId}/config/automations/get`;
 
-        let timeoutTimer = setTimeout(() => {
-          client.end();
-          setSyncStatus('MQTT pull timed out.');
-          setSyncing(false);
-        }, 15000);
-
-        client.on('connect', () => {
-          setSyncStatus('Requesting automations from device...');
-          client.subscribe(`cando/${deviceId}/config/automations/state`, (err) => {
-            if (!err) {
-              client.publish(`cando/${deviceId}/config/automations/get`, '', { qos: 1 });
-            } else {
-              if (timeoutTimer) clearTimeout(timeoutTimer);
-              setSyncStatus(`Subscribe Error: ${err.message}`);
-              setSyncing(false);
-              client.end();
-            }
-          });
-        });
-
-        client.on('message', (topic, message) => {
-          if (topic === `cando/${deviceId}/config/automations/state`) {
-            if (timeoutTimer) clearTimeout(timeoutTimer);
-            try {
-              const data = JSON.parse(message.toString());
-              if (data.rules && Array.isArray(data.rules)) {
-                const decompiled = decompileAutomationRules(data.rules, catalog);
-                lastPushedJsonRef.current = JSON.stringify(decompiled);
-                onUpdateRules(decompiled);
-                if (data.settings) onUpdateSettings(data.settings);
-                if (decompiled[0]?.id) setSelectedRuleId(decompiled[0].id);
-                setSyncStatus(`Imported ${decompiled.length} rule(s) via MQTT!`);
-              } else if (Array.isArray(data)) {
-                const decompiled = decompileAutomationRules(data, catalog);
-                lastPushedJsonRef.current = JSON.stringify(decompiled);
-                onUpdateRules(decompiled);
-                if (decompiled[0]?.id) setSelectedRuleId(decompiled[0].id);
-                setSyncStatus(`Imported ${decompiled.length} rule(s) via MQTT!`);
+          client.once('connect', () => {
+            if (isSettled()) return;
+            showSyncStatus('Requesting automations from device...');
+            client.subscribe(stateTopic, (err) => {
+              if (isSettled()) return;
+              if (!err) {
+                client.publish(getTopic, '', { qos: 1 });
               } else {
-                setSyncStatus('No rules array found in device response.');
+                finish(`Subscribe Error: ${err.message}`);
               }
-            } catch(e: any) {
-              setSyncStatus(`Pull failed: ${e.message}`);
-            }
-            setSyncing(false);
-            client.end();
-            setTimeout(() => setSyncStatus(null), 6000);
-          }
-        });
+            });
+          });
 
-        client.on('error', (err) => {
-          if (timeoutTimer) clearTimeout(timeoutTimer);
-          setSyncStatus(`MQTT Connection Error: ${err.message}`);
-          setSyncing(false);
-          client.end();
-        });
-      } catch (err: any) {
-        setSyncStatus(`MQTT Init Error: ${err.message}`);
-        setSyncing(false);
-      }
+          client.on('message', (topic, message, packet) => {
+            if (isSettled() || topic !== stateTopic) return;
+            // Ignore stale retained broker state; wait for live reply to config/automations/get
+            if (packet?.retain) return;
+            finish(undefined, undefined, () => {
+              try {
+                const data = JSON.parse(message.toString());
+                applyPulledAutomations(data, ' via MQTT');
+              } catch (e: any) {
+                showSyncStatus(`Pull failed: ${e.message}`, 6000);
+              }
+            });
+          });
+        }
+      );
       return;
     }
 
-    setSyncStatus('Pulling automations.json from ESP32...');
+    const activeHost = commitEspIp();
+    showSyncStatus('Pulling automations.json from ESP32...');
 
     try {
-      const base = resolveDeviceBaseUrl(espIp);
+      const base = resolveDeviceBaseUrl(activeHost);
       const url = `${base}/api/automations`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      const data = await res.json();
-      if (data.rules && Array.isArray(data.rules)) {
-        const decompiled = decompileAutomationRules(data.rules, catalog);
-        lastPushedJsonRef.current = JSON.stringify(decompiled);
-        onUpdateRules(decompiled);
-        if (data.settings) onUpdateSettings(data.settings);
-        if (decompiled[0]?.id) setSelectedRuleId(decompiled[0].id);
-        setSyncStatus(`Imported ${decompiled.length} rule(s)!`);
-      } else if (Array.isArray(data)) {
-        const decompiled = decompileAutomationRules(data, catalog);
-        lastPushedJsonRef.current = JSON.stringify(decompiled);
-        onUpdateRules(decompiled);
-        if (decompiled[0]?.id) setSelectedRuleId(decompiled[0].id);
-        setSyncStatus(`Imported ${decompiled.length} rule(s)!`);
-      } else {
-        setSyncStatus('No rules array found in device response.');
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(10000)
+      });
+      if (!res.ok) {
+        const msg = (await res.text().catch(() => '')).trim();
+        throw new Error(`HTTP ${res.status}: ${msg || res.statusText || 'Request failed'}`);
       }
-      setTimeout(() => setSyncStatus(null), 6000);
+      const data = await res.json();
+      if (isMountedRef.current) {
+        applyPulledAutomations(data, '');
+      }
     } catch (err: any) {
-      setSyncStatus(`Pull failed: ${err.message}`);
+      const displayMsg =
+        err?.name === 'TimeoutError' || err?.name === 'AbortError'
+          ? 'Request timed out after 10s (ESP32 did not respond).'
+          : err?.message || String(err);
+      showSyncStatus(`Pull failed: ${displayMsg}`);
     } finally {
-      setSyncing(false);
+      if (isMountedRef.current) setSyncing(false);
     }
   };
 
   const handleApplyImport = (
     importedRules: AutomationRule[],
-    mode: 'merge' | 'replace',
     importedSettings?: AutomationSettings
   ) => {
-    const decompiled = decompileAutomationRules(importedRules, catalog);
-    onUpdateRules(decompiled);
+    const hydrated = ensureRulesTriggerClientIds(importedRules);
+    onUpdateRules(hydrated);
     if (importedSettings) {
       onUpdateSettings({ ...settings, ...importedSettings });
     }
-    if (decompiled.length > 0 && decompiled[0]?.id) {
-      setSelectedRuleId(decompiled[0].id);
+    if (hydrated.length > 0 && hydrated[0]?.id) {
+      setSelectedRuleId(hydrated[0].id);
     }
-  };
-
-  const handleSimulateRule = () => {
-    if (!activeRule) return;
-    setShowSimulateModal(true);
   };
 
   const openAddTriggerDialog = (onAdd: (t: AutomationTrigger) => void) => {
@@ -1836,7 +2311,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     onDuplicate={() => handleDuplicateRule(activeRule)}
                     onDelete={() => handleDeleteRule(activeRule.id)}
                     onRunActions={() => handleRunAllRuleActions(activeRule)}
-                    onShowTraces={() => handleSimulateRuleFor(activeRule)}
+                    onShowTraces={() => handleSimulateRule(activeRule)}
                     onMoreInfo={() => setMoreInfoRule(activeRule)}
                     onEditSettings={() => setEditingSettingsRule(activeRule)}
                     onEditCategory={() => setEditingCategoryRule(activeRule)}
@@ -1961,7 +2436,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   ) : (
                     <div className="space-y-2.5">
                       {activeRule.triggers.map((trig, tIdx) => {
-                        const stableKey = trig._clientId || (trig._clientId = `trig_client_${tIdx}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`);
+                        const stableKey = trig._clientId || trig.id || `trig_fallback_${tIdx}`;
                         return (
                           <TriggerNodeEditor
                             key={stableKey}
@@ -1971,25 +2446,39 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                             liveWifiStatus={liveWifiStatus}
                             liveBleMap={liveBleMap}
                             onUpdate={updated => {
-                              const next = [...activeRule.triggers];
-                              next[tIdx] = { ...updated, _clientId: stableKey };
-                              handleUpdateActiveRule({ triggers: next });
+                              handleUpdateActiveRule(r => {
+                                const next = [...r.triggers];
+                                const existingClientId = updated._clientId || r.triggers[tIdx]?._clientId || createTriggerClientId(updated.id);
+                                next[tIdx] = { ...updated, _clientId: existingClientId };
+                                return { ...r, triggers: next };
+                              });
                             }}
                             onDelete={() => {
-                              const next = activeRule.triggers.filter((_, i) => i !== tIdx);
-                              handleUpdateActiveRule({ triggers: next });
+                              handleUpdateActiveRule(r => ({
+                                ...r,
+                                triggers: r.triggers.filter((_, i) => i !== tIdx)
+                              }));
                             }}
                             onDuplicate={() => {
-                              const dup = regenerateTriggerIds(trig);
-                              const next = [...activeRule.triggers];
-                              next.splice(tIdx + 1, 0, dup);
-                              handleUpdateActiveRule({ triggers: next });
+                              handleUpdateActiveRule(r => {
+                                const target = r.triggers[tIdx] || trig;
+                                const dup = ensureTriggerClientId(regenerateTriggerIds(target));
+                                const next = [...r.triggers];
+                                next.splice(tIdx + 1, 0, dup);
+                                return { ...r, triggers: next };
+                              });
                             }}
                             onMoveUp={tIdx > 0 ? () => {
-                              handleUpdateActiveRule({ triggers: arrayMove(activeRule.triggers, tIdx, tIdx - 1) });
+                              handleUpdateActiveRule(r => ({
+                                ...r,
+                                triggers: arrayMove(r.triggers, tIdx, tIdx - 1)
+                              }));
                             } : undefined}
                             onMoveDown={tIdx < activeRule.triggers.length - 1 ? () => {
-                              handleUpdateActiveRule({ triggers: arrayMove(activeRule.triggers, tIdx, tIdx + 1) });
+                              handleUpdateActiveRule(r => ({
+                                ...r,
+                                triggers: arrayMove(r.triggers, tIdx, tIdx + 1)
+                              }));
                             } : undefined}
                             isFirst={tIdx === 0}
                             isLast={tIdx === activeRule.triggers.length - 1}
@@ -2019,9 +2508,11 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                                       e.preventDefault();
                                       e.stopPropagation();
                                       if (active.index !== tIdx) {
-                                        handleUpdateActiveRule({
-                                          triggers: arrayMove(activeRule.triggers, active.index, tIdx)
-                                        });
+                                        const fromIdx = active.index;
+                                        handleUpdateActiveRule(r => ({
+                                          ...r,
+                                          triggers: arrayMove(r.triggers, fromIdx, tIdx)
+                                        }));
                                       }
                                       setActiveScopedDrag(null);
                                       setTriggerDragIdx(null);
@@ -2048,7 +2539,10 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       type="button"
                       onClick={() =>
                         openAddTriggerDialog(newTrig =>
-                          handleUpdateActiveRule({ triggers: [...activeRule.triggers, newTrig] })
+                          handleUpdateActiveRule(r => ({
+                            ...r,
+                            triggers: [...r.triggers, ensureTriggerClientId(newTrig)]
+                          }))
                         )
                       }
                       className="ha-section-add-btn accent-trig"
@@ -2061,10 +2555,15 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       <button
                         type="button"
                         onClick={() => {
+                          const targetRuleId = activeRule.id;
                           void (async () => {
                             const pasted = await pasteFromClipboard('trigger');
                             if (pasted) {
-                              handleUpdateActiveRule({ triggers: [...activeRule.triggers, pasted] });
+                              const ensured = ensureTriggerClientId(pasted);
+                              handleUpdateRule(targetRuleId, r => ({
+                                ...r,
+                                triggers: [...r.triggers, ensured]
+                              }));
                             }
                           })();
                         }}
@@ -2080,10 +2579,15 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       <button
                         type="button"
                         onClick={() => {
+                          const targetRuleId = activeRule.id;
                           void (async () => {
                             const pasted = await pasteFromClipboard('trigger');
                             if (pasted) {
-                              handleUpdateActiveRule({ triggers: [...activeRule.triggers, pasted] });
+                              const ensured = ensureTriggerClientId(pasted);
+                              handleUpdateRule(targetRuleId, r => ({
+                                ...r,
+                                triggers: [...r.triggers, ensured]
+                              }));
                             }
                           })();
                         }}
@@ -2113,7 +2617,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 <span>{actionTestToast.message}</span>
                 <button
                   type="button"
-                  onClick={() => setActionTestToast(null)}
+                  onClick={clearToast}
                   className="p-1 hover:bg-default-hover rounded transition text-muted hover:text-foreground"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -2154,9 +2658,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     }
                     const gateEval = evaluateConditionState(
                       { id: 'gate_root', logic: 'and', conditions: conds },
-                      liveFrames,
+                      undefined,
                       entityStates,
-                      lastFiredTriggerId,
+                      undefined,
                       catalog,
                       liveWifiStatus,
                       liveBleMap
@@ -2207,9 +2711,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   depth={0}
                   availableTriggers={activeRule.triggers}
                   catalog={catalog}
-                  liveFrames={liveFrames}
                   entityStates={entityStates}
-                  lastFiredTriggerId={lastFiredTriggerId}
                   liveWifiStatus={liveWifiStatus}
                   liveBleMap={liveBleMap}
                   emptyText="No conditions set. Rule will always execute when triggers match."
@@ -2249,9 +2751,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   depth={0}
                   availableTriggers={activeRule.triggers}
                   catalog={catalog}
-                  liveFrames={liveFrames}
                   entityStates={entityStates}
-                  lastFiredTriggerId={lastFiredTriggerId}
                   liveWifiStatus={liveWifiStatus}
                   liveBleMap={liveBleMap}
                   emptyText="No actions defined."
@@ -2307,7 +2807,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   <Button
                     variant="outline"
                     size="sm"
-                    onPress={handleSimulateRule}
+                    onPress={() => handleSimulateRule()}
                     aria-label="Dry run active rule simulation"
                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-surface-secondary hover:bg-default-hover text-accent border border-border transition"
                   >
@@ -2487,10 +2987,22 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   {!useMqttSync ? (
                     <input
                       type="text"
-                      value={espIp}
-                      onChange={e => setEspIp(e.target.value)}
+                      value={espIpDraft}
+                      onChange={e => {
+                        espIpDraftRef.current = e.target.value;
+                        setEspIpDraft(e.target.value);
+                      }}
+                      onBlur={() => {
+                        commitEspIp();
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          commitEspIp();
+                          e.currentTarget.blur();
+                        }
+                      }}
                       placeholder={getDefaultEspIp()}
-                      title="Device IP address or hostname"
+                      title="Device IP address or hostname (press Enter or leave field to apply)"
                       className="min-w-0 flex-1 px-2 py-0.5 text-xs font-mono rounded-lg bg-surface-tertiary border border-border text-accent placeholder:text-field-placeholder focus:outline-none focus:border-focus"
                     />
                   ) : (
@@ -2632,7 +3144,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     onDelete={handleDeleteRule}
                     onToggleEnabled={(id, enabled) => handleUpdateRule(id, { enabled })}
                     onRunActions={handleRunAllRuleActions}
-                    onShowTraces={handleSimulateRuleFor}
+                    onShowTraces={handleSimulateRule}
                     onMoreInfo={(r) => setMoreInfoRule(r)}
                     onEditSettings={(r) => setEditingSettingsRule(r)}
                     onEditCategory={(r) => setEditingCategoryRule(r)}
@@ -2661,13 +3173,18 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           currentRules={rules}
           activeRule={activeRule}
           onInstallRule={(newRule) => {
-            const decompiledRule = decompileAutomationRule(newRule, catalog);
-            const existing = rules.find(r => r.id === decompiledRule.id);
-            const ruleToInstall = existing
-              ? { ...decompiledRule, id: `rule_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}` }
-              : decompiledRule;
-            onUpdateRules([ruleToInstall, ...rules]);
-            setSelectedRuleId(ruleToInstall.id);
+            const decompiledRule = ensureRuleTriggerClientIds(decompileAutomationRule(newRule, catalog));
+            const fallbackId = `rule_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+            let installedId = decompiledRule.id;
+            onUpdateRules(prev => {
+              const existing = prev.find(r => r.id === decompiledRule.id);
+              const ruleToInstall = existing
+                ? { ...decompiledRule, id: fallbackId }
+                : decompiledRule;
+              installedId = ruleToInstall.id;
+              return [ruleToInstall, ...prev];
+            });
+            setSelectedRuleId(installedId);
           }}
           onClose={() => setShowCommunityModal(false)}
         />
@@ -2690,11 +3207,10 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         isOpen={showSimulateModal}
         onClose={() => setShowSimulateModal(false)}
         catalog={catalog}
-        liveFrames={liveFrames}
+        liveFrames={EMPTY_LIVE_FRAMES}
         entityStates={entityStates}
         liveWifiStatus={liveWifiStatus}
         liveBleMap={liveBleMap}
-        lastFiredTriggerId={lastFiredTriggerId}
         onQueryHardwareDryRun={queryHardwareDryRun}
       />
 
@@ -2705,7 +3221,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         onClose={() => setMoreInfoRule(null)}
         onToggleEnabled={(id, enabled) => handleUpdateRule(id, { enabled })}
         onRunActions={handleRunAllRuleActions}
-        onShowTraces={handleSimulateRuleFor}
+        onShowTraces={handleSimulateRule}
         onEditCategory={(r) => setEditingCategoryRule(r)}
         onEditSettings={(r) => setEditingSettingsRule(r)}
       />
@@ -2743,6 +3259,85 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         }}
       />
 
+      {/* MODAL: Confirm Overwriting Local Rules on Pull */}
+      {pendingPullConfirmation && (
+        <Modal
+          isOpen={true}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPendingPullConfirmation(null);
+              showSyncStatus('Pull cancelled — local rules preserved.', 4000);
+            }
+          }}
+        >
+          <ModalBackdrop className="bg-backdrop backdrop-blur-sm fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+            <ModalContainer className="w-full max-w-md">
+              <ModalDialog className="relative bg-overlay border border-border rounded-2xl shadow-overlay overflow-hidden p-0 flex flex-col">
+                <ModalHeader className="px-5 py-4 border-b border-separator bg-surface">
+                  <div className="flex items-start gap-3 pr-8">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border bg-warning-soft text-warning border-warning/30">
+                      <AlertTriangle className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <ModalHeading className="text-base font-bold text-foreground">
+                        {pendingPullConfirmation.isEmptyDeviceOverwrite
+                          ? 'Device Returned 0 Automations'
+                          : 'Overwrite Unpushed Local Edits?'}
+                      </ModalHeading>
+                      <p className="text-xs text-muted mt-0.5">
+                        Confirm before replacing your current workspace rules.
+                      </p>
+                    </div>
+                  </div>
+                </ModalHeader>
+                <ModalBody className="p-5 space-y-2.5 text-sm text-foreground">
+                  {pendingPullConfirmation.isEmptyDeviceOverwrite && (
+                    <p className="text-xs leading-relaxed text-danger bg-danger-soft/50 border border-danger/30 rounded-xl p-3">
+                      The ESP32 returned <strong>0 rules</strong>, while you currently have{' '}
+                      <strong>{rules.length}</strong> local rule{rules.length !== 1 ? 's' : ''}. Proceeding will clear
+                      all local rules in the editor.
+                    </p>
+                  )}
+                  {pendingPullConfirmation.hasUnpushedChanges && (
+                    <p className="text-xs leading-relaxed text-foreground/90">
+                      You have <strong>unpushed local changes</strong> that have not been sent to the ESP32. Replacing
+                      them with the {pendingPullConfirmation.rules.length} rule
+                      {pendingPullConfirmation.rules.length !== 1 ? 's' : ''} pulled
+                      {pendingPullConfirmation.sourceLabel} will discard those local edits.
+                    </p>
+                  )}
+                </ModalBody>
+                <ModalFooter className="px-5 py-3 border-t border-separator bg-surface flex items-center justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onPress={() => {
+                      setPendingPullConfirmation(null);
+                      showSyncStatus('Pull cancelled — local rules preserved.', 4000);
+                    }}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-surface-secondary hover:bg-surface-tertiary text-foreground border border-border transition cursor-pointer"
+                  >
+                    Keep Local Rules
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onPress={() => {
+                      const pending = pendingPullConfirmation;
+                      setPendingPullConfirmation(null);
+                      commitPulledAutomations(pending.rules, pending.settings, pending.sourceLabel);
+                    }}
+                    className="px-4 py-1.5 rounded-xl text-xs font-bold bg-danger hover:bg-danger/90 text-white transition cursor-pointer"
+                  >
+                    Overwrite Local Rules
+                  </Button>
+                </ModalFooter>
+              </ModalDialog>
+            </ModalContainer>
+          </ModalBackdrop>
+        </Modal>
+      )}
+
       {/* Floating Clipboard Indicator */}
       {clipboard && (
         <div className="fixed bottom-5 right-5 z-40 max-w-sm flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-overlay text-overlay-foreground border border-accent/40 shadow-overlay backdrop-blur-md text-xs animate-in fade-in slide-in-from-bottom-2">
@@ -2772,64 +3367,22 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
       {hasUnpushedChanges && !isPushFabDismissed && (
         portalTarget ? (
           createPortal(
-            <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
-              <Button
-                variant="primary"
-                size="sm"
-                isDisabled={syncing}
-                onPress={handlePushToEsp}
-                className="ha-save-fab dirty !bg-warning !text-warning-foreground shadow-lg shadow-warning/25"
-                aria-label="Push unsaved automation changes to device"
-              >
-                {syncing ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Pushing Changes...</span>
-                  </>
-                ) : (
-                  <>
-                    <ArrowUp className="w-4 h-4" />
-                    <span>Push Changes ({rules.length} Rule{rules.length !== 1 ? 's' : ''})</span>
-                  </>
-                )}
-              </Button>
-              <CloseButton
-                aria-label="Dismiss push changes FAB"
-                onPress={() => setIsPushFabDismissed(true)}
-                className="size-8 rounded-full bg-surface-secondary/90 hover:bg-surface-tertiary border border-border text-muted hover:text-foreground shadow-overlay backdrop-blur transition flex items-center justify-center shrink-0 cursor-pointer pointer-events-auto"
-              />
-            </div>,
+            <PushFab
+              syncing={syncing}
+              ruleCount={rules.length}
+              onPush={handlePushToEsp}
+              onDismiss={() => setIsPushFabDismissed(true)}
+            />,
             portalTarget
           )
         ) : (
           <div className="ha-fab-stack">
-            <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
-              <Button
-                variant="primary"
-                size="sm"
-                isDisabled={syncing}
-                onPress={handlePushToEsp}
-                className="ha-save-fab dirty !bg-warning !text-warning-foreground shadow-lg shadow-warning/25"
-                aria-label="Push unsaved automation changes to device"
-              >
-                {syncing ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Pushing Changes...</span>
-                  </>
-                ) : (
-                  <>
-                    <ArrowUp className="w-4 h-4" />
-                    <span>Push Changes ({rules.length} Rule{rules.length !== 1 ? 's' : ''})</span>
-                  </>
-                )}
-              </Button>
-              <CloseButton
-                aria-label="Dismiss push changes FAB"
-                onPress={() => setIsPushFabDismissed(true)}
-                className="size-8 rounded-full bg-surface-secondary/90 hover:bg-surface-tertiary border border-border text-muted hover:text-foreground shadow-overlay backdrop-blur transition flex items-center justify-center shrink-0 cursor-pointer pointer-events-auto"
-              />
-            </div>
+            <PushFab
+              syncing={syncing}
+              ruleCount={rules.length}
+              onPush={handlePushToEsp}
+              onDismiss={() => setIsPushFabDismissed(true)}
+            />
           </div>
         )
       )}

@@ -2697,6 +2697,15 @@ export function compileAutomationRule(
   };
 }
 
+export const MAX_AUTOMATIONS_PAYLOAD_BYTES = 131072; // 128 KB firmware limit
+
+export function getPayloadByteLength(payload: string): number {
+  if (typeof TextEncoder !== 'undefined') {
+    return new TextEncoder().encode(payload).length;
+  }
+  return payload.length;
+}
+
 /**
  * Generate standard WiCAN / CAN Do format strictly matching the exact architecture outcome
  */
@@ -2704,7 +2713,8 @@ export function exportToCandoJson(
   rules: AutomationRule[],
   settings: AutomationSettings = {},
   catalog: Catalog = DEFAULT_CATALOG,
-  vehicle: Vehicle | null = null
+  vehicle: Vehicle | null = null,
+  options?: { minify?: boolean }
 ): string {
   const exportPayload = {
     settings: {
@@ -2717,7 +2727,7 @@ export function exportToCandoJson(
     rules: (Array.isArray(rules) ? rules : []).filter(isPlainObject).map(r => compileAutomationRule(r, catalog, vehicle))
   };
 
-  return JSON.stringify(exportPayload, null, 2);
+  return options?.minify ? JSON.stringify(exportPayload) : JSON.stringify(exportPayload, null, 2);
 }
 
 export function formatDefaultTriggerName(

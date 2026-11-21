@@ -104,7 +104,6 @@ export function matchesCatalogByteSpec(bytes: number[], opt: CommandOption): boo
 /**
  * Decodes EV charging status from a raw CAN frame.
  * - E-GMP Gen 3 (0x326 BMS_06_100ms_1): D5 (bytes[4]) bits 0:1 (mask 0x03) === 0x01
- * - Legacy Gen 2 (0x594 BMS1): D2 (bytes[1]) bit 1 (mask 0x02) !== 0
  * - Catalog-driven options when `mappedChargingCanId` matches the frame ID
  * Returns `null` if the frame ID does not match charging telemetry or lacks required bytes.
  */
@@ -119,7 +118,7 @@ export function decodeChargingCanFrame(
   if (!normId) return null;
 
   const isKnownChargingId =
-    normId === '326' || normId === '594' || (mappedNorm !== '' && normId === mappedNorm);
+    normId === '326' || (mappedNorm !== '' && normId === mappedNorm);
   if (!isKnownChargingId) return null;
 
   if (normId === mappedNorm && catalogOptions && catalogOptions.length > 0) {
@@ -133,11 +132,6 @@ export function decodeChargingCanFrame(
   if (normId === '326') {
     if (bytes.length < 5) return null;
     return (bytes[4] & 0x03) === 0x01;
-  }
-
-  if (normId === '594') {
-    if (bytes.length < 2) return null;
-    return (bytes[1] & 0x02) !== 0;
   }
 
   return null;

@@ -31,6 +31,8 @@ export interface LiveBleItem {
   uuid?: string;
   mac?: string;
   name?: string;
+  major?: number;
+  minor?: number;
   rssi?: number;
   connected?: boolean;
   is_present?: boolean;
@@ -472,9 +474,14 @@ export function evaluateConditionState(
   }
 
   // Check catalog entity state if condition is linked to a command (with proper negation check)
-  const entityId = cond.source_command_id;
-  if (entityId && entityStates && entityStates.has(entityId)) {
-    const curState = (entityStates.get(entityId) || '').toLowerCase();
+  const rawEntityId = cond.source_command_id;
+  const entityId = rawEntityId?.toLowerCase();
+  const resolvedState =
+    entityId && entityStates
+      ? entityStates.get(entityId) ?? (rawEntityId ? entityStates.get(rawEntityId) : undefined)
+      : undefined;
+  if (resolvedState !== undefined) {
+    const curState = resolvedState.toLowerCase();
     const optLabel = (cond.option_label || '').toLowerCase();
     if (optLabel) {
       const match = (curState === optLabel || curState.includes(optLabel) || optLabel.includes(curState));

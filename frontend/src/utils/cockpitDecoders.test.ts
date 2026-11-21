@@ -123,34 +123,10 @@ test('decodeChargingCanFrame decodes E-GMP 0x326 using Byte D5 (bits 0:1), ignor
   );
 });
 
-test('decodeChargingCanFrame decodes Legacy Gen 2 0x594 using Byte D2 bit 1 (0x02)', () => {
-  const condCharging = catalog.commands.find(c => c.id === 'cond_charging') as Command;
-  const gen2Resolved = resolveVariant(condCharging, {
-    id: 'hyundai_kona_ev',
-    name: 'Hyundai Kona EV',
-    make: 'Hyundai',
-    model: 'Kona EV',
-    trim: 'Limited',
-    region: 'us',
-    features: [],
-    family: 'all_gen2',
-  });
-  const mappedId = normalizeHexCanId(gen2Resolved.network?.state_can_id);
-  assert.strictEqual(mappedId, '594');
-
-  assert.strictEqual(
-    decodeChargingCanFrame('594', [0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00], gen2Resolved.options, mappedId),
-    false
-  );
-  assert.strictEqual(
-    decodeChargingCanFrame('594', [0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], gen2Resolved.options, mappedId),
-    true
-  );
-});
-
 test('decodeChargingCanFrame returns null for unrelated CAN IDs', () => {
   assert.strictEqual(decodeChargingCanFrame('30b', [0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x10, 0x00]), null);
   assert.strictEqual(decodeChargingCanFrame('411', [0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00]), null);
+  assert.strictEqual(decodeChargingCanFrame('594', [0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]), null);
 });
 
 test('odometer parsing treats unitless firmware emission as km and converts cleanly to imperial miles', () => {

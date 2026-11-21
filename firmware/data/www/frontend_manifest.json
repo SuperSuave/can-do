@@ -2,44 +2,49 @@
   "version": "2026.11.7-b001",
   "files": [
     {
-      "name": "BOxsMWjn.js.gz",
-      "path": "/spiffs/www/BOxsMWjn.js.gz",
-      "size": 132661
+      "name": "BdMWSxNz.js.gz",
+      "path": "/spiffs/www/BdMWSxNz.js.gz",
+      "size": 70567
     },
     {
-      "name": "C-c33Dmi.js.gz",
-      "path": "/spiffs/www/C-c33Dmi.js.gz",
-      "size": 104062
+      "name": "CBKgjILN.js.gz",
+      "path": "/spiffs/www/CBKgjILN.js.gz",
+      "size": 40749
     },
     {
-      "name": "CNq6mCIu.js.gz",
-      "path": "/spiffs/www/CNq6mCIu.js.gz",
-      "size": 9545
+      "name": "Cp5-dYYC.js.gz",
+      "path": "/spiffs/www/Cp5-dYYC.js.gz",
+      "size": 41804
     },
     {
-      "name": "DgAR_sLE.js.gz",
-      "path": "/spiffs/www/DgAR_sLE.js.gz",
-      "size": 46653
+      "name": "D1dnZ8rW.js.gz",
+      "path": "/spiffs/www/D1dnZ8rW.js.gz",
+      "size": 89681
     },
     {
-      "name": "YYd_756W.js.gz",
-      "path": "/spiffs/www/YYd_756W.js.gz",
-      "size": 35775
+      "name": "Dns0F6AH.js.gz",
+      "path": "/spiffs/www/Dns0F6AH.js.gz",
+      "size": 28788
     },
     {
-      "name": "YrkKBpWN.js.gz",
-      "path": "/spiffs/www/YrkKBpWN.js.gz",
-      "size": 47110
+      "name": "IMn2EYxC.js.gz",
+      "path": "/spiffs/www/IMn2EYxC.js.gz",
+      "size": 9546
     },
     {
-      "name": "index-BZrA4Y.js.gz",
-      "path": "/spiffs/www/index-BZrA4Y.js.gz",
-      "size": 99204
+      "name": "ZvF2C48M.js.gz",
+      "path": "/spiffs/www/ZvF2C48M.js.gz",
+      "size": 242235
     },
     {
-      "name": "index-Ch7U33.css.gz",
-      "path": "/spiffs/www/index-Ch7U33.css.gz",
-      "size": 55906
+      "name": "index-BpDE_d.js.gz",
+      "path": "/spiffs/www/index-BpDE_d.js.gz",
+      "size": 87422
+    },
+    {
+      "name": "index-Cp_b5f.css.gz",
+      "path": "/spiffs/www/index-Cp_b5f.css.gz",
+      "size": 55918
     },
     {
       "name": "index.html",
@@ -49,17 +54,12 @@
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 2284
+      "size": 2286
     },
     {
       "name": "logo.svg",
       "path": "/spiffs/www/logo.svg",
       "size": 8217
-    },
-    {
-      "name": "nskhJ9HB.js.gz",
-      "path": "/spiffs/www/nskhJ9HB.js.gz",
-      "size": 244802
     }
   ]
 }

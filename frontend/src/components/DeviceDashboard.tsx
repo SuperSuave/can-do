@@ -668,7 +668,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
           setLogs((prev) => [...prev.slice(-150), formatted]);
         }
       } else if (data.type === 'automation_fired') {
-        showNotice(`Rule Fired: ${data.rule_id || data.id || 'Automation'}`, 'info');
+        showNotice(`Rule Fired: ${data.name || data.id || 'Automation'}`, 'info');
         fetchAutomationsDiag();
       } else if (data.type === 'state' && data.entity === 'system_time') {
         setStatus((prev) => prev ? { ...prev, time_synced: true, system_time: String(data.state) } : prev);

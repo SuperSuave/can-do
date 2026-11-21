@@ -1,8 +1,16 @@
 import React, { useState, useEffect, useMemo, useRef, Suspense, lazy } from 'react';
 import { Catalog, Command, CommandRole, CommandOption, GitHubRepoConfig, Vehicle, getCommandContributors } from './types/catalog';
 import { DEFAULT_CATALOG, normalizeCatalog } from './data/defaultCatalog';
-import { validateCatalog } from './utils/canValidator';
-import { commandToAction, commandToCondition, commandToTrigger, exportToCandoJson, decompileAutomationRules } from './utils/automationConverters';
+import { validateCatalog, validateAutomationRules } from './utils/canValidator';
+import {
+  commandToAction,
+  commandToCondition,
+  commandToTrigger,
+  exportToCandoJson,
+  decompileAutomationRules,
+  MAX_AUTOMATIONS_PAYLOAD_BYTES,
+  getPayloadByteLength
+} from './utils/automationConverters';
 import { resolveVariant, formatCommandForCatalog } from './utils/catalogUtils';
 import { getAmbientColorHex } from './utils/cockpitDecoders';
 import { deviceWs } from './services/deviceWs';
@@ -1052,16 +1060,49 @@ export default function App() {
 
   const handleSyncAutomationsToDevice = async () => {
     try {
+      const report = validateAutomationRules(automationRules, catalog);
+      if (!report.isValid) {
+        const firstErr = report.errors[0];
+        const detail = firstErr
+          ? `${firstErr.ruleName || firstErr.ruleId}: ${firstErr.message}`
+          : 'One or more automation rules contain validation errors.';
+        throw new Error(
+          `Validation failed (${report.errors.length} error${report.errors.length !== 1 ? 's' : ''}): ${detail}`
+        );
+      }
+
+      const payloadStr = exportToCandoJson(automationRules, automationSettings, catalog, null, { minify: true });
+      const payloadBytes = getPayloadByteLength(payloadStr);
+      if (payloadBytes > MAX_AUTOMATIONS_PAYLOAD_BYTES) {
+        const kb = (payloadBytes / 1024).toFixed(1);
+        throw new Error(
+          `Automations payload is ${kb} KB (${payloadBytes.toLocaleString()} bytes), exceeding the 128 KB (${MAX_AUTOMATIONS_PAYLOAD_BYTES.toLocaleString()} byte) ESP32 limit.`
+        );
+      }
+
       const base = resolveDeviceBaseUrl(localStorage.getItem('cando_device_host'));
-      const payloadStr = exportToCandoJson(automationRules, automationSettings, catalog);
       const res = await fetch(`${base}/api/automations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: payloadStr
+        body: payloadStr,
+        signal: AbortSignal.timeout(10000)
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      if (!res.ok) {
+        const msg = (await res.text().catch(() => '')).trim();
+        if (res.status === 413) {
+          throw new Error(`Payload too large (HTTP 413): ${msg || 'Exceeds 128 KB ESP32 limit.'}`);
+        }
+        if (res.status === 408) {
+          throw new Error(`Upload timed out (HTTP 408): ${msg || 'ESP32 timed out receiving payload.'}`);
+        }
+        throw new Error(`HTTP ${res.status}: ${msg || res.statusText || 'Request failed'}`);
+      }
     } catch (err: any) {
-      alert(`Failed to deploy automations to device: ${err.message}`);
+      const displayMsg =
+        err?.name === 'TimeoutError' || err?.name === 'AbortError'
+          ? 'Request timed out after 10s (ESP32 did not respond).'
+          : err?.message || String(err);
+      alert(`Failed to deploy automations to device: ${displayMsg}`);
       throw err;
     }
   };
@@ -1617,10 +1658,6 @@ export default function App() {
         onUpdateRules={setAutomationRules}
         settings={automationSettings}
         onUpdateSettings={setAutomationSettings}
-        onNavigateToCatalog={() => {
-          setActiveMainTab('catalog');
-          setCatalogSubTab('messages');
-        }}
       />
     ) : activeMainTab === 'dashboard' ? (
       /* Live Vehicle Cockpit Dashboard */
