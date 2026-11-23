@@ -1333,7 +1333,7 @@ export default function App() {
                     }`}
                   >
                     <Gauge className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 transition-colors ${activeMainTab === 'dashboard' ? 'text-accent' : 'text-muted'}`} />
-                    <span>Cockpit</span>
+                    <span>Dashboard</span>
                     <Tabs.Indicator className="rounded-lg bg-segment border border-border shadow-sm" />
                   </Tabs.Tab>
 
@@ -1660,7 +1660,7 @@ export default function App() {
         onUpdateSettings={setAutomationSettings}
       />
     ) : activeMainTab === 'dashboard' ? (
-      /* Live Vehicle Cockpit Dashboard */
+      /* Live Vehicle Dashboard */
       <VehicleDashboard
         catalog={catalog}
         unitSystem={userPreferences.unit_system}

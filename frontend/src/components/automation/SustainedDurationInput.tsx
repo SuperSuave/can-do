@@ -21,7 +21,7 @@ export const SustainedDurationInput: React.FC<SustainedDurationInputProps> = ({
   forSec,
   forMs,
   onChange,
-  label = 'Sustained For (Optional)'
+  label = 'Duration (Optional)'
 }) => {
   const inputId = useId();
   const unitId = useId();

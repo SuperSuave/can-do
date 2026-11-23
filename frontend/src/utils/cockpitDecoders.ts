@@ -292,25 +292,6 @@ export function decodeChargePortCanFrame(
 }
 
 /**
- * Separates sunroof glass position updates from power sunshade cover updates.
- */
-export function decodeSunroofEntityState(stateStr: string): {
-  glassState?: 'closed' | 'vent' | 'open';
-  sunshade?: 'open' | 'closed';
-} {
-  const norm = stateStr.trim().toLowerCase();
-  if (norm.includes('cover') || norm.includes('shade')) {
-    if (norm.includes('open') || norm.includes('retract')) return { sunshade: 'open' };
-    if (norm.includes('close')) return { sunshade: 'closed' };
-    return {};
-  }
-  if (norm.includes('open')) return { glassState: 'open' };
-  if (norm.includes('vent') || norm.includes('tilt')) return { glassState: 'vent' };
-  if (norm.includes('closed') || norm.includes('close')) return { glassState: 'closed' };
-  return {};
-}
-
-/**
  * Decodes HVAC vent airflow mode from 0x31B Byte D4 (high nibble).
  */
 export function decodeAirflowCanByte(d4Byte: number): CockpitAirflowMode | null {

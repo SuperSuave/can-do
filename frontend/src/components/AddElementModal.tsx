@@ -29,8 +29,6 @@ import {
   Wifi,
   X,
   ChevronRight,
-  Shield,
-  Send,
   RotateCw,
   Repeat,
   Navigation
@@ -531,57 +529,32 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
     handleClose();
   };
 
-  const typeConfig = {
-    trigger: {
-      pillText: 'When',
-      pillClass: 'bg-warning-soft text-warning-soft-foreground border-warning/40',
-      title: 'Add Trigger',
-      icon: Zap,
-      iconColor: 'text-warning bg-warning-soft'
-    },
-    condition: {
-      pillText: 'And if',
-      pillClass: 'bg-accent-soft text-accent-soft-foreground border-accent/40',
-      title: 'Add Condition',
-      icon: Shield,
-      iconColor: 'text-accent bg-accent-soft'
-    },
-    action: {
-      pillText: 'Then do',
-      pillClass: 'bg-success-soft text-success-soft-foreground border-success/40',
-      title: 'Add Action',
-      icon: Send,
-      iconColor: 'text-success bg-success-soft'
-    }
+  const defaultTitle = {
+    trigger: 'Add Trigger',
+    condition: 'Add Condition',
+    action: 'Add Action'
   }[target.type];
 
   return (
     <div
       onClick={handleClose}
-      className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-backdrop backdrop-blur-sm transition-opacity duration-200 ease-out ${
-        isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
-      }`}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-backdrop backdrop-blur-sm transition-opacity duration-200 ease-out ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
     >
       <div
         onClick={e => e.stopPropagation()}
-        className={`relative w-full max-w-2xl bg-overlay text-overlay-foreground border border-border rounded-2xl shadow-overlay overflow-hidden flex flex-col max-h-[88vh] transition-all duration-200 ease-out transform ${
-          isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-3'
-        }`}
+        className={`relative w-full max-w-2xl bg-overlay text-overlay-foreground border border-border rounded-2xl shadow-overlay overflow-hidden flex flex-col max-h-[88vh] transition-all duration-200 ease-out transform ${isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-3'
+          }`}
       >
         {/* Header */}
         <div className="p-4 border-b border-separator flex items-center justify-between gap-3 bg-surface pr-12">
-          <div className="flex items-center gap-2.5">
-            <span className={`px-2 py-0.5 rounded-full font-bold uppercase text-[10px] tracking-wider border font-mono ${typeConfig.pillClass}`}>
-              {typeConfig.pillText}
-            </span>
-            <div>
-              <h3 className="text-sm font-bold text-foreground leading-snug">
-                {target.title || typeConfig.title}
-              </h3>
-              <p className="text-[11px] text-muted">
-                {target.contextHint || 'Select a building block or vehicle catalog command'}
-              </p>
-            </div>
+          <div>
+            <h3 className="text-sm font-bold text-foreground leading-snug">
+              {target.title || defaultTitle}
+            </h3>
+            <p className="text-[11px] text-muted">
+              {target.contextHint || 'Select a building block or vehicle catalog command'}
+            </p>
           </div>
         </div>
 
@@ -596,43 +569,39 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
         </button>
 
         {/* Search Bar & Nav Filter */}
-        <div className="p-3 border-b border-separator bg-surface flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted" />
+        <div className="p-3 border-b border-separator bg-surface flex flex-col gap-2">
+          <div className="relative w-full">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder={`Search ${target.type} elements or catalog commands...`}
               autoFocus
-              className="w-full bg-surface-secondary border border-border rounded-xl pl-8 pr-8 py-1.5 text-xs text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus transition"
+              className="w-full h-9 bg-surface-secondary border border-border rounded-xl pl-8 pr-8 text-xs text-foreground placeholder:text-field-placeholder focus:outline-none focus:border-focus transition"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                className="absolute right-2.5 top-2.5 text-muted hover:text-foreground"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-foreground"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
             <Tabs
               selectedKey={activeTab}
               onSelectionChange={key => setActiveTab(key as 'all' | 'blocks' | 'catalog')}
-              aria-label="Filter Elements"
+              className="w-fit max-w-full min-w-0"
             >
-              <Tabs.ListContainer className="p-0.5 rounded-xl bg-surface-secondary border border-border text-[11px]">
-                <Tabs.List className="gap-0.5">
+              <Tabs.ListContainer className="rounded-xl bg-surface-secondary border border-border">
+                <Tabs.List aria-label="Filter Elements" className="gap-1 p-1">
                   <Tabs.Tab
                     id="all"
-                    className={`relative px-2.5 py-1 rounded-lg font-medium transition cursor-pointer whitespace-nowrap shrink-0 ${
-                      activeTab === 'all'
-                        ? 'text-accent-foreground font-semibold'
-                        : 'text-muted hover:text-foreground'
-                    }`}
+                    className="relative w-auto h-7 px-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 text-muted hover:text-foreground data-[selected=true]:text-accent-foreground data-[selected=true]:hover:text-accent-foreground"
                   >
                     <span>All</span>
                     <Tabs.Indicator className="rounded-lg bg-accent shadow-sm" />
@@ -640,11 +609,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
 
                   <Tabs.Tab
                     id="blocks"
-                    className={`relative px-2.5 py-1 rounded-lg font-medium transition cursor-pointer whitespace-nowrap shrink-0 ${
-                      activeTab === 'blocks'
-                        ? 'text-accent-foreground font-semibold'
-                        : 'text-muted hover:text-foreground'
-                    }`}
+                    className="relative w-auto h-7 px-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 text-muted hover:text-foreground data-[selected=true]:text-accent-foreground data-[selected=true]:hover:text-accent-foreground"
                   >
                     <span>Blocks ({filteredBlocks.length})</span>
                     <Tabs.Indicator className="rounded-lg bg-accent shadow-sm" />
@@ -652,11 +617,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
 
                   <Tabs.Tab
                     id="catalog"
-                    className={`relative px-2.5 py-1 rounded-lg font-medium transition cursor-pointer whitespace-nowrap shrink-0 ${
-                      activeTab === 'catalog'
-                        ? 'text-accent-foreground font-semibold'
-                        : 'text-muted hover:text-foreground'
-                    }`}
+                    className="relative w-auto h-7 px-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 text-muted hover:text-foreground data-[selected=true]:text-accent-foreground data-[selected=true]:hover:text-accent-foreground"
                   >
                     <span>Catalog ({filteredCatalog.length})</span>
                     <Tabs.Indicator className="rounded-lg bg-accent shadow-sm" />
@@ -669,7 +630,8 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
               <select
                 value={selectedCategory}
                 onChange={e => setSelectedCategory(e.target.value)}
-                className="bg-surface-secondary border border-border rounded-xl px-2 py-1 text-xs text-foreground focus:outline-none focus:border-focus"
+                aria-label="Filter by category"
+                className="h-9 max-w-full sm:max-w-[200px] bg-surface-secondary border border-border rounded-xl px-2.5 text-xs text-foreground focus:outline-none focus:border-focus"
               >
                 <option value="all">All Categories</option>
                 {categories.map(c => (

@@ -2699,9 +2699,6 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       </span>
                     );
                   })()}
-                  <span className="text-[11px] text-muted hidden sm:inline">
-                    Evaluated before actions run
-                  </span>
                 </div>
               </div>
 
@@ -2740,9 +2737,6 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     Actions
                   </span>
                 </div>
-                <span className="text-[11px] text-muted">
-                  Executed in sequence when triggers &amp; conditions match
-                </span>
               </div>
 
               {!collapsedActions && (

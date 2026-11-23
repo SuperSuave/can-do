@@ -9,7 +9,6 @@ import {
   decodeRearSeatEntityUpdate,
   decodeSeatComfortByte,
   decodeSeatLevel,
-  decodeSunroofEntityState,
   decodeAirflowCanByte,
   decodeAirflowEntityState,
   decodeDriverOnlyCanFrame,
@@ -183,13 +182,6 @@ test('decodeChargePortCanFrame uses catalog 0x3AA Byte D4 (0x01=Open, 0x02=Close
     decodeChargePortCanFrame('3aa', [0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00], chargePort.options, mappedId),
     true
   );
-});
-
-test('decodeSunroofEntityState separates cover shade from glass position', () => {
-  assert.deepStrictEqual(decodeSunroofEntityState('Cover Opened'), { sunshade: 'open' });
-  assert.deepStrictEqual(decodeSunroofEntityState('Cover Closed'), { sunshade: 'closed' });
-  assert.deepStrictEqual(decodeSunroofEntityState('Glass Tilted / Windbreak'), { glassState: 'vent' });
-  assert.deepStrictEqual(decodeSunroofEntityState('closed'), { glassState: 'closed' });
 });
 
 test('decodeAirflowCanByte decodes 0x31B Byte D4 nibble distribution', () => {

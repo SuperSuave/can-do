@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Tabs, Switch, Button, ButtonGroup, Chip, Card, Alert, ProgressBar, Spinner, Slider } from '@heroui/react';
+import { Tabs, Switch, Button, ButtonGroup, Chip, Card, Alert, CloseButton, ProgressBar, Spinner, Slider } from '@heroui/react';
 import { isRunningOnDevice, getDefaultDeviceHost, resolveDeviceBaseUrl } from '../utils/hostUtils';
 import { deviceWs, DeviceWsMessage } from '../services/deviceWs';
 import {
@@ -1191,19 +1191,19 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
       {actionNotice && (
         <Alert
           status={actionNotice.type === 'success' ? 'success' : actionNotice.type === 'error' ? 'danger' : 'accent'}
-          className="p-3 rounded-xl border text-xs font-semibold flex items-center justify-between"
+          className="items-center p-3 rounded-xl border gap-3"
         >
-          <Alert.Indicator />
-          <Alert.Content className="flex items-center justify-between w-full">
-            <Alert.Description>{actionNotice.message}</Alert.Description>
-            <button
-              type="button"
-              onClick={() => setActionNotice(null)}
-              className="text-muted hover:text-foreground ml-3 text-xs"
-            >
-              ✕
-            </button>
+          <Alert.Indicator className="shrink-0" />
+          <Alert.Content className="min-w-0">
+            <Alert.Description className="text-xs font-semibold text-foreground">
+              {actionNotice.message}
+            </Alert.Description>
           </Alert.Content>
+          <CloseButton
+            aria-label="Dismiss notification"
+            onPress={() => setActionNotice(null)}
+            className="shrink-0"
+          />
         </Alert>
       )}
 
@@ -2734,16 +2734,16 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
             </div>
           </div>
 
-          {/* Cockpit & Bench Simulation Settings */}
+          {/* Dashboard & Bench Simulation Settings */}
           <div className="can-do-card p-4 sm:p-5 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h4 className="text-xs sm:text-sm font-bold text-foreground flex items-center gap-2">
                   <Car className="w-4 h-4 text-accent" />
-                  Cockpit Preview & Bench Simulation
+                  Dashboard Preview & Bench Simulation
                 </h4>
                 <p className="text-[11px] text-muted mt-0.5">
-                  Load sample EV6 telemetry on the Cockpit tab when offline (automatically paused if live CAN frames arrive)
+                  Load sample EV6 telemetry on the Dashboard tab when offline (automatically paused if live CAN frames arrive)
                 </p>
               </div>
               <Switch
@@ -2751,10 +2751,10 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                 isSelected={Boolean(localPrefs.demo_telemetry_enabled)}
                 onChange={(isSelected) => {
                   handleSavePreferences({ demo_telemetry_enabled: isSelected });
-                  showNotice(isSelected ? 'Cockpit demo telemetry enabled' : 'Cockpit demo telemetry cleared', 'info');
+                  showNotice(isSelected ? 'Dashboard demo telemetry enabled' : 'Dashboard demo telemetry cleared', 'info');
                 }}
                 size="sm"
-                aria-label="Toggle Cockpit Demo Telemetry"
+                aria-label="Toggle Dashboard Demo Telemetry"
               >
                 <Switch.Content>
                   <Switch.Control>
