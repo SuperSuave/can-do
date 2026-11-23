@@ -2,24 +2,29 @@
   "version": "2026.11.7-b003",
   "files": [
     {
+      "name": "AhZv1xVs.js.gz",
+      "path": "/spiffs/www/AhZv1xVs.js.gz",
+      "size": 45036
+    },
+    {
+      "name": "BUtjp54E.js.gz",
+      "path": "/spiffs/www/BUtjp54E.js.gz",
+      "size": 28791
+    },
+    {
       "name": "BdMWSxNz.js.gz",
       "path": "/spiffs/www/BdMWSxNz.js.gz",
       "size": 70567
     },
     {
-      "name": "C-iHH-nc.js.gz",
-      "path": "/spiffs/www/C-iHH-nc.js.gz",
-      "size": 89581
+      "name": "Crzd30ej.js.gz",
+      "path": "/spiffs/www/Crzd30ej.js.gz",
+      "size": 247216
     },
     {
-      "name": "C61q4zFp.js.gz",
-      "path": "/spiffs/www/C61q4zFp.js.gz",
-      "size": 28793
-    },
-    {
-      "name": "CBKgjILN.js.gz",
-      "path": "/spiffs/www/CBKgjILN.js.gz",
-      "size": 40749
+      "name": "DTTneZ7V.js.gz",
+      "path": "/spiffs/www/DTTneZ7V.js.gz",
+      "size": 89579
     },
     {
       "name": "IMn2EYxC.js.gz",
@@ -27,39 +32,34 @@
       "size": 9546
     },
     {
-      "name": "index-BlxMiQ.js.gz",
-      "path": "/spiffs/www/index-BlxMiQ.js.gz",
-      "size": 87336
+      "name": "index-CELSJS.css.gz",
+      "path": "/spiffs/www/index-CELSJS.css.gz",
+      "size": 55985
     },
     {
-      "name": "index-D7sHxV.css.gz",
-      "path": "/spiffs/www/index-D7sHxV.css.gz",
-      "size": 55729
+      "name": "index-DWdazX.js.gz",
+      "path": "/spiffs/www/index-DWdazX.js.gz",
+      "size": 87336
     },
     {
       "name": "index.html",
       "path": "/spiffs/www/index.html",
-      "size": 6204
+      "size": 6101
     },
     {
       "name": "index.html.gz",
       "path": "/spiffs/www/index.html.gz",
-      "size": 2295
+      "size": 2284
     },
     {
       "name": "logo.svg",
       "path": "/spiffs/www/logo.svg",
-      "size": 8221
+      "size": 8217
     },
     {
-      "name": "xy8lr7g0.js.gz",
-      "path": "/spiffs/www/xy8lr7g0.js.gz",
-      "size": 45037
-    },
-    {
-      "name": "ZvF2C48M.js.gz",
-      "path": "/spiffs/www/ZvF2C48M.js.gz",
-      "size": 242235
+      "name": "ycFcsHfB.js.gz",
+      "path": "/spiffs/www/ycFcsHfB.js.gz",
+      "size": 40748
     }
   ]
 }
