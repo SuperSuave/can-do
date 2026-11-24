@@ -67,6 +67,8 @@ class CanDoEntity(Entity):
         cid = self.entity_id_str.lower()
         if cid in ("outdoor_temperature", "cond_ambient_temperature", "ambient_temperature") or "ambient_temp" in cid:
             return any(self.coordinator.is_can_id_active(x) for x in ("0x31c", "0x227", "0x226"))
+        if "charging_power" in cid or (self.state_can_id and self.state_can_id.lower() in ("0x30e", "0x258", "0x259")):
+            return any(self.coordinator.is_can_id_active(x) for x in ("0x258", "0x259", "0x30e"))
         if self.state_can_id and not self.coordinator.is_can_id_active(self.state_can_id):
             return False
         return True
@@ -115,6 +117,8 @@ class CanDoEntity(Entity):
         cid = self.entity_id_str.lower()
         if cid in ("outdoor_temperature", "cond_ambient_temperature", "ambient_temperature") or "ambient_temp" in cid:
             listen_ids.update(["0x31c", "0x227", "0x226", "outdoor_temperature"])
+        if "charging_power" in cid or (self.state_can_id and self.state_can_id.lower() in ("0x30e", "0x258", "0x259")):
+            listen_ids.update(["0x258", "0x259", "0x30e", "ev_charging_power"])
         if "12v" in cid or "aux" in cid:
             listen_ids.update(["vbat", "cond_aux_12v_battery", "0x1cf"])
 

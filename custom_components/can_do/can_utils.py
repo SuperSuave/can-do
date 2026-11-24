@@ -240,3 +240,43 @@ def decode_outdoor_temperature_c(
             return float(raw_c - 40)
 
     return None
+
+
+def decode_charging_power_kw(
+    obc_v_payload: list[int] | None,
+    obc_a_payload: list[int] | None,
+    vcms_payload: list[int] | None = None,
+    vcms_byte: str = "D7",
+) -> float | int | None:
+    """Decode live EV charging power in kW.
+
+    Primary: OBC HV output voltage (0x258 D2-D3 LE * 0.1 V) * current (0x259 D1-D2 LE * 0.01 A) / 1000.
+    Fallback: VCMS 0x30E byte (default D7, integer kW) when non-zero (e.g. DCFC).
+    """
+    obc_valid = False
+    if (
+        isinstance(obc_v_payload, list)
+        and len(obc_v_payload) >= 3
+        and isinstance(obc_a_payload, list)
+        and len(obc_a_payload) >= 2
+    ):
+        raw_v = obc_v_payload[1] | (obc_v_payload[2] << 8)
+        raw_a = obc_a_payload[0] | (obc_a_payload[1] << 8)
+        if 0 <= raw_v <= 10000 and 0 <= raw_a <= 50000:
+            obc_valid = True
+            obc_kw = round(raw_v * raw_a * 1e-6, 1)
+            if 0.0 < obc_kw <= 400.0:
+                return int(obc_kw) if obc_kw.is_integer() else obc_kw
+
+    vcms_valid = False
+    if isinstance(vcms_payload, list):
+        idx = get_d_index(vcms_byte)
+        if 0 <= idx < len(vcms_payload):
+            vcms_valid = True
+            vcms_kw = int(vcms_payload[idx])
+            if vcms_kw > 0:
+                return vcms_kw
+
+    if obc_valid or vcms_valid:
+        return 0
+    return None

@@ -35,7 +35,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .can_utils import decode_outdoor_temperature_c, option_matches, resolve_effective_mask
+from .can_utils import (
+    decode_charging_power_kw,
+    decode_outdoor_temperature_c,
+    option_matches,
+    resolve_effective_mask,
+)
 from .catalog_loader import (
     DEFAULT_ENDIANNESS,
     check_match,
@@ -520,6 +525,31 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
         if isinstance(direct_entity_val, (int, float)) and not isinstance(direct_entity_val, bool) and math.isfinite(direct_entity_val):
             return round(float(direct_entity_val), 2)
 
+        is_charging_power = (
+            "charging_power" in cid
+            or (bool(self.state_can_id) and self.state_can_id.lower() in ("0x30e", "0x258", "0x259"))
+        )
+        if is_charging_power:
+            if isinstance(direct_entity_val, str):
+                m = re.search(r"[-+]?\d*\.?\d+", direct_entity_val)
+                if m:
+                    try:
+                        num_val = float(m.group(0))
+                        if math.isfinite(num_val):
+                            return int(num_val) if num_val.is_integer() else round(num_val, 2)
+                    except ValueError:
+                        pass
+            vcms_byte = (self.command.get("network") or {}).get("state_byte", "D7")
+            decoded_kw = decode_charging_power_kw(
+                self.coordinator.get_can_payload("0x258"),
+                self.coordinator.get_can_payload("0x259"),
+                self.coordinator.get_can_payload("0x30e"),
+                vcms_byte,
+            )
+            if decoded_kw is not None:
+                return decoded_kw
+            return self._last_native_val
+
         if "bms" in cid:
             bms_aliases = {
                 "bms_hv_voltage": "bms_hv_v",
@@ -695,12 +725,7 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                         val = round(payload[alt_idx] * 0.1, 1)
                         if 8.0 <= val <= 16.5:
                             return val
-        # 1I. Live EV Charging Power (0x30E: Byte D7 = integer in kW, 0-255 kW)
-        if "charging_power" in cid or (self.state_can_id and self.state_can_id.lower() == "0x30e"):
-            state_byte = net.get("state_byte", "D7")
-            idx = get_d_index(state_byte)
-            if isinstance(payload, list) and 0 <= idx < len(payload):
-                return int(payload[idx])
+        # 1I. Live EV Charging Power handled in multi-frame decoder above (0x258 * 0x259 / 1000, fallback 0x30E D7)
 
         # 1J. Charge & Discharge Remaining Times (Minutes, 16-bit unsigned, 0xFFFF = inactive)
         is_remaining_time_ac = "remaining_charge_time_ac" in cid or (
@@ -853,4 +878,16 @@ class CanDoSensorEntity(CanDoEntity, SensorEntity):
                         attrs["max_module_temp_c"] = payload[0] - 40
                     if 0 < payload[1] < 255:
                         attrs["min_module_temp_c"] = payload[1] - 40
+
+        if "charging_power" in cid or (self.state_can_id and self.state_can_id.lower() in ("0x30e", "0x258", "0x259")):
+            p_258 = self.coordinator.get_can_payload("0x258")
+            p_259 = self.coordinator.get_can_payload("0x259")
+            if isinstance(p_258, list) and len(p_258) >= 3:
+                raw_v = p_258[1] | (p_258[2] << 8)
+                if raw_v <= 10000:
+                    attrs["obc_hv_voltage_v"] = round(raw_v * 0.1, 1)
+            if isinstance(p_259, list) and len(p_259) >= 2:
+                raw_a = p_259[0] | (p_259[1] << 8)
+                if raw_a <= 50000:
+                    attrs["obc_hv_current_a"] = round(raw_a * 0.01, 2)
         return attrs

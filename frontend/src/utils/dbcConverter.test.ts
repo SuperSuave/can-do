@@ -5,6 +5,8 @@ import {
   parseCanIdString,
   formatCanIdToHex,
   deriveSignalBitRange,
+  exportToDbc,
+  exportCommandToDbcSnippet,
 } from './dbcConverter.js';
 
 test('parseDbc handles empty and whitespace-only input', () => {
@@ -159,4 +161,54 @@ test('deriveSignalBitRange derives bit offsets for nibble and byte transitions',
   const lowNibbleRange = deriveSignalBitRange('* *0 * * * * *', '* *1 * * * * *');
   assert.strictEqual(lowNibbleRange.startBit, 8); // 1 * 8
   assert.strictEqual(lowNibbleRange.length, 4);
+});
+
+test('exportToDbc and exportCommandToDbcSnippet honor network state_byte, byte_length, factor, offset, min, max, and unit', () => {
+  const evChargingPowerCmd: any = {
+    id: 'ev_charging_power',
+    name: 'Live EV Charging Power',
+    category: 'High Voltage & Charging',
+    roles: ['sensor', 'state'],
+    state_can_id: '0x30E',
+    network: {
+      bus: 0,
+      type: 'can_rx',
+      state_can_id: '0x30E',
+      state_byte: 'D7',
+      factor: 1,
+      offset: 0,
+      unit: 'kW',
+      min: 0,
+      max: 255,
+    },
+  };
+
+  const acRemainTimeCmd: any = {
+    id: 'remaining_charge_time_ac',
+    name: 'AC Normal Charge Remaining Time',
+    category: 'High Voltage & Charging',
+    roles: ['sensor', 'condition'],
+    state_can_id: '0x327',
+    network: {
+      bus: 0,
+      type: 'can_rx',
+      state_can_id: '0x327',
+      state_byte: 'D1',
+      byte_length: 2,
+      unit: 'min',
+    },
+  };
+
+  const snippet = exportCommandToDbcSnippet(evChargingPowerCmd);
+  assert.ok(snippet.includes('BO_ 782 HIGH_VOLTAGE_CHARGING_30E: 8 ECU'));
+  assert.ok(snippet.includes('SG_ EV_CHARGING_POWER : 48|8@1+ (1,0) [0|255] "kW" CAN_DO_HUB'));
+  assert.ok(!snippet.includes('VAL_ 782 EV_CHARGING_POWER 0 "INACTIVE"'));
+
+  const dbc = exportToDbc({
+    can_do_version: '2026.11.7-b003',
+    vehicles: [],
+    commands: [evChargingPowerCmd, acRemainTimeCmd],
+  } as any);
+  assert.ok(dbc.includes('SG_ EV_CHARGING_POWER : 48|8@1+ (1,0) [0|255] "kW" CAN_DO_HUB'));
+  assert.ok(dbc.includes('SG_ REMAINING_CHARGE_TIME_AC : 0|16@1+ (1,0) [0|65535] "min" CAN_DO_HUB'));
 });

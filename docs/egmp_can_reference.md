@@ -199,21 +199,27 @@ To achieve peak 800V DC fast-charging speeds (up to 240 kW), the traction batter
 
 ---
 
-### 4.2 Live Charging Power Telemetry (`0x30E` / `OBC_01`)
+### 4.2 Live Charging Power Telemetry (`0x258` + `0x259` OBC Primary / `0x30E` VCMS Fallback)
 
-The On-Board Charger (OBC) and BMS broadcast the instantaneous net charging power in integer kilowatts on CAN ID **`0x30E`** at 100 ms (DLC: 8):
-* **Signal**: Byte 6 (`D7` in 1-based indexing, unsigned 8-bit integer):
-  $$\text{Power (kW)} = \text{Byte } D7$$
-* Directly reports live charging rate from `0` to `255` kW without requiring high-voltage Volts $\times$ Amps multiplication.
+Live E-GMP EV charging power (`ev_charging_power`) is decoded primarily from the On-Board Charger (OBC) HV output voltage and current frames, with VCMS `0x30E` retained only as a non-zero fallback (e.g., for DC Fast Charging where the OBC is bypassed):
 
-| Charging Scenario | Typical Power | Payload (`0x30E`) | Description |
+* **Primary OBC Power (`0x258` × `0x259`)** — empirically verified on live E-GMP AC Level 2 charging (11.0 kW EVSE):
+  * **`0x258` HV Output Voltage**: Bytes `D2`–`D3` (16-bit unsigned Little Endian), factor `0.1 V`:
+    $$\text{Voltage (V)} = (D2 \mid (D3 \ll 8)) \times 0.1$$
+  * **`0x259` HV Output Current**: Bytes `D1`–`D2` (16-bit unsigned Little Endian), factor `0.01 A`:
+    $$\text{Current (A)} = (D1 \mid (D2 \ll 8)) \times 0.01$$
+  * **Charging Power (kW)**:
+    $$\text{Power (kW)} = \frac{\text{Voltage (V)} \times \text{Current (A)}}{1000}$$
+
+| Charging State | `0x258` Payload | `0x259` Payload | Decoded V × A → Power |
 | :--- | :---: | :---: | :--- |
-| **Not Charging / Standby** | 0 kW | `00 00 00 00 00 00 00 00` | No charging power flow |
-| **Level 1 Trickle (120V / 12A)** | 1.4 kW | `00 00 00 00 00 00 01 00` | Portable emergency cordset |
-| **Level 2 AC (240V / 48A)** | 11 kW | `00 00 00 00 00 00 0B 00` | Home wallbox / 48A commercial AC |
-| **50 kW Commercial DCFC** | 48 kW | `00 00 00 00 00 00 30 00` | Standard urban DC fast charger |
-| **150 kW DC Fast Charger** | 148 kW | `00 00 00 00 00 00 94 00` | High-power CCS DC station |
-| **350 kW / 800V Peak Curve** | 235 kW | `00 00 00 00 00 00 EB 00` | E-GMP maximum 800V charge acceptance |
+| **11 kW Level 2 AC (Active)** | `00 05 1F 00 10 25 00 24` | `38 05 86 3C 45 02 00 00` | `794.1 V × 13.36 A = 10.6 kW` (DC into pack) |
+| **Charge Taper / Ramp-Down** | `00 EF 1E 00 10 25 00 28` | `EB 03 13 3C 2D 02 00 00` | `791.9 V × 10.03 A = 7.9 kW` |
+| **Charging Stopped / Standby** | `00 00 00 00 10 25 00 28` | `00 00 00 3C 01 00 00 00` | `0.0 V × 0.00 A = 0 kW` |
+
+* **Non-Zero VCMS Fallback (`0x30E` / `VCMS_02_100ms_4`)**:
+  * **Signal**: Byte 6 (`D7` in 1-based indexing, start bit 48, length 8, unsigned Intel, factor 1, offset 0, `0–255 kW`).
+  * Empirical captures during 11.0 kW AC charging showed `0x30E` remaining constant at `00 00 38 05 21 00 00 [counter]` (`D7 = 0x00`) both while charging at 11.0 kW and after stopping. Therefore, firmware and Home Assistant only use `0x30E` `D7` as a fallback when `D7 > 0` and OBC `0x258 × 0x259` is `0` or unavailable (preserving DCFC support where the OBC is inactive).
 
 ---
 

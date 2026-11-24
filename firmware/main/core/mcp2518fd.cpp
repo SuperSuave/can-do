@@ -722,7 +722,11 @@ esp_err_t dual_can_send_twai(can_bus_t bus, const twai_message_t *msg, TickType_
 
 esp_err_t dual_can_receive(can_bus_t bus, can_fd_frame_t *frame, TickType_t wait_ticks) {
     if (bus >= CAN_BUS_COUNT || !s_can_bus[bus].initialized) return ESP_ERR_INVALID_STATE;
-    return mcp2518fd_receive(&s_can_bus[bus], frame, wait_ticks);
+    esp_err_t ret = mcp2518fd_receive(&s_can_bus[bus], frame, wait_ticks);
+    if (ret == ESP_OK && frame) {
+        frame->bus = static_cast<uint8_t>(bus);
+    }
+    return ret;
 }
 
 esp_err_t dual_can_poll_receive(can_bus_t bus, can_fd_frame_t *frame) {
@@ -737,7 +741,9 @@ esp_err_t dual_can_poll_receive(can_bus_t bus, can_fd_frame_t *frame) {
         }
     }
     esp_err_t ret = mcp2518fd_receive(dev, frame, pdMS_TO_TICKS(5));
-    if (ret == ESP_ERR_NOT_FOUND) {
+    if (ret == ESP_OK) {
+        frame->bus = static_cast<uint8_t>(bus);
+    } else if (ret == ESP_ERR_NOT_FOUND) {
         dev->last_rx_poll_ms = now_ms;
     }
     return ret;

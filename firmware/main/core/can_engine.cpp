@@ -3007,17 +3007,67 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
         }
     }
 
-    // Live EV Charging Power (0x30E: Byte 6 [D7] = unsigned integer in kW, 0-255 kW)
-    if (identifier == 0x30E && data_length_code >= 7) {
-        uint8_t kw = data[6];
-        static int s_last_kw = -1;
+    // Live EV Charging Power:
+    // Primary: OBC HV Output Voltage (0x258 D2-D3 LE * 0.1 V) * OBC HV Output Current (0x259 D1-D2 LE * 0.01 A) / 1000
+    // Fallback: VCMS 0x30E Byte 6 [D7] (unsigned integer kW, 0-255 kW) when non-zero (e.g., DCFC where OBC is bypassed)
+    if (identifier == 0x258 || identifier == 0x259 || identifier == 0x30E) {
+        static int s_obc_v_raw = -1;
+        static uint32_t s_obc_v_ms = 0;
+        static int s_obc_a_raw = -1;
+        static uint32_t s_obc_a_ms = 0;
+        static int s_vcms_kw = 0;
+        static uint32_t s_vcms_kw_ms = 0;
+        static int s_last_kw_tenths = -1;
         static uint32_t s_last_kw_ms = 0;
-        if ((int)kw != s_last_kw && (now_ms - s_last_kw_ms >= 100)) {
-            s_last_kw = (int)kw;
-            s_last_kw_ms = now_ms;
-            char kw_buf[16];
-            snprintf(kw_buf, sizeof(kw_buf), "%u", kw);
-            emit_live_entity_state("ev_charging_power", kw_buf);
+        bool updated = false;
+
+        if (identifier == 0x258 && data_length_code >= 3) {
+            uint16_t raw_v = (uint16_t)data[1] | ((uint16_t)data[2] << 8);
+            if (raw_v <= 10000) {
+                s_obc_v_raw = (int)raw_v;
+                s_obc_v_ms = now_ms;
+                updated = true;
+            }
+        } else if (identifier == 0x259 && data_length_code >= 2) {
+            uint16_t raw_a = (uint16_t)data[0] | ((uint16_t)data[1] << 8);
+            if (raw_a <= 50000) {
+                s_obc_a_raw = (int)raw_a;
+                s_obc_a_ms = now_ms;
+                updated = true;
+            }
+        } else if (identifier == 0x30E && data_length_code >= 7) {
+            s_vcms_kw = (int)data[6];
+            s_vcms_kw_ms = now_ms;
+            updated = true;
+        }
+
+        if (updated) {
+            bool obc_fresh = (s_obc_v_raw >= 0 && s_obc_a_raw >= 0 &&
+                              (now_ms - s_obc_v_ms) <= 5000 && (now_ms - s_obc_a_ms) <= 5000);
+            int obc_tenths = 0;
+            if (obc_fresh) {
+                float obc_kw = (float)s_obc_v_raw * (float)s_obc_a_raw * 1e-6f;
+                if (obc_kw >= 0.0f && obc_kw <= 400.0f) {
+                    obc_tenths = (int)std::lroundf(obc_kw * 10.0f);
+                }
+            }
+            bool vcms_fresh = (s_vcms_kw_ms != 0 && (now_ms - s_vcms_kw_ms) <= 5000);
+            int vcms_tenths = vcms_fresh ? (s_vcms_kw * 10) : 0;
+
+            if (obc_fresh || vcms_fresh) {
+                int kw_tenths = (obc_tenths > 0) ? obc_tenths : vcms_tenths;
+                if (kw_tenths != s_last_kw_tenths && (s_last_kw_tenths < 0 || (now_ms - s_last_kw_ms) >= 100)) {
+                    s_last_kw_tenths = kw_tenths;
+                    s_last_kw_ms = now_ms;
+                    char kw_buf[16];
+                    if (kw_tenths % 10 == 0) {
+                        snprintf(kw_buf, sizeof(kw_buf), "%d", kw_tenths / 10);
+                    } else {
+                        snprintf(kw_buf, sizeof(kw_buf), "%.1f", kw_tenths / 10.0f);
+                    }
+                    emit_live_entity_state("ev_charging_power", kw_buf);
+                }
+            }
         }
     }
 
@@ -3590,6 +3640,7 @@ void can_rx_task(void* arg) {
                         rx_msg.identifier == 0x130 || rx_msg.identifier == 0x2AD ||
                         rx_msg.identifier == 0x227 || rx_msg.identifier == 0x29C ||
                         rx_msg.identifier == 0x151 || rx_msg.identifier == 0x152 ||
+                        rx_msg.identifier == 0x258 || rx_msg.identifier == 0x259 ||
                         rx_msg.identifier == 0x30E || rx_msg.identifier == 0x25C ||
                         rx_msg.identifier == 0x327 || rx_msg.identifier == 0x328 ||
                         rx_msg.identifier == 0x324 || rx_msg.identifier == 0x597 ||

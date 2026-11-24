@@ -626,7 +626,10 @@ static void network_roam_task(void* pvParameters) {
 
         if (s_sta_connected) {
             if (uds_engine_is_vehicle_awake()) {
-                esp_wifi_set_ps(WIFI_PS_NONE);
+                wifi_ps_type_t cur_ps = WIFI_PS_MIN_MODEM;
+                if (esp_wifi_get_ps(&cur_ps) != ESP_OK || cur_ps != WIFI_PS_NONE) {
+                    esp_wifi_set_ps(WIFI_PS_NONE);
+                }
             }
             static uint8_t s_weak_rssi_count = 0;
             wifi_ap_record_t ap_info;

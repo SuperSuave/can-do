@@ -258,6 +258,7 @@ def get_monitored_can_ids(
     has_light = False
     has_outdoor_temp = False
     has_12v = False
+    has_charging_power = False
     for c in commands:
         net = c.get("network", {})
         cid = net.get("state_can_id") or c.get("state_can_id")
@@ -274,6 +275,8 @@ def get_monitored_can_ids(
             has_outdoor_temp = True
         if "12v" in cmd_id or "aux" in cmd_id:
             has_12v = True
+        if "charging_power" in cmd_id or (cid is not None and normalize_can_id(cid) == "0x30e"):
+            has_charging_power = True
 
     if has_climate:
         ids.update(("0x226", "0x227", "0x31c", "0x2ad", "0x2ae", "0x475"))
@@ -283,6 +286,8 @@ def get_monitored_can_ids(
         ids.update(("0x31c", "0x227", "0x226"))
     if has_12v:
         ids.add("0x1cf")
+    if has_charging_power:
+        ids.update(("0x258", "0x259", "0x30e"))
 
     return sorted(ids)
 

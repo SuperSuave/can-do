@@ -19,9 +19,15 @@
 
 static const char* TAG = "GVRET";
 
+#if CONFIG_SPIRAM
+#define GVRET_QUEUE_SIZE 512
+#else
 #define GVRET_QUEUE_SIZE 128
-#define GVRET_BATCH_SIZE 512
+#endif
+#define GVRET_BATCH_SIZE 1400
 #define GVRET_FLUSH_INTERVAL_MS 10
+#define GVRET_TX_STALL_TIMEOUT_US 5000000LL
+#define GVRET_DROPPABLE_WAIT_MS 20
 
 static QueueHandle_t s_gvret_queue = nullptr;
 static StaticQueue_t s_gvret_queue_struct;
@@ -29,6 +35,16 @@ static uint8_t* s_gvret_queue_storage = nullptr;
 static std::atomic<int> s_client_count{0};
 static int s_active_client_fd = -1;
 static std::atomic<bool> s_disconnect_requested{false};
+
+struct GvretConnState {
+    int sock;
+    int listen_pri;
+    int listen_sec;
+    int64_t stall_start_us;
+    uint32_t dropped_batches;
+    int64_t last_drop_log_us;
+    bool preempted;
+};
 
 int gvret_get_client_count(void) {
     return s_client_count.load();
@@ -54,36 +70,73 @@ void gvret_enqueue_fd_frame(const can_fd_frame_t* msg) {
     xQueueSend(s_gvret_queue, msg, 0);
 }
 
-static bool send_flush_buffer(int sock, uint8_t* buf, size_t& len) {
+static bool has_pending_preemption(int listen_pri, int listen_sec) {
+    fd_set check_fds;
+    FD_ZERO(&check_fds);
+    int check_max = -1;
+    if (listen_pri >= 0) {
+        FD_SET(listen_pri, &check_fds);
+        if (listen_pri > check_max) check_max = listen_pri;
+    }
+    if (listen_sec >= 0) {
+        FD_SET(listen_sec, &check_fds);
+        if (listen_sec > check_max) check_max = listen_sec;
+    }
+    if (check_max < 0) return false;
+    struct timeval tv_zero = { .tv_sec = 0, .tv_usec = 0 };
+    return select(check_max + 1, &check_fds, nullptr, nullptr, &tv_zero) > 0;
+}
+
+static bool send_gvret_bytes(GvretConnState& st, const uint8_t* data, size_t len, bool droppable) {
     if (len == 0) return true;
     size_t sent = 0;
-    int retries = 0;
-    const int max_retries = 25; // 25 * 2ms = 50ms max buffer drain wait
+    int64_t wait_start_us = esp_timer_get_time();
+    int64_t last_preempt_check_us = wait_start_us;
+
     while (sent < len) {
         if (s_disconnect_requested.load()) {
-            len = 0;
             return false;
         }
-        int r = send(sock, buf + sent, len - sent, MSG_DONTWAIT);
+        int r = send(st.sock, data + sent, len - sent, MSG_DONTWAIT);
         if (r > 0) {
-            sent += r;
-            retries = 0;
+            sent += static_cast<size_t>(r);
+            st.stall_start_us = 0;
+            continue;
+        }
+        if (r < 0 && errno == EINTR) {
             continue;
         }
         if (r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            if (++retries > max_retries) {
-                ESP_LOGW(TAG, "GVRET socket TX buffer stalled (>50ms), dropping dead/unresponsive peer");
-                len = 0;
+            int64_t now_us = esp_timer_get_time();
+            if (st.stall_start_us == 0) {
+                st.stall_start_us = now_us;
+            }
+            if ((now_us - last_preempt_check_us) >= 20000) {
+                last_preempt_check_us = now_us;
+                if (has_pending_preemption(st.listen_pri, st.listen_sec)) {
+                    st.preempted = true;
+                    return false;
+                }
+            }
+            if ((now_us - st.stall_start_us) >= GVRET_TX_STALL_TIMEOUT_US) {
+                ESP_LOGW(TAG, "GVRET socket TX buffer stalled (>5s), dropping dead/unresponsive peer");
                 return false;
+            }
+            if (droppable && sent == 0 && (now_us - wait_start_us) >= (GVRET_DROPPABLE_WAIT_MS * 1000LL)) {
+                st.dropped_batches++;
+                if (st.last_drop_log_us == 0 || (now_us - st.last_drop_log_us) >= 5000000LL) {
+                    st.last_drop_log_us = now_us;
+                    ESP_LOGW(TAG, "GVRET TX backpressure: dropped %lu CAN batch(es) to preserve stream framing",
+                             (unsigned long)st.dropped_batches);
+                }
+                return true;
             }
             vTaskDelay(pdMS_TO_TICKS(2));
             continue;
         }
         ESP_LOGW(TAG, "GVRET socket send error (%d), peer disconnected", errno);
-        len = 0;
         return false;
     }
-    len = 0;
     return true;
 }
 
@@ -129,25 +182,25 @@ static void pack_can_frame(uint8_t* dest, size_t& offset, const can_fd_frame_t* 
 static uint8_t s_rx_accum[1024];
 static size_t s_accum_len = 0;
 
-static bool handle_client_rx(int sock) {
+static bool handle_client_rx(GvretConnState& st) {
     if (sizeof(s_rx_accum) - s_accum_len < 256) {
         s_accum_len = 0;
     }
 
-    int r = recv(sock, s_rx_accum + s_accum_len, sizeof(s_rx_accum) - s_accum_len, MSG_DONTWAIT);
+    int r = recv(st.sock, s_rx_accum + s_accum_len, sizeof(s_rx_accum) - s_accum_len, MSG_DONTWAIT);
     if (r == 0) {
         s_accum_len = 0;
         return false; // Client closed connection
     }
     if (r < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
             return true; // No data available
         }
         s_accum_len = 0;
         return false; // Fatal socket error
     }
 
-    s_accum_len += r;
+    s_accum_len += static_cast<size_t>(r);
     size_t idx = 0;
 
     while (idx < s_accum_len) {
@@ -177,7 +230,7 @@ static bool handle_client_rx(int sock) {
             if (idx + 8 > s_accum_len) {
                 break; // Header not fully received yet
             }
-            uint8_t len = s_rx_accum[idx + 7];
+            uint8_t len = s_rx_accum[idx + 7] & 0x0F;
             if (len > 8) len = 8;
             size_t total_frame_len = 8 + len + 1;
 
@@ -221,21 +274,22 @@ static bool handle_client_rx(int sock) {
                 (uint8_t)((now_us >> 16) & 0xFF),
                 (uint8_t)((now_us >> 24) & 0xFF)
             };
-            send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            if (!send_gvret_bytes(st, reply, sizeof(reply), false)) return false;
             idx += 2;
         } else if (cmd == 0x02) {
-            // Firmware version reply (CAN Do 2026.11)
+            // Firmware version / digital inputs reply (CAN Do 2026.11)
             uint8_t reply[4] = { 0xF1, 0x02, 0x04, 0x14 };
-            send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            if (!send_gvret_bytes(st, reply, sizeof(reply), false)) return false;
             idx += 2;
         } else if (cmd == 0x03) {
-            // Filter configuration command (0xF1 0x03 + 8B)
-            if (idx + 10 > s_accum_len) break;
-            idx += 10;
+            // GET_ANALOG_INPUTS: 0xF1 0x03 -> 0xF1 0x03 + 9 bytes
+            uint8_t reply[11] = { 0xF1, 0x03 };
+            if (!send_gvret_bytes(st, reply, sizeof(reply), false)) return false;
+            idx += 2;
         } else if (cmd == 0x04) {
-            // Baud rate configuration command (0xF1 0x04 + 4B baud)
-            if (idx + 6 > s_accum_len) break;
-            idx += 6;
+            // SET_DIG_OUTPUTS: 0xF1 0x04 + 1B outputs
+            if (idx + 3 > s_accum_len) break;
+            idx += 3;
         } else if (cmd == 0x05) {
             // Bus configuration command: 0xF1 0x05 + 4B bus0 + 4B bus1
             if (idx + 10 > s_accum_len) break;
@@ -244,6 +298,7 @@ static bool handle_client_rx(int sock) {
             uint32_t speed = bus0_cfg & 0xFFFFF;
             if (speed > 1000000) speed = 1000000;
             else if (speed == 0) speed = 500000;
+            (void)speed;
             bool listen_only = (bus0_cfg & 0x20000000) != 0;
             if (listen_only != g_hardware_listen_only.load()) {
                 set_sniffer_mode(listen_only, listen_only);
@@ -269,27 +324,43 @@ static bool handle_client_rx(int sock) {
                 (uint8_t)((bus1_speed >> 16) & 0xFF),
                 (uint8_t)((bus1_speed >> 24) & 0xFF)
             };
-            send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            if (!send_gvret_bytes(st, reply, sizeof(reply), false)) return false;
             idx += 2;
         } else if (cmd == 0x07) {
             uint8_t reply[7] = { 0xF1, 0x07, 0x20, 0x00, 0x01, 0x01, 0x01 };
-            send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            if (!send_gvret_bytes(st, reply, sizeof(reply), false)) return false;
             idx += 2;
         } else if (cmd == 0x08) {
+            // SET_SINGLEWIRE_MODE: 0xF1 0x08 + 1B mode
             if (idx + 3 > s_accum_len) break;
             idx += 3;
         } else if (cmd == 0x09) {
             uint8_t reply[4] = { 0xF1, 0x09, 0xDE, 0xAD };
-            send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            if (!send_gvret_bytes(st, reply, sizeof(reply), false)) return false;
             idx += 2;
         } else if (cmd == 0x0A) {
-            idx += 2;
+            // SET_SYSTYPE: 0xF1 0x0A + 1B systype
+            if (idx + 3 > s_accum_len) break;
+            idx += 3;
         } else if (cmd == 0x0B) {
             uint8_t reply[2] = { 0xF1, 0x0B };
-            send(sock, reply, sizeof(reply), MSG_DONTWAIT);
+            if (!send_gvret_bytes(st, reply, sizeof(reply), false)) return false;
             idx += 2;
         } else if (cmd == 0x0C) {
+            // GET_NUM_BUSES: 0xF1 0x0C -> 0xF1 0x0C + 1B bus count
+            uint8_t num_buses = can_bus_is_available(CAN_BUS_1) ? 2 : 1;
+            uint8_t reply[3] = { 0xF1, 0x0C, num_buses };
+            if (!send_gvret_bytes(st, reply, sizeof(reply), false)) return false;
             idx += 2;
+        } else if (cmd == 0x0D) {
+            // GET_EXT_BUSES: 0xF1 0x0D -> 0xF1 0x0D + 15 zero bytes
+            uint8_t reply[17] = { 0xF1, 0x0D };
+            if (!send_gvret_bytes(st, reply, sizeof(reply), false)) return false;
+            idx += 2;
+        } else if (cmd == 0x0E) {
+            // SET_EXT_BUSES: 0xF1 0x0E + 12B config
+            if (idx + 14 > s_accum_len) break;
+            idx += 14;
         } else {
             idx++;
         }
@@ -348,7 +419,12 @@ static void gvret_server_task(void* pvParameters) {
         }
     }
 
-    uint8_t* batch_buf = (uint8_t*)malloc(GVRET_BATCH_SIZE);
+#if CONFIG_SPIRAM
+    uint8_t* batch_buf = static_cast<uint8_t*>(
+        heap_caps_malloc_prefer(GVRET_BATCH_SIZE, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT));
+#else
+    uint8_t* batch_buf = static_cast<uint8_t*>(malloc(GVRET_BATCH_SIZE));
+#endif
     if (!batch_buf) {
         ESP_LOGE(TAG, "Failed to allocate GVRET batch buffer");
         if (listen_sock_primary >= 0) close(listen_sock_primary);
@@ -412,9 +488,19 @@ static void gvret_server_task(void* pvParameters) {
         bool prev_automations_state = g_automations_enabled.load();
         set_automations_enabled(false);
 
+        GvretConnState conn = {
+            .sock = client_sock,
+            .listen_pri = listen_sock_primary,
+            .listen_sec = listen_sock_secondary,
+            .stall_start_us = 0,
+            .dropped_batches = 0,
+            .last_drop_log_us = 0,
+            .preempted = false
+        };
+
         size_t batch_len = 0;
         int64_t last_flush_us = esp_timer_get_time();
-        int loop_counter = 0;
+        int64_t last_preempt_check_us = last_flush_us;
 
         while (true) {
             if (s_disconnect_requested.load()) {
@@ -422,50 +508,46 @@ static void gvret_server_task(void* pvParameters) {
                 break;
             }
 
-            // Check every ~10 iterations (~20ms) if a new client is attempting to connect.
-            // If so, preempt and close the existing client to immediately service the reconnecting client.
-            if (++loop_counter >= 10) {
-                loop_counter = 0;
-                fd_set check_fds;
-                FD_ZERO(&check_fds);
-                int check_max = -1;
-                if (listen_sock_primary >= 0) {
-                    FD_SET(listen_sock_primary, &check_fds);
-                    if (listen_sock_primary > check_max) check_max = listen_sock_primary;
-                }
-                if (listen_sock_secondary >= 0) {
-                    FD_SET(listen_sock_secondary, &check_fds);
-                    if (listen_sock_secondary > check_max) check_max = listen_sock_secondary;
-                }
-                struct timeval tv_zero = { .tv_sec = 0, .tv_usec = 0 };
-                if (check_max >= 0 && select(check_max + 1, &check_fds, nullptr, nullptr, &tv_zero) > 0) {
+            int64_t cur_us = esp_timer_get_time();
+            if ((cur_us - last_preempt_check_us) >= 50000) {
+                last_preempt_check_us = cur_us;
+                if (has_pending_preemption(listen_sock_primary, listen_sock_secondary)) {
                     ESP_LOGI(TAG, "New GVRET client connect detected on listening port; preempting fd %d", client_sock);
                     break;
                 }
             }
 
             // 1. Process client incoming commands/frames
-            if (!handle_client_rx(client_sock)) {
-                ESP_LOGI(TAG, "GVRET client disconnected (rx error/close)");
+            if (!handle_client_rx(conn)) {
+                ESP_LOGI(TAG, "GVRET client disconnected (%s)",
+                         conn.preempted ? "preempted" : "rx error/close");
                 break;
             }
 
-            // 2. Dequeue outbound CAN frames
+            // 2. Drain outbound CAN frames into an MSS-sized batch
             can_fd_frame_t frame;
-            if (xQueueReceive(s_gvret_queue, &frame, pdMS_TO_TICKS(2)) == pdTRUE) {
+            TickType_t wait_ticks = pdMS_TO_TICKS(batch_len > 0 ? 1 : 2);
+            if (xQueueReceive(s_gvret_queue, &frame, wait_ticks) == pdTRUE) {
                 uint32_t now_us = (uint32_t)esp_timer_get_time();
                 pack_can_frame(batch_buf, batch_len, &frame, now_us);
+                while (batch_len < (GVRET_BATCH_SIZE - 32) &&
+                       xQueueReceive(s_gvret_queue, &frame, 0) == pdTRUE) {
+                    now_us = (uint32_t)esp_timer_get_time();
+                    pack_can_frame(batch_buf, batch_len, &frame, now_us);
+                }
             }
 
-            int64_t cur_us = esp_timer_get_time();
-            bool timeout_flush = (cur_us - last_flush_us) >= (GVRET_FLUSH_INTERVAL_MS * 1000);
+            cur_us = esp_timer_get_time();
+            bool timeout_flush = (cur_us - last_flush_us) >= (GVRET_FLUSH_INTERVAL_MS * 1000LL);
             bool size_flush = (batch_len >= (GVRET_BATCH_SIZE - 32));
 
             if (batch_len > 0 && (size_flush || timeout_flush)) {
-                if (!send_flush_buffer(client_sock, batch_buf, batch_len)) {
-                    ESP_LOGI(TAG, "GVRET client disconnected (tx error)");
+                if (!send_gvret_bytes(conn, batch_buf, batch_len, true)) {
+                    ESP_LOGI(TAG, "GVRET client disconnected (%s)",
+                             conn.preempted ? "preempted" : "tx error");
                     break;
                 }
+                batch_len = 0;
                 last_flush_us = cur_us;
             }
         }

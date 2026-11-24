@@ -137,6 +137,73 @@ export function deriveSignalBitRange(
   return { startBit: 0, length: 8, idleVal: 0, activeVal: 1 };
 }
 
+export interface DbcSignalMetadata {
+  startBit: number;
+  length: number;
+  byteOrder: '0' | '1';
+  factor: number;
+  offset: number;
+  min: number;
+  max: number;
+  unit: string;
+  idleVal: number;
+  activeVal: number;
+  hasNetworkSignalSpec: boolean;
+}
+
+/**
+ * Resolves DBC signal layout and scaling from explicit network metadata (`state_byte`, `byte_length`,
+ * `endianness`, `factor`, `offset`, `min`, `max`, `unit`) when payload diff strings are absent.
+ */
+export function resolveCommandDbcSignalMeta(cmd: Command): DbcSignalMetadata {
+  const hasPayloadPatterns = Boolean(cmd.from_payload || cmd.to_payload || cmd.match_payload);
+  const net = cmd.network as (Command['network'] & { byte_length?: number; endianness?: string }) | undefined;
+  const stateByteStr = typeof net?.state_byte === 'string' ? net.state_byte.trim() : '';
+  const byteMatch = stateByteStr.match(/^D([1-8])$/i);
+
+  if (!hasPayloadPatterns && byteMatch && net) {
+    const byteIdx = parseInt(byteMatch[1], 10) - 1;
+    const byteLen = net.byte_length === 2 ? 2 : 1;
+    const isBigEndian = ['big', 'be', 'motorola'].includes(String(net.endianness || '').toLowerCase());
+    const startBit = isBigEndian ? byteIdx * 8 + 7 : byteIdx * 8;
+    const length = byteLen * 8;
+    const defaultMax = Math.pow(2, length) - 1;
+    return {
+      startBit,
+      length,
+      byteOrder: isBigEndian ? '0' : '1',
+      factor: typeof net.factor === 'number' && Number.isFinite(net.factor) ? net.factor : 1,
+      offset: typeof net.offset === 'number' && Number.isFinite(net.offset) ? net.offset : 0,
+      min: typeof net.min === 'number' && Number.isFinite(net.min) ? net.min : 0,
+      max: typeof net.max === 'number' && Number.isFinite(net.max) ? net.max : defaultMax,
+      unit: typeof net.unit === 'string' ? net.unit.replace(/"/g, "'") : '',
+      idleVal: 0,
+      activeVal: 1,
+      hasNetworkSignalSpec: true,
+    };
+  }
+
+  const { startBit, length, idleVal, activeVal } = deriveSignalBitRange(
+    cmd.from_payload,
+    cmd.to_payload,
+    cmd.match_payload
+  );
+  const maxVal = Math.pow(2, length) - 1;
+  return {
+    startBit,
+    length,
+    byteOrder: '1',
+    factor: 1,
+    offset: 0,
+    min: 0,
+    max: maxVal,
+    unit: '',
+    idleVal,
+    activeVal,
+    hasNetworkSignalSpec: false,
+  };
+}
+
 /**
  * Creates a clean DBC identifier (alphanumeric + underscore)
  */
@@ -270,15 +337,12 @@ export function exportToDbc(catalog: Catalog, options: DbcExportOptions = {}): s
       }
       usedSignalNames.add(baseSigName);
 
-      const { startBit, length, idleVal, activeVal } = deriveSignalBitRange(
-        cmd.from_payload,
-        cmd.to_payload,
-        cmd.match_payload
-      );
+      const sigMeta = resolveCommandDbcSignalMeta(cmd);
 
-      // Signal line: SG_ <Name> : <StartBit>|<Length>@1+ (1,0) [min|max] "" <Receivers>
-      const maxVal = Math.pow(2, length) - 1;
-      lines.push(` SG_ ${baseSigName} : ${startBit}|${length}@1+ (1,0) [0|${maxVal}] "" ${ecu}`);
+      // Signal line: SG_ <Name> : <StartBit>|<Length>@<ByteOrder>+ (<Factor>,<Offset>) [<Min>|<Max>] "<Unit>" <Receivers>
+      lines.push(
+        ` SG_ ${baseSigName} : ${sigMeta.startBit}|${sigMeta.length}@${sigMeta.byteOrder}+ (${sigMeta.factor},${sigMeta.offset}) [${sigMeta.min}|${sigMeta.max}] "${sigMeta.unit}" ${ecu}`
+      );
 
       // Generate Value Table (VAL_)
       if (cmd.options && cmd.options.length > 0) {
@@ -297,10 +361,10 @@ export function exportToDbc(catalog: Catalog, options: DbcExportOptions = {}): s
           .join(' ');
 
         valueTableLines.push(`VAL_ ${dbcMessageId} ${baseSigName} ${valPairs} ;`);
-      } else {
+      } else if (!sigMeta.hasNetworkSignalSpec || (sigMeta.max <= 1 && !sigMeta.unit)) {
         // Binary press / active state
         valueTableLines.push(
-          `VAL_ ${dbcMessageId} ${baseSigName} ${idleVal} "INACTIVE" ${activeVal} "ACTIVE" ;`
+          `VAL_ ${dbcMessageId} ${baseSigName} ${sigMeta.idleVal} "INACTIVE" ${sigMeta.activeVal} "ACTIVE" ;`
         );
       }
 
@@ -352,17 +416,14 @@ export function exportCommandToDbcSnippet(command: Command): string {
   const msgName = sanitizeDbcIdentifier(`${command.category}_${canIdHex.replace(/^0x/, '')}`);
   const sigName = sanitizeDbcIdentifier(command.id || command.name);
 
-  const { startBit, length, idleVal, activeVal } = deriveSignalBitRange(
-    command.from_payload,
-    command.to_payload,
-    command.match_payload
-  );
+  const sigMeta = resolveCommandDbcSignalMeta(command);
 
-  const maxVal = Math.pow(2, length) - 1;
   const lines: string[] = [];
 
   lines.push(`BO_ ${dbcMessageId} ${msgName}: 8 ECU`);
-  lines.push(` SG_ ${sigName} : ${startBit}|${length}@1+ (1,0) [0|${maxVal}] "" CAN_DO_HUB`);
+  lines.push(
+    ` SG_ ${sigName} : ${sigMeta.startBit}|${sigMeta.length}@${sigMeta.byteOrder}+ (${sigMeta.factor},${sigMeta.offset}) [${sigMeta.min}|${sigMeta.max}] "${sigMeta.unit}" CAN_DO_HUB`
+  );
 
   if (command.options && command.options.length > 0) {
     const valPairs = command.options
@@ -378,8 +439,8 @@ export function exportCommandToDbcSnippet(command: Command): string {
       })
       .join(' ');
     lines.push(`VAL_ ${dbcMessageId} ${sigName} ${valPairs} ;`);
-  } else {
-    lines.push(`VAL_ ${dbcMessageId} ${sigName} ${idleVal} "INACTIVE" ${activeVal} "ACTIVE" ;`);
+  } else if (!sigMeta.hasNetworkSignalSpec || (sigMeta.max <= 1 && !sigMeta.unit)) {
+    lines.push(`VAL_ ${dbcMessageId} ${sigName} ${sigMeta.idleVal} "INACTIVE" ${sigMeta.activeVal} "ACTIVE" ;`);
   }
 
   const commentParts: string[] = [`Command: ${command.name}`, `Category: ${command.category}`];

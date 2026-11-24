@@ -1,5 +1,5 @@
 {
-  "can_do_version": "2026.11.7-b003",
+  "can_do_version": "2026.11.7-b004",
   "vehicles": [
     {
       "id": "all_egmp",
@@ -12419,6 +12419,8 @@
         "type": "can_rx",
         "state_can_id": "0x30E",
         "state_byte": "D7",
+        "factor": 1,
+        "offset": 0,
         "unit": "kW",
         "min": 0,
         "max": 255
@@ -12426,7 +12428,7 @@
       "contributor": {
         "name": "SuaveEV",
         "github": "supersuave",
-        "notes": "Direct live EV charging power reported in integer kW (0 to 255 kW) by the OBC / BMS on CAN ID 0x30E Byte 6 (D7) during AC Level 2 and DC Fast Charging, eliminating the need to calculate Volts * Amps / 1000."
+        "notes": "Live E-GMP EV charging power decoded primarily from OBC HV output 0x258 (D2-D3 LE * 0.1 V) * 0x259 (D1-D2 LE * 0.01 A) / 1000 during AC charging, with VCMS 0x30E Byte 6 (D7: start bit 48, len 8, unsigned, factor 1, offset 0) retained only as a non-zero fallback (e.g. DC Fast Charging where OBC is bypassed)."
       },
       "state_can_id": "0x30E"
     },
