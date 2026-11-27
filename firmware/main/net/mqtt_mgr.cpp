@@ -1312,6 +1312,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             if (is_notify) {
                 std::string msg = (payload_cstr != nullptr && payload_len > 0) ? std::string(payload_cstr, payload_len) : std::string();
                 std::string level = "info";
+                int32_t hold_ms = 0;
 
                 cJSON* root = (payload_cstr != nullptr && payload_len > 0) ? cJSON_ParseWithLength(payload_cstr, payload_len) : nullptr;
                 if (root) {
@@ -1324,6 +1325,20 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
                         cJSON* l = cJSON_GetObjectItem(root, "level");
                         if (cJSON_IsString(l) && l->valuestring) level = l->valuestring;
+
+                        cJSON* h = cJSON_GetObjectItem(root, "hold_ms");
+                        if (h && cJSON_IsNumber(h) && std::isfinite(h->valuedouble)) {
+                            double v = h->valuedouble;
+                            if (v > 0.0) {
+                                if (v < static_cast<double>(TRACK_POPUP_MIN_HOLD_MS)) {
+                                    hold_ms = static_cast<int32_t>(TRACK_POPUP_MIN_HOLD_MS);
+                                } else if (v > static_cast<double>(TRACK_POPUP_MAX_HOLD_MS)) {
+                                    hold_ms = static_cast<int32_t>(TRACK_POPUP_MAX_HOLD_MS);
+                                } else {
+                                    hold_ms = static_cast<int32_t>(std::llround(v));
+                                }
+                            }
+                        }
                     }
                     cJSON_Delete(root);
                 }
@@ -1333,11 +1348,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 }
 
                 if (level == "warning") {
-                    track_popup_show_warning(msg.c_str());
+                    track_popup_show_warning_ex(msg.c_str(), hold_ms);
                 } else if (level == "error" || level == "critical") {
-                    track_popup_show_error(msg.c_str());
+                    track_popup_show_error_ex(msg.c_str(), hold_ms);
                 } else {
-                    track_popup_show_info(msg.c_str());
+                    track_popup_show_info_ex(msg.c_str(), hold_ms);
                 }
             } else if (is_nav_set) {
                 cJSON* root = (payload_cstr != nullptr && payload_len > 0) ? cJSON_ParseWithLength(payload_cstr, payload_len) : nullptr;

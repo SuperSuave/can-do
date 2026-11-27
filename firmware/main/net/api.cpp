@@ -10,6 +10,7 @@
 #include "gvret_server.h"
 #include "mqtt_mgr.h"
 #include "track_popup.h"
+#include "config_server.h"
 #include "hud_nav.h"
 #include "vbat_sensor.h"
 #include "uds_engine.h"
@@ -19,6 +20,7 @@
 #include "esp_ota_ops.h"
 #include "esp_app_desc.h"
 #include "esp_system.h"
+#include "esp_sleep.h"
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "esp_http_client.h"
@@ -987,7 +989,7 @@ static cJSON* serialize_condition_diag(const AutomationCondition& cond, bool *ou
         cJSON_AddStringToObject(c_obj, "target_val", hex_target);
 
         uint8_t cached_bytes[8] = {0};
-        bool frame_seen = (cond.can_id != 0) && get_cached_can_frame(cond.can_id, cached_bytes);
+        bool frame_seen = (cond.can_id != 0) && get_cached_can_frame(cond.can_id, cached_bytes, nullptr, cond.bus, !cond.has_bus);
         cJSON_AddBoolToObject(c_obj, "frame_seen", frame_seen);
 
         if (frame_seen && cond.byte_index < 8) {
@@ -1319,7 +1321,7 @@ static esp_err_t api_automations_diagnostics_handler(httpd_req_t *req) {
 
             // Live state from cache
             uint8_t cached_bytes[8] = {0};
-            bool frame_seen = (trig.can_id != 0) && get_cached_can_frame(trig.can_id, cached_bytes);
+            bool frame_seen = (trig.can_id != 0) && get_cached_can_frame(trig.can_id, cached_bytes, nullptr, trig.bus, false);
             cJSON_AddBoolToObject(t_obj, "frame_seen", frame_seen);
             if (frame_seen) {
                 char hex_payload[17] = {0};
@@ -1854,6 +1856,14 @@ static esp_err_t api_file_upload_handler(httpd_req_t *req) {
         ESP_LOGE(TAG, "Failed to atomically rename %s -> %s", tmp_filepath, filepath);
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed committing uploaded file");
         return ESP_OK;
+    }
+
+    if (is_preferences) {
+        uds_engine_load_preferences();
+        can_engine_load_preferences();
+        timezone_mgr_load_from_fs();
+        config_server_load_preferences();
+        power_mgr_load_preferences();
     }
 
     char no_reboot_hdr[16] = {0};
@@ -2621,6 +2631,8 @@ static esp_err_t api_post_preferences_handler(httpd_req_t *req) {
     uds_engine_load_preferences();
     can_engine_load_preferences();
     timezone_mgr_load_from_fs();
+    config_server_load_preferences();
+    power_mgr_load_preferences();
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"Preferences saved to device.\"}");
     return ESP_OK;
@@ -2650,6 +2662,15 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
     const esp_app_desc_t *app_desc = esp_app_get_description();
     const char* fw_ver = (app_desc && app_desc->version[0] != '\0') ? app_desc->version : "unknown";
     cJSON_AddStringToObject(root, "can_do_version", fw_ver);
+
+    const char* tier_str = "active";
+    switch (power_mgr_get_tier()) {
+        case POWER_TIER_STANDBY: tier_str = "standby"; break;
+        case POWER_TIER_DEEP_SLEEP: tier_str = "deep_sleep"; break;
+        default: break;
+    }
+    cJSON_AddStringToObject(root, "power_tier", tier_str);
+    cJSON_AddNumberToObject(root, "low_vbat_cutoff_volts", static_cast<double>(power_mgr_get_low_vbat_cutoff()));
 
     // Free heap and uptime
     cJSON_AddNumberToObject(root, "free_heap", esp_get_free_heap_size());
@@ -2750,6 +2771,16 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
         default: break;
     }
     cJSON_AddStringToObject(root, "reset_reason", reason_str);
+
+    const char* wakeup_str = "none";
+    if (reason == ESP_RST_DEEPSLEEP) {
+        uint32_t causes = esp_sleep_get_wakeup_causes();
+        if (causes & BIT(ESP_SLEEP_WAKEUP_EXT1)) wakeup_str = "ext1";
+        else if (causes & BIT(ESP_SLEEP_WAKEUP_GPIO)) wakeup_str = "gpio";
+        else if (causes & BIT(ESP_SLEEP_WAKEUP_TIMER)) wakeup_str = "timer";
+        else wakeup_str = "other";
+    }
+    cJSON_AddStringToObject(root, "wakeup_cause", wakeup_str);
 
     const RtcCrashInfo* crash = get_rtc_crash_info();
     if (crash && crash->magic == RTC_CRASH_MAGIC) {
@@ -3380,6 +3411,21 @@ static esp_err_t api_notify_handler(httpd_req_t *req) {
     cJSON *lvl_item = cJSON_GetObjectItem(root, "level");
     std::string lvl = (lvl_item && cJSON_IsString(lvl_item)) ? lvl_item->valuestring : "info";
 
+    int32_t hold_ms = 0;
+    cJSON *hold_item = cJSON_GetObjectItem(root, "hold_ms");
+    if (hold_item && cJSON_IsNumber(hold_item) && std::isfinite(hold_item->valuedouble)) {
+        double v = hold_item->valuedouble;
+        if (v > 0.0) {
+            if (v < static_cast<double>(TRACK_POPUP_MIN_HOLD_MS)) {
+                hold_ms = static_cast<int32_t>(TRACK_POPUP_MIN_HOLD_MS);
+            } else if (v > static_cast<double>(TRACK_POPUP_MAX_HOLD_MS)) {
+                hold_ms = static_cast<int32_t>(TRACK_POPUP_MAX_HOLD_MS);
+            } else {
+                hold_ms = static_cast<int32_t>(std::llround(v));
+            }
+        }
+    }
+
     cJSON_Delete(root);
 
     if (msg.empty()) {
@@ -3389,11 +3435,11 @@ static esp_err_t api_notify_handler(httpd_req_t *req) {
 
     bool sent = false;
     if (lvl == "warning") {
-        sent = track_popup_show_warning(msg.c_str());
+        sent = track_popup_show_warning_ex(msg.c_str(), hold_ms);
     } else if (lvl == "error" || lvl == "critical") {
-        sent = track_popup_show_error(msg.c_str());
+        sent = track_popup_show_error_ex(msg.c_str(), hold_ms);
     } else {
-        sent = track_popup_show_info(msg.c_str());
+        sent = track_popup_show_info_ex(msg.c_str(), hold_ms);
     }
 
     httpd_resp_set_type(req, "application/json");

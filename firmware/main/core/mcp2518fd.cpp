@@ -796,6 +796,61 @@ esp_err_t dual_can_set_listen_only(bool listen_only) {
     return overall;
 }
 
+void dual_can_prepare_sleep(void) {
+#if CONFIG_IDF_TARGET_ESP32S3
+    if (!s_dual_can_initialized) return;
+
+    for (int i = 0; i < CAN_BUS_COUNT; i++) {
+        mcp2518fd_t *dev = &s_can_bus[i];
+        bool locked = (dev->mutex && xSemaphoreTake(dev->mutex, pdMS_TO_TICKS(100)) == pdTRUE);
+        if (!dev->initialized || !dev->spi) {
+            if (locked) xSemaphoreGive(dev->mutex);
+            continue;
+        }
+
+        dev->config.listen_only = true;
+
+        // Abort any pending TX (ABAT = BIT(27)) and transition to LISTEN_ONLY (no TX / no ACK)
+        uint32_t cicon = 0;
+        if (mcp2518fd_read_32(dev, MCP2518FD_REG_CiCON, &cicon) == ESP_OK) {
+            cicon &= ~(0x7U << 24);
+            cicon |= ((uint32_t)MCP2518FD_MODE_LISTEN_ONLY << 24) | (1U << 27);
+            if (mcp2518fd_write_32(dev, MCP2518FD_REG_CiCON, cicon) == ESP_OK) {
+                uint32_t start_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+                while ((uint32_t)(esp_timer_get_time() / 1000ULL) - start_ms < 50) {
+                    if (mcp2518fd_read_32(dev, MCP2518FD_REG_CiCON, &cicon) == ESP_OK &&
+                        ((cicon >> 21) & 0x7U) == (uint32_t)MCP2518FD_MODE_LISTEN_ONLY) {
+                        break;
+                    }
+                    vTaskDelay(pdMS_TO_TICKS(2));
+                }
+                cicon &= ~(1U << 27);
+                mcp2518fd_write_32(dev, MCP2518FD_REG_CiCON, cicon);
+            }
+        }
+
+        // Enable RX FIFO Interrupt (RXIE = BIT(17)) only so nINT stays HIGH until a new frame arrives
+        mcp2518fd_write_32(dev, MCP2518FD_REG_CiINT, (1U << 17));
+
+        // Drain pending RX FIFO 2 frames so active-low nINT de-asserts HIGH before entering deep sleep
+        for (int n = 0; n < 32; ++n) {
+            uint32_t fifosta = 0;
+            if (mcp2518fd_read_32(dev, MCP2518FD_REG_CiFIFOSTA(2), &fifosta) != ESP_OK) {
+                break;
+            }
+            if ((fifosta & 0x01U) == 0) {
+                break;
+            }
+            mcp2518fd_write_byte(dev, MCP2518FD_REG_CiFIFOCON(2) + 1, 0x01);
+        }
+        mcp2518fd_write_byte(dev, MCP2518FD_REG_CiFIFOSTA(2), 0x00);
+
+        if (locked) xSemaphoreGive(dev->mutex);
+    }
+    ESP_LOGI(TAG, "Dual-CAN controllers placed in LISTEN_ONLY with RXIE armed for wake");
+#endif
+}
+
 void dual_can_shutdown(void) {
 #if CONFIG_IDF_TARGET_ESP32S3
     if (!s_dual_can_initialized) return;

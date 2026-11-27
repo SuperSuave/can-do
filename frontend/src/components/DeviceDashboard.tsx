@@ -443,9 +443,6 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
     showNotice('Update preferences saved');
   };
 
-  // WebSocket ref
-  const wsRef = useRef<WebSocket | null>(null);
-
   // Notice helper
   const showNotice = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setActionNotice({ message, type });
@@ -1836,10 +1833,10 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   <div className="p-3 rounded-xl bg-surface-secondary border border-border text-[11px] text-muted space-y-1.5">
                     <div className="flex items-center gap-1.5 font-bold text-foreground">
                       <Info className="w-3.5 h-3.5 text-accent" />
-                      <span>Home Assistant Auto-Discovery</span>
+                      <span>MQTT Topic Layout</span>
                     </div>
                     <p>
-                      When connected, CAN Do streams selected signals under <code className="text-accent font-mono">homeassistant/sensor/cando/...</code> and commands to <code className="text-accent font-mono">cando/set/...</code>.
+                      When connected, CAN Do publishes entity states to <code className="text-accent font-mono">cando/&lt;device_id&gt;/state/&lt;entity_id&gt;</code> (and monitored raw frames to <code className="text-accent font-mono">cando/&lt;device_id&gt;/state/0x&lt;ID&gt;</code>), listens for commands on <code className="text-accent font-mono">cando/&lt;device_id&gt;/set/&lt;entity_id&gt;</code>, and uses <code className="text-accent font-mono">homeassistant/&lt;domain&gt;/&lt;device_id&gt;/&lt;entity_id&gt;/config</code> only for optional HA Auto-Discovery payloads.
                     </p>
                   </div>
 
@@ -2647,7 +2644,7 @@ export const DeviceDashboard: React.FC<DeviceDashboardProps> = ({
                   </span>
                 </div>
                 <p className="text-[10px] text-muted leading-relaxed">
-                  Frequency of high-voltage BMS queries while driving or charging.
+                  Frequency of high-voltage BMS UDS queries while awake and parked (<code className="font-mono">0 km/h</code>, safe gear gate) or during stationary AC/DC charging; suppressed while driving.
                 </p>
                 <div className="flex items-center gap-2 pt-1">
                   <input

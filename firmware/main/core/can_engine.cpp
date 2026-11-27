@@ -30,6 +30,7 @@
 #include "ambient_anim.h"
 #include "vbat_sensor.h"
 #include "power_mgr.h"
+#include "persistent_settings.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "esp_task_wdt.h"
@@ -84,6 +85,22 @@ static inline SemaphoreHandle_t get_or_create_twai_mutex(void) {
         }
     }
     return mtx;
+}
+
+void can_engine_prepare_deep_sleep(void) {
+    if (dual_can_is_available(CAN_BUS_0) || dual_can_is_available(CAN_BUS_1)) {
+        dual_can_prepare_sleep();
+        return;
+    }
+
+    SemaphoreHandle_t mtx = get_or_create_twai_mutex();
+    bool locked = (mtx && xSemaphoreTake(mtx, pdMS_TO_TICKS(200)) == pdTRUE);
+    twai_clear_transmit_queue();
+    twai_stop();
+    twai_driver_uninstall();
+    if (locked) {
+        xSemaphoreGive(mtx);
+    }
 }
 
 esp_err_t can_engine_get_status_info(twai_status_info_t* status_info) {
@@ -181,7 +198,7 @@ static esp_err_t dual_can_tx_guard(can_bus_t bus) {
 
 extern "C" esp_err_t can_send_fd(can_bus_t bus, const can_fd_frame_t *frame, TickType_t ticks_to_wait) {
     if (!frame) return ESP_ERR_INVALID_ARG;
-    if (g_sniffer_mode.load()) return ESP_ERR_INVALID_STATE;
+    if (g_sniffer_mode.load() || power_mgr_is_restarting()) return ESP_ERR_INVALID_STATE;
 
     if (dual_can_is_available(bus)) {
         esp_err_t guard_err = dual_can_tx_guard(bus);
@@ -201,7 +218,7 @@ extern "C" esp_err_t can_send_fd(can_bus_t bus, const can_fd_frame_t *frame, Tic
 
 extern "C" esp_err_t can_send(can_bus_t bus, twai_message_t *message, TickType_t ticks_to_wait) {
     if (!message) return ESP_ERR_INVALID_ARG;
-    if (g_sniffer_mode.load()) {
+    if (g_sniffer_mode.load() || power_mgr_is_restarting()) {
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -507,6 +524,12 @@ struct BleBeaconState {
 static PsramUnorderedMap<std::string, BleBeaconState> s_ble_beacons;
 
 static PsramUnorderedMap<uint32_t, CachedCanFrame> can_state_cache;
+static std::atomic<bool> s_multi_bus_active{false};
+
+static inline bool is_multi_bus_active(void) {
+    return s_multi_bus_active.load(std::memory_order_relaxed) ||
+           dual_can_is_available(CAN_BUS_1);
+}
 QueueHandle_t tx_command_queue = nullptr;
 
 std::atomic<bool> g_automations_enabled{true};
@@ -583,20 +606,38 @@ void set_sniffer_mode(bool enabled, bool hardware_listen_only) {
 
 static std::mutex s_cache_mutex;
 
-bool get_cached_can_frame(uint32_t can_id, uint8_t out_data[8], uint8_t* out_dlc) {
+bool get_cached_can_frame(uint32_t can_id, uint8_t out_data[8], uint8_t* out_dlc, uint8_t bus, bool allow_bus_fallback) {
     std::lock_guard<std::mutex> lock(s_cache_mutex);
-    auto it = can_state_cache.find(can_id);
-    bool found = (it != can_state_cache.end());
-    if (found) {
-        if (out_data) {
-            memcpy(out_data, it->second.data, 8);
-        }
-        if (out_dlc) {
-            *out_dlc = it->second.dlc;
+    auto it = can_state_cache.find(make_bus_can_key(bus, can_id));
+    if (it == can_state_cache.end()) {
+        if (!is_multi_bus_active() && bus != CAN_BUS_0) {
+            it = can_state_cache.find(make_bus_can_key(CAN_BUS_0, can_id));
+        } else if (allow_bus_fallback) {
+            uint8_t alt_bus = (bus == CAN_BUS_0) ? CAN_BUS_1 : CAN_BUS_0;
+            it = can_state_cache.find(make_bus_can_key(alt_bus, can_id));
         }
     }
-    return found;
+    if (it == can_state_cache.end()) {
+        return false;
+    }
+    if (out_data) {
+        memcpy(out_data, it->second.data, 8);
+    }
+    if (out_dlc) {
+        *out_dlc = it->second.dlc;
+    }
+    return true;
 }
+
+static bool has_cached_can_frame_on_bus(uint8_t bus, uint32_t can_id) {
+    std::lock_guard<std::mutex> lock(s_cache_mutex);
+    return can_state_cache.find(make_bus_can_key(bus, can_id)) != can_state_cache.end();
+}
+
+struct InjectedCanFrame {
+    twai_message_t msg;
+    can_bus_t bus;
+};
 
 static QueueHandle_t s_can_inject_queue = nullptr;
 #if CONFIG_SPIRAM
@@ -604,9 +645,12 @@ static StaticQueue_t s_can_inject_queue_struct;
 static uint8_t* s_can_inject_queue_storage = nullptr;
 #endif
 
-bool can_engine_inject_frame(const twai_message_t* msg) {
+bool can_engine_inject_frame(const twai_message_t* msg, can_bus_t bus) {
     if (!s_can_inject_queue || !msg) return false;
-    return xQueueSend(s_can_inject_queue, msg, 0) == pdTRUE;
+    InjectedCanFrame item = {};
+    item.msg = *msg;
+    item.bus = (bus == CAN_BUS_1) ? CAN_BUS_1 : CAN_BUS_0;
+    return xQueueSend(s_can_inject_queue, &item, 0) == pdTRUE;
 }
 
 void init_can_engine(void) {
@@ -617,23 +661,24 @@ void init_can_engine(void) {
     if (!s_can_inject_queue) {
 #if CONFIG_SPIRAM
         s_can_inject_queue_storage = static_cast<uint8_t*>(
-            heap_caps_malloc_prefer(128 * sizeof(twai_message_t), 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT));
+            heap_caps_malloc_prefer(128 * sizeof(InjectedCanFrame), 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT));
         if (s_can_inject_queue_storage) {
-            s_can_inject_queue = xQueueCreateStatic(128, sizeof(twai_message_t), s_can_inject_queue_storage, &s_can_inject_queue_struct);
+            s_can_inject_queue = xQueueCreateStatic(128, sizeof(InjectedCanFrame), s_can_inject_queue_storage, &s_can_inject_queue_struct);
         }
 #endif
         if (!s_can_inject_queue) {
-            s_can_inject_queue = xQueueCreate(128, sizeof(twai_message_t));
+            s_can_inject_queue = xQueueCreate(128, sizeof(InjectedCanFrame));
         }
     }
     hud_nav_init(HUD_PLATFORM_EGMP_CANFD);
 }
 
-static bool exchange_cached_can_frame(uint32_t can_id, const uint8_t* new_data, uint8_t new_dlc,
+static bool exchange_cached_can_frame(uint8_t bus, uint32_t can_id, const uint8_t* new_data, uint8_t new_dlc,
                                       uint8_t prev_out[8], uint8_t* prev_dlc_out = nullptr) {
     uint8_t clamped_dlc = new_dlc > 8 ? 8 : new_dlc;
+    const uint32_t key = make_bus_can_key(bus, can_id);
     std::lock_guard<std::mutex> lock(s_cache_mutex);
-    auto it = can_state_cache.find(can_id);
+    auto it = can_state_cache.find(key);
     if (it != can_state_cache.end()) {
         if (prev_out) {
             memcpy(prev_out, it->second.data, 8);
@@ -653,7 +698,7 @@ static bool exchange_cached_can_frame(uint32_t can_id, const uint8_t* new_data, 
     if (new_data && clamped_dlc > 0) {
         memcpy(entry.data, new_data, clamped_dlc);
     }
-    can_state_cache.emplace(can_id, entry);
+    can_state_cache.emplace(key, entry);
     return false;
 }
 
@@ -706,7 +751,8 @@ void rtc_can_state_save(void) {
     uint32_t count = 0;
     for (const auto& pair : can_state_cache) {
         if (count >= RTC_MAX_SAVED_FRAMES) break;
-        s_rtc_can_cache.frames[count].can_id = pair.first;
+        s_rtc_can_cache.frames[count].can_id = can_id_from_key(pair.first);
+        s_rtc_can_cache.frames[count].bus = bus_from_can_key(pair.first);
         s_rtc_can_cache.frames[count].dlc = pair.second.dlc > 8 ? 8 : pair.second.dlc;
         memcpy(s_rtc_can_cache.frames[count].data, pair.second.data, 8);
         count++;
@@ -799,13 +845,17 @@ bool rtc_can_state_restore(void) {
         can_state_cache.clear();
         for (uint32_t i = 0; i < count; ++i) {
             const auto& entry = s_rtc_can_cache.frames[i];
+            if (entry.bus >= CAN_BUS_COUNT) continue;
+            if (entry.bus == CAN_BUS_1) {
+                s_multi_bus_active.store(true, std::memory_order_relaxed);
+            }
             CachedCanFrame cached = {};
             uint8_t dlc = entry.dlc > 8 ? 8 : entry.dlc;
             cached.dlc = dlc;
             if (dlc > 0) {
                 memcpy(cached.data, entry.data, dlc);
             }
-            can_state_cache.emplace(entry.can_id, cached);
+            can_state_cache.emplace(make_bus_can_key(entry.bus, entry.can_id), cached);
         }
     }
 
@@ -816,7 +866,8 @@ bool rtc_can_state_restore(void) {
     // 3. Decode restored frames into catalog entities and live UI state
     for (uint32_t i = 0; i < count; ++i) {
         const auto& entry = s_rtc_can_cache.frames[i];
-        decode_can_frame_entities(entry.can_id, entry.data, entry.dlc);
+        if (entry.bus >= CAN_BUS_COUNT) continue;
+        decode_can_frame_entities(entry.can_id, entry.data, entry.dlc, entry.bus);
     }
 
     return true;
@@ -1102,7 +1153,7 @@ static bool evaluate_condition_raw(const AutomationCondition& cond, const EvalCo
 
             uint8_t cached_frame[8] = {0};
             uint8_t cached_dlc = 0;
-            if (!get_cached_can_frame(cond.can_id, cached_frame, &cached_dlc)) return false;
+            if (!get_cached_can_frame(cond.can_id, cached_frame, &cached_dlc, cond.bus, !cond.has_bus)) return false;
 
             if (cond.byte_index >= 8 || cond.byte_index >= cached_dlc) return false;
             uint8_t actual = cached_frame[cond.byte_index];
@@ -1604,7 +1655,7 @@ static bool evaluate_trigger_state_now(const AutomationTrigger& trig, uint32_t n
     if (trig.type == "can_rx" || trig.type == "byte_transition") {
         uint8_t frame[8] = {0};
         uint8_t frame_dlc = 0;
-        if (!get_cached_can_frame(trig.can_id, frame, &frame_dlc)) return false;
+        if (!get_cached_can_frame(trig.can_id, frame, &frame_dlc, trig.bus, false)) return false;
         return is_can_target_match(frame, frame_dlc, trig);
     }
 
@@ -1829,7 +1880,7 @@ static __attribute__((noinline)) void execute_cycle_entity_step(const ActionStep
     if (entity.state_can_id != 0 && !(is_ambient_entity_id(entity.id) && ambient_anim_is_active())) {
         uint8_t frame[8] = {0};
         uint8_t frame_dlc = 0;
-        if (get_cached_can_frame(entity.state_can_id, frame, &frame_dlc)) {
+        if (get_cached_can_frame(entity.state_can_id, frame, &frame_dlc, entity.bus, false)) {
             for (int idx = 0; idx < (int)states.size(); ++idx) {
                 const EntityOption* opt = find_option_by_label(states[idx]);
                 if (opt && opt->match_mask != 0 && is_match(frame, *opt, frame_dlc)) {
@@ -1988,12 +2039,13 @@ static void execute_can_burst_ctx(uint32_t can_id, const PsramVector<ActionStep>
             mitm_arm_entity("cluster_track_popup_message");
             const std::string& txt = !step.popup_text.empty() ? step.popup_text : step.popup_message;
             if (!txt.empty()) {
+                int32_t hold_ms = static_cast<int32_t>(step.hold_ms);
                 if (step.popup_level == "warning") {
-                    track_popup_show_warning(txt.c_str());
+                    track_popup_show_warning_ex(txt.c_str(), hold_ms);
                 } else if (step.popup_level == "error" || step.popup_level == "critical") {
-                    track_popup_show_error(txt.c_str());
+                    track_popup_show_error_ex(txt.c_str(), hold_ms);
                 } else {
-                    track_popup_show_info(txt.c_str());
+                    track_popup_show_info_ex(txt.c_str(), hold_ms);
                 }
             }
             continue;
@@ -2838,7 +2890,7 @@ static void emit_live_entity_state(const char* entity_id, const char* state) {
     emit_live_entity_state_split(entity_id, state, state);
 }
 
-void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t data_length_code) {
+void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t data_length_code, uint8_t frame_bus) {
     if (!data || data_length_code == 0) return;
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
     // 3. Match against catalog entities for state updates (O(1) indexed lookup)
@@ -2851,8 +2903,9 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
     std::vector<PendingEntityUpdate> pending_updates;
     {
         std::lock_guard<std::mutex> lock(g_catalog_mutex);
-        auto cat_it = catalog_by_can_id.find(identifier);
-        if (cat_it != catalog_by_can_id.end()) {
+        auto match_bucket = [&](uint32_t bucket_key) {
+            auto cat_it = catalog_by_can_id.find(bucket_key);
+            if (cat_it == catalog_by_can_id.end()) return;
             for (auto* entity_ptr : cat_it->second) {
                 if (!entity_ptr) continue;
                 auto& entity = *entity_ptr;
@@ -2880,6 +2933,10 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
                     }
                 }
             }
+        };
+        match_bucket(make_bus_can_key(frame_bus, identifier));
+        if (!is_multi_bus_active() && frame_bus == CAN_BUS_0) {
+            match_bucket(make_bus_can_key(CAN_BUS_1, identifier));
         }
     }
     for (const auto& u : pending_updates) {
@@ -2889,6 +2946,7 @@ void decode_can_frame_entities(uint32_t identifier, const uint8_t* data, uint8_t
     }
 
     // 4. Real-time Live Cockpit Telemetry Decoders (continuous numeric formulas & non-catalog bitfields)
+    if (frame_bus != CAN_BUS_0 && is_multi_bus_active()) return;
 
     // Road Speed (0x1AC Byte 0 = kph, or 0x0A2 Wheel Speed 16-bit LE * 0.03125, or 0x1A0 ESC Speed)
     if (identifier == 0x1AC && data_length_code >= 1) {
@@ -3473,21 +3531,24 @@ void can_rx_task(void* arg) {
                     break;
                 }
             }
-            if (!has_frame && s_can_inject_queue && xQueueReceive(s_can_inject_queue, &rx_msg, 0) == pdTRUE) {
+            InjectedCanFrame injected = {};
+            if (!has_frame && s_can_inject_queue && xQueueReceive(s_can_inject_queue, &injected, 0) == pdTRUE) {
+                rx_msg = injected.msg;
                 if (rx_msg.data_length_code > 8) rx_msg.data_length_code = 8;
                 if (rx_msg.data_length_code < 8) {
                     memset(&rx_msg.data[rx_msg.data_length_code], 0, 8 - rx_msg.data_length_code);
                 }
                 has_frame = true;
                 from_physical_bus = false;
-                frame_bus = CAN_BUS_0;
-                can_twai_to_fd(&rx_msg, CAN_BUS_0, &rx_fd_msg);
+                frame_bus = (injected.bus == CAN_BUS_1) ? CAN_BUS_1 : CAN_BUS_0;
+                can_twai_to_fd(&rx_msg, frame_bus, &rx_fd_msg);
             }
             if (!has_frame) {
                 vTaskDelay(pdMS_TO_TICKS(1));
             }
         } else {
             // On-chip TWAI or inject queue
+            InjectedCanFrame injected = {};
             if (twai_receive(&rx_msg, pdMS_TO_TICKS(2)) == ESP_OK) {
                 if (rx_msg.data_length_code > 8) rx_msg.data_length_code = 8;
                 if (rx_msg.data_length_code < 8) {
@@ -3497,19 +3558,23 @@ void can_rx_task(void* arg) {
                 from_physical_bus = true;
                 frame_bus = CAN_BUS_0;
                 can_twai_to_fd(&rx_msg, CAN_BUS_0, &rx_fd_msg);
-            } else if (s_can_inject_queue && xQueueReceive(s_can_inject_queue, &rx_msg, 0) == pdTRUE) {
+            } else if (s_can_inject_queue && xQueueReceive(s_can_inject_queue, &injected, 0) == pdTRUE) {
+                rx_msg = injected.msg;
                 if (rx_msg.data_length_code > 8) rx_msg.data_length_code = 8;
                 if (rx_msg.data_length_code < 8) {
                     memset(&rx_msg.data[rx_msg.data_length_code], 0, 8 - rx_msg.data_length_code);
                 }
                 has_frame = true;
                 from_physical_bus = false;
-                frame_bus = CAN_BUS_0;
-                can_twai_to_fd(&rx_msg, CAN_BUS_0, &rx_fd_msg);
+                frame_bus = (injected.bus == CAN_BUS_1) ? CAN_BUS_1 : CAN_BUS_0;
+                can_twai_to_fd(&rx_msg, frame_bus, &rx_fd_msg);
             }
         }
 
         if (has_frame) {
+            if (frame_bus == CAN_BUS_1) {
+                s_multi_bus_active.store(true, std::memory_order_relaxed);
+            }
             consecutive_rx_frames++;
             if (consecutive_rx_frames >= 64 || (esp_timer_get_time() - burst_start_us) >= 20000) {
                 vTaskDelay(1);
@@ -3591,7 +3656,7 @@ void can_rx_task(void* arg) {
             s_rtc_crash.step_marker = 7;
             uint8_t prev_data[8] = {0};
             uint8_t prev_dlc = 0;
-            bool has_prev = exchange_cached_can_frame(rx_msg.identifier, rx_msg.data, rx_msg.data_length_code, prev_data, &prev_dlc);
+            bool has_prev = exchange_cached_can_frame(static_cast<uint8_t>(frame_bus), rx_msg.identifier, rx_msg.data, rx_msg.data_length_code, prev_data, &prev_dlc);
 
             // Helper: Mask out rolling counter and checksum bytes during MQTT change detection
             auto get_can_comparison_mask = [](uint32_t can_id, uint8_t mask_out[8]) {
@@ -3632,26 +3697,47 @@ void can_rx_task(void* arg) {
             // Publish state change to MQTT if this CAN ID is monitored and actual payload data changed
             if (mqtt_mgr_is_monitored_id(rx_msg.identifier)) {
                 if (!has_prev || has_masked_can_data_changed(rx_msg.identifier, prev_data, rx_msg.data, rx_msg.data_length_code)) {
-                    static PsramUnorderedMap<uint32_t, uint32_t> s_last_mqtt_pub_ms;
-                    auto pit = s_last_mqtt_pub_ms.find(rx_msg.identifier);
-                    bool throttle = false;
-                    // For continuous high-frequency telemetry, throttle to max 10Hz (100ms) to protect MQTT outbox
-                    if (rx_msg.identifier == 0x1AC || rx_msg.identifier == 0x0A2 ||
-                        rx_msg.identifier == 0x130 || rx_msg.identifier == 0x2AD ||
-                        rx_msg.identifier == 0x227 || rx_msg.identifier == 0x29C ||
-                        rx_msg.identifier == 0x151 || rx_msg.identifier == 0x152 ||
-                        rx_msg.identifier == 0x258 || rx_msg.identifier == 0x259 ||
-                        rx_msg.identifier == 0x30E || rx_msg.identifier == 0x25C ||
-                        rx_msg.identifier == 0x327 || rx_msg.identifier == 0x328 ||
-                        rx_msg.identifier == 0x324 || rx_msg.identifier == 0x597 ||
-                        rx_msg.identifier == 0x4E2) {
-                        if (pit != s_last_mqtt_pub_ms.end() && (now_ms - pit->second < 100)) {
-                            throttle = true;
+                    bool allow_mqtt_pub = true;
+                    if (is_multi_bus_active()) {
+                        bool cat_has_bus0 = false;
+                        bool cat_has_bus1 = false;
+                        {
+                            std::lock_guard<std::mutex> lock(g_catalog_mutex);
+                            cat_has_bus0 = (catalog_by_can_id.find(make_bus_can_key(CAN_BUS_0, rx_msg.identifier)) != catalog_by_can_id.end());
+                            cat_has_bus1 = (catalog_by_can_id.find(make_bus_can_key(CAN_BUS_1, rx_msg.identifier)) != catalog_by_can_id.end());
+                        }
+                        if (frame_bus == CAN_BUS_0 && cat_has_bus1 && !cat_has_bus0) {
+                            allow_mqtt_pub = false;
+                        } else if (frame_bus != CAN_BUS_0) {
+                            if (cat_has_bus0 && !cat_has_bus1) {
+                                allow_mqtt_pub = false;
+                            } else if (!cat_has_bus1 && has_cached_can_frame_on_bus(CAN_BUS_0, rx_msg.identifier)) {
+                                allow_mqtt_pub = false;
+                            }
                         }
                     }
-                    if (!throttle) {
-                        s_last_mqtt_pub_ms[rx_msg.identifier] = now_ms;
-                        mqtt_mgr_publish_can_state(rx_msg.identifier, rx_msg.data, rx_msg.data_length_code);
+                    if (allow_mqtt_pub) {
+                        static PsramUnorderedMap<uint32_t, uint32_t> s_last_mqtt_pub_ms;
+                        auto pit = s_last_mqtt_pub_ms.find(rx_msg.identifier);
+                        bool throttle = false;
+                        // For continuous high-frequency telemetry, throttle to max 10Hz (100ms) to protect MQTT outbox
+                        if (rx_msg.identifier == 0x1AC || rx_msg.identifier == 0x0A2 ||
+                            rx_msg.identifier == 0x130 || rx_msg.identifier == 0x2AD ||
+                            rx_msg.identifier == 0x227 || rx_msg.identifier == 0x29C ||
+                            rx_msg.identifier == 0x151 || rx_msg.identifier == 0x152 ||
+                            rx_msg.identifier == 0x258 || rx_msg.identifier == 0x259 ||
+                            rx_msg.identifier == 0x30E || rx_msg.identifier == 0x25C ||
+                            rx_msg.identifier == 0x327 || rx_msg.identifier == 0x328 ||
+                            rx_msg.identifier == 0x324 || rx_msg.identifier == 0x597 ||
+                            rx_msg.identifier == 0x4E2) {
+                            if (pit != s_last_mqtt_pub_ms.end() && (now_ms - pit->second < 100)) {
+                                throttle = true;
+                            }
+                        }
+                        if (!throttle) {
+                            s_last_mqtt_pub_ms[rx_msg.identifier] = now_ms;
+                            mqtt_mgr_publish_can_state(rx_msg.identifier, rx_msg.data, rx_msg.data_length_code);
+                        }
                     }
                 }
             }
@@ -3677,7 +3763,7 @@ void can_rx_task(void* arg) {
 
                             for (const auto& trig : rule.triggers) {
                                 if ((trig.type == "can_rx" || trig.type == "byte_transition") && trig.can_id == rx_msg.identifier) {
-                                    if (use_dual_can && trig.bus != static_cast<uint8_t>(frame_bus)) {
+                                    if (is_multi_bus_active() && trig.bus != static_cast<uint8_t>(frame_bus)) {
                                         continue;
                                     }
                                     if (trig.for_ms > 0 && trig.click_count <= 1) {
@@ -3696,7 +3782,7 @@ void can_rx_task(void* arg) {
                 }
             }
 
-            decode_can_frame_entities(rx_msg.identifier, rx_msg.data, rx_msg.data_length_code);
+            decode_can_frame_entities(rx_msg.identifier, rx_msg.data, rx_msg.data_length_code, static_cast<uint8_t>(frame_bus));
             rtc_crash_step_label(900, "frame_done");
         } else {
             consecutive_rx_frames = 0;
@@ -3781,6 +3867,7 @@ void time_scheduler_task(void* arg) {
 
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(50));
+        persistent_settings_flush(false);
 
         uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
 

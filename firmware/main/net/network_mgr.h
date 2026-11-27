@@ -41,6 +41,7 @@ struct NetworkStatusInfo {
 
 // Lifecycle & Control
 esp_err_t network_mgr_init(void);
+void network_mgr_shutdown(void);
 NetworkStatusInfo network_mgr_get_status(void);
 
 // Known Networks Management

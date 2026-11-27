@@ -58,6 +58,8 @@ int8_t config_server_precon_button(void);
 int8_t config_server_precon_press(void);
 int8_t config_server_precon_mode(void);
 bool config_server_temperature_fahrenheit(void);
+void config_server_load_preferences(void);
+void config_server_set_temperature_fahrenheit(bool fahrenheit);
 
 #ifdef __cplusplus
 }

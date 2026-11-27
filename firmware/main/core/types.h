@@ -10,6 +10,16 @@
 #include <mutex>
 #include "psram_alloc.h"
 
+constexpr inline uint32_t make_bus_can_key(uint8_t bus, uint32_t can_id) {
+    return (static_cast<uint32_t>(bus & 0x07U) << 29) | (can_id & 0x1FFFFFFFU);
+}
+constexpr inline uint8_t bus_from_can_key(uint32_t key) {
+    return static_cast<uint8_t>((key >> 29) & 0x07U);
+}
+constexpr inline uint32_t can_id_from_key(uint32_t key) {
+    return key & 0x1FFFFFFFU;
+}
+
 struct SustainedState {
     std::mutex mtx;
     bool active = false;
@@ -49,6 +59,7 @@ struct AutomationCondition {
     uint8_t bus = 0;
     uint8_t byte_index = 0; // 0..7 (from D1..D8)
     uint8_t byte_mask = 0xFF; // Bitmask (e.g. 0xF0, 0xFF)
+    bool has_bus = false;
     ConditionOperator op = ConditionOperator::EQUAL;
     uint8_t target_value = 0;
     float target_float = 0.0f;

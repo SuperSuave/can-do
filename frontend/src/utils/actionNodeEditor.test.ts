@@ -154,7 +154,7 @@ describe('ActionNodeEditor card mode preservation', () => {
     assert.ok(textHtml.includes('Stop Condition (Repeat Until True)'), 'Must render stop condition editor');
   });
 
-  it('shows unsupported warning for legacy webhook actions and omits webhook from standard CAN TX type selector', () => {
+  it('shows unsupported warning for legacy webhook actions and omits webhook option from action type selector', () => {
     const webhookAction: AutomationAction = {
       id: 'act_wh_1',
       type: 'webhook',
@@ -174,6 +174,7 @@ describe('ActionNodeEditor card mode preservation', () => {
     ).replace(/<!-- -->/g, '');
 
     assert.ok(webhookHtml.includes('Legacy Webhook Action Not Supported on ESP32 Firmware'), 'Must show offline firmware warning for legacy webhook');
+    assert.ok(!webhookHtml.includes('<option value="webhook"'), 'Action type selector must not include a webhook option even for legacy webhook actions');
 
     const canTxAction: AutomationAction = {
       id: 'act_can_1',
@@ -194,7 +195,7 @@ describe('ActionNodeEditor card mode preservation', () => {
       })
     );
 
-    assert.ok(!canTxHtml.includes('webhook (HTTP)'), 'Standard action type selector must not offer broken webhook option');
+    assert.ok(!canTxHtml.includes('<option value="webhook"'), 'Standard action type selector must not offer broken webhook option');
   });
 
   it('renders CycleEntityStepperConfig with catalog entity picker, selectable state chips, draggable sequence strip, and ping-pong mode', () => {
@@ -255,7 +256,7 @@ describe('ActionNodeEditor card mode preservation', () => {
     assert.ok(html.includes('Reverse Order'), 'Must render Reverse Order button');
   });
 
-  it('renders HudNavActionConfig with maneuver icons, imperial/metric distance & speed limit inputs, and 8-lane guidance', () => {
+  it('renders HudNavActionConfig with maneuver icons, imperial/metric distance, turn angle, and 8-lane guidance without unencoded speed_limit/camera_alert inputs', () => {
     const hudAction: AutomationAction = {
       id: 'act_hud_1',
       type: 'hud_nav',
@@ -264,7 +265,8 @@ describe('ActionNodeEditor card mode preservation', () => {
       street: 'Pacific Coast Hwy',
       distance_meters: 305, // ~1000 ft
       bars: 6,
-      speed_limit: 105, // ~65 mph
+      direction_deg: 90,
+      speed_limit: 105, // legacy field in saved JSON must not render UI
       camera_alert: true,
       num_lanes: 3,
       lane_directions: [8, 1, 3],
@@ -288,9 +290,48 @@ describe('ActionNodeEditor card mode preservation', () => {
     assert.ok(html.includes('Turn Right (0x03)'), 'Must render maneuver icon options');
     assert.ok(html.includes('Pacific Coast Hwy'), 'Must render street name');
     assert.ok(html.includes('1001 ft (305m)'), 'Must render both imperial ft and metric m distance');
-    assert.ok(html.includes('Limit 65 mph (105 km/h)'), 'Must render both imperial mph and metric km/h speed limit');
+    assert.ok(html.includes('Turn Angle (°)'), 'Must render Turn Angle input');
+    assert.ok(!html.includes('Speed Limit Badge'), 'Must not render unencoded Speed Limit Badge input');
+    assert.ok(!html.includes('Speed Camera Alert'), 'Must not render unencoded Speed Camera Alert switch');
+    assert.ok(!html.includes('Limit 65 mph'), 'Must not render speed limit summary badge');
     assert.ok(html.includes('Multi-Lane Guidance'), 'Must render Multi-Lane Guidance switch');
     assert.ok(html.includes('Lane 1') && html.includes('Lane 2') && html.includes('Lane 3'), 'Must render 3 lane columns');
+  });
+
+  it('renders climate_target with only temperature, duration, and defrost controls (omitting unimplemented zone/sync/driver_only)', () => {
+    const climateAction: AutomationAction = {
+      id: 'act_clim_1',
+      type: 'climate_target',
+      target_temp_c: 22.5,
+      defrost: true,
+      duration_minutes: 20,
+      zone: 'passenger',
+      sync_on: false,
+      driver_only: true,
+      monitor_0x38: false,
+    };
+
+    const html = ReactDOMServer.renderToString(
+      React.createElement(ActionNodeEditor, {
+        act: climateAction,
+        index: 0,
+        depth: 0,
+        availableTriggers: [],
+        catalog: testCatalog,
+        onUpdate: () => {},
+        onDelete: () => {},
+      })
+    ).replace(/<!-- -->/g, '');
+
+    assert.ok(html.includes('Remote Climate Target'), 'Must render Remote Climate Target label');
+    assert.ok(html.includes('Target Temperature'), 'Must render Target Temperature control');
+    assert.ok(html.includes('°C') && html.includes('°F'), 'Must render °C and °F unit toggles');
+    assert.ok(html.includes('Duration (Minutes)'), 'Must render Duration (Minutes) input');
+    assert.ok(html.includes('Front Windshield Defrost'), 'Must render Front Windshield Defrost switch');
+    assert.ok(!html.includes('Driver Zone'), 'Must not render unimplemented Zone selector');
+    assert.ok(!html.includes('Passenger Zone'), 'Must not render unimplemented Zone selector');
+    assert.ok(!html.includes('Sync Passenger Zone'), 'Must not render unimplemented Sync Passenger Zone switch');
+    assert.ok(!html.includes('Driver Only'), 'Must not render unimplemented Driver Only switch');
   });
 
   it('shows only friendly names for action types in the selector and enforces 50-char cluster popup limit', () => {

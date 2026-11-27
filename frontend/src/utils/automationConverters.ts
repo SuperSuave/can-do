@@ -936,7 +936,7 @@ export function compileAction(
       tempC = ((Number(rawTempF) - 32) * 5) / 9;
     }
     const durationMinutes = clampInt(act.duration_minutes ?? rawAny.duration_min ?? rawAny.duration, 0, 1440, 10);
-    const zone = act.zone || rawAny.climate_zone || 'driver';
+    const rawZone = act.zone || rawAny.climate_zone;
     const rawSyncOn = act.sync_on !== undefined ? act.sync_on : rawAny.climate_sync_on;
     const rawDriverOnly = act.driver_only !== undefined ? act.driver_only : rawAny.climate_driver_only;
     const rawMonitor0x38 = act.monitor_0x38 !== undefined ? act.monitor_0x38 : rawAny.smart;
@@ -946,7 +946,7 @@ export function compileAction(
       target_temp_c: tempC,
       defrost: !!act.defrost,
       duration_minutes: durationMinutes,
-      zone,
+      ...(rawZone ? { zone: rawZone } : {}),
       ...(rawSyncOn !== undefined ? { sync_on: !!rawSyncOn } : {}),
       ...(rawDriverOnly !== undefined ? { driver_only: !!rawDriverOnly } : {}),
       ...(rawMonitor0x38 !== undefined ? { monitor_0x38: !!rawMonitor0x38 } : {})
@@ -2231,7 +2231,7 @@ export function decompileActionList(
         tempC = ((Number(rawTempF) - 32) * 5) / 9;
       }
       const durationMinutes = clampInt(raw.duration_minutes ?? raw.duration_min ?? raw.duration, 0, 1440, 10);
-      const zone = raw.zone || raw.climate_zone || 'driver';
+      const rawZone = raw.zone || raw.climate_zone;
       const rawSyncOn = raw.sync_on !== undefined ? raw.sync_on : raw.climate_sync_on;
       const rawDriverOnly = raw.driver_only !== undefined ? raw.driver_only : raw.climate_driver_only;
       const rawMonitor0x38 = raw.monitor_0x38 !== undefined ? raw.monitor_0x38 : raw.smart;
@@ -2242,7 +2242,7 @@ export function decompileActionList(
         target_temp_c: tempC,
         defrost: !!raw.defrost,
         duration_minutes: durationMinutes,
-        zone,
+        ...(rawZone ? { zone: rawZone } : {}),
         ...(rawSyncOn !== undefined ? { sync_on: !!rawSyncOn } : {}),
         ...(rawDriverOnly !== undefined ? { driver_only: !!rawDriverOnly } : {}),
         ...(rawMonitor0x38 !== undefined ? { monitor_0x38: !!rawMonitor0x38 } : {})
@@ -2931,10 +2931,9 @@ export function commandToAction(
     return {
       id: actId,
       type: 'climate_target',
-      target_temp_c: (cmd as any).target_temp_c ?? 21.0,
-      zone: (cmd as any).climate_zone || 'driver',
-      sync_on: (cmd as any).climate_sync_on ?? true,
-      driver_only: (cmd as any).climate_driver_only ?? false,
+      target_temp_c: (cmd as any).target_temp_c ?? 22.0,
+      defrost: !!(cmd as any).defrost,
+      duration_minutes: (cmd as any).duration_minutes ?? 15,
       source_command_id: cmd.id,
       source_command_name: cmdDisplayName
     };
@@ -2967,8 +2966,6 @@ export function commandToAction(
       icon: !isNaN(parsedIcon) ? parsedIcon : 1,
       distance_meters: 200,
       bars: 4,
-      speed_limit: 0,
-      camera_alert: false,
       street: '',
       num_lanes: 0,
       lane_directions: [],

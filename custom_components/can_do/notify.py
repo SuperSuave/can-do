@@ -17,6 +17,14 @@ from .entity import CanDoEntity
 _LOGGER = logging.getLogger(__name__)
 
 
+def _is_text_notify_command(cmd: dict[str, Any]) -> bool:
+    """Return True only for catalog notify commands backed by the track_popup text transport."""
+    if (cmd.get("ha_metadata") or {}).get("domain") != "notify":
+        return False
+    net_type = (cmd.get("network") or {}).get("type")
+    return cmd.get("type") == "track_popup" or net_type == "track_popup"
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
@@ -27,7 +35,7 @@ async def async_setup_entry(
 
     # 1. Add notify entities defined in the catalog
     for cmd in coordinator.commands:
-        if cmd.get("ha_metadata", {}).get("domain") == "notify":
+        if _is_text_notify_command(cmd):
             entities.append(CanDoNotifyEntity(coordinator, cmd))
 
     # 2. Always ensure the master cluster notification entity exists

@@ -20,6 +20,8 @@
 #include "can_engine.h"
 #include "api.h"
 #include "beep.h"
+#include "config_server.h"
+#include "persistent_settings.h"
 #include "track_popup.h"
 #include "precondition.h"
 #include "board_pins.h"
@@ -198,6 +200,8 @@ extern "C" void app_main(void) {
     init_fs();
     init_crash_diagnostics();
     timezone_mgr_init();
+    config_server_load_preferences();
+    persistent_settings_init();
     mqtt_mgr_init();
 
     // 4. Network connectivity FIRST (Multi-SSID Roaming, Auto-AP Fallback, 192.168.4.1)

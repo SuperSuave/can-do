@@ -21,6 +21,7 @@ extern "C" {
 void persistent_settings_init(void);
 bool persistent_settings_get_precon_enabled(void);
 void persistent_settings_set_precon_enabled(bool enabled);
+void persistent_settings_flush(bool force);
 
 #ifdef __cplusplus
 }

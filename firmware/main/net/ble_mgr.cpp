@@ -162,6 +162,8 @@ static inline void wake_ble_worker(void) {
 static std::atomic<bool> s_ble_scanning{false};
 static std::atomic<bool> s_ble_shutting_down{false};
 static std::atomic<bool> s_bg_scan_has_targets{false};
+static std::atomic<bool> s_ble_standby{false};
+static std::atomic<bool> s_pending_bg_scan_update{false};
 static std::atomic<bool> s_ble_client_connected{false};
 static std::atomic<bool> s_ble_connecting{false};
 static uint32_t s_scan_pause_start_ms = 0; // Protected by s_ble_mutex
@@ -291,7 +293,7 @@ static void compensate_beacon_scan_pause_locked(uint32_t now_ms, bool clear_paus
     }
 }
 
-static void start_background_ble_scan(void) {
+static void start_background_ble_scan(bool force_restart = false) {
     bool has_paired = false;
     bool has_beacons = false;
     {
@@ -320,18 +322,23 @@ static void start_background_ble_scan(void) {
         return;
     }
 
+    if (force_restart && pScan->isScanning()) {
+        pScan->stop();
+    }
+
+    const bool standby = s_ble_standby.load(std::memory_order_relaxed);
     pScan->clearResults();
     pScan->setMaxResults(0);
     pScan->setActiveScan(false); // Passive scan
     pScan->setDuplicateFilter(false);
     if (has_targets) {
-        // Track paired buttons and beacon RSSI while leaving ~80% RF airtime for Wi-Fi coexistence
-        pScan->setInterval(100); // 100ms
-        pScan->setWindow(20);    // 20ms
+        // Track paired buttons and beacon RSSI while leaving >=80% RF airtime (96% in standby) for Wi-Fi coexistence
+        pScan->setInterval(standby ? 500 : 100);
+        pScan->setWindow(20);
     } else {
-        // Low-overhead passive iBeacon discovery (~8% RF duty cycle) when no targets are configured
-        pScan->setInterval(250); // 250ms
-        pScan->setWindow(20);    // 20ms
+        // Low-overhead passive iBeacon discovery (~8% active / ~2% standby) when no targets are configured
+        pScan->setInterval(standby ? 1000 : 250);
+        pScan->setWindow(20);
     }
     if (pScan->start(0, false, true)) {
         std::lock_guard<std::mutex> lock(s_ble_mutex);
@@ -1466,6 +1473,11 @@ static void ble_worker_task(void* pvParameters) {
             connect_ble_device(connect_addr, connect_type);
         }
 
+        if (s_pending_bg_scan_update.exchange(false, std::memory_order_relaxed) &&
+            !s_ble_shutting_down.load(std::memory_order_relaxed)) {
+            start_background_ble_scan(true);
+        }
+
         // 3. Beacon Exit Watchdog (runs once per second)
         uint32_t now = get_time_ms();
         if (now - last_exit_check >= 1000) {
@@ -1543,6 +1555,13 @@ void ble_mgr_init(void) {
         return;
     }
     ESP_LOGI(TAG, "Native BLE Central & Observer Subsystem initialized successfully.");
+}
+
+void ble_mgr_set_standby(bool standby) {
+    if (s_ble_standby.exchange(standby, std::memory_order_relaxed) != standby) {
+        s_pending_bg_scan_update.store(true, std::memory_order_relaxed);
+        wake_ble_worker();
+    }
 }
 
 void ble_mgr_shutdown(void) {
@@ -1937,6 +1956,7 @@ void ble_mgr_init(void) {
     ESP_LOGI(TAG, "Bluetooth is disabled in sdkconfig. ble_mgr inactive.");
 }
 
+void ble_mgr_set_standby(bool standby) { (void)standby; }
 void ble_mgr_shutdown(void) {}
 
 std::string ble_mgr_get_status_json(void) {

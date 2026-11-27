@@ -13,13 +13,7 @@
     "mqtt"
   ],
   "mqtt": [
-    "cando/+/status",
-    "cando/+/ble_button",
-    "cando/+/ble_beacon",
-    "cando/+/ble_device",
-    "cando/ble_button",
-    "cando/ble_beacon",
-    "cando/ble_device"
+    "cando/+/status"
   ],
   "zeroconf": [
     {

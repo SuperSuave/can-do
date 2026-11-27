@@ -293,6 +293,7 @@ from custom_components.can_do.light import CanDoLightEntity
 from custom_components.can_do.lock import CanDoLockEntity
 from custom_components.can_do.notify import (
     CanDoClusterMasterNotifyEntity,
+    CanDoNotifyEntity,
     async_setup_entry as notify_async_setup_entry,
 )
 from custom_components.can_do.number import CanDoNumberEntity
@@ -1250,13 +1251,15 @@ class TestStateParsingAliasingAndCommands(unittest.TestCase):
 
         _run(_scenario())
 
-        # services.yaml valid and includes critical level & new set_hud_nav fields
+        # services.yaml valid and includes critical level & new set_hud_nav fields (without unencoded speed_limit/camera_alert)
         svc_path = can_do_dir / "services.yaml"
         svc_data = yaml.safe_load(svc_path.read_text(encoding="utf-8"))
         level_opts = svc_data["notify"]["fields"]["level"]["selector"]["select"]["options"]
         self.assertIn("critical", [o["value"] for o in level_opts])
         for field in ("direction", "lanes", "lane_directions", "lane_recommended", "platform"):
             self.assertIn(field, svc_data["set_hud_nav"]["fields"])
+        for dead_field in ("speed_limit", "camera_alert"):
+            self.assertNotIn(dead_field, svc_data["set_hud_nav"]["fields"])
 
         # Switch uses is_on_option_label / is_off_option_label for "Remote Climate On"/"Off"
         sw = CanDoSwitchEntity(self.coordinator, self.commands["remote_climate_tmu"])
@@ -1278,6 +1281,118 @@ class TestStateParsingAliasingAndCommands(unittest.TestCase):
         for sym in ("ATTR_CAN_ID", "ATTR_PAYLOAD", "ATTR_LEVEL"):
             self.assertFalse(hasattr(const_mod, sym))
         self.assertFalse(hasattr(catalog_loader_mod, "decode_network_state_value"))
+
+    def test_manifest_notify_cover_tilt_and_climate_wake_guard(self):
+        """Verify manifest discovery topics, notify filtering, cover steps tilt, and climate wake guard."""
+        # 1. manifest.json keeps only cando/+/status (no dead ble_* discovery topics)
+        manifest = json.loads((can_do_dir / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest.get("mqtt"), ["cando/+/status"])
+
+        # 2. notify.py creates CanDoNotifyEntity only for track_popup commands + master entity
+        async def _check_notify():
+            notify_hass = MagicMock()
+            fake_coord = MagicMock()
+            fake_coord.device_id = "ev6"
+            fake_coord.effective_device_id = "ev6"
+            fake_coord.vehicle_id = "kia_ev6"
+            fake_coord.commands = [
+                self.commands["cluster_track_popup_message"],
+                {
+                    "id": "cluster_nav_osd_countdown",
+                    "category": "Cockpit & Controls",
+                    "network": {"bus": 0, "type": "can_tx", "action_can_id": "0x4E8"},
+                    "ha_metadata": {"domain": "notify", "name": "Fake Countdown"},
+                },
+            ]
+            entry = MagicMock()
+            entry.entry_id = "e_notify"
+            notify_hass.data = {"can_do": {"e_notify": fake_coord}}
+            added = []
+            await notify_async_setup_entry(notify_hass, entry, added.extend)
+
+            notify_ents = [e for e in added if isinstance(e, CanDoNotifyEntity)]
+            master_ents = [e for e in added if isinstance(e, CanDoClusterMasterNotifyEntity)]
+            self.assertEqual([e.entity_id_str for e in notify_ents], ["cluster_track_popup_message"])
+            self.assertEqual(len(master_ents), 1)
+
+            # Live catalog routes cluster_nav_osd_countdown (0x4E8) as select, not notify
+            sel_ent = CanDoSelectEntity(self.coordinator, self.commands["cluster_nav_osd_countdown"])
+            sel_ent.async_write_ha_state = MagicMock()
+            self.coordinator.async_send_action = AsyncMock()
+            await sel_ent.async_select_option(sel_ent.options[0])
+            self.coordinator.async_send_action.assert_awaited_once()
+            self.assertEqual(self.coordinator.async_send_action.await_args.args[0], "0x4E8")
+
+        _run(_check_notify())
+
+        # 3. cover.py enables OPEN_TILT for steps-only vent/tilt options and dispatches steps
+        cover_steps_cmd = {
+            "id": "test_sunroof_steps",
+            "category": "Doors, Access & Security",
+            "network": {"bus": 0, "state_can_id": "0x541", "action_can_id": "0x4A2", "delay_ms": 20},
+            "ha_metadata": {"domain": "cover", "name": "Test Sunroof"},
+            "options": [
+                {"label": "Open", "payload": {"D1": "0x01"}},
+                {"label": "Close", "payload": {"D1": "0x02"}},
+                {"label": "Vent / Tilt", "steps": [{"payload": {"D1": "0x04"}, "repeat": 2, "delay_ms": 25}]},
+            ],
+        }
+        cover_ent = CanDoCoverEntity(self.coordinator, cover_steps_cmd)
+        features = getattr(cover_ent, "supported_features", None) or cover_ent._attr_supported_features
+        self.assertTrue(features & ha_cover.CoverEntityFeature.OPEN_TILT)
+        self.coordinator.async_send_action = AsyncMock()
+        _run(cover_ent.async_open_cover_tilt())
+        self.coordinator.async_send_action.assert_awaited_once_with(
+            "0x4A2",
+            20,
+            [{"payload": "0400000000000000", "repeat": 2, "delay_ms": 25}],
+            bus=0,
+        )
+
+        # 4. climate.py removes legacy climate_dual_cabin_temp and guards raw 0x4A0 burst when asleep
+        climate_src = (can_do_dir / "climate.py").read_text(encoding="utf-8")
+        self.assertNotIn("climate_dual_cabin_temp", climate_src)
+
+        async def _check_climate():
+            clim = CanDoClimateEntity(self.coordinator, self.commands["climate_driver_temp"], self.hass)
+            clim.async_write_ha_state = MagicMock()
+            self.coordinator.async_send_remote_climate = AsyncMock()
+            self.coordinator.async_send_action = AsyncMock()
+
+            # Asleep with stale 0x380 and explicit off 0x435 (D8=0xFF): start sends remote_climate only
+            self.coordinator.can_states["0x380"] = [0x00, 0x0E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+            self.coordinator.can_states["0x435"] = [0x00] * 7 + [0xFF]
+
+            await clim.async_set_hvac_mode(ha_climate.HVACMode.HEAT_COOL)
+            self.coordinator.async_send_remote_climate.assert_awaited_once_with(action="start", target_temp=21.0)
+            self.coordinator.async_send_action.assert_not_awaited()
+            self.assertEqual(clim._hvac_mode, ha_climate.HVACMode.HEAT_COOL)
+
+            self.coordinator.async_send_remote_climate.reset_mock()
+            await clim.async_set_hvac_mode(ha_climate.HVACMode.AUTO)
+            self.coordinator.async_send_remote_climate.assert_awaited_once_with(action="start", target_temp=21.0)
+            self.coordinator.async_send_action.assert_not_awaited()
+
+            # Awake via ignition 0x435 (D8=0x00): start sends remote_climate once AND 0x4A0 + 0xFF release burst
+            self.coordinator.async_send_remote_climate.reset_mock()
+            self.coordinator.async_send_action.reset_mock()
+            self.coordinator.can_states["0x435"] = [0x00] * 8
+            await clim.async_set_hvac_mode(ha_climate.HVACMode.AUTO)
+            self.coordinator.async_send_remote_climate.assert_awaited_once_with(action="start", target_temp=21.0)
+            self.coordinator.async_send_action.assert_awaited_once()
+            self.assertEqual(self.coordinator.async_send_action.await_args.args[0].lower(), "0x4a0")
+            self.assertEqual(self.coordinator.async_send_action.await_args.args[2][1]["payload"], "00FF000000000000")
+
+            # Awake via HVAC 0x384: start also dispatches both remote_climate and 0x4A0 burst once
+            self.coordinator.can_states.pop("0x435")
+            self.coordinator.can_states["0x384"] = [0x00, 0x00, 0x00, 0x0A, 0x00, 0x00, 0x00, 0x00]
+            self.coordinator.async_send_remote_climate.reset_mock()
+            self.coordinator.async_send_action.reset_mock()
+            await clim.async_set_hvac_mode(ha_climate.HVACMode.AUTO)
+            self.coordinator.async_send_remote_climate.assert_awaited_once_with(action="start", target_temp=21.0)
+            self.coordinator.async_send_action.assert_awaited_once()
+
+        _run(_check_climate())
 
 
 if __name__ == "__main__":

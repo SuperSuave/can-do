@@ -58,7 +58,7 @@ class CanDoCoverEntity(CanDoEntity, CoverEntity):
 
         has_vent = any(
             ("vent" in opt.get("label", "").lower() or "tilt" in opt.get("label", "").lower())
-            and opt.get("payload")
+            and (opt.get("payload") or opt.get("steps"))
             for opt in self.command.get("options", [])
         )
         if has_vent:

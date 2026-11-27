@@ -423,7 +423,7 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
       {
         id: 'hud_nav',
         title: 'HUD / Cluster Navigation Guidance',
-        desc: 'Project turn-by-turn maneuver icon, distance (ft/mi or m/km), street name, speed limit, and lane guidance on the HUD & Cluster',
+        desc: 'Project turn-by-turn maneuver icon, distance (ft/mi or m/km), street name, and lane guidance on the HUD & Cluster',
         icon: Navigation,
         color: 'text-accent bg-accent-soft border-accent/30',
         create: (): AutomationAction => ({
@@ -433,8 +433,6 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
           icon: 1,
           distance_meters: 200,
           bars: 4,
-          speed_limit: 0,
-          camera_alert: false,
           street: '',
           num_lanes: 0,
           lane_directions: [],
@@ -443,15 +441,16 @@ export const AddElementModal: React.FC<AddElementModalProps> = ({
       },
       {
         id: 'climate_target',
-        title: 'Dynamic Climate Target',
-        desc: 'Adjust driver or passenger setpoint temp and zone conditioning',
+        title: 'Remote Climate Target',
+        desc: 'Start remote cabin climate conditioning with target temperature (°C/°F), front defrost, and duration',
         icon: Thermometer,
         color: 'text-danger bg-danger-soft border-danger/30',
         create: (): AutomationAction => ({
           id: `act_clim_${Date.now().toString(36)}`,
           type: 'climate_target',
-          zone: 'driver',
-          sync_on: true
+          target_temp_c: 22.0,
+          defrost: false,
+          duration_minutes: 15
         })
       },
       {

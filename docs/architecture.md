@@ -4,7 +4,7 @@ CAN Do: Master Architecture Document
 
 Edge-First Execution: The ESP32 operates entirely offline. It does not rely on Wi-Fi or MQTT to process local CAN triggers.
 
-Single Source of Truth: The JSON/YAML Catalog dictates everything. If a feature isn't in the Catalog, the ESP32 C++ backend does not know about it.
+Single Source of Truth: The JSON Catalog (`catalog/can_do_catalog.json`) dictates everything. If a feature isn't in the Catalog, the ESP32 C++ backend does not know about it.
 
 1-Based Indexing Law: All CAN frame payload bytes are strictly represented using 1-based indexing (D1 through D8), where D1 is the first byte.
 
@@ -32,13 +32,13 @@ When generating code, refactoring, or assisting with this repository, you must a
 
 ## 🏛️ Core Axioms & Design Rules
 
-1. **Single Source of Truth (`/catalog/can_do_catalog.js`):**
-   - All vehicle entities, commands, and automation rules must originate from `/catalog/can_do_catalog.js`.
+1. **Single Source of Truth (`catalog/can_do_catalog.json`):**
+   - All vehicle entities, commands, and automation rules must originate from `catalog/can_do_catalog.json`.
    - Never hardcode entity lists, command payloads, or automation logic directly into the C++ firmware.
 
 2. **No Wildcards on the Edge (ESP32):**
    - The ESP32 C++ engine **does not** parse or evaluate wildcard strings (e.g., shell-style globs like `* * * * * * 1*`).
-   - All UI-level filters or wildcard patterns must be compiled at build time into explicit numerical byte indices, target values, and bitmask state transitions (`byte_index`, `from_value`, `to_value`), which follows this catalog schema:
+   - All catalog match rules and UI-authored filters use explicit 1-based byte specs (`D1`–`D8`), target values, and bitmasks parsed at boot into 0-indexed C++ state transitions (`byte_index`, `from_value`, `to_value`), following this catalog schema:
 
 ```json
     {
@@ -151,28 +151,39 @@ When generating code, refactoring, or assisting with this repository, you must a
 ```text
 /CAN-Do
 │
-├── /catalog                  
-│   └── can_do_catalog.json   # PRIMARY SOURCE OF TRUTH (Canonical JSON catalog)
+├── /catalog
+│   └── can_do_catalog.json       # PRIMARY SOURCE OF TRUTH (Canonical JSON catalog)
 │
 ├── /docs
-│   ├── architecture.md       # Core axioms, execution engine, and firmware design
-│   └── egmp_can_reference.md # Complete E-GMP CAN ID, payload, bitmask & ISO-TP reference
+│   ├── architecture.md           # Core axioms, execution engine, and firmware design
+│   └── egmp_can_reference.md     # Complete E-GMP CAN ID, payload, bitmask & ISO-TP reference
 │
-├── /frontend                 # Material Design 3 (MD3) Web Dashboard
-│   ├── index.html
-│   ├── main.js               # WebSocket manager & auto-reconnection loop
-│   └── styles.css
+├── /frontend                     # React 19 + Vite 6 + TypeScript + Tailwind 4 + HeroUI SPA
+│   ├── src/
+│   │   ├── components/           # CatalogExplorer, VehicleDashboard, AutomationBuilder, DeviceDashboard
+│   │   ├── services/
+│   │   │   ├── deviceWs.ts       # Singleton WebSocket manager (/ws) & auto-reconnection loop
+│   │   │   └── updateService.ts  # Staged OTA & LittleFS asset updater
+│   │   ├── utils/
+│   │   │   └── automationConverters.ts # Visual DAG <-> automations.json compiler/decompiler
+│   │   └── types/                # Catalog, automation, and device settings TypeScript schemas
+│   ├── package.json
+│   └── vite.config.ts            # Builds & pre-gzips SPA directly into firmware/data/www/
 │
-└── /firmware                 # ESP-IDF C++ Engine
+├── /custom_components/can_do     # Home Assistant HACS MQTT integration (12 platforms + coordinator)
+│
+└── /firmware                     # ESP-IDF C++ Engine
     ├── /main
-    │   ├── main.cpp          # FreeRTOS tasks, OS hooks, and app entry
-    │   ├── api.cpp           # REST endpoints (/api/upload, /api/states, /api/ota)
-    │   ├── parser.cpp        # cJSON parser loading compiled catalog structures
-    │   ├── can_engine.cpp    # State cache, transition evaluator, and TX queue
-    │   ├── isotp_tx.c/.h     # ISO 15765-2 multi-frame transport worker
-    │   ├── track_popup.c/.h  # Cluster media track info banner display
-    │   ├── hud_nav.c/.h      # HUD / Cluster turn-by-turn navigation injector
-    └── partitions.csv        # Custom 4MB layout (OTA A/B + LittleFS storage)
+    │   ├── main.cpp              # FreeRTOS tasks, OS hooks, and app entry
+    │   ├── /core                 # can_engine.cpp, parser.cpp, mcp2518fd.cpp, psram_alloc.h, types.h
+    │   ├── /net                  # api.cpp, mqtt_mgr.cpp, ble_mgr.cpp, network_mgr.cpp, gvret_server.cpp, usb_can.cpp, serial_cli.cpp
+    │   ├── /platform             # power_mgr.cpp, vbat_sensor.cpp, timezone_mgr.cpp, persistent_settings.c
+    │   ├── /protocols            # uds_engine.cpp, isotp_tx.c, hsm.c, utf8_utf16_converter.c
+    │   └── /subsystems           # precondition.c, track_popup.c, hud_nav.c, remote_climate.cpp, ambient_anim.cpp, beep.c
+    ├── partitions.csv            # Custom 4MB layout (OTA A/B + 960KB LittleFS) for ESP32-C3
+    ├── partitions_8mb.csv        # Custom 8MB layout (OTA A/B + 1984KB LittleFS) for ESP32-S3
+    ├── sdkconfig.defaults        # Default ESP-IDF configuration (ESP32-C3)
+    └── sdkconfig.defaults.esp32s3 # ESP32-S3 configuration (Dual-CAN, 2MB PSRAM, NimBLE BLE)
 ⚙️ Execution & Data Flow
 1. The State Cache (std::unordered_map)
 The FreeRTOS CAN RX task runs continuously at high priority.
@@ -244,7 +255,7 @@ Rules are evaluated using explicit numerical checks rather than string matching 
     ```
 
 3. Asynchronous Communication
-WebSockets (/ws): Real-time state changes and system logs (esp_log hook output) are broadcast asynchronously to connected MD3 dashboards using httpd_queue_work.
+WebSockets (/ws): Real-time state changes and system logs (esp_log hook output) are broadcast asynchronously to connected React web dashboards (`frontend/src/services/deviceWs.ts`) using `httpd_queue_work`.
 
 MQTT Auto-Discovery: Publishes dynamic Home Assistant discovery configurations based on the loaded catalog. Command and state topics are strictly decoupled to prevent desyncs.
 
@@ -257,11 +268,11 @@ POST /api/ota: Performs safe A/B partition firmware flashing.
 GET /api/states: Dumps the current RAM state of all catalog entities as JSON.
 
 🛠️ Development & Build Flow
-Authoring: Update catalog entries and automation definitions inside /catalog/can_do_catalog.js.
+Authoring: Update catalog entries inside `catalog/can_do_catalog.json` (and validate schema/integrity with `python scripts/optimize_catalog.py catalog/can_do_catalog.json --check`).
 
-Compilation: A build-time script flattens the JS catalog into a wildcard-free catalog.json and packs it into a LittleFS binary image alongside the frontend assets.
+Compilation: `npm run build` in `frontend/` compiles and pre-gzips the React 19 SPA into `firmware/data/www/`, and `firmware/main/CMakeLists.txt` minifies `catalog/can_do_catalog.json` into `firmware/data/catalog.json` before packing the LittleFS `storage` partition.
 
-Flashing / Deployment: The binary is flashed via USB initially; subsequent updates are pushed wirelessly via the MD3 web dashboard (/api/upload or /api/ota).
+Flashing / Deployment: The firmware and LittleFS image are flashed via USB initially (`idf.py flash`); subsequent updates are pushed wirelessly via the React web dashboard (`/api/upload`, `/api/ota`, or `/api/ota/cloud_pull`).
 
 4. **Catalog-Driven Dual-CAN MITM Bridge (`network.mitm`)**:
    - On dual-CAN hardware (`CAN_BUS_0 <-> CAN_BUS_1`, when `mitm_bridge_enabled` is enabled and `sniffer_mode`/`hardware_listen_only` are disabled), frames received on a physical bus are evaluated by subsystem forwarding hooks (`precondition_fwd_hook`, `hud_nav_fwd`) and catalog `network.mitm` rules before bridging to the opposite bus:

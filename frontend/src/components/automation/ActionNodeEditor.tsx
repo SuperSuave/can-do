@@ -113,11 +113,10 @@ interface HudNavActionConfigProps {
 
 const HudNavActionConfig: React.FC<HudNavActionConfigProps> = ({ act, onUpdate }) => {
   const [distUnit, setDistUnit] = useState<'m' | 'km' | 'ft' | 'mi'>('ft');
-  const [speedUnit, setSpeedUnit] = useState<'mph' | 'kph'>('mph');
+  const turnAngleId = useId();
 
   const navMode = (act.nav_action || act.action || 'update') === 'clear' ? 'clear' : 'update';
   const distanceMeters = act.distance_meters ?? act.distance ?? 200;
-  const speedLimitKph = act.speed_limit ?? 0;
   const bars = act.bars ?? 4;
   const numLanes = act.num_lanes ?? act.lanes ?? 0;
   const hasLaneGuidance = numLanes > 0;
@@ -150,22 +149,6 @@ const HudNavActionConfig: React.FC<HudNavActionConfigProps> = ({ act, onUpdate }
     else if (unit === 'km') meters = num * 1000;
     const clampedMeters = Math.min(65534, Math.round(meters));
     onUpdate({ ...act, distance_meters: clampedMeters, distance: clampedMeters });
-  };
-
-  const displayedSpeed = useMemo(() => {
-    if (!speedLimitKph || speedLimitKph <= 0) return 0;
-    return speedUnit === 'mph' ? Math.round(speedLimitKph / 1.609344) : Math.round(speedLimitKph);
-  }, [speedLimitKph, speedUnit]);
-
-  const handleSpeedChange = (rawVal: string, unit = speedUnit) => {
-    if (rawVal === '') {
-      onUpdate({ ...act, speed_limit: 0 });
-      return;
-    }
-    const num = parseFloat(rawVal);
-    if (isNaN(num) || num < 0) return;
-    const kph = unit === 'mph' ? Math.round(num * 1.609344) : Math.round(num);
-    onUpdate({ ...act, speed_limit: Math.min(250, Math.max(0, kph)) });
   };
 
   const ensureLaneArrays = (targetCount: number) => {
@@ -247,9 +230,6 @@ const HudNavActionConfig: React.FC<HudNavActionConfigProps> = ({ act, onUpdate }
             <span>
               <span className="text-accent font-bold">{selectedManeuver.symbol}</span>{' '}
               {act.street || 'Guidance'} · {Math.round(distanceMeters * 3.28084)} ft ({distanceMeters}m)
-              {speedLimitKph > 0
-                ? ` · Limit ${Math.round(speedLimitKph / 1.609344)} mph (${speedLimitKph} km/h)`
-                : ''}
             </span>
           )}
         </div>
@@ -311,8 +291,8 @@ const HudNavActionConfig: React.FC<HudNavActionConfigProps> = ({ act, onUpdate }
 
       {navMode !== 'clear' && (
         <>
-          {/* Row 2: Distance (Imperial/Metric), Countdown Bar Graph, Speed Limit (mph/kph), Heading & Camera Alert */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-[11px]">
+          {/* Row 2: Distance (Imperial/Metric), Countdown Bar Graph, Turn Angle */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
             {/* Distance with Imperial/Metric Unit Switcher */}
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -368,72 +348,25 @@ const HudNavActionConfig: React.FC<HudNavActionConfigProps> = ({ act, onUpdate }
               </select>
             </div>
 
-            {/* Speed Limit Sign (mph / km/h) */}
+            {/* Turn Angle */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[10px] text-muted">Speed Limit Badge (0=Off)</label>
-                <span className="text-[9px] font-mono text-accent">
-                  {speedLimitKph > 0
-                    ? speedUnit === 'mph'
-                      ? `${speedLimitKph} km/h`
-                      : `${Math.round(speedLimitKph / 1.609344)} mph`
-                    : 'Off'}
-                </span>
-              </div>
-              <div className="flex items-center gap-1">
-                <input
-                  type="number"
-                  min="0"
-                  max="200"
-                  step="5"
-                  value={displayedSpeed || ''}
-                  onChange={e => handleSpeedChange(e.target.value)}
-                  placeholder="0 (Off)"
-                  className="w-full bg-surface-secondary border border-border rounded px-2 py-1 text-foreground font-mono"
-                />
-                <select
-                  value={speedUnit}
-                  onChange={e => setSpeedUnit(e.target.value as any)}
-                  className="bg-surface-secondary border border-border rounded px-1.5 py-1 text-[10px] text-accent font-mono shrink-0"
-                  title="Speed Limit Unit (Imperial mph or Metric km/h)"
-                >
-                  <option value="mph">mph</option>
-                  <option value="kph">km/h</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Turn Angle & Speed Camera Alert */}
-            <div className="flex flex-col justify-between gap-1">
-              <div className="flex items-center justify-between gap-2">
-                <label className="text-[10px] text-muted shrink-0">Turn Angle (°):</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="359"
-                  value={act.direction_deg ?? 0}
-                  onChange={e =>
-                    onUpdate({
-                      ...act,
-                      direction_deg: Math.max(0, Math.min(359, parseInt(e.target.value, 10) || 0))
-                    })
-                  }
-                  className="w-20 bg-surface-secondary border border-border rounded px-2 py-0.5 text-foreground font-mono text-[11px]"
-                />
-              </div>
-              <Switch
-                isSelected={!!act.camera_alert}
-                onChange={isSelected => onUpdate({ ...act, camera_alert: isSelected })}
-                size="sm"
-                aria-label="Speed Camera Alert"
-              >
-                <Switch.Content>
-                  <Switch.Control>
-                    <Switch.Thumb />
-                  </Switch.Control>
-                  <span className="text-foreground text-[10px]">Speed Camera Alert Icon</span>
-                </Switch.Content>
-              </Switch>
+              <label htmlFor={turnAngleId} className="block text-[10px] text-muted mb-1">
+                Turn Angle (°)
+              </label>
+              <input
+                id={turnAngleId}
+                type="number"
+                min="0"
+                max="359"
+                value={act.direction_deg ?? 0}
+                onChange={e =>
+                  onUpdate({
+                    ...act,
+                    direction_deg: Math.max(0, Math.min(359, parseInt(e.target.value, 10) || 0))
+                  })
+                }
+                className="w-full bg-surface-secondary border border-border rounded px-2 py-1 text-foreground font-mono"
+              />
             </div>
           </div>
 
@@ -524,6 +457,159 @@ const HudNavActionConfig: React.FC<HudNavActionConfigProps> = ({ act, onUpdate }
           </div>
         </>
       )}
+    </div>
+  );
+};
+
+interface ClimateTargetActionConfigProps {
+  act: AutomationAction;
+  onUpdate: (updated: AutomationAction) => void;
+}
+
+const ClimateTargetActionConfig: React.FC<ClimateTargetActionConfigProps> = ({ act, onUpdate }) => {
+  const [tempUnit, setTempUnit] = useState<'°C' | '°F'>('°C');
+  const tempInputId = useId();
+  const durationInputId = useId();
+
+  const rawTempC = act.target_temp_c ?? act.target_c ?? 22.0;
+  const tempC = Number.isFinite(rawTempC) ? Math.max(14, Math.min(32, rawTempC)) : 22.0;
+  const durationMinutes = act.duration_minutes ?? 15;
+
+  const displayedTemp =
+    tempUnit === '°F'
+      ? Math.round(tempC * 1.8 + 32)
+      : Math.round(tempC * 2) / 2;
+  const secondaryTempLabel =
+    tempUnit === '°F'
+      ? `${Math.round(tempC * 2) / 2}°C`
+      : `${Math.round((tempC * 1.8 + 32) * 10) / 10}°F`;
+
+  const updateClimate = (patch: Partial<AutomationAction>) => {
+    const {
+      zone: _z,
+      sync_on: _s,
+      driver_only: _d,
+      monitor_0x38: _m,
+      ...rest
+    } = act as any;
+    onUpdate({
+      ...rest,
+      type: 'climate_target',
+      ...patch
+    });
+  };
+
+  const handleDisplayTempChange = (displayVal: number) => {
+    if (!Number.isFinite(displayVal)) return;
+    const nextC = tempUnit === '°F' ? (displayVal - 32) / 1.8 : displayVal;
+    const clampedC = Math.round(Math.max(14, Math.min(32, nextC)) * 2) / 2;
+    updateClimate({ target_temp_c: clampedC, target_c: clampedC });
+  };
+
+  return (
+    <div className="col-span-full grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-lg bg-surface-tertiary border border-danger/30 font-sans text-[11px] items-start">
+      {/* Target Temperature (°C / °F) */}
+      <div className="sm:col-span-2 space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <label htmlFor={tempInputId} className="text-[10px] text-muted font-medium">
+            Target Temperature
+          </label>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-accent font-mono">{secondaryTempLabel}</span>
+            <div className="flex items-center rounded bg-surface-secondary border border-border p-0.5 text-[10px] font-bold">
+              <button
+                type="button"
+                onClick={() => setTempUnit('°C')}
+                className={`px-1.5 py-0.5 rounded transition ${
+                  tempUnit === '°C' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'
+                }`}
+              >
+                °C
+              </button>
+              <button
+                type="button"
+                onClick={() => setTempUnit('°F')}
+                className={`px-1.5 py-0.5 rounded transition ${
+                  tempUnit === '°F' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'
+                }`}
+              >
+                °F
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Slider
+            minValue={tempUnit === '°F' ? 57 : 14}
+            maxValue={tempUnit === '°F' ? 90 : 32}
+            step={tempUnit === '°F' ? 1 : 0.5}
+            value={displayedTemp}
+            onChange={val => {
+              const num = typeof val === 'number' ? val : val[0];
+              handleDisplayTempChange(num);
+            }}
+            aria-label="Target Temperature Slider"
+            className="flex-1"
+          >
+            <Slider.Track className="h-1.5 bg-surface-secondary rounded-full cursor-pointer relative">
+              <Slider.Fill className="bg-accent rounded-full h-full" />
+              <Slider.Thumb className="w-3.5 h-3.5 bg-accent border-2 border-surface rounded-full shadow cursor-grab active:cursor-grabbing focus:outline-none" />
+            </Slider.Track>
+          </Slider>
+          <div className="flex items-center gap-1 shrink-0 w-20">
+            <input
+              id={tempInputId}
+              type="number"
+              step={tempUnit === '°F' ? '1' : '0.5'}
+              min={tempUnit === '°F' ? 57 : 14}
+              max={tempUnit === '°F' ? 90 : 32}
+              value={displayedTemp}
+              onChange={e => {
+                if (e.target.value === '') return;
+                handleDisplayTempChange(parseFloat(e.target.value));
+              }}
+              className="w-full bg-surface-secondary border border-border rounded px-2 py-1 text-accent font-mono font-bold text-xs"
+            />
+            <span className="text-muted font-sans text-[10px]">{tempUnit}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Duration & Front Windshield Defrost */}
+      <div className="space-y-2.5">
+        <div>
+          <label htmlFor={durationInputId} className="block text-[10px] text-muted mb-1 font-medium">
+            Duration (Minutes)
+          </label>
+          <input
+            id={durationInputId}
+            type="number"
+            min={1}
+            max={60}
+            step={1}
+            value={durationMinutes}
+            onChange={e => {
+              const parsed = parseInt(e.target.value, 10);
+              const clamped = Number.isFinite(parsed) ? Math.max(1, Math.min(1440, parsed)) : 15;
+              updateClimate({ duration_minutes: clamped });
+            }}
+            className="w-full bg-surface-secondary border border-border rounded px-2 py-1 text-foreground font-mono text-xs"
+          />
+        </div>
+        <Switch
+          isSelected={!!act.defrost}
+          onChange={isSelected => updateClimate({ defrost: isSelected })}
+          size="sm"
+          aria-label="Front Windshield Defrost"
+        >
+          <Switch.Content>
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+            <span className="text-foreground text-[11px]">Front Windshield Defrost</span>
+          </Switch.Content>
+        </Switch>
+      </div>
     </div>
   );
 };
@@ -1732,7 +1818,9 @@ export function ActionNodeEditor({
       : act.type === 'precondition'
       ? 'Battery Preconditioning'
       : act.type === 'climate_target' || act.type === 'remote_climate'
-      ? 'Climate Target'
+      ? 'Remote Climate Target'
+      : act.type === 'webhook'
+      ? 'Legacy Webhook (Unsupported)'
       : act.type === 'delay'
       ? `Delay ${act.delay_ms || act.ms || 0}ms`
       : act.type === 'if_then'
@@ -2913,9 +3001,25 @@ export function ActionNodeEditor({
             <div>
               <label className="block text-[10px] font-sans text-muted">Action Type</label>
               <select
-                value={isCanTx ? 'can_tx' : act.type === 'nav' ? 'hud_nav' : act.type}
+                value={
+                  act.type === 'webhook'
+                    ? ''
+                    : isCanTx
+                    ? 'can_tx'
+                    : act.type === 'nav'
+                    ? 'hud_nav'
+                    : act.type === 'remote_climate'
+                    ? 'climate_target'
+                    : act.type
+                }
                 onChange={e => {
                   const nextType = e.target.value as AutomationAction['type'];
+                  if (!nextType) return;
+                  const {
+                    webhook_url: _wu,
+                    webhook_method: _wm,
+                    ...cleanBase
+                  } = act as any;
                   if (nextType === 'hud_nav') {
                     const {
                       source_command_id: _sci,
@@ -2931,8 +3035,10 @@ export function ActionNodeEditor({
                       repeat: _rep,
                       delay_ms: _del,
                       popup_message: _pm,
+                      speed_limit: _sl,
+                      camera_alert: _ca,
                       ...rest
-                    } = act as any;
+                    } = cleanBase;
                     onUpdate({
                       ...rest,
                       type: 'hud_nav',
@@ -2940,9 +3046,33 @@ export function ActionNodeEditor({
                       icon: act.icon ?? 1,
                       distance_meters: act.distance_meters ?? 200,
                       bars: act.bars ?? 4,
-                      speed_limit: act.speed_limit ?? 0,
-                      camera_alert: !!act.camera_alert,
                       street: act.street ?? ''
+                    });
+                    return;
+                  }
+                  if (nextType === 'climate_target') {
+                    const {
+                      source_command_id: _sci,
+                      source_command_name: _scn,
+                      entity_id: _eid,
+                      target_command_id: _tci,
+                      command: _cmd,
+                      option_label: _ol,
+                      can_id: _cid,
+                      payload: _pay,
+                      steps: _steps,
+                      zone: _zn,
+                      sync_on: _sy,
+                      driver_only: _do,
+                      monitor_0x38: _m38,
+                      ...rest
+                    } = cleanBase;
+                    onUpdate({
+                      ...rest,
+                      type: 'climate_target',
+                      target_temp_c: act.target_temp_c ?? act.target_c ?? 22.0,
+                      defrost: !!act.defrost,
+                      duration_minutes: act.duration_minutes ?? 15
                     });
                     return;
                   }
@@ -2958,27 +3088,27 @@ export function ActionNodeEditor({
                       payload: _pay,
                       steps: _steps,
                       ...rest
-                    } = act as any;
+                    } = cleanBase;
                     onUpdate({ ...rest, type: nextType });
                     return;
                   }
-                  onUpdate({ ...act, type: nextType });
+                  onUpdate({ ...cleanBase, type: nextType });
                 }}
                 className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground font-sans"
               >
+                {act.type === 'webhook' && (
+                  <option value="" disabled>Select Action Type...</option>
+                )}
                 <option value="can_tx">CAN Transmit</option>
                 <option value="cycle_entity">Cyclic Stepper</option>
                 <option value="hud_nav">HUD Turn-by-Turn Guidance</option>
                 <option value="precondition">Battery Preconditioning (E-GMP)</option>
-                <option value="climate_target">HVAC Temp Target</option>
+                <option value="climate_target">Remote Climate Target</option>
                 <option value="track_popup">Cluster Popup</option>
                 <option value="delay">Wait / Delay</option>
                 <option value="if_then">Conditional Branch</option>
                 <option value="choose">Multiple Choices</option>
                 <option value="repeat_until">Repeat Until (Loop)</option>
-                {act.type === 'webhook' && (
-                  <option value="webhook" disabled>Webhook (Unsupported on ESP32)</option>
-                )}
               </select>
             </div>
 
@@ -3025,65 +3155,8 @@ export function ActionNodeEditor({
               </>
             )}
 
-            {act.type === 'climate_target' && (
-              <>
-                <div>
-                  <label className="block text-[10px] font-sans text-muted">Zone</label>
-                  <select
-                    value={act.zone || 'driver'}
-                    onChange={e => onUpdate({ ...act, zone: e.target.value as any })}
-                    className="w-full bg-surface-tertiary border border-border rounded px-2 py-1 text-foreground font-sans"
-                  >
-                    <option value="driver">Driver Zone</option>
-                    <option value="passenger">Passenger Zone</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-[10px] font-sans text-muted">Target Temp</label>
-                    <span className="text-[9px] text-accent font-mono">
-                      {act.target_temp_c !== undefined || act.target_c !== undefined
-                        ? `${Math.round(((act.target_temp_c ?? act.target_c ?? 21.0) * 9 / 5 + 32) * 10) / 10}°F`
-                        : '--°F'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Slider
-                      minValue={14}
-                      maxValue={32}
-                      step={0.5}
-                      value={act.target_temp_c ?? act.target_c ?? 21.0}
-                      onChange={val => {
-                        const num = typeof val === 'number' ? val : val[0];
-                        onUpdate({ ...act, target_temp_c: num, target_c: num });
-                      }}
-                      aria-label="Target Temperature Slider"
-                      className="flex-1"
-                    >
-                      <Slider.Track className="h-1.5 bg-surface-tertiary rounded-full cursor-pointer relative">
-                        <Slider.Fill className="bg-accent rounded-full h-full" />
-                        <Slider.Thumb className="w-3.5 h-3.5 bg-accent border-2 border-surface rounded-full shadow cursor-grab active:cursor-grabbing focus:outline-none" />
-                      </Slider.Track>
-                    </Slider>
-                    <div className="flex items-center gap-1 shrink-0 w-20">
-                      <input
-                        type="number"
-                        step="0.5"
-                        min="14"
-                        max="32"
-                        value={act.target_temp_c ?? act.target_c ?? ''}
-                        onChange={e => {
-                          const val = e.target.value === '' ? undefined : parseFloat(e.target.value);
-                          onUpdate({ ...act, target_temp_c: val, target_c: val });
-                        }}
-                        placeholder="21.0"
-                        className="w-full bg-surface-tertiary border border-border rounded px-2 py-0.5 text-accent font-bold text-xs"
-                      />
-                      <span className="text-muted font-sans text-[10px]">°C</span>
-                    </div>
-                  </div>
-                </div>
-              </>
+            {(act.type === 'climate_target' || act.type === 'remote_climate') && (
+              <ClimateTargetActionConfig act={act} onUpdate={onUpdate} />
             )}
 
             {(act.type === 'track_popup' || act.type === 'popup') && (() => {
@@ -3195,37 +3268,6 @@ export function ActionNodeEditor({
               </>
             )}
           </div>
-
-          {act.type === 'climate_target' && (
-            <div className="flex items-center gap-4 pt-1 font-sans text-[11px] text-muted">
-              <Switch
-                isSelected={act.sync_on ?? true}
-                onChange={(isSelected) => onUpdate({ ...act, sync_on: isSelected })}
-                size="sm"
-                aria-label="Sync Passenger Zone (0x4A0)"
-              >
-                <Switch.Content>
-                  <Switch.Control>
-                    <Switch.Thumb />
-                  </Switch.Control>
-                  <span>Sync Passenger Zone (0x4A0)</span>
-                </Switch.Content>
-              </Switch>
-              <Switch
-                isSelected={act.driver_only ?? false}
-                onChange={(isSelected) => onUpdate({ ...act, driver_only: isSelected })}
-                size="sm"
-                aria-label="Driver Only"
-              >
-                <Switch.Content>
-                  <Switch.Control>
-                    <Switch.Thumb />
-                  </Switch.Control>
-                  <span>Driver Only</span>
-                </Switch.Content>
-              </Switch>
-            </div>
-          )}
 
           {isCanTx && !hasMultipleSteps && (
             <div className="space-y-2 font-mono text-[11px]">

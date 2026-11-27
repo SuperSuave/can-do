@@ -87,23 +87,6 @@ set_hud_nav:
       required: false
       selector:
         text:
-    speed_limit:
-      name: Speed Limit (km/h)
-      description: Speed limit sign display in km/h (0 = off).
-      example: 65
-      default: 0
-      required: false
-      selector:
-        number:
-          min: 0
-          max: 200
-    camera_alert:
-      name: Speed Camera Alert
-      description: Show speed camera warning icon on HUD.
-      default: false
-      required: false
-      selector:
-        boolean:
     direction:
       name: Turn Direction (Degrees)
       description: Optional compass/maneuver direction in degrees (0-359).

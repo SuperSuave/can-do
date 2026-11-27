@@ -145,7 +145,7 @@ static void pack_can_frame(uint8_t* dest, size_t& offset, const can_fd_frame_t* 
     // 0: 0xF1 (Start of packet)
     // 1: 0x00 (BUILD_CAN_FRAME)
     // 2-5: Timestamp (µs, little-endian)
-    // 6-9: CAN ID (uint32_t little-endian, bit 31 set if extended)
+    // 6-9: CAN ID (uint32_t little-endian, bit 31 = extd, bit 30 = rtr)
     // 10: Bus & Length (bits 4-7 = bus, bits 0-3 = DLC)
     // 11..11+DLC-1: Data payload
     // 11+DLC: Checksum / terminator (0x00)
@@ -158,9 +158,12 @@ static void pack_can_frame(uint8_t* dest, size_t& offset, const can_fd_frame_t* 
     dest[offset++] = (uint8_t)((timestamp_us >> 16) & 0xFF);
     dest[offset++] = (uint8_t)((timestamp_us >> 24) & 0xFF);
 
-    uint32_t id_field = msg->identifier;
+    uint32_t id_field = msg->identifier & 0x1FFFFFFFU;
     if (msg->flags.extd) {
-        id_field |= 0x80000000;
+        id_field |= 0x80000000U;
+    }
+    if (msg->flags.rtr) {
+        id_field |= 0x40000000U;
     }
 
     dest[offset++] = (uint8_t)(id_field & 0xFF);
@@ -170,7 +173,6 @@ static void pack_can_frame(uint8_t* dest, size_t& offset, const can_fd_frame_t* 
 
     uint8_t dlc = msg->len > 8 ? 8 : msg->len;
     uint8_t flags = ((msg->bus & 0x0F) << 4) | (dlc & 0x0F);
-    if (msg->flags.rtr) flags |= 0x40;
     dest[offset++] = flags;
 
     for (int i = 0; i < dlc; i++) {
@@ -247,15 +249,16 @@ static bool handle_client_rx(GvretConnState& st) {
             frame_pos++; // skip len
 
             twai_message_t tx_msg = {};
-            tx_msg.extd = (id & 0x80000000) ? 1 : 0;
-            tx_msg.identifier = id & 0x1FFFFFFF;
+            tx_msg.extd = (id & 0x80000000U) ? 1 : 0;
+            tx_msg.rtr = (id & 0x40000000U) ? 1 : 0;
+            tx_msg.identifier = id & 0x1FFFFFFFU;
             tx_msg.data_length_code = len;
             for (int i = 0; i < len; i++) {
                 tx_msg.data[i] = s_rx_accum[frame_pos++];
             }
 
             // Feed into internal CAN engine parser (enables bench log playback & SavvyCAN simulation)
-            can_engine_inject_frame(&tx_msg);
+            can_engine_inject_frame(&tx_msg, target_bus);
 
             if (!g_sniffer_mode.load()) {
                 tx_msg.ss = 1; // Single-Shot mode

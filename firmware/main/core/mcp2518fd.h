@@ -137,6 +137,7 @@ mcp2518fd_t* dual_can_get_device(can_bus_t bus);
 esp_err_t dual_can_get_status_snapshot(can_bus_t bus, mcp2518fd_status_snapshot_t *out);
 esp_err_t dual_can_set_listen_only(bool listen_only);
 void dual_can_clear_boot_overflows(void);
+void dual_can_prepare_sleep(void);
 void dual_can_shutdown(void);
 
 #ifdef __cplusplus

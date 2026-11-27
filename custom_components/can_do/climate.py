@@ -356,25 +356,37 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
 
         return attrs
 
-    async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set new target temperature on vehicle CAN bus."""
-        temp = kwargs.get("temperature")
-        if temp is None:
-            return
+    def _is_climate_bus_awake(self) -> bool:
+        """Return True if vehicle HVAC, ignition, or EV system is currently awake."""
+        if self._is_hvac_active():
+            return True
 
-        temp = max(self._attr_min_temp, min(self._attr_max_temp, float(temp)))
-        self._target_temp = temp
+        checks = (
+            ("power_state", ("on", "ready"), ("off", "asleep"), "0x435", lambda p: len(p) >= 8 and p[7] == 0x00),
+            ("ev_system_ready", ("ready",), ("not ready", "off"), "0x200", lambda p: len(p) >= 1 and (p[0] & 0x01) == 0x01),
+            ("car_ready_state", ("ready", "awake"), ("off", "asleep"), "0x038", lambda p: len(p) >= 1 and p[0] in (0x01, 0x04)),
+        )
+        for key, pos_tokens, neg_tokens, can_id, payload_awake in checks:
+            val = self.coordinator.get_can_state(key)
+            if isinstance(val, bool):
+                if val:
+                    return True
+            elif isinstance(val, (int, float)):
+                if val != 0:
+                    return True
+            elif isinstance(val, str):
+                s = val.strip().lower()
+                if any(tok in s for tok in pos_tokens) and not any(tok in s for tok in neg_tokens):
+                    return True
+            else:
+                payload = self.coordinator.get_can_payload(can_id)
+                if payload and payload_awake(payload):
+                    return True
 
-        # Calculate Celsius target for E-GMP TMU frame
-        temp_c = temp
-        if self.temperature_unit == UnitOfTemperature.FAHRENHEIT:
-            temp_c = round((temp - 32.0) / 1.8, 1)
+        return False
 
-        # 1. Update/trigger the background remote climate task
-        if self._is_hvac_active() or self._hvac_mode != HVACMode.OFF:
-            await self.coordinator.async_send_remote_climate(action="start", target_temp=temp_c)
-
-        # 2. Also send direct touchscreen CAN action (when vehicle is awake)
+    async def _async_send_cabin_temp_action(self, temp: float) -> None:
+        """Send direct touchscreen CAN temperature burst when vehicle bus is awake."""
         if self.temperature_unit == UnitOfTemperature.FAHRENHEIT:
             raw_val = 0x06 + round(temp - 62.0)
         else:
@@ -408,11 +420,36 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
         )
         await self.coordinator.async_send_action(self.action_can_id, 20, steps, bus=bus)
 
-        self._hvac_mode = HVACMode.AUTO
+    async def async_set_temperature(self, **kwargs: Any) -> None:
+        """Set new target temperature on vehicle CAN bus."""
+        temp = kwargs.get("temperature")
+        if temp is None:
+            return
+
+        temp = max(self._attr_min_temp, min(self._attr_max_temp, float(temp)))
+        self._target_temp = temp
+
+        bus_awake = self._is_climate_bus_awake()
+        # Calculate Celsius target for E-GMP TMU frame
+        temp_c = temp
+        if self.temperature_unit == UnitOfTemperature.FAHRENHEIT:
+            temp_c = round((temp - 32.0) / 1.8, 1)
+
+        # 1. Update/trigger the background remote climate task
+        if self._is_hvac_active() or self._hvac_mode != HVACMode.OFF or not bus_awake:
+            await self.coordinator.async_send_remote_climate(action="start", target_temp=temp_c)
+
+        # 2. Also send direct touchscreen CAN action only when vehicle bus is awake
+        if bus_awake:
+            await self._async_send_cabin_temp_action(temp)
+
+        if self._hvac_mode == HVACMode.OFF:
+            self._hvac_mode = HVACMode.AUTO
         self.async_write_ha_state()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new HVAC mode."""
+        bus_awake = self._is_climate_bus_awake()
         self._hvac_mode = hvac_mode
         net = self.command.get("network", {})
         bus = net.get("bus")
@@ -420,21 +457,23 @@ class CanDoClimateEntity(CanDoEntity, ClimateEntity):
             # Stop the remote climate background loop on ESP32
             await self.coordinator.async_send_remote_climate(action="stop")
 
-            # Find option with label containing "off"
-            target_opt = None
-            for opt in self.command.get("options", []):
-                if "off" in opt.get("label", "").lower():
-                    target_opt = opt
-                    break
-            if target_opt:
-                steps = build_action_steps(self.command, target_opt)
-                if steps:
-                    await self.coordinator.async_send_action(self.action_can_id, 20, steps, bus=bus)
+            if bus_awake:
+                # Find option with label containing "off"
+                target_opt = None
+                for opt in self.command.get("options", []):
+                    if "off" in opt.get("label", "").lower():
+                        target_opt = opt
+                        break
+                if target_opt:
+                    steps = build_action_steps(self.command, target_opt)
+                    if steps:
+                        await self.coordinator.async_send_action(self.action_can_id, 20, steps, bus=bus)
         elif hvac_mode in (HVACMode.AUTO, HVACMode.HEAT_COOL):
             temp_c = self._target_temp
             if self.temperature_unit == UnitOfTemperature.FAHRENHEIT:
                 temp_c = round((self._target_temp - 32.0) / 1.8, 1)
             await self.coordinator.async_send_remote_climate(action="start", target_temp=temp_c)
-            await self.async_set_temperature(temperature=self._target_temp)
+            if bus_awake:
+                await self._async_send_cabin_temp_action(self._target_temp)
 
         self.async_write_ha_state()

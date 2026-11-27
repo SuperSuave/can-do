@@ -16,6 +16,7 @@
 #include "esp_heap_caps.h"
 #include "sdkconfig.h"
 #include "timezone_mgr.h"
+#include "track_popup.h"
 
 static const char* TAG = "CATALOG_PARSER";
 
@@ -100,12 +101,12 @@ static void rebuild_catalog_can_id_index_locked(void) {
     catalog_by_can_id.clear();
     for (auto& entity : global_catalog) {
         if (entity.state_can_id != 0) {
-            catalog_by_can_id[entity.state_can_id].push_back(&entity);
+            catalog_by_can_id[make_bus_can_key(entity.bus, entity.state_can_id)].push_back(&entity);
         }
     }
     for (auto& entity : s_dynamic_entities) {
         if (entity.state_can_id != 0) {
-            catalog_by_can_id[entity.state_can_id].push_back(&entity);
+            catalog_by_can_id[make_bus_can_key(entity.bus, entity.state_can_id)].push_back(&entity);
         }
     }
     rebuild_mitm_rules_locked();
@@ -720,7 +721,10 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond, int depth)
     }
 
     cJSON* bus = cJSON_GetObjectItem(c_item, "bus");
-    if (cJSON_IsNumber(bus)) cond.bus = clamp_bus(bus, cond.bus);
+    if (cJSON_IsNumber(bus)) {
+        cond.bus = clamp_bus(bus, cond.bus);
+        cond.has_bus = true;
+    }
 
     cJSON* match_obj = cJSON_GetObjectItem(c_item, "match");
     if (!match_obj) match_obj = cJSON_GetObjectItem(c_item, "match_payload");
@@ -748,6 +752,7 @@ bool parse_single_condition(cJSON* c_item, AutomationCondition& cond, int depth)
                 sub.type = "can_state";
                 sub.can_id = cond.can_id;
                 sub.bus = cond.bus;
+                sub.has_bus = cond.has_bus;
                 sub.byte_index = static_cast<uint8_t>(idx);
                 sub.op = base_op;
                 if (cJSON_IsString(m_item)) {
@@ -850,6 +855,22 @@ bool parse_action_step(cJSON* a_item, ActionStep& step, int depth) {
         cJSON* lvl = cJSON_GetObjectItem(a_item, "level");
         if (cJSON_IsString(lvl)) step.popup_level = lvl->valuestring;
         else step.popup_level = "info";
+
+        cJSON* hold = cJSON_GetObjectItem(a_item, "hold_ms");
+        if (hold && cJSON_IsNumber(hold) && std::isfinite(hold->valuedouble)) {
+            double v = hold->valuedouble;
+            if (v <= 0.0) {
+                step.hold_ms = TRACK_POPUP_DEFAULT_HOLD_MS;
+            } else if (v < static_cast<double>(TRACK_POPUP_MIN_HOLD_MS)) {
+                step.hold_ms = TRACK_POPUP_MIN_HOLD_MS;
+            } else if (v > static_cast<double>(TRACK_POPUP_MAX_HOLD_MS)) {
+                step.hold_ms = TRACK_POPUP_MAX_HOLD_MS;
+            } else {
+                step.hold_ms = static_cast<uint32_t>(std::llround(v));
+            }
+        } else {
+            step.hold_ms = TRACK_POPUP_DEFAULT_HOLD_MS;
+        }
         return true;
     } else if (strcmp(type_str, "climate_target") == 0 || strcmp(type_str, "climate") == 0 || strcmp(type_str, "remote_climate") == 0) {
         step.type = ActionType::CLIMATE_TARGET;
@@ -2342,7 +2363,7 @@ bool find_entity_in_catalog(const std::string& entity_id, CanEntity& out_entity)
             } else {
                 CanEntity* ptr = &s_dynamic_entities.back();
                 if (ptr->state_can_id > 0) {
-                    catalog_by_can_id[ptr->state_can_id].push_back(ptr);
+                    catalog_by_can_id[make_bus_can_key(ptr->bus, ptr->state_can_id)].push_back(ptr);
                 }
                 if (ptr->mitm.mode != MitmMode::NONE) {
                     rebuild_mitm_rules_locked();

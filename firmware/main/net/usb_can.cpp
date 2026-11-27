@@ -54,7 +54,7 @@ static void usb_can_task(void* pvParameters) {
                     uint8_t cmd = accum[idx + 1];
                     if (cmd == 0x00) {
                         if (idx + 8 > accum_len) break;
-                        uint8_t dlc = accum[idx + 7];
+                        uint8_t dlc = accum[idx + 7] & 0x0F;
                         if (dlc > 8) dlc = 8;
                         size_t total_len = 8 + dlc + 1;
                         if (idx + total_len > accum_len) break;
@@ -63,16 +63,18 @@ static void usb_can_task(void* pvParameters) {
                         uint32_t id = accum[fpos] | (accum[fpos+1] << 8) | 
                                       (accum[fpos+2] << 16) | (accum[fpos+3] << 24);
                         fpos += 4;
-                        fpos++; // bus
+                        uint8_t bus = accum[fpos++];
+                        can_bus_t target_bus = (bus == 1) ? CAN_BUS_1 : CAN_BUS_0;
                         fpos++; // len
                         twai_message_t tx_msg = {};
-                        tx_msg.extd = (id & 0x80000000) ? 1 : 0;
-                        tx_msg.identifier = id & 0x1FFFFFFF;
+                        tx_msg.extd = (id & 0x80000000U) ? 1 : 0;
+                        tx_msg.rtr = (id & 0x40000000U) ? 1 : 0;
+                        tx_msg.identifier = id & 0x1FFFFFFFU;
                         tx_msg.data_length_code = dlc;
                         for (int d = 0; d < dlc; d++) {
                             tx_msg.data[d] = accum[fpos++];
                         }
-                        can_engine_inject_frame(&tx_msg);
+                        can_engine_inject_frame(&tx_msg, target_bus);
                         s_injected_count++;
                         if (s_injected_count % 1000 == 0) {
                             ESP_LOGI(TAG, "USB Ingested %lu frames", (unsigned long)s_injected_count);

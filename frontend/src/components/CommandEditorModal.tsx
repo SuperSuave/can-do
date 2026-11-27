@@ -77,7 +77,6 @@ const COMMAND_TYPES = [
   'speed_zero',
   'day_of_week',
   'time_window',
-  'webhook',
   'mqtt'
 ];
 

@@ -1231,8 +1231,6 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 direction_deg: act.direction_deg ?? 0,
                 distance_meters: distMeters,
                 bars: act.bars ?? 4,
-                speed_limit: act.speed_limit ?? 0,
-                camera_alert: !!act.camera_alert,
                 street: act.street || '',
                 ...(act.num_lanes || act.lanes
                   ? {
@@ -1462,14 +1460,19 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
       // Special Flow 9: Climate Target
       if (act.type === 'climate_target' || targetEntityId === 'remote_climate') {
-        const targetTemp = act.target_temp_c ?? 22.0;
-        const targetZone = act.zone || 'driver';
+        const targetTemp = act.target_temp_c ?? act.target_c ?? 22.0;
+        const durationMin = act.duration_minutes ?? 15;
         const res = await fetch(`${base}/api/command`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             entity: 'remote_climate',
-            command: JSON.stringify({ action: 'start', temp: targetTemp, zone: targetZone, sync: act.sync_on !== false }),
+            command: JSON.stringify({
+              action: 'start',
+              temp: targetTemp,
+              defrost: !!act.defrost,
+              duration: durationMin * 60
+            }),
             can_id: targetCanId || '0x4A0',
             ...(cleanPayloadStr ? { payload: cleanPayloadStr } : {}),
             repeat: targetRepeat,
@@ -1482,7 +1485,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           throw new Error(`HTTP ${res.status}: ${errBody || res.statusText}`);
         }
         showToast(
-          `Action tested: Set Climate Target ${targetTemp}°C (${targetZone})`,
+          `Action tested: Remote Climate ${targetTemp}°C · ${durationMin}m${act.defrost ? ' · Defrost' : ''}`,
           'success',
           4000
         );

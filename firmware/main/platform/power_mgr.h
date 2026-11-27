@@ -14,6 +14,8 @@ typedef enum {
 } power_tier_t;
 
 void power_mgr_init(void);
+void power_mgr_load_preferences(void);
+float power_mgr_get_low_vbat_cutoff(void);
 void power_mgr_set_tier(power_tier_t tier);
 power_tier_t power_mgr_get_tier(void);
 void power_mgr_enter_deep_sleep(uint32_t sleep_duration_sec);

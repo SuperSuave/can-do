@@ -41,7 +41,7 @@
 #define TRACK_POPUP_TRIGGER_FRAME_COUNT 3U
 #define TRACK_POPUP_TRIGGER_SETTLE_US 5000U
 #define TRACK_POPUP_TRIGGER_TIMEOUT_US 2000000U
-#define TRACK_POPUP_DISPLAY_HOLD_US 5000000U
+#define TRACK_POPUP_DISPLAY_HOLD_US ((int64_t)TRACK_POPUP_DEFAULT_HOLD_MS * 1000LL)
 
 #define TRACK_POPUP_MAX_TEXT_BYTES \
     (TRACK_POPUP_MAX_TEXT_CODE_UNITS * sizeof(utf16_t))
@@ -59,6 +59,7 @@ typedef struct {
     size_t size;
     uint8_t data[TRACK_POPUP_MAX_TEXT_BYTES];
     uint8_t beep_count;
+    uint32_t hold_ms;
 } track_popup_request_t;
 
 typedef struct {
@@ -540,8 +541,11 @@ static fwd_result_t popup_owned_fwd(sm_t *sm, twai_message_t *msg,
 // ********************* display hold state *********************
 
 static void hold_tick(sm_t *sm) {
-    if (sm_time_in_us(sm, &S_HOLD) >= TRACK_POPUP_DISPLAY_HOLD_US) {
-        track_popup_t *service = owner(sm);
+    track_popup_t *service = owner(sm);
+    int64_t hold_us = (service->pending_request.hold_ms > 0U)
+        ? ((int64_t)service->pending_request.hold_ms * 1000LL)
+        : TRACK_POPUP_DISPLAY_HOLD_US;
+    if (sm_time_in_us(sm, &S_HOLD) >= hold_us) {
         uint8_t mtype = service->media_type_owned ? TRACK_POPUP_FALLBACK_MEDIA_TYPE : s_last_media_type;
         twai_message_t dis = {
             .identifier = TRACK_POPUP_MEDIA_FRAME_ID,
@@ -644,11 +648,27 @@ fwd_result_t track_popup_fwd(twai_message_t *msg, can_bus_t fwd_bus) {
     return sm_fwd(&popup.sm, msg, fwd_bus);
 }
 
-static bool queue_popup(const char *utf8_text, uint8_t beep_count) {
+static uint32_t normalize_hold_ms(int32_t hold_ms) {
+    if (hold_ms <= 0) {
+        return TRACK_POPUP_DEFAULT_HOLD_MS;
+    }
+    if ((uint32_t)hold_ms < TRACK_POPUP_MIN_HOLD_MS) {
+        return TRACK_POPUP_MIN_HOLD_MS;
+    }
+    if ((uint32_t)hold_ms > TRACK_POPUP_MAX_HOLD_MS) {
+        return TRACK_POPUP_MAX_HOLD_MS;
+    }
+    return (uint32_t)hold_ms;
+}
+
+static bool queue_popup(const char *utf8_text, uint8_t beep_count, int32_t hold_ms) {
     if (popup.queue == NULL) {
         return false;
     }
-    track_popup_request_t request = { .beep_count = beep_count };
+    track_popup_request_t request = {
+        .beep_count = beep_count,
+        .hold_ms = normalize_hold_ms(hold_ms),
+    };
     if (!encode_text(utf8_text, &request)) {
         return false;
     }
@@ -656,11 +676,16 @@ static bool queue_popup(const char *utf8_text, uint8_t beep_count) {
 }
 
 bool track_popup_show(const char *utf8_text) {
-    return queue_popup(utf8_text, 1U);
+    return queue_popup(utf8_text, 1U, 0);
+}
+
+bool track_popup_show_ex(const char *utf8_text, int32_t hold_ms) {
+    return queue_popup(utf8_text, 1U, hold_ms);
 }
 
 static bool track_popup_show_prefixed(const char *prefix,
-                                      const char *utf8_text, uint8_t beep_count) {
+                                      const char *utf8_text, uint8_t beep_count,
+                                      int32_t hold_ms) {
     if (popup.queue == NULL || utf8_text == NULL || utf8_text[0] == '\0') {
         return false;
     }
@@ -674,17 +699,29 @@ static bool track_popup_show_prefixed(const char *prefix,
     }
     memcpy(prefixed, prefix, prefix_size);
     memcpy(prefixed + prefix_size, utf8_text, text_size + 1U);
-    return queue_popup(prefixed, beep_count);
+    return queue_popup(prefixed, beep_count, hold_ms);
 }
 
 bool track_popup_show_info(const char *utf8_text) {
-    return track_popup_show_prefixed("ⓘ ", utf8_text, 1U);
+    return track_popup_show_prefixed("ⓘ ", utf8_text, 1U, 0);
 }
 
 bool track_popup_show_warning(const char *utf8_text) {
-    return track_popup_show_prefixed("⚠ ", utf8_text, 2U);
+    return track_popup_show_prefixed("⚠ ", utf8_text, 2U, 0);
 }
 
 bool track_popup_show_error(const char *utf8_text) {
-    return track_popup_show_prefixed("‼ ", utf8_text, 3U);
+    return track_popup_show_prefixed("‼ ", utf8_text, 3U, 0);
+}
+
+bool track_popup_show_info_ex(const char *utf8_text, int32_t hold_ms) {
+    return track_popup_show_prefixed("ⓘ ", utf8_text, 1U, hold_ms);
+}
+
+bool track_popup_show_warning_ex(const char *utf8_text, int32_t hold_ms) {
+    return track_popup_show_prefixed("⚠ ", utf8_text, 2U, hold_ms);
+}
+
+bool track_popup_show_error_ex(const char *utf8_text, int32_t hold_ms) {
+    return track_popup_show_prefixed("‼ ", utf8_text, 3U, hold_ms);
 }

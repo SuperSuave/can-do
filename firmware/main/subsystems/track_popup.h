@@ -13,7 +13,12 @@
 #define __TRACK_POPUP_H__
 
 #include <stdbool.h>
+#include <stdint.h>
 #include "hsm.h"
+
+#define TRACK_POPUP_DEFAULT_HOLD_MS 5000U
+#define TRACK_POPUP_MIN_HOLD_MS     1000U
+#define TRACK_POPUP_MAX_HOLD_MS     15000U
 
 // The cluster payload holds up to 50 UTF-16 code units. A matching valid UTF-8
 // string needs at most three bytes per UTF-16 code unit:
@@ -40,6 +45,7 @@ fwd_result_t track_popup_fwd(twai_message_t *msg, can_bus_t fwd_bus);
 // When dequeued, request one head-unit beep (best effort).
 // Returns false if uninitialized, for invalid/oversized text, or a full queue.
 bool track_popup_show(const char *utf8_text);
+bool track_popup_show_ex(const char *utf8_text, int32_t hold_ms);
 
 // Queue a popup with a severity marker prefixed to the supplied text.
 // When dequeued, request 1 (info), 2 (warning), or 3 (error)
@@ -47,6 +53,12 @@ bool track_popup_show(const char *utf8_text);
 bool track_popup_show_info(const char *utf8_text);
 bool track_popup_show_warning(const char *utf8_text);
 bool track_popup_show_error(const char *utf8_text);
+
+// Extended variants accepting an optional hold duration in ms (clamped to
+// [TRACK_POPUP_MIN_HOLD_MS, TRACK_POPUP_MAX_HOLD_MS]; <= 0 uses default 5000 ms).
+bool track_popup_show_info_ex(const char *utf8_text, int32_t hold_ms);
+bool track_popup_show_warning_ex(const char *utf8_text, int32_t hold_ms);
+bool track_popup_show_error_ex(const char *utf8_text, int32_t hold_ms);
 
 #ifdef __cplusplus
 }

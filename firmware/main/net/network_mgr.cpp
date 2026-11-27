@@ -36,6 +36,7 @@ static std::atomic<bool> s_last_scan_ok{false};
 static std::atomic<bool> s_is_connecting{false};
 static std::atomic<bool> s_sta_connected{false};
 static std::atomic<bool> s_ap_active{false};
+static std::atomic<bool> s_net_shutting_down{false};
 
 static ApFallbackMode s_ap_mode = AP_MODE_AUTO;
 static std::string s_ap_ssid = "CAN Do";
@@ -446,9 +447,13 @@ static void network_roam_task(void* pvParameters) {
     uint32_t roam_wait_ms = 5000;
 
     while (true) {
+        if (s_net_shutting_down.load(std::memory_order_relaxed)) {
+            vTaskDelay(pdMS_TO_TICKS(200));
+            continue;
+        }
         process_deferred_network_events();
 
-        if (!s_sta_connected) {
+        if (!s_sta_connected && !s_net_shutting_down.load(std::memory_order_relaxed)) {
             std::vector<KnownNetwork> targets;
             std::string prev_ssid;
             int prev_prio = 0;
@@ -615,6 +620,11 @@ static void network_roam_task(void* pvParameters) {
         EventBits_t wake_bits = xEventGroupWaitBits(s_wifi_event_group,
             DEFER_GOT_IP_BIT | DEFER_DISCONN_BIT | DEFER_AP_STACONN_BIT | DEFER_AP_STADISC_BIT | WIFI_TRIGGER_ROAM_BIT,
             pdTRUE, pdFALSE, pdMS_TO_TICKS(roam_wait_ms));
+
+        if (s_net_shutting_down.load(std::memory_order_relaxed)) {
+            vTaskDelay(pdMS_TO_TICKS(200));
+            continue;
+        }
 
         if (wake_bits & WIFI_TRIGGER_ROAM_BIT) {
             roam_wait_ms = 500; // Immediate scan and roam requested
@@ -914,4 +924,20 @@ void network_mgr_trigger_roam(void) {
     if (s_wifi_event_group) {
         xEventGroupSetBits(s_wifi_event_group, WIFI_TRIGGER_ROAM_BIT);
     }
+}
+
+void network_mgr_shutdown(void) {
+    if (s_net_shutting_down.exchange(true)) return;
+    s_sta_connected = false;
+    s_ap_active = false;
+    if (s_is_scanning.exchange(false)) {
+        esp_wifi_scan_stop();
+    }
+    if (s_wifi_event_group) {
+        xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT | WIFI_SCAN_DONE_BIT);
+    }
+    esp_wifi_disconnect();
+    esp_wifi_stop();
+    board_led_wifi(false);
+    ESP_LOGI(TAG, "Wi-Fi stopped for sleep/shutdown");
 }

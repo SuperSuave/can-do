@@ -162,7 +162,6 @@ const KNOWN_ACTION_TYPES = new Set([
   'precondition',
   'climate_target',
   'hud_nav',
-  'webhook',
   'choose',
   'if_then',
   'track_popup',
