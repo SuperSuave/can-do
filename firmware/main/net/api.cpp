@@ -2774,10 +2774,10 @@ static esp_err_t api_system_status_handler(httpd_req_t *req) {
 
     const char* wakeup_str = "none";
     if (reason == ESP_RST_DEEPSLEEP) {
-        uint32_t causes = esp_sleep_get_wakeup_causes();
-        if (causes & BIT(ESP_SLEEP_WAKEUP_EXT1)) wakeup_str = "ext1";
-        else if (causes & BIT(ESP_SLEEP_WAKEUP_GPIO)) wakeup_str = "gpio";
-        else if (causes & BIT(ESP_SLEEP_WAKEUP_TIMER)) wakeup_str = "timer";
+        esp_sleep_source_t cause = esp_sleep_get_wakeup_cause();
+        if (cause == ESP_SLEEP_WAKEUP_EXT1) wakeup_str = "ext1";
+        else if (cause == ESP_SLEEP_WAKEUP_GPIO) wakeup_str = "gpio";
+        else if (cause == ESP_SLEEP_WAKEUP_TIMER) wakeup_str = "timer";
         else wakeup_str = "other";
     }
     cJSON_AddStringToObject(root, "wakeup_cause", wakeup_str);

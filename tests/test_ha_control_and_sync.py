@@ -275,7 +275,10 @@ if not hasattr(ha_number, "NumberEntity"):
 
     ha_number.NumberEntity = NumberEntity
 
-import yaml
+try:
+    import yaml
+except ImportError:
+    yaml = None
 import custom_components.can_do.catalog_loader as catalog_loader_mod
 import custom_components.can_do.const as const_mod
 from custom_components.can_do.binary_sensor import (
@@ -1253,13 +1256,21 @@ class TestStateParsingAliasingAndCommands(unittest.TestCase):
 
         # services.yaml valid and includes critical level & new set_hud_nav fields (without unencoded speed_limit/camera_alert)
         svc_path = can_do_dir / "services.yaml"
-        svc_data = yaml.safe_load(svc_path.read_text(encoding="utf-8"))
-        level_opts = svc_data["notify"]["fields"]["level"]["selector"]["select"]["options"]
-        self.assertIn("critical", [o["value"] for o in level_opts])
-        for field in ("direction", "lanes", "lane_directions", "lane_recommended", "platform"):
-            self.assertIn(field, svc_data["set_hud_nav"]["fields"])
-        for dead_field in ("speed_limit", "camera_alert"):
-            self.assertNotIn(dead_field, svc_data["set_hud_nav"]["fields"])
+        if yaml is not None:
+            svc_data = yaml.safe_load(svc_path.read_text(encoding="utf-8"))
+            level_opts = svc_data["notify"]["fields"]["level"]["selector"]["select"]["options"]
+            self.assertIn("critical", [o["value"] for o in level_opts])
+            for field in ("direction", "lanes", "lane_directions", "lane_recommended", "platform"):
+                self.assertIn(field, svc_data["set_hud_nav"]["fields"])
+            for dead_field in ("speed_limit", "camera_alert"):
+                self.assertNotIn(dead_field, svc_data["set_hud_nav"]["fields"])
+        else:
+            svc_text = svc_path.read_text(encoding="utf-8")
+            self.assertIn("critical", svc_text)
+            for field in ("direction", "lanes", "lane_directions", "lane_recommended", "platform"):
+                self.assertIn(f"{field}:", svc_text)
+            for dead_field in ("speed_limit:", "camera_alert:"):
+                self.assertNotIn(dead_field, svc_text)
 
         # Switch uses is_on_option_label / is_off_option_label for "Remote Climate On"/"Off"
         sw = CanDoSwitchEntity(self.coordinator, self.commands["remote_climate_tmu"])
